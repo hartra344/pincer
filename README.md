@@ -123,11 +123,11 @@ PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-to
 
 `PINCER_KEYCHAIN=memory` keeps identities and secrets in memory, so checks and dev runs never touch your real Keychain. It works for the app too: `open --env PINCER_KEYCHAIN=memory build/Pincer.app`.
 
+To see what the gateway says about each request, run the app with `open --env PINCER_REQUEST_LOG=/tmp/pincer.log build/Pincer.app`. Every request is logged with ✓ or the gateway's error, along with the fields of each sidebar update. History and image downloads are left out.
+
 ## Known gaps
 
-- Not yet confirmed against a real gateway:
-  - the exact decision strings for exec approvals.
-- iOS builds and compiles, but it hasn't been run in a simulator yet.
+- iOS runs in the simulator (connect, sidebar, history), but hasn't been tried on a real device yet.
 - Session groups are derived from each session's category; `sessions.groups.list` isn't used yet.
 
 ## License

@@ -600,12 +600,12 @@ function handleAuthedRequest(state, conn, msg) {
       conn.sessionSubscribed = true;
       sendRes(conn, id, {
         subscribed: true,
-        list: { sessions: sortedSessions(state, Boolean(params.includeArchived)), nextOffset: null, hasMore: false },
+        list: { sessions: sortedSessions(state, params.archived === true || params.archived === 'all'), nextOffset: null, hasMore: false },
       });
       break;
     }
     case 'sessions.list': {
-      sendRes(conn, id, { sessions: sortedSessions(state, Boolean(params.includeArchived)), nextOffset: null, hasMore: false });
+      sendRes(conn, id, { sessions: sortedSessions(state, params.archived === true || params.archived === 'all'), nextOffset: null, hasMore: false });
       break;
     }
     case 'sessions.groups.list': {

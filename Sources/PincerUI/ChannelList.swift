@@ -193,7 +193,7 @@ struct ChannelList: View {
             }
         }
         Menu("Color", systemImage: "paintpalette") {
-            ForEach(["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"], id: \.self) { color in
+            ForEach(["red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink"], id: \.self) { color in
                 Button(color.capitalized) { Task { await self.gateway.patch(row.key, ["color": .string(color)]) } }
             }
             Divider()

@@ -146,7 +146,17 @@ public actor GatewayConnection {
 
     public func request(_ method: String, _ params: JSONValue = [:], timeout: TimeInterval = 20) async throws -> JSONValue {
         guard self.hello != nil, let task = self.task else { throw GatewayError.notConnected }
-        return try await self.send(method: method, params: params, on: task, timeout: timeout)
+        guard DebugLog.enabled, !DebugLog.quietMethods.contains(method) else {
+            return try await self.send(method: method, params: params, on: task, timeout: timeout)
+        }
+        do {
+            let result = try await self.send(method: method, params: params, on: task, timeout: timeout)
+            DebugLog.write("→ \(method) \(DebugLog.brief(params)) ✓")
+            return result
+        } catch {
+            DebugLog.write("→ \(method) \(DebugLog.brief(params)) ✗ \(error.localizedDescription)")
+            throw error
+        }
     }
 
     // MARK: Connect loop
@@ -545,5 +555,35 @@ extension String {
     var nilIfEmpty: String? {
         let trimmed = self.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+/// Diagnostic log of requests and their outcomes, enabled with `PINCER_REQUEST_LOG=<path>`.
+enum DebugLog {
+    static let path = ProcessInfo.processInfo.environment["PINCER_REQUEST_LOG"]
+    static var enabled: Bool { path != nil }
+    static let quietMethods: Set<String> = ["chat.history", "artifacts.download"]
+    private static let lock = NSLock()
+
+    static func brief(_ params: JSONValue) -> String {
+        guard var object = params.object else { return "" }
+        if object["attachments"] != nil { object["attachments"] = .string("…") }
+        if object["message"] != nil { object["message"] = .string("…") }
+        let data = (try? JSONEncoder().encode(JSONValue.object(object))) ?? Data()
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func write(_ line: String) {
+        guard let path else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        let entry = Data("\(Date().formatted(.iso8601)) \(line)\n".utf8)
+        if let handle = FileHandle(forWritingAtPath: path) {
+            handle.seekToEndOfFile()
+            handle.write(entry)
+            try? handle.close()
+        } else {
+            FileManager.default.createFile(atPath: path, contents: entry)
+        }
     }
 }

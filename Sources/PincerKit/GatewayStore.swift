@@ -71,7 +71,12 @@ public final class GatewayStore: Identifiable {
     public var organization: SidebarOrganization {
         didSet { UserDefaults.standard.set(self.organization.rawValue, forKey: "pincer.org.v2.\(self.id.uuidString)") }
     }
-    public var showArchived = false
+    public var showArchived = false {
+        didSet {
+            guard showArchived != oldValue, self.bootstrapped else { return }
+            Task { await self.refreshSessions() }
+        }
+    }
 
     @ObservationIgnored let connection: GatewayConnection
     @ObservationIgnored private var chats: [String: ChatStore] = [:]
@@ -154,7 +159,7 @@ public final class GatewayStore: Identifiable {
         async let agents = try? self.connection.request("agents.list", [:])
         async let subscribed = try? self.connection.request(
             "sessions.subscribe",
-            ["limit": 300, "ownerFirst": true, "includeArchived": .bool(self.showArchived)],
+            .object(self.listParams),
             timeout: 30)
         if let agents = await agents {
             self.agents = agents["agents"]?.array?.compactMap(AgentSummary.init) ?? []
@@ -203,8 +208,12 @@ public final class GatewayStore: Identifiable {
         }
     }
 
+    private var listParams: [String: JSONValue] {
+        ["limit": 300, "ownerFirst": true, "archived": self.showArchived ? "all" : false]
+    }
+
     public func refreshSessions() async {
-        guard let list = try? await self.connection.request("sessions.list", ["limit": 300, "ownerFirst": true], timeout: 30) else {
+        guard let list = try? await self.connection.request("sessions.list", .object(self.listParams), timeout: 30) else {
             return
         }
         self.applySnapshot(list)
@@ -270,6 +279,12 @@ public final class GatewayStore: Identifiable {
     }
 
     private func applySessionChange(_ payload: JSONValue) {
+        if DebugLog.enabled {
+            let row = payload["session"]
+            let fields = ["pinned", "unread", "color", "category", "label", "archived", "reasoningLevel"]
+                .map { "\($0)=\(row?[$0].map { DebugLog.brief(.object(["v": $0])) } ?? "-")" }
+            DebugLog.write("← sessions.changed key=\(row?["key"]?.text ?? payload["key"]?.text ?? "?") reason=\(payload["reason"]?.text ?? "-") \(fields.joined(separator: " "))")
+        }
         for ancestor in payload["ancestorSessions"]?.array?.compactMap(SessionRow.init) ?? [] {
             self.sessions[ancestor.key] = ancestor
         }
