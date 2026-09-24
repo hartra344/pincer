@@ -1,0 +1,54 @@
+# XcodeGen spec: `xcodegen generate` → Pincer.xcodeproj (macOS + iOS apps).
+name: Pincer
+options:
+  bundleIdPrefix: chat.pincer
+  deploymentTarget:
+    macOS: "15.0"
+    iOS: "18.0"
+packages:
+  Pincer:
+    path: .
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    # Set DEVELOPMENT_TEAM in Xcode (Signing & Capabilities) or here.
+targets:
+  Pincer-macOS:
+    type: application
+    platform: macOS
+    sources: [Apps/macOS]
+    dependencies:
+      - package: Pincer
+        product: PincerUI
+    settings:
+      base:
+        PRODUCT_NAME: Pincer
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.mac
+        CODE_SIGN_ENTITLEMENTS: Apps/macOS/Pincer.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Pincer
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+  Pincer-iOS:
+    type: application
+    platform: iOS
+    sources: [Apps/iOS]
+    dependencies:
+      - package: Pincer
+        product: PincerUI
+    settings:
+      base:
+        PRODUCT_NAME: Pincer
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Pincer
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer connects to your OpenClaw Gateway on your local network or tailnet."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach photos to messages you send to your agents."
+        TARGETED_DEVICE_FAMILY: "1,2"
