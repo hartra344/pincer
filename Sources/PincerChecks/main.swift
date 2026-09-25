@@ -336,10 +336,20 @@ func runLive(url: String, token: String) async {
     other.renameServer(renamed, to: nil)
     let cleared = await waitFor("rename clear") { gateway.displayName(for: renamed) != "Synced Name" }
     check(cleared, "clearing a server name syncs")
+    // Chat icons sync the same way, through the `pincer.chatIcons` pref.
+    if let iconKey = gateway.sessions.keys.sorted().first {
+        gateway.setIcon("star.fill", for: iconKey)
+        let iconSynced = await waitFor("icon sync") { other.customIcon(for: iconKey) == "star.fill" }
+        check(iconSynced, "chat icon syncs through users.prefs")
+        other.setIcon(nil, for: iconKey)
+        let iconCleared = await waitFor("icon clear") { gateway.customIcon(for: iconKey) == nil }
+        check(iconCleared, "clearing a chat icon syncs")
+    }
     other.stop()
     for store in [gateway, other] {
-        UserDefaults.standard.removeObject(forKey: "pincer.serverNames.\(store.id.uuidString)")
-        UserDefaults.standard.removeObject(forKey: "pincer.serverNamesSynced.\(store.id.uuidString)")
+        for prefix in ["serverNames", "serverNamesSynced", "chatIcons", "chatIconsSynced"] {
+            UserDefaults.standard.removeObject(forKey: "pincer.\(prefix).\(store.id.uuidString)")
+        }
     }
     gateway.stop()
 }

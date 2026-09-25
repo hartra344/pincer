@@ -401,8 +401,8 @@ private final class SidebarChatListCell: UICollectionViewListCell {
         var content = self.traitCollection.horizontalSizeClass == .compact
             ? UIListContentConfiguration.subtitleCell()
             : UIListContentConfiguration.sidebarSubtitleCell()
-        let symbol = ChannelRowStyle.symbol(for: row, isThread: entry.isThread)
-        content.image = UIImage(systemName: symbol)
+        let symbol = ChannelRowStyle.symbol(for: entry)
+        content.image = UIImage(systemName: symbol) ?? UIImage(systemName: "number")
         content.imageProperties.tintColor = ChannelRowStyle.tint(for: row)
         content.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(textStyle: .body)
         content.imageProperties.reservedLayoutSize = CGSize(width: 26, height: 0)

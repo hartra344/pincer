@@ -13,6 +13,7 @@ struct ChannelList: View {
     @State private var collapsed: Set<String> = []
     @State private var newSessionAgent: String?
     @State private var renaming: SessionRow?
+    @State private var changingIcon: SessionRow?
     @State private var showingSettings = false
     @State private var expandedThreads: Set<String> = []
     @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
@@ -70,6 +71,9 @@ struct ChannelList: View {
         .sheet(item: self.$renaming) { row in
             RenameSheet(row: row)
         }
+        .sheet(item: self.$changingIcon) { row in
+            IconPickerSheet(row: row)
+        }
         .sheet(item: self.$prompt) { prompt in
             TextPromptSheet(prompt: prompt)
         }
@@ -96,6 +100,7 @@ struct ChannelList: View {
             },
             newChat: { self.newSessionAgent = $0 },
             rename: { self.renaming = $0 },
+            changeIcon: { self.changingIcon = $0 },
             prompt: { self.prompt = $0 },
             toggleThreads: { key in
                 if self.expandedThreads.contains(key) { self.expandedThreads.remove(key) } else { self.expandedThreads.insert(key) }
@@ -268,6 +273,82 @@ struct RenameSheet: View {
     }
 }
 
+/// Searchable grid of curated SF Symbols; the pick syncs to every device through the gateway.
+struct IconPickerSheet: View {
+    let row: SessionRow
+    @Environment(GatewayStore.self) private var gateway
+    @Environment(\.dismiss) private var dismiss
+    @State private var search = ""
+
+    private var current: String? { ChannelRowStyle.customSymbol(for: self.row, gateway: self.gateway) }
+    private var defaultSymbol: String { ChannelRowStyle.defaultSymbol(for: self.row, isThread: self.row.isSubagent) }
+    private var tint: Color { Theme.color(named: self.row.color) ?? .secondary }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                let categories = SymbolCatalog.search(self.search)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 40, maximum: 48), spacing: 6)], spacing: 6) {
+                    ForEach(categories) { category in
+                        Section {
+                            ForEach(category.symbols, id: \.self) { symbol in
+                                self.cell(symbol)
+                            }
+                        } header: {
+                            Text(category.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 10)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom)
+                if categories.isEmpty {
+                    ContentUnavailableView.search(text: self.search)
+                }
+            }
+            .searchable(text: self.$search, prompt: "Search symbols")
+            .navigationTitle("Change Icon")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { self.dismiss() } }
+                ToolbarItem(placement: .destructiveAction) {
+                    Button("Use Default") {
+                        self.gateway.setIcon(nil, for: self.row.key)
+                        self.dismiss()
+                    }
+                    .disabled(self.gateway.customIcon(for: self.row.key) == nil)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 420, idealWidth: 460, minHeight: 440, idealHeight: 520)
+        #endif
+    }
+
+    private func cell(_ symbol: String) -> some View {
+        let selected = symbol == (self.current ?? self.defaultSymbol)
+        return Button {
+            self.gateway.setIcon(symbol, for: self.row.key)
+            self.dismiss()
+        } label: {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(self.tint)
+                .frame(width: 40, height: 40)
+                .background(selected ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.clear),
+                            in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .help(symbol)
+        .accessibilityLabel(symbol)
+    }
+}
 
 struct TextPrompt: Identifiable {
     let id = UUID()

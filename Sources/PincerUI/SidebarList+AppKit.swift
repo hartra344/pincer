@@ -439,7 +439,8 @@ private final class SidebarChatCell: NSTableCellView {
     func configure(_ entry: SidebarModel.Entry, actions: SidebarActions) {
         let row = entry.row
         self.threadArrow.isHidden = !entry.isThread
-        self.icon.image = NSImage(systemSymbolName: ChannelRowStyle.symbol(for: row, isThread: entry.isThread), accessibilityDescription: nil)
+        self.icon.image = NSImage(systemSymbolName: ChannelRowStyle.symbol(for: entry), accessibilityDescription: nil)
+            ?? NSImage(systemSymbolName: "number", accessibilityDescription: nil)
         self.icon.contentTintColor = ChannelRowStyle.tint(for: row)
         self.title.stringValue = row.title
         self.title.font = .systemFont(ofSize: NSFont.systemFontSize, weight: row.isUnread && !row.isSubagent ? .semibold : .regular)
