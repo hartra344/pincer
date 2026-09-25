@@ -217,7 +217,7 @@ enum SidebarMenus {
     }
 
     static func reasoning(_ row: SessionRow, gateway: GatewayStore) -> SidebarMenuItem {
-        .submenu("Show Thinking", image: "brain", [("on", "Save & show"), ("stream", "Live only"), ("off", "Off")].map { value, label in
+        .submenu("Gateway Reasoning", image: "brain", [("on", "Save & Stream"), ("stream", "Stream Only"), ("off", "Off")].map { value, label in
             .action(label, checked: row.reasoningLevel == value) {
                 Task { await gateway.patch(row.key, ["reasoningLevel": .string(value)]) }
             }

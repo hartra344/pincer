@@ -1097,7 +1097,7 @@ final class TranscriptThinkingHeaderView: TranscriptTapView {
         self.addSubview(self.spinner)
     }
 
-    private var title: String { self.thinking?.isStreaming == true ? "Thinking…" : "Thinking" }
+    private var title: String { self.thinking?.title ?? "Thinking" }
 
     private var titleWidth: CGFloat {
         singleLine(self.title, TranscriptStyle.shared.calloutMedium, TranscriptColors.secondary).lineWidth
@@ -1106,6 +1106,7 @@ final class TranscriptThinkingHeaderView: TranscriptTapView {
     override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
         guard case let .thinkingHeader(thinking) = part else { return }
         let changed = self.thinking?.isExpanded != thinking.isExpanded || self.thinking?.isStreaming != thinking.isStreaming
+            || self.thinking?.title != thinking.title
         self.thinking = thinking
         self.spinner.setAnimating(thinking.isStreaming)
         let rowId = row.id
