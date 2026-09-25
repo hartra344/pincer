@@ -92,6 +92,8 @@ public actor GatewayConnection {
     private var bufferedChallenge: (String, Int64)?
     private var shouldRun = false
     private var attempt = 0
+    private var attemptStartedAt: Date?
+    private var isWaitingToRetry = false
     private var lastFrameAt = Date()
     private var hello: GatewayHello?
     private var eventHandler: (@Sendable (GatewayEvent) -> Void)?
@@ -146,7 +148,15 @@ public actor GatewayConnection {
         {
             return
         }
+        // Don't restart a handshake that's still in flight (e.g. the scene turning active right
+        // after launch); only one that has been hanging long enough to look dead.
+        if self.hello == nil, !self.isWaitingToRetry, let started = self.attemptStartedAt,
+           Date().timeIntervalSince(started) < 5
+        {
+            return
+        }
         self.attempt = 0
+        self.isWaitingToRetry = false
         self.loopTask?.cancel()
         self.teardown(reason: "reconnect requested")
         self.loopTask = Task { await self.runLoop() }
@@ -172,8 +182,10 @@ public actor GatewayConnection {
     private func runLoop() async {
         while self.shouldRun, !Task.isCancelled {
             self.emit(.connecting)
+            self.attemptStartedAt = Date()
             do {
                 try await self.connectOnce()
+                self.attemptStartedAt = nil
                 self.attempt = 0
                 self.emit(.connected)
                 await self.waitUntilDisconnected()
@@ -181,14 +193,16 @@ public actor GatewayConnection {
                 self.attempt += 1
                 let delay = self.backoffSeconds()
                 self.emit(.reconnecting(attempt: self.attempt, delaySeconds: delay, reason: "connection lost"))
-                try? await Task.sleep(for: .seconds(delay))
+                await self.waitToRetry(seconds: delay)
             } catch let error as GatewayError {
-                self.teardown(reason: error.localizedDescription)
+                self.attemptStartedAt = nil
+                // A superseded loop (reconnectNow/stop) must not tear down the attempt replacing it.
                 guard self.shouldRun, !Task.isCancelled else { return }
+                self.teardown(reason: error.localizedDescription)
                 switch Self.classify(error) {
                 case let .pairing(requestId):
                     self.emit(.awaitingPairing(requestId: requestId, deviceId: self.identity.deviceId))
-                    try? await Task.sleep(for: .seconds(5))
+                    await self.waitToRetry(seconds: 5)
                 case .staleDeviceToken:
                     // The Gateway rotated or revoked our device token; fall back to the shared secret once.
                     guard self.profile.deviceToken != nil else {
@@ -205,17 +219,24 @@ public actor GatewayConnection {
                     self.attempt += 1
                     let delay = self.backoffSeconds()
                     self.emit(.reconnecting(attempt: self.attempt, delaySeconds: delay, reason: message))
-                    try? await Task.sleep(for: .seconds(delay))
+                    await self.waitToRetry(seconds: delay)
                 }
             } catch {
-                self.teardown(reason: error.localizedDescription)
+                self.attemptStartedAt = nil
                 guard self.shouldRun, !Task.isCancelled else { return }
+                self.teardown(reason: error.localizedDescription)
                 self.attempt += 1
                 let delay = self.backoffSeconds()
                 self.emit(.reconnecting(attempt: self.attempt, delaySeconds: delay, reason: error.localizedDescription))
-                try? await Task.sleep(for: .seconds(delay))
+                await self.waitToRetry(seconds: delay)
             }
         }
+    }
+
+    private func waitToRetry(seconds: Int) async {
+        self.isWaitingToRetry = true
+        try? await Task.sleep(for: .seconds(seconds))
+        self.isWaitingToRetry = false
     }
 
     private enum FailureClass { case pairing(String?), staleDeviceToken, fatal(String), retry(String) }

@@ -142,10 +142,17 @@ private struct ConnectionStatusRow: View {
         case .connected, .idle:
             EmptyView()
         case .connecting:
-            Label("Connecting…", systemImage: "antenna.radiowaves.left.and.right").foregroundStyle(.secondary)
+            self.connectingLabel
+        case let .reconnecting(attempt, _, _) where !self.gateway.hasConnected && attempt <= 1:
+            // A single failed first attempt (network still coming up at launch) isn't worth alarming about.
+            self.connectingLabel
         case let .reconnecting(attempt, delay, reason):
             VStack(alignment: .leading, spacing: 2) {
-                Label("Reconnecting in \(delay)s (attempt \(attempt))", systemImage: "arrow.triangle.2.circlepath")
+                if self.gateway.hasConnected {
+                    Label("Reconnecting in \(delay)s (attempt \(attempt))", systemImage: "arrow.triangle.2.circlepath")
+                } else {
+                    Label("Can't reach Gateway · retrying in \(delay)s", systemImage: "antenna.radiowaves.left.and.right.slash")
+                }
                 Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 Button("Retry now") { self.gateway.reconnectIfNeeded() }.buttonStyle(.borderless)
             }
@@ -155,6 +162,10 @@ private struct ConnectionStatusRow: View {
         case let .failed(message):
             Label(message, systemImage: "exclamationmark.octagon").foregroundStyle(.red)
         }
+    }
+
+    private var connectingLabel: some View {
+        Label("Connecting…", systemImage: "antenna.radiowaves.left.and.right").foregroundStyle(.secondary)
     }
 }
 

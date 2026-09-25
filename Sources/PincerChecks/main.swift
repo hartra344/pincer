@@ -340,13 +340,19 @@ func runLive(url: String, token: String) async {
     profile.secret = token
     let gateway = GatewayStore(profile: profile)
     gateway.start()
+    // What launch does: the scene turning active asks for a reconnect mid-handshake.
+    try? await Task.sleep(for: .milliseconds(Int(ProcessInfo.processInfo.environment["RACE_MS"] ?? "30") ?? 30))
+    gateway.reconnectIfNeeded()
 
     var sawPairing = false
+    var sawReconnecting = false
     let connected = await waitFor("connection", timeout: 25) {
         if case .awaitingPairing = gateway.state { sawPairing = true }
+        if case .reconnecting = gateway.state { sawReconnecting = true }
         return gateway.state.isConnected && !gateway.sessions.isEmpty
     }
     check(connected, "connected and bootstrapped (pairing seen: \(sawPairing))")
+    check(!sawReconnecting, "first connect never reports reconnecting")
     guard connected else { return }
     check(gateway.agents.count >= 3, "agents.list (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions.subscribe (\(gateway.sessions.count) rows)")

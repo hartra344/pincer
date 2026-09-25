@@ -63,6 +63,9 @@ public final class GatewayStore: Identifiable {
     public private(set) var profile: GatewayProfile
     public nonisolated let id: UUID
     public private(set) var state: ConnectionState = .idle
+    /// Whether this store has ever reached `.connected`, so the UI can tell a first connect
+    /// that's still retrying apart from a connection that was lost.
+    public private(set) var hasConnected = false
     public private(set) var hello: GatewayHello?
     public private(set) var agents: [AgentSummary] = []
     public private(set) var defaultAgentId = "main"
@@ -167,6 +170,7 @@ public final class GatewayStore: Identifiable {
         self.state = state
         if case let .failed(message) = state { self.lastError = message }
         guard state == .connected, let hello else { return }
+        self.hasConnected = true
         self.hello = hello
         self.lastError = nil
         Task { await self.bootstrap() }

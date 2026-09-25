@@ -18,7 +18,7 @@ public final class AppModel {
     public var appIsActive = true {
         didSet {
             self.notifier.appIsActive = self.appIsActive
-            if self.appIsActive { self.gateways.forEach { $0.reconnectIfNeeded() } }
+            if self.appIsActive, !oldValue { self.gateways.forEach { $0.reconnectIfNeeded() } }
         }
     }
 
