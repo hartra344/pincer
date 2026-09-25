@@ -5,6 +5,7 @@ import SwiftUI
 /// threads (subagent sessions).
 struct ChannelList: View {
     @Environment(GatewayStore.self) private var gateway
+    let editConnection: () -> Void
     @State private var search = ""
     @State private var collapsed: Set<String> = []
     @State private var newSessionAgent: String?
@@ -13,12 +14,17 @@ struct ChannelList: View {
     @State private var expandedThreads: Set<String> = []
     @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
     @State private var prompt: TextPrompt?
+    /// Chat being dragged in the sidebar, used to highlight only drops that would move it.
+    @State private var draggingKey: String?
+    /// Drop-zone element id → section id, for every zone the drag is currently over.
+    @State private var dropHovers: [String: String] = [:]
 
     var body: some View {
         @Bindable var gateway = self.gateway
         List(selection: $gateway.selectedKey) {
             ConnectionStatusRow()
             ForEach(self.gateway.sections(search: self.search)) { section in
+                let highlighted = self.isDropHighlighted(section)
                 Section(isExpanded: self.expansion(section.id)) {
                     ForEach(section.channels) { channel in
                         let expanded = self.expandedThreads.contains(channel.row.key)
@@ -33,10 +39,18 @@ struct ChannelList: View {
                             })
                             .tag(channel.row.key)
                             .contextMenu { self.menu(for: channel.row) }
+                            .onDrag {
+                                self.draggingKey = channel.row.key
+                                return NSItemProvider(object: channel.row.key as NSString)
+                            }
+                            .groupDropZone(self, section: section, element: "row:\(channel.row.key)")
+                            .listRowBackground(highlighted ? Color.accentColor.opacity(0.12) : nil)
                         ForEach(self.visibleThreads(channel, expanded: expanded)) { thread in
                             ChannelRow(row: thread, isThread: true)
                                 .tag(thread.key)
                                 .contextMenu { self.menu(for: thread) }
+                                .groupDropZone(self, section: section, element: "row:\(thread.key)")
+                                .listRowBackground(highlighted ? Color.accentColor.opacity(0.12) : nil)
                         }
                     }
                 } header: {
@@ -69,6 +83,10 @@ struct ChannelList: View {
                             .help("New chat")
                         }
                     }
+                    .padding(.horizontal, highlighted ? 4 : 0)
+                    .background(highlighted ? Color.accentColor.opacity(0.2) : .clear, in: RoundedRectangle(cornerRadius: 5))
+                    .contentShape(Rectangle())
+                    .groupDropZone(self, section: section, element: "header:\(section.id)")
                     .contextMenu { self.headerMenu(for: section) }
                 }
             }
@@ -84,6 +102,9 @@ struct ChannelList: View {
                     }
                     .pickerStyle(.inline)
                     Toggle("Show Archived", isOn: $gateway.showArchived)
+                    Divider()
+                    Button("Edit Connection…", action: self.editConnection)
+                    Button("Reconnect") { self.gateway.stop(); self.gateway.start() }
                 } label: {
                     Label("Organize", systemImage: "line.3.horizontal.decrease.circle")
                 }
@@ -121,6 +142,28 @@ struct ChannelList: View {
         }
         #endif
         .refreshable { await self.gateway.refreshSessions() }
+    }
+
+    // MARK: Drag and drop between groups
+
+    fileprivate func isDropHighlighted(_ section: SidebarSection) -> Bool {
+        guard let key = self.draggingKey, self.dropHovers.values.contains(section.id) else { return false }
+        return self.gateway.groupDropValue(for: key, onto: section) != nil
+    }
+
+    fileprivate func setDropHover(_ targeted: Bool, element: String, section: SidebarSection) {
+        if targeted { self.dropHovers[element] = section.id } else { self.dropHovers[element] = nil }
+    }
+
+    fileprivate func drop(_ keys: [String], onto section: SidebarSection) -> Bool {
+        self.draggingKey = nil
+        self.dropHovers = [:]
+        let moves = keys.filter { self.gateway.groupDropValue(for: $0, onto: section) != nil }
+        guard !moves.isEmpty else { return false }
+        Task {
+            for key in moves { await self.gateway.moveToGroup(key, droppedOn: section) }
+        }
+        return true
     }
 
     private func expansion(_ id: String) -> Binding<Bool> {
@@ -211,6 +254,17 @@ struct ChannelList: View {
 
 extension String: @retroactive Identifiable {
     public var id: String { self }
+}
+
+private extension View {
+    /// Accepts chats dragged from the sidebar and moves them into `section`'s group.
+    func groupDropZone(_ list: ChannelList, section: SidebarSection, element: String) -> some View {
+        self.dropDestination(for: String.self) { keys, _ in
+            list.drop(keys, onto: section)
+        } isTargeted: { targeted in
+            list.setDropHover(targeted, element: element, section: section)
+        }
+    }
 }
 
 private struct ChannelRow: View {

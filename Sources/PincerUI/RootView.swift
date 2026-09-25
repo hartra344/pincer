@@ -54,11 +54,9 @@ struct RootView: View {
 
     var body: some View {
         NavigationSplitView(columnVisibility: self.$columns) {
-            HStack(spacing: 0) {
-                ServerRail(editing: self.$editing, addingGateway: self.$addingGateway)
-                Divider()
+            Group {
                 if let gateway = self.app.selectedGateway {
-                    ChannelList()
+                    ChannelList(editConnection: { self.editing = gateway.profile })
                         .environment(gateway)
                         .id(gateway.id)
                 } else {
@@ -66,7 +64,7 @@ struct RootView: View {
                 }
             }
             #if os(macOS)
-            .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 460)
+            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
             #endif
         } detail: {
             self.detail

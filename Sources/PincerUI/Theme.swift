@@ -10,7 +10,6 @@ public typealias PlatformImage = UIImage
 #endif
 
 enum Theme {
-    static let railWidth: CGFloat = 68
     static let bubbleCorner: CGFloat = 14
     static let accent = Color(red: 0.93, green: 0.33, blue: 0.24) // lobster
 
