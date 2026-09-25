@@ -319,6 +319,10 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     print("Live against \(url)")
     await runLive(url: url, token: token)
 }
+if arguments.contains("--demo") {
+    print("Built-in demo")
+    await runDemo()
+}
 
 print("\n\(passes) passed, \(failures) failed")
 exit(failures == 0 ? 0 : 1)
@@ -332,6 +336,73 @@ func waitFor(_ label: String, timeout: Double = 15, _ condition: () -> Bool) asy
     }
     print("    … timed out waiting for \(label)")
     return condition()
+}
+
+@MainActor
+func runDemo() async {
+    let profile = GatewayProfile.demo()
+    check(profile.isDemo && profile.authMode == .none, "demo profile")
+    let gateway = GatewayStore(profile: profile)
+    gateway.start()
+    gateway.reconnectIfNeeded()
+    let connected = await waitFor("demo connection") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    check(connected, "demo connected and bootstrapped")
+    guard connected else { return }
+    check(gateway.agents.count >= 3, "agents (\(gateway.agents.map(\.name)))")
+    check(gateway.sessions.count >= 5, "sessions (\(gateway.sessions.count))")
+
+    let key = "agent:main:main"
+    gateway.selectedKey = key
+    let chat = gateway.chat(for: key)
+    let loaded = await waitFor("history") { chat.hasLoaded }
+    check(loaded && !chat.entries.isEmpty, "welcome history loaded")
+
+    let trip = gateway.chat(for: "agent:main:dashboard:trip")
+    await trip.load()
+    check(trip.hasMoreHistory && trip.items.count == 120, "trip latest page (\(trip.items.count))")
+    await trip.loadOlder()
+    await trip.loadOlder()
+    check(!trip.hasMoreHistory && trip.items.count == 302, "trip paged to start (\(trip.items.count))")
+
+    let before = chat.entries.count
+    await chat.send("show me a tool and an image")
+    var sawThinking = false
+    var sawTool = false
+    let finished = await waitFor("demo reply", timeout: 20) {
+        if case let .assistant(turn)? = chat.entries.last, turn.isStreaming {
+            if !turn.thinking.isEmpty { sawThinking = true }
+            if !turn.tools.isEmpty { sawTool = true }
+        }
+        return !chat.isRunning && chat.entries.count > before
+    }
+    check(finished, "demo reply finished")
+    check(sawThinking && sawTool, "demo streamed thinking and a tool")
+    if case let .assistant(turn)? = chat.entries.last, let image = turn.images.first {
+        check(!turn.body.isEmpty, "demo reply has text")
+        gateway.images.load(image, sessionKey: key)
+        let decoded = await waitFor("chart") { gateway.images.cached(image) != nil }
+        check(decoded, "demo chart decoded")
+    } else {
+        check(false, "demo reply carries a chart")
+    }
+
+    await gateway.loadModels(agentId: "main")
+    check(!(gateway.modelCatalogs["main"] ?? []).isEmpty, "demo model catalog")
+    await gateway.setModel(key, to: "openai/gpt-5.6-sol")
+    let switched = await waitFor("model switch") { gateway.sessions[key]?.modelRef == "openai/gpt-5.6-sol" }
+    check(switched, "demo model switch")
+
+    await chat.send("please approve this")
+    let approvalSeen = await waitFor("approval") { !gateway.approvals.isEmpty }
+    check(approvalSeen, "demo approval surfaced")
+    if let approval = gateway.approvals.first {
+        await gateway.resolveApproval(approval, decision: "allow-once")
+        check(gateway.approvals.isEmpty, "demo approval resolved")
+    }
+
+    let newKey = await gateway.createSession(agentId: "research", label: "Demo check", category: "Work")
+    check(newKey != nil && gateway.sessions[newKey ?? ""] != nil, "demo sessions.create")
+    gateway.stop()
 }
 
 @MainActor

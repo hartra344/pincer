@@ -83,6 +83,15 @@ public final class AppModel {
         return store
     }
 
+    /// Selects the built-in demo, adding it the first time.
+    public func openDemo() {
+        if let existing = self.gateways.first(where: { $0.profile.isDemo }) {
+            self.selectedGatewayId = existing.id
+        } else {
+            self.add(.demo(), secret: nil)
+        }
+    }
+
     /// Replaces the connection; the device identity (and thus pairing) is kept.
     public func update(_ profile: GatewayProfile, secret: String?, credentialsChanged: Bool) {
         guard let index = self.gateways.firstIndex(where: { $0.id == profile.id }) else { return }

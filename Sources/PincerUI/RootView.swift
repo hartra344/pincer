@@ -112,13 +112,14 @@ struct RootView: View {
             }
             .environment(gateway)
         } else {
-            WelcomeView { self.addingGateway = true }
+            WelcomeView(add: { self.addingGateway = true }, tryDemo: { self.app.openDemo() })
         }
     }
 }
 
 struct WelcomeView: View {
     let add: () -> Void
+    let tryDemo: () -> Void
 
     var body: some View {
         ContentUnavailableView {
@@ -128,6 +129,9 @@ struct WelcomeView: View {
         } actions: {
             Button("Add Gateway…", action: self.add)
                 .glassProminentButton()
+                .controlSize(.large)
+            Button("Try the Demo", action: self.tryDemo)
+                .glassButton()
                 .controlSize(.large)
         }
     }

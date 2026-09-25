@@ -58,6 +58,13 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
         self.manageSettings ? GatewayConnection.scopes + [GatewayConnection.adminScope] : GatewayConnection.scopes
     }
 
+    /// The built-in demo, which runs a simulated Gateway on the device.
+    public var isDemo: Bool { self.url == DemoGateway.url }
+
+    public static func demo() -> GatewayProfile {
+        GatewayProfile(name: "Demo", url: DemoGateway.url, authMode: .none)
+    }
+
     public var initials: String {
         let words = self.name.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
         let letters = words.prefix(2).compactMap(\.first).map(String.init).joined()

@@ -18,47 +18,64 @@ struct ConnectionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    TextField("Name", text: self.$name)
-                    TextField("Gateway URL", text: self.$url, prompt: Text("wss://home.tailnet-name.ts.net"))
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        #endif
-                    if let error = self.urlError {
-                        Text(error).font(.caption).foregroundStyle(.red)
-                    } else if self.url.lowercased().hasPrefix("ws://"), self.url.lowercased().contains(".ts.net") {
-                        Text("Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port.")
-                            .font(.caption).foregroundStyle(.orange)
+                if self.existing?.isDemo == true {
+                    Section {
+                        Text("The demo runs a simulated Gateway on this device, with sample agents, chats and replies. Nothing is sent anywhere.")
                     }
-                } footer: {
-                    Text("Use your Tailscale Serve name (wss://…ts.net) or tailnet IP (ws://100.x.y.z:18789). Plain ws:// is only allowed for Tailscale, LAN and loopback addresses.")
+                } else {
+                    Section {
+                        TextField("Name", text: self.$name)
+                        TextField("Gateway URL", text: self.$url, prompt: Text("wss://home.tailnet-name.ts.net"))
+                            .autocorrectionDisabled()
+                            #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.URL)
+                            #endif
+                        if let error = self.urlError {
+                            Text(error).font(.caption).foregroundStyle(.red)
+                        } else if self.url.lowercased().hasPrefix("ws://"), self.url.lowercased().contains(".ts.net") {
+                            Text("Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port.")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                    } footer: {
+                        Text("Use your Tailscale Serve name (wss://…ts.net) or tailnet IP (ws://100.x.y.z:18789). Plain ws:// is only allowed for Tailscale, LAN and loopback addresses.")
+                    }
+
+                    Section("Authentication") {
+                        Picker("Method", selection: self.$authMode) {
+                            ForEach(GatewayProfile.AuthMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                        }
+                        if self.authMode != .none {
+                            SecureField(self.authMode == .token ? "Gateway token" : "Gateway password", text: self.$secret,
+                                        prompt: Text(self.existing != nil && !self.secretEdited ? "Saved in Keychain" : "Required for first pairing"))
+                                .onChange(of: self.secret) { self.secretEdited = true }
+                        }
+                    }
+
+                    Section {
+                        TextField("TLS certificate SHA-256", text: self.$fingerprint, prompt: Text("Optional pin, hex"))
+                            .font(.body.monospaced())
+                            .autocorrectionDisabled()
+                        Toggle(isOn: self.$manageSettings) {
+                            Text("Manage Gateway settings")
+                            Text("Also asks for admin access, so you can change the Gateway's config and plugins. The Gateway host approves this device again.")
+                        }
+                    } header: {
+                        Text("Advanced")
+                    } footer: {
+                        Text("Pincer connects as an operator only. It never runs a Gateway, never registers as a node, and stores secrets in the Keychain.")
+                    }
                 }
 
-                Section("Authentication") {
-                    Picker("Method", selection: self.$authMode) {
-                        ForEach(GatewayProfile.AuthMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                if self.existing == nil {
+                    Section {
+                        Button("Try the Demo", systemImage: "play.circle") {
+                            self.app.openDemo()
+                            self.dismiss()
+                        }
+                    } footer: {
+                        Text("No Gateway yet? Explore Pincer with sample agents and chats. Nothing leaves this device.")
                     }
-                    if self.authMode != .none {
-                        SecureField(self.authMode == .token ? "Gateway token" : "Gateway password", text: self.$secret,
-                                    prompt: Text(self.existing != nil && !self.secretEdited ? "Saved in Keychain" : "Required for first pairing"))
-                            .onChange(of: self.secret) { self.secretEdited = true }
-                    }
-                }
-
-                Section {
-                    TextField("TLS certificate SHA-256", text: self.$fingerprint, prompt: Text("Optional pin, hex"))
-                        .font(.body.monospaced())
-                        .autocorrectionDisabled()
-                    Toggle(isOn: self.$manageSettings) {
-                        Text("Manage Gateway settings")
-                        Text("Also asks for admin access, so you can change the Gateway's config and plugins. The Gateway host approves this device again.")
-                    }
-                } header: {
-                    Text("Advanced")
-                } footer: {
-                    Text("Pincer connects as an operator only. It never runs a Gateway, never registers as a node, and stores secrets in the Keychain.")
                 }
 
                 if let existing {
@@ -110,7 +127,7 @@ struct ConnectionSheet: View {
     }
 
     private var urlError: String? {
-        guard !self.url.isEmpty else { return nil }
+        guard !self.url.isEmpty, !self.draft.isDemo else { return nil }
         do {
             _ = try self.draft.resolvedURL()
             return nil

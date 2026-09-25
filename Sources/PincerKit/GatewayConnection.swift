@@ -100,10 +100,13 @@ public actor GatewayConnection {
     private var stateHandler: (@Sendable (ConnectionState, GatewayHello?) -> Void)?
     private var loopTask: Task<Void, Never>?
     private var watchdogTask: Task<Void, Never>?
+    /// Stands in for the WebSocket when the profile is the built-in demo.
+    private let demo: DemoGateway?
 
     public init(profile: GatewayProfile, identity: DeviceIdentity = .loadOrCreate()) {
         self.profile = profile
         self.identity = identity
+        self.demo = profile.isDemo ? DemoGateway() : nil
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 30
@@ -141,6 +144,7 @@ public actor GatewayConnection {
     /// Force an immediate reconnect (e.g. app returned to foreground on iOS).
     public func reconnectNow() {
         guard self.shouldRun else { return }
+        if self.demo != nil, self.hello != nil { return }
         // A suspended iOS app's socket can still report `.running` while it's dead; missed
         // heartbeats mean requests would hang until the watchdog notices, so reconnect now.
         if let hello = self.hello, self.task?.state == .running,
@@ -163,6 +167,10 @@ public actor GatewayConnection {
     }
 
     public func request(_ method: String, _ params: JSONValue = [:], timeout: TimeInterval = 20) async throws -> JSONValue {
+        if let demo = self.demo {
+            guard self.hello != nil else { throw GatewayError.notConnected }
+            return try await demo.handle(method, params)
+        }
         guard self.hello != nil, let task = self.task else { throw GatewayError.notConnected }
         guard DebugLog.enabled, !DebugLog.quietMethods.contains(method) else {
             return try await self.send(method: method, params: params, on: task, timeout: timeout)
@@ -274,6 +282,14 @@ public actor GatewayConnection {
     }
 
     private func connectOnce() async throws {
+        if let demo = self.demo {
+            self.teardown(reason: "new attempt")
+            let handler = self.eventHandler
+            let response = await demo.attach { handler?($0) }
+            self.hello = GatewayHello(payload: response)
+            self.lastFrameAt = Date()
+            return
+        }
         let url = try self.profile.resolvedURL()
         self.teardown(reason: "new attempt")
         self.generation += 1

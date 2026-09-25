@@ -133,6 +133,10 @@ The certificates and profiles expire on 2027-09-25. Renew them before then and u
 
 ## Testing without a real gateway
 
+The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, chats, streamed replies, a chart and an exec approval, and nothing leaves the device. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too.
+
+For the full protocol, including Gateway Settings, run the Node mock:
+
 ```sh
 cd mock-gateway && npm install
 npm start                                   # ws://127.0.0.1:18789, token "dev-token"
@@ -153,6 +157,7 @@ To run the self-checks:
 ```sh
 PINCER_KEYCHAIN=memory swift run PincerChecks
 PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo
 ```
 
 `PINCER_KEYCHAIN=memory` keeps identities and secrets in memory, so checks and dev runs never touch your real Keychain. It works for the app too: `open --env PINCER_KEYCHAIN=memory build/Pincer.app`.
