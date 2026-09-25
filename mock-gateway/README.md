@@ -21,3 +21,10 @@ Run the full in-process self-test:
 npm test --if-present
 npm run selftest
 ```
+
+Config and plugins (`config.mjs`):
+
+- `config.get`, `config.schema`, `config.patch`, `config.set`, `config.apply` with redacted secrets, `baseHash` checks, validation issues, and `restart` for `gateway.*` changes. Writes need the `operator.admin` scope.
+- `plugins.list`, `plugins.inspect`, `plugins.setEnabled`, `plugins.install`, `plugins.uninstall`, broadcasting `plugins.changed`.
+- `weather` needs an `apiKey` (at least 8 characters); `browser` asks for capability consent before enabling; bundled plugins can't be removed.
+- Install specs containing `missing` fail as not found; specs containing `unverified` require acknowledging the install policy warning.

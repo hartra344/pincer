@@ -12,6 +12,7 @@ struct ConnectionSheet: View {
     @State private var secret = ""
     @State private var secretEdited = false
     @State private var fingerprint = ""
+    @State private var manageSettings = false
     @State private var confirmRemove = false
 
     var body: some View {
@@ -50,6 +51,10 @@ struct ConnectionSheet: View {
                     TextField("TLS certificate SHA-256", text: self.$fingerprint, prompt: Text("Optional pin, hex"))
                         .font(.body.monospaced())
                         .autocorrectionDisabled()
+                    Toggle(isOn: self.$manageSettings) {
+                        Text("Manage Gateway settings")
+                        Text("Also asks for admin access, so you can change the Gateway's config and plugins. The Gateway host approves this device again.")
+                    }
                 } header: {
                     Text("Advanced")
                 } footer: {
@@ -89,6 +94,7 @@ struct ConnectionSheet: View {
             self.url = existing.url
             self.authMode = existing.authMode
             self.fingerprint = existing.tlsFingerprint ?? ""
+            self.manageSettings = existing.manageSettings
             self.secretEdited = false
         }
     }
@@ -99,7 +105,8 @@ struct ConnectionSheet: View {
             name: self.name.trimmingCharacters(in: .whitespaces).isEmpty ? "Gateway" : self.name,
             url: self.url.trimmingCharacters(in: .whitespacesAndNewlines),
             authMode: self.authMode,
-            tlsFingerprint: self.fingerprint.nilIfBlank)
+            tlsFingerprint: self.fingerprint.nilIfBlank,
+            manageSettings: self.manageSettings)
     }
 
     private var urlError: String? {

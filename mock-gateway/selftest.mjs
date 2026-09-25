@@ -17,8 +17,9 @@ function makeDevice() {
   return { id, publicKey: b64url(rawPublic), privateKey };
 }
 
-function signConnect(device, challenge, token) {
-  const scopes = ['operator.read', 'operator.write', 'operator.approvals'];
+const BASE_SCOPES = ['operator.read', 'operator.write', 'operator.approvals'];
+
+function signConnect(device, challenge, token, scopes = BASE_SCOPES) {
   const client = {
     id: 'openclaw-macos',
     displayName: 'Pincer Selftest',
@@ -47,7 +48,7 @@ function signConnect(device, challenge, token) {
   };
 }
 
-async function connectClient(url, device, token, expectOk = true) {
+async function connectClient(url, device, token, expectOk = true, scopes = BASE_SCOPES) {
   const ws = new WebSocket(url);
   const emitter = new EventEmitter();
   const pending = new Map();
@@ -77,7 +78,7 @@ async function connectClient(url, device, token, expectOk = true) {
   await waitUntil(() => challenge, 1000, 'challenge');
   const id = `req_${nextId++}`;
   const connectResP = new Promise((resolve) => pending.set(id, resolve));
-  ws.send(JSON.stringify({ type: 'req', id, method: 'connect', params: signConnect(device, challenge, token) }));
+  ws.send(JSON.stringify({ type: 'req', id, method: 'connect', params: signConnect(device, challenge, token, scopes) }));
   const connectRes = await connectResP;
   if (expectOk) {
     assert.equal(connectRes.ok, true, JSON.stringify(connectRes));
@@ -88,11 +89,15 @@ async function connectClient(url, device, token, expectOk = true) {
     return { ws, connectRes };
   }
 
-  function send(method, params = {}) {
+  function call(method, params = {}) {
     const reqId = `req_${nextId++}`;
     const p = new Promise((resolve) => pending.set(reqId, resolve));
     ws.send(JSON.stringify({ type: 'req', id: reqId, method, params }));
-    return p.then((res) => {
+    return p;
+  }
+
+  function send(method, params = {}) {
+    return call(method, params).then((res) => {
       assert.equal(res.ok, true, `${method} failed: ${JSON.stringify(res)}`);
       return res.payload;
     });
@@ -123,7 +128,7 @@ async function connectClient(url, device, token, expectOk = true) {
     });
   }
 
-  return { ws, hello, send, waitEvent, emitter };
+  return { ws, hello, send, call, waitEvent, emitter };
 }
 
 async function waitUntil(fn, timeoutMs, label) {
@@ -195,7 +200,45 @@ try {
   assert.ok(deltaCount > 0, 'expected chat deltas');
   assert.equal(sawTool, true, 'expected tool result event');
 
+  // Config and plugins: reads need operator.read, writes operator.admin.
+  const snapshot = await client.send('config.get');
+  assert.equal(snapshot.valid, true, JSON.stringify(snapshot.issues));
+  assert.equal(snapshot.config.gateway.auth.token, '__OPENCLAW_REDACTED__');
+  const schema = await client.send('config.schema');
+  assert.equal(schema.uiHints['gateway.auth.token'].sensitive, true);
+  const denied = await client.call('config.patch', { raw: '{"agents":{"defaults":{"timeoutSeconds":5}}}', baseHash: snapshot.hash });
+  assert.equal(denied.ok, false);
+  assert.match(denied.error.message, /operator\.admin/);
   client.ws.close();
+
+  const admin = await connectClient(url, device, deviceToken, true, [...BASE_SCOPES, 'operator.admin']);
+  const stale = await admin.call('config.patch', { raw: '{"agents":{"defaults":{"timeoutSeconds":5}}}', baseHash: 'nope' });
+  assert.match(stale.error.message, /config changed since last load/);
+  const invalid = await admin.call('config.patch', { raw: '{"gateway":{"port":70000}}', baseHash: snapshot.hash });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.error.details.issues[0].path, 'gateway.port');
+  const hot = await admin.send('config.patch', { raw: '{"agents":{"defaults":{"timeoutSeconds":5}},"gateway":{"auth":{"token":"__OPENCLAW_REDACTED__"}}}', baseHash: snapshot.hash });
+  assert.deepEqual(hot.changedPaths, ['agents.defaults.timeoutSeconds']);
+  assert.equal(hot.restart, undefined);
+  assert.equal(server.state.configState.config.gateway.auth.token, 'dev-token', 'redacted secret restored');
+  const restart = await admin.send('config.patch', { raw: '{"gateway":{"port":18790}}', baseHash: hot.hash });
+  assert.equal(restart.restart.delayMs, 2000);
+
+  const plugins = await admin.send('plugins.list');
+  assert.equal(plugins.plugins.find((p) => p.id === 'weather').state, 'needs-setup');
+  const consent = await admin.call('plugins.setEnabled', { pluginId: 'browser', enabled: true });
+  assert.equal(consent.error.details.capabilityConsentCode, 'PLUGIN_CAPABILITY_CONSENT_REQUIRED');
+  const changed = admin.waitEvent('plugins.changed');
+  const enabled = await admin.send('plugins.setEnabled', { pluginId: 'browser', enabled: true, acknowledgeCapabilities: { reviewToken: consent.error.details.reviewToken } });
+  assert.equal(enabled.plugin.enabled, true);
+  await changed;
+  const installed = await admin.send('plugins.install', { source: 'npm', spec: 'openclaw-plugin-todo@1.0.0' });
+  assert.equal(installed.plugin.id, 'todo');
+  const removed = await admin.send('plugins.uninstall', { pluginId: 'todo' });
+  assert.equal(removed.pluginId, 'todo');
+  const bundled = await admin.call('plugins.uninstall', { pluginId: 'browser' });
+  assert.equal(bundled.ok, false);
+  admin.ws.close();
   console.log('PASS');
 } finally {
   await server.close();

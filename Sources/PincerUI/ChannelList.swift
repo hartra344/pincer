@@ -15,6 +15,7 @@ struct ChannelList: View {
     @State private var renaming: SessionRow?
     @State private var changingIcon: SessionRow?
     @State private var showingSettings = false
+    @State private var showingGatewaySettings = false
     @State private var expandedThreads: Set<String> = []
     @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
     @State private var prompt: TextPrompt?
@@ -49,6 +50,8 @@ struct ChannelList: View {
                     .pickerStyle(.inline)
                     Toggle("Show Archived", isOn: $gateway.showArchived)
                     Divider()
+                    Button("Gateway Settings…") { self.showingGatewaySettings = true }
+                        .disabled(!self.gateway.state.isConnected)
                     Button("Edit Connection…", action: self.editConnection)
                     Button("Reconnect") { self.gateway.stop(); self.gateway.start() }
                 } label: {
@@ -76,6 +79,9 @@ struct ChannelList: View {
         }
         .sheet(item: self.$prompt) { prompt in
             TextPromptSheet(prompt: prompt)
+        }
+        .sheet(isPresented: self.$showingGatewaySettings) {
+            GatewaySettingsView()
         }
         #if os(iOS)
         .toolbar {
