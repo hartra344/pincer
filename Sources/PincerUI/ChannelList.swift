@@ -39,7 +39,9 @@ struct ChannelList: View {
                             })
                             .tag(channel.row.key)
                             .contextMenu { self.menu(for: channel.row) }
-                            .onDrag {
+                            // `.itemProvider`, not `.onDrag`: on macOS `.onDrag` swallows the
+                            // mouse-down, so clicks to select a chat lag or get lost.
+                            .itemProvider {
                                 self.draggingKey = channel.row.key
                                 return NSItemProvider(object: channel.row.key as NSString)
                             }
