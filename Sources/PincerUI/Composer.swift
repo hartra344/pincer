@@ -13,7 +13,6 @@ struct Composer: View {
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var attachmentError: String?
     @State private var isTargeted = false
-    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -35,25 +34,13 @@ struct Composer: View {
             }
             HStack(alignment: .bottom, spacing: 8) {
                 self.attachMenu
-                TextField(self.placeholder, text: self.$text, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1...12)
-                    .focused(self.$focused)
+                ComposerTextView(
+                    placeholder: self.placeholder,
+                    text: self.$text,
+                    onSubmit: self.submit,
+                    onMedia: self.ingest)
                     .padding(.vertical, 8)
                     .frame(minHeight: 34)
-                    #if os(macOS)
-                    .onKeyPress(.return, phases: .down) { press in
-                        if press.modifiers.contains(.shift) || press.modifiers.contains(.option) {
-                            self.text += "\n"
-                            return .handled
-                        }
-                        self.submit()
-                        return .handled
-                    }
-                    .onPasteCommand(of: [.image, .fileURL]) { providers in
-                        self.ingest(providers)
-                    }
-                    #endif
                 if self.chat.isRunning {
                     Button {
                         Task { await self.chat.abort() }
@@ -83,13 +70,13 @@ struct Composer: View {
         .padding(.horizontal, 16)
         .padding(.top, 6)
         .padding(.bottom, 12)
-        .onDrop(of: [.image, .fileURL], isTargeted: self.$isTargeted) { providers in
-            self.ingest(providers)
+        .onDrop(of: [.fileURL, .image, .audiovisualContent, .pdf], isTargeted: self.$isTargeted) { providers in
+            self.ingest(providers.map(PastedMedia.provider))
             return true
         }
         .fileImporter(isPresented: self.$importing, allowedContentTypes: [.image, .pdf, .plainText, .item], allowsMultipleSelection: true) { result in
             guard case let .success(urls) = result else { return }
-            for url in urls { self.addFile(url) }
+            self.ingest(urls.map(PastedMedia.file))
         }
         .onChange(of: self.photoItems) { _, items in
             guard !items.isEmpty else { return }
@@ -102,7 +89,6 @@ struct Composer: View {
                 self.photoItems = []
             }
         }
-        .onAppear { self.focused = true }
     }
 
     private var attachMenu: some View {
@@ -110,8 +96,13 @@ struct Composer: View {
             Button("Choose File…", systemImage: "doc") { self.importing = true }
             #if os(iOS)
             Button("Paste Image", systemImage: "doc.on.clipboard") {
-                if let image = UIPasteboard.general.image, let data = image.pngData() {
-                    self.addImage(data, name: "pasted.png")
+                let items = MediaPasteboard.items(from: .general)
+                if !items.isEmpty {
+                    self.ingest(items)
+                } else if let image = UIPasteboard.general.image, let data = image.pngData() {
+                    self.addImage(data, name: "Pasted Image.png")
+                } else {
+                    self.attachmentError = "There’s no image or file on the clipboard."
                 }
             }
             #endif
@@ -166,40 +157,133 @@ struct Composer: View {
         return min(hello?.maxAttachmentBytes ?? 10_000_000, Int(Double(hello?.maxPayload ?? 25_000_000) * 0.7))
     }
 
-    private func ingest(_ providers: [NSItemProvider]) {
-        for provider in providers {
-            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-                _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                    guard let url else { return }
-                    Task { @MainActor in self.addFile(url) }
-                }
-            } else if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
-                provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
-                    guard let data else { return }
-                    Task { @MainActor in self.addImage(data, name: "pasted.png") }
+    private func ingest(_ items: [PastedMedia]) {
+        for item in items {
+            switch item {
+            case let .file(url):
+                self.addFile(url)
+            case let .data(data, type, name):
+                self.addData(data, type: type, name: name ?? Self.pastedName(for: type))
+            case let .provider(provider):
+                self.load(provider)
+            }
+        }
+    }
+
+    private func load(_ provider: NSItemProvider) {
+        let mediaType = MediaPasteboard.mediaType(in: provider.registeredTypeIdentifiers)
+        guard mediaType == nil, provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else {
+            self.loadData(provider, type: mediaType)
+            return
+        }
+        let maxFileBytes = self.maxFileBytes
+        _ = provider.loadObject(ofClass: URL.self) { url, _ in
+            // Files handed over by a provider may only be readable inside this callback.
+            let result = url.map { Self.readFile($0, maxFileBytes: maxFileBytes) }
+            Task { @MainActor in
+                switch result {
+                case let .success(file)?:
+                    self.addData(file.data, type: file.type, name: file.name)
+                case let .failure(error)?:
+                    self.attachmentError = error.message
+                case nil:
+                    self.attachmentError = "That item can’t be attached."
                 }
             }
         }
     }
 
-    private func addFile(_ url: URL) {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        guard let data = try? Data(contentsOf: url) else {
-            self.attachmentError = "Couldn’t read \(url.lastPathComponent)."
+    private func loadData(_ provider: NSItemProvider, type: UTType?) {
+        guard let type else {
+            self.attachmentError = "That item can’t be attached."
             return
         }
-        let type = UTType(filenameExtension: url.pathExtension)
+        let name = Self.fileName(provider.suggestedName, type: type)
+        _ = provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
+            Task { @MainActor in
+                guard let data else {
+                    self.attachmentError = "Couldn’t read \(name)."
+                    return
+                }
+                self.addData(data, type: type, name: name)
+            }
+        }
+    }
+
+    private func addFile(_ url: URL) {
+        switch Self.readFile(url, maxFileBytes: self.maxFileBytes) {
+        case let .success(file):
+            self.addData(file.data, type: file.type, name: file.name)
+        case let .failure(error):
+            self.attachmentError = error.message
+        }
+    }
+
+    private func addData(_ data: Data, type: UTType?, name: String) {
         if type?.conforms(to: .image) == true {
-            self.addImage(data, name: url.lastPathComponent)
+            self.addImage(data, name: name)
         } else if data.count > self.maxFileBytes {
-            self.attachmentError = "\(url.lastPathComponent) is larger than the Gateway allows."
+            self.attachmentError = "\(name) is larger than the Gateway allows (\(Self.byteString(self.maxFileBytes)))."
         } else {
             self.attachments.append(OutgoingAttachment(
-                fileName: url.lastPathComponent,
+                fileName: name,
                 mimeType: type?.preferredMIMEType ?? "application/octet-stream",
                 data: data))
+            self.attachmentError = nil
         }
+    }
+
+    private struct ReadFile: Sendable {
+        let data: Data
+        let type: UTType?
+        let name: String
+    }
+
+    private struct ReadError: Error {
+        let message: String
+    }
+
+    /// Images may exceed the Gateway limit because they're downscaled before upload.
+    private static let maxRawImageBytes = 200_000_000
+
+    private nonisolated static func readFile(_ url: URL, maxFileBytes: Int) -> Result<ReadFile, ReadError> {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let name = url.lastPathComponent
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey, .contentTypeKey])
+        if values?.isDirectory == true {
+            return .failure(ReadError(message: "\(name) is a folder; attach files instead."))
+        }
+        let type = values?.contentType ?? UTType(filenameExtension: url.pathExtension)
+        let limit = type?.conforms(to: .image) == true ? self.maxRawImageBytes : maxFileBytes
+        if let size = values?.fileSize, size > limit {
+            return .failure(ReadError(message: "\(name) is larger than the Gateway allows (\(self.byteString(maxFileBytes)))."))
+        }
+        guard let data = try? Data(contentsOf: url) else {
+            return .failure(ReadError(message: "Couldn’t read \(name)."))
+        }
+        return .success(ReadFile(data: data, type: type, name: name))
+    }
+
+    private nonisolated static func pastedName(for type: UTType) -> String {
+        self.fileName(nil, type: type)
+    }
+
+    private nonisolated static func fileName(_ suggested: String?, type: UTType) -> String {
+        let base: String
+        if let suggested, !suggested.isEmpty {
+            base = suggested
+        } else if type.conforms(to: .image) {
+            base = "Pasted Image"
+        } else {
+            base = "Pasted File"
+        }
+        guard (base as NSString).pathExtension.isEmpty, let ext = type.preferredFilenameExtension else { return base }
+        return "\(base).\(ext)"
+    }
+
+    private nonisolated static func byteString(_ bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 
     private func addImage(_ data: Data, name: String) {
