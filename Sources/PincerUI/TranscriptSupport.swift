@@ -89,7 +89,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     private enum ImageState: Equatable { case loading, loaded, failed }
 
     private(set) var context: TranscriptContext
-    private var settings = TranscriptSettings.current
+    private var settings: TranscriptSettings
     private var cache: [String: Entry] = [:]
     private var imageRows: [String: Set<String>] = [:]
     private var imageStates: [String: ImageState] = [:]
@@ -103,6 +103,7 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     init(context: TranscriptContext) {
         self.context = context
+        self.settings = .current(for: context)
         self.observeImages()
         self.observeSessions()
         let center = NotificationCenter.default
@@ -126,7 +127,12 @@ final class TranscriptRenderer: TranscriptRowActions {
     func update(context: TranscriptContext) {
         let changed = context.differs(from: self.context)
         self.context = context
-        if changed { self.reset() }
+        if changed {
+            self.settings = .current(for: context)
+            self.reset()
+        } else {
+            self.settingsChanged()
+        }
     }
 
     /// The row laid out at `width`, from cache when neither has changed.
@@ -207,6 +213,8 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     private func sessionsChanged() {
+        // The session's reasoningLevel feeds the settings.
+        if self.settingsChanged() { return }
         guard !self.spawnRows.isEmpty else { return }
         var stale: Set<String> = []
         for id in self.spawnRows {
@@ -220,11 +228,12 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.invalidate(stale)
     }
 
-    private func settingsChanged() {
-        let settings = TranscriptSettings.current
-        guard settings != self.settings else { return }
+    @discardableResult private func settingsChanged() -> Bool {
+        let settings = TranscriptSettings.current(for: self.context)
+        guard settings != self.settings else { return false }
         self.settings = settings
         self.invalidateAll()
+        return true
     }
 
     // MARK: TranscriptRowActions
@@ -286,8 +295,12 @@ enum TranscriptLayout {
             return scaffold + lines(item.plainText) * 18 + (images > 0 ? 240 : 0) + CGFloat(files) * 36
         case let .entry(.assistant(turn)):
             var height = scaffold
-            if !turn.thinking.isEmpty { height += 26 }
-            height += CGFloat(turn.tools.count) * 34
+            if turn.isStreaming, ThinkingDisplay.current != .none {
+                if !turn.thinking.isEmpty { height += 26 }
+                height += CGFloat(turn.tools.count) * 34
+            } else if ThinkingDisplay.current == .all, !turn.thinking.isEmpty || !turn.tools.isEmpty {
+                height += 26
+            }
             if !turn.text.isEmpty { height += lines(turn.body) * 18 }
             if !turn.images.isEmpty { height += 240 }
             height += CGFloat(turn.files.count) * 36

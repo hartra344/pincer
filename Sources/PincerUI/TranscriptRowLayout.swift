@@ -40,6 +40,7 @@ enum TranscriptPart {
 
     struct Thinking {
         let key: String
+        let title: String
         let isStreaming: Bool
         let isExpanded: Bool
     }
@@ -147,16 +148,17 @@ struct TranscriptRowLayout {
     var serial = 0
 }
 
-/// Settings that change how rows look. Read from the same defaults the Settings screen writes.
+/// Settings that change how rows look. Read from the same defaults the Settings screen writes,
+/// plus the session's own `reasoningLevel`.
 struct TranscriptSettings: Equatable {
-    var expandThinking: Bool
-    var showTools: Bool
+    var thinking: ThinkingDisplay
+    /// The session has reasoning turned off on the Gateway, so no reasoning text is shown at all.
+    var reasoningOff = false
 
-    static var current: TranscriptSettings {
-        let defaults = UserDefaults.standard
-        return TranscriptSettings(
-            expandThinking: defaults.object(forKey: "pincer.expandThinking") as? Bool ?? false,
-            showTools: defaults.object(forKey: "pincer.showTools") as? Bool ?? true)
+    @MainActor static func current(for context: TranscriptContext) -> TranscriptSettings {
+        TranscriptSettings(
+            thinking: ThinkingDisplay.current,
+            reasoningOff: context.gateway.sessions[context.sessionKey]?.reasoningLevel == "off")
     }
 }
 
@@ -240,26 +242,41 @@ struct TranscriptLayoutBuilder {
         layout.copyItems = [.init(title: "Copy Reply", text: turn.body)]
         if !thinking.isEmpty { layout.copyItems.append(.init(title: "Copy Thinking", text: thinking)) }
         layout.accessibilityLabel = "\(agent.name): \(turn.body)"
+        let reasoning = self.settings.reasoningOff ? "" : thinking
+        let hasSteps = !reasoning.isEmpty || !turn.tools.isEmpty
+        let hasReply = !turn.text.isEmpty || !turn.images.isEmpty || !turn.files.isEmpty
+        let steps: ThinkingSteps = switch self.settings.thinking {
+        case _ where !hasSteps: .hidden
+        case .none: .hidden
+        case _ where turn.isStreaming: .live
+        case .all: .grouped
+        // A finished turn with nothing else to show keeps its steps, folded, so it isn't blank.
+        case .live: hasReply ? .hidden : .grouped
+        }
         self.scaffold(avatar: .init(text: String(agent.name.prefix(1)).uppercased(), emoji: agent.emoji, color: TranscriptColors.accent),
                       header: header, into: &layout) { stack, layout in
-            if !thinking.isEmpty {
-                self.thinking(thinking, turn: turn, into: &stack)
-            }
-            if self.settings.showTools {
-                for (index, tool) in turn.tools.enumerated() {
-                    self.tool(tool, first: index == 0, into: &stack, layout: &layout)
-                }
+            switch steps {
+            case .hidden:
+                break
+            case .live:
+                if !reasoning.isEmpty { self.thinking(reasoning, turn: turn, into: &stack) }
+                self.tools(turn.tools, into: &stack, layout: &layout)
+            case .grouped:
+                self.thinkingGroup(reasoning, turn: turn, into: &stack, layout: &layout)
             }
             if !turn.text.isEmpty {
                 self.markdown(turn.body, tone: turn.isError ? .error : .primary, into: &stack)
             }
             self.images(turn.images, into: &stack, layout: &layout)
             for file in turn.files { self.file(file, into: &stack) }
-            if turn.isStreaming, turn.text.isEmpty, turn.thinking.isEmpty, turn.tools.allSatisfy({ !$0.isRunning }) {
+            let showsActivity = steps == .live && (!reasoning.isEmpty || turn.tools.contains(where: \.isRunning))
+            if turn.isStreaming, turn.text.isEmpty, !showsActivity {
                 stack.add(.typing, height: 14, width: 26)
             }
         }
     }
+
+    private enum ThinkingSteps { case hidden, live, grouped }
 
     /// Avatar on the left, name line on top, content stacked below it.
     private func scaffold(avatar: TranscriptPart.Avatar, header: TranscriptPart.Header,
@@ -364,15 +381,39 @@ struct TranscriptLayoutBuilder {
     private func thinking(_ text: String, turn: AssistantTurn, into stack: inout Stack) {
         let key = "thinking:\(turn.id)"
         let streaming = turn.isStreaming && turn.text.isEmpty
-        // Thinking opened while it streamed stays open once the reply starts.
+        // Thinking opened while it streamed stays open until the turn finishes.
         if streaming { self.context.disclosure.setIfUnset(key, expanded: true) }
-        let expanded = self.context.disclosure.isExpanded(key, default: self.settings.expandThinking || streaming)
+        let expanded = self.context.disclosure.isExpanded(key, default: streaming)
         let width = min(stack.width, TranscriptMetrics.maxCardWidth)
         let headerHeight = max(TranscriptStyle.lineHeight(self.style.calloutMedium), TranscriptMetrics.iconBox)
-        stack.add(.thinkingHeader(.init(key: key, isStreaming: streaming, isExpanded: expanded)), height: headerHeight, width: width)
-        if expanded {
-            let body = TranscriptText.plain(text, font: self.style.callout, color: TranscriptColors.secondary)
-            stack.add(.thinkingBody(body), height: TranscriptText.size(body, width: max(width - 10, 20)).height, width: width, spacing: 6)
+        let title = streaming ? "Thinking…" : "Thinking"
+        stack.add(.thinkingHeader(.init(key: key, title: title, isStreaming: streaming, isExpanded: expanded)), height: headerHeight, width: width)
+        if expanded { self.thinkingBody(text, width: width, into: &stack) }
+    }
+
+    /// A finished turn's reasoning and tool calls as one collapsible "Thinking" item, closed until opened.
+    private func thinkingGroup(_ text: String, turn: AssistantTurn, into stack: inout Stack, layout: inout TranscriptRowLayout) {
+        let key = "steps:\(turn.id)"
+        let expanded = self.context.disclosure.isExpanded(key, default: false)
+        let width = min(stack.width, TranscriptMetrics.maxCardWidth)
+        let headerHeight = max(TranscriptStyle.lineHeight(self.style.calloutMedium), TranscriptMetrics.iconBox)
+        var title = "Thinking"
+        let count = turn.tools.count
+        if count > 0 { title += " · \(count) tool call\(count == 1 ? "" : "s")" }
+        stack.add(.thinkingHeader(.init(key: key, title: title, isStreaming: false, isExpanded: expanded)), height: headerHeight, width: width)
+        guard expanded else { return }
+        if !text.isEmpty { self.thinkingBody(text, width: width, into: &stack) }
+        self.tools(turn.tools, into: &stack, layout: &layout)
+    }
+
+    private func thinkingBody(_ text: String, width: CGFloat, into stack: inout Stack) {
+        let body = TranscriptText.plain(text, font: self.style.callout, color: TranscriptColors.secondary)
+        stack.add(.thinkingBody(body), height: TranscriptText.size(body, width: max(width - 10, 20)).height, width: width, spacing: 6)
+    }
+
+    private func tools(_ tools: [ToolActivity], into stack: inout Stack, layout: inout TranscriptRowLayout) {
+        for (index, tool) in tools.enumerated() {
+            self.tool(tool, first: index == 0, into: &stack, layout: &layout)
         }
     }
 

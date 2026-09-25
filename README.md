@@ -42,7 +42,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - search, unread dots and dock badge;
   - "Next Unread Chat" (⌥⇧↓).
 - **Transcript:**
-  - live streaming, with a collapsible **thinking** section and **tool cards** showing arguments and results;
+  - live streaming, with a collapsible **thinking** section and **tool cards** showing arguments and results. Choose whether to show thinking steps never, only live, or for every turn;
   - the full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer quietly caches every chat (most recently active first) and skips chats that haven't changed. Opening one shows the cached transcript at once, then fetches only what's new;
   - Markdown, including tables and code blocks with a Copy button;
   - **inline images** with a Quick Look-style preview and sharing. This covers attachments and the agent's `MEDIA:` lines, the same as the web UI. Local files are fetched through the gateway's `assistant-media` route. Public `https` images are downloaded directly, with no credentials or cookies sent; you can turn this off in Settings with "Load images the agent links from the web".
@@ -68,7 +68,15 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
 
 ### Seeing thinking
 
-OpenClaw only stores reasoning when the session's reasoning level is `on`. To turn it on, use the hint above the composer, the chat's ⋯ menu (**Reasoning → On**), or send `/reasoning on` in the chat.
+OpenClaw only stores reasoning when the session's reasoning level is `on`. To turn it on, use the hint above the composer, the chat's ⋯ menu (**Gateway Reasoning → Save & Stream**), or send `/reasoning on` in the chat. Setting it to **Off** also hides reasoning text in the transcript.
+
+How much of the agent's thinking steps (reasoning and tool calls) the transcript shows is a separate, per-device choice, under **Thinking Steps** in the chat's ⋯ menu or in Settings:
+
+- **None:** only replies.
+- **Live Only** (default): thinking and tool calls show while the agent works, then hide once the reply finishes.
+- **All:** every turn keeps its thinking and tool calls, folded into one collapsible "Thinking" item once the turn finishes.
+
+"Copy Thinking" stays in a reply's context menu whichever you pick.
 
 ## Building
 

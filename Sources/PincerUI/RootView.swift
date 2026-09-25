@@ -164,8 +164,7 @@ private struct SettingsForm: View {
     let sections: [Section]
     @Environment(AppModel.self) private var app
     @AppStorage("pincer.ownerName") private var ownerName = ""
-    @AppStorage("pincer.expandThinking") private var expandThinking = false
-    @AppStorage("pincer.showTools") private var showTools = true
+    @AppStorage(ThinkingDisplay.storageKey) private var thinkingDisplay = ThinkingDisplay.defaultValue
     @AppStorage("pincer.loadWebImages") private var loadWebImages = true
     @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
     @State private var notifications = true
@@ -194,8 +193,12 @@ private struct SettingsForm: View {
             }
         case .conversation:
             SwiftUI.Section("Conversation") {
-                Toggle("Expand thinking by default", isOn: self.$expandThinking)
-                Toggle("Show tool activity", isOn: self.$showTools)
+                Picker(selection: self.$thinkingDisplay) {
+                    ForEach(ThinkingDisplay.allCases) { Text($0.label).tag($0) }
+                } label: {
+                    Text("Thinking steps")
+                    Text(self.thinkingDisplay.detail + " Includes reasoning and tool calls.")
+                }
                 Toggle(isOn: self.$loadWebImages) {
                     Text("Load images the agent links from the web")
                     Text("Like OpenClaw's web UI. The image's website can see your IP address.")

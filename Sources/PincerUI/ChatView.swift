@@ -170,6 +170,7 @@ struct ChatView: View {
                     Button(row.isPinned ? "Unpin" : "Pin", systemImage: row.isPinned ? "pin.slash" : "pin") {
                         Task { await self.gateway.patch(row.key, ["pinned": .bool(!row.isPinned)]) }
                     }
+                    ThinkingDisplayPicker()
                     ReasoningMenu(row: row)
                     Divider()
                     Button("Reload", systemImage: "arrow.clockwise") {
@@ -184,13 +185,15 @@ struct ChatView: View {
     }
 }
 
+/// What the Gateway saves and streams of the agent's reasoning for this session. How much of it
+/// the transcript shows is `ThinkingDisplay`; "Off" hides reasoning text there too.
 struct ReasoningMenu: View {
     let row: SessionRow
     @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
-        Menu("Show Thinking", systemImage: "brain") {
-            ForEach([("on", "Save & show"), ("stream", "Live only"), ("off", "Off")], id: \.0) { value, label in
+        Menu("Gateway Reasoning", systemImage: "brain") {
+            ForEach([("on", "Save & Stream"), ("stream", "Stream Only"), ("off", "Off")], id: \.0) { value, label in
                 Button {
                     Task { await self.gateway.patch(self.row.key, ["reasoningLevel": .string(value)]) }
                 } label: {
