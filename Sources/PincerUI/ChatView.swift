@@ -57,8 +57,16 @@ struct ChatView: View {
     }
 
     @ViewBuilder private var transcript: some View {
-        if self.chat.isLoading, self.chat.entries.isEmpty {
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+        if self.chat.entries.isEmpty, self.chat.isLoading || !self.chat.hasLoaded {
+            // Until history has loaded once (cache still reading, or the Gateway reconnecting after
+            // the app was suspended), an empty chat isn't known to be empty.
+            VStack(spacing: 8) {
+                ProgressView()
+                if !self.gateway.state.isConnected {
+                    Text("Connecting…").font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if self.chat.entries.isEmpty {
             ContentUnavailableView {
                 Label("Say hello to \(self.agent.name)", systemImage: "bubble.left.and.bubble.right")
@@ -109,7 +117,8 @@ struct ChatView: View {
             }
             .onScrollGeometryChange(for: ScrollMetrics.Sample.self) { geometry in
                 .init(offset: geometry.contentOffset.y, height: geometry.contentSize.height,
-                      container: geometry.containerSize.height, insetTop: geometry.contentInsets.top)
+                      container: geometry.containerSize.height, insetTop: geometry.contentInsets.top,
+                      insetBottom: geometry.contentInsets.bottom)
             } action: { _, sample in
                 if let target = self.metrics.restoreTarget(for: sample) {
                     self.position.scrollTo(y: target + sample.insetTop)
@@ -276,9 +285,18 @@ private final class ScrollMetrics {
         var height: CGFloat
         var container: CGFloat
         var insetTop: CGFloat
+        var insetBottom: CGFloat
+
+        /// `target` limited to offsets the content can actually scroll to. Scrolling past the end
+        /// leaves the lazily built transcript blank until the reader scrolls it back.
+        func clamped(_ target: CGFloat) -> CGFloat {
+            let top = -self.insetTop
+            let bottom = max(top, self.height + self.insetBottom - self.container)
+            return min(max(target, top), bottom)
+        }
     }
 
-    var last = Sample(offset: 0, height: 0, container: 0, insetTop: 0)
+    var last = Sample(offset: 0, height: 0, container: 0, insetTop: 0, insetBottom: 0)
     private var distanceFromBottom: CGFloat?
     private var restoreUntil = Date.distantPast
     /// Last laid-out content-space y of each row, the row being held in place during a restore, and
@@ -324,7 +342,7 @@ private final class ScrollMetrics {
     func rowMoved(_ id: String, to y: CGFloat) -> CGFloat? {
         self.rowY[id] = y
         guard id == self.anchorId, self.restoring, let hold = self.hold else { return nil }
-        let target = hold.offset + (y - hold.y)
+        let target = self.last.clamped(hold.offset + (y - hold.y))
         if !self.anchorLocked {
             // Positions reported while the row is still off-screen are LazyVStack estimates.
             guard abs(target - self.last.offset) < self.last.container else { return nil }
@@ -356,7 +374,7 @@ private final class ScrollMetrics {
             self.distanceFromBottom = sample.height - sample.offset
             return nil
         }
-        let target = sample.height - distance
+        let target = sample.clamped(sample.height - distance)
         return abs(sample.offset - target) > 1 ? target : nil
     }
 }

@@ -90,6 +90,7 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var chats: [String: ChatStore] = [:]
     @ObservationIgnored private var runSessions: [String: String] = [:]
     @ObservationIgnored private var bootstrapped = false
+    @ObservationIgnored private var didPickInitialChat = false
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
     @ObservationIgnored weak var notifier: Notifier?
@@ -186,10 +187,18 @@ public final class GatewayStore: Identifiable {
         self.dumpSessionShapesIfRequested()
         Task { await self.loadConfiguredServerNames() }
         Task { await self.pullServerNames() }
-        if self.selectedKey == nil || self.sessions[self.selectedKey ?? ""] == nil {
+        // Only pick a chat on the first connect: on iPhone, going back to the sidebar clears the
+        // selection, and re-selecting on every reconnect would push a chat the user left.
+        let selectionGone = self.selectedKey.map { self.sessions[$0] == nil } ?? false
+        if selectionGone || (self.selectedKey == nil && !self.didPickInitialChat) {
             self.selectedKey = self.defaultSessionKey
         }
-        for chat in self.chats.values {
+        self.didPickInitialChat = true
+        // The open chat first, so it isn't stuck behind every chat visited since launch.
+        if let key = self.selectedKey, let open = self.chats[key] {
+            await open.load(force: true)
+        }
+        for chat in self.chats.values where chat.sessionKey != self.selectedKey {
             await chat.load(force: true)
         }
         self.startPrefetch()

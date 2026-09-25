@@ -137,7 +137,13 @@ public actor GatewayConnection {
     /// Force an immediate reconnect (e.g. app returned to foreground on iOS).
     public func reconnectNow() {
         guard self.shouldRun else { return }
-        if self.hello != nil, self.task?.state == .running { return }
+        // A suspended iOS app's socket can still report `.running` while it's dead; missed
+        // heartbeats mean requests would hang until the watchdog notices, so reconnect now.
+        if let hello = self.hello, self.task?.state == .running,
+           !self.isStale(limit: Self.staleLimit(tickIntervalMs: hello.tickIntervalMs), generation: self.generation)
+        {
+            return
+        }
         self.attempt = 0
         self.loopTask?.cancel()
         self.teardown(reason: "reconnect requested")
@@ -337,7 +343,7 @@ public actor GatewayConnection {
 
     private func startWatchdog(tickIntervalMs: Int, generation: Int) {
         self.watchdogTask?.cancel()
-        let limit = Double(max(tickIntervalMs, 5000)) * 2.5 / 1000
+        let limit = Self.staleLimit(tickIntervalMs: tickIntervalMs)
         self.watchdogTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
@@ -348,6 +354,10 @@ public actor GatewayConnection {
                 }
             }
         }
+    }
+
+    private static func staleLimit(tickIntervalMs: Int) -> TimeInterval {
+        Double(max(tickIntervalMs, 5000)) * 2.5 / 1000
     }
 
     private func isStale(limit: TimeInterval, generation: Int) -> Bool {
