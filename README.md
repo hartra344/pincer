@@ -34,7 +34,6 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
 ## Features
 
 - **Layout:**
-  - server rail for multiple gateways;
   - by default, a **"Like Discord"** layout: each Discord server gets a section with its `#channels`, automations get their own section, and everything else is grouped under its agent. You can also group by agent, by group, or by recency;
   - server names come from the gateway's Discord config (`channels.discord.guilds.<id>.slug`) when it's set; otherwise the section is just called "Discord". Discord categories aren't sent at all. To name a server yourself, right-click its header and choose **Rename Server…**. Names you set sync to your other devices through the gateway's user preferences (`users.prefs`, key `pincer.serverNames`); if the gateway has no durable identity for your connection, they stay on this device. To recreate categories, right-click a channel and choose **Move to Group → New Group…**. Groups sync through the gateway;
   - subagent (helper) runs stay out of the sidebar, like Discord: open one from the **Open run** button on the tool call that started it, and a spinner on the parent shows helpers are working. Settings → Sidebar can list them under their parent (behind a ✨ count chip) instead. They never add to unread counts or notifications;
@@ -51,7 +50,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
 - **Composer:** Return sends and ⇧/⌥-Return adds a new line. You can paste, drag in or pick images and files; they are downscaled to fit the gateway's limits. Stop a run with ⌘.
 - **Approvals:** exec approvals appear as a banner and as actionable notifications (Allow once, Always allow, Deny).
 - **Notifications:** one notification thread per chat, a reply action, and no notification for the chat you're already looking at.
-- **Per-session actions:** pin, rename, group, color, reasoning level and archive.
+- **Per-session actions:** pin, rename, group, color, reasoning level and archive. Drag a chat onto a group (or **Ungrouped**) to move it; in **Like Discord**, dropping a grouped chat on its own server or agent takes it out of the group.
 
 ## Connecting to your home gateway over Tailscale
 
@@ -95,6 +94,8 @@ open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pince
 | `Sources/PincerKit` | Protocol client (handshake, signing, reconnect, TLS pinning), models, and the observable stores. No UI. |
 | `Sources/PincerUI` | Shared SwiftUI for macOS and iOS. |
 | `Apps/macOS`, `Apps/iOS` | `@main` app shells used by the Xcode project. |
+| `Apps/Shared` | Asset catalog shared by both apps, including the generated app icon. |
+| `Design/AppIcon` | Source artwork for the app icon (`Pincer.svg`). After editing it, run `swift scripts/make-icons.swift` to regenerate the icons. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |
 | `Sources/PincerChecks` | Self-checks, with an optional live end-to-end run. |
 | `mock-gateway/` | Node mock of the Gateway protocol for offline development. |

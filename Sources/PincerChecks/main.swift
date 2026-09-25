@@ -276,6 +276,39 @@ func runLive(url: String, token: String) async {
     let newKey = await gateway.createSession(agentId: "research", label: "Pincer check", category: "Work")
     check(newKey != nil && gateway.sessions[newKey ?? ""] != nil, "sessions.create")
 
+    // Drag and drop between groups.
+    if let newKey {
+        let savedOrganization = gateway.organization
+        gateway.organization = .group
+        func section(_ id: String) -> SidebarSection? { gateway.sections().first { $0.id == id } }
+        if let work = section("group:Work") {
+            check(gateway.groupDropValue(for: newKey, onto: work) == nil, "drop onto its own group is ignored")
+        }
+        let home = SidebarSection(id: "group:Home", title: "Home", emoji: nil, channels: [], kind: .group("Home"))
+        let didMove = await gateway.moveToGroup(newKey, droppedOn: home)
+        check(didMove, "drop onto another group moves the chat")
+        let moved = await waitFor("drop move") { gateway.sessions[newKey]?.category == "Home" }
+        check(moved && section("group:Home")?.channels.contains { $0.id == newKey } == true, "dropped chat shows in its new group")
+        let ungrouped = SidebarSection(id: "group:", title: "Ungrouped", emoji: nil, channels: [], kind: .other)
+        let didUngroup = await gateway.moveToGroup(newKey, droppedOn: ungrouped)
+        check(didUngroup, "drop onto Ungrouped")
+        let removed = await waitFor("drop ungroup") { gateway.sessions[newKey]?.category == nil }
+        check(removed, "drop onto Ungrouped removes the group")
+        check(gateway.groupDropValue(for: newKey, onto: ungrouped) == nil, "ungrouped chat ignores Ungrouped drop")
+        let recent = SidebarSection(id: "recent", title: "Recent", emoji: nil, channels: [], kind: .other)
+        check(gateway.groupDropValue(for: newKey, onto: recent) == nil, "drop onto Recent is ignored")
+        check(gateway.groupDropValue(for: "agent:nope:missing", onto: home) == nil, "unknown dropped key is ignored")
+        // Like Discord: a grouped chat dropped on its home agent section leaves its group.
+        gateway.organization = .servers
+        await gateway.patch(newKey, ["category": "Work"])
+        _ = await waitFor("regroup") { gateway.sessions[newKey]?.category == "Work" }
+        let agentHome = SidebarSection(id: "agent:research", title: "Research", emoji: nil, channels: [], kind: .agent("research"))
+        let otherAgent = SidebarSection(id: "agent:main", title: "Main", emoji: nil, channels: [], kind: .agent("main"))
+        check(gateway.groupDropValue(for: newKey, onto: agentHome) == .null, "drop onto home agent section ungroups")
+        check(gateway.groupDropValue(for: newKey, onto: otherAgent) == nil, "drop onto another agent is ignored")
+        gateway.organization = savedOrganization
+    }
+
     // A second device: names set on it before syncing are uploaded, and renames flow both ways.
     let otherProfile = GatewayProfile(name: "Mock 2", url: url, authMode: .token)
     otherProfile.secret = token

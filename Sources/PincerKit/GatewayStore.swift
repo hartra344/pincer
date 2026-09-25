@@ -46,6 +46,14 @@ public struct SidebarSection: Identifiable, Hashable, Sendable {
     }
 
     public var unreadCount: Int { self.channels.filter { $0.row.isUnread }.count }
+
+    public init(id: String, title: String, emoji: String?, channels: [SidebarChannel], kind: Kind) {
+        self.id = id
+        self.title = title
+        self.emoji = emoji
+        self.channels = channels
+        self.kind = kind
+    }
 }
 
 /// Everything the UI knows about one Gateway ("server" in the rail).
@@ -601,6 +609,39 @@ public final class GatewayStore: Identifiable {
             }
             return sections
         }
+    }
+
+    /// The `category` value that dropping chat `key` onto `section` should set (`.null` removes
+    /// it from its group), or `nil` when that drop wouldn't move the chat anywhere.
+    public func groupDropValue(for key: String, onto section: SidebarSection) -> JSONValue? {
+        guard let row = self.sessions[key], !row.isSubagent else { return nil }
+        switch section.kind {
+        case let .group(name):
+            return row.category == name ? nil : .string(name)
+        case .other where section.id == "group:":
+            return row.category == nil ? nil : .null
+        case .server, .agent, .automations:
+            // Like Discord: a grouped chat can go back to the section it lives in without a group.
+            guard self.organization == .servers, row.category != nil,
+                  Self.ungroupedHome(of: row) == section.kind else { return nil }
+            return .null
+        case .other:
+            return nil
+        }
+    }
+
+    /// Returns true if the drop changed a chat's group.
+    @discardableResult
+    public func moveToGroup(_ key: String, droppedOn section: SidebarSection) async -> Bool {
+        guard let value = self.groupDropValue(for: key, onto: section) else { return false }
+        await self.patch(key, ["category": value])
+        return true
+    }
+
+    private static func ungroupedHome(of row: SessionRow) -> SidebarSection.Kind {
+        if let server = row.server { return .server(server) }
+        if row.isAutomation { return .automations }
+        return .agent(row.agentId)
     }
 
     private func agentSections(_ channels: [SidebarChannel]) -> [SidebarSection] {
