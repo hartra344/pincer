@@ -77,6 +77,16 @@ public final class GatewayStore: Identifiable {
     public private(set) var loadingModelCatalogs: Set<String> = []
     /// The model sessions use when nobody picked one (`sessions.list` `defaults`).
     public private(set) var defaultModelRef: String?
+    struct CommandCatalog {
+        let commands: [SlashCommand]
+        let fetchedAt: Date
+        let connectionEpoch: Int
+    }
+    /// `commands.list` per session key.
+    private(set) var commandCatalogs: [String: CommandCatalog] = [:]
+    @ObservationIgnored private var loadingCommands: Set<String> = []
+    /// Bumped on every connect, so catalogs from an earlier connection are refetched.
+    @ObservationIgnored private var connectionEpoch = 0
     public var selectedKey: String? {
         didSet {
             guard oldValue != self.selectedKey, let key = self.selectedKey else { return }
@@ -172,6 +182,7 @@ public final class GatewayStore: Identifiable {
         guard state == .connected, let hello else { return }
         self.hasConnected = true
         self.hello = hello
+        self.connectionEpoch += 1
         self.lastError = nil
         Task { await self.bootstrap() }
     }
@@ -429,6 +440,37 @@ public final class GatewayStore: Identifiable {
         } catch {
             self.lastError = error.localizedDescription
         }
+    }
+
+    /// Slash commands for a session (Gateway `commands.list` plus client commands). Falls back to a
+    /// built-in list until the Gateway answers, or when it can't list commands.
+    public func slashCommands(for sessionKey: String) -> [SlashCommand] {
+        SlashCommand.withClientCommands(self.commandCatalogs[sessionKey]?.commands ?? SlashCommand.fallback)
+    }
+
+    /// Fetches a session's commands. Plugins, skills and config change what's available, so a
+    /// catalog is refetched once it's older than a minute.
+    public func loadCommands(sessionKey: String, agentId: String?) async {
+        if let cached = self.commandCatalogs[sessionKey], cached.connectionEpoch == self.connectionEpoch,
+           Date().timeIntervalSince(cached.fetchedAt) < 60
+        {
+            return
+        }
+        guard self.state.isConnected, self.loadingCommands.insert(sessionKey).inserted else { return }
+        defer { self.loadingCommands.remove(sessionKey) }
+        if let methods = self.hello?.methods, !methods.isEmpty, !methods.contains("commands.list") { return }
+        let epoch = self.connectionEpoch
+        var params: [String: JSONValue] = ["includeArgs": true, "scope": "text"]
+        if let agentId { params["agentId"] = .string(agentId) }
+        var result = try? await self.connection.request(
+            "commands.list", .object(params.merging(["sessionKey": .string(sessionKey)]) { $1 }), timeout: 15)
+        if result == nil {
+            // Chats that haven't been written to yet aren't sessions the Gateway can scope to.
+            result = try? await self.connection.request("commands.list", .object(params), timeout: 15)
+        }
+        guard let result, result["commands"]?.array != nil else { return }
+        self.commandCatalogs[sessionKey] = CommandCatalog(
+            commands: SlashCommand.parse(result), fetchedAt: Date(), connectionEpoch: epoch)
     }
 
     /// Sets the model new messages in a session use; `nil` goes back to the agent's default.

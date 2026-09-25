@@ -13,6 +13,10 @@ struct Composer: View {
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var attachmentError: String?
     @State private var isTargeted = false
+    @State private var menuSelection = 0
+    /// Text the suggestion menu was dismissed at (Escape); it comes back once the text changes.
+    @State private var dismissedMenuText: String?
+    @State private var caretAtEnd = true
 
     private static let corner: CGFloat = 20
 
@@ -39,8 +43,11 @@ struct Composer: View {
                 ComposerTextView(
                     placeholder: self.placeholder,
                     text: self.$text,
+                    menuActive: !self.suggestions.isEmpty,
                     onSubmit: self.submit,
-                    onMedia: self.ingest)
+                    onMedia: self.ingest,
+                    onKey: self.menuKey,
+                    onCaretAtEnd: { if self.caretAtEnd != $0 { self.caretAtEnd = $0 } })
                     .padding(.vertical, 8)
                     .frame(minHeight: 34)
                 if self.chat.isRunning {
@@ -74,6 +81,22 @@ struct Composer: View {
                     .opacity(self.isTargeted ? 1 : 0))
             .animation(.snappy, value: self.chat.isRunning)
             .animation(.snappy, value: self.canSend)
+            // An overlay, so the floating chrome's measured height (and the transcript's inset) stays put.
+            .overlay(alignment: .top) {
+                let suggestions = self.suggestions
+                if !suggestions.isEmpty {
+                    // A fixed-height box whose bottom sits just above the field, so the menu grows upward.
+                    let box = SlashCommandMenu.maxHeight + 40
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        SlashCommandMenu(suggestions: suggestions, selection: self.$menuSelection, onPick: self.accept)
+                    }
+                    .frame(height: box, alignment: .bottom)
+                    .offset(y: -(box + 8))
+                    .transition(.opacity)
+                }
+            }
+            .onChange(of: self.suggestions.map(\.id)) { self.menuSelection = 0 }
         }
         .padding(.horizontal, 14)
         .padding(.top, 6)
@@ -85,6 +108,11 @@ struct Composer: View {
         .fileImporter(isPresented: self.$importing, allowedContentTypes: [.image, .pdf, .plainText, .item], allowsMultipleSelection: true) { result in
             guard case let .success(urls) = result else { return }
             self.ingest(urls.map(PastedMedia.file))
+        }
+        .task(id: self.isTypingCommand ? self.chat.sessionKey : nil) {
+            guard self.isTypingCommand else { return }
+            await self.gateway.loadCommands(sessionKey: self.chat.sessionKey, agentId: self.agentId)
+            await self.gateway.loadModels(agentId: self.agentId)
         }
         .onChange(of: self.photoItems) { _, items in
             guard !items.isEmpty else { return }
@@ -146,13 +174,77 @@ struct Composer: View {
     }
 
     private func submit() {
+        let suggestions = self.suggestions
+        if suggestions.indices.contains(self.menuSelection), !suggestions[self.menuSelection].isComplete(for: self.text) {
+            self.accept(suggestions[self.menuSelection])
+            return
+        }
         guard self.canSend else { return }
-        let text = self.text
+        let text = SlashCommand.outgoingText(self.text, commands: self.gateway.slashCommands(for: self.chat.sessionKey))
         let attachments = self.attachments
         self.text = ""
         self.attachments = []
         self.attachmentError = nil
         Task { await self.chat.send(text, attachments: attachments) }
+    }
+
+    // MARK: Slash commands
+
+    private var row: SessionRow? { self.gateway.sessions[self.chat.sessionKey] }
+
+    private var agentId: String {
+        self.row?.agentId ?? self.chat.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? self.gateway.defaultAgentId
+    }
+
+    private var isTypingCommand: Bool { self.text.hasPrefix("/") }
+
+    private var suggestions: [SlashSuggestion] {
+        guard self.isTypingCommand, self.caretAtEnd, self.text != self.dismissedMenuText else { return [] }
+        let suggestions = SlashCompletion.suggestions(
+            for: self.text, commands: self.gateway.slashCommands(for: self.chat.sessionKey), choices: self.choices)
+        // Nothing left to complete: keep the menu out of the way so Return just sends.
+        if suggestions.count == 1, suggestions[0].isComplete(for: self.text) { return [] }
+        return suggestions
+    }
+
+    /// Values for a command's argument: the catalog's, or ones Pincer knows (models, thinking levels).
+    private func choices(_ command: SlashCommand, _ index: Int, _ arg: SlashCommandArg?) -> [SlashCommandChoice] {
+        if let arg, !arg.choices.isEmpty { return arg.choices }
+        guard index == 0 else { return [] }
+        if command.matches("model") || arg?.name == "model" {
+            return (self.gateway.modelCatalogs[self.agentId] ?? [])
+                .filter { $0.isAvailable && $0.manualSelectionAllowed }
+                .map { SlashCommandChoice(value: $0.ref, label: $0.displayName, detail: $0.provider) }
+        }
+        if command.matches("think") {
+            let levels = self.row?.thinkingLevelChoices?.nilIfEmpty
+                ?? SlashCommand.fallbackThinkingLevels.map { SlashCommandChoice(value: $0) }
+            return [SlashCommandChoice(value: "default")] + levels.filter { $0.value != "default" }
+        }
+        return []
+    }
+
+    private func accept(_ suggestion: SlashSuggestion) {
+        self.text = suggestion.replacement
+        self.dismissedMenuText = nil
+        self.menuSelection = 0
+        self.caretAtEnd = true
+    }
+
+    private func menuKey(_ key: ComposerKey) -> Bool {
+        let suggestions = self.suggestions
+        guard !suggestions.isEmpty else { return false }
+        switch key {
+        case .up:
+            self.menuSelection = (self.menuSelection - 1 + suggestions.count) % suggestions.count
+        case .down:
+            self.menuSelection = (self.menuSelection + 1) % suggestions.count
+        case .tab:
+            self.accept(suggestions[min(self.menuSelection, suggestions.count - 1)])
+        case .escape:
+            self.dismissedMenuText = self.text
+        }
+        return true
     }
 
     // MARK: Attachments
@@ -372,4 +464,8 @@ private extension View {
     func composerControl() -> some View {
         self.frame(width: 28, height: 34)
     }
+}
+
+private extension Array {
+    var nilIfEmpty: Self? { self.isEmpty ? nil : self }
 }

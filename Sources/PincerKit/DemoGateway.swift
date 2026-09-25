@@ -30,7 +30,7 @@ actor DemoGateway {
         "agents.list", "sessions.subscribe", "sessions.list", "sessions.groups.list", "sessions.messages.subscribe",
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
-        "users.prefs.set",
+        "users.prefs.set", "commands.list",
     ]
 
     private let agents: [JSONValue] = [
@@ -57,6 +57,44 @@ actor DemoGateway {
         self.transcripts = seeded.transcripts
         self.artifacts["demo-chart"] = ("image/png", Self.chartPNG())
     }
+
+    /// A small `commands.list` answer, shaped like the Gateway's `scope: "text"` catalog.
+    private static let commandCatalog: [JSONValue] = {
+        func command(_ name: String, _ description: String, aliases: [String] = [], category: String,
+                     source: String = "native", args: [JSONValue] = [], acceptsArgs: Bool? = nil) -> JSONValue
+        {
+            [
+                "name": .string(name), "textAliases": JSONValue(([name] + aliases).map { "/\($0)" }),
+                "description": .string(description), "category": .string(category), "source": .string(source),
+                "scope": "both", "acceptsArgs": .bool(acceptsArgs ?? !args.isEmpty), "args": .array(args),
+            ]
+        }
+        func arg(_ name: String, _ description: String, choices: [String]? = nil, dynamic: Bool = false) -> JSONValue {
+            var arg: [String: JSONValue] = ["name": .string(name), "description": .string(description), "type": "string"]
+            if let choices { arg["choices"] = .array(choices.map { ["value": .string($0), "label": .string($0)] }) }
+            if dynamic { arg["dynamic"] = true }
+            return .object(arg)
+        }
+        return [
+            command("help", "Show available commands.", category: "status"),
+            command("status", "Show current status.", category: "status"),
+            command("new", "Start a new session.", category: "session", acceptsArgs: true),
+            command("reset", "Reset the current session.", category: "session", acceptsArgs: true),
+            command("compact", "Compact the session context.", category: "session",
+                    args: [arg("instructions", "Extra compaction instructions")]),
+            command("stop", "Stop the current run.", category: "session"),
+            command("restart", "Restart OpenClaw.", category: "tools"),
+            command("model", "Show or set the model; use -s, -a, or -g to choose scope.", category: "options",
+                    args: [arg("model", "Model id; add -s for session, -a for agent, or -g for global scope")]),
+            command("think", "Set thinking level.", aliases: ["thinking", "t"], category: "options",
+                    args: [arg("level", "Thinking level", dynamic: true)]),
+            command("verbose", "Toggle verbose mode.", aliases: ["v"], category: "options",
+                    args: [arg("mode", "on, off, or full", choices: ["on", "off", "full"])]),
+            command("reasoning", "Toggle reasoning visibility.", aliases: ["reason"], category: "options",
+                    args: [arg("mode", "on, off, or stream", choices: ["on", "off", "stream"])]),
+            command("summarize", "Summarize a URL or file.", category: "tools", source: "skill", acceptsArgs: true),
+        ]
+    }()
 
     // MARK: Connection
 
@@ -108,6 +146,8 @@ actor DemoGateway {
             return try self.patch(params)
         case "models.list":
             return ["models": .array(Self.modelCatalog)]
+        case "commands.list":
+            return ["commands": .array(Self.commandCatalog)]
         case "sessions.create":
             return self.create(params)
         case "artifacts.download":

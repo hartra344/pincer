@@ -68,17 +68,30 @@ enum MediaPasteboard {
     #endif
 }
 
+/// Keys the composer's suggestion menu takes over while it's open.
+enum ComposerKey {
+    case up, down, tab, escape
+}
+
 /// Multi-line composer field that turns pasted images and files into attachments instead of
 /// letting the platform text view paste their file path (or nothing).
 struct ComposerTextView: View {
     let placeholder: String
     @Binding var text: String
     var maxLines = 12
+    /// A suggestion menu is showing: arrow keys, Tab, Escape (and Return on iOS) go to `onKey`/`onSubmit`.
+    var menuActive = false
     let onSubmit: () -> Void
     let onMedia: ([PastedMedia]) -> Void
+    /// Returns whether the key was handled.
+    var onKey: (ComposerKey) -> Bool = { _ in false }
+    /// Whether the caret is an insertion point at the end of the text.
+    var onCaretAtEnd: (Bool) -> Void = { _ in }
 
     var body: some View {
-        PlatformComposerTextView(text: self.$text, maxLines: self.maxLines, onSubmit: self.onSubmit, onMedia: self.onMedia)
+        PlatformComposerTextView(
+            text: self.$text, maxLines: self.maxLines, menuActive: self.menuActive, onSubmit: self.onSubmit,
+            onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd)
             .overlay(alignment: .topLeading) {
                 if self.text.isEmpty {
                     Text(self.placeholder)
@@ -150,8 +163,11 @@ final class ComposerNSTextView: NSTextView {
 private struct PlatformComposerTextView: NSViewRepresentable {
     @Binding var text: String
     let maxLines: Int
+    let menuActive: Bool
     let onSubmit: () -> Void
     let onMedia: ([PastedMedia]) -> Void
+    let onKey: (ComposerKey) -> Bool
+    let onCaretAtEnd: (Bool) -> Void
 
     private static let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
     private static let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
@@ -194,6 +210,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         textView.onMedia = self.onMedia
         if textView.string != self.text {
             textView.string = self.text
+            textView.setSelectedRange(NSRange(location: (self.text as NSString).length, length: 0))
         }
     }
 
@@ -217,7 +234,24 @@ private struct PlatformComposerTextView: NSViewRepresentable {
             textView.enclosingScrollView?.invalidateIntrinsicContentSize()
         }
 
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            let range = textView.selectedRange()
+            self.parent.onCaretAtEnd(range.length == 0 && range.location == (textView.string as NSString).length)
+        }
+
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            if self.parent.menuActive, !textView.hasMarkedText() {
+                let key: ComposerKey? = switch selector {
+                case #selector(NSResponder.moveUp(_:)): .up
+                case #selector(NSResponder.moveDown(_:)): .down
+                case #selector(NSResponder.insertTab(_:)): .tab
+                // Escape in a text view is `complete:` (system completion), not `cancelOperation:`.
+                case #selector(NSResponder.cancelOperation(_:)), #selector(NSTextView.complete(_:)): .escape
+                default: nil
+                }
+                if let key, self.parent.onKey(key) { return true }
+            }
             guard selector == #selector(NSResponder.insertNewline(_:)), !textView.hasMarkedText() else { return false }
             let flags = NSApp.currentEvent?.modifierFlags ?? []
             if flags.contains(.shift) || flags.contains(.option) {
@@ -235,9 +269,31 @@ private typealias PlatformFont = UIFont
 
 final class ComposerUITextView: UITextView {
     var onMedia: (([PastedMedia]) -> Void)?
+    var menuActive = false
+    var onKey: ((ComposerKey) -> Bool)?
     private var didAutoFocus = false
 
+    private static let menuKeys: [(String, ComposerKey)] = [
+        (UIKeyCommand.inputUpArrow, .up), (UIKeyCommand.inputDownArrow, .down), ("\t", .tab),
+        (UIKeyCommand.inputEscape, .escape),
+    ]
+
+    override var keyCommands: [UIKeyCommand]? {
+        let menu = Self.menuKeys.map { input, _ in
+            let command = UIKeyCommand(input: input, modifierFlags: [], action: #selector(self.menuKey(_:)))
+            command.wantsPriorityOverSystemBehavior = true
+            return command
+        }
+        return menu + (super.keyCommands ?? [])
+    }
+
+    @objc private func menuKey(_ command: UIKeyCommand) {
+        guard let key = Self.menuKeys.first(where: { $0.0 == command.input })?.1 else { return }
+        _ = self.onKey?(key)
+    }
+
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(self.menuKey(_:)) { return self.menuActive && self.markedTextRange == nil }
         if action == #selector(paste(_:)), MediaPasteboard.hasMedia(.general) { return true }
         return super.canPerformAction(action, withSender: sender)
     }
@@ -265,8 +321,11 @@ final class ComposerUITextView: UITextView {
 private struct PlatformComposerTextView: UIViewRepresentable {
     @Binding var text: String
     let maxLines: Int
+    let menuActive: Bool
     let onSubmit: () -> Void
     let onMedia: ([PastedMedia]) -> Void
+    let onKey: (ComposerKey) -> Bool
+    let onCaretAtEnd: (Bool) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -282,14 +341,19 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textView.text = self.text
         textView.onMedia = self.onMedia
+        textView.menuActive = self.menuActive
+        textView.onKey = self.onKey
         return textView
     }
 
     func updateUIView(_ textView: ComposerUITextView, context: Context) {
         context.coordinator.parent = self
         textView.onMedia = self.onMedia
+        textView.menuActive = self.menuActive
+        textView.onKey = self.onKey
         if textView.text != self.text {
             textView.text = self.text
+            textView.selectedRange = NSRange(location: (self.text as NSString).length, length: 0)
         }
     }
 
@@ -310,6 +374,18 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         func textViewDidChange(_ textView: UITextView) {
             self.parent.text = textView.text
             textView.invalidateIntrinsicContentSize()
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            let range = textView.selectedRange
+            self.parent.onCaretAtEnd(range.length == 0 && range.location == (textView.text as NSString).length)
+        }
+
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            // Return picks the highlighted suggestion (or sends a finished command) while the menu is open.
+            guard text == "\n", self.parent.menuActive, textView.markedTextRange == nil else { return true }
+            self.parent.onSubmit()
+            return false
         }
     }
 }

@@ -23,6 +23,7 @@ const METHODS = [
   'exec.approval.resolve',
   'users.prefs.get',
   'users.prefs.set',
+  'commands.list',
   ...CONFIG_METHODS,
 ];
 const EVENTS = [
@@ -83,6 +84,32 @@ function imageBlock(artifactId, alt = 'Mock chart') {
 }
 
 const DEFAULT_MODEL = { provider: 'anthropic', model: 'claude-opus-4-8' };
+const commandEntry = (name, description, { aliases = [], category, source = 'native', args, acceptsArgs } = {}) => ({
+  name,
+  textAliases: [name, ...aliases].map((alias) => `/${alias}`),
+  description,
+  ...(category ? { category } : {}),
+  source,
+  scope: 'both',
+  acceptsArgs: acceptsArgs ?? Boolean(args?.length),
+  ...(args ? { args } : {}),
+});
+const choices = (...values) => values.map((value) => ({ value, label: value }));
+const COMMAND_CATALOG = [
+  commandEntry('help', 'Show available commands.', { category: 'status' }),
+  commandEntry('status', 'Show current status.', { category: 'status' }),
+  commandEntry('new', 'Start a new session.', { category: 'session', acceptsArgs: true }),
+  commandEntry('reset', 'Reset the current session.', { category: 'session', acceptsArgs: true }),
+  commandEntry('stop', 'Stop the current run.', { category: 'session' }),
+  commandEntry('restart', 'Restart OpenClaw.', { category: 'tools' }),
+  commandEntry('model', 'Show or set the model.', { category: 'options', args: [{ name: 'model', description: 'Model id', type: 'string' }] }),
+  commandEntry('think', 'Set thinking level.', { aliases: ['thinking', 't'], category: 'options', args: [{ name: 'level', description: 'Thinking level', type: 'string', dynamic: true }] }),
+  commandEntry('verbose', 'Toggle verbose mode.', { aliases: ['v'], category: 'options', args: [{ name: 'mode', description: 'on, off, or full', type: 'string', choices: choices('on', 'off', 'full') }] }),
+  commandEntry('reasoning', 'Toggle reasoning visibility.', { aliases: ['reason'], category: 'options', args: [{ name: 'mode', description: 'on, off, or stream', type: 'string', choices: choices('on', 'off', 'stream') }] }),
+  { name: 'pair', nativeName: 'pair', description: 'Native-only command', source: 'native', scope: 'native', acceptsArgs: false },
+  commandEntry('weather', 'Look up the weather.', { source: 'plugin', acceptsArgs: true }),
+];
+
 const MODEL_CATALOG = [
   { id: 'claude-opus-4-8', name: 'Claude Opus 4.8', provider: 'anthropic', available: true },
   { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', provider: 'anthropic', available: true },
@@ -744,6 +771,14 @@ function handleAuthedRequest(state, conn, msg) {
     case 'models.list': {
       if (params.agentId && !state.agents.has(params.agentId)) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown agent');
       sendRes(conn, id, { models: clone(MODEL_CATALOG) });
+      break;
+    }
+    case 'commands.list': {
+      if (params.agentId && !state.agents.has(params.agentId)) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown agent');
+      if (params.sessionKey && !state.sessions.has(params.sessionKey)) return sendErr(conn, id, 'INVALID_REQUEST', 'Session not found.');
+      const commands = COMMAND_CATALOG.filter((cmd) => !params.scope || cmd.scope === 'both' || cmd.scope === params.scope)
+        .map(({ args, ...cmd }) => (params.includeArgs && args ? { ...cmd, args } : cmd));
+      sendRes(conn, id, { commands: clone(commands) });
       break;
     }
     case 'sessions.create': {
