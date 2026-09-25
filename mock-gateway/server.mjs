@@ -16,6 +16,7 @@ const METHODS = [
   'chat.send',
   'chat.abort',
   'sessions.patch',
+  'models.list',
   'sessions.create',
   'artifacts.download',
   'exec.approval.list',
@@ -81,14 +82,33 @@ function imageBlock(artifactId, alt = 'Mock chart') {
   return { type: 'image', artifactId, mimeType: 'image/png', alt, width: 320, height: 200 };
 }
 
+const DEFAULT_MODEL = { provider: 'anthropic', model: 'claude-opus-4-8' };
+const MODEL_CATALOG = [
+  { id: 'claude-opus-4-8', name: 'Claude Opus 4.8', provider: 'anthropic', available: true },
+  { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', provider: 'anthropic', available: true },
+  { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol', provider: 'openai', available: true },
+  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', provider: 'google', available: false, unavailableReason: 'missing-auth' },
+];
+
 function makeMessage(role, content, extras = {}) {
+  // Like the Gateway, assistant messages record the model that wrote them.
+  const model = role === 'assistant' ? (extras.model ?? DEFAULT_MODEL) : undefined;
   return {
     role,
     content,
     timestamp: nowMs(),
+    ...(model ? { provider: model.provider, model: model.model } : {}),
     __openclaw: { id: crypto.randomUUID(), ...extras.openclaw },
     ...extras.extra,
   };
+}
+
+function rowModel(row) {
+  return { provider: row.modelProvider ?? DEFAULT_MODEL.provider, model: row.model ?? DEFAULT_MODEL.model };
+}
+
+function sessionDefaults() {
+  return { model: DEFAULT_MODEL.model, modelProvider: DEFAULT_MODEL.provider, contextTokens: null };
 }
 
 const CRC_TABLE = (() => {
@@ -186,6 +206,9 @@ function createSeedState() {
       spawnedBy: props.spawnedBy,
       hasActiveRun: false,
       activeRunIds: [],
+      model: DEFAULT_MODEL.model,
+      modelProvider: DEFAULT_MODEL.provider,
+      modelOverrideSource: null,
     };
     sessions.set(key, entry);
     transcripts.set(key, []);
@@ -527,7 +550,7 @@ async function simulateRun(state, run, params) {
         seq: ++run.seq,
         state: 'delta',
         deltaText: '',
-        message: makeMessage('assistant', [thinkingBlock(thinking)], { openclaw: { runId: run.runId } }),
+        message: makeMessage('assistant', [thinkingBlock(thinking)], { openclaw: { runId: run.runId }, model: rowModel(row) }),
       });
     }
 
@@ -550,7 +573,7 @@ async function simulateRun(state, run, params) {
         stream: 'tool',
         data: { phase: 'result', name: 'exec', toolCallId, isError: false, result: ' 10:42  up 3 days, 4 users, load averages: 1.2 1.0 0.8' },
       });
-      const toolMsg = makeMessage('assistant', [toolCallBlock(toolCallId, 'exec', { command: 'uptime' })], { openclaw: { runId: run.runId } });
+      const toolMsg = makeMessage('assistant', [toolCallBlock(toolCallId, 'exec', { command: 'uptime' })], { openclaw: { runId: run.runId }, model: rowModel(row) });
       const toolResult = makeMessage('toolResult', [textBlock(' 10:42  up 3 days, 4 users, load averages: 1.2 1.0 0.8')], {
         openclaw: { runId: run.runId },
         extra: { toolCallId, toolName: 'exec', isError: false },
@@ -573,12 +596,12 @@ async function simulateRun(state, run, params) {
         seq: ++run.seq,
         state: 'delta',
         deltaText: word,
-        message: makeMessage('assistant', [thinkingBlock(thinking), textBlock(out)], { openclaw: { runId: run.runId } }),
+        message: makeMessage('assistant', [thinkingBlock(thinking), textBlock(out)], { openclaw: { runId: run.runId }, model: rowModel(row) }),
       });
     }
     const finalContent = [thinkingBlock(thinking), textBlock(reply)];
     if (/image/i.test(String(text ?? ''))) finalContent.push(imageBlock('art-chart-1', 'Synthetic mock chart'));
-    const finalMsg = makeMessage('assistant', finalContent, { openclaw: { runId: run.runId } });
+    const finalMsg = makeMessage('assistant', finalContent, { openclaw: { runId: run.runId }, model: rowModel(row) });
     transcript.push(finalMsg);
     broadcastSessionMessage(state, sessionKey, finalMsg, transcript.length);
     broadcast(state, 'chat', { runId: run.runId, sessionKey, seq: ++run.seq, state: 'final', message: clone(finalMsg) });
@@ -616,12 +639,12 @@ function handleAuthedRequest(state, conn, msg) {
       conn.sessionSubscribed = true;
       sendRes(conn, id, {
         subscribed: true,
-        list: { sessions: sortedSessions(state, params.archived === true || params.archived === 'all'), nextOffset: null, hasMore: false },
+        list: { sessions: sortedSessions(state, params.archived === true || params.archived === 'all'), defaults: sessionDefaults(), nextOffset: null, hasMore: false },
       });
       break;
     }
     case 'sessions.list': {
-      sendRes(conn, id, { sessions: sortedSessions(state, params.archived === true || params.archived === 'all'), nextOffset: null, hasMore: false });
+      sendRes(conn, id, { sessions: sortedSessions(state, params.archived === true || params.archived === 'all'), defaults: sessionDefaults(), nextOffset: null, hasMore: false });
       break;
     }
     case 'sessions.groups.list': {
@@ -701,10 +724,26 @@ function handleAuthedRequest(state, conn, msg) {
       for (const field of ['unread', 'pinned', 'label', 'category', 'color', 'archived']) {
         if (Object.hasOwn(params, field)) row[field] = params[field];
       }
+      if (Object.hasOwn(params, 'model')) {
+        if (params.model === null) {
+          Object.assign(row, { model: DEFAULT_MODEL.model, modelProvider: DEFAULT_MODEL.provider, modelOverrideSource: null });
+        } else {
+          const [provider, ...rest] = String(params.model).split('/');
+          const choice = MODEL_CATALOG.find((m) => m.provider === provider && m.id === rest.join('/'));
+          if (!choice) return sendErr(conn, id, 'INVALID_REQUEST', `model not allowed: ${params.model}`);
+          if (!choice.available) return sendErr(conn, id, 'UNAVAILABLE', `model unavailable: ${params.model}`);
+          Object.assign(row, { model: choice.id, modelProvider: choice.provider, modelOverrideSource: 'user' });
+        }
+      }
       if (Object.hasOwn(params, 'label')) row.derivedTitle = params.label ?? (row.isMain ? 'Main' : row.derivedTitle);
       updateSessionRow(row, { lastActivityAt: nowMs() });
       sendRes(conn, id, { ok: true, key: params.key, entry: clone(row) });
       broadcastSessionChanged(state, params.key, 'patch', row);
+      break;
+    }
+    case 'models.list': {
+      if (params.agentId && !state.agents.has(params.agentId)) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown agent');
+      sendRes(conn, id, { models: clone(MODEL_CATALOG) });
       break;
     }
     case 'sessions.create': {

@@ -12,7 +12,7 @@ enum TranscriptCache {
         /// Session activity when saved; an unchanged session needs no background refresh.
         var activityMs: Double?
 
-        static let currentVersion = 1
+        static let currentVersion = 2
     }
 
     /// Written next to each transcript so freshness checks don't decode the whole thing.

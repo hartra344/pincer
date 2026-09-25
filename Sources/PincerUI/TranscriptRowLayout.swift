@@ -237,7 +237,7 @@ struct TranscriptLayoutBuilder {
 
     private func assistant(_ turn: AssistantTurn, into layout: inout TranscriptRowLayout) {
         let agent = self.context.agent
-        let header = TranscriptPart.Header(name: agent.name, badge: nil, time: turn.timestamp?.chatTimestamp, isPending: false)
+        let header = TranscriptPart.Header(name: agent.name, badge: turn.modelName, time: turn.timestamp?.chatTimestamp, isPending: false)
         let thinking = turn.thinking.joined(separator: "\n\n")
         layout.copyItems = [.init(title: "Copy Reply", text: turn.body)]
         if !thinking.isEmpty { layout.copyItems.append(.init(title: "Copy Thinking", text: thinking)) }

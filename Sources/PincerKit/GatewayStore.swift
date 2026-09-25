@@ -69,6 +69,11 @@ public final class GatewayStore: Identifiable {
     public private(set) var sessions: [String: SessionRow] = [:]
     public private(set) var approvals: [ExecApproval] = []
     public private(set) var lastError: String?
+    /// `models.list` per agent id, fetched when a model picker opens.
+    public private(set) var modelCatalogs: [String: [ModelChoice]] = [:]
+    public private(set) var loadingModelCatalogs: Set<String> = []
+    /// The model sessions use when nobody picked one (`sessions.list` `defaults`).
+    public private(set) var defaultModelRef: String?
     public var selectedKey: String? {
         didSet {
             guard oldValue != self.selectedKey, let key = self.selectedKey else { return }
@@ -248,6 +253,9 @@ public final class GatewayStore: Identifiable {
             next[row.key] = row
         }
         self.sessions = next
+        if let defaults = list["defaults"], let model = defaults["model"]?.text {
+            self.defaultModelRef = ModelRef.qualified(model, provider: defaults["modelProvider"]?.text)
+        }
     }
 
     private func scheduleRefresh() {
@@ -403,6 +411,26 @@ public final class GatewayStore: Identifiable {
         } catch {
             self.lastError = error.localizedDescription
         }
+    }
+
+    /// Loads the models an agent can use. Cached per agent; `refresh` refetches.
+    public func loadModels(agentId: String, refresh: Bool = false) async {
+        guard self.state.isConnected, refresh || self.modelCatalogs[agentId] == nil,
+              self.loadingModelCatalogs.insert(agentId).inserted
+        else { return }
+        defer { self.loadingModelCatalogs.remove(agentId) }
+        do {
+            let result = try await self.connection.request("models.list", ["agentId": .string(agentId)], timeout: 30)
+            self.modelCatalogs[agentId] = result["models"]?.array?.compactMap(ModelChoice.init) ?? []
+        } catch {
+            self.lastError = error.localizedDescription
+        }
+    }
+
+    /// Sets the model new messages in a session use; `nil` goes back to the agent's default.
+    /// Messages already written keep the model the Gateway recorded for them.
+    public func setModel(_ key: String, to ref: String?) async {
+        await self.patch(key, ["model": ref.map(JSONValue.string) ?? .null])
     }
 
     public func resolveApproval(_ approval: ExecApproval, decision: String) async {

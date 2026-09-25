@@ -166,6 +166,7 @@ struct ChatView: View {
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
             if let row {
+                ModelPicker(row: row)
                 Menu {
                     Button(row.isPinned ? "Unpin" : "Pin", systemImage: row.isPinned ? "pin.slash" : "pin") {
                         Task { await self.gateway.patch(row.key, ["pinned": .bool(!row.isPinned)]) }
