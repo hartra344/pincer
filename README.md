@@ -2,19 +2,8 @@
 
 A native macOS and iOS client for [OpenClaw](https://github.com/openclaw/openclaw). It keeps the parts of the Discord connection that work well, organized chats and notifications, and adds what Discord can't show: thinking, tool calls, inline images, and messages attributed to you as the owner.
 
-```
-┌────┬──────────────────┬──────────────────────────────────────┐
-│ HM │ 🦞 Claw        + │ Main · Claw                      ⋯   │
-│ ●  │   💬 home-lab  • │                                      │
-│    │   ⌂  Main        │ AL  Alex       2:01 PM               │
-│ +  │   #  Japan trip  │     Can you check disk usage?        │
-│    │ 🔭 Scout       + │ 🦞  Claw  2:01 PM                    │
-│    │   ⌂  Main        │     🧠 Thinking ›                    │
-│    │   #  Paper digest│     ▸ exec  df -h                    │
-│    │     ↳ Summarize… │     ## Disk status …   [image]       │
-└────┴──────────────────┴──────────────────────────────────────┘
- gateways  agents → sessions → subagent threads
-```
+<img width="2804" height="2004" alt="CleanShot 2026-09-25 at 3 20 07 PM@2x" src="https://github.com/user-attachments/assets/03bc0ca0-8cee-49bf-8985-a684b6e691b5" />
+
 
 ## What it is (and isn't)
 
