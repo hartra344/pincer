@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 // MARK: Agents
 
@@ -373,12 +374,36 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         } else {
             self.blocks = (json["content"]?.array ?? []).compactMap(ContentBlock.parse)
         }
+        self.blocks += Self.mediaFactBlocks(meta?["media"], existing: self.blocks)
         if self.blocks.isEmpty, self.role == .assistant, let errorMessage {
             self.blocks = [.text(errorMessage)]
             self.isError = true
         }
         if self.blocks.isEmpty, self.role != .marker, self.role != .toolResult {
             return nil
+        }
+    }
+
+    /// Uploads (composer attachments, channel media) live in `__openclaw.media` facts, not in
+    /// `content`: history strips their bytes and points at `media://inbound/<id>` instead.
+    static func mediaFactBlocks(_ facts: JSONValue?, existing: [ContentBlock]) -> [ContentBlock] {
+        var seen = Set(existing.compactMap { block -> String? in
+            if case let .image(ref) = block { return ref.url }
+            return nil
+        })
+        return (facts?.array ?? []).compactMap { fact in
+            guard let source = fact["path"]?.text ?? fact["url"]?.text, !source.isEmpty, seen.insert(source).inserted else { return nil }
+            let mimeType = fact["contentType"]?.text
+            let fileName = fact["fileName"]?.text
+            let isImage = mimeType.map { $0.hasPrefix("image/") && !$0.hasPrefix("image/svg") }
+                ?? (fact["kind"]?.text == "image"
+                    || UTType(filenameExtension: (source as NSString).pathExtension)?.conforms(to: .image) == true)
+            if isImage {
+                return .image(ImageRef(
+                    artifactId: nil, base64: nil, url: source, mimeType: mimeType, alt: fileName,
+                    width: fact["width"]?.int, height: fact["height"]?.int))
+            }
+            return .file(name: fileName ?? (source as NSString).lastPathComponent, mimeType: mimeType)
         }
     }
 

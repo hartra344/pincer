@@ -151,20 +151,25 @@ struct PairingView: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 440)
             let command = self.requestId.map { "openclaw devices approve \($0)" } ?? "openclaw devices list"
-            HStack {
-                Text(command)
-                    .font(.system(.body, design: .monospaced))
-                    .textSelection(.enabled)
-                Button {
-                    Clipboard.copy(command)
-                } label: {
-                    Image(systemName: "doc.on.doc")
+            Text(command)
+                .font(.system(.body, design: .monospaced))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+                .padding(12)
+                .frame(maxWidth: 440)
+                .background(Theme.codeBackground, in: RoundedRectangle(cornerRadius: 8))
+                .contextMenu {
+                    Button("Copy Command", systemImage: "doc.on.doc") { self.copy(command) }
                 }
-                .buttonStyle(.borderless)
-                .help("Copy command")
+            Button {
+                self.copy(command)
+            } label: {
+                Label(self.copied ? "Copied" : "Copy Command",
+                      systemImage: self.copied ? "checkmark" : "doc.on.doc")
             }
-            .padding(12)
-            .background(Theme.codeBackground, in: RoundedRectangle(cornerRadius: 8))
+            .buttonStyle(.borderedProminent)
+            .tint(self.copied ? .green : .accentColor)
             VStack(spacing: 4) {
                 Text("Device ID").font(.caption).foregroundStyle(.secondary)
                 Text(self.deviceId.prefix(16) + "…")
@@ -178,6 +183,17 @@ struct PairingView: View {
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @State private var copied = false
+
+    private func copy(_ command: String) {
+        Clipboard.copy(command)
+        self.copied = true
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            self.copied = false
+        }
     }
 }
 

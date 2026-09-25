@@ -39,7 +39,9 @@ struct ChannelList: View {
                             })
                             .tag(channel.row.key)
                             .contextMenu { self.menu(for: channel.row) }
-                            .onDrag {
+                            // `.itemProvider`, not `.onDrag`: on macOS `.onDrag` swallows the
+                            // mouse-down, so clicks to select a chat lag or get lost.
+                            .itemProvider {
                                 self.draggingKey = channel.row.key
                                 return NSItemProvider(object: channel.row.key as NSString)
                             }
@@ -389,10 +391,47 @@ private struct ConnectionStatusRow: View {
                 Button("Retry now") { self.gateway.reconnectIfNeeded() }.buttonStyle(.borderless)
             }
             .foregroundStyle(.orange)
-        case .awaitingPairing:
-            Label("Waiting for approval on the Gateway host", systemImage: "lock.shield").foregroundStyle(.orange)
+        case let .awaitingPairing(requestId, deviceId):
+            PairingStatusRow(requestId: requestId, deviceId: deviceId)
         case let .failed(message):
             Label(message, systemImage: "exclamationmark.octagon").foregroundStyle(.red)
+        }
+    }
+}
+
+/// On iPhone the split view's detail column (which hosts `PairingView`) isn't on screen, so the
+/// approval command would be unreachable. The row opens it in a sheet, automatically when compact.
+private struct PairingStatusRow: View {
+    let requestId: String?
+    let deviceId: String
+    @Environment(GatewayStore.self) private var gateway
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+    @State private var showing = false
+
+    var body: some View {
+        Button {
+            self.showing = true
+        } label: {
+            Label("Waiting for approval on the Gateway host", systemImage: "lock.shield").foregroundStyle(.orange)
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: self.$showing) {
+            NavigationStack {
+                ScrollView { PairingView(requestId: self.requestId, deviceId: self.deviceId) }
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { self.showing = false }
+                        }
+                    }
+            }
+            .environment(self.gateway)
+        }
+        .onAppear {
+            #if os(iOS)
+            if self.sizeClass == .compact { self.showing = true }
+            #endif
         }
     }
 }

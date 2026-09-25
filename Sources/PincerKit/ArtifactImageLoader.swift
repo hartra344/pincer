@@ -211,9 +211,16 @@ public enum ImageCodec {
         let baseName = (fileName as NSString).deletingPathExtension
         let originalType = CGImageSourceGetType(source) as String?
         let keepsAlpha = originalType == UTType.png.identifier
+        // Re-encoding would drop animation, so GIFs that already fit go up untouched.
+        if data.count <= maxBytes, originalType == UTType.gif.identifier {
+            return OutgoingAttachment(fileName: "\(baseName).gif", mimeType: "image/gif", data: data)
+        }
         if data.count <= maxBytes, originalType == UTType.jpeg.identifier || originalType == UTType.png.identifier {
             if let clean = Self.encode(source: source, maxPixel: nil, png: keepsAlpha, quality: 0.9) , clean.count <= maxBytes {
-                return OutgoingAttachment(fileName: fileName, mimeType: keepsAlpha ? "image/png" : "image/jpeg", data: clean)
+                return OutgoingAttachment(
+                    fileName: "\(baseName).\(keepsAlpha ? "png" : "jpg")",
+                    mimeType: keepsAlpha ? "image/png" : "image/jpeg",
+                    data: clean)
             }
         }
         for maxPixel in [3072, 2048, 1600, 1280, 1024, 768, 512] {
