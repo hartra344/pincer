@@ -70,36 +70,117 @@ struct MarkdownTableView: View {
     let rows: [[String]]
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
-                GridRow {
-                    ForEach(self.header.indices, id: \.self) { column in
-                        self.cell(self.header[column], column: column).fontWeight(.semibold)
-                    }
-                }
-                .background(Theme.codeBackground)
-                ForEach(self.rows.indices, id: \.self) { index in
-                    GridRow {
-                        ForEach(self.header.indices, id: \.self) { column in
-                            self.cell(column < self.rows[index].count ? self.rows[index][column] : "", column: column)
-                                .overlay(alignment: .top) { Rectangle().fill(.quaternary).frame(height: 1) }
-                        }
-                    }
+        // Wrap cells to the available width when every column can keep a readable minimum;
+        // otherwise fall back to horizontal scrolling at the minimum widths.
+        ViewThatFits(in: .horizontal) {
+            self.table(fillsWidth: true)
+            ScrollView(.horizontal, showsIndicators: false) {
+                self.table(fillsWidth: false)
+            }
+        }
+    }
+
+    private func table(fillsWidth: Bool) -> some View {
+        MarkdownTableLayout(columns: self.header.count, fillsWidth: fillsWidth) {
+            ForEach(self.header.indices, id: \.self) { column in
+                self.cell(self.header[column], column: column)
+                    .fontWeight(.semibold)
+                    .background(Theme.codeBackground)
+            }
+            ForEach(self.rows.indices, id: \.self) { index in
+                ForEach(self.header.indices, id: \.self) { column in
+                    self.cell(column < self.rows[index].count ? self.rows[index][column] : "", column: column)
+                        .overlay(alignment: .top) { Rectangle().fill(.quaternary).frame(height: 1) }
                 }
             }
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     private func cell(_ text: String, column: Int) -> some View {
         let alignment = column < self.alignments.count ? self.alignments[column] : .leading
+        let frameAlignment: SwiftUI.Alignment = alignment == .trailing ? .topTrailing : alignment == .center ? .top : .topLeading
+        let textAlignment: TextAlignment = alignment == .trailing ? .trailing : alignment == .center ? .center : .leading
         return Text(MarkdownText.inline(text))
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(minWidth: 0, maxWidth: 320, alignment: alignment == .trailing ? .trailing : alignment == .center ? .center : .leading)
+            .multilineTextAlignment(textAlignment)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .gridColumnAlignment(alignment == .trailing ? .trailing : alignment == .center ? .center : .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: frameAlignment)
+    }
+}
+
+/// Lays out table cells (row-major) with shared column widths so wrapped cells grow their
+/// whole row instead of overlapping the next one.
+struct MarkdownTableLayout: Layout {
+    let columns: Int
+    /// When true, columns shrink/wrap to fit the proposed width. When false, columns use
+    /// their ideal widths (capped) and the table may be wider than its container.
+    let fillsWidth: Bool
+
+    private static let minimumColumn: CGFloat = 72
+    private static let maximumColumn: CGFloat = 320
+
+    struct Metrics {
+        var widths: [CGFloat]
+        var heights: [CGFloat]
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let metrics = self.metrics(width: proposal.width, subviews: subviews)
+        return CGSize(width: metrics.widths.reduce(0, +), height: metrics.heights.reduce(0, +))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let metrics = self.metrics(width: bounds.width, subviews: subviews)
+        var y = bounds.minY
+        for row in metrics.heights.indices {
+            var x = bounds.minX
+            for column in 0..<self.columns {
+                let index = row * self.columns + column
+                guard index < subviews.count else { return }
+                let size = CGSize(width: metrics.widths[column], height: metrics.heights[row])
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width
+            }
+            y += metrics.heights[row]
+        }
+    }
+
+    private func metrics(width available: CGFloat?, subviews: Subviews) -> Metrics {
+        guard self.columns > 0 else { return Metrics(widths: [], heights: []) }
+        var ideals = Array(repeating: CGFloat(0), count: self.columns)
+        for (index, subview) in subviews.enumerated() {
+            let column = index % self.columns
+            ideals[column] = max(ideals[column], ceil(subview.sizeThatFits(.unspecified).width))
+        }
+        ideals = ideals.map { min($0, Self.maximumColumn) }
+        let minimums = ideals.map { min($0, Self.minimumColumn) }
+
+        var widths = ideals
+        if self.fillsWidth {
+            // A nil width is an ideal-size query (e.g. from ViewThatFits): report the narrowest
+            // readable table so we're chosen whenever the minimums fit.
+            let target = available ?? minimums.reduce(0, +)
+            let idealTotal = ideals.reduce(0, +)
+            let minimumTotal = minimums.reduce(0, +)
+            if idealTotal > target {
+                let slack = max(0, target - minimumTotal)
+                let flexible = idealTotal - minimumTotal
+                widths = zip(ideals, minimums).map { ideal, minimum in
+                    flexible > 0 ? minimum + (ideal - minimum) / flexible * slack : minimum
+                }
+                widths = widths.map { floor($0) }
+            }
+        }
+
+        let rowCount = (subviews.count + self.columns - 1) / self.columns
+        var heights = Array(repeating: CGFloat(0), count: rowCount)
+        for (index, subview) in subviews.enumerated() {
+            let size = subview.sizeThatFits(ProposedViewSize(width: widths[index % self.columns], height: nil))
+            heights[index / self.columns] = max(heights[index / self.columns], ceil(size.height))
+        }
+        return Metrics(widths: widths, heights: heights)
     }
 }
 
