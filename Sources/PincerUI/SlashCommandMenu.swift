@@ -6,6 +6,7 @@ struct SlashCommandMenu: View {
     let suggestions: [SlashSuggestion]
     @Binding var selection: Int
     let onPick: (SlashSuggestion) -> Void
+    @State private var contentHeight: CGFloat = 0
 
     private static let corner: CGFloat = 16
     static let maxHeight: CGFloat = 280
@@ -22,12 +23,13 @@ struct SlashCommandMenu: View {
                     .padding(.bottom, 2)
             }
             ScrollViewReader { proxy in
-                // Only scrolls when the rows don't fit; otherwise the menu hugs its rows.
-                ViewThatFits(in: .vertical) {
+                // As tall as the rows, up to `maxHeight`; only then does it scroll.
+                ScrollView {
                     self.rows
-                    ScrollView { self.rows }
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.contentHeight = $0 }
                 }
-                .frame(maxHeight: Self.maxHeight)
+                .scrollDisabled(self.contentHeight <= Self.maxHeight)
+                .frame(height: min(max(self.contentHeight, 1), Self.maxHeight))
                 .onChange(of: self.selection) { _, index in
                     guard self.suggestions.indices.contains(index) else { return }
                     proxy.scrollTo(self.suggestions[index].id)

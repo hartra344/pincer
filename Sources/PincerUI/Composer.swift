@@ -200,11 +200,9 @@ struct Composer: View {
 
     private var suggestions: [SlashSuggestion] {
         guard self.isTypingCommand, self.caretAtEnd, self.text != self.dismissedMenuText else { return [] }
-        let suggestions = SlashCompletion.suggestions(
+        // A fully typed command stays listed; Return sends it since accepting wouldn't change anything.
+        return SlashCompletion.suggestions(
             for: self.text, commands: self.gateway.slashCommands(for: self.chat.sessionKey), choices: self.choices)
-        // Nothing left to complete: keep the menu out of the way so Return just sends.
-        if suggestions.count == 1, suggestions[0].isComplete(for: self.text) { return [] }
-        return suggestions
     }
 
     /// Values for a command's argument: the catalog's, or ones Pincer knows (models, thinking levels).
