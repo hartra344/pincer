@@ -164,11 +164,14 @@ struct TranscriptSettings: Equatable {
     var thinking: ThinkingDisplay
     /// The session has reasoning turned off on the Gateway, so no reasoning text is shown at all.
     var reasoningOff = false
+    /// Colors are baked into layouts (avatars) and drawn by row views, so a theme change redoes them.
+    var theme = AppTheme()
 
     @MainActor static func current(for context: TranscriptContext) -> TranscriptSettings {
         TranscriptSettings(
             thinking: ThinkingDisplay.current,
-            reasoningOff: context.gateway.sessions[context.sessionKey]?.reasoningLevel == "off")
+            reasoningOff: context.gateway.sessions[context.sessionKey]?.reasoningLevel == "off",
+            theme: AppTheme.current)
     }
 }
 
@@ -231,7 +234,7 @@ struct TranscriptLayoutBuilder {
         layout.alpha = item.isPending ? 0.7 : 1
         layout.copyItems = [.init(title: "Copy Text", text: text)]
         layout.accessibilityLabel = "\(header.name): \(text)"
-        self.scaffold(avatar: .init(text: Owner.initials, emoji: nil, color: TranscriptColors.blue),
+        self.scaffold(avatar: .init(text: Owner.initials, emoji: nil, color: TranscriptColors.ownerAvatar),
                       header: header, into: &layout) { stack, layout in
             if !text.isEmpty { self.markdown(text, tone: .primary, into: &stack) }
             let images = item.blocks.compactMap { block -> ImageRef? in
@@ -266,7 +269,7 @@ struct TranscriptLayoutBuilder {
         // A finished turn with nothing else to show keeps its steps, folded, so it isn't blank.
         case .live: hasReply ? .hidden : .grouped
         }
-        self.scaffold(avatar: .init(text: String(agent.name.prefix(1)).uppercased(), emoji: agent.emoji, color: TranscriptColors.accent),
+        self.scaffold(avatar: .init(text: String(agent.name.prefix(1)).uppercased(), emoji: agent.emoji, color: TranscriptColors.agentAvatar),
                       header: header, into: &layout) { stack, layout in
             switch steps {
             case .hidden:

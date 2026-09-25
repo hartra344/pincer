@@ -125,6 +125,7 @@ public final class GatewayStore: Identifiable {
             rawValue: UserDefaults.standard.string(forKey: "pincer.org.v2.\(profile.id.uuidString)") ?? "") ?? .servers
         self.serverNameOverrides = UserDefaults.standard.dictionary(forKey: "pincer.serverNames.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.chatIcons = UserDefaults.standard.dictionary(forKey: "pincer.chatIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.chatColors = UserDefaults.standard.dictionary(forKey: "pincer.chatColors.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.selectedKey = UserDefaults.standard.string(forKey: "pincer.selected.\(profile.id.uuidString)")
         self.images = ArtifactImageLoader()
         self.images.gateway = self
@@ -212,6 +213,7 @@ public final class GatewayStore: Identifiable {
         Task { await self.loadConfiguredServerNames() }
         Task { await self.pullServerNames() }
         Task { await self.pullChatIcons() }
+        Task { await self.pullChatColors() }
         // Only pick a chat on the first connect: on iPhone, going back to the sidebar clears the
         // selection, and re-selecting on every reconnect would push a chat the user left.
         let selectionGone = self.selectedKey.map { self.sessions[$0] == nil } ?? false
@@ -562,6 +564,9 @@ public final class GatewayStore: Identifiable {
     /// SF Symbol names by session key. Kept in prefs because `sessions.patch` only accepts
     /// emoji, OpenClaw glyph ids or SVG for a session's `icon`.
     static let chatIconsPref = "pincer.chatIcons"
+    /// Custom "#RRGGBB" colors by session key. Kept in prefs because `sessions.patch` only accepts
+    /// OpenClaw's named colors for a session's `color`.
+    static let chatColorsPref = "pincer.chatColors"
 
     private struct SyncedMap {
         let pref: String
@@ -575,6 +580,8 @@ public final class GatewayStore: Identifiable {
                       syncedDefaultsKey: "pincer.serverNamesSynced.\(self.id.uuidString)"),
             SyncedMap(pref: Self.chatIconsPref, local: \.chatIcons,
                       syncedDefaultsKey: "pincer.chatIconsSynced.\(self.id.uuidString)"),
+            SyncedMap(pref: Self.chatColorsPref, local: \.chatColors,
+                      syncedDefaultsKey: "pincer.chatColorsSynced.\(self.id.uuidString)"),
         ]
     }
 
@@ -604,6 +611,7 @@ public final class GatewayStore: Identifiable {
 
     func pullServerNames() async { await self.pull(self.syncedMap(Self.serverNamesPref)) }
     func pullChatIcons() async { await self.pull(self.syncedMap(Self.chatIconsPref)) }
+    func pullChatColors() async { await self.pull(self.syncedMap(Self.chatColorsPref)) }
 
     private func pull(_ map: SyncedMap) async {
         guard let fetched = await self.fetchRemoteMap(map.pref) else { return }
@@ -674,6 +682,24 @@ public final class GatewayStore: Identifiable {
         guard self.chatIcons[key] != value else { return }
         self.chatIcons[key] = value
         Task { await self.push(self.syncedMap(Self.chatIconsPref), key, value) }
+    }
+
+    // MARK: Chat colors
+
+    /// Custom "#RRGGBB" colors by session key, synced through `users.prefs` (`pincer.chatColors`).
+    public var chatColors: [String: String] {
+        didSet { UserDefaults.standard.set(self.chatColors, forKey: "pincer.chatColors.\(self.id.uuidString)") }
+    }
+
+    /// The custom color picked for a chat, if any. It wins over the session's named `color`.
+    public func customColor(for key: String) -> String? { self.chatColors[key] }
+
+    /// Sets (or with `nil`, clears) a chat's custom color on every device.
+    public func setColor(_ hex: String?, for key: String) {
+        let value = hex?.trimmingCharacters(in: .whitespaces).nilIfEmpty
+        guard self.chatColors[key] != value else { return }
+        self.chatColors[key] = value
+        Task { await self.push(self.syncedMap(Self.chatColorsPref), key, value) }
     }
 
     public func sections(search: String = "") -> [SidebarSection] {

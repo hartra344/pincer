@@ -118,7 +118,7 @@ private struct SlashSuggestionRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(self.isSelected ? Color.accentColor.opacity(0.18) : .clear))
+                .fill(self.isSelected ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(.clear)))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(self.isSelected ? [.isButton, .isSelected] : .isButton)
     }

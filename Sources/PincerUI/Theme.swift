@@ -11,7 +11,6 @@ public typealias PlatformImage = UIImage
 
 enum Theme {
     static let bubbleCorner: CGFloat = 14
-    static let accent = Color(red: 0.93, green: 0.33, blue: 0.24) // lobster
 
     static func color(named name: String?) -> Color? {
         guard let name = name?.lowercased() else { return nil }

@@ -10,6 +10,7 @@ struct SidebarList: UIViewRepresentable {
     let selectedKey: String?
     let gateway: GatewayStore
     let actions: SidebarActions
+    var theme = AppTheme()
 
     func makeCoordinator() -> Coordinator { Coordinator(gateway: self.gateway, actions: self.actions) }
 
@@ -18,7 +19,7 @@ struct SidebarList: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UICollectionView, context: Context) {
-        context.coordinator.update(model: self.model, selectedKey: self.selectedKey, actions: self.actions)
+        context.coordinator.update(model: self.model, selectedKey: self.selectedKey, actions: self.actions, theme: self.theme)
     }
 
     static func dismantleUIView(_ view: UICollectionView, coordinator: Coordinator) {
@@ -117,9 +118,13 @@ struct SidebarList: UIViewRepresentable {
 
         // MARK: Updates
 
-        func update(model: SidebarModel, selectedKey: String?, actions: SidebarActions) {
+        func update(model: SidebarModel, selectedKey: String?, actions: SidebarActions, theme: AppTheme) {
             self.actions = actions
             self.selectedKey = selectedKey
+            if theme != self.theme {
+                self.theme = theme
+                self.themeChanged()
+            }
             guard let dataSource else { return }
             if model != self.model || !self.hasLoaded {
                 let old = self.model
@@ -194,6 +199,13 @@ struct SidebarList: UIViewRepresentable {
                     cell.configure(entry, actions: self.actions)
                 }
             }
+        }
+
+        private var theme = AppTheme()
+
+        private func themeChanged() {
+            self.collectionView?.tintColor = self.theme.platformColor(.accent)
+            self.reconfigureVisible()
         }
 
         private func reconfigureVisible() {
@@ -403,7 +415,7 @@ private final class SidebarChatListCell: UICollectionViewListCell {
             : UIListContentConfiguration.sidebarSubtitleCell()
         let symbol = ChannelRowStyle.symbol(for: entry)
         content.image = UIImage(systemName: symbol) ?? UIImage(systemName: "number")
-        content.imageProperties.tintColor = ChannelRowStyle.tint(for: row)
+        content.imageProperties.tintColor = ChannelRowStyle.tint(for: entry)
         content.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(textStyle: .body)
         content.imageProperties.reservedLayoutSize = CGSize(width: 26, height: 0)
 

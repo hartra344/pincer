@@ -161,6 +161,7 @@ struct PairingView: View {
     let requestId: String?
     let deviceId: String
     @Environment(GatewayStore.self) private var gateway
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         VStack(spacing: 18) {
@@ -194,7 +195,7 @@ struct PairingView: View {
             }
             .glassProminentButton()
             .controlSize(.large)
-            .tint(self.copied ? .green : .accentColor)
+            .tint(self.copied ? .green : self.theme.accent)
             .contentTransition(.symbolEffect(.replace))
             VStack(spacing: 4) {
                 Text("Device ID").font(.caption).foregroundStyle(.secondary)

@@ -14,10 +14,12 @@ struct ChannelList: View {
     @State private var newSessionAgent: String?
     @State private var renaming: SessionRow?
     @State private var changingIcon: SessionRow?
+    @State private var pickingColor: SessionRow?
     @State private var showingSettings = false
     @State private var showingGatewaySettings = false
     @State private var expandedThreads: Set<String> = []
     @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
+    @Environment(\.appTheme) private var theme
     @State private var prompt: TextPrompt?
 
     var body: some View {
@@ -35,7 +37,8 @@ struct ChannelList: View {
                                           expandedThreads: self.expandedThreads, showSubagentRuns: self.showSubagentRuns),
                 selectedKey: self.gateway.selectedKey,
                 gateway: self.gateway,
-                actions: self.actions)
+                actions: self.actions,
+                theme: self.theme)
         }
         #if os(iOS)
         .searchable(text: self.$search, placement: .sidebar, prompt: "Find a chat")
@@ -77,6 +80,9 @@ struct ChannelList: View {
         .sheet(item: self.$changingIcon) { row in
             IconPickerSheet(row: row)
         }
+        .sheet(item: self.$pickingColor) { row in
+            ChatColorSheet(row: row)
+        }
         .sheet(item: self.$prompt) { prompt in
             TextPromptSheet(prompt: prompt)
         }
@@ -107,6 +113,7 @@ struct ChannelList: View {
             newChat: { self.newSessionAgent = $0 },
             rename: { self.renaming = $0 },
             changeIcon: { self.changingIcon = $0 },
+            pickColor: { self.pickingColor = $0 },
             prompt: { self.prompt = $0 },
             toggleThreads: { key in
                 if self.expandedThreads.contains(key) { self.expandedThreads.remove(key) } else { self.expandedThreads.insert(key) }
@@ -299,7 +306,7 @@ struct IconPickerSheet: View {
 
     private var current: String? { ChannelRowStyle.customSymbol(for: self.row, gateway: self.gateway) }
     private var defaultSymbol: String { ChannelRowStyle.defaultSymbol(for: self.row, isThread: self.row.isSubagent) }
-    private var tint: Color { Theme.color(named: self.row.color) ?? .secondary }
+    private var tint: Color { ChannelRowStyle.color(for: self.row, gateway: self.gateway) ?? .secondary }
 
     var body: some View {
         NavigationStack {
@@ -402,5 +409,56 @@ struct TextPromptSheet: View {
     private func save() {
         self.prompt.onSave(self.value)
         self.dismiss()
+    }
+}
+
+/// Any color for a chat's icon, beyond OpenClaw's named ones. Syncs through the gateway's prefs.
+struct ChatColorSheet: View {
+    let row: SessionRow
+    @Environment(GatewayStore.self) private var gateway
+    @Environment(\.dismiss) private var dismiss
+    @State private var color = Color.accentColor
+
+    private var symbol: String {
+        ChannelRowStyle.customSymbol(for: self.row, gateway: self.gateway)
+            ?? ChannelRowStyle.defaultSymbol(for: self.row, isThread: self.row.isSubagent)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack(spacing: 12) {
+                        Image(systemName: self.symbol)
+                            .font(.title2)
+                            .foregroundStyle(self.color)
+                            .frame(width: 32)
+                        Text(self.row.title)
+                            .lineLimit(1)
+                    }
+                    ColorPicker("Color", selection: self.$color, supportsOpacity: false)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Chat Color")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { self.dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        if let hex = self.color.rgbHex { self.gateway.setColor(hex, for: self.row.key) }
+                        self.dismiss()
+                    }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(width: 360, height: 200)
+        #endif
+        .onAppear {
+            if let current = ChannelRowStyle.color(for: self.row, gateway: self.gateway) { self.color = current }
+        }
     }
 }

@@ -7,6 +7,7 @@ struct Composer: View {
     let chat: ChatStore
     let placeholder: String
     @Environment(GatewayStore.self) private var gateway
+    @Environment(\.appTheme) private var theme
     @State private var text = ""
     @State private var attachments: [OutgoingAttachment] = []
     @State private var importing = false
@@ -18,7 +19,9 @@ struct Composer: View {
     @State private var dismissedMenuText: String?
     @State private var caretAtEnd = true
 
-    private static let corner: CGFloat = 20
+    private static let corner: CGFloat = 22
+    /// Height of a single-line field, which the side controls match.
+    fileprivate static let controlHeight: CGFloat = 40
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -48,8 +51,8 @@ struct Composer: View {
                     onMedia: self.ingest,
                     onKey: self.menuKey,
                     onCaretAtEnd: { if self.caretAtEnd != $0 { self.caretAtEnd = $0 } })
-                    .padding(.vertical, 8)
-                    .frame(minHeight: 34)
+                    .padding(.vertical, 11)
+                    .frame(minHeight: Self.controlHeight)
                 if self.chat.isRunning {
                     Button {
                         Task { await self.chat.abort() }
@@ -64,7 +67,7 @@ struct Composer: View {
                     .transition(.scale.combined(with: .opacity))
                 }
                 Button(action: self.submit) {
-                    ComposerActionLabel(systemImage: "arrow.up", tint: .accentColor, active: self.canSend)
+                    ComposerActionLabel(systemImage: "arrow.up", tint: self.theme.accent, active: self.canSend)
                 }
                 .buttonStyle(.plain)
                 .composerControl()
@@ -72,12 +75,12 @@ struct Composer: View {
                 .help(self.chat.isRunning ? "Queue a follow-up" : "Send")
                 .accessibilityLabel(self.chat.isRunning ? "Queue a follow-up" : "Send")
             }
-            .padding(.leading, 8)
-            .padding(.trailing, 6)
+            .padding(.leading, 10)
+            .padding(.trailing, 7)
             .glassSurface(in: RoundedRectangle(cornerRadius: Self.corner, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: Self.corner, style: .continuous)
-                    .strokeBorder(Color.accentColor, lineWidth: 2)
+                    .strokeBorder(self.theme.accent, lineWidth: 2)
                     .opacity(self.isTargeted ? 1 : 0))
             .animation(.snappy, value: self.chat.isRunning)
             .animation(.snappy, value: self.canSend)
@@ -441,8 +444,8 @@ private struct ComposerActionLabel: View {
 
     var body: some View {
         let icon = Image(systemName: self.systemImage)
-            .font(.system(size: 13, weight: .bold))
-            .frame(width: 26, height: 26)
+            .font(.system(size: 14, weight: .bold))
+            .frame(width: 30, height: 30)
             .contentShape(Circle())
         if #available(macOS 26, iOS 26, *) {
             icon
@@ -460,7 +463,7 @@ private extension View {
     /// Side controls share one box as tall as a single-line field, so with bottom alignment they
     /// centre on the first line and stay pinned to the last line as the field grows.
     func composerControl() -> some View {
-        self.frame(width: 28, height: 34)
+        self.frame(width: 32, height: Composer.controlHeight)
     }
 }
 

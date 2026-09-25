@@ -11,6 +11,7 @@ public struct PincerScene: Scene {
         WindowGroup("Pincer", id: "main") {
             RootView()
                 .environment(self.app)
+                .themed()
                 .task { self.app.start() }
         }
         #if os(macOS)
@@ -27,6 +28,7 @@ public struct PincerScene: Scene {
         Settings {
             SettingsView()
                 .environment(self.app)
+                .themed()
         }
         #endif
     }
@@ -47,6 +49,7 @@ extension AppModel {
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.appTheme) private var theme
     @Environment(\.scenePhase) private var scenePhase
     @State private var editing: GatewayProfile?
     @State private var addingGateway = false
@@ -61,12 +64,14 @@ struct RootView: View {
                     ChannelList(editConnection: { self.editing = gateway.profile },
                                 openChat: { self.compactColumn = .detail })
                         .environment(gateway)
+                        .background { self.theme.background(.sidebarBackground)?.ignoresSafeArea() }
                         .id(gateway.id)
                         #if os(macOS)
                         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
                         #endif
                 } detail: {
                     self.detail(gateway)
+                        .background { self.theme.background(.chatBackground)?.ignoresSafeArea() }
                 }
             } else {
                 // Outside the split view: on iPhone it collapses to the (empty) sidebar column.
@@ -143,6 +148,9 @@ struct SettingsView: View {
             Tab("General", systemImage: "gearshape") {
                 SettingsForm(sections: [.you, .device])
             }
+            Tab("Appearance", systemImage: "paintpalette") {
+                SettingsForm(sections: [.appearance, .colors], scrolls: true)
+            }
             Tab("Conversation", systemImage: "bubble.left.and.text.bubble.right") {
                 SettingsForm(sections: [.conversation, .sidebar])
             }
@@ -160,15 +168,20 @@ struct SettingsView: View {
 
 private struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, conversation, sidebar, notifications, device
+        case you, appearance, colors, conversation, sidebar, notifications, device
     }
 
     let sections: [Section]
+    /// Tall tabs scroll in a fixed-height window instead of growing past the screen.
+    var scrolls = false
     @Environment(AppModel.self) private var app
     @AppStorage("pincer.ownerName") private var ownerName = ""
     @AppStorage(ThinkingDisplay.storageKey) private var thinkingDisplay = ThinkingDisplay.defaultValue
     @AppStorage("pincer.loadWebImages") private var loadWebImages = true
     @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
+    @AppStorage(AppTheme.presetKey) private var preset = ThemePreset.standard
+    @AppStorage(AppTheme.modeKey) private var mode = AppearanceMode.system
+    @Environment(\.appTheme) private var theme
     @State private var notifications = true
 
     var body: some View {
@@ -177,8 +190,9 @@ private struct SettingsForm: View {
         }
         .formStyle(.grouped)
         #if os(macOS)
-        .scrollDisabled(true)
-        .fixedSize(horizontal: false, vertical: true)
+        .scrollDisabled(!self.scrolls)
+        .fixedSize(horizontal: false, vertical: !self.scrolls)
+        .frame(height: self.scrolls ? 520 : nil)
         #endif
         .onAppear { self.notifications = self.app.notifier.enabled }
     }
@@ -192,6 +206,36 @@ private struct SettingsForm: View {
                 Text("You")
             } footer: {
                 Text("Your messages show under this name, whichever channel they came from.")
+            }
+        case .appearance:
+            SwiftUI.Section {
+                Picker("Appearance", selection: self.$mode) {
+                    ForEach(AppearanceMode.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                ThemePresetGrid(selection: self.$preset)
+            } header: {
+                Text("Theme")
+            } footer: {
+                Text("Themes set the accent, links, avatars and backgrounds. Default follows your system accent color.")
+            }
+        case .colors:
+            SwiftUI.Section {
+                ForEach(ThemeRole.allCases) { role in
+                    ThemeColorRow(role: role, theme: self.theme)
+                }
+            } header: {
+                HStack {
+                    Text("Colors")
+                    Spacer()
+                    if !self.theme.overrides.isEmpty {
+                        Button("Reset All") { AppTheme.resetOverrides() }
+                            .buttonStyle(.borderless)
+                            .font(.callout)
+                    }
+                }
+            } footer: {
+                Text("Pick a color to override the theme for just that part.")
             }
         case .conversation:
             SwiftUI.Section("Conversation") {
@@ -227,6 +271,91 @@ private struct SettingsForm: View {
                 }
                 LabeledContent("Role", value: "operator (read, write, approvals)")
             }
+        }
+    }
+}
+
+/// Swatches for the built-in themes.
+private struct ThemePresetGrid: View {
+    @Binding var selection: ThemePreset
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 10)], spacing: 10) {
+            ForEach(ThemePreset.allCases) { preset in
+                Button { self.selection = preset } label: { self.swatch(preset) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(preset.label) theme")
+                    .accessibilityAddTraits(preset == self.selection ? .isSelected : [])
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func swatch(_ preset: ThemePreset) -> some View {
+        let selected = preset == self.selection
+        let colors = preset.swatch
+        return VStack(spacing: 6) {
+            HStack(spacing: -6) {
+                ForEach(colors.indices, id: \.self) { index in
+                    Circle()
+                        .fill(colors[index].gradient)
+                        .overlay(Circle().stroke(.background, lineWidth: 2))
+                        .frame(width: 22, height: 22)
+                }
+            }
+            Text(preset.label)
+                .font(.caption)
+                .foregroundStyle(selected ? .primary : .secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(selected ? AnyShapeStyle(colors[0].opacity(0.15)) : AnyShapeStyle(.quinary)))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .strokeBorder(selected ? colors[0] : .clear, lineWidth: 2))
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// One themeable color: a picker, and a reset button once the user has overridden it. The picker
+/// edits local state, so the color panel isn't reset to the old color while the save round-trips
+/// through UserDefaults.
+private struct ThemeColorRow: View {
+    let role: ThemeRole
+    let theme: AppTheme
+    @State private var picked: Color?
+
+    var body: some View {
+        let overridden = self.theme.overrides[self.role] != nil
+        HStack {
+            ColorPicker(selection: Binding(
+                get: { self.picked ?? self.theme.color(self.role) },
+                set: { color in
+                    self.picked = color
+                    AppTheme.setOverride(color, for: self.role)
+                }
+            ), supportsOpacity: false) {
+                HStack(spacing: 6) {
+                    Text(self.role.label)
+                    if overridden {
+                        Text("Custom").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if overridden {
+                Button {
+                    AppTheme.setOverride(nil, for: self.role)
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .buttonStyle(.borderless)
+                .help("Use the theme's color")
+                .accessibilityLabel("Reset \(self.role.label)")
+            }
+        }
+        // Reset or Reset All: follow the theme again.
+        .onChange(of: overridden) { _, overridden in
+            if !overridden { self.picked = nil }
         }
     }
 }

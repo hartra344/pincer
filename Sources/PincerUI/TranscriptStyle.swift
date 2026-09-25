@@ -106,7 +106,8 @@ final class TranscriptStyle {
     }
 }
 
-/// Semantic colors for native transcript rows. All dynamic, so they follow light/dark mode.
+/// Semantic colors for native transcript rows. All dynamic, so they follow light/dark mode, and
+/// the themeable ones follow `AppTheme`.
 enum TranscriptColors {
     #if os(macOS)
     static var label: PColor { .labelColor }
@@ -120,9 +121,9 @@ enum TranscriptColors {
     #endif
     static var strongFill: PColor { .quaternaryLabelColor }
     static var separator: PColor { .separatorColor }
-    static var codeBackground: PColor { NSColor.textBackgroundColor.withAlphaComponent(0.6) }
-    static var link: PColor { .linkColor }
-    static var tint: PColor { .controlAccentColor }
+    static var codeBackground: PColor { AppTheme.current.platformColor(.codeBackground) ?? NSColor.textBackgroundColor.withAlphaComponent(0.6) }
+    static var link: PColor { AppTheme.current.platformColor(.link) ?? .linkColor }
+    static var tint: PColor { AppTheme.current.platformColor(.accent) ?? .controlAccentColor }
     static var highlight: PColor { .quaternaryLabelColor }
     #else
     static var label: PColor { .label }
@@ -132,14 +133,14 @@ enum TranscriptColors {
     static var fill: PColor { .quaternarySystemFill }
     static var strongFill: PColor { .tertiarySystemFill }
     static var separator: PColor { .separator }
-    static var codeBackground: PColor { .tertiarySystemBackground }
-    static var link: PColor { .link }
-    static var tint: PColor { .tintColor }
+    static var codeBackground: PColor { AppTheme.current.platformColor(.codeBackground) ?? .tertiarySystemBackground }
+    static var link: PColor { AppTheme.current.platformColor(.link) ?? .link }
+    static var tint: PColor { AppTheme.current.platformColor(.accent) ?? .tintColor }
     static var highlight: PColor { .systemFill }
     #endif
     static var red: PColor { .systemRed }
-    static var blue: PColor { .systemBlue }
-    static let accent = PColor(red: 0.93, green: 0.33, blue: 0.24, alpha: 1)
+    static var ownerAvatar: PColor { AppTheme.current.platformColor(.ownerAvatar) ?? .systemBlue }
+    static var agentAvatar: PColor { AppTheme.current.platformColor(.agentAvatar) ?? AppTheme.systemPlatformDefault(.agentAvatar) }
 }
 
 /// Spacing shared by row layout and row views. Mirrors the old SwiftUI rows.

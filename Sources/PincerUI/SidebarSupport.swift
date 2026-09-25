@@ -29,6 +29,8 @@ struct SidebarModel: Equatable {
         let row: SessionRow
         /// Custom SF Symbol (already checked for this OS), or `nil` for the default icon.
         let icon: String?
+        /// The chat's color: a synced custom pick, or the session's named color.
+        let color: String?
         let isThread: Bool
         let subagentCount: Int
         let runningSubagents: Int
@@ -62,6 +64,7 @@ struct SidebarModel: Equatable {
                     id: self.entryId(channel.row.key),
                     row: channel.row,
                     icon: ChannelRowStyle.customSymbol(for: channel.row, gateway: gateway),
+                    color: ChannelRowStyle.colorName(for: channel.row, gateway: gateway),
                     isThread: false,
                     subagentCount: subagents.count,
                     runningSubagents: subagents.filter(\.hasActiveRun).count,
@@ -80,7 +83,8 @@ struct SidebarModel: Equatable {
                 }
                 for thread in visible {
                     entries.append(Entry(id: self.entryId(thread.key), row: thread,
-                                         icon: ChannelRowStyle.customSymbol(for: thread, gateway: gateway), isThread: true, subagentCount: 0,
+                                         icon: ChannelRowStyle.customSymbol(for: thread, gateway: gateway),
+                                         color: ChannelRowStyle.colorName(for: thread, gateway: gateway), isThread: true, subagentCount: 0,
                                          runningSubagents: 0, hiddenUnreadThreads: 0, threadsExpanded: false,
                                          showSubagentRuns: showSubagentRuns))
                 }
@@ -101,6 +105,7 @@ struct SidebarActions {
     var newChat: (String) -> Void
     var rename: (SessionRow) -> Void
     var changeIcon: (SessionRow) -> Void
+    var pickColor: (SessionRow) -> Void
     var prompt: (TextPrompt) -> Void
     var toggleThreads: (String) -> Void
     var setCollapsed: (String, Bool) -> Void
@@ -115,6 +120,16 @@ enum ChannelRowStyle {
     @MainActor
     static func customSymbol(for row: SessionRow, gateway: GatewayStore) -> String? {
         SymbolCatalog.symbol(for: gateway.customIcon(for: row.key)) ?? SymbolCatalog.symbol(for: row.icon)
+    }
+
+    @MainActor
+    static func colorName(for row: SessionRow, gateway: GatewayStore) -> String? {
+        gateway.customColor(for: row.key) ?? row.color
+    }
+
+    @MainActor
+    static func color(for row: SessionRow, gateway: GatewayStore) -> Color? {
+        Theme.color(named: self.colorName(for: row, gateway: gateway))
     }
 
     static func symbol(for entry: SidebarModel.Entry) -> String {
@@ -165,12 +180,12 @@ enum ChannelRowStyle {
     }
 
     #if os(macOS)
-    static func tint(for row: SessionRow) -> NSColor {
-        Theme.color(named: row.color).map { NSColor($0) } ?? .secondaryLabelColor
+    static func tint(for entry: SidebarModel.Entry) -> NSColor {
+        Theme.color(named: entry.color).map { NSColor($0) } ?? .secondaryLabelColor
     }
     #else
-    static func tint(for row: SessionRow) -> UIColor {
-        Theme.color(named: row.color).map { UIColor($0) } ?? .secondaryLabel
+    static func tint(for entry: SidebarModel.Entry) -> UIColor {
+        Theme.color(named: entry.color).map { UIColor($0) } ?? .secondaryLabel
     }
     #endif
 }
@@ -204,10 +219,21 @@ enum SidebarMenus {
         if row.category != nil {
             groups.append(.action("Remove from Group") { patch(["category": .null]) })
         }
+        let custom = gateway.customColor(for: row.key)
         var colors: [SidebarMenuItem] = ["red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink"].map { color in
-            .action(color.capitalized) { patch(["color": .string(color)]) }
+            .action(color.capitalized, checked: custom == nil && row.color == color) {
+                gateway.setColor(nil, for: row.key)
+                patch(["color": .string(color)])
+            }
         }
-        colors += [.divider, .action("None") { patch(["color": .null]) }]
+        colors += [
+            .divider,
+            .action("Custom…", image: "eyedropper", checked: custom != nil) { actions.pickColor(row) },
+            .action("None") {
+                gateway.setColor(nil, for: row.key)
+                patch(["color": .null])
+            },
+        ]
 
         var items: [SidebarMenuItem] = [
             .action(row.isPinned ? "Unpin" : "Pin", image: row.isPinned ? "pin.slash" : "pin") {

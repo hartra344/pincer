@@ -10,6 +10,7 @@ struct SidebarList: NSViewRepresentable {
     let selectedKey: String?
     let gateway: GatewayStore
     let actions: SidebarActions
+    var theme = AppTheme()
 
     func makeCoordinator() -> Coordinator { Coordinator(gateway: self.gateway, actions: self.actions) }
 
@@ -18,7 +19,7 @@ struct SidebarList: NSViewRepresentable {
     }
 
     func updateNSView(_ view: NSScrollView, context: Context) {
-        context.coordinator.update(model: self.model, selectedKey: self.selectedKey, actions: self.actions)
+        context.coordinator.update(model: self.model, selectedKey: self.selectedKey, actions: self.actions, theme: self.theme)
     }
 
     static func dismantleNSView(_ view: NSScrollView, coordinator: Coordinator) {
@@ -44,6 +45,7 @@ struct SidebarList: NSViewRepresentable {
         private var roots: [Node] = []
         private var selectedKey: String?
         private var isProgrammatic = false
+        private var theme = AppTheme()
         private var timer: Timer?
         private weak var outline: NSOutlineView?
 
@@ -100,9 +102,13 @@ struct SidebarList: NSViewRepresentable {
 
         // MARK: Updates
 
-        func update(model: SidebarModel, selectedKey: String?, actions: SidebarActions) {
+        func update(model: SidebarModel, selectedKey: String?, actions: SidebarActions, theme: AppTheme) {
             self.actions = actions
             self.selectedKey = selectedKey
+            if theme != self.theme {
+                self.theme = theme
+                self.themeChanged()
+            }
             guard let outline else { return }
             if model != self.model || !self.hasLoaded {
                 let old = self.model
@@ -163,6 +169,12 @@ struct SidebarList: NSViewRepresentable {
                 }
             }
             if !resized.isEmpty { outline.noteHeightOfRows(withIndexesChanged: resized) }
+        }
+
+        private func themeChanged() {
+            guard let outline else { return }
+            self.reconfigureVisible()
+            outline.enumerateAvailableRowViews { rowView, _ in rowView.needsDisplay = true }
         }
 
         private func reconfigureVisible() {
@@ -252,6 +264,10 @@ struct SidebarList: NSViewRepresentable {
                 ?? SidebarChatCell()
             cell.configure(entry, actions: self.actions)
             return cell
+        }
+
+        func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
+            SidebarRowView()
         }
 
         func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
@@ -441,7 +457,7 @@ private final class SidebarChatCell: NSTableCellView {
         self.threadArrow.isHidden = !entry.isThread
         self.icon.image = NSImage(systemSymbolName: ChannelRowStyle.symbol(for: entry), accessibilityDescription: nil)
             ?? NSImage(systemSymbolName: "number", accessibilityDescription: nil)
-        self.icon.contentTintColor = ChannelRowStyle.tint(for: row)
+        self.icon.contentTintColor = ChannelRowStyle.tint(for: entry)
         self.title.stringValue = row.title
         self.title.font = .systemFont(ofSize: NSFont.systemFontSize, weight: row.isUnread && !row.isSubagent ? .semibold : .regular)
         self.title.textColor = row.isSubagent || row.isArchived ? .secondaryLabelColor : .labelColor
@@ -454,7 +470,7 @@ private final class SidebarChatCell: NSTableCellView {
         self.chip.isHidden = !showChip
         if showChip {
             self.chip.title = "\(entry.subagentCount) \(entry.threadsExpanded ? "▴" : "▾")"
-            self.chip.contentTintColor = entry.hiddenUnreadThreads > 0 ? .controlAccentColor : .secondaryLabelColor
+            self.chip.contentTintColor = entry.hiddenUnreadThreads > 0 ? TranscriptColors.tint : .secondaryLabelColor
             self.chip.toolTip = entry.threadsExpanded ? "Hide subagent runs" : "Show \(entry.subagentCount) subagent runs"
             let key = row.key
             self.onToggleThreads = { actions.toggleThreads(key) }
@@ -646,4 +662,18 @@ struct SidebarSearchField: NSViewRepresentable {
     }
 }
 
+/// Draws the selection in the theme's accent when it sets one; otherwise the system's source-list
+/// highlight.
+private final class SidebarRowView: NSTableRowView {
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard let accent = AppTheme.current.platformColor(.accent) else {
+            super.drawSelection(in: dirtyRect)
+            return
+        }
+        let rect = self.bounds.insetBy(dx: 10, dy: 1)
+        let fill = self.isEmphasized ? accent : accent.withAlphaComponent(0.35)
+        fill.setFill()
+        NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
+    }
+}
 #endif

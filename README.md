@@ -37,6 +37,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - Markdown, including tables and code blocks with a Copy button;
   - every message ends with a **Copy** button and its details: the model that wrote it and the full date and time it was sent. Back-to-back messages from the agent each get their own footer and some space, and replies from a different run start a new row;
   - **inline images** with a Quick Look-style preview and sharing. This covers attachments and the agent's `MEDIA:` lines, the same as the web UI. Local files are fetched through the gateway's `assistant-media` route. Public `https` images are downloaded directly, with no credentials or cookies sent; you can turn this off in Settings with "Load images the agent links from the web".
+- **Appearance:** Settings → Appearance picks Light, Dark or System and a theme: Default (your system accent), Lobster, Ocean, Forest, Grape, Sunset, Graphite or Midnight. Themes color the accent, links, both avatars, and the chat, sidebar and code backgrounds, with separate shades for light and dark mode. Any of those colors can be overridden with your own pick, and reset back to the theme's.
 - **Owner attribution:** messages from you appear under your own name (set in Settings, default is your macOS full name), even when they came in through Discord. A small "via Discord" tag shows where they came from.
 - **Models:** the chat toolbar shows the session's model; pick another (from the Gateway's `models.list`) or go back to the agent's default, and new messages use it. Each reply's footer shows the model the Gateway recorded for it, so earlier replies keep their original model after a switch.
 - **Composer:** Return sends and ⇧/⌥-Return adds a new line. You can paste, drag in or pick images and files; they are downscaled to fit the gateway's limits. Stop a run with ⌘.
@@ -49,7 +50,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - changes are saved with `config.patch`, so the gateway validates, persists and hot-applies them; invalid values come back with the field and reason, and changes that need a gateway restart say so;
   - secrets are shown only as "saved" and are never sent back to the gateway unless you change them;
   - editing needs **Manage Gateway settings** turned on for the gateway; without it, settings are read-only.
-- **Per-session actions:** pin, rename, group, color, reasoning level and archive. Drag a chat onto a group (or **Ungrouped**) to move it; in **Like Discord**, dropping a grouped chat on its own server or agent takes it out of the group.
+- **Per-session actions:** pin, rename, group, color, reasoning level and archive. **Color → Custom…** picks any color; since `sessions.patch` only takes OpenClaw's named colors, custom colors sync through `users.prefs` (key `pincer.chatColors`) and win over the named one. Drag a chat onto a group (or **Ungrouped**) to move it; in **Like Discord**, dropping a grouped chat on its own server or agent takes it out of the group.
 
 ## Connecting to your home gateway over Tailscale
 

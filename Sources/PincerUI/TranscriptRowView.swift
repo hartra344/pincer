@@ -221,6 +221,16 @@ final class TranscriptTextView: NSTextView {
         self.isAutomaticDataDetectionEnabled = false
         container.widthTracksTextView = wraps
         container.heightTracksTextView = false
+        self.applyLinkColor()
+    }
+
+    private var linkTheme: ThemeColor??
+
+    /// Link color lives on the view, not the text, so a theme change has to reach reused views.
+    private func applyLinkColor() {
+        let theme = AppTheme.current.value(.link)
+        guard self.linkTheme != .some(theme) else { return }
+        self.linkTheme = .some(theme)
         self.linkTextAttributes = [
             .foregroundColor: TranscriptColors.link,
             .underlineStyle: NSUnderlineStyle.single.rawValue,
@@ -239,6 +249,7 @@ final class TranscriptTextView: NSTextView {
     /// Shows `text`. `identity` is the row it belongs to: selection survives updates to the same
     /// row (a streaming reply) and clears when the view is reused for another one.
     func set(_ text: NSAttributedString, identity: String) {
+        self.applyLinkColor()
         guard text !== self.shown || identity != self.identity else { return }
         let selection = self.selectedRange()
         let sameRow = identity == self.identity
@@ -388,16 +399,27 @@ final class TranscriptTextView: UITextView, UITextViewDelegate {
         self.textContainerInset = .zero
         self.dataDetectorTypes = []
         self.adjustsFontForContentSizeCategory = false
-        self.linkTextAttributes = [.foregroundColor: TranscriptColors.link]
+        self.applyLinkColor()
         container.widthTracksTextView = wraps
         container.heightTracksTextView = false
         self.delegate = self
+    }
+
+    private var linkTheme: ThemeColor??
+
+    /// Link color lives on the view, not the text, so a theme change has to reach reused views.
+    private func applyLinkColor() {
+        let theme = AppTheme.current.value(.link)
+        guard self.linkTheme != .some(theme) else { return }
+        self.linkTheme = .some(theme)
+        self.linkTextAttributes = [.foregroundColor: TranscriptColors.link]
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
     func set(_ text: NSAttributedString, identity: String) {
+        self.applyLinkColor()
         guard text !== self.shown || identity != self.identity else { return }
         let selection = self.selectedRange
         let sameRow = identity == self.identity
@@ -541,8 +563,17 @@ final class TranscriptRowView: TranscriptBaseView {
         #endif
     }
 
+    /// Theme the pooled views last drew with. Parts only redraw when their own content changes,
+    /// so a theme change has to be pushed to them.
+    private var drawnTheme: AppTheme?
+
     func apply(_ layout: TranscriptRowLayout, actions: TranscriptRowActions) {
         self.layout = layout
+        let theme = AppTheme.current
+        if let drawnTheme, drawnTheme != theme {
+            for view in self.pool.values.joined() { view.appearanceChanged() }
+        }
+        self.drawnTheme = theme
         var used: [TranscriptPart.Kind: Int] = [:]
         for placed in layout.parts {
             let kind = placed.part.kind

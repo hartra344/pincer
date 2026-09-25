@@ -191,11 +191,12 @@ struct GatewaySettingsView: View {
 
 struct PluginRow: View {
     let plugin: PluginInfo
+    @Environment(\.appTheme) private var theme
 
     var body: some View {
         HStack {
             Image(systemName: "puzzlepiece.extension")
-                .foregroundStyle(self.plugin.enabled ? Theme.accent : .secondary)
+                .foregroundStyle(self.plugin.enabled ? self.theme.color(.agentAvatar) : .secondary)
             VStack(alignment: .leading, spacing: 2) {
                 Text(self.plugin.name)
                 if let description = self.plugin.description {
