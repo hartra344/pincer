@@ -27,6 +27,8 @@ struct SidebarModel: Equatable {
     struct Entry: Equatable {
         let id: String
         let row: SessionRow
+        /// Custom SF Symbol (already checked for this OS), or `nil` for the default icon.
+        let icon: String?
         let isThread: Bool
         let subagentCount: Int
         let runningSubagents: Int
@@ -59,6 +61,7 @@ struct SidebarModel: Equatable {
                 entries.append(Entry(
                     id: self.entryId(channel.row.key),
                     row: channel.row,
+                    icon: ChannelRowStyle.customSymbol(for: channel.row, gateway: gateway),
                     isThread: false,
                     subagentCount: subagents.count,
                     runningSubagents: subagents.filter(\.hasActiveRun).count,
@@ -76,7 +79,8 @@ struct SidebarModel: Equatable {
                     visible = channel.threads.filter { !$0.isSubagent || $0.hasActiveRun || $0.key == selected }
                 }
                 for thread in visible {
-                    entries.append(Entry(id: self.entryId(thread.key), row: thread, isThread: true, subagentCount: 0,
+                    entries.append(Entry(id: self.entryId(thread.key), row: thread,
+                                         icon: ChannelRowStyle.customSymbol(for: thread, gateway: gateway), isThread: true, subagentCount: 0,
                                          runningSubagents: 0, hiddenUnreadThreads: 0, threadsExpanded: false,
                                          showSubagentRuns: showSubagentRuns))
                 }
@@ -96,6 +100,7 @@ struct SidebarActions {
     var select: (String) -> Void
     var newChat: (String) -> Void
     var rename: (SessionRow) -> Void
+    var changeIcon: (SessionRow) -> Void
     var prompt: (TextPrompt) -> Void
     var toggleThreads: (String) -> Void
     var setCollapsed: (String, Bool) -> Void
@@ -105,7 +110,18 @@ struct SidebarActions {
 // MARK: Row appearance
 
 enum ChannelRowStyle {
-    static func symbol(for row: SessionRow, isThread: Bool) -> String {
+    /// The chat's chosen icon: this app's synced pick first, then a session `icon` other
+    /// OpenClaw clients set, if it maps to an SF Symbol available here.
+    @MainActor
+    static func customSymbol(for row: SessionRow, gateway: GatewayStore) -> String? {
+        SymbolCatalog.symbol(for: gateway.customIcon(for: row.key)) ?? SymbolCatalog.symbol(for: row.icon)
+    }
+
+    static func symbol(for entry: SidebarModel.Entry) -> String {
+        entry.icon ?? self.defaultSymbol(for: entry.row, isThread: entry.isThread)
+    }
+
+    static func defaultSymbol(for row: SessionRow, isThread: Bool) -> String {
         if isThread { return row.isSubagent ? "sparkles" : "bubble.left.and.text.bubble.right" }
         if row.isAutomation { return "clock.arrow.circlepath" }
         if row.isSlashCommands { return "command" }
@@ -201,6 +217,12 @@ enum SidebarMenus {
                 patch(["unread": .bool(!row.isUnread)])
             },
             .action("Rename…", image: "pencil") { actions.rename(row) },
+            .action("Change Icon…", image: "face.smiling") { actions.changeIcon(row) },
+        ]
+        if gateway.customIcon(for: row.key) != nil {
+            items.append(.action("Reset Icon", image: "arrow.uturn.backward") { gateway.setIcon(nil, for: row.key) })
+        }
+        items += [
             .submenu("Move to Group", image: "folder", groups),
             .submenu("Color", image: "paintpalette", colors),
             self.reasoning(row, gateway: gateway),

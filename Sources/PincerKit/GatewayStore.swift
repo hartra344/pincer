@@ -103,6 +103,7 @@ public final class GatewayStore: Identifiable {
         self.organization = SidebarOrganization(
             rawValue: UserDefaults.standard.string(forKey: "pincer.org.v2.\(profile.id.uuidString)") ?? "") ?? .servers
         self.serverNameOverrides = UserDefaults.standard.dictionary(forKey: "pincer.serverNames.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.chatIcons = UserDefaults.standard.dictionary(forKey: "pincer.chatIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.selectedKey = UserDefaults.standard.string(forKey: "pincer.selected.\(profile.id.uuidString)")
         self.images = ArtifactImageLoader()
         self.images.gateway = self
@@ -187,6 +188,7 @@ public final class GatewayStore: Identifiable {
         self.dumpSessionShapesIfRequested()
         Task { await self.loadConfiguredServerNames() }
         Task { await self.pullServerNames() }
+        Task { await self.pullChatIcons() }
         // Only pick a chat on the first connect: on iPhone, going back to the sidebar clears the
         // selection, and re-selecting on every reconnect would push a chat the user left.
         let selectionGone = self.selectedKey.map { self.sessions[$0] == nil } ?? false
@@ -267,8 +269,9 @@ public final class GatewayStore: Identifiable {
         case "sessions.changed":
             self.applySessionChange(payload)
         case "users.prefs.changed":
-            if payload["keys"]?.array?.contains(where: { $0.string == Self.serverNamesPref }) ?? true {
-                Task { await self.pullServerNames() }
+            let keys = payload["keys"]?.array?.compactMap(\.string)
+            for map in self.syncedMaps where keys?.contains(map.pref) ?? true {
+                Task { await self.pull(map) }
             }
         case "chat":
             guard let key = payload["sessionKey"]?.text else { return }
@@ -469,17 +472,37 @@ public final class GatewayStore: Identifiable {
         let trimmed = name?.trimmingCharacters(in: .whitespaces) ?? ""
         let value = trimmed.isEmpty ? nil : trimmed
         self.serverNameOverrides[server.id] = value
-        Task { await self.pushServerName(server.id, value) }
+        Task { await self.push(self.syncedMap(Self.serverNamesPref), server.id, value) }
     }
 
-    // MARK: Synced names
+    // MARK: Synced preferences
 
-    /// Server names you set live in your gateway user preferences, so every device signed in as
-    /// you shows the same names. The local copy keeps them instant and works offline.
+    /// Server names and chat icons you set live in your gateway user preferences, so every device
+    /// signed in as you shows the same ones. The local copy keeps them instant and works offline.
     static let serverNamesPref = "pincer.serverNames"
-    private var serverNamesSyncedKey: String { "pincer.serverNamesSynced.\(self.id.uuidString)" }
-    /// Last names seen on the gateway; `nil` until a successful read.
-    @ObservationIgnored private var remoteServerNames: [String: String]?
+    /// SF Symbol names by session key. Kept in prefs because `sessions.patch` only accepts
+    /// emoji, OpenClaw glyph ids or SVG for a session's `icon`.
+    static let chatIconsPref = "pincer.chatIcons"
+
+    private struct SyncedMap {
+        let pref: String
+        let local: ReferenceWritableKeyPath<GatewayStore, [String: String]>
+        let syncedDefaultsKey: String
+    }
+
+    private var syncedMaps: [SyncedMap] {
+        [
+            SyncedMap(pref: Self.serverNamesPref, local: \.serverNameOverrides,
+                      syncedDefaultsKey: "pincer.serverNamesSynced.\(self.id.uuidString)"),
+            SyncedMap(pref: Self.chatIconsPref, local: \.chatIcons,
+                      syncedDefaultsKey: "pincer.chatIconsSynced.\(self.id.uuidString)"),
+        ]
+    }
+
+    private func syncedMap(_ pref: String) -> SyncedMap { self.syncedMaps.first { $0.pref == pref }! }
+
+    /// Last values seen on the gateway per pref; missing until a successful read.
+    @ObservationIgnored private var remotePrefMaps: [String: [String: String]] = [:]
     @ObservationIgnored private var prefsSupportsExpected = true
 
     private static func names(from value: JSONValue?) -> [String: String] {
@@ -490,53 +513,55 @@ public final class GatewayStore: Identifiable {
         .object(names.mapValues(JSONValue.string))
     }
 
-    /// Reads names from the gateway; `nil` when this connection has no user profile to store them.
-    private func fetchRemoteServerNames() async -> [String: String]?? {
+    /// Reads a map from the gateway; `nil` when this connection has no user profile to store it.
+    private func fetchRemoteMap(_ pref: String) async -> [String: String]?? {
         guard let result = try? await self.connection.request(
-            "users.prefs.get", ["keys": [.string(Self.serverNamesPref)]], timeout: 15),
+            "users.prefs.get", ["keys": [.string(pref)]], timeout: 15),
             result["status"]?.string == "ok"
         else { return nil }
-        let value = result["entries"]?[Self.serverNamesPref]
+        let value = result["entries"]?[pref]
         return .some(value == nil || value == .null ? nil : Self.names(from: value))
     }
 
-    func pullServerNames() async {
-        guard let fetched = await self.fetchRemoteServerNames() else { return }
+    func pullServerNames() async { await self.pull(self.syncedMap(Self.serverNamesPref)) }
+    func pullChatIcons() async { await self.pull(self.syncedMap(Self.chatIconsPref)) }
+
+    private func pull(_ map: SyncedMap) async {
+        guard let fetched = await self.fetchRemoteMap(map.pref) else { return }
         let defaults = UserDefaults.standard
-        if !defaults.bool(forKey: self.serverNamesSyncedKey) {
-            // First sync from this device: keep names already set here, remote wins on conflicts.
-            var merged = self.serverNameOverrides
+        if !defaults.bool(forKey: map.syncedDefaultsKey) {
+            // First sync from this device: keep values already set here, remote wins on conflicts.
+            var merged = self[keyPath: map.local]
             merged.merge(fetched ?? [:]) { _, remote in remote }
             if merged != (fetched ?? [:]) {
-                guard await self.writeRemoteServerNames(merged, expected: fetched) else { return }
+                guard await self.writeRemoteMap(map.pref, merged, expected: fetched) else { return }
             }
-            defaults.set(true, forKey: self.serverNamesSyncedKey)
-            self.remoteServerNames = merged
-            self.serverNameOverrides = merged
+            defaults.set(true, forKey: map.syncedDefaultsKey)
+            self.remotePrefMaps[map.pref] = merged
+            self[keyPath: map.local] = merged
             return
         }
-        self.remoteServerNames = fetched ?? [:]
-        if self.serverNameOverrides != fetched ?? [:] { self.serverNameOverrides = fetched ?? [:] }
+        self.remotePrefMaps[map.pref] = fetched ?? [:]
+        if self[keyPath: map.local] != fetched ?? [:] { self[keyPath: map.local] = fetched ?? [:] }
     }
 
-    private func pushServerName(_ id: String, _ name: String?) async {
-        guard UserDefaults.standard.bool(forKey: self.serverNamesSyncedKey) else { return }
-        // Optimistic write; on a conflict (another device renamed at the same time) re-read and retry.
+    private func push(_ map: SyncedMap, _ id: String, _ value: String?) async {
+        guard UserDefaults.standard.bool(forKey: map.syncedDefaultsKey) else { return }
+        // Optimistic write; on a conflict (another device changed it at the same time) re-read and retry.
         for _ in 0..<3 {
-            guard let current = self.remoteServerNames == nil ? await self.fetchRemoteServerNames() : .some(self.remoteServerNames)
-            else { return }
+            let cached = self.remotePrefMaps[map.pref]
+            guard let current = cached == nil ? await self.fetchRemoteMap(map.pref) : .some(cached) else { return }
             var next = current ?? [:]
-            next[id] = name
-            if await self.writeRemoteServerNames(next, expected: current) {
-                self.remoteServerNames = next
+            next[id] = value
+            if await self.writeRemoteMap(map.pref, next, expected: current) {
+                self.remotePrefMaps[map.pref] = next
                 return
             }
-            self.remoteServerNames = nil
+            self.remotePrefMaps[map.pref] = nil
         }
     }
 
-    private func writeRemoteServerNames(_ names: [String: String], expected: [String: String]?) async -> Bool {
-        let key = Self.serverNamesPref
+    private func writeRemoteMap(_ key: String, _ names: [String: String], expected: [String: String]?) async -> Bool {
         let entries: JSONValue = .object([key: names.isEmpty ? .null : Self.json(names)])
         if self.prefsSupportsExpected {
             let params: JSONValue = ["entries": entries, "expectedEntries": .object([key: expected.map(Self.json) ?? .null])]
@@ -552,6 +577,24 @@ public final class GatewayStore: Identifiable {
         }
         guard let result = try? await self.connection.request("users.prefs.set", ["entries": entries], timeout: 15) else { return false }
         return result["status"]?.string == "ok"
+    }
+
+    // MARK: Chat icons
+
+    /// Custom SF Symbol names by session key, synced through `users.prefs` (`pincer.chatIcons`).
+    public var chatIcons: [String: String] {
+        didSet { UserDefaults.standard.set(self.chatIcons, forKey: "pincer.chatIcons.\(self.id.uuidString)") }
+    }
+
+    /// The SF Symbol chosen for a chat, if any. Callers still validate it for the running OS.
+    public func customIcon(for key: String) -> String? { self.chatIcons[key] }
+
+    /// Sets (or with `nil`, clears) a chat's icon on every device.
+    public func setIcon(_ symbol: String?, for key: String) {
+        let value = symbol?.trimmingCharacters(in: .whitespaces).nilIfEmpty
+        guard self.chatIcons[key] != value else { return }
+        self.chatIcons[key] = value
+        Task { await self.push(self.syncedMap(Self.chatIconsPref), key, value) }
     }
 
     public func sections(search: String = "") -> [SidebarSection] {
