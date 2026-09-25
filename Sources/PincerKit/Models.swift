@@ -61,6 +61,17 @@ public struct SessionRow: Identifiable, Hashable, Sendable {
     }
     public var parentKey: String? { self.raw["parentSessionKey"]?.text ?? self.raw["spawnedBy"]?.text }
     public var model: String? { self.raw["model"]?.text }
+    public var modelProvider: String? { self.raw["modelProvider"]?.text }
+    /// Selected model as a `provider/model` ref, the form `sessions.patch` accepts.
+    public var modelRef: String? { self.model.map { ModelRef.qualified($0, provider: self.modelProvider) } }
+    /// Model actually serving the session while it differs from the selected one (e.g. a fallback).
+    public var activeModelRef: String? {
+        self.raw["activeModel"]?.text.map { ModelRef.qualified($0, provider: self.raw["activeModelProvider"]?.text) }
+    }
+    /// `user` when someone picked the model for this session; `nil` when it follows the agent default.
+    public var modelOverrideSource: String? { self.raw["modelOverrideSource"]?.text }
+    /// The Gateway doesn't allow changing this session's model.
+    public var isModelSelectionLocked: Bool { self.raw["modelSelectionLocked"]?.bool ?? false }
     public var reasoningLevel: String? { self.raw["reasoningLevel"]?.text }
     public var thinkingLevel: String? { self.raw["thinkingLevel"]?.text }
 
@@ -186,6 +197,51 @@ public struct ChatServer: Hashable, Sendable {
     }
 
     public var displayName: String { self.name ?? self.provider.capitalized }
+}
+
+// MARK: Models
+
+/// Model references as the Gateway writes them: `provider/model`, or a bare model id.
+public enum ModelRef {
+    /// Mirrors the Control UI's `buildQualifiedChatModelValue`.
+    public static func qualified(_ model: String, provider: String?) -> String {
+        let model = model.trimmingCharacters(in: .whitespaces)
+        guard let provider = provider?.trimmingCharacters(in: .whitespaces), !provider.isEmpty, !model.isEmpty else { return model }
+        return model.lowercased().hasPrefix(provider.lowercased() + "/") ? model : "\(provider)/\(model)"
+    }
+
+    /// The model part alone, e.g. `claude-opus-4-8` for `anthropic/claude-opus-4-8`.
+    public static func shortName(_ ref: String) -> String {
+        guard let slash = ref.lastIndex(of: "/") else { return ref }
+        let tail = ref[ref.index(after: slash)...]
+        return tail.isEmpty ? ref : String(tail)
+    }
+}
+
+/// One entry of `models.list`.
+public struct ModelChoice: Identifiable, Hashable, Sendable {
+    public let modelId: String
+    public let name: String
+    public let provider: String
+    public let alias: String?
+    /// `false` when the provider is missing auth or cooling down.
+    public let isAvailable: Bool
+    public let manualSelectionAllowed: Bool
+
+    public init?(_ json: JSONValue) {
+        guard let id = json["id"]?.text, let provider = json["provider"]?.text else { return nil }
+        self.modelId = id
+        self.provider = provider
+        self.name = json["name"]?.text ?? id
+        self.alias = json["alias"]?.text
+        self.isAvailable = json["available"]?.bool ?? true
+        self.manualSelectionAllowed = json["manualSelectionAllowed"]?.bool ?? true
+    }
+
+    /// `provider/id`, the value `sessions.patch { model }` takes.
+    public var ref: String { ModelRef.qualified(self.modelId, provider: self.provider) }
+    public var id: String { self.ref }
+    public var displayName: String { self.alias ?? self.name }
 }
 
 public enum SessionKey {
@@ -335,7 +391,12 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     public var markerKind: String?
     public var idempotencyKey: String?
     public var isPending: Bool = false
+    /// Model that generated this message, as recorded by the Gateway (assistant messages only).
+    public var model: String?
+    public var provider: String?
 
+    /// `provider/model`, or nil when the Gateway didn't record a model.
+    public var modelRef: String? { self.model.map { ModelRef.qualified($0, provider: self.provider) } }
     public init(
         id: String = UUID().uuidString,
         role: ChatRole,
@@ -374,6 +435,10 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         }
         let provenance = json["provenance"]
         self.via = provenance?["sourceChannel"]?.text.map { $0.capitalized }
+        if self.role == .assistant, let model = json["model"]?.text, !Self.syntheticModels.contains(model) {
+            self.model = model
+            self.provider = json["provider"]?.text
+        }
 
         if let text = json["content"]?.string {
             self.blocks = text.isEmpty ? [] : [.text(text)]
@@ -389,6 +454,9 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
             return nil
         }
     }
+
+    /// Placeholders the Gateway writes for messages no model produced (injected notices, errors).
+    static let syntheticModels: Set<String> = ["gateway-injected"]
 
     /// Uploads (composer attachments, channel media) live in `__openclaw.media` facts, not in
     /// `content`: history strips their bytes and points at `media://inbound/<id>` instead.
@@ -499,8 +567,17 @@ public struct AssistantTurn: Identifiable, Hashable, Sendable {
     public var timestamp: Date?
     public var isError = false
     public var isStreaming = false
+    /// Model that generated the turn (the latest assistant message's, if a fallback switched
+    /// models mid-turn). Comes from the Gateway's transcript, so it survives reloads and doesn't
+    /// change when the session's model does. Nil when the Gateway didn't record one.
+    public var model: String?
+    public var provider: String?
 
     public var body: String { self.text.joined(separator: "\n\n") }
+    /// `provider/model`, e.g. `anthropic/claude-opus-4-8`.
+    public var modelRef: String? { self.model.map { ModelRef.qualified($0, provider: self.provider) } }
+    /// Short label for display, e.g. `claude-opus-4-8`.
+    public var modelName: String? { self.modelRef.map(ModelRef.shortName) }
 }
 
 public enum TranscriptBuilder {
@@ -536,6 +613,10 @@ public enum TranscriptBuilder {
                 var turn = current ?? AssistantTurn(id: item.id, timestamp: item.timestamp)
                 turn.timestamp = item.timestamp ?? turn.timestamp
                 turn.isError = turn.isError || item.isError
+                if let model = item.model {
+                    turn.model = model
+                    turn.provider = item.provider
+                }
                 for block in item.blocks {
                     switch block {
                     case let .text(text):

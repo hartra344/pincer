@@ -160,6 +160,34 @@ if case let .assistant(turn) = TranscriptBuilder.build(stripped.array!.enumerate
     check(false, "omitted-image turn built")
 }
 
+print("Models")
+check(ModelRef.qualified("claude-opus-4-8", provider: "anthropic") == "anthropic/claude-opus-4-8", "model ref qualified with provider")
+check(ModelRef.qualified("anthropic/claude-opus-4-8", provider: "anthropic") == "anthropic/claude-opus-4-8", "already-qualified ref kept")
+check(ModelRef.shortName("openrouter/meta/llama-4") == "llama-4" && ModelRef.shortName("gpt-5") == "gpt-5", "short model name")
+let choice = ModelChoice(json(#"{"id":"gpt-5.6-sol","name":"GPT-5.6 Sol","provider":"openai","available":false}"#))
+check(choice?.ref == "openai/gpt-5.6-sol" && choice?.isAvailable == false && choice?.displayName == "GPT-5.6 Sol", "models.list entry")
+let modelRow = SessionRow(json(#"{"key":"k","model":"claude-sonnet-5","modelProvider":"anthropic","modelOverrideSource":"user"}"#))!
+check(modelRow.modelRef == "anthropic/claude-sonnet-5" && modelRow.modelOverrideSource == "user", "session row model ref")
+let attributed = json(#"""
+[
+ {"role":"user","content":"hi","__openclaw":{"id":"x1"}},
+ {"role":"assistant","provider":"anthropic","model":"claude-opus-4-8","content":[{"type":"toolCall","id":"t1","name":"exec","arguments":{}}],"__openclaw":{"id":"x2"}},
+ {"role":"toolResult","toolCallId":"t1","content":"ok","__openclaw":{"id":"x3"}},
+ {"role":"assistant","provider":"openai","model":"gpt-5.6-sol","content":"done","__openclaw":{"id":"x4"}},
+ {"role":"user","content":"again","__openclaw":{"id":"x5"}},
+ {"role":"assistant","model":"gateway-injected","content":"notice","__openclaw":{"id":"x6"}}
+]
+"""#).array!.enumerated().compactMap { ChatItem($1, fallbackIndex: $0) }
+check(attributed[1].modelRef == "anthropic/claude-opus-4-8" && attributed[0].model == nil, "assistant messages carry their model")
+let attributedTurns = TranscriptBuilder.build(attributed).compactMap { entry -> AssistantTurn? in
+    if case let .assistant(turn) = entry { return turn }
+    return nil
+}
+check(attributedTurns.first?.modelRef == "openai/gpt-5.6-sol" && attributedTurns.first?.modelName == "gpt-5.6-sol", "turn takes its latest model")
+check(attributedTurns.count == 2 && attributedTurns.last?.model == nil, "gateway-injected messages have no model")
+let roundTrip = try? JSONDecoder().decode(ChatItem.self, from: JSONEncoder().encode(attributed[1]))
+check(roundTrip?.modelRef == "anthropic/claude-opus-4-8", "model survives the transcript cache")
+
 print("Exec approvals")
 let approval = ExecApproval(json(#"{"id":"ap1","request":{"command":"rm -rf build","cwd":"/p","sessionKey":"agent:main:main"},"expiresAtMs":1}"#))
 check(approval?.id == "ap1" && approval?.command == "rm -rf build" && approval?.cwd == "/p", "approval payload")
@@ -271,6 +299,39 @@ func runLive(url: String, token: String) async {
     await gateway.patch(key, ["pinned": true])
     let pinned = await waitFor("pin") { gateway.sessions[key]?.isPinned == true }
     check(pinned, "sessions.patch round-trips via sessions.changed")
+
+    // Model picker: the catalog loads, a new model applies to new replies, older ones keep theirs.
+    await gateway.loadModels(agentId: "main")
+    check(gateway.modelCatalogs["main"]?.contains { $0.ref == "openai/gpt-5.6-sol" } == true, "models.list catalog")
+    check(gateway.defaultModelRef == "anthropic/claude-opus-4-8", "default model from sessions.list")
+    func lastTurn() -> AssistantTurn? {
+        for entry in chat.entries.reversed() {
+            if case let .assistant(turn) = entry { return turn }
+        }
+        return nil
+    }
+    let previousModel = lastTurn()?.modelRef
+    check(previousModel == "anthropic/claude-opus-4-8", "reply attributed to the model that wrote it (\(previousModel ?? "nil"))")
+    let previousTurnId = lastTurn()?.id
+    await gateway.setModel(key, to: "openai/gpt-5.6-sol")
+    let switched = await waitFor("model switch") { gateway.sessions[key]?.modelRef == "openai/gpt-5.6-sol" }
+    check(switched && gateway.sessions[key]?.modelOverrideSource == "user", "sessions.patch model round-trips")
+    let beforeSwitchSend = chat.entries.count
+    await chat.send("which model now?")
+    let switchedReply = await waitFor("reply after switch", timeout: 20) {
+        !chat.isRunning && chat.entries.count > beforeSwitchSend && lastTurn()?.isStreaming == false
+    }
+    check(switchedReply && lastTurn()?.modelRef == "openai/gpt-5.6-sol", "new reply uses the selected model")
+    let oldTurn = chat.entries.lazy.compactMap { entry -> AssistantTurn? in
+        if case let .assistant(turn) = entry, turn.id == previousTurnId { return turn }
+        return nil
+    }.first
+    check(oldTurn?.modelRef == "anthropic/claude-opus-4-8", "earlier reply keeps its original model")
+    await gateway.setModel(key, to: nil)
+    let reset = await waitFor("model reset") {
+        gateway.sessions[key]?.modelOverrideSource == nil && gateway.sessions[key]?.modelRef == "anthropic/claude-opus-4-8"
+    }
+    check(reset, "model reset to default")
 
     await chat.send("please approve this")
     let approvalSeen = await waitFor("approval") { !gateway.approvals.isEmpty }

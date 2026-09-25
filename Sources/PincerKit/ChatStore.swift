@@ -27,6 +27,9 @@ public struct LiveRun: Sendable, Hashable {
     public var phase: String?
     public var isCompacting = false
     public var startedAt = Date()
+    /// Model named by the streamed snapshot, when the Gateway includes one.
+    public var model: String?
+    public var provider: String?
 }
 
 /// One session's transcript ("channel"). History comes from `chat.history`; live output from
@@ -361,6 +364,10 @@ public final class ChatStore: Identifiable {
                 // The cumulative snapshot carries thinking and images as well as text.
                 let text = item.plainText
                 if !text.isEmpty { run.text = text }
+                if let model = item.model {
+                    run.model = model
+                    run.provider = item.provider
+                }
                 if let thinking = item.thinkingText { run.thinking = thinking; self.sawThinking = true }
                 let images = item.blocks.compactMap { block -> ImageRef? in
                     if case let .image(ref) = block { return ref }
@@ -494,6 +501,13 @@ public final class ChatStore: Identifiable {
             turn.images = live.images + parsed.images
             turn.files = parsed.files
             turn.isStreaming = true
+            if let model = live.model {
+                turn.model = model
+                turn.provider = live.provider
+            } else if let row = self.gateway?.sessions[self.sessionKey] {
+                // Until the reply is committed, it's being written by the session's current model.
+                turn.model = row.activeModelRef ?? row.modelRef
+            }
             entries.append(.assistant(turn))
             if live.isCompacting { entries.append(.marker(id: "live-compaction-\(live.runId)", label: "Compacting context…")) }
         }
