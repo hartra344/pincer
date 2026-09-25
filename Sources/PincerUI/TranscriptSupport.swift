@@ -108,7 +108,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.observeSessions()
         let center = NotificationCenter.default
         self.observers.append(center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.settingsChanged() }
+            MainActor.assumeIsolated { _ = self?.settingsChanged() }
         })
         #if os(iOS)
         self.observers.append(center.addObserver(forName: UIContentSizeCategory.didChangeNotification, object: nil, queue: .main) { [weak self] _ in

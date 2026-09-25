@@ -113,7 +113,11 @@ enum TranscriptColors {
     static var secondary: PColor { .secondaryLabelColor }
     static var tertiary: PColor { .tertiaryLabelColor }
     static var stroke: PColor { .quaternaryLabelColor }
+    #if compiler(>=6.4) // Xcode 27 SDK renamed it back
     static var fill: PColor { .quinaryLabelColor }
+    #else
+    static var fill: PColor { .quinaryLabel }
+    #endif
     static var strongFill: PColor { .quaternaryLabelColor }
     static var separator: PColor { .separatorColor }
     static var codeBackground: PColor { NSColor.textBackgroundColor.withAlphaComponent(0.6) }
