@@ -95,6 +95,8 @@ open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pince
 | `Sources/PincerKit` | Protocol client (handshake, signing, reconnect, TLS pinning), models, and the observable stores. No UI. |
 | `Sources/PincerUI` | Shared SwiftUI for macOS and iOS. |
 | `Apps/macOS`, `Apps/iOS` | `@main` app shells used by the Xcode project. |
+| `Apps/Shared` | Asset catalog shared by both apps, including the generated app icon. |
+| `Design/AppIcon` | Source artwork for the app icon (`Pincer.svg`). After editing it, run `swift scripts/make-icons.swift` to regenerate the icons. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |
 | `Sources/PincerChecks` | Self-checks, with an optional live end-to-end run. |
 | `mock-gateway/` | Node mock of the Gateway protocol for offline development. |

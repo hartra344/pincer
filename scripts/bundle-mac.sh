@@ -10,6 +10,11 @@ APP="build/Pincer.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Pincer"
+# App icon: reuse the macOS PNGs from the asset catalog (regenerate with scripts/make-icons.swift).
+ICONSET="build/Pincer.iconset"
+rm -rf "$ICONSET" && mkdir -p "$ICONSET"
+cp Apps/Shared/Assets.xcassets/AppIcon.appiconset/icon_*.png "$ICONSET/"
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Pincer.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -19,6 +24,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>Pincer</string>
   <key>CFBundleDisplayName</key><string>Pincer</string>
   <key>CFBundleExecutable</key><string>Pincer</string>
+  <key>CFBundleIconFile</key><string>Pincer</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>

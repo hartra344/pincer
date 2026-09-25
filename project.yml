@@ -19,7 +19,7 @@ targets:
   Pincer-macOS:
     type: application
     platform: macOS
-    sources: [Apps/macOS]
+    sources: [Apps/macOS, Apps/Shared]
     dependencies:
       - package: Pincer
         product: PincerUI
@@ -36,7 +36,7 @@ targets:
   Pincer-iOS:
     type: application
     platform: iOS
-    sources: [Apps/iOS]
+    sources: [Apps/iOS, Apps/Shared]
     dependencies:
       - package: Pincer
         product: PincerUI
