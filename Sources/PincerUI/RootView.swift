@@ -55,22 +55,24 @@ struct RootView: View {
     @State private var compactColumn = NavigationSplitViewColumn.sidebar
 
     var body: some View {
-        NavigationSplitView(columnVisibility: self.$columns, preferredCompactColumn: self.$compactColumn) {
-            Group {
-                if let gateway = self.app.selectedGateway {
+        Group {
+            if let gateway = self.app.selectedGateway {
+                NavigationSplitView(columnVisibility: self.$columns, preferredCompactColumn: self.$compactColumn) {
                     ChannelList(editConnection: { self.editing = gateway.profile },
                                 openChat: { self.compactColumn = .detail })
                         .environment(gateway)
                         .id(gateway.id)
-                } else {
-                    Spacer()
+                        #if os(macOS)
+                        .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
+                        #endif
+                } detail: {
+                    self.detail(gateway)
                 }
+            } else {
+                // Outside the split view: on iPhone it collapses to the (empty) sidebar column.
+                WelcomeView(add: { self.addingGateway = true }, tryDemo: { self.app.openDemo() })
+                    .onAppear { self.compactColumn = .sidebar }
             }
-            #if os(macOS)
-            .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
-            #endif
-        } detail: {
-            self.detail
         }
         .sheet(isPresented: self.$addingGateway) { ConnectionSheet(existing: nil) }
         .sheet(item: self.$editing) { ConnectionSheet(existing: $0) }
@@ -90,30 +92,26 @@ struct RootView: View {
         }
     }
 
-    @ViewBuilder private var detail: some View {
-        if let gateway = self.app.selectedGateway {
-            Group {
-                switch gateway.state {
-                case let .awaitingPairing(requestId, deviceId):
-                    PairingView(requestId: requestId, deviceId: deviceId)
-                case let .failed(message) where gateway.sessions.isEmpty:
-                    FailedView(message: message) { self.editing = gateway.profile }
-                default:
-                    if let key = gateway.selectedKey {
-                        ChatView(chat: gateway.chat(for: key))
-                            .id("\(gateway.id)|\(key)")
-                    } else if gateway.state.isConnected {
-                        ContentUnavailableView("Pick a chat", systemImage: "bubble.left.and.bubble.right",
-                                               description: Text("Choose a session from the sidebar or start a new one."))
-                    } else {
-                        ProgressView("Connecting to \(gateway.profile.name)…")
-                    }
+    private func detail(_ gateway: GatewayStore) -> some View {
+        Group {
+            switch gateway.state {
+            case let .awaitingPairing(requestId, deviceId):
+                PairingView(requestId: requestId, deviceId: deviceId)
+            case let .failed(message) where gateway.sessions.isEmpty:
+                FailedView(message: message) { self.editing = gateway.profile }
+            default:
+                if let key = gateway.selectedKey {
+                    ChatView(chat: gateway.chat(for: key))
+                        .id("\(gateway.id)|\(key)")
+                } else if gateway.state.isConnected {
+                    ContentUnavailableView("Pick a chat", systemImage: "bubble.left.and.bubble.right",
+                                           description: Text("Choose a session from the sidebar or start a new one."))
+                } else {
+                    ProgressView("Connecting to \(gateway.profile.name)…")
                 }
             }
-            .environment(gateway)
-        } else {
-            WelcomeView(add: { self.addingGateway = true }, tryDemo: { self.app.openDemo() })
         }
+        .environment(gateway)
     }
 }
 
