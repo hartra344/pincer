@@ -497,7 +497,10 @@ public final class ChatStore: Identifiable {
             if let thinking = live.thinking { turn.thinking = [thinking] }
             turn.tools = live.tools
             let parsed = MediaDirectives.extract(from: MediaDirectives.withoutPartialDirective(live.text))
-            if !parsed.text.isEmpty { turn.text = [parsed.text] }
+            if !parsed.text.isEmpty {
+                turn.text = [parsed.text]
+                turn.textTimestamps = [live.startedAt]
+            }
             turn.images = live.images + parsed.images
             turn.files = parsed.files
             turn.isStreaming = true

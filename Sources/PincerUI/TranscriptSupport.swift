@@ -284,6 +284,7 @@ enum TranscriptLayout {
             return total
         }
         let scaffold: CGFloat = 12 + 22
+        let footer: CGFloat = TranscriptMetrics.footerSpacing + 16
         switch row {
         case .loadingOlder:
             return 36
@@ -293,6 +294,7 @@ enum TranscriptLayout {
             let images = item.blocks.filter { if case .image = $0 { true } else { false } }.count
             let files = item.blocks.filter { if case .file = $0 { true } else { false } }.count
             return scaffold + lines(item.plainText) * 18 + (images > 0 ? 240 : 0) + CGFloat(files) * 36
+                + (item.plainText.isEmpty ? 0 : footer)
         case let .entry(.assistant(turn)):
             var height = scaffold
             if turn.isStreaming, ThinkingDisplay.current != .none {
@@ -301,7 +303,7 @@ enum TranscriptLayout {
             } else if ThinkingDisplay.current == .all, !turn.thinking.isEmpty || !turn.tools.isEmpty {
                 height += 26
             }
-            if !turn.text.isEmpty { height += lines(turn.body) * 18 }
+            if !turn.text.isEmpty { height += lines(turn.body) * 18 + CGFloat(turn.text.count) * footer }
             if !turn.images.isEmpty { height += 240 }
             height += CGFloat(turn.files.count) * 36
             return height

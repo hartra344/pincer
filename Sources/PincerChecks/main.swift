@@ -133,6 +133,23 @@ if case let .assistant(turn) = entries[1] {
 } else {
     check(false, "second entry is an assistant turn")
 }
+let backToBack = json("""
+[
+ {"role":"assistant","content":[{"type":"text","text":"Checking."},{"type":"toolCall","id":"b1","name":"exec","arguments":{}}],"timestamp":1000,"__openclaw":{"id":"b1","runId":"r1"}},
+ {"role":"toolResult","toolCallId":"b1","content":"ok","__openclaw":{"id":"b2","runId":"r1"}},
+ {"role":"assistant","content":[{"type":"text","text":"Done."},{"type":"text","text":"More."}],"timestamp":2000,"__openclaw":{"id":"b3","runId":"r1"}},
+ {"role":"assistant","content":[{"type":"text","text":"Daily digest"}],"timestamp":3000,"__openclaw":{"id":"b4","runId":"r2"}}
+]
+""")
+let backToBackEntries = TranscriptBuilder.build(backToBack.array!.enumerated().compactMap { ChatItem($1, fallbackIndex: $0) })
+check(backToBackEntries.count == 2, "a reply from another run gets its own row (got \(backToBackEntries.count))")
+if case let .assistant(turn)? = backToBackEntries.first {
+    check(turn.text == ["Checking.", "Done.\n\nMore."], "each assistant message stays a separate text entry")
+    check(turn.textTimestamps == [Date(timeIntervalSince1970: 1000), Date(timeIntervalSince1970: 2000)], "each message keeps its own timestamp")
+    check(turn.body == "Checking.\n\nDone.\n\nMore.", "reply body still joins every message")
+} else {
+    check(false, "back-to-back turn built")
+}
 check(ChatItem(json(#"{"role":"assistant","content":[],"errorMessage":"boom"}"#), fallbackIndex: 0)?.isError == true, "error-only assistant message")
 let spawn = ToolActivity(id: "t", name: "sessions_spawn", arguments: #"{"label":"Find rentals","task":"x"}"#, result: nil, isError: false, isRunning: false)
 check(spawn.spawnLabel == "Find rentals" && spawn.summary == nil, "spawn label derived once")
@@ -184,6 +201,7 @@ let attributedTurns = TranscriptBuilder.build(attributed).compactMap { entry -> 
     return nil
 }
 check(attributedTurns.first?.modelRef == "openai/gpt-5.6-sol" && attributedTurns.first?.modelName == "gpt-5.6-sol", "turn takes its latest model")
+check(attributedTurns.first?.textModelNames.compactMap(\.self).last == "gpt-5.6-sol", "each message keeps its own model")
 check(attributedTurns.count == 2 && attributedTurns.last?.model == nil, "gateway-injected messages have no model")
 let roundTrip = try? JSONDecoder().decode(ChatItem.self, from: JSONEncoder().encode(attributed[1]))
 check(roundTrip?.modelRef == "anthropic/claude-opus-4-8", "model survives the transcript cache")
