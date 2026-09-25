@@ -18,7 +18,7 @@ A native macOS and iOS client for [OpenClaw](https://github.com/openclaw/opencla
 
 ## What it is (and isn't)
 
-Pincer is a **pure client**. It connects to a Gateway you already run and speaks the Gateway WebSocket protocol (v4) in the `operator` role, with the `operator.read`, `operator.write` and `operator.approvals` scopes.
+Pincer is a **pure client**. It connects to a Gateway you already run and speaks the Gateway WebSocket protocol (v4) in the `operator` role, with the `operator.read`, `operator.write` and `operator.approvals` scopes. If you turn on **Manage Gateway settings** for a gateway (Edit Gateway → Advanced), it also asks for `operator.admin`, which the gateway has to approve once more.
 
 It **never** bundles, launches or embeds a Gateway, and it never registers as a node, so it exposes no camera, screen, shell or `system.run` capabilities. That makes it suitable for machines where the official OpenClaw app isn't allowed.
 
@@ -50,6 +50,12 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
 - **Composer:** Return sends and ⇧/⌥-Return adds a new line. You can paste, drag in or pick images and files; they are downscaled to fit the gateway's limits. Stop a run with ⌘.
 - **Approvals:** exec approvals appear as a banner and as actionable notifications (Allow once, Always allow, Deny).
 - **Notifications:** one notification thread per chat, a reply action, and no notification for the chat you're already looking at.
+- **Gateway settings** (sidebar menu → **Gateway Settings…**):
+  - view and edit the gateway's OpenClaw config as forms generated from the gateway's own schema (`config.get` / `config.schema`), plus a raw JSON5 editor (`config.apply`) for anything the forms don't cover;
+  - list, add (ClawHub, npm or git), remove, enable and disable plugins, and fill in their settings and credentials (`plugins.*`);
+  - changes are saved with `config.patch`, so the gateway validates, persists and hot-applies them; invalid values come back with the field and reason, and changes that need a gateway restart say so;
+  - secrets are shown only as "saved" and are never sent back to the gateway unless you change them;
+  - editing needs **Manage Gateway settings** turned on for the gateway; without it, settings are read-only.
 - **Per-session actions:** pin, rename, group, color, reasoning level and archive. Drag a chat onto a group (or **Ungrouped**) to move it; in **Like Discord**, dropping a grouped chat on its own server or agent takes it out of the group.
 
 ## Connecting to your home gateway over Tailscale
@@ -113,6 +119,8 @@ Message triggers:
 - `image` also attaches an image;
 - `approve` raises an exec approval.
 
+The mock also serves a small config and plugin catalog for Gateway Settings; see its README.
+
 For the rest of the options, see [`mock-gateway/README.md`](mock-gateway/README.md).
 
 To run the self-checks:
@@ -129,6 +137,7 @@ To see what the gateway says about each request, run the app with `open --env PI
 ## Known gaps
 
 - iOS runs in the simulator (connect, sidebar, history), but hasn't been tried on a real device yet.
+- Gateway Settings has been tested against the mock only. It doesn't browse the ClawHub catalog, show install progress, or edit lists of objects in forms (use the raw editor).
 - Session groups are derived from each session's category; `sessions.groups.list` isn't used yet.
 
 ## License

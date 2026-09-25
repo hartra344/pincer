@@ -78,6 +78,8 @@ public actor GatewayConnection {
     public static let protocolVersion = 4
     public static let role = "operator"
     public static let scopes = ["operator.read", "operator.write", "operator.approvals"]
+    /// Only requested when the profile opts into managing Gateway settings.
+    public static let adminScope = "operator.admin"
     public static let caps = ["tool-events"]
 
     public nonisolated let profile: GatewayProfile
@@ -289,7 +291,7 @@ public actor GatewayConnection {
             clientId: clientId,
             clientMode: clientMode,
             role: Self.role,
-            scopes: Self.scopes,
+            scopes: self.profile.requestedScopes,
             signedAtMs: signedAt,
             token: signatureToken,
             nonce: nonce)
@@ -308,7 +310,7 @@ public actor GatewayConnection {
                 "instanceId": .string(Self.instanceId),
             ],
             "role": .string(Self.role),
-            "scopes": JSONValue(Self.scopes),
+            "scopes": JSONValue(self.profile.requestedScopes),
             "caps": JSONValue(Self.caps),
             "commands": [],
             "permissions": [:],

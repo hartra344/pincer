@@ -24,13 +24,38 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
     public var authMode: AuthMode
     /// Optional SHA-256 fingerprint (hex) of the Gateway's TLS leaf certificate.
     public var tlsFingerprint: String?
+    /// Opt-in: also request `operator.admin`, which the Gateway requires to change its config
+    /// and plugins. Off by default so Pincer stays read/write/approvals-only unless asked.
+    public var manageSettings: Bool
 
-    public init(id: UUID = UUID(), name: String, url: String, authMode: AuthMode, tlsFingerprint: String? = nil) {
+    public init(id: UUID = UUID(), name: String, url: String, authMode: AuthMode, tlsFingerprint: String? = nil,
+                manageSettings: Bool = false)
+    {
         self.id = id
         self.name = name
         self.url = url
         self.authMode = authMode
         self.tlsFingerprint = tlsFingerprint
+        self.manageSettings = manageSettings
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, url, authMode, tlsFingerprint, manageSettings
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.url = try container.decode(String.self, forKey: .url)
+        self.authMode = try container.decode(AuthMode.self, forKey: .authMode)
+        self.tlsFingerprint = try container.decodeIfPresent(String.self, forKey: .tlsFingerprint)
+        self.manageSettings = try container.decodeIfPresent(Bool.self, forKey: .manageSettings) ?? false
+    }
+
+    /// Scopes requested on connect.
+    public var requestedScopes: [String] {
+        self.manageSettings ? GatewayConnection.scopes + [GatewayConnection.adminScope] : GatewayConnection.scopes
     }
 
     public var initials: String {

@@ -95,6 +95,9 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
     @ObservationIgnored weak var notifier: Notifier?
     public let images: ArtifactImageLoader
+    /// Gateway config and plugins; loaded when the settings screen opens.
+    @ObservationIgnored public private(set) lazy var settings = GatewaySettingsStore(
+        connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] })
 
     public init(profile: GatewayProfile) {
         self.profile = profile
@@ -291,6 +294,8 @@ public final class GatewayStore: Identifiable {
                 self.approvals.append(approval)
                 self.notifier?.notifyApproval(approval, gateway: self)
             }
+        case "plugins.changed":
+            self.settings.handlePluginsChanged()
         case "exec.approval.resolved":
             if let id = payload["id"]?.text ?? payload["request"]?["id"]?.text {
                 self.approvals.removeAll { $0.id == id }

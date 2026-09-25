@@ -164,6 +164,106 @@ print("Exec approvals")
 let approval = ExecApproval(json(#"{"id":"ap1","request":{"command":"rm -rf build","cwd":"/p","sessionKey":"agent:main:main"},"expiresAtMs":1}"#))
 check(approval?.id == "ap1" && approval?.command == "rm -rf build" && approval?.cwd == "/p", "approval payload")
 
+print("Gateway config schema")
+let configSchema = ConfigSchema(response: json(#"""
+{"version":"2026.9.1","schema":{"type":"object","definitions":{"port":{"type":"integer","minimum":1,"maximum":65535}},
+ "properties":{
+  "gateway":{"type":"object","required":["port"],"properties":{
+    "port":{"$ref":"#/definitions/port"},
+    "bind":{"anyOf":[{"const":"loopback"},{"const":"lan"},{"const":"tailnet"}]},
+    "auth":{"type":"object","properties":{"mode":{"type":"string","enum":["token","password","none"]},
+      "token":{"anyOf":[{"type":"string"},{"type":"object","properties":{"source":{"type":"string"},"id":{"type":"string"}}}]}}}}},
+  "agents":{"type":"object","properties":{"defaults":{"allOf":[{"type":"object","properties":{"model":{"type":"string","minLength":3}}},
+    {"properties":{"thinking":{"type":"boolean"}}}]}}},
+  "tools":{"type":"object","properties":{"allow":{"type":"array","items":{"type":"string"}},
+    "rules":{"type":"array","items":{"type":"object"}}}},
+  "plugins":{"type":"object","properties":{"entries":{"type":"object","additionalProperties":{"type":"object",
+    "properties":{"enabled":{"type":"boolean"},"config":{"type":"object","additionalProperties":{}}}}}}}
+ }},
+ "uiHints":{"gateway":{"label":"Gateway","order":1},"gateway.auth.token":{"sensitive":true,"label":"Token"},
+  "gateway.port":{"help":"Port the Gateway listens on.","order":1},
+  "plugins.entries.*.config.apiKey":{"sensitive":true,"label":"API key"}}}
+"""#))
+check(configSchema.version == "2026.9.1", "schema version")
+let sampleConfig = json(#"{"gateway":{"port":18789,"bind":"tailnet","auth":{"mode":"token","token":"__OPENCLAW_REDACTED__"}},"plugins":{"entries":{"weather":{"enabled":true,"config":{"apiKey":"__OPENCLAW_REDACTED__","units":"metric"}}}}}"#)
+let topFields = configSchema.fields(at: [], value: sampleConfig)
+check(topFields.first?.label == "Gateway" && topFields.allSatisfy { $0.kind == .object }, "top-level sections, ordered by hint (\(topFields.map(\.label)))")
+let gatewayFields = configSchema.fields(at: ["gateway"], value: sampleConfig["gateway"])
+let port = gatewayFields.first { $0.key == "port" }
+check(port?.kind == .integer && port?.isRequired == true && port?.maximum == 65535, "$ref resolved: required integer with bounds")
+check(port?.help == "Port the Gateway listens on." && gatewayFields.first?.key == "port", "hint help and order")
+check(gatewayFields.first { $0.key == "bind" }?.kind == .choice(["loopback", "lan", "tailnet"]), "const union → choice")
+let authFields = configSchema.fields(at: ["gateway", "auth"], value: sampleConfig["gateway"]?["auth"])
+check(authFields.first { $0.key == "mode" }?.kind == .choice(["token", "password", "none"]), "enum → choice")
+check(authFields.first { $0.key == "token" }?.kind == .secret, "sensitive hint → secret field")
+check(configSchema.field(at: ["gateway", "auth", "token"], value: json(#"{"source":"env","id":"TOKEN"}"#))?.kind == .object,
+      "SecretRef object picks the object branch")
+let defaults = configSchema.fields(at: ["agents", "defaults"], value: nil)
+check(Set(defaults.map(\.key)) == ["model", "thinking"], "allOf properties merged")
+check(defaults.first { $0.key == "model" }?.validate("ab") != nil, "minLength enforced")
+let toolFields = configSchema.fields(at: ["tools"], value: nil)
+check(toolFields.first { $0.key == "allow" }?.kind == .list && toolFields.first { $0.key == "rules" }?.kind == .json,
+      "string arrays are lists, object arrays JSON")
+let pluginConfig = configSchema.fields(at: ["plugins", "entries", "weather", "config"],
+                                       value: sampleConfig.value(at: ["plugins", "entries", "weather", "config"]))
+check(pluginConfig.map(\.key) == ["apiKey", "units"], "map-like plugin config lists existing keys")
+check(pluginConfig.first?.kind == .secret && pluginConfig.first?.label == "API key", "wildcard hint matches plugin id")
+check(configSchema.fields(at: ["plugins"], value: nil).first { $0.key == "entries" }?.isMap == true, "additionalProperties object is a map")
+
+print("Gateway config values")
+if let port {
+    check(port.validate(nil) == "Port is required.", "required field")
+    check(port.validate(.number(70000)) != nil && port.validate(.number(8080)) == nil, "range check")
+    check((try? port.value(fromText: "abc")) == nil, "non-numeric input rejected")
+    check((try? port.value(fromText: " 8080 ")) == .number(8080), "integer parsed")
+    check(port.text(for: .number(18789)) == "18789", "integer shown without decimals")
+}
+let bind = gatewayFields.first { $0.key == "bind" }!
+check(bind.validate("public") != nil && bind.validate("lan") == nil, "choice validated")
+let list = toolFields.first { $0.key == "allow" }!
+check((try? list.value(fromText: "exec\n read \n\n")) == json(#"["exec","read"]"#), "list input split by line")
+check(list.text(for: json(#"["a","b"]"#)) == "a\nb", "list shown one per line")
+check((try? toolFields.first { $0.key == "rules" }!.value(fromText: "{nope")) == nil, "invalid JSON rejected")
+check(authFields.first { $0.key == "token" }?.validate(.string(JSONValue.redactedSentinel)) == nil, "redacted secret passes")
+check(sampleConfig.value(at: ["gateway", "auth", "mode"]) == "token", "value(at:)")
+
+var draft = ConfigDraft(path: ["gateway"], original: sampleConfig["gateway"])
+draft.set("port", .number(18789))
+check(!draft.hasChanges && draft.patch == nil, "setting the same value is not a change")
+draft.set("port", .number(9000))
+draft.set("bind", nil)
+check(draft.patch == json(#"{"gateway":{"port":9000,"bind":null}}"#), "draft → merge patch with removal")
+check(draft.current["port"] == 9000 && draft.current["bind"] == nil && draft.value(for: "auth") != nil, "draft current value")
+draft.set("port", .number(18789))
+check(draft.patch == json(#"{"gateway":{"bind":null}}"#), "reverting a change drops it")
+let merged = sampleConfig.applyingMergePatch(json(#"{"gateway":{"port":1,"auth":null},"new":{"a":[1]}}"#))
+check(merged["gateway"]?["port"] == 1 && merged["gateway"]?["auth"] == nil && merged["gateway"]?["bind"] == "tailnet"
+      && merged["new"]?["a"] == json("[1]"), "RFC 7386 merge")
+check(JSONValue.mergePatch(setting: false, at: ["plugins", "entries", "x", "enabled"])
+      == json(#"{"plugins":{"entries":{"x":{"enabled":false}}}}"#), "nested merge patch")
+
+print("Gateway config feedback")
+let rejected = GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid config: gateway.port: too big", details: json(#"""
+{"issues":[{"path":"gateway.port","message":"Number must be less than or equal to 65535"},{"path":["plugins","entries","x"],"message":"unknown plugin","fixHint":"install it"}]}
+"""#))
+let issues = ConfigIssue.from(rejected)
+check(issues.count == 2 && issues[0].path == "gateway.port" && issues[1].path == "plugins.entries.x" && issues[1].fixHint == "install it",
+      "validation issues parsed from error details")
+check(ConfigIssue.from(GatewayError.rpc(code: "INVALID_REQUEST", message: "boom", details: nil)).first?.message == "boom",
+      "error without issues keeps its message")
+check(ConfigApplyOutcome(configWrite: json(#"{"ok":true,"noop":true}"#)) == .noChange, "noop patch")
+check(ConfigApplyOutcome(configWrite: json(#"{"ok":true,"restart":{"delayMs":2000}}"#)) == .restarting, "restart scheduled")
+check(ConfigApplyOutcome(configWrite: json(#"{"ok":true,"hash":"h"}"#)) == .applied, "hot-applied")
+check(ConfigApplyOutcome(pluginChange: json(#"{"ok":true,"restartRequired":true}"#)) == .restarting, "plugin restart")
+
+let plugin = PluginInfo(json(#"{"id":"weather","name":"Weather","installed":true,"enabled":true,"state":"needs-setup","origin":"clawhub","runtime":{"state":"disabled"}}"#))
+check(plugin?.needsSetup == true && plugin?.statusLabel == "Needs setup" && plugin?.removable == true, "plugin entry")
+check(PluginInfo(json(#"{"id":"b","name":"B","installed":true,"enabled":false,"state":"disabled","origin":"bundled"}"#))?.removable == false,
+      "bundled plugins aren't removable by default")
+let credential = PluginCredential(json(#"{"path":["plugins","entries","weather","config","apiKey"],"label":"API key","envVars":["WEATHER_KEY"],"signupUrl":"http://x","requiresCredential":true}"#))
+check(credential?.path.last == "apiKey" && credential?.isRequired == true && credential?.signupURL == nil, "plugin credential (non-https signup dropped)")
+check(PluginCredential(json(#"{"path":["a","b",0,"c","d"],"label":"x","envVars":[]}"#)) == nil, "array credential paths skipped")
+
 // MARK: Live
 
 let arguments = CommandLine.arguments
@@ -337,6 +437,92 @@ func runLive(url: String, token: String) async {
     let cleared = await waitFor("rename clear") { gateway.displayName(for: renamed) != "Synced Name" }
     check(cleared, "clearing a server name syncs")
     other.stop()
+
+    // Gateway settings: read-only without admin, then edits through config.patch and plugins.*.
+    let settings = gateway.settings
+    await settings.load()
+    check(settings.hasLoaded && settings.isValid && settings.schema != nil, "config.get + config.schema loaded")
+    check(settings.value(at: ["gateway", "auth", "token"])?.isRedacted == true, "secrets arrive redacted")
+    let weatherKeySet = settings.value(at: ["plugins", "entries", "weather", "config", "apiKey"]) != nil
+    check(settings.plugins.contains { $0.id == "weather" && $0.needsSetup != weatherKeySet }, "plugins.list (\(settings.plugins.map(\.id)))")
+    check(!settings.canEdit, "no admin scope by default")
+    let readOnly = await settings.save(.mergePatch(setting: 30, at: ["agents", "defaults", "timeoutSeconds"]))
+    check(!readOnly && settings.lastError?.contains("admin") == true, "writes need admin access")
+    gateway.stop()
+
+    let adminProfile = GatewayProfile(id: profile.id, name: "Mock", url: url, authMode: .token, manageSettings: true)
+    check(adminProfile.requestedScopes.contains("operator.admin") && !profile.requestedScopes.contains("operator.admin"),
+          "admin scope only when opted in")
+    let decodedProfile = try? JSONDecoder().decode(GatewayProfile.self, from: Data(#"{"id":"\#(UUID().uuidString)","name":"Old","url":"ws://127.0.0.1","authMode":"token"}"#.utf8))
+    check(decodedProfile?.manageSettings == false, "profiles saved before settings support still load")
+    let admin = GatewayStore(profile: adminProfile)
+    admin.start()
+    let adminConnected = await waitFor("admin connection") { admin.state.isConnected && admin.hello != nil }
+    check(adminConnected && admin.settings.canEdit, "admin scope granted")
+    let adminSettings = admin.settings
+    await adminSettings.load()
+    let hashBefore = adminSettings.hash
+    var draft = ConfigDraft(path: ["agents", "defaults"], original: adminSettings.value(at: ["agents", "defaults"]))
+    draft.set("timeoutSeconds", 30)
+    let hot = await adminSettings.save(draft.patch!)
+    check(hot && adminSettings.lastOutcome == .applied, "config.patch hot-applied (\(adminSettings.lastError ?? "")\(adminSettings.writeIssues.map(\.message)))")
+    check(adminSettings.value(at: ["agents", "defaults", "timeoutSeconds"]) == 30 && adminSettings.hash != hashBefore,
+          "saved value re-read with a new hash")
+    let bindValue: JSONValue = adminSettings.value(at: ["gateway", "bind"]) == "lan" ? "tailnet" : "lan"
+    let restarting = await adminSettings.save(.mergePatch(setting: bindValue, at: ["gateway", "bind"]))
+    check(restarting && adminSettings.lastOutcome == .restarting, "restart-only change reported")
+    let invalid = await adminSettings.save(json(#"{"gateway":{"port":70000}}"#))
+    check(!invalid && adminSettings.writeIssues.first?.path == "gateway.port", "invalid value rejected with its path")
+    check(!adminSettings.issues(under: ["gateway"]).isEmpty && adminSettings.issues(under: ["agents"]).isEmpty, "issues matched to their section")
+    let keptSecret = await adminSettings.save(json(#"{"channels":{"discord":{"token":"__OPENCLAW_REDACTED__","dmPolicy":"allowlist"}}}"#))
+    check(keptSecret && adminSettings.value(at: ["channels", "discord", "dmPolicy"]) == "allowlist", "redacted secret round-trips")
+    let lists = await adminSettings.save(json(#"{"tools":{"allow":["exec"]}}"#))
+    check(lists && adminSettings.value(at: ["tools", "allow"]) == json(#"["exec"]"#), "lists replace with replacePaths")
+
+    // Another writer changed the config: the stale save is refused and the latest config loaded.
+    let otherAdminProfile = GatewayProfile(name: "Other admin", url: url, authMode: .token, manageSettings: true)
+    otherAdminProfile.secret = token
+    let other2 = GatewayStore(profile: otherAdminProfile)
+    other2.start()
+    _ = await waitFor("other admin") { other2.state.isConnected && other2.hello != nil }
+    await other2.settings.load()
+    await other2.settings.save(json(#"{"agents":{"defaults":{"timeoutSeconds":45}}}"#))
+    let stale = await adminSettings.save(json(#"{"agents":{"defaults":{"timeoutSeconds":60}}}"#))
+    check(!stale && adminSettings.lastError?.contains("changed on the Gateway") == true
+          && adminSettings.value(at: ["agents", "defaults", "timeoutSeconds"]) == 45, "stale hash → reload, no overwrite")
+    other2.stop()
+
+    if let weather = adminSettings.plugin("weather") {
+        await adminSettings.loadCredentials(for: weather)
+        check(adminSettings.credentials["weather"]?.first?.path.last == "apiKey", "plugins.inspect credentials")
+        let short = await adminSettings.save(.mergePatch(setting: "short", at: weather.configPath + ["apiKey"]))
+        check(!short && adminSettings.writeIssues.first?.path == "plugins.entries.weather.config.apiKey", "plugin config validated")
+        await adminSettings.save(.mergePatch(setting: "weather-key-123", at: weather.configPath + ["apiKey"]))
+        check(adminSettings.plugin("weather")?.needsSetup == false && adminSettings.value(at: weather.configPath + ["apiKey"])?.isRedacted == true,
+              "plugin set up with its credential")
+    }
+    if let browser = adminSettings.plugin("browser") {
+        await adminSettings.setEnabled(browser, true)
+        check(adminSettings.pendingConfirmation != nil && adminSettings.plugin("browser")?.enabled == false, "capability consent asked first")
+        if let confirmation = adminSettings.pendingConfirmation { await adminSettings.confirm(confirmation) }
+        check(adminSettings.plugin("browser")?.enabled == true && adminSettings.pendingConfirmation == nil, "plugin enabled after consent")
+        await adminSettings.setEnabled(adminSettings.plugin("browser")!, false)
+        check(adminSettings.plugin("browser")?.enabled == false, "plugin disabled")
+    }
+    let installed = await adminSettings.install(from: .npm, spec: "openclaw-plugin-todo@1.0.0")
+    check(installed && adminSettings.plugin("todo")?.enabled == true, "plugins.install")
+    let unverified = await adminSettings.install(from: .clawhub, spec: "@someone/unverified-thing")
+    check(!unverified, "unverified install waits for confirmation")
+    if let confirmation = adminSettings.pendingConfirmation { await adminSettings.confirm(confirmation) }
+    check(adminSettings.plugin("unverified-thing") != nil, "install after acknowledging the policy warning")
+    if let todo = adminSettings.plugin("todo") {
+        await adminSettings.uninstall(todo)
+        check(adminSettings.plugin("todo") == nil, "plugins.uninstall")
+    }
+    let missing = await adminSettings.install(from: .npm, spec: "missing-package")
+    check(!missing && adminSettings.lastError?.contains("not found") == true, "install errors surface")
+    admin.stop()
+
     for store in [gateway, other] {
         UserDefaults.standard.removeObject(forKey: "pincer.serverNames.\(store.id.uuidString)")
         UserDefaults.standard.removeObject(forKey: "pincer.serverNamesSynced.\(store.id.uuidString)")

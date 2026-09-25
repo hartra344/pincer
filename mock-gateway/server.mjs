@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const METHODS = [
@@ -21,6 +22,7 @@ const METHODS = [
   'exec.approval.resolve',
   'users.prefs.get',
   'users.prefs.set',
+  ...CONFIG_METHODS,
 ];
 const EVENTS = [
   'connect.challenge',
@@ -32,6 +34,7 @@ const EVENTS = [
   'exec.approval.requested',
   'exec.approval.resolved',
   'users.prefs.changed',
+  'plugins.changed',
 ];
 
 function canonicalJson(value) {
@@ -307,6 +310,7 @@ function createSeedState() {
     idempotency: new Map(),
     activeRuns: new Map(),
     connections: new Set(),
+    configState: createConfigState(),
   };
 }
 
@@ -597,6 +601,7 @@ async function simulateRun(state, run, params) {
 
 function handleAuthedRequest(state, conn, msg) {
   const { id, method, params = {} } = msg;
+  if (handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
   switch (method) {
     case 'agents.list': {
       sendRes(conn, id, {
@@ -835,6 +840,7 @@ function handleConnect(state, conn, msg, options) {
   conn.authenticated = true;
   conn.connId = shortId('conn_');
   conn.deviceId = deviceId;
+  conn.scopes = Array.isArray(params.scopes) ? params.scopes : [];
   sendRes(conn, id, makeHelloPayload(state, params, conn.connId, deviceId));
 }
 
