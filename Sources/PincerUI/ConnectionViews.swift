@@ -156,9 +156,9 @@ struct PairingView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
-                .padding(12)
+                .padding(14)
                 .frame(maxWidth: 440)
-                .background(Theme.codeBackground, in: RoundedRectangle(cornerRadius: 8))
+                .glassSurface(in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .contextMenu {
                     Button("Copy Command", systemImage: "doc.on.doc") { self.copy(command) }
                 }
@@ -168,8 +168,10 @@ struct PairingView: View {
                 Label(self.copied ? "Copied" : "Copy Command",
                       systemImage: self.copied ? "checkmark" : "doc.on.doc")
             }
-            .buttonStyle(.borderedProminent)
+            .glassProminentButton()
+            .controlSize(.large)
             .tint(self.copied ? .green : .accentColor)
+            .contentTransition(.symbolEffect(.replace))
             VStack(spacing: 4) {
                 Text("Device ID").font(.caption).foregroundStyle(.secondary)
                 Text(self.deviceId.prefix(16) + "…")
@@ -208,11 +210,16 @@ struct FailedView: View {
         } description: {
             Text(self.message)
         } actions: {
-            Button("Edit Connection…", action: self.edit)
-            Button("Try Again") {
-                self.gateway.stop()
-                self.gateway.start()
+            HStack {
+                Button("Edit Connection…", action: self.edit)
+                    .glassButton()
+                Button("Try Again") {
+                    self.gateway.stop()
+                    self.gateway.start()
+                }
+                .glassProminentButton()
             }
+            .controlSize(.large)
         }
     }
 }

@@ -52,7 +52,13 @@ public struct SessionRow: Identifiable, Hashable, Sendable {
     public var hasActiveRun: Bool { self.raw["hasActiveRun"]?.bool ?? false }
     public var status: String? { self.raw["status"]?.text }
     public var lastRunError: String? { self.raw["lastRunError"]?.text }
-    public var preview: String? { self.raw["lastMessagePreview"]?.text }
+    /// The last message as one line of plain text. Gateways send the raw message, Markdown and
+    /// line breaks included, which a one-line list row can't show.
+    public var preview: String? {
+        guard let text = self.raw["lastMessagePreview"]?.text else { return nil }
+        let line = Self.plainLine(text)
+        return line.isEmpty ? nil : line
+    }
     public var parentKey: String? { self.raw["parentSessionKey"]?.text ?? self.raw["spawnedBy"]?.text }
     public var model: String? { self.raw["model"]?.text }
     public var reasoningLevel: String? { self.raw["reasoningLevel"]?.text }
@@ -677,5 +683,33 @@ public enum MediaDirectives {
         let path = URL(string: source)?.path ?? source
         let name = (path as NSString).lastPathComponent
         return name.isEmpty || name == "/" ? nil : name.removingPercentEncoding ?? name
+    }
+}
+
+extension SessionRow {
+    static func plainLine(_ text: String) -> String {
+        var parts: [Substring] = []
+        var length = 0
+        for raw in text.split(whereSeparator: \.isNewline) {
+            var line = raw.drop(while: \.isWhitespace)
+            if line.hasPrefix("```") || line.hasPrefix("~~~") { continue }
+            if line.allSatisfy({ "-*_=| ".contains($0) }) { continue }
+            while let first = line.first, "#>".contains(first) { line = line.dropFirst().drop(while: \.isWhitespace) }
+            if let first = line.first, "-*+".contains(first), line.dropFirst().first == " " {
+                line = line.dropFirst(2)
+            } else if let dot = line.firstIndex(where: { $0 == "." || $0 == ")" }), dot != line.startIndex,
+                      line[..<dot].allSatisfy(\.isNumber), line[line.index(after: dot)...].first == " " {
+                line = line[line.index(dot, offsetBy: 2)...]
+            }
+            guard !line.isEmpty else { continue }
+            parts.append(line)
+            length += line.count
+            if length > 240 { break }
+        }
+        return parts.joined(separator: " ")
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "__", with: "")
+            .replacingOccurrences(of: "`", with: "")
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 }

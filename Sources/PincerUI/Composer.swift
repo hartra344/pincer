@@ -14,6 +14,8 @@ struct Composer: View {
     @State private var attachmentError: String?
     @State private var isTargeted = false
 
+    private static let corner: CGFloat = 20
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let attachmentError {
@@ -45,29 +47,35 @@ struct Composer: View {
                     Button {
                         Task { await self.chat.abort() }
                     } label: {
-                        Image(systemName: "stop.circle.fill").font(.title2)
+                        ComposerActionLabel(systemImage: "stop.fill", tint: .red, active: true)
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                     .composerControl()
-                    .foregroundStyle(.red)
                     .help("Stop the current run")
                     .keyboardShortcut(".", modifiers: .command)
+                    .accessibilityLabel("Stop")
+                    .transition(.scale.combined(with: .opacity))
                 }
                 Button(action: self.submit) {
-                    Image(systemName: "arrow.up.circle.fill").font(.title2)
+                    ComposerActionLabel(systemImage: "arrow.up", tint: .accentColor, active: self.canSend)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.plain)
                 .composerControl()
                 .disabled(!self.canSend)
                 .help(self.chat.isRunning ? "Queue a follow-up" : "Send")
+                .accessibilityLabel(self.chat.isRunning ? "Queue a follow-up" : "Send")
             }
-            .padding(.horizontal, 10)
-            .background(.background, in: RoundedRectangle(cornerRadius: 12))
+            .padding(.leading, 8)
+            .padding(.trailing, 6)
+            .glassSurface(in: RoundedRectangle(cornerRadius: Self.corner, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(self.isTargeted ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary), lineWidth: self.isTargeted ? 2 : 1))
+                RoundedRectangle(cornerRadius: Self.corner, style: .continuous)
+                    .strokeBorder(Color.accentColor, lineWidth: 2)
+                    .opacity(self.isTargeted ? 1 : 0))
+            .animation(.snappy, value: self.chat.isRunning)
+            .animation(.snappy, value: self.canSend)
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 12)
         .onDrop(of: [.fileURL, .image, .audiovisualContent, .pdf], isTargeted: self.$isTargeted) { providers in
@@ -107,7 +115,11 @@ struct Composer: View {
             }
             #endif
         } label: {
-            Image(systemName: "plus.circle.fill").font(.title2).foregroundStyle(.secondary)
+            Image(systemName: "plus")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 26, height: 26)
+                .contentShape(Circle())
         } primaryAction: {
             self.importing = true
         }
@@ -328,6 +340,29 @@ private struct AttachmentThumb: View {
             .accessibilityLabel("Remove \(self.attachment.fileName)")
         }
         .padding(.top, 5)
+    }
+}
+
+/// The round Send / Stop control: a tinted glass disc when active, a quiet one when not.
+private struct ComposerActionLabel: View {
+    let systemImage: String
+    let tint: Color
+    let active: Bool
+
+    var body: some View {
+        let icon = Image(systemName: self.systemImage)
+            .font(.system(size: 13, weight: .bold))
+            .frame(width: 26, height: 26)
+            .contentShape(Circle())
+        if #available(macOS 26, iOS 26, *) {
+            icon
+                .foregroundStyle(self.active ? AnyShapeStyle(.white) : AnyShapeStyle(.tertiary))
+                .glassEffect(self.active ? Glass.regular.tint(self.tint).interactive() : .identity, in: Circle())
+        } else {
+            icon
+                .foregroundStyle(self.active ? AnyShapeStyle(.white) : AnyShapeStyle(.tertiary))
+                .background(self.active ? AnyShapeStyle(self.tint.gradient) : AnyShapeStyle(.quaternary), in: Circle())
+        }
     }
 }
 

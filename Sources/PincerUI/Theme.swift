@@ -34,6 +34,15 @@ enum Theme {
         }
     }
 
+    /// Glass toolbar buttons draw their own circle on macOS 26 / iOS 26, so glyphs drop the ring.
+    static var moreSymbol: String {
+        if #available(macOS 26, iOS 26, *) { "ellipsis" } else { "ellipsis.circle" }
+    }
+
+    static var filterSymbol: String {
+        if #available(macOS 26, iOS 26, *) { "line.3.horizontal.decrease" } else { "line.3.horizontal.decrease.circle" }
+    }
+
     static var sidebarBackground: Color {
         #if os(macOS)
         Color(nsColor: .windowBackgroundColor)
@@ -48,6 +57,65 @@ enum Theme {
         #else
         Color(uiColor: .tertiarySystemBackground)
         #endif
+    }
+}
+
+// MARK: Liquid Glass
+
+/// Liquid Glass on macOS 26 / iOS 26, with a material fallback on earlier systems.
+extension View {
+    /// A floating glass surface, like a toolbar or composer, clipped to `shape`.
+    @ViewBuilder
+    func glassSurface(in shape: some Shape, tint: Color? = nil, interactive: Bool = false) -> some View {
+        if #available(macOS 26, iOS 26, *) {
+            self.glassEffect(Glass.regular.tint(tint).interactive(interactive), in: shape)
+        } else {
+            self
+                .background(tint.map { AnyShapeStyle($0.opacity(0.12)) } ?? AnyShapeStyle(.clear), in: shape)
+                .background(.regularMaterial, in: shape)
+                .overlay(shape.stroke(.quaternary, lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
+        }
+    }
+
+    /// Prominent glass for primary actions (Send, Connect); bordered-prominent on earlier systems.
+    @ViewBuilder
+    func glassProminentButton() -> some View {
+        if #available(macOS 26, iOS 26, *) {
+            self.buttonStyle(.glassProminent)
+        } else {
+            self.buttonStyle(.borderedProminent)
+        }
+    }
+
+    /// Secondary glass buttons; bordered on earlier systems.
+    @ViewBuilder
+    func glassButton() -> some View {
+        if #available(macOS 26, iOS 26, *) {
+            self.buttonStyle(.glass)
+        } else {
+            self.buttonStyle(.bordered)
+        }
+    }
+
+    /// Lets neighbouring glass shapes blend and morph into each other.
+    @ViewBuilder
+    func glassGroup(spacing: CGFloat = 8) -> some View {
+        if #available(macOS 26, iOS 26, *) {
+            GlassEffectContainer(spacing: spacing) { self }
+        } else {
+            self
+        }
+    }
+
+    /// Soft scroll-edge fade under floating chrome (macOS 26 / iOS 26).
+    @ViewBuilder
+    func softScrollEdges() -> some View {
+        if #available(macOS 26, iOS 26, *) {
+            self.scrollEdgeEffectStyle(.soft, for: .all)
+        } else {
+            self
+        }
     }
 }
 

@@ -40,18 +40,17 @@ public final class ArtifactImageLoader {
     private func fetch(_ ref: ImageRef, sessionKey: String) {
         let key = ref.cacheKey
         guard !self.inFlight.contains(key), !self.failures.contains(key) else { return }
-        if let base64 = ref.base64 {
-            if let data = Data(base64Encoded: Self.stripDataURL(base64)), let image = ImageCodec.decode(data) {
-                self.store(image, key: key)
-            } else {
-                self.failures.insert(key)
-            }
-            return
-        }
         self.inFlight.insert(key)
         Task {
             defer { self.inFlight.remove(key) }
-            if let data = try? await self.download(ref, sessionKey: sessionKey), let image = ImageCodec.decode(data) {
+            let data: Data? = if let base64 = ref.base64 {
+                Data(base64Encoded: Self.stripDataURL(base64))
+            } else {
+                try? await self.download(ref, sessionKey: sessionKey)
+            }
+            // Decoding a large image takes long enough to drop frames, so it stays off the main thread.
+            let image = await Task.detached(priority: .userInitiated) { data.flatMap(ImageCodec.decode) }.value
+            if let image {
                 self.store(image, key: key)
             } else {
                 self.failures.insert(key)

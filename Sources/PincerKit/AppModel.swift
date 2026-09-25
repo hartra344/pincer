@@ -13,6 +13,8 @@ public final class AppModel {
         }
     }
     public let notifier = Notifier()
+    /// Counts `open(_:)` calls (from notifications), so the UI can bring the chat on screen.
+    public private(set) var openRequests = 0
     public var appIsActive = true {
         didSet {
             self.notifier.appIsActive = self.appIsActive
@@ -64,6 +66,7 @@ public final class AppModel {
         self.selectedGatewayId = gateway.id
         gateway.selectedKey = target.sessionKey
         self.updateVisible()
+        self.openRequests += 1
     }
 
     // MARK: Profiles

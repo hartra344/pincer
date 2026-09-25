@@ -10,6 +10,10 @@ APP="build/Pincer.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Pincer"
+# SwiftPM records the deployment target as the SDK version, so macOS would run the app in its
+# pre-26 compatibility look (no Liquid Glass). Stamp the SDK it was actually built with.
+SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+vtool -set-build-version macos 15.0 "$SDK_VERSION" -replace -output "$APP/Contents/MacOS/Pincer" "$APP/Contents/MacOS/Pincer"
 # App icon: reuse the macOS PNGs from the asset catalog (regenerate with scripts/make-icons.swift).
 ICONSET="build/Pincer.iconset"
 rm -rf "$ICONSET" && mkdir -p "$ICONSET"

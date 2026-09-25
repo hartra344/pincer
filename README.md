@@ -92,7 +92,7 @@ open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pince
 | Path | Contents |
 | --- | --- |
 | `Sources/PincerKit` | Protocol client (handshake, signing, reconnect, TLS pinning), models, and the observable stores. No UI. |
-| `Sources/PincerUI` | Shared SwiftUI for macOS and iOS. |
+| `Sources/PincerUI` | Shared UI for macOS and iOS. The app shell is SwiftUI. The chat transcript and sidebar are native for performance: `NSTableView`/`NSOutlineView` on macOS and `UICollectionView` on iOS. Markdown is laid out once with TextKit (`TranscriptSupport`, `TranscriptRowView`), and the same part views are shared by both platforms. |
 | `Apps/macOS`, `Apps/iOS` | `@main` app shells used by the Xcode project. |
 | `Apps/Shared` | Asset catalog shared by both apps, including the generated app icon. |
 | `Design/AppIcon` | Source artwork for the app icon (`Pincer.svg`). After editing it, run `swift scripts/make-icons.swift` to regenerate the icons. |

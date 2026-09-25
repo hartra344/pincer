@@ -51,12 +51,15 @@ struct RootView: View {
     @State private var editing: GatewayProfile?
     @State private var addingGateway = false
     @State private var columns: NavigationSplitViewVisibility = .all
+    /// On iPhone the split view is a stack; picking a chat pushes it.
+    @State private var compactColumn = NavigationSplitViewColumn.sidebar
 
     var body: some View {
-        NavigationSplitView(columnVisibility: self.$columns) {
+        NavigationSplitView(columnVisibility: self.$columns, preferredCompactColumn: self.$compactColumn) {
             Group {
                 if let gateway = self.app.selectedGateway {
-                    ChannelList(editConnection: { self.editing = gateway.profile })
+                    ChannelList(editConnection: { self.editing = gateway.profile },
+                                openChat: { self.compactColumn = .detail })
                         .environment(gateway)
                         .id(gateway.id)
                 } else {
@@ -75,6 +78,7 @@ struct RootView: View {
             self.app.appIsActive = phase == .active
         }
         .onChange(of: self.app.selectedGateway?.selectedKey) { self.app.updateVisible() }
+        .onChange(of: self.app.openRequests) { self.compactColumn = .detail }
         .onChange(of: self.app.totalUnread, initial: true) { _, count in
             self.app.notifier.setBadge(count)
             #if os(macOS)
@@ -122,12 +126,42 @@ struct WelcomeView: View {
         } description: {
             Text("A native client for your OpenClaw Gateway. Connect over Tailscale to chat with your agents as yourself — with thinking, tools and images inline.")
         } actions: {
-            Button("Add Gateway…", action: self.add).buttonStyle(.borderedProminent)
+            Button("Add Gateway…", action: self.add)
+                .glassProminentButton()
+                .controlSize(.large)
         }
     }
 }
 
+/// macOS: a tabbed Settings window, like the system's own apps. iOS: one grouped form in a sheet.
 struct SettingsView: View {
+    var body: some View {
+        #if os(macOS)
+        TabView {
+            Tab("General", systemImage: "gearshape") {
+                SettingsForm(sections: [.you, .device])
+            }
+            Tab("Conversation", systemImage: "bubble.left.and.text.bubble.right") {
+                SettingsForm(sections: [.conversation, .sidebar])
+            }
+            Tab("Notifications", systemImage: "bell.badge") {
+                SettingsForm(sections: [.notifications])
+            }
+        }
+        .frame(width: 520)
+        #else
+        SettingsForm(sections: SettingsForm.Section.allCases)
+            .navigationTitle("Settings")
+        #endif
+    }
+}
+
+private struct SettingsForm: View {
+    enum Section: CaseIterable {
+        case you, conversation, sidebar, notifications, device
+    }
+
+    let sections: [Section]
     @Environment(AppModel.self) private var app
     @AppStorage("pincer.ownerName") private var ownerName = ""
     @AppStorage("pincer.expandThinking") private var expandThinking = false
@@ -138,12 +172,28 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section("You") {
+            ForEach(self.sections, id: \.self) { self.section($0) }
+        }
+        .formStyle(.grouped)
+        #if os(macOS)
+        .scrollDisabled(true)
+        .fixedSize(horizontal: false, vertical: true)
+        #endif
+        .onAppear { self.notifications = self.app.notifier.enabled }
+    }
+
+    @ViewBuilder private func section(_ section: Section) -> some View {
+        switch section {
+        case .you:
+            SwiftUI.Section {
                 TextField("Display name", text: self.$ownerName, prompt: Text(Owner.displayName))
+            } header: {
+                Text("You")
+            } footer: {
                 Text("Your messages show under this name, whichever channel they came from.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Conversation") {
+        case .conversation:
+            SwiftUI.Section("Conversation") {
                 Toggle("Expand thinking by default", isOn: self.$expandThinking)
                 Toggle("Show tool activity", isOn: self.$showTools)
                 Toggle(isOn: self.$loadWebImages) {
@@ -151,17 +201,20 @@ struct SettingsView: View {
                     Text("Like OpenClaw's web UI. The image's website can see your IP address.")
                 }
             }
-            Section("Sidebar") {
+        case .sidebar:
+            SwiftUI.Section("Sidebar") {
                 Toggle(isOn: self.$showSubagentRuns) {
                     Text("List subagent runs under their chat")
                     Text("Off keeps one thread per chat, like Discord. Open a run from its tool call instead.")
                 }
             }
-            Section("Notifications") {
+        case .notifications:
+            SwiftUI.Section("Notifications") {
                 Toggle("Notify about replies and approvals", isOn: self.$notifications)
                     .onChange(of: self.notifications) { _, value in self.app.notifier.enabled = value }
             }
-            Section("This device") {
+        case .device:
+            SwiftUI.Section("This device") {
                 LabeledContent("Device ID") {
                     Text(DeviceIdentity.loadOrCreate().deviceId.prefix(16) + "…")
                         .font(.caption.monospaced())
@@ -170,10 +223,5 @@ struct SettingsView: View {
                 LabeledContent("Role", value: "operator (read, write, approvals)")
             }
         }
-        .formStyle(.grouped)
-        #if os(macOS)
-        .frame(width: 460)
-        #endif
-        .onAppear { self.notifications = self.app.notifier.enabled }
     }
 }
