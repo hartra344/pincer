@@ -19,6 +19,9 @@ struct ChatView: View {
     var body: some View {
         self.transcript
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Measured outside the transcript's ignored region, so these are the toolbar and
+            // home-indicator heights the transcript runs under. (Inside it, macOS reports zero.)
+            .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { self.safeArea = $0 }
             .overlay(alignment: .top) {
                 ApprovalsBanner(sessionKey: self.chat.sessionKey)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.topChrome = $0 }
@@ -108,9 +111,6 @@ struct ChatView: View {
                     previewImage: { self.previewing = $0 }),
                 bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
                 topInset: self.topChrome + self.transcriptSafeArea.top)
-                // Measured inside the ignored region, so these are the toolbar and home-indicator
-                // heights the transcript now runs under.
-                .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { self.safeArea = $0 }
                 .ignoresSafeArea(.container, edges: [.top, .bottom])
         }
     }
