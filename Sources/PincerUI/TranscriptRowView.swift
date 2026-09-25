@@ -584,6 +584,7 @@ final class TranscriptRowView: TranscriptBaseView {
         case .imageLink: TranscriptImageLinkView()
         case .file: TranscriptFileView()
         case .typing: TranscriptTypingView()
+        case .footer: TranscriptFooterView()
         case .marker: TranscriptMarkerView()
         case .loading: TranscriptLoadingView()
         }
@@ -892,6 +893,8 @@ final class TranscriptRuleView: TranscriptBaseView {
 final class TranscriptLabelButton: TranscriptTapView {
     private var title = ""
     private var symbol = ""
+    /// Draws in the secondary label color instead of the accent, for buttons that sit on every row.
+    var isSubdued = false
 
     func set(title: String, symbol: String) {
         guard title != self.title || symbol != self.symbol else { return }
@@ -909,12 +912,81 @@ final class TranscriptLabelButton: TranscriptTapView {
 
     override func draw(_ rect: CGRect) {
         let font = TranscriptStyle.shared.caption
-        let color = self.isPressed ? TranscriptColors.tint.withAlphaComponent(0.5) : TranscriptColors.tint
+        let base = self.isSubdued ? TranscriptColors.secondary : TranscriptColors.tint
+        let color = self.isPressed ? base.withAlphaComponent(0.5) : base
         let height = self.bounds.height
         TranscriptSymbols.draw(self.symbol, in: CGRect(x: 0, y: 0, width: 14, height: height), size: font.pointSize, color: color)
         let text = singleLine(self.title, font, color)
         text.drawLine(at: CGPoint(x: 18, y: (height - TranscriptStyle.lineHeight(font)) / 2), width: self.bounds.width - 18, font: font)
     }
+}
+
+/// The line under a message: Copy, then details such as the time it was sent and its model.
+final class TranscriptFooterView: TranscriptBaseView {
+    private var footer: TranscriptPart.Footer?
+    private let copyButton = TranscriptLabelButton()
+    private var copiedToken = 0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.copyButton.isSubdued = true
+        self.addSubview(self.copyButton)
+        self.showCopy()
+        self.copyButton.onTap = { [weak self] in self?.copy() }
+    }
+
+    override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
+        guard case let .footer(footer) = part else { return }
+        let old = self.footer
+        self.footer = footer
+        if old?.key != footer.key {
+            self.copiedToken += 1
+            self.showCopy()
+        }
+        if old?.details != footer.details { self.redraw() }
+        #if os(macOS)
+        self.toolTip = footer.details.isEmpty ? nil : footer.details
+        #endif
+    }
+
+    private func showCopy() {
+        self.copyButton.set(title: "Copy", symbol: "doc.on.doc")
+        self.copyButton.accessibilityText = "Copy message"
+    }
+
+    private func copy() {
+        guard let footer else { return }
+        Clipboard.copy(footer.copyText)
+        self.copyButton.set(title: "Copied", symbol: "checkmark")
+        self.copiedToken += 1
+        let token = self.copiedToken
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, self.copiedToken == token else { return }
+            self.showCopy()
+        }
+    }
+
+    override func layoutContent() {
+        let size = self.copyButton.buttonSize
+        let frame = CGRect(x: 0, y: (self.bounds.height - size.height) / 2, width: size.width, height: size.height)
+        if self.copyButton.frame != frame {
+            self.copyButton.frame = frame
+            self.redraw()
+        }
+    }
+
+    override func draw(_ rect: CGRect) {
+        guard let footer, !footer.details.isEmpty else { return }
+        let font = TranscriptStyle.shared.caption
+        let x = self.copyButton.frame.maxX + 10
+        singleLine(footer.details, font, TranscriptColors.tertiary)
+            .drawLine(at: CGPoint(x: x, y: (self.bounds.height - TranscriptStyle.lineHeight(font)) / 2),
+                      width: self.bounds.width - x, font: font)
+    }
+
+    #if os(macOS)
+    override func isAccessibilityElement() -> Bool { false }
+    #endif
 }
 
 final class TranscriptCodeView: TranscriptBaseView {

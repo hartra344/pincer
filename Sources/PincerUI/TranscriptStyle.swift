@@ -147,6 +147,9 @@ enum TranscriptMetrics {
     static let headerGap: CGFloat = 4
     static let blockSpacing: CGFloat = 8
     static let toolSpacing: CGFloat = 4
+    /// Space between two messages in the same turn.
+    static let messageSpacing: CGFloat = 14
+    static let footerSpacing: CGFloat = 4
     static let maxCardWidth: CGFloat = 640
     static let cardRadius: CGFloat = 8
     static let iconBox: CGFloat = 16

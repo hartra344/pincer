@@ -561,7 +561,12 @@ public struct AssistantTurn: Identifiable, Hashable, Sendable {
     public var id: String
     public var thinking: [String] = []
     public var tools: [ToolActivity] = []
+    /// One entry per assistant message, so back-to-back messages in a turn stay distinct.
     public var text: [String] = []
+    /// When each entry of `text` was sent, in the same order.
+    public var textTimestamps: [Date?] = []
+    /// Short name of the model that wrote each entry of `text`, when the Gateway recorded one.
+    public var textModelNames: [String?] = []
     public var images: [ImageRef] = []
     public var files: [String] = []
     public var timestamp: Date?
@@ -584,6 +589,7 @@ public enum TranscriptBuilder {
     public static func build(_ items: [ChatItem]) -> [TranscriptEntry] {
         var entries: [TranscriptEntry] = []
         var current: AssistantTurn?
+        var currentRunId: String?
         var toolIndex: [String: Int] = [:]
 
         func flush() {
@@ -591,6 +597,7 @@ public enum TranscriptBuilder {
                 entries.append(.assistant(turn))
             }
             current = nil
+            currentRunId = nil
             toolIndex.removeAll()
         }
 
@@ -610,6 +617,9 @@ public enum TranscriptBuilder {
             case .system:
                 continue
             case .assistant:
+                // A reply from another run (a cron job, a follow-up) is its own row, not part of this one.
+                if let runId = item.runId, let currentRunId, runId != currentRunId { flush() }
+                if let runId = item.runId { currentRunId = runId }
                 var turn = current ?? AssistantTurn(id: item.id, timestamp: item.timestamp)
                 turn.timestamp = item.timestamp ?? turn.timestamp
                 turn.isError = turn.isError || item.isError
@@ -617,11 +627,12 @@ public enum TranscriptBuilder {
                     turn.model = model
                     turn.provider = item.provider
                 }
+                var message: [String] = []
                 for block in item.blocks {
                     switch block {
                     case let .text(text):
                         let parsed = MediaDirectives.extract(from: text)
-                        if !parsed.text.isEmpty { turn.text.append(parsed.text) }
+                        if !parsed.text.isEmpty { message.append(parsed.text) }
                         turn.images += parsed.images
                         turn.files += parsed.files
                     case let .thinking(text): turn.thinking.append(text)
@@ -631,6 +642,11 @@ public enum TranscriptBuilder {
                         toolIndex[id] = turn.tools.count
                         turn.tools.append(ToolActivity(id: id, name: name, arguments: arguments, result: nil, isError: false, isRunning: false))
                     }
+                }
+                if !message.isEmpty {
+                    turn.text.append(message.joined(separator: "\n\n"))
+                    turn.textTimestamps.append(item.timestamp)
+                    turn.textModelNames.append(item.modelRef.map(ModelRef.shortName))
                 }
                 current = turn
             case .toolResult:

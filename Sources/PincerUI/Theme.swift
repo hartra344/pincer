@@ -184,6 +184,13 @@ extension Date {
     }
 }
 
+extension Date {
+    /// Full date and time, with seconds, for a message's details line.
+    var messageDetailTimestamp: String {
+        self.formatted(date: .abbreviated, time: .standard)
+    }
+}
+
 extension Image {
     init(cgImage: CGImage) {
         self.init(decorative: cgImage, scale: 1)

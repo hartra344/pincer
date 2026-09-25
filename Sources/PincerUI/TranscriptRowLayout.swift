@@ -70,6 +70,14 @@ enum TranscriptPart {
         let runningY: CGFloat?
     }
 
+    /// The line under a message: a Copy button and details such as when it was sent.
+    struct Footer {
+        /// Tells a recycled footer it now shows a different message, so "Copied" resets.
+        let key: String
+        let copyText: String
+        let details: String
+    }
+
     struct Image {
         enum State { case loading, loaded(CGImage), failed }
         let ref: ImageRef
@@ -90,12 +98,13 @@ enum TranscriptPart {
     case imageLink(title: String, url: URL)
     case file(String)
     case typing
+    case footer(Footer)
     case marker(String)
     case loading
 
     enum Kind: Hashable {
         case avatar, header, text, quote, thinkingBody, rule, code, table, thinkingHeader, tool, image,
-             imageLink, file, typing, marker, loading
+             imageLink, file, typing, footer, marker, loading
     }
 
     var kind: Kind {
@@ -114,6 +123,7 @@ enum TranscriptPart {
         case .imageLink: .imageLink
         case .file: .file
         case .typing: .typing
+        case .footer: .footer
         case .marker: .marker
         case .loading: .loading
         }
@@ -232,12 +242,15 @@ struct TranscriptLayoutBuilder {
             for block in item.blocks {
                 if case let .file(name, _) = block { self.file(name, into: &stack) }
             }
+            if !item.isPending, !text.isEmpty {
+                self.footer(key: "\(item.id):0", copy: text, time: item.timestamp, model: nil, into: &stack)
+            }
         }
     }
 
     private func assistant(_ turn: AssistantTurn, into layout: inout TranscriptRowLayout) {
         let agent = self.context.agent
-        let header = TranscriptPart.Header(name: agent.name, badge: turn.modelName, time: turn.timestamp?.chatTimestamp, isPending: false)
+        let header = TranscriptPart.Header(name: agent.name, badge: nil, time: turn.timestamp?.chatTimestamp, isPending: false)
         let thinking = turn.thinking.joined(separator: "\n\n")
         layout.copyItems = [.init(title: "Copy Reply", text: turn.body)]
         if !thinking.isEmpty { layout.copyItems.append(.init(title: "Copy Thinking", text: thinking)) }
@@ -264,11 +277,17 @@ struct TranscriptLayoutBuilder {
             case .grouped:
                 self.thinkingGroup(reasoning, turn: turn, into: &stack, layout: &layout)
             }
-            if !turn.text.isEmpty {
-                self.markdown(turn.body, tone: turn.isError ? .error : .primary, into: &stack)
+            // Each message gets its own footer, which with the gap after it keeps back-to-back
+            // messages apart. The last footer goes under the turn's images and files.
+            let showFooters = !turn.isStreaming
+            for (index, message) in turn.text.enumerated() {
+                if index > 0 { stack.y += TranscriptMetrics.messageSpacing - TranscriptMetrics.blockSpacing }
+                self.markdown(message, tone: turn.isError ? .error : .primary, into: &stack)
+                if showFooters, index < turn.text.count - 1 { self.messageFooter(turn, message: index, into: &stack) }
             }
             self.images(turn.images, into: &stack, layout: &layout)
             for file in turn.files { self.file(file, into: &stack) }
+            if showFooters, !turn.text.isEmpty { self.messageFooter(turn, message: turn.text.count - 1, into: &stack) }
             let showsActivity = steps == .live && (!reasoning.isEmpty || turn.tools.contains(where: \.isRunning))
             if turn.isStreaming, turn.text.isEmpty, !showsActivity {
                 stack.add(.typing, height: 14, width: 26)
@@ -534,5 +553,27 @@ struct TranscriptLayoutBuilder {
         let textWidth = TranscriptText.naturalWidth(TranscriptText.plain(name, font: self.style.callout, color: TranscriptColors.label))
         let height = 6 + TranscriptStyle.lineHeight(self.style.callout) + 6
         stack.add(.file(name), height: height, width: 10 + TranscriptMetrics.iconBox + 6 + textWidth + 10)
+    }
+}
+
+// MARK: Message footers
+
+extension TranscriptLayoutBuilder {
+    fileprivate func messageFooter(_ turn: AssistantTurn, message index: Int, into stack: inout Stack) {
+        let time = turn.textTimestamps.indices.contains(index) ? turn.textTimestamps[index] : turn.timestamp
+        self.footer(key: "\(turn.id):\(index)", copy: turn.text[index], time: time ?? turn.timestamp,
+                    model: self.model(of: turn, message: index), into: &stack)
+    }
+
+    /// Model that wrote a message, falling back to the turn's when the message didn't record one.
+    fileprivate func model(of turn: AssistantTurn, message index: Int) -> String? {
+        let own = turn.textModelNames.indices.contains(index) ? turn.textModelNames[index] : nil
+        return own ?? turn.modelName
+    }
+
+    fileprivate func footer(key: String, copy text: String, time: Date?, model: String?, into stack: inout Stack) {
+        let details = [model, time?.messageDetailTimestamp].compactMap(\.self).joined(separator: " · ")
+        let height = max(TranscriptStyle.lineHeight(self.style.caption), 16)
+        stack.add(.footer(.init(key: key, copyText: text, details: details)), height: height, spacing: TranscriptMetrics.footerSpacing)
     }
 }
