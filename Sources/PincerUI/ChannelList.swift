@@ -39,9 +39,7 @@ struct ChannelList: View {
                             })
                             .tag(channel.row.key)
                             .contextMenu { self.menu(for: channel.row) }
-                            // `.itemProvider`, not `.onDrag`: on macOS `.onDrag` swallows the
-                            // mouse-down, so clicks to select a chat lag or get lost.
-                            .itemProvider {
+                            .chatDragSource {
                                 self.draggingKey = channel.row.key
                                 return NSItemProvider(object: channel.row.key as NSString)
                             }
@@ -259,13 +257,33 @@ extension String: @retroactive Identifiable {
 }
 
 private extension View {
+    // Drag and drop between groups is macOS-only. On iOS, a SwiftUI List never delivers drops
+    // from its own rows to row, header, or ForEach drop destinations, and `onMove` can't cross
+    // sections, so iOS uses the "Move to Group" context menu instead.
+
+    /// Makes a sidebar row draggable. Uses `.itemProvider`, not `.onDrag`: on macOS `.onDrag`
+    /// swallows the mouse-down, so clicks to select a chat lag or get lost.
+    @ViewBuilder
+    func chatDragSource(_ provider: @escaping () -> NSItemProvider) -> some View {
+        #if os(macOS)
+        self.itemProvider { provider() }
+        #else
+        self
+        #endif
+    }
+
     /// Accepts chats dragged from the sidebar and moves them into `section`'s group.
+    @ViewBuilder
     func groupDropZone(_ list: ChannelList, section: SidebarSection, element: String) -> some View {
+        #if os(macOS)
         self.dropDestination(for: String.self) { keys, _ in
             list.drop(keys, onto: section)
         } isTargeted: { targeted in
             list.setDropHover(targeted, element: element, section: section)
         }
+        #else
+        self
+        #endif
     }
 }
 
