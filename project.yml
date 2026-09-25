@@ -1,5 +1,9 @@
 # XcodeGen spec: `xcodegen generate` → Pincer.xcodeproj (macOS + iOS apps).
 name: Pincer
+include:
+  # CI-only: switches the app targets to manual App Store signing (see .github/workflows/testflight.yml).
+  - path: project.appstore.yml
+    enable: ${PINCER_APP_STORE_SIGNING}
 options:
   bundleIdPrefix: chat.pincer
   deploymentTarget:
@@ -14,10 +18,11 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
-    # Set DEVELOPMENT_TEAM in Xcode (Signing & Capabilities) or here.
+    DEVELOPMENT_TEAM: E4Y97NXBXG
 targets:
   Pincer-macOS:
     type: application
+    scheme: {}
     platform: macOS
     sources: [Apps/macOS, Apps/Shared]
     dependencies:
@@ -33,8 +38,10 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: Pincer
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
   Pincer-iOS:
     type: application
+    scheme: {}
     platform: iOS
     sources: [Apps/iOS, Apps/Shared]
     dependencies:
@@ -47,6 +54,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Pincer
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer connects to your OpenClaw Gateway on your local network or tailnet."

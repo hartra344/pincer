@@ -1,0 +1,15 @@
+# Included by project.yml only when PINCER_APP_STORE_SIGNING=YES (CI TestFlight builds).
+# Profiles and the Apple Distribution certificate come from repository secrets.
+targets:
+  Pincer-macOS:
+    settings:
+      base:
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: Apple Distribution
+        PROVISIONING_PROFILE_SPECIFIER: Pincer_macOS_AppStore_CI
+  Pincer-iOS:
+    settings:
+      base:
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: Apple Distribution
+        PROVISIONING_PROFILE_SPECIFIER: Pincer_iOS_AppStore_CI

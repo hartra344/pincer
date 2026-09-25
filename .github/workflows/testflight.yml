@@ -1,0 +1,111 @@
+name: TestFlight
+
+# Archives the macOS and iOS apps with App Store signing and uploads them to TestFlight.
+# Run it from the Actions tab, or push a tag like v0.1.0.
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which app to upload
+        type: choice
+        options: [both, ios, macos]
+        default: both
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: ${{ matrix.platform }}
+    runs-on: macos-26
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ios, macos]
+    steps:
+      - name: Skip unselected platform
+        id: gate
+        run: |
+          selected="${{ github.event.inputs.platform || 'both' }}"
+          if [ "$selected" = both ] || [ "$selected" = "${{ matrix.platform }}" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/checkout@v5
+        if: steps.gate.outputs.run
+
+      - name: Select newest Xcode
+        if: steps.gate.outputs.run
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        if: steps.gate.outputs.run
+        run: brew install xcodegen
+
+      - name: Install signing certificates and profiles
+        if: steps.gate.outputs.run
+        env:
+          DISTRIBUTION_P12: ${{ secrets.DISTRIBUTION_P12 }}
+          MAC_INSTALLER_P12: ${{ secrets.MAC_INSTALLER_P12 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          IOS_PROFILE: ${{ secrets.IOS_PROFILE }}
+          MACOS_PROFILE: ${{ secrets.MACOS_PROFILE }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          curl -fsSL -o "$RUNNER_TEMP/AppleWWDRCAG3.cer" https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+          security import "$RUNNER_TEMP/AppleWWDRCAG3.cer" -k "$KEYCHAIN" -A || true
+
+          echo "$DISTRIBUTION_P12" | base64 --decode > "$RUNNER_TEMP/distribution.p12"
+          security import "$RUNNER_TEMP/distribution.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -A -t cert -f pkcs12
+          if [ "${{ matrix.platform }}" = macos ]; then
+            echo "$MAC_INSTALLER_P12" | base64 --decode > "$RUNNER_TEMP/installer.p12"
+            security import "$RUNNER_TEMP/installer.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -A -t cert -f pkcs12
+          fi
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productbuild: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" > /dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v "$KEYCHAIN"
+
+          if [ "${{ matrix.platform }}" = macos ]; then PROFILE="$MACOS_PROFILE"; EXT=provisionprofile; else PROFILE="$IOS_PROFILE"; EXT=mobileprovision; fi
+          echo "$PROFILE" | base64 --decode > "$RUNNER_TEMP/profile"
+          UUID="$(security cms -D -i "$RUNNER_TEMP/profile" | plutil -extract UUID raw -)"
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir" && cp "$RUNNER_TEMP/profile" "$dir/$UUID.$EXT"
+          done
+
+          echo "$ASC_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          rm -f "$RUNNER_TEMP"/*.p12 "$RUNNER_TEMP/profile"
+
+      - name: Archive and upload to TestFlight
+        if: steps.gate.outputs.run
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          BUILD_NUMBER: ${{ github.run_number }}.${{ github.run_attempt }}
+        run: ASC_KEY_PATH="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8" scripts/testflight.sh ${{ matrix.platform }}
+
+      - name: Upload build logs
+        if: failure() && steps.gate.outputs.run
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-logs-${{ matrix.platform }}
+          path: build/testflight/${{ matrix.platform }}/export/*.log
+          if-no-files-found: ignore
+
+      - name: Clean up keychain
+        if: always() && steps.gate.outputs.run
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
