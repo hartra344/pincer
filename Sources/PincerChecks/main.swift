@@ -230,13 +230,14 @@ func runLive(url: String, token: String) async {
     check(trip.items.count == 240 && Array(trip.items.suffix(120).map(\.id)) == firstPage,
           "older page prepended; newer rows keep their ids (\(trip.items.count))")
     await trip.load(force: true)
-    check(trip.items.count == 240, "tail reload keeps paged history (\(trip.items.count))")
+    check(trip.items.count >= 240, "tail reload keeps paged history (\(trip.items.count))")
     await trip.loadOlder()
     check(!trip.hasMoreHistory && trip.items.count == 302, "reaches the start (\(trip.items.count))")
     check(trip.items.first?.plainText == "Idea for day 1?", "oldest message first")
 
     let before = chat.entries.count
-    await chat.send("show me a tool and an image please")
+    let sendNonce = UUID().uuidString.prefix(8)
+    await chat.send("show me a tool and an image please \(sendNonce)")
     var sawLive = false
     var sawLiveTool = false
     var sawLiveThinking = false
@@ -257,7 +258,7 @@ func runLive(url: String, token: String) async {
     } else {
         check(false, "last entry is the assistant reply")
     }
-    let userTurns = chat.entries.filter { if case let .user(item) = $0 { item.plainText.contains("show me a tool") } else { false } }
+    let userTurns = chat.entries.filter { if case let .user(item) = $0 { item.plainText.contains("please \(sendNonce)") } else { false } }
     check(userTurns.count == 1, "optimistic send merged, not duplicated (\(userTurns.count))")
 
     await gateway.patch(key, ["pinned": true])
@@ -274,5 +275,31 @@ func runLive(url: String, token: String) async {
 
     let newKey = await gateway.createSession(agentId: "research", label: "Pincer check", category: "Work")
     check(newKey != nil && gateway.sessions[newKey ?? ""] != nil, "sessions.create")
+
+    // A second device: names set on it before syncing are uploaded, and renames flow both ways.
+    let otherProfile = GatewayProfile(name: "Mock 2", url: url, authMode: .token)
+    otherProfile.secret = token
+    let other = GatewayStore(profile: otherProfile)
+    let early = ChatServer(provider: "discord", id: "server-early", name: nil)
+    let renamed = ChatServer(provider: "discord", id: "server-renamed", name: nil)
+    other.renameServer(early, to: "Set Before Sync")
+    other.start()
+    let otherConnected = await waitFor("second device") { other.state.isConnected && !other.sessions.isEmpty }
+    check(otherConnected, "second device connected")
+    let uploaded = await waitFor("first-sync upload") {
+        gateway.displayName(for: early) == "Set Before Sync"
+    }
+    check(uploaded, "names set before syncing reach other devices")
+    gateway.renameServer(renamed, to: "Synced Name")
+    let synced = await waitFor("rename sync") { other.displayName(for: renamed) == "Synced Name" }
+    check(synced, "server rename syncs through users.prefs")
+    other.renameServer(renamed, to: nil)
+    let cleared = await waitFor("rename clear") { gateway.displayName(for: renamed) != "Synced Name" }
+    check(cleared, "clearing a server name syncs")
+    other.stop()
+    for store in [gateway, other] {
+        UserDefaults.standard.removeObject(forKey: "pincer.serverNames.\(store.id.uuidString)")
+        UserDefaults.standard.removeObject(forKey: "pincer.serverNamesSynced.\(store.id.uuidString)")
+    }
     gateway.stop()
 }

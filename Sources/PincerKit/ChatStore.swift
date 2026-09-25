@@ -68,6 +68,7 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored private var cacheChecked = false
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var backfillTask: Task<Void, Never>?
+    @ObservationIgnored private var olderTask: Task<Bool, Never>?
     /// `chat.history` offset (counted back from the newest message) of the next older page.
     @ObservationIgnored private var olderOffset: Int?
     /// Whether older pages have been prepended beyond the latest page.
@@ -187,10 +188,24 @@ public final class ChatStore: Identifiable {
     /// Returns false when it couldn't reach the Gateway.
     @discardableResult
     public func loadOlder() async -> Bool {
-        guard self.hasMoreHistory, !self.isLoadingOlder, let offset = self.olderOffset else { return true }
-        guard let gateway, gateway.state.isConnected else { return false }
+        // Concurrent callers share the in-flight page rather than returning early and spinning.
+        if let inFlight = self.olderTask { return await inFlight.value }
+        guard self.hasMoreHistory else { return true }
+        guard self.olderOffset != nil else { return false }
         self.isLoadingOlder = true
-        defer { self.isLoadingOlder = false }
+        let task = Task {
+            let ok = await self.fetchOlderPage()
+            // Cleared by the task itself so every waiter sees it finished.
+            self.olderTask = nil
+            self.isLoadingOlder = false
+            return ok
+        }
+        self.olderTask = task
+        return await task.value
+    }
+
+    private func fetchOlderPage() async -> Bool {
+        guard let offset = self.olderOffset, let gateway, gateway.state.isConnected else { return false }
         var params = self.params(keyName: "sessionKey")
         params["limit"] = .number(Double(self.historyLimit))
         params["offset"] = .number(Double(offset))

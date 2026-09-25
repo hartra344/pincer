@@ -172,6 +172,12 @@ public struct ChatServer: Hashable, Sendable {
     public let id: String
     public let name: String?
 
+    public init(provider: String, id: String, name: String?) {
+        self.provider = provider
+        self.id = id
+        self.name = name
+    }
+
     public var displayName: String { self.name ?? self.provider.capitalized }
 }
 

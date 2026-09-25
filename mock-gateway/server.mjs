@@ -19,6 +19,8 @@ const METHODS = [
   'artifacts.download',
   'exec.approval.list',
   'exec.approval.resolve',
+  'users.prefs.get',
+  'users.prefs.set',
 ];
 const EVENTS = [
   'connect.challenge',
@@ -29,7 +31,16 @@ const EVENTS = [
   'agent',
   'exec.approval.requested',
   'exec.approval.resolved',
+  'users.prefs.changed',
 ];
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(value[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
 
 function b64url(buf) {
   return Buffer.from(buf).toString('base64url');
@@ -734,6 +745,34 @@ function handleAuthedRequest(state, conn, msg) {
         encoding: 'base64',
         data: artifact.data.toString('base64'),
       });
+      break;
+    }
+    case 'users.prefs.get': {
+      const prefs = state.userPrefs ?? (state.userPrefs = {});
+      const keys = Array.isArray(params.keys) ? params.keys : Object.keys(prefs);
+      const entries = Object.fromEntries(keys.filter((k) => k in prefs).map((k) => [k, clone(prefs[k])]));
+      sendRes(conn, id, { status: 'ok', entries });
+      break;
+    }
+    case 'users.prefs.set': {
+      const prefs = state.userPrefs ?? (state.userPrefs = {});
+      const entries = params.entries ?? {};
+      if (process.env.MOCK_PREFS_NO_CAS && 'expectedEntries' in params) {
+        return sendErr(conn, id, 'INVALID_REQUEST', "invalid users.prefs.set params: at root: unexpected property 'expectedEntries'");
+      }
+      for (const [key, expected] of Object.entries(params.expectedEntries ?? {})) {
+        const current = key in prefs ? prefs[key] : null;
+        if (canonicalJson(current) !== canonicalJson(expected)) {
+          sendRes(conn, id, { status: 'conflict' });
+          return;
+        }
+      }
+      for (const [key, value] of Object.entries(entries)) {
+        if (value === null) delete prefs[key];
+        else prefs[key] = clone(value);
+      }
+      sendRes(conn, id, { status: 'ok' });
+      broadcast(state, 'users.prefs.changed', { profileId: 'gateway-owner', keys: Object.keys(entries) });
       break;
     }
     case 'exec.approval.list': {

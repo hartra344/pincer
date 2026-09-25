@@ -177,6 +177,7 @@ public final class GatewayStore: Identifiable {
         self.bootstrapped = true
         self.dumpSessionShapesIfRequested()
         Task { await self.loadConfiguredServerNames() }
+        Task { await self.pullServerNames() }
         if self.selectedKey == nil || self.sessions[self.selectedKey ?? ""] == nil {
             self.selectedKey = self.defaultSessionKey
         }
@@ -248,6 +249,10 @@ public final class GatewayStore: Identifiable {
         switch event.name {
         case "sessions.changed":
             self.applySessionChange(payload)
+        case "users.prefs.changed":
+            if payload["keys"]?.array?.contains(where: { $0.string == Self.serverNamesPref }) ?? true {
+                Task { await self.pullServerNames() }
+            }
         case "chat":
             guard let key = payload["sessionKey"]?.text else { return }
             if let runId = payload["runId"]?.text { self.runSessions[runId] = key }
@@ -445,7 +450,91 @@ public final class GatewayStore: Identifiable {
 
     public func renameServer(_ server: ChatServer, to name: String?) {
         let trimmed = name?.trimmingCharacters(in: .whitespaces) ?? ""
-        self.serverNameOverrides[server.id] = trimmed.isEmpty ? nil : trimmed
+        let value = trimmed.isEmpty ? nil : trimmed
+        self.serverNameOverrides[server.id] = value
+        Task { await self.pushServerName(server.id, value) }
+    }
+
+    // MARK: Synced names
+
+    /// Server names you set live in your gateway user preferences, so every device signed in as
+    /// you shows the same names. The local copy keeps them instant and works offline.
+    static let serverNamesPref = "pincer.serverNames"
+    private var serverNamesSyncedKey: String { "pincer.serverNamesSynced.\(self.id.uuidString)" }
+    /// Last names seen on the gateway; `nil` until a successful read.
+    @ObservationIgnored private var remoteServerNames: [String: String]?
+    @ObservationIgnored private var prefsSupportsExpected = true
+
+    private static func names(from value: JSONValue?) -> [String: String] {
+        (value?.object ?? [:]).compactMapValues { $0.string?.nilIfEmpty }
+    }
+
+    private static func json(_ names: [String: String]) -> JSONValue {
+        .object(names.mapValues(JSONValue.string))
+    }
+
+    /// Reads names from the gateway; `nil` when this connection has no user profile to store them.
+    private func fetchRemoteServerNames() async -> [String: String]?? {
+        guard let result = try? await self.connection.request(
+            "users.prefs.get", ["keys": [.string(Self.serverNamesPref)]], timeout: 15),
+            result["status"]?.string == "ok"
+        else { return nil }
+        let value = result["entries"]?[Self.serverNamesPref]
+        return .some(value == nil || value == .null ? nil : Self.names(from: value))
+    }
+
+    func pullServerNames() async {
+        guard let fetched = await self.fetchRemoteServerNames() else { return }
+        let defaults = UserDefaults.standard
+        if !defaults.bool(forKey: self.serverNamesSyncedKey) {
+            // First sync from this device: keep names already set here, remote wins on conflicts.
+            var merged = self.serverNameOverrides
+            merged.merge(fetched ?? [:]) { _, remote in remote }
+            if merged != (fetched ?? [:]) {
+                guard await self.writeRemoteServerNames(merged, expected: fetched) else { return }
+            }
+            defaults.set(true, forKey: self.serverNamesSyncedKey)
+            self.remoteServerNames = merged
+            self.serverNameOverrides = merged
+            return
+        }
+        self.remoteServerNames = fetched ?? [:]
+        if self.serverNameOverrides != fetched ?? [:] { self.serverNameOverrides = fetched ?? [:] }
+    }
+
+    private func pushServerName(_ id: String, _ name: String?) async {
+        guard UserDefaults.standard.bool(forKey: self.serverNamesSyncedKey) else { return }
+        // Optimistic write; on a conflict (another device renamed at the same time) re-read and retry.
+        for _ in 0..<3 {
+            guard let current = self.remoteServerNames == nil ? await self.fetchRemoteServerNames() : .some(self.remoteServerNames)
+            else { return }
+            var next = current ?? [:]
+            next[id] = name
+            if await self.writeRemoteServerNames(next, expected: current) {
+                self.remoteServerNames = next
+                return
+            }
+            self.remoteServerNames = nil
+        }
+    }
+
+    private func writeRemoteServerNames(_ names: [String: String], expected: [String: String]?) async -> Bool {
+        let key = Self.serverNamesPref
+        let entries: JSONValue = .object([key: names.isEmpty ? .null : Self.json(names)])
+        if self.prefsSupportsExpected {
+            let params: JSONValue = ["entries": entries, "expectedEntries": .object([key: expected.map(Self.json) ?? .null])]
+            do {
+                let result = try await self.connection.request("users.prefs.set", params, timeout: 15)
+                return result["status"]?.string == "ok"
+            } catch let GatewayError.rpc(_, message, _) where message.contains("expectedEntries") {
+                // Older gateways don't accept compare-and-set; fall back to last write wins.
+                self.prefsSupportsExpected = false
+            } catch {
+                return false
+            }
+        }
+        guard let result = try? await self.connection.request("users.prefs.set", ["entries": entries], timeout: 15) else { return false }
+        return result["status"]?.string == "ok"
     }
 
     public func sections(search: String = "") -> [SidebarSection] {
