@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #else
+import GameController
 import UIKit
 #endif
 
@@ -254,6 +255,9 @@ final class ComposerUITextView: UITextView {
         super.didMoveToWindow()
         guard self.window != nil, !self.didAutoFocus else { return }
         self.didAutoFocus = true
+        // With a software keyboard, focusing here brings the keyboard up in the middle of the
+        // navigation push. That stalls the main thread and resizes the transcript while it animates.
+        guard GCKeyboard.coalesced != nil else { return }
         DispatchQueue.main.async { self.becomeFirstResponder() }
     }
 }
