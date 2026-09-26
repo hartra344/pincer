@@ -113,7 +113,7 @@ Signing uses manual App Store profiles through `project.appstore.yml`, which is 
 | `IOS_PROFILE`, `MACOS_PROFILE` | Base64 `Pincer_iOS_AppStore_CI` / `Pincer_macOS_AppStore_CI` provisioning profiles |
 | `IOS_SHARE_PROFILE`, `MACOS_SHARE_PROFILE` | Base64 `Pincer_iOS_Share_AppStore_CI` / `Pincer_macOS_Share_AppStore_CI` profiles for the Share extensions (`chat.pincer.ios.share`, `chat.pincer.mac.share`) |
 
-All four profiles need the App Groups capability (`group.chat.pincer` on iOS, `E4Y97NXBXG.chat.pincer` on macOS) and Keychain Sharing (`chat.pincer.shared`). The certificates and profiles expire on 2027-09-25. Renew them before then and update the secrets.
+Both iOS profiles need the App Groups capability with `group.chat.pincer`. macOS uses the team-prefixed group `E4Y97NXBXG.chat.pincer`, which needs no portal setup. The shared Keychain group `E4Y97NXBXG.chat.pincer.shared` is already covered by the default `E4Y97NXBXG.*` keychain entitlement. The certificates and profiles expire on 2027-09-25. Renew them before then and update the secrets.
 
 ### Layout
 
