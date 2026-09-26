@@ -69,7 +69,10 @@ struct MenuBarInboxTests {
                         Self.approval("forever")],
             questions: [Self.question("answered", status: "answered"), Self.question("late", expiresAtMs: Self.nowMs - 1),
                         Self.question("open", expiresAtMs: Self.nowMs + 60_000)]))
-        #expect(inbox.needsYou.map(\.id).map { $0.split(separator: ":").last.map(String.init) } == ["live", "forever", "open"])
+        let ids: [String] = inbox.needsYou.map { (item: MenuBarInbox.Item) -> String in
+            String(item.id.split(separator: ":").last ?? "")
+        }
+        #expect(ids == ["live", "forever", "open"])
         #expect(inbox.needsYouCount == 3)
     }
 
