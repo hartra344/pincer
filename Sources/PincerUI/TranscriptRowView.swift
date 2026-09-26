@@ -266,12 +266,25 @@ final class TranscriptTextView: NSTextView {
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = super.menu(for: event) ?? NSMenu()
         let items = self.extraItems + self.copyItems
-        guard !items.isEmpty else { return menu }
-        menu.insertItem(.separator(), at: 0)
-        for item in items.reversed() {
-            menu.insertItem(TranscriptMenuItem(item.title) { Clipboard.copy(item.text) }, at: 0)
-        }
+        let messageItems = self.enclosingRow?.messageMenuItems(at: self.convert(event.locationInWindow, from: nil), in: self) ?? []
+        guard !items.isEmpty || !messageItems.isEmpty else { return menu }
+        var prefix = messageItems
+        if !messageItems.isEmpty, !items.isEmpty { prefix.append(.separator()) }
+        prefix += items.map { item in TranscriptMenuItem(item.title) { Clipboard.copy(item.text) } }
+        if !menu.items.isEmpty { prefix.append(.separator()) }
+        for item in prefix.reversed() { menu.insertItem(item, at: 0) }
         return menu
+    }
+}
+
+extension NSView {
+    var enclosingRow: TranscriptRowView? {
+        var view = self.superview
+        while let current = view {
+            if let row = current as? TranscriptRowView { return row }
+            view = current.superview
+        }
+        return nil
     }
 }
 
@@ -279,10 +292,11 @@ final class TranscriptTextView: NSTextView {
 final class TranscriptMenuItem: NSMenuItem {
     private let handler: () -> Void
 
-    init(_ title: String, handler: @escaping () -> Void) {
+    init(_ title: String, symbol: String? = nil, handler: @escaping () -> Void) {
         self.handler = handler
         super.init(title: title, action: #selector(self.run), keyEquivalent: "")
         self.target = self
+        if let symbol { self.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
     }
 
     @available(*, unavailable)
@@ -442,9 +456,12 @@ final class TranscriptTextView: UITextView, UITextViewDelegate {
 
     func textView(_ textView: UITextView, editMenuForTextIn range: NSRange, suggestedActions: [UIMenuElement]) -> UIMenu? {
         let items = self.extraItems + self.copyItems
-        guard !items.isEmpty else { return nil }
+        var row: UIView? = self.superview
+        while let current = row, !(current is TranscriptRowView) { row = current.superview }
+        let messageItems = (row as? TranscriptRowView)?.messageMenuElements(at: self.convert(CGPoint(x: 0, y: 1), to: row), anchor: self) ?? []
+        guard !items.isEmpty || !messageItems.isEmpty else { return nil }
         let extras = items.map { item in UIAction(title: item.title) { _ in Clipboard.copy(item.text) } }
-        return UIMenu(children: suggestedActions + [UIMenu(options: .displayInline, children: extras)])
+        return UIMenu(children: suggestedActions + messageItems + [UIMenu(options: .displayInline, children: extras)])
     }
 }
 
@@ -551,6 +568,7 @@ private func singleLine(_ text: String, _ font: PFont, _ color: PColor,
 final class TranscriptRowView: TranscriptBaseView {
     private var pool: [TranscriptPart.Kind: [TranscriptBaseView]] = [:]
     private(set) var layout: TranscriptRowLayout?
+    private weak var actions: TranscriptRowActions?
     #if os(iOS)
     private let menuDelegate = TranscriptRowMenuDelegate()
     #endif
@@ -569,6 +587,7 @@ final class TranscriptRowView: TranscriptBaseView {
 
     func apply(_ layout: TranscriptRowLayout, actions: TranscriptRowActions) {
         self.layout = layout
+        self.actions = actions
         let theme = AppTheme.current
         if let drawnTheme, drawnTheme != theme {
             for view in self.pool.values.joined() { view.appearanceChanged() }
@@ -618,6 +637,9 @@ final class TranscriptRowView: TranscriptBaseView {
         case .footer: TranscriptFooterView()
         case .marker: TranscriptMarkerView()
         case .loading: TranscriptLoadingView()
+        case .replyQuote: TranscriptReplyQuoteView()
+        case .reactions: TranscriptReactionsView()
+        case .flash: TranscriptFlashView()
         }
     }
 
@@ -627,15 +649,60 @@ final class TranscriptRowView: TranscriptBaseView {
 
     #if os(macOS)
     override func menu(for event: NSEvent) -> NSMenu? {
-        self.menu(extra: [])
+        self.menu(extra: [], event: event)
     }
 
-    func menu(extra: [TranscriptRowLayout.CopyItem]) -> NSMenu? {
+    func menu(extra: [TranscriptRowLayout.CopyItem], event: NSEvent) -> NSMenu? {
         let items = self.copyItems(extra: extra)
-        guard !items.isEmpty else { return nil }
+        let point = self.convert(event.locationInWindow, from: nil)
+        let messageItems = self.messageMenuItems(at: point, in: self)
+        guard !items.isEmpty || !messageItems.isEmpty else { return nil }
         let menu = NSMenu()
+        for item in messageItems { menu.addItem(item) }
+        if !messageItems.isEmpty, !items.isEmpty { menu.addItem(.separator()) }
         for item in items { menu.addItem(TranscriptMenuItem(item.title) { Clipboard.copy(item.text) }) }
         return menu
+    }
+
+    /// Reply, Add Reaction… and one-click reactions for the message under `point` (in `view`).
+    func messageMenuItems(at point: CGPoint, in view: NSView) -> [NSMenuItem] {
+        let rowPoint = self.convert(point, from: view)
+        guard let actions, let id = self.layout?.message(at: rowPoint.y) else { return [] }
+        let quick = NSMenuItem()
+        quick.view = QuickReactionsMenuView { [weak actions] emoji in actions?.toggleReaction(emoji, on: id) }
+        return [
+            TranscriptMenuItem("Reply", symbol: "arrowshape.turn.up.left") { [weak actions] in actions?.reply(to: id) },
+            TranscriptMenuItem("Add Reaction…", symbol: "face.smiling") { [weak self, weak actions] in
+                guard let self else { return }
+                actions?.pickReaction(for: id, from: self, rect: CGRect(x: rowPoint.x, y: rowPoint.y, width: 1, height: 1))
+            },
+            quick,
+        ]
+    }
+    #else
+    /// Reply, Add Reaction… and one-tap reactions for the message at `point` (row coordinates).
+    func messageMenuElements(at point: CGPoint, anchor: UIView? = nil) -> [UIMenuElement] {
+        guard let actions, let id = self.layout?.message(at: point.y) else { return [] }
+        let anchorView: UIView = anchor ?? self
+        let anchorRect = anchor.map { $0.bounds } ?? CGRect(origin: point, size: CGSize(width: 1, height: 1))
+        let quick = Reactions.quickBar(recent: Reactions.recent).map { emoji in
+            UIAction(title: emoji) { [weak actions] _ in actions?.toggleReaction(emoji, on: id) }
+        }
+        return [
+            UIMenu(options: .displayInline, children: [
+                UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak actions] _ in
+                    actions?.reply(to: id)
+                },
+                UIAction(title: "Add Reaction…", image: UIImage(systemName: "face.smiling")) { [weak actions, weak anchorView] _ in
+                    // After the menu has finished dismissing, so the picker can present.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        guard let anchorView else { return }
+                        actions?.pickReaction(for: id, from: anchorView, rect: anchorRect)
+                    }
+                },
+            ]),
+            UIMenu(options: .displayInline, preferredElementSize: .small, children: quick),
+        ]
     }
     #endif
 }
@@ -671,9 +738,10 @@ extension TranscriptRowView {
             }
         }
         let items = self.copyItems(extra: extra)
-        guard !items.isEmpty else { return nil }
+        let messageItems = self.messageMenuElements(at: location)
+        guard !items.isEmpty || !messageItems.isEmpty else { return nil }
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
-            UIMenu(children: items.map { item in
+            UIMenu(children: messageItems + items.map { item in
                 UIAction(title: item.title, image: UIImage(systemName: "doc.on.doc")) { _ in Clipboard.copy(item.text) }
             })
         }
@@ -952,24 +1020,45 @@ final class TranscriptLabelButton: TranscriptTapView {
     }
 }
 
-/// The line under a message: Copy, then details such as the time it was sent and its model.
+/// The line under a message: Copy, Reply and React, then details such as the time it was sent
+/// and its model.
 final class TranscriptFooterView: TranscriptBaseView {
     private var footer: TranscriptPart.Footer?
     private let copyButton = TranscriptLabelButton()
+    private let replyButton = TranscriptLabelButton()
+    private let reactButton = TranscriptLabelButton()
+    private weak var actions: TranscriptRowActions?
     private var copiedToken = 0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        self.copyButton.isSubdued = true
-        self.addSubview(self.copyButton)
+        for button in [self.copyButton, self.replyButton, self.reactButton] {
+            button.isSubdued = true
+            self.addSubview(button)
+        }
         self.showCopy()
         self.copyButton.onTap = { [weak self] in self?.copy() }
+        self.replyButton.set(title: "Reply", symbol: "arrowshape.turn.up.left")
+        self.replyButton.onTap = { [weak self] in
+            guard let self, let id = self.footer?.messageId else { return }
+            self.actions?.reply(to: id)
+        }
+        self.reactButton.set(title: "React", symbol: "face.smiling")
+        self.reactButton.accessibilityText = "Add Reaction"
+        self.reactButton.onTap = { [weak self] in
+            guard let self, let id = self.footer?.messageId else { return }
+            self.actions?.pickReaction(for: id, from: self.reactButton, rect: self.reactButton.bounds)
+        }
     }
 
     override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
         guard case let .footer(footer) = part else { return }
         let old = self.footer
         self.footer = footer
+        self.actions = actions
+        self.copyButton.isHidden = footer.copyText.isEmpty
+        self.replyButton.isHidden = footer.messageId == nil
+        self.reactButton.isHidden = footer.messageId == nil
         if old?.key != footer.key {
             self.copiedToken += 1
             self.showCopy()
@@ -997,11 +1086,23 @@ final class TranscriptFooterView: TranscriptBaseView {
         }
     }
 
+    /// Where the details start, after the buttons showing.
+    private var detailsX: CGFloat = 0
+
     override func layoutContent() {
-        let size = self.copyButton.buttonSize
-        let frame = CGRect(x: 0, y: (self.bounds.height - size.height) / 2, width: size.width, height: size.height)
-        if self.copyButton.frame != frame {
-            self.copyButton.frame = frame
+        var x: CGFloat = 0
+        var moved = false
+        for button in [self.copyButton, self.replyButton, self.reactButton] where !button.isHidden {
+            let size = button.buttonSize
+            let frame = CGRect(x: x, y: (self.bounds.height - size.height) / 2, width: size.width, height: size.height)
+            if button.frame != frame {
+                button.frame = frame
+                moved = true
+            }
+            x = frame.maxX + 10
+        }
+        if moved || x != self.detailsX {
+            self.detailsX = x
             self.redraw()
         }
     }
@@ -1009,7 +1110,7 @@ final class TranscriptFooterView: TranscriptBaseView {
     override func draw(_ rect: CGRect) {
         guard let footer, !footer.details.isEmpty else { return }
         let font = TranscriptStyle.shared.caption
-        let x = self.copyButton.frame.maxX + 10
+        let x = self.detailsX
         singleLine(footer.details, font, TranscriptColors.tertiary)
             .drawLine(at: CGPoint(x: x, y: (self.bounds.height - TranscriptStyle.lineHeight(font)) / 2),
                       width: self.bounds.width - x, font: font)
@@ -1102,7 +1203,7 @@ final class TranscriptCodeView: TranscriptBaseView {
 
     #if os(macOS)
     override func menu(for event: NSEvent) -> NSMenu? {
-        self.rowView?.menu(extra: self.extraCopyItems)
+        self.rowView?.menu(extra: self.extraCopyItems, event: event)
     }
     #endif
 }
@@ -1140,7 +1241,7 @@ final class TranscriptMarkdownTableView: TranscriptBaseView {
 
     #if os(macOS)
     override func menu(for event: NSEvent) -> NSMenu? {
-        self.rowView?.menu(extra: self.extraCopyItems)
+        self.rowView?.menu(extra: self.extraCopyItems, event: event)
     }
     #endif
 }
@@ -1151,7 +1252,7 @@ final class TranscriptTableGridView: TranscriptBaseView {
     #if os(macOS)
     override func menu(for event: NSEvent) -> NSMenu? {
         (self.superview?.superview?.superview as? TranscriptMarkdownTableView).flatMap { table in
-            self.rowView?.menu(extra: table.extraCopyItems)
+            self.rowView?.menu(extra: table.extraCopyItems, event: event)
         }
     }
     #endif
@@ -1839,5 +1940,251 @@ final class TranscriptLoadingView: TranscriptBaseView {
 
     override func layoutContent() {
         self.spinner.place(center: CGPoint(x: self.bounds.midX, y: self.bounds.midY))
+    }
+}
+
+// MARK: - Replies and reactions
+
+/// The quoted original above a reply. Tapping it jumps to the original message.
+final class TranscriptReplyQuoteView: TranscriptTapView {
+    private var quote: TranscriptPart.ReplyQuote?
+    private let spinner = TranscriptSpinner(size: 10)
+    private weak var actions: TranscriptRowActions?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.addSubview(self.spinner)
+        self.onTap = { [weak self] in
+            guard let self, let id = self.quote?.targetId else { return }
+            self.actions?.showOriginal(id)
+        }
+        self.accessibilityText = "Show original message"
+        #if os(macOS)
+        self.toolTip = "Show original message"
+        #else
+        self.accessibilityHint = "Jumps to the message this replies to"
+        #endif
+    }
+
+    override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
+        guard case let .replyQuote(quote) = part else { return }
+        self.actions = actions
+        self.quote = quote
+        self.spinner.setAnimating(quote.isLocating)
+        self.spinner.isHidden = !quote.isLocating
+        self.layoutContent()
+        self.redraw()
+    }
+
+    override func didHide() {
+        self.spinner.setAnimating(false)
+    }
+
+    override func layoutContent() {
+        let lineHeight = TranscriptLayoutBuilder.quoteSenderHeight
+        self.spinner.place(center: CGPoint(x: self.bounds.width - TranscriptLayoutBuilder.quotePadding - 5,
+                                           y: TranscriptLayoutBuilder.quotePadding + lineHeight / 2))
+    }
+
+    override func draw(_ rect: CGRect) {
+        guard let quote else { return }
+        let style = TranscriptStyle.shared
+        let bounds = self.bounds
+        (self.isPressed ? TranscriptColors.strongFill : TranscriptColors.fill).setFill()
+        PBezierPath.rounded(bounds, radius: 6).fill()
+        TranscriptColors.tint.setFill()
+        PBezierPath.rounded(CGRect(x: 0, y: 0, width: 2, height: bounds.height), radius: 1).fill()
+        let inset = TranscriptLayoutBuilder.quoteInset, padding = TranscriptLayoutBuilder.quotePadding
+        let trailing = quote.isLocating ? 16 : 0
+        if let sender = quote.sender {
+            singleLine(sender, style.captionSemibold, TranscriptColors.tint)
+                .drawLine(at: CGPoint(x: inset, y: padding), width: bounds.width - inset - padding - CGFloat(trailing), font: style.captionSemibold)
+        }
+        let previewRect = CGRect(x: inset, y: padding + TranscriptLayoutBuilder.quoteSenderHeight + 2,
+                                 width: TranscriptLayoutBuilder.quoteTextWidth(bounds.width), height: quote.previewHeight)
+        quote.preview.draw(with: previewRect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], context: nil)
+    }
+}
+
+/// One reaction: the emoji and, when two or more reacted, the count. Tapping toggles yours.
+final class TranscriptReactionChipView: TranscriptTapView {
+    fileprivate var chip: TranscriptPart.Reactions.Chip?
+    fileprivate var onRemove: (() -> Void)?
+
+    #if os(iOS)
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.isContextMenuInteractionEnabled = true
+    }
+
+    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
+                                         configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration?
+    {
+        guard let chip, !chip.isAck else { return nil }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            var children: [UIMenuElement] = []
+            if chip.includesYou {
+                children.append(UIAction(title: "Remove My Reaction", image: UIImage(systemName: "minus.circle"),
+                                         attributes: .destructive) { _ in self?.onRemove?() })
+            }
+            return UIMenu(title: "\(chip.emoji) \(chip.reactors)", children: children)
+        }
+    }
+    #endif
+
+    func set(_ chip: TranscriptPart.Reactions.Chip) {
+        self.chip = chip
+        self.accessibilityText = chip.accessibilityLabel
+        #if os(macOS)
+        self.toolTip = chip.reactors
+        #else
+        self.accessibilityTraits = chip.isAck ? .staticText : (chip.includesYou ? [.button, .selected] : .button)
+        self.isUserInteractionEnabled = !chip.isAck
+        #endif
+        self.redraw()
+    }
+
+    #if os(macOS)
+    // The 👀 chip has no action but still reads, as static text.
+    override func isAccessibilityElement() -> Bool { self.chip != nil }
+    override func accessibilityRole() -> NSAccessibility.Role? { self.chip?.isAck == true ? .staticText : .button }
+    #endif
+
+    override func draw(_ rect: CGRect) {
+        guard let chip else { return }
+        let style = TranscriptStyle.shared
+        let bounds = self.bounds
+        let shape = PBezierPath.rounded(bounds.insetBy(dx: 0.5, dy: 0.5), radius: bounds.height / 2)
+        if chip.includesYou {
+            TranscriptColors.tint.withAlphaComponent(self.isPressed ? 0.3 : 0.15).setFill()
+        } else {
+            (self.isPressed ? TranscriptColors.strongFill : TranscriptColors.fill).setFill()
+        }
+        shape.fill()
+        (chip.includesYou ? TranscriptColors.tint.withAlphaComponent(0.6) : TranscriptColors.stroke).setStroke()
+        shape.lineWidth = 1
+        shape.stroke()
+        let emoji = NSAttributedString(string: chip.emoji, attributes: [.font: style.callout])
+        let emojiHeight = TranscriptStyle.lineHeight(style.callout)
+        let emojiWidth = ceil(emoji.size().width)
+        let alpha: CGFloat = chip.isAck ? 0.6 : 1
+        let context = self.drawingContext
+        context?.saveGState()
+        context?.setAlpha(alpha)
+        emoji.draw(with: CGRect(x: 8, y: (bounds.height - emojiHeight) / 2, width: emojiWidth + 1, height: emojiHeight),
+                   options: [.usesLineFragmentOrigin], context: nil)
+        context?.restoreGState()
+        guard chip.count >= 2 else { return }
+        let color = chip.includesYou ? TranscriptColors.tint : TranscriptColors.secondary
+        let countHeight = TranscriptStyle.lineHeight(style.captionSemibold)
+        singleLine("\(chip.count)", style.captionSemibold, color)
+            .drawLine(at: CGPoint(x: 8 + emojiWidth + 4, y: (bounds.height - countHeight) / 2),
+                      width: bounds.width - emojiWidth - 12, font: style.captionSemibold)
+    }
+}
+
+/// The add-reaction button after a message's chips.
+final class TranscriptAddReactionView: TranscriptTapView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.accessibilityText = "Add Reaction"
+        #if os(macOS)
+        self.toolTip = "Add Reaction"
+        #endif
+    }
+
+    override func draw(_ rect: CGRect) {
+        let bounds = self.bounds
+        let shape = PBezierPath.rounded(bounds.insetBy(dx: 0.5, dy: 0.5), radius: bounds.height / 2)
+        (self.isPressed ? TranscriptColors.strongFill : TranscriptColors.fill).setFill()
+        shape.fill()
+        TranscriptColors.stroke.setStroke()
+        shape.lineWidth = 1
+        shape.stroke()
+        let size = TranscriptStyle.shared.caption.pointSize
+        TranscriptSymbols.draw("face.smiling", in: CGRect(x: 6, y: 0, width: 16, height: bounds.height), size: size + 1,
+                               color: TranscriptColors.secondary)
+        TranscriptSymbols.draw("plus", in: CGRect(x: bounds.width - 16, y: 0, width: 10, height: bounds.height),
+                               size: size - 3, color: TranscriptColors.secondary)
+    }
+}
+
+/// A message's reaction chips and the add-reaction button.
+final class TranscriptReactionsView: TranscriptBaseView {
+    private var chipViews: [TranscriptReactionChipView] = []
+    private let addView = TranscriptAddReactionView()
+    private var part: TranscriptPart.Reactions?
+    private weak var actions: TranscriptRowActions?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.addSubview(self.addView)
+        self.addView.onTap = { [weak self] in
+            guard let self, let id = self.part?.messageId else { return }
+            self.actions?.pickReaction(for: id, from: self.addView, rect: self.addView.bounds)
+        }
+    }
+
+    override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
+        guard case let .reactions(reactions) = part else { return }
+        self.part = reactions
+        self.actions = actions
+        while self.chipViews.count < reactions.chips.count {
+            let view = TranscriptReactionChipView()
+            self.addSubview(view)
+            self.chipViews.append(view)
+        }
+        for (index, view) in self.chipViews.enumerated() {
+            guard index < reactions.chips.count else {
+                view.isHidden = true
+                continue
+            }
+            let chip = reactions.chips[index]
+            view.isHidden = false
+            view.set(chip)
+            let toggle: () -> Void = { [weak self] in
+                guard let self, let id = self.part?.messageId else { return }
+                self.actions?.toggleReaction(chip.emoji, on: id)
+            }
+            view.onTap = chip.isAck ? nil : toggle
+            view.onRemove = toggle
+        }
+        self.addView.isHidden = reactions.addFrame == nil
+        self.layoutContent()
+    }
+
+    override func layoutContent() {
+        guard let part else { return }
+        for (view, chip) in zip(self.chipViews, part.chips) where view.frame != chip.frame {
+            view.frame = chip.frame
+            view.redraw()
+        }
+        if let frame = part.addFrame, self.addView.frame != frame {
+            self.addView.frame = frame
+            self.addView.redraw()
+        }
+    }
+}
+
+/// The brief highlight over a message after jumping to it. Never takes clicks or taps.
+final class TranscriptFlashView: TranscriptBaseView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        #if os(iOS)
+        self.isUserInteractionEnabled = false
+        #endif
+    }
+
+    #if os(macOS)
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    #endif
+
+    override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
+        self.redraw()
+    }
+
+    override func draw(_ rect: CGRect) {
+        TranscriptColors.tint.withAlphaComponent(0.15).setFill()
+        PBezierPath.rounded(self.bounds, radius: 8).fill()
     }
 }

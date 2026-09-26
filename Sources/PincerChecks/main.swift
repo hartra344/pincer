@@ -12,6 +12,7 @@ import UserNotifications
 //   swift run PincerChecks                  → unit checks
 //   swift run PincerChecks --live URL TOKEN → end-to-end against a (mock) Gateway
 //   swift run PincerChecks --live-no-usage URL TOKEN → a Gateway without usage (mock with MOCK_NO_USAGE=1)
+//   swift run PincerChecks --live-no-reply-to URL TOKEN → a Gateway without replyToId (mock with MOCK_NO_REPLY_TO=1)
 // Run with PINCER_KEYCHAIN=memory so nothing touches the real Keychain.
 
 var failures = 0
@@ -501,6 +502,9 @@ await checkGatewayHealth()
 
 print("Usage & cost")
 await checkUsage()
+
+print("Replies & reactions")
+checkReactionsReply()
 
 print("Agent questions")
 do {
@@ -1389,6 +1393,8 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     await runLive(url: url, token: token)
     print("Quick Capture (live)")
     await runQuickCaptureLive(url: url, token: token)
+    print("Replies & reactions (live)")
+    await runLiveReactionsReply(url: url, token: token)
 }
 if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count > index + 2 {
     print("Scope upgrade fallback against \(arguments[index + 1])")
@@ -1398,6 +1404,10 @@ if let index = arguments.firstIndex(of: "--live-no-usage"), arguments.count > in
     print("Gateway without usage at \(arguments[index + 1])")
     await runLiveNoUsage(url: arguments[index + 1], token: arguments[index + 2])
 }
+if let index = arguments.firstIndex(of: "--live-no-reply-to"), arguments.count > index + 2 {
+    print("Gateway without replyToId at \(arguments[index + 1])")
+    await runLiveNoReplyTo(url: arguments[index + 1], token: arguments[index + 2])
+}
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
@@ -1405,6 +1415,8 @@ if arguments.contains("--demo") {
     await runNavigation()
     print("Quick Capture (demo)")
     await runQuickCaptureDemo()
+    print("Replies & reactions (demo)")
+    await runDemoReactionsReply()
 }
 
 print("\n\(passes) passed, \(failures) failed")

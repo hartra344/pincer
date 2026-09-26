@@ -22,6 +22,10 @@ description: Keyboard shortcuts for Pincer on macOS (and iPad with a keyboard).
 | Send | <kbd>Return</kbd> |
 | New line | <kbd>⇧</kbd> <kbd>Return</kbd> or <kbd>⌥</kbd> <kbd>Return</kbd> |
 | Stop the current run | <kbd>⌘</kbd> <kbd>.</kbd> |
+| Reply to Last Message | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>R</kbd> |
+| Cancel the reply | <kbd>Esc</kbd> |
+
+On macOS, **Reply to Last Message** is also in the **Edit** menu. See [Replying to a message](../../guides/composer/#replying-to-a-message).
 
 ## Quick Capture (macOS)
 

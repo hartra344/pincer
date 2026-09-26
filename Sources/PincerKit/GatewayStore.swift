@@ -90,7 +90,7 @@ public final class GatewayStore: Identifiable {
     private(set) var commandCatalogs: [String: CommandCatalog] = [:]
     @ObservationIgnored private var loadingCommands: Set<String> = []
     /// Bumped on every connect, so catalogs from an earlier connection are refetched.
-    @ObservationIgnored private var connectionEpoch = 0
+    @ObservationIgnored private(set) var connectionEpoch = 0
     public var selectedKey: String? {
         didSet {
             guard oldValue != self.selectedKey, let key = self.selectedKey else { return }
@@ -181,6 +181,7 @@ public final class GatewayStore: Identifiable {
         self.groupPositions = defaults.dictionary(forKey: "pincer.groups.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.groupIcons = defaults.dictionary(forKey: "pincer.groupIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.chatPositions = defaults.dictionary(forKey: "pincer.chatOrder.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.reactions = defaults.dictionary(forKey: "pincer.reactions.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.selectedKey = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)")
         self.sectionCollapse = defaults.dictionary(forKey: "pincer.collapsed.\(profile.id.uuidString)") as? [String: Bool] ?? [:]
         let images = ArtifactImageLoader()
@@ -256,6 +257,9 @@ public final class GatewayStore: Identifiable {
         self.hello = hello
         self.health.connectionChanged(state, hello: hello)
         self.connectionEpoch += 1
+        self.replyToUnsupported = false
+        self.reactionForwardingOff = []
+        self.reactionNoticeShown = []
         self.lastError = nil
         Task { await self.bootstrap() }
         self.execPolicy.handleReconnect()
@@ -291,6 +295,7 @@ public final class GatewayStore: Identifiable {
         Task { await self.pullChatColors() }
         Task { await self.pull(self.syncedMap(Self.chatOrderPref)) }
         Task { await self.pull(self.syncedMap(Self.groupIconsPref)) }
+        Task { await self.pull(self.syncedMap(Reactions.prefKey)) }
         Task { await self.loadGroups() }
         // Only pick a chat on the first connect: on iPhone, going back to the sidebar clears the
         // selection, and re-selecting on every reconnect would push a chat the user left.
@@ -893,6 +898,8 @@ public final class GatewayStore: Identifiable {
                       syncedDefaultsKey: "pincer.chatOrderSynced.\(self.id.uuidString)"),
             SyncedMap(pref: Self.groupIconsPref, local: \.groupIcons,
                       syncedDefaultsKey: "pincer.groupIconsSynced.\(self.id.uuidString)"),
+            SyncedMap(pref: Reactions.prefKey, local: \.reactions,
+                      syncedDefaultsKey: "pincer.reactionsSynced.\(self.id.uuidString)"),
         ]
     }
 
@@ -901,6 +908,10 @@ public final class GatewayStore: Identifiable {
     /// Last values seen on the gateway per pref; missing until a successful read.
     @ObservationIgnored private var remotePrefMaps: [String: [String: String]] = [:]
     @ObservationIgnored private var prefsSupportsExpected = true
+    /// Changes not yet confirmed by the gateway, per pref.
+    @ObservationIgnored private var pendingPrefChanges: [String: [String: String?]] = [:]
+    /// The latest write per pref, which the next one waits for.
+    @ObservationIgnored private var prefPushes: [String: Task<Void, Never>] = [:]
 
     private static func names(from value: JSONValue?) -> [String: String] {
         (value?.object ?? [:]).compactMapValues { $0.string?.nilIfEmpty }
@@ -940,15 +951,36 @@ public final class GatewayStore: Identifiable {
             return
         }
         self.remotePrefMaps[map.pref] = fetched ?? [:]
-        if self[keyPath: map.local] != fetched ?? [:] { self[keyPath: map.local] = fetched ?? [:] }
+        // Local changes still being written win over what the gateway had a moment ago.
+        var local = fetched ?? [:]
+        for (id, value) in self.pendingPrefChanges[map.pref] ?? [:] { local[id] = value }
+        if self[keyPath: map.local] != local { self[keyPath: map.local] = local }
     }
 
     private func push(_ map: SyncedMap, _ id: String, _ value: String?) async {
         await self.push(map, [id: value])
     }
 
+    /// Writes one after another per pref, so quick successive changes (toggling reactions) don't
+    /// conflict with each other, and a pull in between keeps them.
     private func push(_ map: SyncedMap, _ changes: [String: String?]) async {
         guard !changes.isEmpty, self.defaults.bool(forKey: map.syncedDefaultsKey) else { return }
+        var pending = self.pendingPrefChanges[map.pref] ?? [:]
+        for (id, value) in changes { pending.updateValue(value, forKey: id) }
+        self.pendingPrefChanges[map.pref] = pending
+        let previous = self.prefPushes[map.pref]
+        let task = Task {
+            await previous?.value
+            await self.write(map, changes)
+            for (id, value) in changes where self.pendingPrefChanges[map.pref]?[id] == .some(value) {
+                self.pendingPrefChanges[map.pref]?.removeValue(forKey: id)
+            }
+        }
+        self.prefPushes[map.pref] = task
+        await task.value
+    }
+
+    private func write(_ map: SyncedMap, _ changes: [String: String?]) async {
         // Optimistic write; on a conflict (another device changed it at the same time) re-read and retry.
         for _ in 0..<3 {
             let cached = self.remotePrefMaps[map.pref]
@@ -979,6 +1011,46 @@ public final class GatewayStore: Identifiable {
         }
         guard let result = try? await self.connection.request("users.prefs.set", ["entries": entries], timeout: 15) else { return false }
         return result["status"]?.string == "ok"
+    }
+
+    // MARK: Reactions
+
+    /// Your emoji reactions, `"<sessionKey>|<transcriptId>"` to space-separated emoji in the order
+    /// added, synced through `users.prefs` (`pincer.reactions`).
+    public internal(set) var reactions: [String: String] {
+        didSet { self.defaults.set(self.reactions, forKey: "pincer.reactions.\(self.id.uuidString)") }
+    }
+
+    /// Your emoji on one message, in the order added.
+    public func myReactions(sessionKey: String, messageId: String) -> [String] {
+        Reactions.decode(self.reactions[Reactions.prefEntryKey(sessionKey: sessionKey, messageId: messageId)])
+    }
+
+    /// Replaces your emoji on one message on every device; an empty list deletes the entry.
+    func setReactions(_ emoji: [String], sessionKey: String, messageId: String) {
+        let key = Reactions.prefEntryKey(sessionKey: sessionKey, messageId: messageId)
+        let value = Reactions.encode(emoji)
+        guard self.reactions[key] != value else { return }
+        self.reactions[key] = value
+        Task { await self.push(self.syncedMap(Reactions.prefKey), key, value) }
+    }
+
+    /// This connection's Gateway rejected `chat.send`'s `replyToId`, so replies quote instead.
+    public internal(set) var replyToUnsupported = false
+    /// Channels whose `message.action` reactions failed as unsupported on this connection.
+    @ObservationIgnored var reactionForwardingOff: Set<String> = []
+    /// Chats already told a reaction didn't reach their channel on this connection.
+    @ObservationIgnored var reactionNoticeShown: Set<String> = []
+
+    /// Whether reactions can be mirrored to bridged channels. Unlike older methods, `message.action`
+    /// is only tried when the Gateway advertises it.
+    public var supportsMessageAction: Bool {
+        self.hello?.methods.contains("message.action") ?? false
+    }
+
+    /// `message.action` calls the built-in demo received, oldest first (for checks; empty for real Gateways).
+    public func demoRecordedActions() async -> [JSONValue] {
+        await self.connection.demoRecordedActions()
     }
 
     // MARK: Chat icons

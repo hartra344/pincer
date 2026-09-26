@@ -42,7 +42,8 @@ public enum ChatSendRequest {
         agentId: String?,
         message: String,
         idempotencyKey: String,
-        attachments: [OutgoingAttachment]) -> [String: JSONValue]
+        attachments: [OutgoingAttachment],
+        replyToId: String? = nil) -> [String: JSONValue]
     {
         var params: [String: JSONValue] = ["sessionKey": .string(sessionKey)]
         if let agentId, SessionKey.agentId(from: sessionKey) == nil {
@@ -50,6 +51,7 @@ public enum ChatSendRequest {
         }
         params["message"] = .string(message)
         params["idempotencyKey"] = .string(idempotencyKey)
+        if let replyToId { params["replyToId"] = .string(replyToId) }
         if !attachments.isEmpty {
             params["attachments"] = .array(attachments.map { attachment in
                 [
@@ -121,6 +123,16 @@ public final class ChatStore: Identifiable {
             self.scheduleDraftSave()
         }
     }
+    /// The message the composer is replying to. Per chat, in memory only.
+    public var replyTarget: ReplyTarget?
+    /// A passing, non-error note for the chat's notice bar (not a send failure).
+    public var notice: String?
+    /// The quoted message being looked for in older history, while paging.
+    public private(set) var locatingReplyId: String?
+    /// Reactions the agent added with its `message` tool, by transcript id.
+    public private(set) var agentReactions: [String: [String]] = [:]
+    /// Committed items by transcript id.
+    @ObservationIgnored private var itemsByTranscriptId: [String: ChatItem] = [:]
     /// The latest "Compact now" request, for the composer's context meter.
     public private(set) var compaction: CompactionState? {
         didSet { if oldValue?.isRunning != self.compaction?.isRunning { self.rebuild(itemsChanged: false) } }
@@ -487,18 +499,20 @@ public final class ChatStore: Identifiable {
 
     /// Sends and returns the run id, or nil when there's none or the send failed (see `errorMessage`).
     @discardableResult
-    public func send(_ text: String, attachments: [OutgoingAttachment] = []) async -> String? {
-        if case let .sent(runId) = await self.sendMessage(text, attachments: attachments) { return runId }
+    public func send(_ text: String, attachments: [OutgoingAttachment] = [], replyTo: ReplyTarget? = nil) async -> String? {
+        if case let .sent(runId) = await self.sendMessage(text, attachments: attachments, replyTo: replyTo) { return runId }
         return nil
     }
 
-    /// Sends, telling an accepted send apart from a failed one.
+    /// Sends, telling an accepted send apart from a failed one. With `replyTo`, the message replies
+    /// to that one (`replyToId`), or quotes it on Gateways that don't take `replyToId`; an accepted
+    /// reply clears `replyTarget`.
     @discardableResult
-    public func sendMessage(_ text: String, attachments: [OutgoingAttachment] = []) async -> SendOutcome {
+    public func sendMessage(_ text: String, attachments: [OutgoingAttachment] = [], replyTo: ReplyTarget? = nil) async -> SendOutcome {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty else { return .failed("Couldn’t send: the message is empty.") }
         guard let gateway else { return .failed("Couldn’t send: the Gateway is gone.") }
-        let idempotencyKey = UUID().uuidString.lowercased()
+        var idempotencyKey = UUID().uuidString.lowercased()
         var blocks: [ContentBlock] = trimmed.isEmpty ? [] : [.text(trimmed)]
         for attachment in attachments {
             if attachment.isImage {
@@ -509,15 +523,37 @@ public final class ChatStore: Identifiable {
                 blocks.append(.file(FileRef(name: attachment.fileName, mimeType: attachment.mimeType)))
             }
         }
-        self.items.append(ChatItem(role: .user, blocks: blocks, idempotencyKey: idempotencyKey, isPending: true))
+        var pending = ChatItem(role: .user, blocks: blocks, idempotencyKey: idempotencyKey, isPending: true)
+        if let replyTo {
+            pending.replyToId = replyTo.messageId
+            pending.replyToPreview = ReplyPreview(text: Replies.previewLine(replyTo.preview), senderLabel: replyTo.senderLabel)
+        }
+        self.items.append(pending)
         self.isSending = true
         defer { self.isSending = false }
 
-        let params = ChatSendRequest.params(
-            sessionKey: self.sessionKey, agentId: self.agentId, message: trimmed,
-            idempotencyKey: idempotencyKey, attachments: attachments)
+        let quoted = replyTo.map { Replies.quotedFallback(sender: $0.senderLabel, preview: $0.preview, text: trimmed) }
+        func params(replying: Bool) -> [String: JSONValue] {
+            ChatSendRequest.params(
+                sessionKey: self.sessionKey, agentId: self.agentId, message: replying ? trimmed : (quoted ?? trimmed),
+                idempotencyKey: idempotencyKey, attachments: attachments, replyToId: replying ? replyTo?.messageId : nil)
+        }
+        let replying = replyTo != nil && !gateway.replyToUnsupported
         do {
-            let result = try await gateway.connection.request("chat.send", .object(params), timeout: 60)
+            let result: JSONValue
+            do {
+                result = try await gateway.connection.request("chat.send", .object(params(replying: replying)), timeout: 60)
+            } catch where replying && Replies.isReplyToRejection(error) {
+                // An older Gateway: quote the original in the text instead, for this connection.
+                gateway.replyToUnsupported = true
+                let retryKey = UUID().uuidString.lowercased()
+                if let index = self.items.firstIndex(where: { $0.isPending && $0.idempotencyKey == idempotencyKey }) {
+                    self.items[index].idempotencyKey = retryKey
+                }
+                idempotencyKey = retryKey
+                result = try await gateway.connection.request("chat.send", .object(params(replying: false)), timeout: 60)
+            }
+            if let replyTo, self.replyTarget == replyTo { self.replyTarget = nil }
             let runId = result["runId"]?.text
             if let runId {
                 gateway.track(runId: runId, sessionKey: self.sessionKey)
@@ -811,6 +847,13 @@ public final class ChatStore: Identifiable {
     private func rebuild(itemsChanged: Bool) {
         if itemsChanged {
             self.committedEntries = TranscriptBuilder.build(self.items)
+            var byId: [String: ChatItem] = [:]
+            for item in self.items where item.isReplyable {
+                if let id = item.transcriptId { byId[id] = item }
+            }
+            self.itemsByTranscriptId = byId
+            let reactions = Reactions.agentReactions(in: self.items)
+            if reactions != self.agentReactions { self.agentReactions = reactions }
             if !self.sawThinking {
                 self.sawThinking = self.items.contains { $0.thinkingText != nil }
             }
@@ -824,6 +867,7 @@ public final class ChatStore: Identifiable {
             if !parsed.text.isEmpty {
                 turn.text = [parsed.text]
                 turn.textTimestamps = [live.startedAt]
+                turn.textIds = [nil]
             }
             turn.images = live.images + parsed.images
             turn.files = parsed.files
@@ -844,6 +888,115 @@ public final class ChatStore: Identifiable {
     }
 
     var liveRunId: String? { self.live?.runId }
+
+    // MARK: Replies
+
+    /// A loaded, committed message by transcript id.
+    public func message(withId id: String) -> ChatItem? {
+        self.itemsByTranscriptId[id]
+    }
+
+    /// What a Reply on `messageId` would target. `you` and `agent` name the senders.
+    public func replyTarget(for messageId: String, you: String, agent: String) -> ReplyTarget? {
+        guard let item = self.message(withId: messageId) else { return nil }
+        let text = MediaDirectives.extract(from: item.plainText).text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preview = text.isEmpty ? (item.blocks.contains { if case .image = $0 { true } else { false } } ? "Image" : "Attachment") : text
+        return ReplyTarget(messageId: messageId, senderLabel: item.role == .user ? you : agent,
+                           preview: preview, isAssistant: item.role == .assistant)
+    }
+
+    /// The newest committed message a reply can target (for ⇧⌘R).
+    public var latestReplyableId: String? {
+        self.items.last { item in
+            item.isReplyable && (item.role == .user || !item.plainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }?.transcriptId
+    }
+
+    /// The quote card for a user turn that replies to another message.
+    public func quote(for item: ChatItem) -> ReplyQuote? {
+        guard let targetId = item.replyToId else { return nil }
+        if let target = self.message(withId: targetId) {
+            let line = Replies.previewLine(MediaDirectives.extract(from: target.plainText).text)
+            return ReplyQuote(targetId: targetId, sender: target.role == .user ? .you : .agent,
+                              text: line.isEmpty ? item.replyToPreview?.text : line)
+        }
+        if let preview = item.replyToPreview {
+            return ReplyQuote(targetId: targetId, sender: preview.senderLabel.map { .label($0) },
+                              text: Replies.previewLine(preview.text))
+        }
+        return ReplyQuote(targetId: targetId, sender: nil, text: nil)
+    }
+
+    /// Loads older history until the message is loaded (at most 40 pages). Returns whether it is;
+    /// when history runs out or the page cap is hit, says so in `notice`. One lookup at a time.
+    @discardableResult
+    public func locate(_ id: String) async -> Bool {
+        if self.message(withId: id) != nil { return true }
+        guard self.locatingReplyId == nil else { return false }
+        self.locatingReplyId = id
+        defer { self.locatingReplyId = nil }
+        for _ in 0..<40 where self.hasMoreHistory {
+            guard await self.loadOlder() else { return false }
+            if self.message(withId: id) != nil { return true }
+        }
+        if self.message(withId: id) != nil { return true }
+        self.notice = self.hasMoreHistory
+            ? "The original message is too far back to show."
+            : "The original message isn't in this chat's history anymore."
+        return false
+    }
+
+    // MARK: Reactions
+
+    /// Emoji reactions on one message: the agent's first, then yours.
+    public func reactionGroups(for messageId: String, agentName: String) -> [ReactionGroup] {
+        let mine = self.gateway?.myReactions(sessionKey: self.sessionKey, messageId: messageId) ?? []
+        return Reactions.groups(agent: self.agentReactions[messageId] ?? [], agentName: agentName, mine: mine)
+    }
+
+    /// Your latest message while the agent works on it, for the transient 👀.
+    public var ackMessageId: String? {
+        Reactions.ackTarget(items: self.items, isRunning: self.isRunning, runId: self.live?.runId,
+                            agentReactions: self.agentReactions)
+    }
+
+    /// Adds `emoji` to the message, or removes it when it's already yours. Syncs through
+    /// `users.prefs`, and mirrors it to the bridged channel's message when the Gateway can.
+    public func toggleReaction(_ emoji: String, on messageId: String) {
+        guard let gateway, let item = self.message(withId: messageId) else { return }
+        let mine = gateway.myReactions(sessionKey: self.sessionKey, messageId: messageId)
+        let removing = mine.contains(emoji)
+        if !removing { Reactions.noteRecent(emoji) }
+        gateway.setReactions(Reactions.toggling(emoji, in: mine), sessionKey: self.sessionKey, messageId: messageId)
+        self.forwardReaction(emoji, remove: removing, on: item)
+    }
+
+    private func forwardReaction(_ emoji: String, remove: Bool, on item: ChatItem) {
+        guard let gateway, gateway.supportsMessageAction, item.role == .user,
+              let channelMessageId = item.channelMessageId
+        else { return }
+        let row = gateway.sessions[self.sessionKey]
+        guard let sessionChannel = row?.channel ?? row?.raw["lastChannel"]?.text ?? item.transportChannel,
+              sessionChannel != "webchat", sessionChannel != "internal"
+        else { return }
+        let channel = item.transportChannel ?? sessionChannel
+        guard !gateway.reactionForwardingOff.contains(channel) else { return }
+        let params = Reactions.messageActionParams(
+            channel: channel, sessionKey: self.sessionKey, channelMessageId: channelMessageId, emoji: emoji,
+            remove: remove, conversationRef: item.conversationRef, idempotencyKey: UUID().uuidString.lowercased())
+        let epoch = gateway.connectionEpoch
+        Task { [weak self, weak gateway] in
+            do {
+                _ = try await gateway?.connection.request("message.action", .object(params), timeout: 30)
+            } catch {
+                guard let self, let gateway, gateway.connectionEpoch == epoch else { return }
+                if Reactions.isUnsupported(error) { gateway.reactionForwardingOff.insert(channel) }
+                if gateway.reactionNoticeShown.insert(self.sessionKey).inserted {
+                    self.notice = "Couldn't add the reaction in \(channel.capitalized). It's saved in Pincer only."
+                }
+            }
+        }
+    }
 
     private func params(keyName: String) -> [String: JSONValue] {
         var params: [String: JSONValue] = [keyName: .string(self.sessionKey)]

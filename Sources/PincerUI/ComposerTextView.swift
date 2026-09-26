@@ -83,6 +83,10 @@ struct ComposerTextView: View {
     var isEditable = true
     /// A suggestion menu is showing: arrow keys, Tab, Escape (and Return on iOS) go to `onKey`/`onSubmit`.
     var menuActive = false
+    /// Escape goes to `onKey` even without a menu, such as to cancel a reply.
+    var escapeActive = false
+    /// Takes keyboard focus each time this changes.
+    var focusRequest = 0
     let onSubmit: () -> Void
     let onMedia: ([PastedMedia]) -> Void
     /// Returns whether the key was handled.
@@ -92,7 +96,8 @@ struct ComposerTextView: View {
 
     var body: some View {
         PlatformComposerTextView(
-            text: self.$text, maxLines: self.maxLines, isEditable: self.isEditable, menuActive: self.menuActive, onSubmit: self.onSubmit,
+            text: self.$text, maxLines: self.maxLines, isEditable: self.isEditable, menuActive: self.menuActive,
+            escapeActive: self.escapeActive, focusRequest: self.focusRequest, onSubmit: self.onSubmit,
             onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd)
             .overlay(alignment: .topLeading) {
                 if self.text.isEmpty {
@@ -167,6 +172,8 @@ private struct PlatformComposerTextView: NSViewRepresentable {
     let maxLines: Int
     let isEditable: Bool
     let menuActive: Bool
+    let escapeActive: Bool
+    let focusRequest: Int
     let onSubmit: () -> Void
     let onMedia: ([PastedMedia]) -> Void
     let onKey: (ComposerKey) -> Bool
@@ -212,6 +219,10 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         guard let textView = scrollView.documentView as? ComposerNSTextView else { return }
         textView.onMedia = self.onMedia
         if textView.isEditable != self.isEditable { textView.isEditable = self.isEditable }
+        if context.coordinator.focusRequest != self.focusRequest {
+            context.coordinator.focusRequest = self.focusRequest
+            DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
+        }
         if textView.string != self.text {
             textView.string = self.text
             textView.setSelectedRange(NSRange(location: (self.text as NSString).length, length: 0))
@@ -229,8 +240,12 @@ private struct PlatformComposerTextView: NSViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: PlatformComposerTextView
+        var focusRequest: Int
 
-        init(_ parent: PlatformComposerTextView) { self.parent = parent }
+        init(_ parent: PlatformComposerTextView) {
+            self.parent = parent
+            self.focusRequest = parent.focusRequest
+        }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
@@ -256,6 +271,12 @@ private struct PlatformComposerTextView: NSViewRepresentable {
                 }
                 if let key, self.parent.onKey(key) { return true }
             }
+            if self.parent.escapeActive, !textView.hasMarkedText(),
+               selector == #selector(NSResponder.cancelOperation(_:)) || selector == #selector(NSTextView.complete(_:)),
+               self.parent.onKey(.escape)
+            {
+                return true
+            }
             guard selector == #selector(NSResponder.insertNewline(_:)), !textView.hasMarkedText() else { return false }
             let flags = NSApp.currentEvent?.modifierFlags ?? []
             if flags.contains(.shift) || flags.contains(.option) {
@@ -274,6 +295,7 @@ private typealias PlatformFont = UIFont
 final class ComposerUITextView: UITextView {
     var onMedia: (([PastedMedia]) -> Void)?
     var menuActive = false
+    var escapeActive = false
     var onKey: ((ComposerKey) -> Bool)?
     private var didAutoFocus = false
 
@@ -297,7 +319,11 @@ final class ComposerUITextView: UITextView {
     }
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        if action == #selector(self.menuKey(_:)) { return self.menuActive && self.markedTextRange == nil }
+        if action == #selector(self.menuKey(_:)) {
+            guard self.markedTextRange == nil else { return false }
+            if self.menuActive { return true }
+            return self.escapeActive && (sender as? UIKeyCommand)?.input == UIKeyCommand.inputEscape
+        }
         if action == #selector(paste(_:)), MediaPasteboard.hasMedia(.general) { return true }
         return super.canPerformAction(action, withSender: sender)
     }
@@ -327,6 +353,8 @@ private struct PlatformComposerTextView: UIViewRepresentable {
     let maxLines: Int
     let isEditable: Bool
     let menuActive: Bool
+    let escapeActive: Bool
+    let focusRequest: Int
     let onSubmit: () -> Void
     let onMedia: ([PastedMedia]) -> Void
     let onKey: (ComposerKey) -> Bool
@@ -347,6 +375,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         textView.text = self.text
         textView.onMedia = self.onMedia
         textView.menuActive = self.menuActive
+        textView.escapeActive = self.escapeActive
         textView.onKey = self.onKey
         return textView
     }
@@ -355,8 +384,13 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         context.coordinator.parent = self
         textView.onMedia = self.onMedia
         textView.menuActive = self.menuActive
+        textView.escapeActive = self.escapeActive
         textView.onKey = self.onKey
         if textView.isEditable != self.isEditable { textView.isEditable = self.isEditable }
+        if context.coordinator.focusRequest != self.focusRequest {
+            context.coordinator.focusRequest = self.focusRequest
+            DispatchQueue.main.async { textView.becomeFirstResponder() }
+        }
         if textView.text != self.text {
             textView.text = self.text
             textView.selectedRange = NSRange(location: (self.text as NSString).length, length: 0)
@@ -374,8 +408,12 @@ private struct PlatformComposerTextView: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: PlatformComposerTextView
+        var focusRequest: Int
 
-        init(_ parent: PlatformComposerTextView) { self.parent = parent }
+        init(_ parent: PlatformComposerTextView) {
+            self.parent = parent
+            self.focusRequest = parent.focusRequest
+        }
 
         func textViewDidChange(_ textView: UITextView) {
             self.parent.text = textView.text

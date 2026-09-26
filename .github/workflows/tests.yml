@@ -103,6 +103,12 @@ jobs:
           for _ in $(seq 1 30); do nc -z 127.0.0.1 18790 && break; sleep 1; done
           "$BIN/PincerChecks" --live-no-usage ws://127.0.0.1:18790 dev-token
 
+      - name: Live checks against a gateway without replyToId
+        run: |
+          MOCK_NO_REPLY_TO=1 PORT=18791 node mock-gateway/server.mjs > "$RUNNER_TEMP/mock-gateway-no-reply-to.log" 2>&1 &
+          for _ in $(seq 1 30); do nc -z 127.0.0.1 18791 && break; sleep 1; done
+          "$BIN/PincerChecks" --live-no-reply-to ws://127.0.0.1:18791 dev-token
+
       - name: Upload check logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -113,4 +119,5 @@ jobs:
             ${{ runner.temp }}/demo.log
             ${{ runner.temp }}/live.log
             ${{ runner.temp }}/mock-gateway-no-usage.log
+            ${{ runner.temp }}/mock-gateway-no-reply-to.log
           if-no-files-found: ignore

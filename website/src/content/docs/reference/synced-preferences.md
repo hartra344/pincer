@@ -27,6 +27,7 @@ These are Pincer extras that OpenClaw's session data can't hold:
 | `pincer.groupIcons` | Group header icons |
 | `pincer.chatOrder` | The order of chats within a group. This wins over pinning and activity. |
 | `pincer.groups` | Groups, on gateways without the group catalog |
+| `pincer.reactions` | Your [reactions](../../guides/transcript/#reactions), keyed by `<session key>\|<message id>`, with that message's emoji in the order you added them, separated by spaces |
 
 :::note
 If the gateway has no durable identity for your connection, these preferences stay on the current device instead of syncing.
@@ -43,5 +44,6 @@ If the gateway has no durable identity for your connection, these preferences st
 - Notifications on or off (**Notify about replies and approvals**)
 - The push relay URL (iOS)
 - Find in Chat options (**Include Thinking** and **Include Tool Output**)
+- Recent reaction emoji, for the quick reactions
 - Unsent [drafts](../../guides/composer/#drafts)
 - The last gateway and chat you [shared to](../../guides/sharing-to-pincer/)

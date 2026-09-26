@@ -26,6 +26,7 @@ const METHODS = [
   'chat.message.get',
   'chat.send',
   'chat.abort',
+  'message.action',
   'sessions.patch',
   'sessions.compact',
   'models.list',
@@ -412,9 +413,17 @@ function createSeedState() {
       imageBlock('art-chart-1', 'Disk usage chart'),
     ]),
   );
+  // Bridged messages carry their channel message id, and the agent reacted 👀 to this one with its
+  // `message` tool (as upstream's ack reactions do).
+  const labAck = 'call_seed_lab_ack';
   transcripts.get('agent:main:discord:channel:123').push(
     makeMessage('user', [textBlock('Discord says the lab sensor is noisy tonight.')], {
+      openclaw: { transport: { channel: 'discord', messageId: '1300000000000000001', conversationRef: 'channel:123' } },
       extra: { provenance: { sourceChannel: 'discord' } },
+    }),
+    makeMessage('assistant', [toolCallBlock(labAck, 'message', { action: 'react', emoji: '👀', messageId: '1300000000000000001' })]),
+    makeMessage('toolResult', [textBlock('{"ok":true,"added":"👀"}')], {
+      extra: { toolCallId: labAck, toolName: 'message', isError: false },
     }),
     makeMessage('assistant', [textBlock('I will keep an eye on the home-lab channel and flag anomalies.')]),
   );
@@ -460,6 +469,8 @@ function createSeedState() {
     // Gateway-owned custom group catalog: names in display order, kept even when empty.
     groups: ['Home', 'Personal', 'Work'],
     idempotency: new Map(),
+    messageActions: new Map(),
+    reactionLog: [],
     activeRuns: new Map(),
     connections: new Set(),
     configState: createConfigState(),
@@ -824,7 +835,26 @@ async function simulateCompactCommand(state, run, sessionKey, row, instructions)
   state.activeRuns.delete(run.runId);
 }
 
-async function simulateRun(state, run, params) {
+/// `__openclaw` reply metadata for a `chat.send` with `replyToId`, like upstream: the target's text
+/// (up to 2000 characters) and who wrote it. Unknown ids send without it.
+function replyFacts(state, sessionKey, replyToId, conn) {
+  if (typeof replyToId !== 'string' || !replyToId || replyToId.startsWith('pending:')) return {};
+  const target = state.transcripts.get(sessionKey)?.find((entry) => entry.__openclaw?.id === replyToId);
+  if (!target) return {};
+  const text = (target.content ?? [])
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n')
+    .trim()
+    .slice(0, 2000);
+  const agentId = state.sessions.get(sessionKey)?.agentId ?? 'main';
+  const senderLabel = target.role === 'assistant'
+    ? (state.agents.get(agentId)?.identity?.name ?? 'Assistant')
+    : (conn.client?.displayName ?? 'User');
+  return { replyToId, replyToPreview: { text, senderLabel } };
+}
+
+async function simulateRun(state, run, params, replyMeta = {}) {
   const { sessionKey, message: text, attachments = [] } = params;
   const row = state.sessions.get(sessionKey);
   const transcript = state.transcripts.get(sessionKey);
@@ -842,7 +872,7 @@ async function simulateRun(state, run, params) {
         content.push(imageBlock(artifactId, attachment.fileName ?? 'Uploaded image'));
       }
     }
-    const userMsg = makeMessage('user', content, { openclaw: { runId: run.runId, idempotencyKey: params.idempotencyKey } });
+    const userMsg = makeMessage('user', content, { openclaw: { runId: run.runId, idempotencyKey: params.idempotencyKey, ...replyMeta } });
     transcript.push(userMsg);
     row.hasActiveRun = true;
     row.activeRunIds = [...new Set([...row.activeRunIds, run.runId])];
@@ -1144,6 +1174,10 @@ function handleAuthedRequest(state, conn, msg) {
     }
     case 'chat.send': {
       const key = params.sessionKey;
+      // Gateways from before reply support reject the unknown property outright.
+      if (process.env.MOCK_NO_REPLY_TO === '1' && Object.hasOwn(params, 'replyToId')) {
+        return sendErr(conn, id, 'INVALID_REQUEST', "invalid chat.send params: at root: unexpected property 'replyToId'");
+      }
       if (!params.idempotencyKey) return sendErr(conn, id, 'INVALID_REQUEST', 'idempotencyKey is required');
       if (!state.sessions.has(key)) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown session');
       // Test hooks: `[mock:fail-send]` in the message refuses it; `[mock:drop]` drops this connection.
@@ -1167,7 +1201,26 @@ function handleAuthedRequest(state, conn, msg) {
       };
       state.activeRuns.set(runId, run);
       sendRes(conn, id, { runId, status: 'started' });
-      setImmediate(() => simulateRun(state, run, params));
+      const reply = replyFacts(state, key, params.replyToId, conn);
+      setImmediate(() => simulateRun(state, run, params, reply));
+      break;
+    }
+    case 'message.action': {
+      for (const field of ['channel', 'action', 'idempotencyKey']) {
+        if (typeof params[field] !== 'string' || !params[field]) return sendErr(conn, id, 'INVALID_REQUEST', `${field} is required`);
+      }
+      if (!params.params || typeof params.params !== 'object') return sendErr(conn, id, 'INVALID_REQUEST', 'params is required');
+      if (state.messageActions.has(params.idempotencyKey)) return sendRes(conn, id, state.messageActions.get(params.idempotencyKey));
+      const { emoji, messageId, remove } = params.params;
+      if (params.action !== 'react') return sendErr(conn, id, 'INVALID_REQUEST', `unsupported action: ${params.action}`);
+      if (params.channel !== 'discord') return sendErr(conn, id, 'INVALID_REQUEST', `reactions are not supported on ${params.channel}`);
+      if (typeof emoji !== 'string' || !emoji || typeof messageId !== 'string' || !messageId) {
+        return sendErr(conn, id, 'INVALID_REQUEST', 'react needs params.emoji and params.messageId');
+      }
+      const result = remove === true ? { ok: true, removed: emoji } : { ok: true, added: emoji };
+      state.messageActions.set(params.idempotencyKey, result);
+      state.reactionLog.push({ channel: params.channel, sessionKey: params.sessionKey, ...params.params });
+      sendRes(conn, id, result);
       break;
     }
     case 'chat.abort': {
@@ -1436,6 +1489,7 @@ function simulateBackground(state) {
   const transcript = state.transcripts.get(key);
   if (!row || !transcript) return;
   const userMsg = makeMessage('user', [textBlock(`Discord background ping at ${new Date().toISOString()}`)], {
+    openclaw: { transport: { channel: 'discord', messageId: String(1300000000000000000n + BigInt(nowMs())), conversationRef: 'channel:123' } },
     extra: { provenance: { sourceChannel: 'discord' } },
   });
   const assistantMsg = makeMessage('assistant', [textBlock('Mock background activity acknowledged.')]);

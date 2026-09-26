@@ -60,6 +60,7 @@ PINCER_KEYCHAIN=memory swift run PincerChecks          # offline checks
 PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo gateway
 PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
 PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock started with MOCK_NO_USAGE=1 PORT=18790
+PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token   # mock started with MOCK_NO_REPLY_TO=1 PORT=18791
 ```
 
 | Mode | What it checks |
@@ -68,6 +69,7 @@ PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:187
 | `--demo` | The offline checks, then a full run against the in-process demo gateway, including sidebar navigation. |
 | `--live <url> <token>` | The offline checks, then an end-to-end run against a real or [mock](../mock-gateway/) gateway. |
 | `--live-no-usage <url> <token>` | The offline checks, then a run against a gateway without the usage methods (the mock with `MOCK_NO_USAGE=1`), checking that Usage reports them as unsupported. |
+| `--live-no-reply-to <url> <token>` | The offline checks, then a run against a gateway that rejects `chat.send`'s `replyToId` (the mock with `MOCK_NO_REPLY_TO=1`), checking that replies fall back to quoting the original. |
 
 Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaults suite, so concurrent runs don't share storage.
 
@@ -82,6 +84,7 @@ Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaul
    - `PincerChecks`
    - `PincerChecks --demo` (with `PINCER_DEMO_DELAY_SCALE=0.2`) and `PincerChecks --live` against the mock (started just before), **at the same time**
    - `PincerChecks --live-no-usage` against a second mock started with `MOCK_NO_USAGE=1` on port 18790
+   - `PincerChecks --live-no-reply-to` against a third mock started with `MOCK_NO_REPLY_TO=1` on port 18791
 
 CI passes `-Xswiftc -enable-incremental-file-hashing` to every `swift` command. Checkout gives every file a new modification time, so without it the restored build would recompile everything.
 

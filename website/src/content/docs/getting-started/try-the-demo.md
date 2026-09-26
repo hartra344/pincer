@@ -40,6 +40,9 @@ While you're there, try:
 - **Gateway Settings → Command Policy** (or ⌘K → "Command Policy…"), to see which commands each agent may run. **Recently allowed** lists allowed commands such as `/usr/bin/git`, `/usr/bin/rg` and `/opt/homebrew/bin/npm`; open an agent to change its settings, or remove an allowed command or tool. Changes are saved to the demo gateway only;
 - **Gateway Settings → Pairing Requests**, to approve or dismiss the sample people waiting to message your agents on Telegram and Discord;
 - **Gateway Settings → Health**: Telegram has lost its connection, so the gateway shows **Degraded**, with its channels, last heartbeat and the three clients connected (this device, a Control UI and a node). **Restart Gateway…** simulates a safe restart: nothing real restarts, your chats are still there afterwards, and Telegram reconnects, so the gateway comes back **Healthy**. Start a reply first to see the restart wait for it, then try **Restart Now Anyway**. It works with the demo's default access, since nothing real restarts;
+- the reply "Can you sketch that as a little gauge?" in **Main**, which quotes the disk status. Click the quote to jump to it, or click **Reply** under any message (or press <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>R</kbd>) to reply yourself;
+- reactions: in **Main**, Claw reacted ✅ to your first question and you've reacted 👍 and 🎉 to its replies. Click **React** under a message, or click a chip to add or remove yours. In **home-lab**, Claw reacted 👀 to the sensor message, and your reactions there are also sent to the (simulated) Discord;
+- a faint 👀 on your message while the agent's reply streams in;
 - <kbd>⌘</kbd> <kbd>K</kbd>, to open the command palette.
 
 ## Sample usage and cost

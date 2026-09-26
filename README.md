@@ -46,7 +46,9 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - the full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer quietly caches every chat (most recently active first) and skips chats that haven't changed. Opening one shows the cached transcript at once, then fetches only what's new;
   - Markdown, including tables and code blocks with a Copy button;
   - **Find in Chat** (⌘F, or the Session menu): highlights every match with a count, and ⌘G / ⇧⌘G (or Return) step through them, scrolling to each one. Matches in thinking and tool input/output are optional (the find bar's options menu) and are expanded when you land on them;
-  - every message ends with a **Copy** button and its details: the model that wrote it and the full date and time it was sent. Back-to-back messages from the agent each get their own footer and some space, and replies from a different run start a new row;
+  - **Replies**: **Reply** in a message's footer or context menu, or ⇧⌘R for the last message, shows a "Replying to" chip above the composer (✕ or Esc cancels) and sends with `chat.send`'s `replyToId`. Replies show the original in a quote card; click it to jump there, loading older history if needed. Gateways that don't accept `replyToId` get the original quoted in the text instead;
+  - **Reactions**: emoji chips under messages, with counts and who reacted. React from the footer, the context menu (with six quick reactions) or a chip. Your reactions sync through `users.prefs` (key `pincer.reactions`); reactions the agent made with its `message` tool show from history, and a faint 👀 marks the message the agent is working on. In bridged chats, reactions on your own messages are also sent to the channel with `message.action` when the gateway offers it; everything else is kept in Pincer. Not yet: a dedicated `reactionLevel` control, swipe to reply, and sending your reactions to the agent as feedback;
+  - every message ends with **Copy**, **Reply** and **React** buttons and its details: the model that wrote it and the full date and time it was sent. Back-to-back messages from the agent each get their own footer and some space, and replies from a different run start a new row;
   - **inline images** with a Quick Look-style preview and sharing. This covers attachments and the agent's `MEDIA:` lines, the same as the web UI. Local files are fetched through the gateway's `assistant-media` route. Public `https` images are downloaded directly, with no credentials or cookies sent; you can turn this off in Settings with "Load images the agent links from the web".
 - **Appearance:** Settings → Appearance picks Light, Dark or System and a theme: Default (your system accent), Lobster, Ocean, Forest, Grape, Sunset, Graphite or Midnight. Themes color the accent, links, both avatars, and the chat, sidebar and code backgrounds, with separate shades for light and dark mode. Any of those colors can be overridden with your own pick, and reset back to the theme's.
 - **Owner attribution:** messages from you appear under your own name (set in Settings, default is your macOS full name), even when they came in through Discord. A small "via Discord" tag shows where they came from.
@@ -121,7 +123,7 @@ open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pince
 
 ### Tests on CI
 
-`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs the `PincerKitTests` unit tests, runs `PincerChecks` in offline, `--demo`, `--live` and `--live-no-usage` (against the mock gateway) modes, and runs the mock gateway's selftest.
+`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs the `PincerKitTests` unit tests, runs `PincerChecks` in offline, `--demo`, `--live`, `--live-no-usage` and `--live-no-reply-to` (against the mock gateway) modes, and runs the mock gateway's selftest.
 
 ### TestFlight
 
@@ -195,6 +197,7 @@ PINCER_KEYCHAIN=memory swift run PincerChecks
 PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
 PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo
 PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock started with MOCK_NO_USAGE=1 PORT=18790
+PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token   # mock started with MOCK_NO_REPLY_TO=1 PORT=18791
 ```
 
 `PINCER_KEYCHAIN=memory` keeps identities and secrets in memory, so checks and dev runs never touch your real Keychain. It works for the app too: `open --env PINCER_KEYCHAIN=memory build/Pincer.app`.

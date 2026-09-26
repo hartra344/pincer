@@ -65,6 +65,19 @@ struct TranscriptList: UIViewRepresentable {
             self.renderer.onInvalidate = { [weak self] ids, keepInPlace in
                 self?.invalidate(ids, keepInPlace: keepInPlace)
             }
+            self.renderer.onReveal = { [weak self] id in
+                guard let self else { return }
+                // A row paged in from older history arrives with the next update.
+                if self.index[id] != nil { self.reveal(id) } else { self.pendingReveal = id }
+            }
+        }
+
+        private var pendingReveal: String?
+
+        private func revealPending() {
+            guard let id = self.pendingReveal, self.index[id] != nil else { return }
+            self.pendingReveal = nil
+            self.reveal(id)
         }
 
         func makeCollectionView() -> UICollectionView {
@@ -94,6 +107,7 @@ struct TranscriptList: UIViewRepresentable {
             let contextChanged = context.differs(from: self.context)
             self.context = context
             self.renderer.update(context: context)
+            defer { self.revealPending() }
             guard let view = self.collectionView else { return }
             let top = TranscriptLayout.verticalInset + max(0, insets.top)
             let bottom = TranscriptLayout.verticalInset + max(0, insets.bottom)
@@ -241,7 +255,7 @@ struct TranscriptList: UIViewRepresentable {
         private func height(at row: Int) -> CGFloat {
             let item = self.rows[row]
             if let height = self.heights[item.id] { return height.value }
-            let estimate = TranscriptLayout.estimatedHeight(item, width: self.width)
+            let estimate = TranscriptLayout.estimatedHeight(item, width: self.width, hasReactions: { self.context.hasReactions($0) })
             self.heights[item.id] = Height(value: estimate, width: self.width, measured: false)
             return estimate
         }

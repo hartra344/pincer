@@ -126,7 +126,7 @@ public actor GatewayConnection {
     public init(profile: GatewayProfile, identity: DeviceIdentity = .loadOrCreate()) {
         self.profile = profile
         self.identity = identity
-        self.demo = profile.isDemo ? DemoGateway() : nil
+        self.demo = profile.isDemo ? DemoGateway(acceptsReplyTo: profile.url != DemoGateway.noReplyToURL) : nil
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 30
@@ -198,6 +198,11 @@ public actor GatewayConnection {
         self.loopTask?.cancel()
         self.teardown(reason: "retrying optional scopes")
         self.loopTask = Task { await self.runLoop() }
+    }
+
+    /// `message.action` calls the built-in demo received, oldest first (empty for real Gateways).
+    public func demoRecordedActions() async -> [JSONValue] {
+        await self.demo?.recordedActions ?? []
     }
 
     /// Handshake done and a socket to send on, so `request` won't throw `notConnected`.

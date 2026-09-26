@@ -29,6 +29,7 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `MOCK_CHANNEL_PAIRING` | on | Set to `off` to hide the `channels.pairing.*` methods, like an older gateway. |
 | `MOCK_CHANNEL_PAIRING_EVERY` | off | Seconds between new channel pairing requests. |
 | `MOCK_NO_HEALTH` | off | Set to `1` to drop the health and restart methods, like an older gateway. |
+| `MOCK_NO_REPLY_TO` | off | Set to `1` to refuse `chat.send` with `replyToId`, like a gateway from before replies. Pincer then quotes the original in the text. |
 
 ## Message triggers
 
@@ -40,6 +41,10 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `plan` | Walks a three-step progress card. |
 | `[mock:fail-send]` | Refuses the `chat.send` with `UNAVAILABLE`, for testing failed sends. |
 | `[mock:drop]` | Closes the connection. The client reconnects after its backoff. |
+
+## Replies and reactions
+
+`chat.send` takes `replyToId`, and the sent message keeps `replyToId` and a `replyToPreview` (the original's text and who wrote it), like the gateway. The **home-lab** Discord chat has a message with its Discord message id, which the agent reacted 👀 to with its `message` tool. `message.action` reacts to Discord messages (`action: "react"`) and refuses other channels and actions.
 
 ## Config and plugins
 
@@ -74,6 +79,10 @@ PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-to
 # a gateway without usage, on another port:
 MOCK_NO_USAGE=1 PORT=18790 npm start
 PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token
+
+# a gateway from before replies (rejects replyToId):
+MOCK_NO_REPLY_TO=1 PORT=18791 npm start
+PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token
 ```
 
 The unit tests (`swift test`) don't need the mock: they never open a socket. See [Building from source](../building/#unit-tests).

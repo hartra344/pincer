@@ -77,6 +77,39 @@ enum TranscriptPart {
         let key: String
         let copyText: String
         let details: String
+        /// The message Reply and React act on; nil hides them.
+        var messageId: String?
+    }
+
+    /// The message a reply quotes, above its text. Tapping it jumps to the original.
+    struct ReplyQuote {
+        let targetId: String
+        let sender: String?
+        let preview: NSAttributedString
+        let previewHeight: CGFloat
+        /// Older history is being paged in to find the original.
+        let isLocating: Bool
+    }
+
+    /// Emoji reaction chips under a message, wrapping onto more lines as needed.
+    struct Reactions {
+        struct Chip {
+            let emoji: String
+            /// Shown next to the emoji when two or more reacted.
+            let count: Int
+            let includesYou: Bool
+            /// The transient 👀 while the agent works on the message: subdued and not tappable.
+            let isAck: Bool
+            /// In the part's coordinates.
+            let frame: CGRect
+            let reactors: String
+            let accessibilityLabel: String
+        }
+
+        let messageId: String
+        let chips: [Chip]
+        /// The "add reaction" button after the chips, when there are any.
+        let addFrame: CGRect?
     }
 
     struct Image {
@@ -115,10 +148,14 @@ enum TranscriptPart {
     case footer(Footer)
     case marker(String)
     case loading
+    case replyQuote(ReplyQuote)
+    case reactions(Reactions)
+    /// A brief tint over the message a quote jumped to.
+    case flash
 
     enum Kind: Hashable {
         case avatar, header, text, quote, thinkingBody, rule, code, table, thinkingHeader, tool, image,
-             imageLink, file, typing, footer, marker, loading
+             imageLink, file, typing, footer, marker, loading, replyQuote, reactions, flash
     }
 
     var kind: Kind {
@@ -140,6 +177,9 @@ enum TranscriptPart {
         case .footer: .footer
         case .marker: .marker
         case .loading: .loading
+        case .replyQuote: .replyQuote
+        case .reactions: .reactions
+        case .flash: .flash
         }
     }
 }
@@ -154,6 +194,13 @@ struct TranscriptRowLayout {
     struct CopyItem {
         let title: String
         let text: String
+    }
+
+    /// Where one message of the row sits, for menus and the jump-to-original flash.
+    struct MessageSpan {
+        let id: String
+        let minY: CGFloat
+        let maxY: CGFloat
     }
 
     let id: String
@@ -172,8 +219,28 @@ struct TranscriptRowLayout {
     var accessibilityLabel = ""
     /// Where Find's selected match is, in row coordinates (the bottom of its line), when this row has it.
     var matchY: CGFloat?
+    /// The row's messages that replies and reactions can target, top to bottom.
+    var messages: [MessageSpan] = []
+    /// Reply and reaction state this layout was built with, to tell when it's stale.
+    var decoration = TranscriptDecoration()
     /// Distinct for every layout built, so a view can tell it already shows this one.
     var serial = 0
+
+    /// The message at `y` (row coordinates), or the row's last one outside them all.
+    func message(at y: CGFloat?) -> String? {
+        if let y, let span = self.messages.first(where: { y >= $0.minY && y <= $0.maxY }) { return span.id }
+        return self.messages.last?.id
+    }
+}
+
+/// What a row shows besides its own content: its quote card, reaction chips, the 👀 while the
+/// agent works, and the flash after a jump. Rows are laid out again when it changes.
+struct TranscriptDecoration: Equatable {
+    var quote: ReplyQuote?
+    var isLocating = false
+    var reactions: [String: [ReactionGroup]] = [:]
+    var ack: String?
+    var flash: String?
 }
 
 /// Settings that change how rows look. Read from the same defaults the Settings screen writes,
@@ -219,6 +286,8 @@ struct TranscriptLayoutBuilder {
     let context: TranscriptContext
     let settings: TranscriptSettings
     var highlight = TranscriptHighlight()
+    /// The message to flash, after jumping to it from a quote.
+    var flash: String?
     /// Find matches counted so far in the row being laid out, per section.
     let marks = TranscriptFindMarks()
 
@@ -226,6 +295,7 @@ struct TranscriptLayoutBuilder {
 
     func layout(_ row: TranscriptRow, width: CGFloat) -> TranscriptRowLayout {
         var layout = TranscriptRowLayout(id: row.id, width: width)
+        layout.decoration = self.decoration(for: row)
         self.marks.reset(row: row.id, highlight: self.highlight)
         switch row {
         case .loadingOlder:
@@ -244,7 +314,43 @@ struct TranscriptLayoutBuilder {
         case let .entry(.assistant(turn)):
             self.assistant(turn, into: &layout)
         }
+        if let flash = layout.decoration.flash, let span = layout.messages.first(where: { $0.id == flash }) {
+            let x = TranscriptMetrics.contentX - 6
+            let frame = CGRect(x: x, y: max(span.minY - 4, 0), width: max(width - x - TranscriptMetrics.sidePadding + 12, 1),
+                               height: span.maxY - span.minY + 8)
+            layout.parts.append(.init(part: .flash, frame: frame))
+            layout.matchY = span.minY + min(span.maxY - span.minY, 20)
+        }
         return layout
+    }
+
+    /// Reply and reaction state for a row, read from the chat.
+    func decoration(for row: TranscriptRow) -> TranscriptDecoration {
+        var decoration = TranscriptDecoration()
+        guard case let .entry(entry) = row, let chat = self.context.chat else { return decoration }
+        let agent = self.context.agent.name
+        var ids: [String] = []
+        switch entry {
+        case let .user(item):
+            if let quote = chat.quote(for: item) {
+                decoration.quote = quote
+                decoration.isLocating = chat.locatingReplyId == quote.targetId
+            }
+            if item.isReplyable, let id = item.transcriptId {
+                ids = [id]
+                if chat.ackMessageId == id { decoration.ack = id }
+            }
+        case let .assistant(turn):
+            ids = turn.textIds.compactMap(\.self)
+        case .marker:
+            break
+        }
+        for id in ids {
+            let groups = chat.reactionGroups(for: id, agentName: agent)
+            if !groups.isEmpty { decoration.reactions[id] = groups }
+            if id == self.flash { decoration.flash = id }
+        }
+        return decoration
     }
 
     // MARK: Rows
@@ -253,11 +359,22 @@ struct TranscriptLayoutBuilder {
         let header = TranscriptPart.Header(name: Owner.displayName, badge: item.via.map { "via \($0)" },
                                            time: item.timestamp?.chatTimestamp, isPending: item.isPending)
         let text = item.plainText
+        let messageId = item.isReplyable ? item.transcriptId : nil
+        let contentWidth = max(layout.width - TranscriptMetrics.contentX - TranscriptMetrics.sidePadding, 40)
+        let quote = layout.decoration.quote.map {
+            self.replyQuote($0, isLocating: layout.decoration.isLocating, width: min(contentWidth, TranscriptMetrics.maxCardWidth))
+        }
         layout.alpha = item.isPending ? 0.7 : 1
         layout.copyItems = [.init(title: "Copy Text", text: text)]
         layout.accessibilityLabel = "\(header.name): \(text)"
+        if let quote {
+            layout.accessibilityLabel = "In reply to \(quote.sender ?? "a message"): \(quote.preview.string). " + layout.accessibilityLabel
+        }
         self.scaffold(avatar: .init(text: Owner.initials, emoji: nil, color: TranscriptColors.ownerAvatar),
                       header: header, into: &layout) { stack, layout in
+            if let quote {
+                stack.add(.replyQuote(quote), height: Self.quoteHeight(quote), width: min(stack.width, TranscriptMetrics.maxCardWidth))
+            }
             if !text.isEmpty { self.markdown(text, tone: .primary, section: .message(0), into: &stack, layout: &layout) }
             let images = item.blocks.compactMap { block -> ImageRef? in
                 if case let .image(ref) = block { return ref }
@@ -267,8 +384,12 @@ struct TranscriptLayoutBuilder {
             for block in item.blocks {
                 if case let .file(file) = block { self.file(file, into: &stack, layout: &layout) }
             }
-            if !item.isPending, !text.isEmpty {
-                self.footer(key: "\(item.id):0", copy: text, time: item.timestamp, model: nil, into: &stack)
+            if let messageId { self.reactions(on: messageId, into: &stack, layout: layout) }
+            if !item.isPending, !text.isEmpty || messageId != nil {
+                self.footer(key: "\(item.id):0", copy: text, time: item.timestamp, model: nil, messageId: messageId, into: &stack)
+            }
+            if let messageId {
+                layout.messages.append(.init(id: messageId, minY: TranscriptMetrics.verticalPadding, maxY: stack.y))
             }
         }
     }
@@ -307,14 +428,30 @@ struct TranscriptLayoutBuilder {
             // Each message gets its own footer, which with the gap after it keeps back-to-back
             // messages apart. The last footer goes under the turn's images and files.
             let showFooters = !turn.isStreaming
+            let last = turn.text.count - 1
+            var start: CGFloat = 0
             for (index, message) in turn.text.enumerated() {
                 if index > 0 { stack.y += TranscriptMetrics.messageSpacing - TranscriptMetrics.blockSpacing }
+                start = stack.isEmpty ? stack.y : stack.y + TranscriptMetrics.blockSpacing
                 self.markdown(message, tone: turn.isError ? .error : .primary, section: .message(index), into: &stack, layout: &layout)
-                if showFooters, index < turn.text.count - 1 { self.messageFooter(turn, message: index, into: &stack) }
+                guard index < last else { continue }
+                let id = Self.messageId(turn, index)
+                if let chipId = Self.chipId(turn, index) {
+                    self.reactions(on: chipId, canAdd: id != nil, into: &stack, layout: layout)
+                }
+                if showFooters { self.messageFooter(turn, message: index, into: &stack) }
+                if let id { layout.messages.append(.init(id: id, minY: start, maxY: stack.y)) }
             }
             self.images(turn.images, into: &stack, layout: &layout)
             for file in turn.files { self.file(file, into: &stack, layout: &layout) }
-            if showFooters, !turn.text.isEmpty { self.messageFooter(turn, message: turn.text.count - 1, into: &stack) }
+            if !turn.text.isEmpty {
+                let id = Self.messageId(turn, last)
+                if let chipId = Self.chipId(turn, last) {
+                    self.reactions(on: chipId, canAdd: id != nil, into: &stack, layout: layout)
+                }
+                if showFooters { self.messageFooter(turn, message: last, into: &stack) }
+                if let id { layout.messages.append(.init(id: id, minY: start, maxY: stack.y)) }
+            }
             let showsActivity = steps == .live && (!reasoning.isEmpty || turn.tools.contains(where: \.isRunning))
             if turn.isStreaming, turn.text.isEmpty, !showsActivity {
                 stack.add(.typing, height: 14, width: 26)
@@ -682,7 +819,19 @@ extension TranscriptLayoutBuilder {
     fileprivate func messageFooter(_ turn: AssistantTurn, message index: Int, into stack: inout Stack) {
         let time = turn.textTimestamps.indices.contains(index) ? turn.textTimestamps[index] : turn.timestamp
         self.footer(key: "\(turn.id):\(index)", copy: turn.text[index], time: time ?? turn.timestamp,
-                    model: self.model(of: turn, message: index), into: &stack)
+                    model: self.model(of: turn, message: index), messageId: Self.messageId(turn, index), into: &stack)
+    }
+
+    /// Transcript id of one message of a turn, when replies and reactions can target it.
+    fileprivate static func messageId(_ turn: AssistantTurn, _ index: Int) -> String? {
+        guard !turn.isStreaming, turn.textIds.indices.contains(index) else { return nil }
+        return turn.textIds[index]
+    }
+
+    /// Transcript id of one message of a turn whose reactions show. Committed messages keep their
+    /// chips while the rest of the turn streams, though Reply and React wait for it to finish.
+    fileprivate static func chipId(_ turn: AssistantTurn, _ index: Int) -> String? {
+        turn.textIds.indices.contains(index) ? turn.textIds[index] : nil
     }
 
     /// Model that wrote a message, falling back to the turn's when the message didn't record one.
@@ -691,9 +840,96 @@ extension TranscriptLayoutBuilder {
         return own ?? turn.modelName
     }
 
-    fileprivate func footer(key: String, copy text: String, time: Date?, model: String?, into stack: inout Stack) {
+    fileprivate func footer(key: String, copy text: String, time: Date?, model: String?, messageId: String?,
+                            into stack: inout Stack)
+    {
         let details = [model, time?.messageDetailTimestamp].compactMap(\.self).joined(separator: " · ")
         let height = max(TranscriptStyle.lineHeight(self.style.caption), 16)
-        stack.add(.footer(.init(key: key, copyText: text, details: details)), height: height, spacing: TranscriptMetrics.footerSpacing)
+        stack.add(.footer(.init(key: key, copyText: text, details: details, messageId: messageId)), height: height,
+                  spacing: TranscriptMetrics.footerSpacing)
+    }
+}
+
+// MARK: Replies and reactions
+
+extension TranscriptLayoutBuilder {
+    static let quoteInset: CGFloat = 10
+    static let quotePadding: CGFloat = 6
+    static let quoteSpinner: CGFloat = 18
+
+    fileprivate func replyQuote(_ quote: ReplyQuote, isLocating: Bool, width: CGFloat) -> TranscriptPart.ReplyQuote {
+        let sender: String? = switch quote.sender {
+        case .you: Owner.displayName
+        case .agent: self.context.agent.name
+        case let .label(label): label
+        case nil: nil
+        }
+        let style = self.style
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        let preview = NSAttributedString(string: quote.text ?? "Original message", attributes: [
+            .font: style.callout, .foregroundColor: TranscriptColors.secondary, .paragraphStyle: paragraph,
+        ])
+        let lineHeight = TranscriptStyle.lineHeight(style.callout)
+        let natural = TranscriptText.size(preview, width: Self.quoteTextWidth(width)).height
+        return TranscriptPart.ReplyQuote(targetId: quote.targetId, sender: sender, preview: preview,
+                                         previewHeight: min(max(natural, lineHeight), lineHeight * 2), isLocating: isLocating)
+    }
+
+    static func quoteTextWidth(_ cardWidth: CGFloat) -> CGFloat {
+        max(cardWidth - self.quoteInset - self.quotePadding, 20)
+    }
+
+    static var quoteSenderHeight: CGFloat { TranscriptStyle.lineHeight(TranscriptStyle.shared.captionSemibold) }
+
+    /// Accent bar, sender line and at most two lines of preview.
+    fileprivate static func quoteHeight(_ quote: TranscriptPart.ReplyQuote) -> CGFloat {
+        self.quotePadding + self.quoteSenderHeight + 2 + quote.previewHeight + self.quotePadding
+    }
+
+    static var chipHeight: CGFloat { TranscriptStyle.lineHeight(TranscriptStyle.shared.callout) + 6 }
+    static let chipSpacing: CGFloat = 6
+
+    static func chipWidth(emoji: String, count: Int) -> CGFloat {
+        let style = TranscriptStyle.shared
+        var width = 8 + ceil(NSAttributedString(string: emoji, attributes: [.font: style.callout]).size().width) + 8
+        if count >= 2 {
+            width += 4 + ceil(NSAttributedString(string: "\(count)", attributes: [.font: style.captionSemibold]).size().width)
+        }
+        return width
+    }
+
+    /// Chips for a message's reactions (and the 👀 while the agent works on it), wrapped to the width.
+    fileprivate func reactions(on messageId: String, canAdd: Bool = true, into stack: inout Stack, layout: TranscriptRowLayout) {
+        let groups = layout.decoration.reactions[messageId] ?? []
+        let showsAck = layout.decoration.ack == messageId && !groups.contains { $0.emoji == Reactions.ackEmoji }
+        guard !groups.isEmpty || showsAck else { return }
+        let height = Self.chipHeight, spacing = Self.chipSpacing
+        let width = min(stack.width, TranscriptMetrics.maxCardWidth)
+        var x: CGFloat = 0, y: CGFloat = 0
+        func place(_ chipWidth: CGFloat) -> CGRect {
+            if x > 0, x + chipWidth > width {
+                x = 0
+                y += height + spacing
+            }
+            let frame = CGRect(x: x, y: y, width: min(chipWidth, width), height: height)
+            x += chipWidth + spacing
+            return frame
+        }
+        var chips = groups.map { group in
+            TranscriptPart.Reactions.Chip(
+                emoji: group.emoji, count: group.count, includesYou: group.includesYou, isAck: false,
+                frame: place(Self.chipWidth(emoji: group.emoji, count: group.count)),
+                reactors: group.reactorsText, accessibilityLabel: group.accessibilityLabel)
+        }
+        if showsAck {
+            let working = "\(self.context.agent.name) is working on this"
+            chips.append(.init(emoji: Reactions.ackEmoji, count: 1, includesYou: false, isAck: true,
+                               frame: place(Self.chipWidth(emoji: Reactions.ackEmoji, count: 1)),
+                               reactors: working, accessibilityLabel: working))
+        }
+        let addFrame = groups.isEmpty || !canAdd ? nil : place(height + 14)
+        stack.add(.reactions(.init(messageId: messageId, chips: chips, addFrame: addFrame)), height: y + height, width: width,
+                  spacing: 6)
     }
 }

@@ -9,7 +9,7 @@ The transcript is where you read what your agents are doing. It's built with nat
 
 Replies stream in as the agent writes them. Markdown is fully supported, including tables and code blocks with a **Copy** button.
 
-Every message ends with a **Copy** button and its details: the model that wrote it and the full date and time it was sent.
+Every message ends with **Copy**, **Reply** and **React** buttons and its details: the model that wrote it and the full date and time it was sent.
 
 ## Thinking
 
@@ -68,6 +68,38 @@ The options menu in the bar has two toggles:
 - **Include Tool Output** also searches tool cards' arguments and results, up to the first 20,000 characters of each, the same as the card shows.
 
 When a match is inside folded thinking or a tool card, it opens when you get to it. The options are remembered on this device.
+
+## Replies
+
+To reply to a particular message, click **Reply** in its footer, choose **Reply** from its context menu (right-click on macOS, touch and hold on iOS), or press <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>R</kbd> to reply to the last message. You can reply to your own messages and to any finished message from the agent. Writing the reply is covered in [Replying to a message](../composer/#replying-to-a-message).
+
+A reply shows the message it answers in a small card above its text, with who wrote it and the first two lines. The gateway keeps this with the message, so the quote is still there after a reload and on your other devices. The quote isn't searched by Find in Chat and isn't part of **Copy**.
+
+Click or tap the quote to jump to the original. Pincer scrolls to it and highlights it briefly. If it's further back than what's loaded, Pincer loads older history until it finds it, with a small spinner in the quote meanwhile. If the original isn't in the chat's history anymore, for example after a reset, a note says "The original message isn't in this chat's history anymore." If it's more than 40 pages back, Pincer stops looking and says "The original message is too far back to show."
+
+Swiping a message to reply isn't supported yet.
+
+## Reactions
+
+Reactions appear as small chips under a message, above its footer. Each chip shows an emoji and, when two or more reacted with it, the count. Your own reactions are tinted with the accent color.
+
+- **React:** click **React** in the message's footer, choose **Add Reaction…** from its context menu, or click the smiley button after its chips. Pick from the six quick reactions at the top (the ones you used most recently, then 👍 ❤️ 😂 🎉 👀 ✅) or the grid below. The context menu also lists the quick reactions, for reacting in one step.
+- **Add or remove:** click a chip to add the same reaction, or click one of yours to remove it.
+- **Who reacted:** hover over a chip on macOS, or touch and hold it on iOS. On iOS, that menu also has **Remove My Reaction**.
+
+Your reactions sync between your devices through the gateway's `users.prefs` (see [Synced preferences](../../reference/synced-preferences/)). The emoji you used recently are kept on each device.
+
+### The agent's reactions
+
+When the agent reacts with its `message` tool (`action: "react"`), Pincer shows that reaction on the message it targeted, under the agent's name. These come from the chat's history, so they're still there after a reload, and you can't remove them. While the agent works on your latest message, it shows a faint 👀 ("Claw is working on this"), which goes away when the run ends.
+
+How freely the agent reacts on Telegram, WhatsApp and Signal is the gateway's `channels.<channel>.reactionLevel` setting. If your gateway's settings schema lists it, you can change it under **Gateway Settings → Channels** or **All Settings**. Pincer doesn't have its own control for it yet.
+
+### Reactions in bridged chats
+
+In a chat bridged from another channel, such as Discord, reacting to one of **your** messages also adds the reaction there, if the gateway offers `message.action` and the message came through that channel. Removing your reaction removes it there too. If the channel refuses, the reaction stays in Pincer and a note says "Couldn't add the reaction in Discord. It's saved in Pincer only."
+
+Reactions on the agent's messages in bridged chats, and all reactions in chats you have with the agent directly, are kept in Pincer only. Your reactions aren't sent to the agent as feedback.
 
 ## Images
 

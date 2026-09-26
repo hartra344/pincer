@@ -501,6 +501,18 @@ extension JSONEncoder {
     }()
 }
 
+/// What the Gateway recorded of the message a user turn replies to (`__openclaw.replyToPreview`),
+/// shown when the original isn't loaded.
+public struct ReplyPreview: Hashable, Codable, Sendable {
+    public var text: String
+    public var senderLabel: String?
+
+    public init(text: String, senderLabel: String? = nil) {
+        self.text = text
+        self.senderLabel = senderLabel
+    }
+}
+
 public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     public var id: String
     public var transcriptId: String?
@@ -523,6 +535,22 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     /// The Gateway cut this message's text to its history cap; the full copy comes from
     /// `chat.message.get`.
     public var isCapped: Bool = false
+    /// Transcript id of the message this user turn replies to (`__openclaw.replyToId`).
+    public var replyToId: String?
+    public var replyToPreview: ReplyPreview?
+    /// The bridged channel's own id for this message (`__openclaw.transport.messageId`), e.g. a
+    /// Discord snowflake. Agent `message` tool reactions name it.
+    public var channelMessageId: String?
+    /// Channel the message arrived through (`__openclaw.transport.channel`).
+    public var transportChannel: String?
+    /// Conversation it arrived in (`__openclaw.transport.conversationRef`), e.g. `channel:123`.
+    public var conversationRef: String?
+
+    /// A committed message that replies and reactions can point at.
+    public var isReplyable: Bool {
+        guard !self.isPending, let transcriptId, !transcriptId.hasPrefix(Self.pendingInputPrefix) else { return false }
+        return self.role == .user || self.role == .assistant
+    }
 
     /// `provider/model`, or nil when the Gateway didn't record a model.
     public var modelRef: String? { self.model.map { ModelRef.qualified($0, provider: self.provider) } }
@@ -568,6 +596,14 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
             self.model = model
             self.provider = json["provider"]?.text
         }
+        self.replyToId = meta?["replyToId"]?.text
+        if let preview = meta?["replyToPreview"], let text = preview["text"]?.text {
+            self.replyToPreview = ReplyPreview(text: text, senderLabel: preview["senderLabel"]?.text)
+        }
+        let transport = meta?["transport"]
+        self.channelMessageId = transport?["messageId"]?.text
+        self.transportChannel = transport?["channel"]?.text
+        self.conversationRef = transport?["conversationRef"]?.text
         // Only the Gateway marker proves a cap; the sentinel text alone could be literal.
         let recoverable = self.role == .assistant || self.transcriptId?.hasPrefix(Self.pendingInputPrefix) == true
         self.isCapped = recoverable && meta?["truncated"]?.bool == true
@@ -705,6 +741,8 @@ public struct AssistantTurn: Identifiable, Hashable, Sendable {
     public var textTimestamps: [Date?] = []
     /// Short name of the model that wrote each entry of `text`, when the Gateway recorded one.
     public var textModelNames: [String?] = []
+    /// Transcript id of the message each entry of `text` came from, for replies and reactions.
+    public var textIds: [String?] = []
     public var images: [ImageRef] = []
     public var files: [FileRef] = []
     public var timestamp: Date?
@@ -785,6 +823,7 @@ public enum TranscriptBuilder {
                     turn.text.append(message.joined(separator: "\n\n"))
                     turn.textTimestamps.append(item.timestamp)
                     turn.textModelNames.append(item.modelRef.map(ModelRef.shortName))
+                    turn.textIds.append(item.isReplyable ? item.transcriptId : nil)
                 }
                 current = turn
             case .toolResult:

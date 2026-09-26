@@ -11,6 +11,18 @@ description: Sending messages, attachments, stopping runs and using slash comman
 | New line | <kbd>⇧</kbd> <kbd>Return</kbd> or <kbd>⌥</kbd> <kbd>Return</kbd> |
 | Stop the current run | <kbd>⌘</kbd> <kbd>.</kbd> |
 
+## Replying to a message
+
+After you choose **Reply** on a message (see [Replies](../transcript/#replies)), a **Replying to** chip sits above the composer with who wrote the message and how it starts. The composer takes focus, so you can start typing. Send as usual and your message is sent as a reply to that one, and the chip goes away.
+
+- To cancel, click the ✕ in the chip, or press <kbd>Esc</kbd>. When slash command suggestions are showing, <kbd>Esc</kbd> hides them first.
+- Choosing **Reply** on another message replaces the one you're replying to.
+- Each chat keeps its own reply while you switch between chats. Replies aren't saved in drafts, so they're gone after you quit Pincer.
+- Slash commands aren't sent as replies. The chip stays for your next message.
+- If sending fails, the chip and your text stay, so you can try again.
+
+The gateway gives the agent the message you replied to, so your text is sent as you wrote it. Older gateways don't accept replies. With those, Pincer quotes the original at the start of your message instead, as `> **Claw:** …`, and keeps doing so on that connection.
+
 ## Attachments
 
 Paste, drag in, or pick images and files with the **+** button. Images are downscaled to fit the gateway's limits before they're sent.
