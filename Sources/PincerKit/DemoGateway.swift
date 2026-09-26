@@ -84,6 +84,11 @@ actor DemoGateway {
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
         self.approvalHistory = Self.seedApprovalHistory()
+        let pending = Self.seedPendingApproval()
+        if let id = pending["id"]?.string {
+            self.approvals[id] = pending
+            self.approvalOrder.append(id)
+        }
         self.pairingRequests = Self.seedPairingRequests()
         self.artifacts["demo-chart"] = ("image/png", Self.chartPNG())
         self.artifacts["demo-script"] = ("text/x-shellscript", Data(Self.diskScript.utf8))
@@ -563,6 +568,17 @@ actor DemoGateway {
             "decision": .string(decision), "reason": "user", "source": .object(source),
             "resolver": ["kind": "device", "id": .string(Self.deviceId)],
             "presentation": Self.execPresentation(request),
+        ]
+    }
+
+    /// One approval waiting in Forge's Main chat from the start. No `expiresAtMs`, so it stays until answered.
+    static func seedPendingApproval() -> JSONValue {
+        [
+            "id": "approval_seeded_push",
+            "request": ["command": "git push --force origin main", "cwd": "/home/claw/project",
+                        "sessionKey": "agent:coder:main", "agentId": "coder",
+                        "allowedDecisions": ["allow-once", "allow-always", "deny"]],
+            "createdAtMs": .number((Self.now().double ?? 0) - 5 * 60_000),
         ]
     }
 

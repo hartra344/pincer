@@ -62,6 +62,8 @@ public struct PincerScene: Scene {
                 .environment(self.app)
                 .themed()
         }
+
+        PincerMenuBar(app: self.app)
         #endif
     }
 }
@@ -259,7 +261,7 @@ struct SettingsView: View {
         #if os(macOS)
         TabView {
             Tab("General", systemImage: "gearshape") {
-                SettingsForm(sections: [.you, .quickCapture, .device])
+                SettingsForm(sections: [.you, .quickCapture, .menuBar, .device])
             }
             Tab("Appearance", systemImage: "paintpalette") {
                 SettingsForm(sections: [.appearance, .colors], scrolls: true)
@@ -281,14 +283,14 @@ struct SettingsView: View {
 
 private struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, quickCapture, appearance, colors, conversation, sidebar, notifications, device
+        case you, quickCapture, menuBar, appearance, colors, conversation, sidebar, notifications, device
 
         /// Sections that exist on this platform.
         static var available: [Self] {
             #if os(macOS)
             Self.allCases
             #else
-            Self.allCases.filter { $0 != .quickCapture }
+            Self.allCases.filter { $0 != .quickCapture && $0 != .menuBar }
             #endif
         }
     }
@@ -345,6 +347,10 @@ private struct SettingsForm: View {
         case .quickCapture:
             #if os(macOS)
             QuickCaptureSettingsSection()
+            #endif
+        case .menuBar:
+            #if os(macOS)
+            MenuBarSettingsSection()
             #endif
         case .appearance:
             SwiftUI.Section {

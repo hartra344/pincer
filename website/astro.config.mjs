@@ -47,6 +47,7 @@ export default defineConfig({
 						{ slug: 'guides/transcript' },
 						{ slug: 'guides/composer' },
 						{ slug: 'guides/quick-capture' },
+						{ slug: 'guides/menu-bar' },
 						{ slug: 'guides/sharing-to-pincer' },
 						{ slug: 'guides/approvals-and-notifications' },
 						{ slug: 'guides/push-notifications' },

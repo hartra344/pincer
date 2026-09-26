@@ -27,6 +27,8 @@ description: Keyboard shortcuts for Pincer on macOS (and iPad with a keyboard).
 
 Change or turn off the shortcut in **Settings → General → Quick Capture**. See [Quick Capture](../../guides/quick-capture/).
 
+The shortcut is also shown next to **Quick Capture…** in the [menu bar item](../../guides/menu-bar/), if you've turned it on.
+
 | Action | Shortcut |
 | --- | --- |
 | Open or close Quick Capture | <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd> |

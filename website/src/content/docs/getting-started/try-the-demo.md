@@ -14,6 +14,8 @@ Choose **Try the Demo**:
 
 The demo shows up in the rail like any other gateway. You can remove it whenever you like.
 
+It starts with one exec approval waiting, `git push --force origin main`, in the Forge agent's **Main** chat. On a Mac with the [menu bar item](../../guides/menu-bar/) turned on, it's listed under **Needs You**, next to the demo's unread chats, *home-lab* and *Paper digest*.
+
 ## Things to try
 
 Send a message and watch the reply stream in. A few words trigger special behavior:
@@ -40,7 +42,8 @@ While you're there, try:
 - **Gateway Settings → Command Policy** (or ⌘K → "Command Policy…"), to see which commands each agent may run. **Recently allowed** lists allowed commands such as `/usr/bin/git`, `/usr/bin/rg` and `/opt/homebrew/bin/npm`; open an agent to change its settings, or remove an allowed command or tool. Changes are saved to the demo gateway only;
 - **Gateway Settings → Pairing Requests**, to approve or dismiss the sample people waiting to message your agents on Telegram and Discord;
 - **Gateway Settings → Health**: Telegram has lost its connection, so the gateway shows **Degraded**, with its channels, last heartbeat and the three clients connected (this device, a Control UI and a node). **Restart Gateway…** simulates a safe restart: nothing real restarts, your chats are still there afterwards, and Telegram reconnects, so the gateway comes back **Healthy**. Start a reply first to see the restart wait for it, then try **Restart Now Anyway**. It works with the demo's default access, since nothing real restarts;
-- <kbd>⌘</kbd> <kbd>K</kbd>, to open the command palette.
+- <kbd>⌘</kbd> <kbd>K</kbd>, to open the command palette;
+- on a Mac, the [menu bar item](../../guides/menu-bar/) (**Settings → General → Menu Bar**). Say **approve** in a chat to add a row under **Needs You**, and send any message to see the chat under **Running** while the reply streams. The demo's status there reads **Degraded** until you restart it, because of Telegram.
 
 ## Sample usage and cost
 

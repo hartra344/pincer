@@ -7,7 +7,7 @@ Quick Capture opens a small composer on top of whatever you're doing. Pick a cha
 
 ## Open it
 
-Press <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd> anywhere, or choose **Go → Quick Capture…**.
+Press <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd> anywhere, or choose **Go → Quick Capture…**. You can also click the Pincer [menu bar item](../menu-bar/) and choose **Quick Capture…** (if you've turned it on).
 
 The panel opens near the top of the screen your pointer is on. It works over full-screen apps and when Pincer's main window is closed. The app you were using stays in front, and focus goes back to it when the panel closes.
 

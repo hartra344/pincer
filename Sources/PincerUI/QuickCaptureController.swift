@@ -183,6 +183,9 @@ final class QuickCaptureController: NSObject, NSWindowDelegate {
 
     var displayShortcut: String? { self.isEnabled ? self.shortcut.displayString : nil }
 
+    /// The Go menu and menu bar item title, with the shortcut while it's on.
+    var menuTitle: String { self.displayShortcut.map { "Quick Capture…  \($0)" } ?? "Quick Capture…" }
+
     func setEnabled(_ enabled: Bool) {
         self.settings.isEnabled = enabled
         self.isEnabled = enabled
