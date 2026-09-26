@@ -494,6 +494,7 @@ do {
           && ApprovalHistoryModel.KindFilter.all.emptyMessage == nil, "filtered empty messages")
 }
 await checkApprovalHistoryModel()
+await checkExecPolicy()
 print("Pairing requests")
 await checkPairingInboxModel()
 
@@ -1796,6 +1797,7 @@ func runDemo() async {
               "models page marks the session's model")
     }
     await gateway.patch(tripKey, ["pinned": false])
+    await runDemoExecPolicy(gateway, chat: chat)
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
     let pairing = gateway.pairingInbox
@@ -2882,6 +2884,7 @@ func runLive(url: String, token: String) async {
     } else {
         check(false, "nothing left to compact (\(String(describing: papers.compaction)))")
     }
+    await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
     admin.stop()
 
     for store in [gateway, other] {

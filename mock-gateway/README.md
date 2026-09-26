@@ -54,6 +54,15 @@ Approval history (`approvals.mjs`):
 - `exec.approval.resolve` records the decision at the top of the history, resolved by the calling device.
 - `MOCK_NO_APPROVAL_HISTORY=1` drops both methods from `hello-ok` and answers them with `UNKNOWN_METHOD`, like an older Gateway.
 
+Command policy (`exec-approvals.mjs`):
+
+- `exec.approvals.get` (`{}`) returns `{ path, exists, hash, file, resolvedDefaults }` for `~/.openclaw/exec-approvals.json`; `exec.approvals.set` (`{ file, baseHash }`) replaces the whole file and returns the new snapshot. `resolvedDefaults` is the file's `defaults` with unset or unknown fields filled from the Gateway's built-in values (`security: "full"`, `ask: "off"`, `askFallback: "deny"`, `autoAllowSkills: false`). Both need `operator.admin` (`operator.approvals` alone gets `FORBIDDEN` "missing scope: operator.admin", `details: {code: "MISSING_SCOPE", scope: "operator.admin"}`), like the Gateway.
+- `file.socket.token` is never sent; set merges the current socket (token included) back in, so clients can leave `socket` out or send only its path. `hash` is the sha256 of the stored file, so it changes whenever the file does.
+- set checks, in upstream order: the params schema (closed objects, `version: 1`, `pattern` required on allowlist entries, `server`/`tool`/`source`/`addedAt` required on `mcpTools`; policy values are free strings, so unknown ones survive), failing with "invalid exec.approvals.set params: …"; then, when the file exists, "exec approvals base hash required; re-run exec.approvals.get and retry" or "exec approvals changed since last load; re-run exec.approvals.get and retry" (also for a wrong `baseHash` when there's no file yet); then "exec approvals file is required". get rejects any params with "invalid exec.approvals.get params: …".
+- Seeded: defaults `{security: "allowlist", ask: "on-miss"}` (resolved `askFallback: "deny"`, `autoAllowSkills: false`); `main` has an `allow-always` entry for git (with `commandText`, `lastUsedAt`, `lastUsedCommand`), a hand-added `/bin/ls` entry and a `github › search_code` tool grant; `research` asks every time with an empty allowlist; `ghost` isn't in `agents.list` and has one entry.
+- `exec.approval.resolve` with `allow-always` appends `{id, pattern, source: "allow-always", commandText, lastUsedAt}` to the requesting agent's allowlist (agent from the request, else its `agent:<id>:…` session key), creating the agent if needed. So "`approve` in chat → Always allow → Command Policy" works end to end.
+- `MOCK_NO_EXEC_APPROVALS=1` drops both methods from `hello-ok` and answers them with `UNKNOWN_METHOD`. `MOCK_EXEC_APPROVALS_MISSING=1` starts with `exists: false` and an empty `{version: 1}` file; the first save creates it.
+
 Usage & cost (`usage.mjs`):
 
 - `usage.status` returns four providers: Claude (a 92% 5-hour window resetting within the hour, plus weekly windows), OpenAI (a window, a credit balance and a monthly budget), Gemini (an `error`) and Ollama (a `summary` only).
