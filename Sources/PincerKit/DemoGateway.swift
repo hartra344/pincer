@@ -33,7 +33,7 @@ actor DemoGateway {
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
-        "approval.history", "approval.get",
+        "approval.history", "approval.get", "logs.tail",
     ]
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
@@ -52,6 +52,8 @@ actor DemoGateway {
     private var resolvedApprovals: [String: String] = [:]
     /// Terminal approvals, newest first (`approval.history`).
     private var approvalHistory: [JSONValue] = []
+    /// The simulated Gateway log file (`logs.tail`).
+    private var logs = DemoGatewayLogs()
     /// `ask_user` prompts by id, in the order they were asked.
     private var questions: [String: JSONValue] = [:]
     private var questionOrder: [String] = []
@@ -217,12 +219,15 @@ actor DemoGateway {
             self.approvalHistory.insert(Self.resolvedRecord(approval, decision: decision), at: 0)
             self.approvals[id] = nil
             self.approvalOrder.removeAll { $0 == id }
+            self.logs.approvalResolved(id: id, decision: decision)
             self.emit("exec.approval.resolved", ["id": .string(id), "decision": .string(decision)])
             return ["ok": true, "id": .string(id), "decision": .string(decision)]
         case "approval.history":
             return try self.approvalHistoryPage(params)
         case "approval.get":
             return try self.approvalSnapshot(params)
+        case "logs.tail":
+            return try self.logs.tail(params)
         case "question.list":
             return ["questions": .array(self.questionOrder.compactMap { self.questions[$0] }
                     .filter { $0["status"]?.string == "pending" })]
@@ -603,6 +608,7 @@ actor DemoGateway {
         let key = run.sessionKey
         let text = run.text
         let model = self.rowModel(key)
+        self.logs.chatStarted(runId: runId, sessionKey: key, model: "\(model.provider)/\(model.model)", text: text)
 
         var content = [Self.text(text)]
         for attachment in params["attachments"]?.array ?? [] {
@@ -643,6 +649,7 @@ actor DemoGateway {
             ]
             self.approvals[id] = approval
             self.approvalOrder.append(id)
+            self.logs.approvalRequested(id: id, command: "rm -rf ./build")
             self.emit("exec.approval.requested", approval)
         }
 
@@ -697,6 +704,7 @@ actor DemoGateway {
         self.chat(runId, ["state": "final", "message": finalMessage])
         self.agentEvent(runId, stream: "lifecycle", ["phase": "end"])
         self.runs[runId] = nil
+        self.logs.chatFinished(runId: runId, outputTokens: reply.count / 4, usedTool: wantsTool)
         self.updateRow(key, reason: "run-finished") { row in
             row["hasActiveRun"] = false
             row["activeRunIds"] = []

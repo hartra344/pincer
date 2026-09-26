@@ -77,7 +77,15 @@ For a detailed log of every request and the gateway's reply, run the app with a 
 open --env PINCER_REQUEST_LOG=/tmp/pincer.log /Applications/Pincer.app
 ```
 
-Each request is logged with ✓ or the gateway's error. History and image downloads are left out.
+Each request is logged with ✓ or the gateway's error. History and image downloads, and Gateway Logs polls, are left out.
+
+This is Pincer's own log. To see the **gateway's** log, open [Gateway Logs](../../guides/gateway-logs/) (**Organize → Gateway Logs…** or <kbd>⌘</kbd> <kbd>K</kbd>).
+
+## Gateway Logs says it isn't available or can't read the log
+
+- **Gateway Logs Aren't Available:** the gateway doesn't offer `logs.tail`. Update OpenClaw on the gateway host.
+- **Needs the operator.read scope:** approve the scope for this device on the gateway host, then choose **Try Again**.
+- **Couldn't read the gateway log:** the gateway couldn't open its log file, often a permissions problem on the gateway host. Pincer keeps retrying and keeps the lines it already has. Check the path shown at the bottom of the page.
 
 ## Still stuck?
 

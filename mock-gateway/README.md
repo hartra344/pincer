@@ -53,3 +53,11 @@ Approval history (`approvals.mjs`):
 - Cursors are opaque and bound to their `kind`; an unknown one fails with `INVALID_REQUEST` "invalid approval.history cursor". Unknown ids fail with `INVALID_REQUEST` and `details.reason: "APPROVAL_NOT_FOUND"`.
 - `exec.approval.resolve` records the decision at the top of the history, resolved by the calling device.
 - `MOCK_NO_APPROVAL_HISTORY=1` drops both methods from `hello-ok` and answers them with `UNKNOWN_METHOD`, like an older Gateway.
+
+Gateway logs (`logs.mjs`):
+
+- `logs.tail` (`cursor` ≥ 0, `limit` 1–5000 defaulting to 500, `maxBytes` 1–1,000,000 defaulting to 250,000) reads an in-memory log file by byte offset, like the Gateway's `readLogSlice`, and returns `{ file, cursor, size, lines, truncated, reset, skippedBytes? }`. Unknown params and bad types fail with `INVALID_REQUEST` "invalid logs.tail params: …". It needs `operator.read` (`operator.write` or `operator.admin` also work); otherwise `FORBIDDEN` with `details.code: "MISSING_SCOPE"`.
+- Without a cursor it returns the tail (the last `maxBytes`, `truncated` when older lines were left out). The returned cursor ends on a complete line; a cursor in the middle of a line drops that partial line. A cursor past the end of the file resets to the tail (`reset`); one more than `maxBytes` behind fast-forwards (`reset`, `truncated` and `skippedBytes`). More than `limit` lines keeps the newest (`truncated`).
+- The file is `/tmp/openclaw/openclaw-YYYY-MM-DD.log` (a name only; nothing is written to disk), seeded with about 130 tslog-style JSON lines from the last 90 minutes across every level (including one that repeats the logger name as its first argument, a meta-object argument and a long prompt), plus a plain-text and an ANSI-colored line. A timer appends 1–3 lines a second; `chat.send` and `approve` add lines too.
+- Chat triggers: `[mock:rotate-logs]` switches to the next day's file name with a fresh file; `[mock:truncate-logs]` empties the current file (the next read with a cursor gets `reset`); `[mock:log-burst]` appends 6,000 lines at once (the next read fast-forwards with `skippedBytes`); `[mock:logs-unavailable]` makes the next two reads fail with `UNAVAILABLE` "log read failed: EACCES: permission denied, open '…'".
+- `MOCK_NO_LOGS=1` drops `logs.tail` from `hello-ok` and answers it with `UNKNOWN_METHOD`, like an older Gateway.

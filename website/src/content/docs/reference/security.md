@@ -21,6 +21,8 @@ Pincer connects to a Gateway you already run and speaks the Gateway WebSocket pr
 
 `operator.admin` is only requested when you choose **Full Management**, and the gateway has to approve it separately.
 
+[Gateway Logs](../../guides/gateway-logs/) needs only `operator.read`.
+
 ## Device identity
 
 Each install creates its own **Ed25519 device key**, stored in the Keychain and marked *this device only*, so it never syncs to other devices or backups. The gateway must approve each device once.
@@ -50,6 +52,12 @@ Transcripts are cached so chats open instantly:
 - **Cleanup:** removing a gateway deletes its cache.
 
 To turn the cache off, set `PINCER_CACHE_DIR=off`. To use another folder, set it to a path.
+
+## Gateway logs
+
+[Gateway Logs](../../guides/gateway-logs/) keeps the lines it fetches (`logs.tail`) in memory only, up to the last 2,000 lines or 8 MB. They're never cached on disk or written to Pincer's own logs, and `PINCER_REQUEST_LOG` leaves these requests out.
+
+The gateway redacts tokens and other secrets before it sends log lines; Pincer doesn't add redaction of its own. Lines can still contain hostnames, file paths and message content, so **Export…** reminds you to review a file before sharing it.
 
 ## Sandbox
 

@@ -6,6 +6,8 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case overview
     /// Approval History: past decisions on commands, plugins and system changes.
     case approvals
+    /// Gateway Logs: a live tail of the Gateway's log file (`logs.tail`).
+    case logs
     /// A curated page from `SettingsCatalog`, by id.
     case page(String)
     case plugins

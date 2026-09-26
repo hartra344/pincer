@@ -3,7 +3,7 @@ title: Try the demo
 description: Explore Pincer with a simulated gateway that runs entirely on your device.
 ---
 
-Pincer has a built-in demo, so you can look around before you set up a gateway. It runs a simulated Gateway on your device with sample agents, chats, streamed replies, a chart and an exec approval. **Nothing leaves your device.**
+Pincer has a built-in demo, so you can look around before you set up a gateway. It runs a simulated Gateway on your device with sample agents, chats, streamed replies, a chart, an exec approval, past approval decisions and a live gateway log. **Nothing leaves your device.**
 
 ## Open the demo
 
@@ -29,7 +29,8 @@ While you're there, try:
 - the **layout** menu at the top of the sidebar, to switch between *By server*, *By agent*, *By group* and *Recent*;
 - typing `/` in the composer to see slash commands;
 - **Thinking Steps** in the chat's ⋯ menu, to choose how much of the agent's work you see;
-- **Settings → Appearance**, to try a different theme.
+- **Settings → Appearance**, to try a different theme;
+- **Organize → Gateway Logs…**, to watch the simulated gateway's log grow. Send a message or trigger an approval and it shows up there. Try the level buttons, search, **Pause** and **Export…**.
 
 :::tip
 The demo is what TestFlight testers and App Review use, so they don't need a Gateway or Tailscale.

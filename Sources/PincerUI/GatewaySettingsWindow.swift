@@ -147,6 +147,7 @@ private struct GatewaySettingsRoot: View {
         case .connection: ConnectionPage()
         case .overview: OverviewPage()
         case .approvals: ApprovalHistoryPage()
+        case .logs: GatewayLogsPage()
         case let .page(id):
             if let page = SettingsCatalog.page(id) { CuratedPage(page: page) }
         case .plugins: PluginsPage()
@@ -208,6 +209,7 @@ private struct SettingsSidebar: View {
                     self.row("Connection", symbol: "network", .connection)
                     self.row("Overview", symbol: "info.circle", .overview)
                     self.row("Approval History", symbol: "checkmark.shield", .approvals)
+                    self.row("Gateway Logs", symbol: "doc.text.magnifyingglass", .logs)
                 }
                 if settings.hasLoaded {
                     Section("Settings") {

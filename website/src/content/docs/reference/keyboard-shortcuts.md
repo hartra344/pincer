@@ -50,3 +50,5 @@ Change or turn off the shortcut in **Settings → General → Quick Capture**. S
 | Action | Shortcut |
 | --- | --- |
 | Save (opens Review Changes) | <kbd>⌘</kbd> <kbd>S</kbd> |
+| Search the log (Gateway Logs, macOS) | <kbd>⌘</kbd> <kbd>F</kbd> |
+| Copy selected log lines (Gateway Logs, macOS) | <kbd>⌘</kbd> <kbd>C</kbd> |

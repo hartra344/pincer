@@ -48,6 +48,7 @@ export default defineConfig({
 						{ slug: 'guides/quick-capture' },
 						{ slug: 'guides/approvals-and-notifications' },
 						{ slug: 'guides/gateway-settings' },
+						{ slug: 'guides/gateway-logs' },
 						{ slug: 'guides/appearance' },
 					],
 				},

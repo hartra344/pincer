@@ -5,6 +5,7 @@ import { WebSocketServer } from 'ws';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
+import { LOGS_METHODS, createLogsState, handleLogsRequest, logsDisabled, noteApprovalForLogs, noteChatForLogs, stopLogs } from './logs.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
@@ -39,6 +40,7 @@ const METHODS = [
   'progressCard.put',
   ...CONFIG_METHODS,
   ...CRON_METHODS,
+  ...LOGS_METHODS,
 ];
 const EVENTS = [
   'connect.challenge',
@@ -457,6 +459,7 @@ function createSeedState() {
     webPushState: createWebPushState(),
     cronState: createCronState(base),
     approvalHistoryState: createApprovalHistoryState(base),
+    logsState: createLogsState(base),
   };
 }
 
@@ -595,7 +598,10 @@ function makeHelloPayload(state, params, connId, deviceId) {
     type: 'hello-ok',
     protocol: 4,
     server: { version: 'mock-2026.1', connId },
-    features: { methods: approvalHistoryDisabled() ? METHODS.filter((m) => !APPROVAL_HISTORY_METHODS.includes(m)) : METHODS, events: EVENTS },
+    features: {
+      methods: METHODS.filter((m) => !(approvalHistoryDisabled() && APPROVAL_HISTORY_METHODS.includes(m)) && !(logsDisabled() && LOGS_METHODS.includes(m))),
+      events: EVENTS,
+    },
     snapshot: {},
     auth: { role: 'operator', scopes: params.scopes ?? [], deviceToken: deviceTokenFor(state, deviceId) },
     policy: {
@@ -852,6 +858,7 @@ async function simulateRun(state, run, params) {
       setTimeout(() => {
         if (state.pendingApprovals.get(approval.id) === approval) state.pendingApprovals.delete(approval.id);
       }, ttlMs).unref?.();
+      noteApprovalForLogs(state, approval);
       broadcast(state, 'exec.approval.requested', clone(approval));
     }
 
@@ -986,6 +993,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession })) return;
   if (handleWebPushRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleLogsRequest(state, conn, msg, { sendRes, sendErr })) return;
   switch (method) {
     case 'progressCard.get': {
       const key = params.sessionKey;
@@ -1128,6 +1136,7 @@ function handleAuthedRequest(state, conn, msg) {
       }
       const runId = shortId('run_');
       state.idempotency.set(params.idempotencyKey, runId);
+      noteChatForLogs(state, key, message, runId);
       const run = {
         runId,
         sessionKey: key,
@@ -1503,6 +1512,7 @@ export async function startServer(opts = {}) {
       new Promise((resolve) => {
         if (backgroundTimer) clearInterval(backgroundTimer);
         for (const timer of state.cronState.active.values()) clearTimeout(timer);
+        stopLogs(state.logsState);
         for (const conn of state.connections) conn.ws.close(1001, 'server closing');
         wss.close(() => resolve());
       }),

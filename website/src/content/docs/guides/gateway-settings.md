@@ -20,6 +20,7 @@ Settings are read-only unless this device's **Access** is set to **Full Manageme
 | --- | --- |
 | **Connection** | This device's URL, token, access level and TLS pin. **Apply** reconnects. |
 | **Overview** | The gateway's version, config file and health. |
+| **Gateway Logs** | A live tail of the gateway's log, with level filters, search, copy and export. See [Gateway Logs](../gateway-logs/). |
 | **Gateway** | Core gateway settings. |
 | **Agents & Models** | Agents, their models and defaults. |
 | **Channels** | Messaging channels, such as Discord. |
