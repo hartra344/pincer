@@ -104,6 +104,10 @@ xcodegen generate
 open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pincer-iOS
 ```
 
+### Tests on CI
+
+`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs `PincerChecks` in offline, `--demo` and `--live` (against the mock gateway) modes, and runs the mock gateway's selftest.
+
 ### TestFlight
 
 `.github/workflows/testflight.yml` archives both apps, signs them for the App Store, and uploads them to TestFlight. To run it, go to **Actions → TestFlight → Run workflow** and pick a platform, or push a `v*` tag. Each build number is `<run number>.<attempt>`.
