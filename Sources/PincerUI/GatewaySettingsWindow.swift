@@ -204,6 +204,7 @@ private struct GatewaySettingsRoot: View {
         switch destination {
         case .connection: ConnectionPage()
         case .overview: OverviewPage()
+        case .health: GatewayHealthPage()
         case .approvals: ApprovalHistoryPage()
         case .execPolicy: ExecPolicyPage()
         case .usage: UsagePage()
@@ -308,6 +309,8 @@ private struct SettingsSidebar: View {
                 Section {
                     self.row("Connection", symbol: "network", .connection)
                     self.row("Overview", symbol: "info.circle", .overview)
+                    self.row("Health", symbol: "heart.text.square", .health,
+                             attention: self.gateway.health.level == .degraded || self.gateway.health.needsRestart)
                     self.row("Approval History", symbol: "checkmark.shield", .approvals)
                     self.row("Command Policy", symbol: "lock.shield", .execPolicy,
                              unsaved: self.gateway.execPolicy.hasChanges)
