@@ -7,13 +7,13 @@ The **Health** page shows how your gateway is doing and lets you restart it with
 
 ## Opening it
 
-Open [Gateway Settings](../gateway-settings/) and choose **Health** in the sidebar. The row gets an attention mark when the gateway is degraded or needs a restart.
+Open [Gateway Settings](../gateway-settings/) and choose **Health** in the sidebar. The row gets an attention mark when the gateway is degraded (not counting dismissed issues) or needs a restart.
 
 When something needs a look, a line at the top of the chat sidebar says so. Click or tap it to open the Health page:
 
 | Line | Meaning |
 | --- | --- |
-| **Gateway degraded · N issues** | The gateway is up, but something on it isn't working. |
+| **Gateway degraded · N issues** | The gateway is up, but something on it isn't working. It only counts issues you haven't [dismissed](#dismissing-issues). |
 | **Restart needed to apply changes** | A saved change only takes effect after a restart. |
 | **Restarting Gateway…**, then **Reconnecting…** | A restart is under way. |
 | **Gateway hasn't come back yet** | A minute after a restart the gateway still isn't answering. Pincer keeps trying; check the gateway host. |
@@ -29,12 +29,54 @@ A healthy gateway shows nothing there.
   - failed deliveries waiting in a queue;
   - a quarantined context engine;
   - a failed heartbeat, or one that's more than twice its interval late while heartbeats are on.
+- **Dismissed:** issues you [dismissed](#dismissing-issues), collapsed until you open it.
 - **Channels:** each channel with its status (Connected, Stopped, Error…) and its last error.
 - **Connected Clients:** the apps and nodes connected to the gateway right now, with their platform, role and last activity. **This device** is marked.
 
 The page updates live from the gateway's events and refreshes every 30 seconds while it's open. Use **Refresh** in the toolbar, or pull down on iOS, to refresh now.
 
 If your gateway doesn't offer part of this, that section says **Unavailable on this Gateway** and the rest still works.
+
+## Dismissing issues
+
+Some issues are expected, like a channel account you keep set up but offline, or one old failed delivery. You can dismiss them so the gateway shows **Healthy** again.
+
+- **Mac:** hover over the issue and click **Dismiss**, or Control-click it and choose **Dismiss**.
+- **iPhone and iPad:** swipe left on the issue, or touch and hold it and choose **Dismiss**.
+- **VoiceOver:** the **Dismiss**, **Always Ignore** and **Restore** actions are in the actions rotor.
+
+A dismissed issue moves to the collapsed **Dismissed (N)** section. It doesn't count toward Degraded, the sidebar line, the Overview badge or the Settings attention mark. When every issue is dismissed, the summary shows **Healthy** and "N dismissed issues".
+
+### Until it changes
+
+**Dismiss** hides an issue until it changes:
+
+| Issue | Comes back when |
+| --- | --- |
+| Channel account | its state changes (not running, not connected, error). A new error message alone doesn't bring it back. |
+| Plugin failed to load | the error text changes |
+| Failed deliveries | the count goes up. The same or a lower count stays hidden. |
+| Heartbeat failed | the reason changes |
+| Heartbeat late | the interval changes |
+| Plugin unavailable, quarantined context engine | it clears and happens again |
+
+Any issue also comes back if it clears up and happens again: when a device running Pincer sees a fresh result without the issue, it forgets the dismissal.
+
+### Always Ignore
+
+For a **channel account** or a **plugin** you can choose **Always Ignore This Account** or **Always Ignore This Plugin** from the context menu. It stays hidden whatever changes, and stays listed under **Dismissed** even while the gateway isn't reporting it, so you can restore it. Failed deliveries, context engines and heartbeats can't be always ignored, since they point to lost messages or a stalled agent.
+
+### Restoring
+
+Open **Dismissed**, then choose **Restore** from the context menu (swipe on iOS, or the hover button on the Mac). The issue goes back to **Issues** and counts again.
+
+### Fixing instead
+
+For channel, plugin and context engine issues, the context menu also has **Restart Gateway…** (with Full Management), which often fixes them. There's no way to retry or clear failed deliveries from Pincer yet: the gateway doesn't offer a method for it. That needs an upstream OpenClaw change; until then, dismiss the issue.
+
+### Syncing
+
+Dismissals are stored in your gateway's user preferences (`pincer.healthDismissals`, see [Synced preferences](../../reference/synced-preferences/)), so your other devices signed in as you hide the same issues. Down, Restarting and "Restart needed" can't be dismissed.
 
 ## Restarting the gateway
 
@@ -54,4 +96,6 @@ When a setting you saved needs a restart, Gateway Settings says "Saved. Restart 
 
 - Health and restart have been tested against the [demo](../../getting-started/try-the-demo/) and the [mock gateway](../../development/mock-gateway/) only, not a real gateway restart.
 - **Restart Now Anyway** asks the gateway to skip waiting for active work. How quickly a real gateway restarts after that is up to the gateway.
+- If a dismissed issue clears up and happens again while no device running Pincer is connected, it stays dismissed, unless it also changed (for example, more failed deliveries).
+- Pincer can't retry or clear failed deliveries yet, since the gateway has no method for it.
 - If the gateway shuts down without saying it will come back (for example `openclaw gateway stop`), Pincer treats it as a stop, not a restart, and shows its usual reconnecting status.

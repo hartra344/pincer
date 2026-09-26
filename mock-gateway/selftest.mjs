@@ -6,6 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import { startServer } from './server.mjs';
 import { SEEDED_HISTORY_COUNTS } from './approvals.mjs';
+import { FAILED_DELIVERY_QUEUE, addFailedDelivery, createHealthState, healthSummary } from './health.mjs';
 import { PAIRING_TTL_MS, PENDING_PER_ACCOUNT, addChannelPairingRequest, createChannelPairingState } from './pairing.mjs';
 import { decryptWebPush, sessionPath } from './webpush.mjs';
 
@@ -968,6 +969,12 @@ try {
   const healthNow = await watcher.send('health');
   assert.equal(healthNow.channels.discord.connected, true);
   assert.equal(healthNow.heartbeatSeconds, 1800);
+  // One failed delivery that stays failed, so Pincer shows a dismissable issue.
+  assert.equal(healthNow.deliveryQueues.failed.length, 1);
+  assert.equal(healthNow.deliveryQueues.failed[0].queueName, FAILED_DELIVERY_QUEUE);
+  assert.equal(healthNow.deliveryQueues.failed[0].count, 1);
+  assert.ok(healthNow.deliveryQueues.failed[0].oldestFailedAt > 0);
+  assert.deepEqual(helloSnap.health.deliveryQueues.failed, healthNow.deliveryQueues.failed);
   assert.equal((await watcher.send('last-heartbeat')).status, 'ok-token');
   assert.ok((await watcher.send('system-presence')).some((p) => p.mode === 'node'));
   assert.ok((await watcher.send('status')).uptimeMs > 0);
@@ -1020,6 +1027,51 @@ try {
     old.ws.close();
   } finally {
     delete process.env.MOCK_NO_HEALTH;
+  }
+
+  // The failed delivery survived the restarts; MOCK_FAILED_DELIVERY_EVERY adds more, MOCK_FAILED_DELIVERY=off drops it.
+  const afterRestart = await connectClient(url, device, deviceToken, true);
+  assert.equal((await afterRestart.send('health')).deliveryQueues.failed[0].count, 1);
+  afterRestart.ws.close();
+  const fakeState = { agents: new Map(), sessions: new Map(), healthState: createHealthState() };
+  const sent = [];
+  addFailedDelivery(fakeState, (_state, event, payload) => sent.push({ event, payload }));
+  assert.equal(fakeState.healthState.failedDelivery.count, 2);
+  assert.equal(sent[0].event, 'health');
+  assert.equal(sent[0].payload.deliveryQueues.failed[0].count, 2);
+  process.env.MOCK_FAILED_DELIVERY = 'off';
+  try {
+    const quiet = { agents: new Map(), sessions: new Map(), healthState: createHealthState() };
+    assert.deepEqual(healthSummary(quiet).deliveryQueues.failed, []);
+    addFailedDelivery(quiet, () => assert.fail('nothing to add'));
+  } finally {
+    delete process.env.MOCK_FAILED_DELIVERY;
+  }
+  // Through the env vars on a real server: the timer broadcasts `health` with a higher count;
+  // MOCK_FAILED_DELIVERY=off reports no failed queue in `health` or the hello snapshot.
+  process.env.MOCK_FAILED_DELIVERY_EVERY = '0.2';
+  const everyServer = await startServer({ host: '127.0.0.1', port: 0, pairing: 'off', mockToken: 'dev-token' });
+  delete process.env.MOCK_FAILED_DELIVERY_EVERY;
+  try {
+    const client = await connectClient(`ws://127.0.0.1:${everyServer.address().port}`, makeDevice(), 'dev-token');
+    const grown = await client.waitEvent('health', (p) => p.deliveryQueues?.failed?.[0]?.count >= 2, 3000);
+    assert.equal(grown.deliveryQueues.failed[0].queueName, FAILED_DELIVERY_QUEUE);
+    assert.ok((await client.send('health')).deliveryQueues.failed[0].count >= 2);
+    client.ws.close();
+  } finally {
+    await everyServer.close();
+  }
+  process.env.MOCK_FAILED_DELIVERY = 'off';
+  const offServer = await startServer({ host: '127.0.0.1', port: 0, pairing: 'off', mockToken: 'dev-token', failedDeliveryEvery: 0.1 });
+  delete process.env.MOCK_FAILED_DELIVERY;
+  try {
+    const client = await connectClient(`ws://127.0.0.1:${offServer.address().port}`, makeDevice(), 'dev-token');
+    assert.deepEqual(client.hello.snapshot.health.deliveryQueues.failed, []);
+    await delay(300);
+    assert.deepEqual((await client.send('health')).deliveryQueues.failed, []);
+    client.ws.close();
+  } finally {
+    await offServer.close();
   }
   console.log('PASS');
 } finally {

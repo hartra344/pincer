@@ -8,6 +8,7 @@ struct GatewayHealthPage: View {
     @Environment(SettingsNavigator.self) private var navigator
     @State private var confirmRestart = false
     @State private var confirmForce = false
+    @State private var showDismissed = false
 
     private var model: GatewayHealthModel { self.gateway.health }
 
@@ -19,23 +20,7 @@ struct GatewayHealthPage: View {
                 self.restartBanner(model)
             }
             self.summary(model, connected: connected)
-            let issues = model.issues
-            if !issues.isEmpty {
-                Section("Issues") {
-                    ForEach(issues) { issue in
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(issue.title)
-                                if let detail = issue.detail {
-                                    Text(detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                                }
-                            }
-                        } icon: {
-                            Image(systemName: issue.symbol).foregroundStyle(.orange)
-                        }
-                    }
-                }
-            }
+            self.issues(model)
             self.channels(model)
             self.clients(model)
             self.restartSection(model)
@@ -77,6 +62,45 @@ struct GatewayHealthPage: View {
 
     // MARK: Sections
 
+    private static let dismissFooter = "Dismissed issues come back if they get worse, or clear up and happen again."
+
+    @ViewBuilder private func issues(_ model: GatewayHealthModel) -> some View {
+        let active = model.activeIssues
+        let absent = model.ignoredButAbsent
+        let dismissed = model.dismissedIssues + absent
+        if !active.isEmpty {
+            Section {
+                ForEach(active) { issue in
+                    GatewayHealthIssueRow(issue: issue, model: model) { self.confirmRestart = true }
+                }
+            } header: {
+                Text("Issues")
+            } footer: {
+                Text(Self.dismissFooter)
+            }
+        }
+        if !dismissed.isEmpty {
+            Section {
+                DisclosureGroup("Dismissed (\(dismissed.count))", isExpanded: self.$showDismissed) {
+                    ForEach(dismissed) { issue in
+                        GatewayHealthIssueRow(issue: issue, model: model,
+                                              dismissedCaption: Self.dismissedCaption(issue, model: model,
+                                                                                      absent: absent.contains(issue))) {
+                            self.confirmRestart = true
+                        }
+                    }
+                }
+            } footer: {
+                if active.isEmpty { Text(Self.dismissFooter) }
+            }
+        }
+    }
+
+    static func dismissedCaption(_ issue: GatewayHealthIssue, model: GatewayHealthModel, absent: Bool) -> String {
+        if absent { return "Always ignored · Not reported right now" }
+        return model.dismissal(for: issue.id) == .always ? "Always ignored" : "Dismissed until it changes"
+    }
+
     static func showsRestartBanner(_ model: GatewayHealthModel) -> Bool {
         model.needsRestart && !model.restartState.isInProgress
     }
@@ -104,6 +128,9 @@ struct GatewayHealthPage: View {
         return Section {
             LabeledContent("Status") {
                 Label(level.label, systemImage: level.symbol).foregroundStyle(Self.color(level))
+            }
+            if level == .healthy, case let count = model.dismissedIssues.count, count > 0 {
+                Text("\(count) dismissed issue\(count == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary)
             }
             if let failure = model.healthFailure {
                 Text(failure).font(.caption).foregroundStyle(.secondary)
@@ -285,6 +312,114 @@ struct GatewayHealthPage: View {
         case .stopped: .orange
         case .error: .red
         case .disabled, .notConfigured, .unknown: .secondary
+        }
+    }
+}
+
+/// One Health issue: Dismiss or Always Ignore when active, Restore when dismissed, from the context
+/// menu, a swipe (iOS), a hover button (macOS) or accessibility actions.
+private struct GatewayHealthIssueRow: View {
+    let issue: GatewayHealthIssue
+    let model: GatewayHealthModel
+    /// Set for rows in the Dismissed section.
+    var dismissedCaption: String?
+    let onRestart: () -> Void
+    @State private var hovering = false
+
+    private var isDismissed: Bool { self.dismissedCaption != nil }
+
+    private var alwaysIgnoreTitle: String {
+        self.issue.kind == .channel ? "Always Ignore This Account" : "Always Ignore This Plugin"
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(self.issue.title)
+                    if let caption = self.dismissedCaption {
+                        Text(caption).font(.caption).foregroundStyle(.secondary)
+                    } else if let detail = self.issue.detail {
+                        Text(detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    }
+                }
+            } icon: {
+                Image(systemName: self.issue.symbol).foregroundStyle(self.isDismissed ? Color.secondary : Color.orange)
+            }
+            #if os(macOS)
+            Spacer(minLength: 8)
+            self.hoverButton
+                .opacity(self.hovering ? 1 : 0)
+                .allowsHitTesting(self.hovering)
+                .accessibilityHidden(true)
+            #endif
+        }
+        .contentShape(Rectangle())
+        #if os(macOS)
+        .onHover { self.hovering = $0 }
+        #endif
+        .contextMenu { self.menu }
+        #if os(iOS)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if self.isDismissed {
+                Button("Restore", systemImage: "arrow.uturn.backward") { self.model.restore(id: self.issue.id) }
+                    .tint(.blue)
+            } else {
+                Button("Dismiss", systemImage: "eye.slash") { self.model.dismiss(self.issue) }
+                    .tint(.gray)
+            }
+        }
+        #endif
+        .accessibilityElement(children: .combine)
+        .modifier(IssueAccessibilityActions(issue: self.issue, model: self.model, isDismissed: self.isDismissed,
+                                            alwaysIgnoreTitle: self.alwaysIgnoreTitle))
+    }
+
+    @ViewBuilder private var menu: some View {
+        if self.isDismissed {
+            Button("Restore", systemImage: "arrow.uturn.backward") { self.model.restore(id: self.issue.id) }
+        } else {
+            Button("Dismiss", systemImage: "eye.slash") { self.model.dismiss(self.issue) }
+            if self.issue.canAlwaysIgnore {
+                Button(self.alwaysIgnoreTitle, systemImage: "eye.slash.circle") { self.model.dismiss(self.issue, always: true) }
+            }
+            if self.issue.offersRestart, self.model.canRestart {
+                Divider()
+                Button("Restart Gateway…", systemImage: "arrow.clockwise") { self.onRestart() }
+            }
+        }
+    }
+
+    #if os(macOS)
+    @ViewBuilder private var hoverButton: some View {
+        if self.isDismissed {
+            Button("Restore") { self.model.restore(id: self.issue.id) }
+                .buttonStyle(.borderless)
+                .help("Show this issue again")
+        } else {
+            Button("Dismiss") { self.model.dismiss(self.issue) }
+                .buttonStyle(.borderless)
+                .help("Dismiss until it changes")
+        }
+    }
+    #endif
+}
+
+private struct IssueAccessibilityActions: ViewModifier {
+    let issue: GatewayHealthIssue
+    let model: GatewayHealthModel
+    let isDismissed: Bool
+    let alwaysIgnoreTitle: String
+
+    func body(content: Content) -> some View {
+        if self.isDismissed {
+            content.accessibilityAction(named: "Restore") { self.model.restore(id: self.issue.id) }
+        } else if self.issue.canAlwaysIgnore {
+            content
+                .accessibilityAction(named: "Dismiss") { self.model.dismiss(self.issue) }
+                .accessibilityAction(named: self.alwaysIgnoreTitle) { self.model.dismiss(self.issue, always: true) }
+        } else {
+            content.accessibilityAction(named: "Dismiss") { self.model.dismiss(self.issue) }
         }
     }
 }

@@ -8,7 +8,7 @@ import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
 import { EXEC_APPROVALS_METHODS, createExecApprovalsState, execApprovalsDisabled, handleExecApprovalsRequest, recordAllowAlways } from './exec-approvals.mjs';
 import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, createChannelPairingState, handleChannelPairingRequest } from './pairing.mjs';
-import { HEALTH_EVENTS, HEALTH_METHODS, broadcastPresence, cancelPendingRestart, createHealthState, handleHealthRequest, healthDisabled, helloSnapshot, isRestarting } from './health.mjs';
+import { HEALTH_EVENTS, HEALTH_METHODS, addFailedDelivery, broadcastPresence, cancelPendingRestart, createHealthState, handleHealthRequest, healthDisabled, helloSnapshot, isRestarting } from './health.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
@@ -1456,6 +1456,7 @@ export async function startServer(opts = {}) {
     background: opts.background ?? process.env.MOCK_BACKGROUND === '1',
     legacyPairing: opts.legacyPairing ?? process.env.MOCK_LEGACY_PAIRING === '1',
     channelPairingEvery: Number(opts.channelPairingEvery ?? process.env.MOCK_CHANNEL_PAIRING_EVERY ?? 0),
+    failedDeliveryEvery: Number(opts.failedDeliveryEvery ?? process.env.MOCK_FAILED_DELIVERY_EVERY ?? 0),
   };
   const state = createSeedState();
   setupManualPairing(state, options.pairing === 'manual');
@@ -1534,6 +1535,9 @@ export async function startServer(opts = {}) {
   const pairingTimer = options.channelPairingEvery > 0
     ? setInterval(() => addChannelPairingRequest(state), options.channelPairingEvery * 1000)
     : undefined;
+  const failedDeliveryTimer = options.failedDeliveryEvery > 0
+    ? setInterval(() => addFailedDelivery(state, broadcast), options.failedDeliveryEvery * 1000)
+    : undefined;
   await ready;
   console.log(`mock OpenClaw Gateway listening on ws://${options.host}:${wss.address().port}`);
 
@@ -1545,6 +1549,7 @@ export async function startServer(opts = {}) {
       new Promise((resolve) => {
         if (backgroundTimer) clearInterval(backgroundTimer);
         if (pairingTimer) clearInterval(pairingTimer);
+        if (failedDeliveryTimer) clearInterval(failedDeliveryTimer);
         for (const timer of state.cronState.active.values()) clearTimeout(timer);
         cancelPendingRestart(state);
         for (const conn of state.connections) conn.ws.close(1001, 'server closing');
