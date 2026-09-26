@@ -296,7 +296,9 @@ struct ApprovalsBanner: View {
                             .glassButton()
                             Menu("Allow") {
                                 Button("Allow Once") { Task { await self.gateway.resolveApproval(approval, decision: "allow-once") } }
-                                Button("Always Allow") { Task { await self.gateway.resolveApproval(approval, decision: "allow-always") } }
+                                if approval.allowsAlways {
+                                    Button("Always Allow") { Task { await self.gateway.resolveApproval(approval, decision: "allow-always") } }
+                                }
                             } primaryAction: {
                                 Task { await self.gateway.resolveApproval(approval, decision: "allow-once") }
                             }

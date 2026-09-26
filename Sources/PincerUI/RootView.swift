@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The whole app: shared by the macOS and iOS targets.
 public struct PincerScene: Scene {
-    @State private var app = AppModel()
+    @State private var app = AppModel.shared
 
     public init() {}
 
