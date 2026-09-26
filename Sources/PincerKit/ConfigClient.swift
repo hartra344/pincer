@@ -39,6 +39,8 @@ public enum ConfigApplyOutcome: Equatable, Sendable {
     case noChange
     case applied
     case restarting
+    /// Applied, but part of it only takes effect after a Gateway restart (a plugin's `restartRequired`).
+    case restartRequired
     /// Saved, but the Gateway couldn't apply it yet.
     case savedNotApplied(String)
 
@@ -47,6 +49,7 @@ public enum ConfigApplyOutcome: Equatable, Sendable {
         case .noChange: "Nothing changed."
         case .applied: "Saved and applied."
         case .restarting: "Saved. The Gateway is restarting to apply it."
+        case .restartRequired: "Saved. Restart the Gateway to finish applying it."
         case let .savedNotApplied(reason): "Saved, but not applied yet. \(reason)"
         }
     }
@@ -63,8 +66,18 @@ public enum ConfigApplyOutcome: Equatable, Sendable {
         }
     }
 
+    /// Plugin changes apply live; `restartRequired` means leftovers stay loaded until someone
+    /// restarts the Gateway, which doesn't happen on its own.
     public init(pluginChange response: JSONValue) {
-        self = response["restartRequired"]?.bool == true ? .restarting : .applied
+        self = response["restartRequired"]?.bool == true ? .restartRequired : .applied
+    }
+
+    /// Whether the change waits for a restart someone has to start.
+    public var needsManualRestart: Bool {
+        switch self {
+        case .restartRequired, .savedNotApplied: true
+        default: false
+        }
     }
 }
 

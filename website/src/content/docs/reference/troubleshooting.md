@@ -68,6 +68,14 @@ Reviewing pairing requests needs **Access → Full Management** on the **Connect
 
 If the page says no channels use DM pairing, set a channel account's `dmPolicy` to `"pairing"` on the gateway.
 
+## The sidebar says "Gateway degraded"
+
+Something on the gateway isn't working, usually a channel that lost its connection. Click the line (or open **Gateway Settings → Health**) to see each issue and the channel's last error.
+
+## I can't restart the gateway
+
+**Restart Gateway…** needs **Access → Full Management**, and the gateway must offer `gateway.restart.request`. If it says **Waiting for N active tasks**, the gateway is letting running work finish first; choose **Restart Now Anyway** to skip the wait. If it says **Gateway hasn't come back yet**, the gateway process didn't come back on its own. Check the gateway host.
+
 ## A helper run is missing from the sidebar
 
 Subagent (helper) runs are hidden by default. Open one with **Open run** on the tool call that started it, or turn on listing them under their parent in **Settings → Sidebar**.
