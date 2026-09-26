@@ -6,7 +6,7 @@ import SwiftUI
 /// search, toolbar and sheets around it.
 struct ChannelList: View {
     @Environment(GatewayStore.self) private var gateway
-    let editConnection: () -> Void
+    @Environment(\.openGatewaySettings) private var openGatewaySettings
     /// Called when the reader picks a chat, so compact layouts can show it.
     var openChat: () -> Void = {}
     @State private var search = ""
@@ -16,7 +16,6 @@ struct ChannelList: View {
     @State private var changingGroupIcon: String?
     @State private var pickingColor: SessionRow?
     @State private var showingSettings = false
-    @State private var showingGatewaySettings = false
     @State private var expandedThreads: Set<String> = []
     @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
     @AppStorage("pincer.showMessagePreviews") private var showMessagePreviews = true
@@ -64,9 +63,9 @@ struct ChannelList: View {
                             .disabled(!self.gateway.state.isConnected)
                     }
                     Divider()
-                    Button("Gateway Settings…") { self.showingGatewaySettings = true }
-                        .disabled(!self.gateway.state.isConnected)
-                    Button("Edit Connection…", action: self.editConnection)
+                    Button("Gateway Settings…") { self.openGatewaySettings(self.gateway) }
+                        .keyboardShortcut(",", modifiers: [.command, .shift])
+                    Button("Edit Connection…") { self.openGatewaySettings(self.gateway, at: .connection) }
                     Button("Reconnect") { self.gateway.stop(); self.gateway.start() }
                 } label: {
                     Label("Organize", systemImage: Theme.filterSymbol)
@@ -99,9 +98,6 @@ struct ChannelList: View {
         }
         .sheet(item: self.$prompt) { prompt in
             TextPromptSheet(prompt: prompt)
-        }
-        .sheet(isPresented: self.$showingGatewaySettings) {
-            GatewaySettingsView()
         }
         .confirmationDialog(self.confirmation?.title ?? "", isPresented: Binding(
             get: { self.confirmation != nil }, set: { if !$0 { self.confirmation = nil } }

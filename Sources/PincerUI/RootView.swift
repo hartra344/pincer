@@ -28,6 +28,14 @@ public struct PincerScene: Scene {
         #endif
 
         #if os(macOS)
+        WindowGroup("Gateway Settings", id: "gateway-settings", for: UUID.self) { $gatewayId in
+            GatewaySettingsWindow(gatewayId: gatewayId)
+                .environment(self.app)
+                .themed()
+        }
+        .defaultSize(width: 860, height: 640)
+        .restorationBehavior(.disabled)
+
         Settings {
             SettingsView()
                 .environment(self.app)
@@ -54,8 +62,12 @@ struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.appTheme) private var theme
     @Environment(\.scenePhase) private var scenePhase
-    @State private var editing: GatewayProfile?
     @State private var addingGateway = false
+    /// iOS: Gateway Settings shown as a sheet.
+    @State private var settingsRequest: GatewaySettingsRequest?
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
     @State private var columns: NavigationSplitViewVisibility = .all
     /// On iPhone the split view is a stack; picking a chat pushes it.
     @State private var compactColumn = NavigationSplitViewColumn.sidebar
@@ -64,8 +76,7 @@ struct RootView: View {
         Group {
             if let gateway = self.app.selectedGateway {
                 NavigationSplitView(columnVisibility: self.$columns, preferredCompactColumn: self.$compactColumn) {
-                    ChannelList(editConnection: { self.editing = gateway.profile },
-                                openChat: { self.compactColumn = .detail })
+                    ChannelList(openChat: { self.compactColumn = .detail })
                         .environment(gateway)
                         .background { self.theme.background(.sidebarBackground)?.ignoresSafeArea() }
                         .id(gateway.id)
@@ -82,8 +93,11 @@ struct RootView: View {
                     .onAppear { self.compactColumn = .sidebar }
             }
         }
-        .sheet(isPresented: self.$addingGateway) { ConnectionSheet(existing: nil) }
-        .sheet(item: self.$editing) { ConnectionSheet(existing: $0) }
+        .sheet(isPresented: self.$addingGateway) { ConnectionSheet() }
+        .sheet(item: self.$settingsRequest) { request in
+            GatewaySettingsWindow(gatewayId: request.id, close: { self.settingsRequest = nil })
+        }
+        .environment(\.openGatewaySettings, self.settingsOpener)
         .onChange(of: self.scenePhase, initial: true) { _, phase in
             self.app.appIsActive = phase == .active
         }
@@ -100,13 +114,24 @@ struct RootView: View {
         }
     }
 
+    private var settingsOpener: GatewaySettingsOpener {
+        GatewaySettingsOpener { gateway, destination in
+            gateway.settings.requestedDestination = destination
+            #if os(macOS)
+            self.openWindow(id: "gateway-settings", value: gateway.id)
+            #else
+            self.settingsRequest = GatewaySettingsRequest(id: gateway.id)
+            #endif
+        }
+    }
+
     private func detail(_ gateway: GatewayStore) -> some View {
         Group {
             switch gateway.state {
             case let .awaitingPairing(requestId, deviceId):
                 PairingView(requestId: requestId, deviceId: deviceId)
             case let .failed(message) where gateway.sessions.isEmpty:
-                FailedView(message: message) { self.editing = gateway.profile }
+                FailedView(message: message) { self.settingsOpener(gateway, at: .connection) }
             default:
                 if let key = gateway.selectedKey {
                     ChatView(chat: gateway.chat(for: key))

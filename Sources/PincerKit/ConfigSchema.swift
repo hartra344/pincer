@@ -12,7 +12,7 @@ public enum ConfigPath {
         path.split(separator: ".", omittingEmptySubsequences: true).map(String.init)
     }
 
-    static func humanized(_ key: String) -> String {
+    public static func humanized(_ key: String) -> String {
         var words: [String] = []
         var current = ""
         for character in key {
@@ -156,6 +156,8 @@ public struct ConfigField: Identifiable, Hashable, Sendable {
     public let defaultValue: JSONValue?
     /// Object whose keys are user-defined (a map), such as `plugins.entries`.
     public let isMap: Bool
+    /// A secret that can also point at an env var, file or command instead of holding the value.
+    public var allowsSecretRef = false
     /// Where to get a credential, for plugin credentials.
     public var signupURL: URL? = nil
 
@@ -184,6 +186,7 @@ public struct ConfigField: Identifiable, Hashable, Sendable {
             pattern: existing?.pattern,
             defaultValue: nil,
             isMap: false,
+            allowsSecretRef: existing?.allowsSecretRef ?? false,
             signupURL: credential.signupURL)
     }
 
@@ -191,7 +194,8 @@ public struct ConfigField: Identifiable, Hashable, Sendable {
     public func text(for value: JSONValue?) -> String {
         guard let value, !value.isNull else { return "" }
         switch self.kind {
-        case .text, .secret, .choice: return value.string ?? value.compactString()
+        case .secret: return value.string ?? ""
+        case .text, .choice: return value.string ?? value.compactString()
         case .integer, .number:
             if let number = value.double {
                 return number.rounded() == number && abs(number) < 1e15 ? String(Int64(number)) : String(number)
@@ -239,7 +243,7 @@ public struct ConfigField: Identifiable, Hashable, Sendable {
     /// Client-side check before sending; the Gateway still validates the whole config.
     public func validate(_ value: JSONValue?) -> String? {
         guard let value, !value.isNull else { return self.isRequired ? "\(self.label) is required." : nil }
-        if value.isRedacted { return nil }
+        if value.isRedacted || SecretRef(value) != nil { return nil }
         switch self.kind {
         case .text, .secret:
             guard let string = value.string else { return nil }
@@ -405,7 +409,11 @@ public struct ConfigSchema: Sendable {
         }
         let concrete = self.concreteBranch(resolved, value: value)
         var kind = self.kind(of: concrete, path: path)
-        // A value the form can't show as its kind (e.g. a SecretRef object) is edited as JSON.
+        let sensitive = self.isSensitive(path)
+        let allowsSecretRef = sensitive && (value.flatMap(SecretRef.init) != nil || self.acceptsSecretRef(resolved))
+        // A secret can also be a reference to where the Gateway reads it from.
+        if allowsSecretRef, value.flatMap(SecretRef.init) != nil || (kind == .text && sensitive) { kind = .secret }
+        // A value the form can't show as its kind is edited as JSON.
         if let value, !value.isNull, !value.isRedacted, !Self.fits(value, kind) { kind = .json }
         let isMap = kind == .object && concrete["properties"] == nil
             && (concrete["additionalProperties"]?.object != nil || concrete["patternProperties"] != nil)
@@ -416,14 +424,58 @@ public struct ConfigSchema: Sendable {
             placeholder: hint?["placeholder"]?.text,
             kind: kind,
             isRequired: required,
-            isAdvanced: hint?["advanced"]?.bool ?? false,
+            isAdvanced: self.isAdvanced(path),
             order: hint?["order"]?.double ?? .greatestFiniteMagnitude,
             minimum: concrete["minimum"]?.double ?? concrete["exclusiveMinimum"]?.double,
             maximum: concrete["maximum"]?.double ?? concrete["exclusiveMaximum"]?.double,
             minLength: concrete["minLength"]?.int,
             pattern: concrete["pattern"]?.string,
             defaultValue: resolved["default"] ?? concrete["default"],
-            isMap: isMap)
+            isMap: isMap,
+            allowsSecretRef: allowsSecretRef)
+    }
+
+    /// A string-or-object union whose object branch looks like a SecretRef (`{source, id}`).
+    private func acceptsSecretRef(_ node: JSONValue) -> Bool {
+        let objects = ([node] + self.branches(node)).filter(self.isObjectNode)
+        return objects.contains { $0["properties"]?["source"] != nil && $0["properties"]?["id"] != nil }
+    }
+
+    /// Whether `uiHints` marks tiers at all. Gateways that predate tiers show everything as common.
+    public var hasTiers: Bool { self.hints.values.contains { $0["advanced"]?.bool != nil } }
+
+    /// The presentation tier: the nearest hint with `advanced` on the path or its ancestors wins,
+    /// and paths with none are advanced (as in the Control UI).
+    public func isAdvanced(_ path: [String]) -> Bool {
+        guard self.hasTiers else { return false }
+        var path = path
+        while !path.isEmpty {
+            if let advanced = self.hint(for: path)?["advanced"]?.bool { return advanced }
+            path.removeLast()
+        }
+        return true
+    }
+
+    // MARK: Search
+
+    /// Every leaf setting the schema declares (and every key present in `config`), for search.
+    /// Stops at `depth` so recursive or very deep schemas stay cheap.
+    public func searchIndex(config: JSONValue, depth: Int = 8) -> [ConfigField] {
+        var fields: [ConfigField] = []
+        var visited = 0
+        func walk(_ path: [String], _ value: JSONValue?) {
+            guard path.count < depth, visited < 20000 else { return }
+            for field in self.fields(at: path, value: value) {
+                visited += 1
+                if field.kind == .object {
+                    walk(field.path, value?[field.key])
+                } else {
+                    fields.append(field)
+                }
+            }
+        }
+        walk([], config)
+        return fields
     }
 
     /// The fields of the object at `path`: its declared properties, plus any keys already in
@@ -505,6 +557,8 @@ public struct ConfigSchema: Sendable {
 
     static func fits(_ value: JSONValue, _ kind: ConfigField.Kind) -> Bool {
         switch (kind, value) {
+        case (.secret, .object):
+            return SecretRef(value) != nil
         case (.text, .string), (.secret, .string), (.choice, .string), (.toggle, .bool),
              (.integer, .number), (.number, .number), (.object, .object), (.json, _):
             return true
@@ -526,45 +580,44 @@ public struct ConfigSchema: Sendable {
     }
 }
 
-/// Edits to one object in the config, kept apart from the loaded value until saved.
-public struct ConfigDraft: Sendable, Equatable {
-    public let path: [String]
-    public let original: JSONValue?
-    /// Changed keys: a value to set, or `.null` to remove.
-    public private(set) var changes: [String: JSONValue] = [:]
+/// Where the Gateway reads a secret from instead of the config (`{source, provider, id}`).
+public struct SecretRef: Hashable, Sendable {
+    public enum Source: String, CaseIterable, Identifiable, Sendable {
+        case env, file, exec
+        public var id: String { self.rawValue }
+        public var label: String {
+            switch self {
+            case .env: "Environment Variable"
+            case .file: "File"
+            case .exec: "Command"
+            }
+        }
 
-    public init(path: [String], original: JSONValue?) {
-        self.path = path
-        self.original = original
-    }
-
-    public var hasChanges: Bool { !self.changes.isEmpty }
-
-    public func value(for key: String) -> JSONValue? {
-        if let change = self.changes[key] { return change.isNull ? nil : change }
-        return self.original?[key]
-    }
-
-    /// The object as it would be saved.
-    public var current: JSONValue {
-        (self.original ?? .object([:])).applyingMergePatch(.object(self.changes))
-    }
-
-    public mutating func set(_ key: String, _ value: JSONValue?) {
-        let old = self.original?[key]
-        let new = value ?? .null
-        if (old ?? .null) == new || (old == nil && new.isNull) {
-            self.changes.removeValue(forKey: key)
-        } else {
-            self.changes[key] = new
+        public var prompt: String {
+            switch self {
+            case .env: "VARIABLE_NAME"
+            case .file: "/path/to/secret"
+            case .exec: "Secret ID for the exec provider"
+            }
         }
     }
 
-    public mutating func reset() { self.changes = [:] }
+    public var source: Source
+    public var provider: String
+    public var id: String
 
-    /// Merge patch for `config.patch`, rooted at the config top.
-    public var patch: JSONValue? {
-        guard self.hasChanges else { return nil }
-        return .mergePatch(setting: .object(self.changes), at: self.path)
+    public init(source: Source, provider: String = "default", id: String) {
+        self.source = source
+        self.provider = provider
+        self.id = id
+    }
+
+    public init?(_ value: JSONValue) {
+        guard let source = value["source"]?.string.flatMap(Source.init(rawValue:)), let id = value["id"]?.string else { return nil }
+        self.init(source: source, provider: value["provider"]?.string ?? "default", id: id)
+    }
+
+    public var json: JSONValue {
+        ["source": .string(self.source.rawValue), "provider": .string(self.provider), "id": .string(self.id)]
     }
 }

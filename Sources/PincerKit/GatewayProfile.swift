@@ -18,29 +18,53 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
         }
     }
 
+    /// What Pincer asks the Gateway to allow.
+    public enum AccessLevel: String, Codable, CaseIterable, Identifiable, Sendable {
+        /// Read, chat and approvals.
+        case standard
+        /// Also `operator.admin`, which the Gateway requires to change its config and plugins.
+        case admin
+
+        public var id: String { self.rawValue }
+        public var label: String {
+            switch self {
+            case .standard: "Chat & Approvals"
+            case .admin: "Full Management"
+            }
+        }
+
+        public var detail: String {
+            switch self {
+            case .standard: "Chat, read history and answer approvals. Gateway settings are read-only."
+            case .admin: "Also change the Gateway's settings and plugins. The Gateway host approves this device again."
+            }
+        }
+    }
+
     public var id: UUID
     public var name: String
     public var url: String
     public var authMode: AuthMode
     /// Optional SHA-256 fingerprint (hex) of the Gateway's TLS leaf certificate.
     public var tlsFingerprint: String?
-    /// Opt-in: also request `operator.admin`, which the Gateway requires to change its config
-    /// and plugins. Off by default so Pincer stays read/write/approvals-only unless asked.
-    public var manageSettings: Bool
+    /// Standard by default, so Pincer stays read/write/approvals-only unless asked.
+    public var access: AccessLevel
 
     public init(id: UUID = UUID(), name: String, url: String, authMode: AuthMode, tlsFingerprint: String? = nil,
-                manageSettings: Bool = false)
+                access: AccessLevel = .standard)
     {
         self.id = id
         self.name = name
         self.url = url
         self.authMode = authMode
         self.tlsFingerprint = tlsFingerprint
-        self.manageSettings = manageSettings
+        self.access = access
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, url, authMode, tlsFingerprint, manageSettings
+        case id, name, url, authMode, tlsFingerprint, access
+        /// Before access levels: a Bool for "also request admin".
+        case manageSettings
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,12 +74,26 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
         self.url = try container.decode(String.self, forKey: .url)
         self.authMode = try container.decode(AuthMode.self, forKey: .authMode)
         self.tlsFingerprint = try container.decodeIfPresent(String.self, forKey: .tlsFingerprint)
-        self.manageSettings = try container.decodeIfPresent(Bool.self, forKey: .manageSettings) ?? false
+        if let access = try container.decodeIfPresent(AccessLevel.self, forKey: .access) {
+            self.access = access
+        } else {
+            self.access = try container.decodeIfPresent(Bool.self, forKey: .manageSettings) == true ? .admin : .standard
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.id, forKey: .id)
+        try container.encode(self.name, forKey: .name)
+        try container.encode(self.url, forKey: .url)
+        try container.encode(self.authMode, forKey: .authMode)
+        try container.encodeIfPresent(self.tlsFingerprint, forKey: .tlsFingerprint)
+        try container.encode(self.access, forKey: .access)
     }
 
     /// Scopes requested on connect.
     public var requestedScopes: [String] {
-        self.manageSettings ? GatewayConnection.scopes + [GatewayConnection.adminScope] : GatewayConnection.scopes
+        self.access == .admin ? GatewayConnection.scopes + [GatewayConnection.adminScope] : GatewayConnection.scopes
     }
 
     /// The built-in demo, which runs a simulated Gateway on the device.

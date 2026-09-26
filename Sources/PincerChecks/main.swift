@@ -271,8 +271,12 @@ check(gatewayFields.first { $0.key == "bind" }?.kind == .choice(["loopback", "la
 let authFields = configSchema.fields(at: ["gateway", "auth"], value: sampleConfig["gateway"]?["auth"])
 check(authFields.first { $0.key == "mode" }?.kind == .choice(["token", "password", "none"]), "enum → choice")
 check(authFields.first { $0.key == "token" }?.kind == .secret, "sensitive hint → secret field")
-check(configSchema.field(at: ["gateway", "auth", "token"], value: json(#"{"source":"env","id":"TOKEN"}"#))?.kind == .object,
-      "SecretRef object picks the object branch")
+let tokenRefField = configSchema.field(at: ["gateway", "auth", "token"], value: json(#"{"source":"env","id":"TOKEN"}"#))
+check(tokenRefField?.kind == .secret && tokenRefField?.allowsSecretRef == true, "SecretRef-capable secret stays a secret field")
+check(authFields.first { $0.key == "token" }?.allowsSecretRef == true, "schema with a ref branch allows SecretRefs")
+check(SecretRef(json(#"{"source":"env","provider":"default","id":"TOKEN"}"#)) == SecretRef(source: .env, id: "TOKEN"), "SecretRef parsed")
+check(SecretRef(source: .file, id: "/k").json == json(#"{"source":"file","provider":"default","id":"/k"}"#), "SecretRef JSON")
+check(tokenRefField?.validate(json(#"{"source":"env","id":"TOKEN"}"#)) == nil, "SecretRef passes validation")
 let defaults = configSchema.fields(at: ["agents", "defaults"], value: nil)
 check(Set(defaults.map(\.key)) == ["model", "thinking"], "allOf properties merged")
 check(defaults.first { $0.key == "model" }?.validate("ab") != nil, "minLength enforced")
@@ -302,15 +306,64 @@ check((try? toolFields.first { $0.key == "rules" }!.value(fromText: "{nope")) ==
 check(authFields.first { $0.key == "token" }?.validate(.string(JSONValue.redactedSentinel)) == nil, "redacted secret passes")
 check(sampleConfig.value(at: ["gateway", "auth", "mode"]) == "token", "value(at:)")
 
-var draft = ConfigDraft(path: ["gateway"], original: sampleConfig["gateway"])
-draft.set("port", .number(18789))
-check(!draft.hasChanges && draft.patch == nil, "setting the same value is not a change")
-draft.set("port", .number(9000))
-draft.set("bind", nil)
-check(draft.patch == json(#"{"gateway":{"port":9000,"bind":null}}"#), "draft → merge patch with removal")
-check(draft.current["port"] == 9000 && draft.current["bind"] == nil && draft.value(for: "auth") != nil, "draft current value")
-draft.set("port", .number(18789))
-check(draft.patch == json(#"{"gateway":{"bind":null}}"#), "reverting a change drops it")
+var edits = ConfigEdits(base: sampleConfig)
+edits.set(["gateway", "port"], .number(18789))
+check(!edits.hasChanges && edits.patch == nil, "setting the same value is not a change")
+edits.set(["gateway", "port"], .number(9000))
+edits.set(["gateway", "bind"], nil)
+check(edits.patch == json(#"{"gateway":{"port":9000,"bind":null}}"#), "edits → merge patch with removal")
+check(edits.value(at: ["gateway", "port"]) == 9000 && edits.value(at: ["gateway", "bind"]) == nil
+      && edits.value(at: ["gateway", "auth", "mode"]) == "token", "edited values read through")
+check(edits.changes.map(\.id) == ["gateway.bind", "gateway.port"] && edits.changeCount(under: ["gateway"]) == 2
+      && edits.changeCount(under: ["plugins"]) == 0, "leaf changes counted by section")
+check(edits.isChanged(["gateway"]) && edits.isChanged(["gateway", "port"]) && !edits.isChanged(["gateway", "auth"]), "isChanged")
+edits.set(["gateway", "port"], .number(18789))
+check(edits.patch == json(#"{"gateway":{"bind":null}}"#), "setting the loaded value drops the edit")
+edits.revert(["gateway"])
+check(!edits.hasChanges, "revert a whole section")
+edits.set(["channels", "entries", "discord"], .object([:]))
+edits.set(["channels", "entries", "discord", "token"], "abc")
+check(edits.patch == json(#"{"channels":{"entries":{"discord":{"token":"abc"}}}}"#), "editing inside a new entry")
+edits.discardAll()
+// JSONValue is ExpressibleByNilLiteral; absent must be Optional.none, not `.null`.
+func isAbsent(_ value: JSONValue?) -> Bool { if case .none = value { true } else { false } }
+check(isAbsent(edits.value(at: ["agents", "entries"])) && isAbsent(edits.value(at: ["gateway", "nope"])),
+      "missing paths read as absent")
+edits.set(["gateway", "bind"], "lan")
+edits.set(["gateway", "bind"], nil)
+check(isAbsent(edits.value(at: ["gateway", "bind"])), "a removed key reads as absent")
+edits.discardAll()
+check(isAbsent(edits.patch), "no patch without changes")
+
+var arrayEdits = ConfigEdits(base: json(#"{"tools":{"allow":["a","b"],"deny":["x"]},"old":{"list":[1],"keep":true}}"#))
+arrayEdits.set(["tools", "allow"], json(#"["a"]"#))
+arrayEdits.set(["old"], nil)
+check(arrayEdits.replacePaths == ["old.list", "tools.allow"], "replacePaths lists changed and deleted arrays (\(arrayEdits.replacePaths))")
+
+var rebased = ConfigEdits(base: json(#"{"a":1,"b":1,"c":1}"#))
+rebased.set(["a"], 2)
+rebased.set(["b"], 2)
+let conflicts = rebased.rebase(onto: json(#"{"a":1,"b":3,"c":5}"#))
+check(conflicts.map(\.id) == ["b"] && conflicts.first?.theirs == 3 && conflicts.first?.mine == 2, "rebase reports real conflicts only")
+check(rebased.current == json(#"{"a":2,"b":2,"c":5}"#), "rebase keeps edits over the newer config")
+check(JSONValue.mergeDiff(from: json(#"{"a":{"b":1,"c":2},"d":[1]}"#), to: json(#"{"a":{"b":1},"d":[1,2],"e":true}"#))
+      == json(#"{"a":{"c":null},"d":[1,2],"e":true}"#), "mergeDiff")
+
+let tiered = ConfigSchema(response: json(#"""
+{"schema":{"type":"object","properties":{"gateway":{"type":"object","properties":{"port":{"type":"integer"},
+  "tls":{"type":"object","properties":{"cert":{"type":"string"}}},"reload":{"type":"string"}}}}},
+ "uiHints":{"gateway":{"advanced":false},"gateway.tls":{"advanced":true},"gateway.tls.cert":{"advanced":false}}}
+"""#))
+check(tiered.hasTiers && !tiered.isAdvanced(["gateway", "port"]) && tiered.isAdvanced(["gateway", "tls"])
+      && !tiered.isAdvanced(["gateway", "tls", "cert"]), "advanced tiers inherit from the nearest hint")
+check(tiered.isAdvanced(["other"]) && !configSchema.isAdvanced(["other"]), "unhinted paths are advanced only with tiers")
+check(tiered.searchIndex(config: .object([:])).contains { $0.path == ["gateway", "tls", "cert"] }, "search index reaches nested fields")
+
+check(SettingsCatalog.location(for: ["gateway", "port"]).destination == .page("gateway"), "curated location")
+check(SettingsCatalog.location(for: ["plugins", "entries", "weather", "config", "apiKey"])
+      == SettingsLocation(destination: .plugins, routes: [.plugin("weather")], focus: ["plugins", "entries", "weather", "config", "apiKey"]),
+      "plugin setting opens its plugin")
+check(SettingsCatalog.location(for: ["zzz", "q"]).destination == .allSettings, "unknown settings fall back to All Settings")
 let merged = sampleConfig.applyingMergePatch(json(#"{"gateway":{"port":1,"auth":null},"new":{"a":[1]}}"#))
 check(merged["gateway"]?["port"] == 1 && merged["gateway"]?["auth"] == nil && merged["gateway"]?["bind"] == "tailnet"
       && merged["new"]?["a"] == json("[1]"), "RFC 7386 merge")
@@ -835,63 +888,100 @@ func runLive(url: String, token: String) async {
     // Gateway settings: read-only without admin, then edits through config.patch and plugins.*.
     let settings = gateway.settings
     await settings.load()
-    check(settings.hasLoaded && settings.isValid && settings.schema != nil, "config.get + config.schema loaded")
+    check(settings.hasLoaded && settings.snapshot?.isValid == true && settings.schema != nil, "config.get + config.schema loaded")
     check(settings.value(at: ["gateway", "auth", "token"])?.isRedacted == true, "secrets arrive redacted")
     let weatherKeySet = settings.value(at: ["plugins", "entries", "weather", "config", "apiKey"]) != nil
     check(settings.plugins.contains { $0.id == "weather" && $0.needsSetup != weatherKeySet }, "plugins.list (\(settings.plugins.map(\.id)))")
     check(!settings.canEdit, "no admin scope by default")
-    let readOnly = await settings.save(.mergePatch(setting: 30, at: ["agents", "defaults", "timeoutSeconds"]))
-    check(!readOnly && settings.lastError?.contains("admin") == true, "writes need admin access")
+    settings.set(["agents", "defaults", "timeoutSeconds"], 30)
+    let readOnly = await settings.save()
+    check(!readOnly && settings.saveState.error?.contains("Full Management") == true && settings.hasChanges, "writes need admin access, draft kept")
+    settings.discardChanges()
     gateway.stop()
 
-    let adminProfile = GatewayProfile(id: profile.id, name: "Mock", url: url, authMode: .token, manageSettings: true)
+    let adminProfile = GatewayProfile(id: profile.id, name: "Mock", url: url, authMode: .token, access: .admin)
     check(adminProfile.requestedScopes.contains("operator.admin") && !profile.requestedScopes.contains("operator.admin"),
           "admin scope only when opted in")
     let decodedProfile = try? JSONDecoder().decode(GatewayProfile.self, from: Data(#"{"id":"\#(UUID().uuidString)","name":"Old","url":"ws://127.0.0.1","authMode":"token"}"#.utf8))
-    check(decodedProfile?.manageSettings == false, "profiles saved before settings support still load")
+    check(decodedProfile?.access == .standard, "profiles saved before settings support still load")
+    let legacyAdmin = try? JSONDecoder().decode(GatewayProfile.self, from: Data(#"{"id":"\#(UUID().uuidString)","name":"Old","url":"ws://127.0.0.1","authMode":"token","manageSettings":true}"#.utf8))
+    check(legacyAdmin?.access == .admin, "legacy manageSettings → Full Management")
+    let reencoded = try? JSONDecoder().decode(GatewayProfile.self, from: JSONEncoder().encode(adminProfile))
+    check(reencoded?.access == .admin, "access level round-trips")
     let admin = GatewayStore(profile: adminProfile)
     admin.start()
     let adminConnected = await waitFor("admin connection") { admin.state.isConnected && admin.hello != nil }
     check(adminConnected && admin.settings.canEdit, "admin scope granted")
     let adminSettings = admin.settings
     await adminSettings.load()
-    let hashBefore = adminSettings.hash
-    var draft = ConfigDraft(path: ["agents", "defaults"], original: adminSettings.value(at: ["agents", "defaults"]))
-    draft.set("timeoutSeconds", 30)
-    let hot = await adminSettings.save(draft.patch!)
-    check(hot && adminSettings.lastOutcome == .applied, "config.patch hot-applied (\(adminSettings.lastError ?? "")\(adminSettings.writeIssues.map(\.message)))")
-    check(adminSettings.value(at: ["agents", "defaults", "timeoutSeconds"]) == 30 && adminSettings.hash != hashBefore,
+    let hashBefore = adminSettings.snapshot?.hash
+    adminSettings.set(["agents", "defaults", "timeoutSeconds"], 30)
+    check(adminSettings.changeCount == 1 && adminSettings.saveBlocker == nil, "one pending change")
+    let hot = await adminSettings.save()
+    check(hot && adminSettings.lastSave?.outcome == .applied && !adminSettings.hasChanges,
+          "config.patch hot-applied (\(adminSettings.saveState.error ?? "")\(adminSettings.writeIssues.map(\.message)))")
+    check(adminSettings.value(at: ["agents", "defaults", "timeoutSeconds"]) == 30 && adminSettings.snapshot?.hash != hashBefore,
           "saved value re-read with a new hash")
     let bindValue: JSONValue = adminSettings.value(at: ["gateway", "bind"]) == "lan" ? "tailnet" : "lan"
-    let restarting = await adminSettings.save(.mergePatch(setting: bindValue, at: ["gateway", "bind"]))
-    check(restarting && adminSettings.lastOutcome == .restarting, "restart-only change reported")
-    let invalid = await adminSettings.save(json(#"{"gateway":{"port":70000}}"#))
-    check(!invalid && adminSettings.writeIssues.first?.path == "gateway.port", "invalid value rejected with its path")
-    check(!adminSettings.issues(under: ["gateway"]).isEmpty && adminSettings.issues(under: ["agents"]).isEmpty, "issues matched to their section")
-    let keptSecret = await adminSettings.save(json(#"{"channels":{"discord":{"token":"__OPENCLAW_REDACTED__","dmPolicy":"allowlist"}}}"#))
-    check(keptSecret && adminSettings.value(at: ["channels", "discord", "dmPolicy"]) == "allowlist", "redacted secret round-trips")
-    let lists = await adminSettings.save(json(#"{"tools":{"allow":["exec"]}}"#))
+    adminSettings.set(["gateway", "bind"], bindValue)
+    adminSettings.set(["agents", "defaults", "timeoutSeconds"], 35)
+    let restarting = await adminSettings.save()
+    check(restarting && adminSettings.lastSave?.outcome == .restarting
+          && adminSettings.value(at: ["agents", "defaults", "timeoutSeconds"]) == 35, "several changes in one save; restart reported")
+    adminSettings.set(["gateway", "port"], 70000)
+    check(adminSettings.saveBlocker == nil || adminSettings.validationProblems["gateway.port"] != nil, "local validation when the schema has bounds")
+    if adminSettings.saveBlocker == nil {
+        let invalid = await adminSettings.save()
+        check(!invalid && adminSettings.writeIssues.first?.path == "gateway.port" && adminSettings.hasChanges,
+              "invalid value rejected with its path, draft kept")
+        check(!adminSettings.issues(under: ["gateway"]).isEmpty && adminSettings.issues(under: ["agents"]).isEmpty, "issues matched to their section")
+    }
+    adminSettings.discardChanges()
+    check(adminSettings.writeIssues.isEmpty && !adminSettings.hasChanges, "discard clears the draft and issues")
+    adminSettings.set(["channels", "discord", "dmPolicy"], "allowlist")
+    let keptSecret = await adminSettings.save()
+    check(keptSecret && adminSettings.value(at: ["channels", "discord", "dmPolicy"]) == "allowlist"
+          && adminSettings.value(at: ["channels", "discord", "token"])?.isRedacted != false, "redacted secret round-trips")
+    adminSettings.set(["tools", "allow"], json(#"["exec"]"#))
+    let lists = await adminSettings.save()
     check(lists && adminSettings.value(at: ["tools", "allow"]) == json(#"["exec"]"#), "lists replace with replacePaths")
 
-    // Another writer changed the config: the stale save is refused and the latest config loaded.
-    let otherAdminProfile = GatewayProfile(name: "Other admin", url: url, authMode: .token, manageSettings: true)
+    // Another writer changed the config: unrelated edits are rebased and saved, clashing ones asked about.
+    let otherAdminProfile = GatewayProfile(name: "Other admin", url: url, authMode: .token, access: .admin)
     otherAdminProfile.secret = token
     let other2 = GatewayStore(profile: otherAdminProfile)
     other2.start()
     _ = await waitFor("other admin") { other2.state.isConnected && other2.hello != nil }
     await other2.settings.load()
-    await other2.settings.save(json(#"{"agents":{"defaults":{"timeoutSeconds":45}}}"#))
-    let stale = await adminSettings.save(json(#"{"agents":{"defaults":{"timeoutSeconds":60}}}"#))
-    check(!stale && adminSettings.lastError?.contains("changed on the Gateway") == true
-          && adminSettings.value(at: ["agents", "defaults", "timeoutSeconds"]) == 45, "stale hash → reload, no overwrite")
+    other2.settings.set(["agents", "defaults", "timeoutSeconds"], 45)
+    await other2.settings.save()
+    let rebasedModel = JSONValue.string("mock/rebased-\(UUID().uuidString.prefix(6))")
+    adminSettings.set(["agents", "defaults", "model"], rebasedModel)
+    let rebasedSave = await adminSettings.save()
+    check(rebasedSave && adminSettings.value(at: ["agents", "defaults", "model"]) == rebasedModel
+          && adminSettings.value(at: ["agents", "defaults", "timeoutSeconds"]) == 45, "stale hash → rebased and saved without clobbering")
+    other2.settings.set(["agents", "defaults", "timeoutSeconds"], 50)
+    await other2.settings.load()
+    await other2.settings.save()
+    adminSettings.set(["agents", "defaults", "timeoutSeconds"], 60)
+    let clash = await adminSettings.save()
+    check(!clash && adminSettings.conflicts.first?.id == "agents.defaults.timeoutSeconds"
+          && adminSettings.conflicts.first?.theirs == 50, "clashing edit becomes a conflict (\(adminSettings.saveState.error ?? ""))")
+    if let conflict = adminSettings.conflicts.first { adminSettings.resolve(conflict, keepMine: false) }
+    check(adminSettings.conflicts.isEmpty && !adminSettings.hasChanges
+          && adminSettings.value(at: ["agents", "defaults", "timeoutSeconds"]) == 50, "use the Gateway's value")
     other2.stop()
 
     if let weather = adminSettings.plugin("weather") {
         await adminSettings.loadCredentials(for: weather)
         check(adminSettings.credentials["weather"]?.first?.path.last == "apiKey", "plugins.inspect credentials")
-        let short = await adminSettings.save(.mergePatch(setting: "short", at: weather.configPath + ["apiKey"]))
-        check(!short && adminSettings.writeIssues.first?.path == "plugins.entries.weather.config.apiKey", "plugin config validated")
-        await adminSettings.save(.mergePatch(setting: "weather-key-123", at: weather.configPath + ["apiKey"]))
+        adminSettings.set(weather.configPath + ["apiKey"], "short")
+        let short = await adminSettings.save()
+        let apiKeyId = "plugins.entries.weather.config.apiKey"
+        check(!short && (adminSettings.validationProblems[apiKeyId] != nil || adminSettings.writeIssues.first?.path == apiKeyId),
+              "plugin config validated")
+        adminSettings.set(weather.configPath + ["apiKey"], "weather-key-123")
+        await adminSettings.save()
         check(adminSettings.plugin("weather")?.needsSetup == false && adminSettings.value(at: weather.configPath + ["apiKey"])?.isRedacted == true,
               "plugin set up with its credential")
     }
@@ -903,8 +993,11 @@ func runLive(url: String, token: String) async {
         await adminSettings.setEnabled(adminSettings.plugin("browser")!, false)
         check(adminSettings.plugin("browser")?.enabled == false, "plugin disabled")
     }
+    adminSettings.set(["agents", "defaults", "timeoutSeconds"], 55)
     let installed = await adminSettings.install(from: .npm, spec: "openclaw-plugin-todo@1.0.0")
     check(installed && adminSettings.plugin("todo")?.enabled == true, "plugins.install")
+    check(adminSettings.value(at: ["agents", "defaults", "timeoutSeconds"]) == 55, "plugin changes keep the unsaved draft")
+    adminSettings.discardChanges()
     let unverified = await adminSettings.install(from: .clawhub, spec: "@someone/unverified-thing")
     check(!unverified, "unverified install waits for confirmation")
     if let confirmation = adminSettings.pendingConfirmation { await adminSettings.confirm(confirmation) }
@@ -914,7 +1007,8 @@ func runLive(url: String, token: String) async {
         check(adminSettings.plugin("todo") == nil, "plugins.uninstall")
     }
     let missing = await adminSettings.install(from: .npm, spec: "missing-package")
-    check(!missing && adminSettings.lastError?.contains("not found") == true, "install errors surface")
+    check(!missing && adminSettings.operation(for: GatewaySettingsModel.installKey).error?.contains("not found") == true,
+          "install errors surface")
     admin.stop()
 
     for store in [gateway, other] {

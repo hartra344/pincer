@@ -115,7 +115,7 @@ public final class GatewayStore: Identifiable {
     public let images: ArtifactImageLoader
     public let files: FileContentLoader
     /// Gateway config and plugins; loaded when the settings screen opens.
-    @ObservationIgnored public private(set) lazy var settings = GatewaySettingsStore(
+    @ObservationIgnored public private(set) lazy var settings = GatewaySettingsModel(
         connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] })
 
     public init(profile: GatewayProfile) {
