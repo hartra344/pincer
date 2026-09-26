@@ -97,6 +97,12 @@ jobs:
           tail -n 1 "$RUNNER_TEMP/demo.log" "$RUNNER_TEMP/live.log"
           exit $status
 
+      - name: Live checks against a gateway without usage
+        run: |
+          MOCK_NO_USAGE=1 PORT=18790 node mock-gateway/server.mjs > "$RUNNER_TEMP/mock-gateway-no-usage.log" 2>&1 &
+          for _ in $(seq 1 30); do nc -z 127.0.0.1 18790 && break; sleep 1; done
+          "$BIN/PincerChecks" --live-no-usage ws://127.0.0.1:18790 dev-token
+
       - name: Upload check logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -106,4 +112,5 @@ jobs:
             ${{ runner.temp }}/mock-gateway.log
             ${{ runner.temp }}/demo.log
             ${{ runner.temp }}/live.log
+            ${{ runner.temp }}/mock-gateway-no-usage.log
           if-no-files-found: ignore

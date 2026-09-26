@@ -28,7 +28,7 @@ struct CommandPaletteView: View {
     enum Page { case root, models }
 
     private enum Command: String {
-        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy
+        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, usage, sessionUsage
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -221,7 +221,12 @@ struct CommandPaletteView: View {
                      keywords: ["approvals", "audit", "log", "exec", "plugin", "decisions"]),
                 item(.execPolicy, "Command Policy…", "lock.shield",
                      keywords: ["exec", "allowlist", "always allow", "approval policy", "ask", "security", "commands"]),
+                item(.usage, "Usage & Cost…", "chart.bar.xaxis",
+                     keywords: ["usage", "cost", "tokens", "spend", "billing", "quota", "rate limit", "budget"]),
             ]
+            if row != nil {
+                items.append(item(.sessionUsage, "Session Usage…", "chart.bar", keywords: ["usage", "cost", "tokens", "session"]))
+            }
         }
         return items
     }
@@ -347,6 +352,10 @@ struct CommandPaletteView: View {
             if let gateway { self.openGatewaySettings(gateway, at: .approvals) }
         case .execPolicy:
             if let gateway { self.openGatewaySettings(gateway, at: .execPolicy) }
+        case .usage:
+            if let gateway { self.openGatewaySettings(gateway, at: .usage) }
+        case .sessionUsage:
+            if let gateway, let row { self.openGatewaySettings.sessionUsage(gateway, key: row.key, agentId: row.agentId) }
         }
     }
 }

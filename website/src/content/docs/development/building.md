@@ -59,6 +59,7 @@ The tests are hermetic:
 PINCER_KEYCHAIN=memory swift run PincerChecks          # offline checks
 PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo gateway
 PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock started with MOCK_NO_USAGE=1 PORT=18790
 ```
 
 | Mode | What it checks |
@@ -66,6 +67,7 @@ PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-to
 | no flag | Offline checks: identity, protocol models, stores, the transcript cache and composer drafts. |
 | `--demo` | The offline checks, then a full run against the in-process demo gateway, including sidebar navigation. |
 | `--live <url> <token>` | The offline checks, then an end-to-end run against a real or [mock](../mock-gateway/) gateway. |
+| `--live-no-usage <url> <token>` | The offline checks, then a run against a gateway without the usage methods (the mock with `MOCK_NO_USAGE=1`), checking that Usage reports them as unsupported. |
 
 Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaults suite, so concurrent runs don't share storage.
 
@@ -79,6 +81,7 @@ Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaul
    - `swift build --build-tests`, then `swift test --skip-build --parallel`
    - `PincerChecks`
    - `PincerChecks --demo` (with `PINCER_DEMO_DELAY_SCALE=0.2`) and `PincerChecks --live` against the mock (started just before), **at the same time**
+   - `PincerChecks --live-no-usage` against a second mock started with `MOCK_NO_USAGE=1` on port 18790
 
 CI passes `-Xswiftc -enable-incremental-file-hashing` to every `swift` command. Checkout gives every file a new modification time, so without it the restored build would recompile everything.
 

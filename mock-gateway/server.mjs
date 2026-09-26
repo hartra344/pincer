@@ -6,6 +6,7 @@ import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistor
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
 import { EXEC_APPROVALS_METHODS, createExecApprovalsState, execApprovalsDisabled, handleExecApprovalsRequest, recordAllowAlways } from './exec-approvals.mjs';
+import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, createChannelPairingState, handleChannelPairingRequest } from './pairing.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 
@@ -33,6 +34,7 @@ const METHODS = [
   'exec.approval.resolve',
   ...APPROVAL_HISTORY_METHODS,
   ...EXEC_APPROVALS_METHODS,
+  ...USAGE_METHODS,
   'question.list',
   'question.resolve',
   'users.prefs.get',
@@ -601,6 +603,7 @@ function advertisedMethods() {
     ...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []),
     ...(execApprovalsDisabled() ? EXEC_APPROVALS_METHODS : []),
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
+    ...(usageDisabled() ? USAGE_METHODS : []),
   ];
   return METHODS.filter((m) => !hidden.includes(m));
 }
@@ -1002,6 +1005,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleWebPushRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleExecApprovalsRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
   switch (method) {
     case 'progressCard.get': {

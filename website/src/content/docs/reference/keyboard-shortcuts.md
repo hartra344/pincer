@@ -8,6 +8,7 @@ description: Keyboard shortcuts for Pincer on macOS (and iPad with a keyboard).
 | Action | Shortcut |
 | --- | --- |
 | New Chat | <kbd>⌘</kbd> <kbd>N</kbd> |
+| Command Palette | <kbd>⌘</kbd> <kbd>K</kbd> |
 | Next Unread Chat | <kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>↓</kbd> |
 | Gateway Settings | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>,</kbd> |
 | Settings | <kbd>⌘</kbd> <kbd>,</kbd> |
@@ -88,3 +89,12 @@ Number keys work while the question card is selected, not while you're typing an
 | Action | Shortcut |
 | --- | --- |
 | Save (opens Review Changes) | <kbd>⌘</kbd> <kbd>S</kbd> |
+
+## Usage (macOS)
+
+In the **Sessions** table on the [Usage](../../guides/usage-and-cost/) page:
+
+| Action | Shortcut |
+| --- | --- |
+| Open the selected session's usage | <kbd>Return</kbd> or double-click |
+| Move between sessions | <kbd>↑</kbd> <kbd>↓</kbd> |

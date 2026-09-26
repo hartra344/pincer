@@ -35,7 +35,7 @@ actor DemoGateway {
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
         "approval.history", "approval.get", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "exec.approvals.get", "exec.approvals.set",
-    ]
+    ] + DemoUsage.methods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -236,6 +236,8 @@ actor DemoGateway {
             return try self.execApprovalsGet(params)
         case "exec.approvals.set":
             return try self.execApprovalsSet(params)
+        case _ where DemoUsage.methods.contains(method):
+            return try DemoUsage.handle(method, params, knownKeys: Set(self.sessions.keys))
         case "channels.pairing.list":
             return self.pairingList()
         case "channels.pairing.approve":
@@ -1194,6 +1196,18 @@ actor DemoGateway {
             row.merge(["totalTokens": 24_000, "totalTokensFresh": true, "inputTokens": 24_000, "outputTokens": 900,
                        "contextTokens": JSONValue(Self.contextTokens)]) { _, new in new }
             row.merge(extra) { _, new in new }
+            var messages = messages
+            // Each chat runs on the model its sample usage is billed to.
+            if let model = DemoUsage.model(for: key) {
+                row["model"] = .string(model.model)
+                row["modelProvider"] = .string(model.provider)
+                messages = messages.map { message in
+                    guard case var .object(fields) = message, fields["role"]?.string == "assistant" else { return message }
+                    fields["provider"] = .string(model.provider)
+                    fields["model"] = .string(model.model)
+                    return .object(fields)
+                }
+            }
             sessions[key] = row
             transcripts[key] = messages
         }
