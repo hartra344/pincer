@@ -45,3 +45,11 @@ Automations (`cron.mjs`):
 - `cron.status`, `cron.list` (paging, `includeDisabled`, sorting), `cron.get`, `cron.runs`, `cron.add`, `cron.update`, `cron.remove` and `cron.run`. Writes need the `operator.admin` scope, and `cron.update` rejects a stale `expectedConfigRevision`.
 - Seeded jobs: `morning-briefing` (cron, announces to Discord), `disk-check` (every 6 hours, failing) and `paper-digest` (research agent, paused), with run history.
 - `cron.run` broadcasts `cron` started/finished events, posts the run into the job's chat (`agent:<agent>:cron:<id>`), and records it in the run log. A job whose message contains `fail` fails.
+
+Approval history (`approvals.mjs`):
+
+- `approval.history` (`cursor`, `limit` 1–100 defaulting to 50, `kind` `exec`/`plugin`/`system-agent`) returns the terminal ledger newest first as `{ items, nextCursor? }`; `approval.get` (`{ id }`) returns `{ approval }`, including pending exec approvals with `status: "pending"`. Both need `operator.approvals`. Snapshots follow the Gateway (`presentation.kind`, no `cwd`).
+- Seeded with 60 records from the last 30 days: 30 `exec`, 18 `plugin` and 12 `system-agent`, covering every status, decision and reason, device/channel/runtime/system resolvers and records without a resolver or source. Two pages at the default limit.
+- Cursors are opaque and bound to their `kind`; an unknown one fails with `INVALID_REQUEST` "invalid approval.history cursor". Unknown ids fail with `INVALID_REQUEST` and `details.reason: "APPROVAL_NOT_FOUND"`.
+- `exec.approval.resolve` records the decision at the top of the history, resolved by the calling device.
+- `MOCK_NO_APPROVAL_HISTORY=1` drops both methods from `hello-ok` and answers them with `UNKNOWN_METHOD`, like an older Gateway.

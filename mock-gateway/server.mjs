@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
@@ -28,6 +29,7 @@ const METHODS = [
   'artifacts.download',
   'exec.approval.list',
   'exec.approval.resolve',
+  ...APPROVAL_HISTORY_METHODS,
   'question.list',
   'question.resolve',
   'users.prefs.get',
@@ -454,6 +456,7 @@ function createSeedState() {
     configState: createConfigState(),
     webPushState: createWebPushState(),
     cronState: createCronState(base),
+    approvalHistoryState: createApprovalHistoryState(base),
   };
 }
 
@@ -592,7 +595,7 @@ function makeHelloPayload(state, params, connId, deviceId) {
     type: 'hello-ok',
     protocol: 4,
     server: { version: 'mock-2026.1', connId },
-    features: { methods: METHODS, events: EVENTS },
+    features: { methods: approvalHistoryDisabled() ? METHODS.filter((m) => !APPROVAL_HISTORY_METHODS.includes(m)) : METHODS, events: EVENTS },
     snapshot: {},
     auth: { role: 'operator', scopes: params.scopes ?? [], deviceToken: deviceTokenFor(state, deviceId) },
     policy: {
@@ -982,6 +985,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
   if (handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession })) return;
   if (handleWebPushRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr })) return;
   switch (method) {
     case 'progressCard.get': {
       const key = params.sessionKey;
@@ -1322,6 +1326,7 @@ function handleAuthedRequest(state, conn, msg) {
         }
         return sendErr(conn, id, 'INVALID_REQUEST', 'invalid decision');
       }
+      recordExecResolution(state, approval, params.decision, conn.deviceId);
       state.pendingApprovals.delete(params.id);
       state.resolvedApprovals.set(params.id, params.decision);
       broadcast(state, 'exec.approval.resolved', { id: params.id, decision: params.decision });

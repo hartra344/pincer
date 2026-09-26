@@ -128,6 +128,10 @@ public final class GatewayStore: Identifiable {
     /// Cron jobs; loaded when the Automations view opens.
     @ObservationIgnored public private(set) lazy var automations = AutomationsModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
+    /// Past approval decisions; loaded when Approval History opens.
+    @ObservationIgnored public private(set) lazy var approvalHistory = ApprovalHistoryModel(
+        connection: self.connection, hello: { [weak self] in self?.hello },
+        localDeviceId: self.profile.isDemo ? DemoGateway.deviceId : self.deviceId)
 
     public init(profile: GatewayProfile) {
         self.profile = profile
@@ -381,6 +385,7 @@ public final class GatewayStore: Identifiable {
                 self.approvals.removeAll { $0.id == id }
                 self.clearApprovalNotifications(id)
             }
+            self.approvalHistory.handleApprovalResolved()
         default:
             break
         }

@@ -406,6 +406,89 @@ do {
     check(unknown == .unknownGateway, "notification for a removed gateway → no longer in Pincer, nothing sent")
 }
 
+print("Approval history")
+do {
+    let localDevice = String(repeating: "d", count: 64)
+    let exec = ApprovalRecord(json(#"""
+    {"id":"exec_1","urlPath":"/approve/exec_1","createdAtMs":1000,"expiresAtMs":121000,"resolvedAtMs":5000,
+     "status":"allowed","decision":"allow-once","reason":"user",
+     "source":{"agentId":"coder","sessionKey":"agent:coder:main"},"resolver":{"kind":"device","id":"\#(localDevice)"},
+     "presentation":{"kind":"exec","commandText":"rm -rf ./build","commandPreview":"rm -rf …","warningText":"Deletes files.",
+      "host":"node","nodeId":"node-1","agentId":"main","allowedDecisions":["allow-once","allow-always","deny"]}}
+    """#))
+    check(exec?.id == "exec_1" && exec?.kind == .exec && exec?.status == .allowed && exec?.decision == .allowOnce
+          && exec?.reason == .user && exec?.urlPath == "/approve/exec_1", "exec snapshot decodes")
+    check(exec?.commandText == "rm -rf ./build" && exec?.commandPreview == "rm -rf …" && exec?.warningText == "Deletes files."
+          && exec?.host == "node" && exec?.nodeId == "node-1" && exec?.displayTitle == "rm -rf ./build", "exec presentation fields")
+    check(exec?.createdAt == Date(timeIntervalSince1970: 1) && exec?.expiresAt == Date(timeIntervalSince1970: 121)
+          && exec?.resolvedAt == Date(timeIntervalSince1970: 5), "timestamps from *AtMs")
+    check(exec?.agentId == "coder" && exec?.sessionKey == "agent:coder:main", "source wins over presentation agent")
+    check(exec?.statusLabel == "Allowed once" && exec?.tone == .allowed, "allowed once capsule")
+    check(exec?.decidedBy(localDeviceId: localDevice) == "This device", "resolver matching this device → This device")
+    check(exec?.decidedBy(localDeviceId: "other") == "Another device (dddddd…)", "resolver on another device")
+    check(exec?.decidedBy(localDeviceId: nil) == "Another device (dddddd…)", "no local id → another device")
+
+    let plugin = ApprovalRecord(json(#"""
+    {"id":"plugin_1","createdAtMs":1,"expiresAtMs":2,"resolvedAtMs":3,"status":"allowed","decision":"allow-always","reason":"user",
+     "resolver":{"kind":"channel","id":"discord:ops"},
+     "presentation":{"kind":"plugin","title":"Send email","description":"Email 3 people.","detail":"To: a@example.com",
+      "severity":"warning","pluginId":"mail","toolName":"send_email","agentId":"main","allowedDecisions":["allow-once","deny"]}}
+    """#))
+    check(plugin?.kind == .plugin && plugin?.title == "Send email" && plugin?.description == "Email 3 people."
+          && plugin?.detail == "To: a@example.com" && plugin?.severity == "warning" && plugin?.pluginId == "mail"
+          && plugin?.toolName == "send_email", "plugin presentation fields")
+    check(plugin?.agentId == "main" && plugin?.sessionKey == nil, "agent from presentation without source")
+    check(plugin?.displayTitle == "Send email" && plugin?.statusLabel == "Always allowed" && plugin?.tone == .allowed, "always allowed capsule")
+    check(plugin?.decidedBy(localDeviceId: localDevice) == "Channel · discord:ops", "channel resolver")
+
+    let system = ApprovalRecord(json(#"""
+    {"id":"sys_1","status":"denied","decision":"deny","reason":"no-route","resolver":{"kind":"system"},
+     "presentation":{"kind":"system-agent","title":"Enable plugin","description":"Enable browser.","proposalHash":"ab","agentId":"main"}}
+    """#))
+    check(system?.kind == .systemAgent && system?.kind.rawValue == "system-agent" && system?.title == "Enable plugin", "system-agent decodes")
+    check(system?.statusLabel == "Denied · No reviewer" && system?.tone == .denied, "denied no-route capsule")
+    check(system?.decidedBy(localDeviceId: localDevice) == "OpenClaw (automatic)", "system resolver")
+    check(system?.reason?.explanation.isEmpty == false, "reason explained")
+
+    let malformed = ApprovalRecord(json(#"{"id":"d2","status":"denied","decision":"deny","reason":"malformed-verdict","resolver":{"kind":"runtime"},"presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(malformed?.statusLabel == "Denied · Invalid response" && malformed?.decidedBy(localDeviceId: nil) == "Runtime",
+          "denied malformed-verdict capsule, runtime resolver")
+    let byUser = ApprovalRecord(json(#"{"id":"d3","status":"denied","decision":"deny","reason":"user","presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(byUser?.statusLabel == "Denied" && byUser?.decidedBy(localDeviceId: nil) == "Unknown", "denied by user, missing resolver → Unknown")
+    let expired = ApprovalRecord(json(#"{"id":"e1","status":"expired","reason":"timeout","presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(expired?.status == .expired && expired?.decision == nil && expired?.statusLabel == "Expired" && expired?.tone == .neutral,
+          "expired capsule")
+    let cancelled = ApprovalRecord(json(#"{"id":"c1","status":"cancelled","reason":"gateway-restart","presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(cancelled?.status == .cancelled && cancelled?.reason == .gatewayRestart && cancelled?.statusLabel == "Cancelled"
+          && cancelled?.tone == .neutral, "cancelled capsule")
+    let pending = ApprovalRecord(json(#"{"id":"p1","status":"pending","sourceSessionKey":"agent:main:main","presentation":{"kind":"exec","commandText":"ls"}}"#))
+    check(pending?.status == .pending && pending?.sessionKey == "agent:main:main" && pending?.resolvedAt == nil, "pending approval.get snapshot")
+
+    let unknown = ApprovalRecord(json(#"""
+    {"id":"u1","status":"escalated","reason":"quorum-lost","futureField":{"x":1},"resolver":{"kind":"committee","id":"c9"},
+     "presentation":{"kind":"mcp-tool","title":"Call tool","extra":true}}
+    """#))
+    check(unknown?.kind == .other("mcp-tool") && unknown?.kind.rawValue == "mcp-tool" && unknown?.kind.label == "Mcp tool",
+          "unknown kind kept raw, capitalized")
+    check(unknown?.status == .other("escalated") && unknown?.statusLabel == "Escalated" && unknown?.reason == .other("quorum-lost")
+          && unknown?.reason?.shortLabel == "Quorum lost", "unknown status/reason kept raw, extra fields ignored")
+    check(unknown?.decidedBy(localDeviceId: nil) == "Committee · c9", "unknown resolver kind humanized")
+    check(ApprovalRecord(json(#"{"status":"allowed","presentation":{"kind":"exec","commandText":"ls"}}"#)) == nil, "record without id rejected")
+    check(ApprovalRecord(json(#"{"id":""}"#)) == nil && ApprovalRecord(json(#""ap1""#)) == nil, "empty id and non-objects rejected")
+    let legacy = ApprovalRecord(json(#"{"id":"l1","kind":"exec","command":"make","decision":"deny","requestedAtMs":2000,"decidedAtMs":4000,"agentId":"main","sessionKey":"agent:main:main"}"#))
+    check(legacy?.kind == .exec && legacy?.commandText == "make" && legacy?.status == .denied
+          && legacy?.createdAt == Date(timeIntervalSince1970: 2) && legacy?.resolvedAt == Date(timeIntervalSince1970: 4)
+          && legacy?.agentId == "main" && legacy?.sessionKey == "agent:main:main", "flat legacy record, status from decision, requested/decidedAtMs")
+    check(ApprovalRecord(json(#"{"id":"l2","decision":"allow-always"}"#))?.status == .allowed, "missing status derived from allow decision")
+    check(ApprovalRecord(json(#"{"id":"l3","presentation":{"commandText":"ls"}}"#))?.kind == .exec, "kind inferred from commandText")
+    check(ApprovalHistoryModel.KindFilter.allCases.map(\.label) == ["All", "Commands", "Plugins", "System"]
+          && ApprovalHistoryModel.KindFilter.all.wireValue == nil && ApprovalHistoryModel.KindFilter.systemAgent.wireValue == "system-agent",
+          "kind filter labels and wire values")
+    check(ApprovalHistoryModel.KindFilter.exec.emptyMessage == "No command approvals in the last 30 days."
+          && ApprovalHistoryModel.KindFilter.all.emptyMessage == nil, "filtered empty messages")
+}
+await checkApprovalHistoryModel()
+
 print("Agent questions")
 do {
     let record = json(#"""
@@ -1180,6 +1263,171 @@ print("\n\(passes) passed, \(failures) failed")
 try? FileManager.default.removeItem(at: draftsRoot)
 exit(failures == 0 ? 0 : 1)
 
+/// `ApprovalHistoryModel` against a scripted Gateway: aliases, paging, cursors, errors and unsupported gateways.
+@MainActor
+func checkApprovalHistoryModel() async {
+    func row(_ id: String, kind: String = "exec") -> JSONValue {
+        json(#"{"id":"\#(id)","status":"allowed","decision":"allow-once","reason":"user","resolvedAtMs":1,"presentation":{"kind":"\#(kind)","title":"t","commandText":"c"}}"#)
+    }
+    var calls: [(String, JSONValue)] = []
+
+    let aliased = ApprovalHistoryModel { method, params in
+        calls.append((method, params))
+        return ["approvals": .array([row("a1"), row("a2"), row("a1")])]
+    }
+    await aliased.load()
+    check(aliased.items.map(\.id) == ["a1", "a2"] && aliased.hasLoaded && aliased.supported && !aliased.hasMore,
+          "approvals alias decodes, duplicate ids dropped")
+    check(calls.first?.0 == "approval.history" && calls.first?.1["limit"]?.int == 50 && calls.first?.1["cursor"] == nil
+          && calls.first?.1["kind"] == nil, "first page asks for 50 without cursor or kind")
+    let bare = ApprovalHistoryModel { _, _ in .array([row("b1"), json(#"{"status":"allowed"}"#)]) }
+    await bare.load()
+    check(bare.items.map(\.id) == ["b1"], "bare array result, records without id skipped")
+    let entries = ApprovalHistoryModel { _, _ in ["entries": .array([row("e1")])] }
+    await entries.load()
+    check(entries.items.map(\.id) == ["e1"], "entries alias decodes")
+
+    // Paging: cursors echoed, pages appended without duplicates, a repeated cursor stops.
+    calls = []
+    let paged = ApprovalHistoryModel { method, params in
+        calls.append((method, params))
+        switch params["cursor"]?.string {
+        case nil: return ["items": .array([row("p1"), row("p2")]), "nextCursor": "c1"]
+        case "c1": return ["items": .array([row("p2"), row("p3")]), "nextCursor": "c2"]
+        case "c2": return ["items": .array([row("p4")]), "nextCursor": "c1"]
+        default: return ["items": []]
+        }
+    }
+    paged.pageSize = 2
+    await paged.load()
+    check(paged.items.map(\.id) == ["p1", "p2"] && paged.nextCursor == "c1" && calls.last?.1["limit"]?.int == 2, "page size override")
+    await paged.loadMore()
+    check(paged.items.map(\.id) == ["p1", "p2", "p3"] && calls.last?.1["cursor"]?.string == "c1", "loadMore echoes the cursor, dedups by id")
+    await paged.loadMore()
+    check(paged.items.map(\.id) == ["p1", "p2", "p3", "p4"] && !paged.hasMore, "repeated cursor stops paging")
+    let callsBefore = calls.count
+    await paged.loadMore()
+    check(calls.count == callsBefore, "no request without a cursor")
+    await paged.refresh()
+    check(paged.items.map(\.id) == ["p1", "p2"] && paged.nextCursor == "c1", "refresh replaces with page 1")
+
+    let emptyPage = ApprovalHistoryModel { _, params in
+        params["cursor"] == nil ? ["items": .array([row("x1")]), "nextCursor": "more"] : ["items": [], "nextCursor": "again"]
+    }
+    await emptyPage.load()
+    await emptyPage.loadMore()
+    check(emptyPage.items.map(\.id) == ["x1"] && !emptyPage.hasMore, "empty page stops paging")
+
+    // Kind filter goes to the server and resets paging.
+    calls = []
+    let filtered = ApprovalHistoryModel { method, params in
+        calls.append((method, params))
+        let kind = params["kind"]?.string ?? "exec"
+        return ["items": .array([row("\(kind)-1", kind: kind)]), "nextCursor": params["kind"] == nil ? "n" : nil]
+    }
+    await filtered.load()
+    await filtered.setKindFilter(.plugin)
+    check(filtered.kindFilter == .plugin && calls.last?.1["kind"]?.string == "plugin" && calls.last?.1["cursor"] == nil
+          && filtered.items.map(\.id) == ["plugin-1"] && !filtered.hasMore, "kind filter reloads page 1 with kind")
+    await filtered.setKindFilter(.systemAgent)
+    check(calls.last?.1["kind"]?.string == "system-agent" && filtered.items.first?.kind == .systemAgent, "system filter sends system-agent")
+    let filterCalls = calls.count
+    await filtered.setKindFilter(.systemAgent)
+    check(calls.count == filterCalls, "same filter doesn't reload")
+    await filtered.setKindFilter(.all)
+    check(calls.last?.1["kind"] == nil, "All omits kind")
+
+    // A stale cursor reloads page 1 once.
+    var historyCalls = 0
+    let stale = ApprovalHistoryModel { _, params in
+        historyCalls += 1
+        if params["cursor"] != nil {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid approval.history cursor", details: nil)
+        }
+        return ["items": .array([row("s1")]), "nextCursor": "gone"]
+    }
+    await stale.load()
+    await stale.loadMore()
+    check(historyCalls == 3 && stale.items.map(\.id) == ["s1"] && stale.loadState == .idle && stale.loadMoreState == .idle,
+          "invalid cursor → one fresh reload, no error")
+
+    // Other load-more failures keep the rows.
+    let flaky = ApprovalHistoryModel { _, params in
+        if params["cursor"] != nil { throw GatewayError.rpc(code: "UNAVAILABLE", message: "storage unavailable", details: nil) }
+        return ["items": .array([row("f1")]), "nextCursor": "next"]
+    }
+    await flaky.load()
+    await flaky.loadMore()
+    check(flaky.items.map(\.id) == ["f1"] && flaky.loadMoreState.error == "storage unavailable" && flaky.hasMore,
+          "load-more failure keeps rows and cursor")
+
+    // Errors.
+    let noScope = ApprovalHistoryModel { _, _ in
+        throw GatewayError.rpc(code: "FORBIDDEN", message: "missing scope: operator.approvals",
+                               details: ["code": "MISSING_SCOPE", "scope": "operator.approvals"])
+    }
+    await noScope.load()
+    check(noScope.supported && noScope.hasLoaded && noScope.loadState.error == ApprovalHistoryModel.missingScopeMessage
+          && ApprovalHistoryModel.missingScopeMessage.contains("operator.approvals"), "missing scope → approve operator.approvals message")
+    let failing = ApprovalHistoryModel { _, _ in throw GatewayError.rpc(code: "UNAVAILABLE", message: "ledger offline", details: nil) }
+    await failing.load()
+    check(failing.loadState.error == "ledger offline" && failing.supported, "other errors show the gateway's message")
+
+    // Unsupported gateways: hello without approval.history, or UNKNOWN_METHOD.
+    var requested = false
+    let legacyHello = ApprovalHistoryModel(methods: { ["chat.send", "exec.approval.resolve"] }) { _, _ in
+        requested = true
+        return ["items": []]
+    }
+    await legacyHello.load()
+    check(!legacyHello.supported && legacyHello.hasLoaded && !requested && legacyHello.loadState == .idle,
+          "hello without approval.history → unsupported, no request, no error")
+    let unknownMethod = ApprovalHistoryModel(methods: { [] }) { method, _ in
+        throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "unknown method: \(method)", details: nil)
+    }
+    await unknownMethod.load()
+    check(!unknownMethod.supported && unknownMethod.hasLoaded && unknownMethod.loadState == .idle && unknownMethod.items.isEmpty,
+          "UNKNOWN_METHOD → unsupported, no error")
+    let advertised = ApprovalHistoryModel(methods: { ["approval.history", "approval.get"] }) { method, _ in
+        if method == "approval.get" { throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "unknown method: approval.get", details: nil) }
+        return ["items": .array([row("g1")])]
+    }
+    await advertised.load()
+    check(advertised.supported && advertised.items.count == 1, "advertised approval.history loads")
+
+    // approval.get is optional: detail upgrades the row, failures keep it.
+    let detailed = ApprovalHistoryModel(localDeviceId: "me") { method, params in
+        switch method {
+        case "approval.get":
+            if params["id"]?.string == "missing" {
+                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "approval not found", details: ["reason": "APPROVAL_NOT_FOUND"])
+            }
+            return ["approval": json(#"{"id":"d1","status":"allowed","decision":"allow-once","reason":"user","resolver":{"kind":"device","id":"me"},"presentation":{"kind":"exec","commandText":"full command","warningText":"careful"}}"#)]
+        default:
+            return ["items": .array([row("d1"), row("missing")])]
+        }
+    }
+    await detailed.load()
+    check(detailed.record("d1")?.warningText == nil, "row before approval.get")
+    await detailed.loadDetail("d1")
+    check(detailed.record("d1")?.commandText == "full command" && detailed.record("d1")?.warningText == "careful"
+          && detailed.detailState["d1"] == .idle, "approval.get detail replaces the row")
+    check(detailed.record("d1").map(detailed.decidedBy) == "This device", "model decidedBy uses its device id")
+    await detailed.loadDetail("missing")
+    check(detailed.record("missing")?.id == "missing" && detailed.detailState["missing"]?.error != nil, "approval.get failure keeps the row")
+    check(detailed.record(nil) == nil && detailed.record("nope") == nil, "unknown ids have no record")
+    await advertised.loadDetail("g1")
+    check(advertised.record("g1") != nil && advertised.detailState["g1"] == .idle, "approval.get unknown method is quiet")
+    var getCalled = false
+    let noGet = ApprovalHistoryModel(methods: { ["approval.history"] }) { method, _ in
+        if method == "approval.get" { getCalled = true }
+        return ["items": .array([row("n1")])]
+    }
+    await noGet.load()
+    await noGet.loadDetail("n1")
+    check(!getCalled && noGet.record("n1") != nil, "hello without approval.get skips the request")
+}
+
 @MainActor
 func waitFor(_ label: String, timeout: Double = 15, _ condition: () -> Bool) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
@@ -1253,13 +1501,56 @@ func runDemo() async {
     check(gateway.automations.hasLoaded && !gateway.automations.supported && gateway.automations.jobs.isEmpty,
           "gateway without cron.* shows automations unavailable")
 
+    // Approval History: 12 seeded decisions (7 commands, 3 plugins, 2 system changes).
+    let history = gateway.approvalHistory
+    history.pageSize = 5
+    await history.load()
+    check(history.supported && history.hasLoaded && history.items.count == 5 && history.hasMore, "demo approval.history first page")
+    await history.loadMore()
+    await history.loadMore()
+    let demoIds = history.items.map(\.id)
+    check(demoIds.count == 12 && Set(demoIds).count == 12 && !history.hasMore, "demo history paged to the end, no duplicates (\(demoIds.count))")
+    check(zip(history.items, history.items.dropFirst()).allSatisfy { ($0.resolvedAt ?? .distantPast) >= ($1.resolvedAt ?? .distantPast) },
+          "demo history newest first")
+    check(Set(history.items.map(\.status)) == [.allowed, .denied, .expired, .cancelled], "demo covers every terminal status")
+    check(Set(history.items.map { history.decidedBy($0) }).isSuperset(of: ["This device", "OpenClaw (automatic)", "Unknown", "Runtime"])
+          && history.items.contains { history.decidedBy($0).hasPrefix("Another device (") }
+          && history.items.contains { history.decidedBy($0).hasPrefix("Channel") }, "demo resolvers in plain words")
+    for (filter, count) in [(ApprovalHistoryModel.KindFilter.exec, 7), (.plugin, 3), (.systemAgent, 2)] {
+        await history.setKindFilter(filter)
+        while history.hasMore { await history.loadMore() }
+        check(history.items.count == count && history.items.allSatisfy { $0.kind.rawValue == filter.rawValue },
+              "demo \(filter.label) filter (\(history.items.count))")
+    }
+    await history.setKindFilter(.all)
+    if let plugin = history.items.first(where: { $0.kind == .plugin }) {
+        await history.loadDetail(plugin.id)
+        check(history.details[plugin.id]?.detail != nil || history.record(plugin.id)?.title == plugin.title, "demo approval.get detail")
+        check(history.detailState[plugin.id] == .idle && history.record(plugin.id)?.pluginId == plugin.pluginId, "demo detail round-trips")
+    } else {
+        check(false, "demo history has a plugin")
+    }
+    await history.loadMore()
+    check(history.items.count == 10 && history.hasMore, "demo second page before resolving")
+
     await chat.send("please approve this")
     let approvalSeen = await waitFor("approval") { !gateway.approvals.isEmpty }
     check(approvalSeen, "demo approval surfaced")
     if let approval = gateway.approvals.first {
+        await history.loadDetail(approval.id)
+        check(history.details[approval.id]?.status == .pending, "demo approval.get returns a pending approval")
         await gateway.resolveApproval(approval, decision: "allow-once")
         check(gateway.approvals.isEmpty, "demo approval resolved")
+        let merged = await waitFor("history refresh after resolve", timeout: 5) { history.items.first?.id == approval.id }
+        check(merged && history.items.count == 11, "resolved approval shows first after exec.approval.resolved (\(history.items.count))")
+        if let top = history.items.first {
+            check(top.statusLabel == "Allowed once" && history.decidedBy(top) == "This device" && top.sessionKey == key,
+                  "resolved entry decided by this device in its chat")
+        }
+        await history.refresh()
+        check(history.items.first?.id == approval.id && history.items.count == 5, "refresh keeps the resolved entry first")
     }
+    history.pageSize = ApprovalHistoryModel.defaultPageSize
 
     let settled = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
     check(settled, "demo approval run finished")
@@ -1757,6 +2048,37 @@ func runLive(url: String, token: String) async {
         gateway.organization = savedOrganization
     }
     other.stop()
+
+    // Approval History against the mock's 60 seeded decisions (30 exec, 18 plugin, 12 system-agent),
+    // plus any approvals resolved earlier in this run.
+    let history = gateway.approvalHistory
+    check(gateway.hello?.methods.contains("approval.history") == true, "hello advertises approval.history")
+    await history.load()
+    check(history.supported && history.loadState == .idle && history.items.count == 50 && history.hasMore, "approval.history page 1 (\(history.items.count))")
+    await history.loadMore()
+    let seededIds = history.items.map(\.id).filter { $0.contains("_hist_") }
+    let resolvedHere = history.items.filter { !$0.id.contains("_hist_") }
+    check(seededIds.count == 60 && history.items.count == 60 + resolvedHere.count && Set(history.items.map(\.id)).count == history.items.count
+          && !history.hasMore, "two pages = 60 seeded + \(resolvedHere.count) resolved, no duplicates")
+    check(!resolvedHere.isEmpty && history.items.first?.id == resolvedHere.first?.id && resolvedHere.first?.status == .denied
+          && resolvedHere.first.map(history.decidedBy) == "This device", "approval denied earlier is first, decided by this device")
+    check(history.items.allSatisfy { $0.status != .pending } && Set(history.items.map(\.status)) == [.allowed, .denied, .expired, .cancelled],
+          "terminal statuses only")
+    for (filter, seeded) in [(ApprovalHistoryModel.KindFilter.exec, 30), (.plugin, 18), (.systemAgent, 12)] {
+        await history.setKindFilter(filter)
+        while history.hasMore { await history.loadMore() }
+        let expected = seeded + (filter == .exec ? resolvedHere.count : 0)
+        check(history.items.count == expected && history.items.allSatisfy { $0.kind.rawValue == filter.rawValue },
+              "\(filter.label) filter (\(history.items.count)/\(expected))")
+    }
+    await history.setKindFilter(.all)
+    await history.loadDetail("plugin_hist_001")
+    check(history.details["plugin_hist_001"]?.kind == .plugin && history.details["plugin_hist_001"]?.title != nil
+          && history.detailState["plugin_hist_001"] == .idle, "approval.get plugin_hist_001")
+    await history.loadDetail("sys_hist_001")
+    check(history.details["sys_hist_001"]?.kind == .systemAgent, "approval.get sys_hist_001")
+    await history.loadDetail("nope_missing")
+    check(history.detailState["nope_missing"]?.error == "This approval is no longer on the Gateway.", "approval.get not found")
 
     // Automations: read-only without admin, then run, pause, edit, create and delete.
     let automations = gateway.automations

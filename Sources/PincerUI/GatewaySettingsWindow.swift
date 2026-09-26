@@ -38,6 +38,7 @@ struct GatewaySettingsWindow: View {
             GatewaySettingsRoot(close: self.close)
                 .environment(gateway)
                 .environment(self.navigator)
+                .environment(\.closeGatewaySettings, GatewaySettingsCloser(close: self.close))
         } else {
             ContentUnavailableView("Gateway Removed", systemImage: "server.rack",
                                    description: Text("This Gateway is no longer in Pincer."))
@@ -85,6 +86,7 @@ private struct GatewaySettingsRoot: View {
                         case let .object(path): ConfigObjectPage(path: path)
                         case let .list(path): StringListPage(path: path)
                         case let .plugin(id): PluginPage(pluginId: id)
+                        case let .approval(id): ApprovalDetailPage(approvalId: id)
                         }
                     }
             }
@@ -144,6 +146,7 @@ private struct GatewaySettingsRoot: View {
         switch destination {
         case .connection: ConnectionPage()
         case .overview: OverviewPage()
+        case .approvals: ApprovalHistoryPage()
         case let .page(id):
             if let page = SettingsCatalog.page(id) { CuratedPage(page: page) }
         case .plugins: PluginsPage()
@@ -204,6 +207,7 @@ private struct SettingsSidebar: View {
                 Section {
                     self.row("Connection", symbol: "network", .connection)
                     self.row("Overview", symbol: "info.circle", .overview)
+                    self.row("Approval History", symbol: "checkmark.shield", .approvals)
                 }
                 if settings.hasLoaded {
                     Section("Settings") {
