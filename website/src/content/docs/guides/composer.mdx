@@ -3,6 +3,11 @@ title: Composer & slash commands
 description: Sending messages, attachments, stopping runs and using slash commands in Pincer.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import commands from '../../../assets/screenshots/slash-commands.png';
+import context from '../../../assets/screenshots/context-meter.png';
+
+
 ## Sending messages
 
 | Action | Keys |
@@ -35,6 +40,8 @@ A few notes:
 - `/clear` is sent as `/reset`, like the Control UI.
 - Gateways that don't support `commands.list` get a built-in list of common commands.
 
+<DocScreenshot focus={{ x: 580, y: 870, width: 1765, height: 675 }} src={commands} alt="Slash command suggestions above the composer, including help, status, compact, and model." caption="Type / without sending it to browse available commands. This example uses the built-in demo." />
+
 ### Handy commands
 
 | Command | What it does |
@@ -45,3 +52,9 @@ A few notes:
 | `/reset` or `/clear` | Start the session fresh. |
 
 The exact list depends on your gateway, its skills and its plugins.
+
+## Context window
+
+Click the ring beside Send to see how much context the chat uses. The demo’s **Claw → Main** starts at **172k / 200k tokens (86%)**, so the ring is orange. **Compact Now** summarizes older messages; optional instructions tell the agent what to keep.
+
+<DocScreenshot focus={{ x: 1670, y: 1010, width: 670, height: 535 }} src={context} alt="Context Window popover showing 172k of 200k tokens, optional instructions, and Compact Now." caption="Built-in demo, Lobster theme. Open the ring to inspect usage before compacting." />

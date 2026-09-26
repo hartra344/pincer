@@ -3,6 +3,10 @@ title: Try the demo
 description: Explore Pincer with a simulated gateway that runs entirely on your device.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import overview from '../../../assets/screenshots/transcript.png';
+
+
 Pincer has a built-in demo, so you can look around before you set up a gateway. It runs a simulated Gateway on your device with sample agents, chats, streamed replies, a chart and an exec approval. **Nothing leaves your device.**
 
 ## Open the demo
@@ -14,6 +18,8 @@ Choose **Try the Demo**:
 
 The demo shows up in the rail like any other gateway. You can remove it whenever you like.
 
+<DocScreenshot src={overview} alt="Pincer demo showing sample agents, grouped chats, and a disk status reply with a chart." caption="A real macOS capture using only synthetic demo content. The name Alex is a documentation persona." />
+
 ## Things to try
 
 Send a message and watch the reply stream in. A few words trigger special behavior:
@@ -22,6 +28,8 @@ Send a message and watch the reply stream in. A few words trigger special behavi
 | --- | --- |
 | `tool` or `disk` | The agent streams a tool call, shown as a card with arguments and a result. |
 | `image` | The reply also includes an inline image. Click it for a Quick Look-style preview. |
+| `ask` | An agent question appears with choices and a custom-answer field. |
+| `plan` | A task progress card walks through a three-step plan. |
 | `approve` | The agent asks for an exec approval. Try **Allow once**, **Always allow** or **Deny**. |
 
 While you're there, try:

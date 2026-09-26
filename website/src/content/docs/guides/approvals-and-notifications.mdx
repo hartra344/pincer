@@ -1,0 +1,42 @@
+---
+title: Approvals & notifications
+description: Answering exec approvals and managing notifications in Pincer.
+---
+
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import approval from '../../../assets/screenshots/exec-approval.png';
+import question from '../../../assets/screenshots/agent-question.png';
+
+
+## Exec approvals
+
+When an agent wants to run something that needs your OK, Pincer shows the request as a **banner** in the app and as an **actionable notification**. Choose:
+
+- **Allow once:** run it this time only.
+- **Always allow:** run it now, and let the gateway allow it from now on.
+- **Deny:** don't run it.
+
+You can answer from the notification without opening Pincer.
+
+:::note
+Answering approvals uses the `operator.approvals` scope, which Pincer requests with both access levels.
+:::
+
+<DocScreenshot focus={{ x: 580, y: 105, width: 1765, height: 225 }} src={approval} alt="Orange command approval banner with Deny and the Allow Once and Always Allow menu." caption="Built-in demo: a simulated rm -rf ./build approval. No command is executed on your Mac." />
+
+## Agent questions
+
+When an agent uses `ask_user`, its question appears above the composer. Choose an option or type your own answer, then choose **Submit**. **Skip** tells the agent you would rather not answer. Prompts with several questions use **Next** and **Back** before submitting all answers together.
+
+To try this safely, open **Scout → Main** in the demo and send **Please ask me before choosing what to clean up.** Select **Stop watching Discord channels here** to see the selected state below. The reply explicitly confirms that nothing was actually removed.
+
+<DocScreenshot focus={{ x: 580, y: 685, width: 1765, height: 765 }} src={question} alt="Agent question with three choices, a custom-answer field, Skip, and Submit; the third option is selected." caption="Built-in demo. Selecting an answer enables Submit; selection alone does not send it." />
+
+## Notifications
+
+- **One thread per chat:** notifications from the same chat are grouped together.
+- **Reply inline:** use the reply action on a notification to answer without switching apps.
+- **No double alerts:** you won't get a notification for the chat you're already looking at.
+- **Helpers stay quiet:** subagent (helper) runs never send notifications or add to unread counts.
+
+Allow notifications when Pincer asks the first time. If you missed it, turn them on in **System Settings → Notifications → Pincer** on macOS, or **Settings → Notifications → Pincer** on iOS.

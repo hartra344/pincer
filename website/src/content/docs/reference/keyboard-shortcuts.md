@@ -33,4 +33,4 @@ description: Keyboard shortcuts for Pincer on macOS (and iPad with a keyboard).
 
 | Action | Shortcut |
 | --- | --- |
-| Save (opens Review Changes) | <kbd>⌘</kbd> <kbd>S</kbd> |
+| Save gateway settings | <kbd>⌘</kbd> <kbd>S</kbd> |

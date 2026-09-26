@@ -3,6 +3,12 @@ title: Organizing chats
 description: Sidebar layouts, servers, groups, pins, icons and colors in Pincer.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import organization from '../../../assets/screenshots/organize-chats.png';
+import palette from '../../../assets/screenshots/command-palette.png';
+import automations from '../../../assets/screenshots/automations.png';
+
+
 The sidebar keeps your chats organized by server, channel and agent. This page covers how it's laid out and how to arrange it.
 
 ## Layouts
@@ -15,6 +21,8 @@ Pick a layout from the menu at the top of the sidebar:
 | **By agent** | One section per agent. |
 | **By group** | One section per group you've made. |
 | **Recent** | One list, most recently active first. |
+
+<DocScreenshot src={organization} alt="Organize menu with By server, By agent, By group, Recent, New Group, and Automations." caption="The Organize menu controls the sidebar layout and opens gateway tools. Built-in demo." />
 
 ### Discord server names
 
@@ -71,3 +79,15 @@ When a chat's context is compacted, it stays the same chat. You'll see a "Compac
 - **Search** at the top of the sidebar filters chats by name.
 - **Unread dots** and the **Dock badge** show what's new.
 - **Next Unread Chat** (<kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>↓</kbd>) jumps to the next chat with unread messages.
+
+### Quick switching
+
+Press **⌘K** and type part of a chat name. Matching is fuzzy: in the demo, **jptr** finds **Japan trip**. Press Return to open the selected result, or Escape to close the palette.
+
+<DocScreenshot focus={{ x: 615, y: 245, width: 1125, height: 250 }} src={palette} alt="Command palette filtered by jptr, with Japan trip as the selected result." caption="Jump to a chat without scrolling through the sidebar." />
+
+## Automations
+
+Choose **Organize → Automations…** and select a job to see its schedule, task, delivery destination, and run history. **Run Now**, **Pause/Resume**, and **Edit** require Full Management access.
+
+<DocScreenshot src={automations} alt="Morning briefing automation details with its schedule, task, delivery to home-lab, and Run Now, Pause, and Edit controls." caption="Local mock gateway. The sidebar shows successful, failing, and paused sample jobs; these are synthetic records." />

@@ -2,7 +2,9 @@
 
 A native macOS and iOS client for [OpenClaw](https://github.com/openclaw/openclaw). It keeps the parts of the Discord connection that work well, organized chats and notifications, and adds what Discord can't show: thinking, tool calls, inline images, and messages attributed to you as the owner.
 
-<img width="2804" height="2004" alt="CleanShot 2026-09-25 at 3 20 07 PM@2x" src="https://github.com/user-attachments/assets/03bc0ca0-8cee-49bf-8985-a684b6e691b5" />
+![Pincer on macOS with synthetic demo chats, a tool call, a disk summary, and an inline chart.](website/src/assets/screenshots/transcript.png)
+
+*Captured from the built-in demo with fictional user Alex. No live conversations or gateway credentials are shown.*
 
 
 ## What it is (and isn't)
@@ -58,7 +60,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - curated pages (Gateway, Agents & Models, Channels, Sessions & Messages, Tools & Skills, Automation) built from the gateway's own schema (`config.get` / `config.schema`), with rarely used fields under **Advanced**. Sections the gateway's schema doesn't have are hidden;
   - **Plugins**: list, add (ClawHub, npm or git), remove, enable and disable plugins, and fill in their settings and credentials (`plugins.*`);
   - **All Settings** (every field, grouped by section) and **Raw Config** (JSON5, `config.apply`) for anything else. Search in the sidebar finds any setting and jumps to it;
-  - edits from every page go into one draft. The toolbar shows how many are unsaved, and **Save** (⌘S) opens **Review Changes**, which lists each change and sends them together with `config.patch`, so the gateway validates, persists and hot-applies them. Invalid values come back with the field and reason, and changes that need a gateway restart say so. If the config changed on the gateway meanwhile, Pincer rebases the draft and asks about any conflicting setting;
+  - edits from every page go into one draft. The toolbar shows how many are unsaved, and the **Unsaved** count opens a review of each change. **Save** (⌘S) sends the draft with `config.patch`, so the gateway validates, persists and hot-applies them. Invalid values come back with the field and reason, and changes that need a gateway restart say so. If the config changed on the gateway meanwhile, Pincer rebases the draft and asks about any conflicting setting;
   - secrets are shown only as "saved" and are never sent back to the gateway unless you change them;
   - editing needs **Access → Full Management** on the Connection page (and the gateway's approval); otherwise settings are read-only.
 - **Share extension** (iOS and macOS share sheets): send text, links, images and files into a chat. Pick the gateway, then an existing chat or **New chat with** an agent (`sessions.list`, `sessions.create`), add a note if you like, and **Send** (`chat.send`). The note comes first, then any shared text, then links, and a link that's already in the text isn't repeated. Images are downscaled to fit the gateway's limits; files that are too big are listed and left out. The extension connects as the app's own, already approved device, so there's nothing new to pair. Open Pincer once after installing so it can share its device key, and add a gateway first. The next share starts on the gateway and chat you used last.
