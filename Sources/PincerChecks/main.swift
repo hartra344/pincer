@@ -630,6 +630,10 @@ func runDemo() async {
     let switched = await waitFor("model switch") { gateway.sessions[key]?.modelRef == "openai/gpt-5.6-sol" }
     check(switched, "demo model switch")
 
+    await gateway.automations.load()
+    check(gateway.automations.hasLoaded && !gateway.automations.supported && gateway.automations.jobs.isEmpty,
+          "gateway without cron.* shows automations unavailable")
+
     await chat.send("please approve this")
     let approvalSeen = await waitFor("approval") { !gateway.approvals.isEmpty }
     check(approvalSeen, "demo approval surfaced")
