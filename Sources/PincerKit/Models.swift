@@ -823,6 +823,8 @@ public struct ExecApproval: Identifiable, Hashable, Sendable {
     public let agentId: String?
     public let warning: String?
     public let expiresAt: Date?
+    /// `request.allowedDecisions`; nil from Gateways that don't send it, where every decision is offered.
+    public let allowedDecisions: [String]?
 
     public init?(_ payload: JSONValue) {
         let request = payload["request"] ?? payload
@@ -835,6 +837,14 @@ public struct ExecApproval: Identifiable, Hashable, Sendable {
         self.agentId = request["agentId"]?.text ?? payload["agentId"]?.text
         self.warning = request["warningText"]?.text
         self.expiresAt = (payload["expiresAtMs"]?.double).map { Date(timeIntervalSince1970: $0 / 1000) }
+        self.allowedDecisions = (request["allowedDecisions"] ?? payload["allowedDecisions"])?.array?.compactMap(\.string)
+    }
+
+    /// Whether "Always allow" may be offered.
+    public var allowsAlways: Bool { self.allowedDecisions?.contains("allow-always") ?? true }
+
+    public func isExpired(at date: Date = Date()) -> Bool {
+        self.expiresAt.map { $0 <= date } ?? false
     }
 }
 

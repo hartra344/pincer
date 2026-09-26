@@ -14,7 +14,8 @@ public enum TranscriptCache {
 
         public static let currentVersion = 4
 
-        public init(items: [ChatItem], complete: Bool, activityMs: Double? = nil) {
+        public init(version: Int = Self.currentVersion, items: [ChatItem], complete: Bool, activityMs: Double? = nil) {
+            self.version = version
             self.items = items
             self.complete = complete
             self.activityMs = activityMs
@@ -39,17 +40,17 @@ public enum TranscriptCache {
             .appending(path: "Pincer/Transcripts", directoryHint: .isDirectory)
     }
 
-    public static func directory(gatewayId: UUID) -> URL? {
-        self.root?.appending(path: gatewayId.uuidString, directoryHint: .isDirectory)
+    public static func directory(gatewayId: UUID, root: URL? = Self.root) -> URL? {
+        root?.appending(path: gatewayId.uuidString, directoryHint: .isDirectory)
     }
 
-    public static func file(gatewayId: UUID, sessionKey: String) -> URL? {
+    public static func file(gatewayId: UUID, sessionKey: String, root: URL? = Self.root) -> URL? {
         let digest = SHA256.hash(data: Data(sessionKey.utf8)).map { String(format: "%02x", $0) }.joined()
-        return self.directory(gatewayId: gatewayId)?.appending(path: "\(digest).json")
+        return self.directory(gatewayId: gatewayId, root: root)?.appending(path: "\(digest).json")
     }
 
-    static func meta(gatewayId: UUID, sessionKey: String) async -> Meta? {
-        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey)?.appendingPathExtension("meta") else {
+    static func meta(gatewayId: UUID, sessionKey: String, root: URL? = Self.root) async -> Meta? {
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root)?.appendingPathExtension("meta") else {
             return nil
         }
         return await Task.detached(priority: .utility) {
@@ -57,8 +58,8 @@ public enum TranscriptCache {
         }.value
     }
 
-    public static func load(gatewayId: UUID, sessionKey: String) async -> Snapshot? {
-        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey) else { return nil }
+    public static func load(gatewayId: UUID, sessionKey: String, root: URL? = Self.root) async -> Snapshot? {
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else { return nil }
         return await Task.detached(priority: .userInitiated) {
             guard let data = try? Data(contentsOf: url),
                   let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data),
@@ -76,21 +77,33 @@ public enum TranscriptCache {
               let written = await Writer.shared.write(snapshot, to: url)
         else { return }
         guard !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId) else {
-            self.deleteDirectory(gatewayId: gatewayId)
+            self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
             return
         }
         await MessageIndex.shared(gatewayId: gatewayId).index(sessionKey: sessionKey, snapshot: snapshot, fileMtime: written)
+    }
+
+    /// Writes the transcript under another cache root (tests). The message search index, which
+    /// lives under the default root, isn't touched.
+    static func save(_ snapshot: Snapshot, gatewayId: UUID, sessionKey: String, root: URL?) async {
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else { return }
+        _ = await Writer.shared.write(snapshot, to: url)
     }
 
     /// Deletes the Gateway's transcripts and message search index. `permanently`: the Gateway
     /// was removed from the app, so saves still under way don't write them again.
     public static func removeAll(gatewayId: UUID, permanently: Bool = false) {
         MessageIndex.discard(gatewayId: gatewayId, permanently: permanently)
-        self.deleteDirectory(gatewayId: gatewayId)
+        self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
     }
 
-    private static func deleteDirectory(gatewayId: UUID) {
-        guard let directory = self.directory(gatewayId: gatewayId) else { return }
+    /// Deletes the Gateway's transcripts under another cache root (tests).
+    static func removeAll(gatewayId: UUID, root: URL?) {
+        self.deleteDirectory(gatewayId: gatewayId, root: root)
+    }
+
+    private static func deleteDirectory(gatewayId: UUID, root: URL?) {
+        guard let directory = self.directory(gatewayId: gatewayId, root: root) else { return }
         try? FileManager.default.removeItem(at: directory)
     }
 

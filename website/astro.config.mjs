@@ -46,6 +46,7 @@ export default defineConfig({
 						{ slug: 'guides/transcript' },
 						{ slug: 'guides/search' },
 						{ slug: 'guides/composer' },
+						{ slug: 'guides/quick-capture' },
 						{ slug: 'guides/approvals-and-notifications' },
 						{ slug: 'guides/gateway-settings' },
 						{ slug: 'guides/appearance' },

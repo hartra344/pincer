@@ -19,8 +19,6 @@ struct ChannelList: View {
     @State private var pickingColor: SessionRow?
     @State private var showingSettings = false
     @State private var expandedThreads: Set<String> = []
-    @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
-    @AppStorage("pincer.showMessagePreviews") private var showMessagePreviews = true
     @Environment(\.appTheme) private var theme
     @State private var prompt: TextPrompt?
     @State private var confirmation: ConfirmPrompt?
@@ -55,14 +53,8 @@ struct ChannelList: View {
             #endif
             self.searchMessagesRow
             ConnectionStatusRow()
-            SidebarList(
-                model: SidebarModel.build(gateway: self.gateway, search: self.search, collapsed: self.gateway.collapsedSections,
-                                          expandedThreads: self.expandedThreads, showSubagentRuns: self.showSubagentRuns,
-                                          showPreviews: self.showMessagePreviews),
-                selectedKey: self.gateway.selectedKey,
-                gateway: self.gateway,
-                actions: self.actions,
-                theme: self.theme)
+            ChannelListRows(search: self.search, expandedThreads: self.expandedThreads,
+                            actions: self.actions, theme: self.theme)
                 #if os(iOS)
                 // Scroll under the bottom search bar instead of stopping at its edge.
                 .ignoresSafeArea(.container, edges: .bottom)
@@ -86,6 +78,7 @@ struct ChannelList: View {
                     }
                     Divider()
                     Button("Automations…") { self.openAutomations(self.gateway) }
+                    Button("Approval History…") { self.openGatewaySettings(self.gateway, at: .approvals) }
                     Button("Gateway Settings…") { self.openGatewaySettings(self.gateway) }
                         .keyboardShortcut(",", modifiers: [.command, .shift])
                     Button("Edit Connection…") { self.openGatewaySettings(self.gateway, at: .connection) }
@@ -165,6 +158,30 @@ struct ChannelList: View {
             setCollapsed: { id, collapsed in self.gateway.setSectionCollapsed(id, collapsed) },
             refresh: { await self.gateway.refreshSessions() },
             openAutomations: { self.openAutomations(self.gateway) })
+    }
+}
+
+/// The native list, in its own view so selection and session updates re-render only it, not
+/// `ChannelList` and its toolbar. The `@AppStorage` lives here too: it re-renders its view on
+/// any UserDefaults write, and picking a chat writes one.
+private struct ChannelListRows: View {
+    let search: String
+    let expandedThreads: Set<String>
+    let actions: SidebarActions
+    let theme: AppTheme
+    @Environment(GatewayStore.self) private var gateway
+    @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
+    @AppStorage("pincer.showMessagePreviews") private var showPreviews = true
+
+    var body: some View {
+        SidebarList(
+            model: SidebarModel.build(gateway: self.gateway, search: self.search, collapsed: self.gateway.collapsedSections,
+                                      expandedThreads: self.expandedThreads, showSubagentRuns: self.showSubagentRuns,
+                                      showPreviews: self.showPreviews),
+            selectedKey: self.gateway.selectedKey,
+            gateway: self.gateway,
+            actions: self.actions,
+            theme: self.theme)
     }
 }
 

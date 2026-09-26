@@ -56,7 +56,7 @@ struct CommandPaletteView: View {
     }
 
     private enum Command: String {
-        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations
+        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -407,6 +407,8 @@ struct CommandPaletteView: View {
             items += [
                 item(.gatewaySettings, "Gateway Settings…", "server.rack", keywords: ["config"], shortcut: "⇧⌘,"),
                 item(.automations, "Automations…", "clock", keywords: ["cron", "jobs", "schedule"]),
+                item(.approvalHistory, "Approval History…", "checkmark.shield",
+                     keywords: ["approvals", "audit", "log", "exec", "plugin", "decisions"]),
             ]
         }
         return items
@@ -543,6 +545,8 @@ struct CommandPaletteView: View {
             if let gateway { self.openGatewaySettings(gateway) }
         case .automations:
             if let gateway { self.openAutomations(gateway) }
+        case .approvalHistory:
+            if let gateway { self.openGatewaySettings(gateway, at: .approvals) }
         }
     }
 }
@@ -629,8 +633,16 @@ struct GoCommands: Commands {
     let app: AppModel
     @FocusedValue(\.commandPalette) private var palette
     @FocusedValue(\.searchMessages) private var searchMessages
+    #if os(macOS)
+    /// Commands live in the app's scenes, so this can open a main window even when none has
+    /// existed since launch; Quick Capture uses it for Send & Open and Open in Pincer.
+    @Environment(\.openWindow) private var openWindow
+    #endif
 
     var body: some Commands {
+        #if os(macOS)
+        let _ = (QuickCaptureController.shared.openWindow = self.openWindow)
+        #endif
         CommandMenu("Go") {
             Button("Command Palette…") { self.palette?.wrappedValue.toggle() }
                 .keyboardShortcut("k", modifiers: .command)
@@ -638,6 +650,11 @@ struct GoCommands: Commands {
             Button("Search Messages…") { self.searchMessages?() }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 .disabled(self.palette == nil || self.searchMessages == nil || self.app.selectedGateway == nil)
+            #if os(macOS)
+            Button(QuickCaptureController.shared.displayShortcut.map { "Quick Capture…  \($0)" } ?? "Quick Capture…") {
+                QuickCaptureController.shared.show()
+            }
+            #endif
             Divider()
             Button("Back") { self.app.goBack() }
                 .keyboardShortcut("[", modifiers: .command)

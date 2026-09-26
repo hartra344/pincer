@@ -33,10 +33,15 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - search, unread dots and dock badge;
   - "Next Unread Chat" (⌥⇧↓).
 - **Command palette and quick switching** (**Go** menu):
-  - ⌘K opens a palette to jump to any chat on any gateway (recently visited first), start a new chat with an agent, change the chat's model, pin or unpin it, show or hide thinking steps, switch gateways, or open Settings, Gateway Settings or Automations. Type to filter (fuzzy, so `jptr` finds "Japan trip"), use ↑/↓ to move, Return to run and Esc to go back or close;
+  - ⌘K opens a palette to jump to any chat on any gateway (recently visited first), start a new chat with an agent, change the chat's model, pin or unpin it, show or hide thinking steps, switch gateways, or open Settings, Gateway Settings, Automations or Approval History. Type to filter (fuzzy, so `jptr` finds "Japan trip"), use ↑/↓ to move, Return to run and Esc to go back or close;
   - **Search Messages** (⇧⌘F, "Search Messages for …" in ⌘K, or the "Search messages for …" row that appears above the sidebar's chat list while you type in "Find a chat") searches the text of every cached chat on the selected gateway, including older history you haven't scrolled to. Results are grouped by chat (newest first, up to 3 per chat) with the sender, date and a highlighted snippet; picking one opens the chat with Find in Chat on that message. Matching ignores case and accents, each word must match from its start (`tok` finds "Tokyo", `kyo` doesn't), and multi-word queries must appear as a phrase. Only user and assistant message text is searched, not thinking or tool output. The index lives on disk next to the transcript cache and is built in the background;
   - Back (⌘[) and Forward (⌘]) move through the chats you've visited, like a browser;
   - ⌘1–⌘9 open the selected gateway's pinned chats, in sidebar order.
+- **Quick Capture** (macOS): press ⌃⇧Space from any app to open a small floating composer, even when the main window is closed. It remembers the chat you last sent to.
+  - To pick a recent chat or **New Chat with** an agent, click the target or press ⌘J (or Tab). Type to filter, ↑/↓ to move, and ⌘1–⌘9 for pinned chats.
+  - Return sends (`chat.send`, after `sessions.create` for a new chat) without leaving what you're doing. ⌘Return sends and opens the chat in Pincer, ⌘O opens it without sending, and Esc closes and keeps your text.
+  - Paste or drag in images and files, as in the main composer.
+  - Change or turn off the shortcut in Settings → General → Quick Capture. It uses a standard system hotkey, so no Accessibility permission is needed. It's also in the **Go** menu.
 - **Transcript:**
   - live streaming, with a collapsible **thinking** section and **tool cards** showing arguments and results. Choose whether to show thinking steps never, only live, or for every turn;
   - the full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer quietly caches every chat (most recently active first) and skips chats that haven't changed. Opening one shows the cached transcript at once, then fetches only what's new;
@@ -50,12 +55,13 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
 - **Composer:** Return sends and ⇧/⌥-Return adds a new line. You can paste, drag in or pick images and files; they are downscaled to fit the gateway's limits. Stop a run with ⌘.
 - **Context meter:** a ring next to Send shows how full the chat's context window is, from the session's token snapshot (the row's context limit or prompt budget, else the model's window from `models.list`, else the Gateway default). It turns orange at 85% and red at 95%. Click it for used/limit, the last run's tokens and **Compact Now**, with optional instructions for what to keep; the result reads "Compacted 172k → 31k tokens." With Full Management it calls `sessions.compact`; otherwise, or with instructions, it sends `/compact`.
 - **Slash commands:** typing `/` suggests the commands the gateway offers for that chat (`commands.list`: built-ins, skills and plugins), then their arguments: listed choices (`/verbose on`), the agent's models for `/model`, and the session's thinking levels for `/think`. Use ↑/↓ to move, Tab or Return to complete, Esc to hide; Return sends once the command is complete. `/clear` is sent as `/reset`, like the Control UI. Gateways without `commands.list` get a built-in list of common commands.
-- **Approvals:** exec approvals appear as a banner and as actionable notifications (Allow once, Always allow, Deny).
+- **Approvals:** exec approvals appear as a banner and as actionable notifications with **Allow once**, **Always allow** and **Deny**. The actions work from the lock screen and without opening Pincer: it connects in the background (even if it wasn't running), sends `exec.approval.resolve` to the gateway the approval came from, and removes the notification once the gateway confirms. On iOS, both Allow actions require unlocking the device (Face ID, Touch ID or passcode); Deny doesn't, since it can only stop a command. **Always allow** is offered only when the approval's `allowedDecisions` permit it (Gateways that don't send the field get all three). An approval answered elsewhere disappears on its own. If an action comes too late, a follow-up notification says so instead: "That approval expired. Nothing was run.", "Already answered elsewhere.", or, if the gateway can't be reached within about 25 seconds, "Couldn't reach … — the command is still waiting." with the actions to try again. The decision is never saved and sent later. Follow-ups never show the command.
+- **Approval History** (Gateway Settings, or ⌘K → "Approval History…") lists the last 30 days of decisions on commands, plugins and system changes, newest first: what was asked, by which agent and chat, how it ended and who decided (`approval.history`, `approval.get`). Filter by kind, **Load More** for older entries, and select one for its full details. Gateways without approval history say so.
 - **Agent questions:** when the agent asks you something (`ask_user`), a question card appears above the composer, like the Control UI's. Pick an option (click it or press its number), type your own answer, and **Submit**, or **Skip** to tell the agent you'd rather not answer. Prompts with several questions step through them with **Next**/**Back** and send every answer together (`question.resolve`). Questions answered elsewhere, for example with Discord's buttons, disappear on their own, and a question in a chat you aren't looking at posts a notification.
 - **Notifications:** one notification thread per chat, a reply action, and no notification for the chat you're already looking at.
-- **Push on iOS:** with a [push relay](push-relay/README.md) set in Settings → Notifications, finished replies and exec approvals still arrive when Pincer is suspended or closed. Pincer subscribes to the Gateway's Web Push (`push.web.subscribe`). The relay forwards the encrypted payload to APNs, and a notification service extension decrypts it on the device. Neither the relay nor Apple can read it. The Gateway sends only a generic title and the chat or approval it refers to, so opening the notification loads the content. Setup takes about 10 minutes on the Gateway machine; see [`push-relay/README.md`](push-relay/README.md).
+- **Push on iOS:** with a [push relay](push-relay/README.md) set in Settings → Notifications, finished replies and exec approvals still arrive when Pincer is suspended or closed. Pincer subscribes to the Gateway's Web Push (`push.web.subscribe`). The relay forwards the encrypted payload to APNs, and a notification service extension decrypts it on the device. Neither the relay nor Apple can read it. The Gateway sends only a generic title and the chat or approval it refers to, so opening the notification loads the content. Approval pushes are actionable: Allow once, Always allow and Deny work from the lock screen, as for local notifications. Setup takes about 10 minutes on the Gateway machine; see [`push-relay/README.md`](push-relay/README.md).
 - **Gateway settings** (**Pincer → Gateway Settings…**, ⇧⌘, on macOS, or the gateway's menu in the sidebar): a window on macOS and a sheet on iOS, with a sidebar of pages:
-  - **Connection** (this device's URL, token, access level and TLS pin; **Apply** reconnects) and **Overview** (version, config file and health);
+  - **Connection** (this device's URL, token, access level and TLS pin; **Apply** reconnects), **Overview** (version, config file and health) and **Approval History** (past approval decisions; also under **Organize → Approval History…**);
   - curated pages (Gateway, Agents & Models, Channels, Sessions & Messages, Tools & Skills, Automation) built from the gateway's own schema (`config.get` / `config.schema`), with rarely used fields under **Advanced**. Sections the gateway's schema doesn't have are hidden;
   - **Plugins**: list, add (ClawHub, npm or git), remove, enable and disable plugins, and fill in their settings and credentials (`plugins.*`);
   - **All Settings** (every field, grouped by section) and **Raw Config** (JSON5, `config.apply`) for anything else. Search in the sidebar finds any setting and jumps to it;
@@ -112,7 +118,7 @@ open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pince
 
 ### Tests on CI
 
-`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs `PincerChecks` in offline, `--demo` and `--live` (against the mock gateway) modes, and runs the mock gateway's selftest.
+`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs the `PincerKitTests` unit tests, runs `PincerChecks` in offline, `--demo` and `--live` (against the mock gateway) modes, and runs the mock gateway's selftest.
 
 ### TestFlight
 
@@ -142,6 +148,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 | `Design/AppIcon` | Flattened reference artwork for the app icon (`Pincer.svg`). The shipped icon is `Apps/Shared/AppIcon.icon`, a layered Icon Composer file (gradient background + glass speech-bubble layer) with Default, Dark, Clear and Tinted appearances; edit it in Icon Composer (Xcode ▸ Open Developer Tool). Xcode renders flat fallbacks for iOS 18 / macOS 15. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |
 | `Sources/PincerChecks` | Self-checks, with an optional live end-to-end run. |
+| `Tests/PincerKitTests` | Swift Testing unit tests for PincerKit's pure logic (framing, signing, URL/TLS policy, caches, sidebar, slash commands, approvals). |
 | `Sources/PincerPush` | Web Push decryption (RFC 8291), per-gateway push keys and payload parsing, shared by the app and its notification service extension. |
 | `Apps/iOSNotificationService` | iOS notification service extension that decrypts relayed pushes. |
 | `push-relay/` | Zero-dependency Node relay from Gateway Web Push to APNs. |
@@ -149,7 +156,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 
 ## Testing without a real gateway
 
-The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, chats, streamed replies, a chart and an exec approval, and nothing leaves the device. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too.
+The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, chats, streamed replies, a chart, an exec approval and a sample approval history, and nothing leaves the device. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too.
 
 For the full protocol, including Gateway Settings, run the Node mock:
 
@@ -162,11 +169,21 @@ MOCK_TOKEN= MOCK_BACKGROUND=1 npm start     # no auth, simulated Discord traffic
 Message triggers:
 - a message containing `tool` or `disk` streams a tool call;
 - `image` also attaches an image;
-- `approve` raises an exec approval.
+- `approve` raises an exec approval;
+- `approve once-only` raises one whose `allowedDecisions` leave out `allow-always` (Always allow then fails with `APPROVAL_ALLOW_ALWAYS_UNAVAILABLE` and the approval stays pending);
+- `approve short-lived` (mock only) raises one that expires after 3 seconds, so acting on it afterwards gets `APPROVAL_NOT_FOUND` ("That approval expired. Nothing was run.").
 
 The mock also serves a small config and plugin catalog for Gateway Settings, and three cron jobs for Automations; see its README.
 
 For the rest of the options, see [`mock-gateway/README.md`](mock-gateway/README.md).
+
+To run the unit tests:
+
+```sh
+swift test --parallel
+```
+
+They use fixed signing keys, their own temp folders and throwaway defaults suites, so they need no gateway, socket or Keychain (no `PINCER_KEYCHAIN` either) and can run alongside the self-checks.
 
 To run the self-checks:
 
