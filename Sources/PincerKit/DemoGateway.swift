@@ -33,8 +33,9 @@ actor DemoGateway {
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
-        "approval.history", "approval.get", "logs.tail",
-    ]
+        "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
+        "exec.approvals.get", "exec.approvals.set",
+    ] + DemoUsage.methods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -54,9 +55,14 @@ actor DemoGateway {
     private var approvalHistory: [JSONValue] = []
     /// The simulated Gateway log file (`logs.tail`).
     private var logs = DemoGatewayLogs()
+    /// The exec approvals file (`exec.approvals.get/set`). The demo keeps no socket token.
+    var execApprovals = DemoGateway.seedExecApprovals()
+    var execApprovalsExists = true
     /// `ask_user` prompts by id, in the order they were asked.
     private var questions: [String: JSONValue] = [:]
     private var questionOrder: [String] = []
+    /// Pending DM pairing requests (`channels.pairing.*`).
+    private var pairingRequests: [JSONValue] = []
     private var prefs: [String: JSONValue] = [:]
     /// Custom group catalog in display order; groups stay until deleted, even when empty.
     private var groups = ["Home", "Personal", "Work"]
@@ -73,6 +79,7 @@ actor DemoGateway {
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
         self.approvalHistory = Self.seedApprovalHistory()
+        self.pairingRequests = Self.seedPairingRequests()
         self.artifacts["demo-chart"] = ("image/png", Self.chartPNG())
         self.artifacts["demo-script"] = ("text/x-shellscript", Data(Self.diskScript.utf8))
     }
@@ -127,7 +134,8 @@ actor DemoGateway {
             "server": ["version": "demo", "connId": .string(Self.shortId("conn_"))],
             "features": ["methods": JSONValue(Self.methods), "events": []],
             "snapshot": [:],
-            "auth": ["role": "operator", "scopes": JSONValue(GatewayConnection.scopes)],
+            // operator.pairing lets the demo show Pairing Requests without making settings editable.
+            "auth": ["role": "operator", "scopes": JSONValue(GatewayConnection.scopes + [PairingInboxModel.pairingScope])],
             "policy": [
                 "maxPayload": 26_214_400,
                 "tickIntervalMs": 15000,
@@ -216,6 +224,7 @@ actor DemoGateway {
                                        details: ["reason": "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE"])
             }
             self.resolvedApprovals[id] = decision
+            if decision == "allow-always" { self.appendAllowAlways(approval) }
             self.approvalHistory.insert(Self.resolvedRecord(approval, decision: decision), at: 0)
             self.approvals[id] = nil
             self.approvalOrder.removeAll { $0 == id }
@@ -228,6 +237,18 @@ actor DemoGateway {
             return try self.approvalSnapshot(params)
         case "logs.tail":
             return try self.logs.tail(params)
+        case "exec.approvals.get":
+            return try self.execApprovalsGet(params)
+        case "exec.approvals.set":
+            return try self.execApprovalsSet(params)
+        case _ where DemoUsage.methods.contains(method):
+            return try DemoUsage.handle(method, params, knownKeys: Set(self.sessions.keys))
+        case "channels.pairing.list":
+            return self.pairingList()
+        case "channels.pairing.approve":
+            return try self.resolvePairing(params, approve: true)
+        case "channels.pairing.dismiss":
+            return try self.resolvePairing(params, approve: false)
         case "question.list":
             return ["questions": .array(self.questionOrder.compactMap { self.questions[$0] }
                     .filter { $0["status"]?.string == "pending" })]
@@ -236,6 +257,88 @@ actor DemoGateway {
         default:
             throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "The demo doesn't support \(method).", details: nil)
         }
+    }
+
+    // MARK: Channel pairing
+
+    private static let pairingAccounts: [JSONValue] = [
+        ["channel": "telegram", "channelLabel": "Telegram", "accountId": "home", "accountLabel": "Home bot", "notifySupported": true],
+        ["channel": "discord", "channelLabel": "Discord", "accountId": "family", "accountLabel": "Family server", "notifySupported": false],
+    ]
+    private static let pairingTTL: TimeInterval = 60 * 60
+
+    private static func iso(_ date: Date) -> JSONValue {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return .string(formatter.string(from: date))
+    }
+
+    private static func seedPairingRequests(now: Date = Date()) -> [JSONValue] {
+        func request(_ id: String, account: Int, senderId: String, senderLabel: String, metadata: [String: JSONValue]?,
+                     createdAgo: TimeInterval, lastSeenAgo: TimeInterval) -> JSONValue
+        {
+            let account = Self.pairingAccounts[account]
+            let created = now.addingTimeInterval(-createdAgo)
+            var row: [String: JSONValue] = [
+                "requestId": .string(id), "channel": account["channel"] ?? .null, "channelLabel": account["channelLabel"] ?? .null,
+                "accountId": account["accountId"] ?? .null, "accountLabel": account["accountLabel"] ?? .null,
+                "senderId": .string(senderId), "senderLabel": .string(senderLabel),
+                "createdAt": Self.iso(created), "lastSeenAt": Self.iso(now.addingTimeInterval(-lastSeenAgo)),
+                "expiresAt": Self.iso(created.addingTimeInterval(Self.pairingTTL)),
+                "notifySupported": account["notifySupported"] ?? false,
+            ]
+            if let metadata { row["metadata"] = .object(metadata) }
+            return .object(row)
+        }
+        return [
+            request("pr_demo_maya", account: 0, senderId: "5550142", senderLabel: "Telegram user id",
+                    metadata: ["name": "Maya Chen", "username": "mayac", "languageCode": "en"],
+                    createdAgo: 5 * 60, lastSeenAgo: 2 * 60),
+            request("pr_demo_discord", account: 1, senderId: "418820017734812160", senderLabel: "Discord user id",
+                    metadata: nil, createdAgo: 20 * 60, lastSeenAgo: 20 * 60),
+            request("pr_demo_soon", account: 0, senderId: "5550199", senderLabel: "Telegram user id",
+                    metadata: ["username": "night_owl"], createdAgo: Self.pairingTTL - 2 * 60, lastSeenAgo: Self.pairingTTL - 2 * 60),
+        ]
+    }
+
+    private func pairingList() -> JSONValue {
+        let now = Date()
+        let pending = self.pairingRequests.filter { PairingRequest($0).map { !$0.isExpired(at: now) } ?? false }
+        return [
+            "accounts": .array(Self.pairingAccounts),
+            "requests": .array(pending),
+            "commandOwnerConfigured": true,
+            "limits": ["pendingPerAccount": 3, "ttlMs": .number(Self.pairingTTL * 1000)],
+        ]
+    }
+
+    private func resolvePairing(_ params: JSONValue, approve: Bool) throws -> JSONValue {
+        guard let channel = params["channel"]?.string, let accountId = params["accountId"]?.string,
+              let requestId = params["requestId"]?.string
+        else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "channel, accountId and requestId are required", details: nil) }
+        guard let account = Self.pairingAccounts.first(where: {
+            $0["channel"]?.string == channel && $0["accountId"]?.string == accountId
+        }) else {
+            throw GatewayError.rpc(code: "INVALID_REQUEST",
+                                   message: "channel account does not use DM pairing: \(channel):\(accountId)", details: nil)
+        }
+        let now = Date()
+        guard let index = self.pairingRequests.firstIndex(where: {
+            $0["requestId"]?.string == requestId && $0["channel"]?.string == channel && $0["accountId"]?.string == accountId
+        }), PairingRequest(self.pairingRequests[index])?.isExpired(at: now) == false else {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "pending DM access request no longer exists", details: nil)
+        }
+        let senderId = self.pairingRequests[index]["senderId"] ?? .null
+        self.pairingRequests.remove(at: index)
+        guard approve else { return ["requestId": .string(requestId), "senderId": senderId] }
+        let notification: String = switch params["notify"]?.bool {
+        case true?: account["notifySupported"]?.bool == true ? "sent" : "unsupported"
+        default: "not-requested"
+        }
+        return [
+            "requestId": .string(requestId), "senderId": senderId, "notification": .string(notification),
+            "commandOwnerBootstrap": params["bootstrapCommandOwner"]?.bool == true ? "already-configured" : "not-requested",
+        ]
     }
 
     // MARK: Approval history
@@ -896,9 +999,20 @@ actor DemoGateway {
         return ["card": self.progressCards[key] ?? .null]
     }
 
+    /// Multiplier for simulated run delays. `PINCER_DEMO_DELAY_SCALE=0` lets headless checks skip the pacing.
+    private static let delayScale: Double = {
+        guard let raw = ProcessInfo.processInfo.environment["PINCER_DEMO_DELAY_SCALE"], let scale = Double(raw) else { return 1 }
+        return max(0, scale)
+    }()
+
     /// Sleeps, then reports whether the run should keep going.
     private func pause(_ runId: String, milliseconds: Int) async -> Bool {
-        try? await Task.sleep(for: .milliseconds(milliseconds))
+        let scaled = Int((Double(milliseconds) * Self.delayScale).rounded())
+        if scaled > 0 {
+            try? await Task.sleep(for: .milliseconds(scaled))
+        } else {
+            await Task.yield()
+        }
         return !Task.isCancelled && self.runs[runId] != nil
     }
 
@@ -1014,11 +1128,11 @@ actor DemoGateway {
         return parts
     }
 
-    private static func now() -> JSONValue {
+    static func now() -> JSONValue {
         .number((Date().timeIntervalSince1970 * 1000).rounded())
     }
 
-    private static func shortId(_ prefix: String = "") -> String {
+    static func shortId(_ prefix: String = "") -> String {
         prefix + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12).lowercased()
     }
 
@@ -1090,6 +1204,18 @@ actor DemoGateway {
             row.merge(["totalTokens": 24_000, "totalTokensFresh": true, "inputTokens": 24_000, "outputTokens": 900,
                        "contextTokens": JSONValue(Self.contextTokens)]) { _, new in new }
             row.merge(extra) { _, new in new }
+            var messages = messages
+            // Each chat runs on the model its sample usage is billed to.
+            if let model = DemoUsage.model(for: key) {
+                row["model"] = .string(model.model)
+                row["modelProvider"] = .string(model.provider)
+                messages = messages.map { message in
+                    guard case var .object(fields) = message, fields["role"]?.string == "assistant" else { return message }
+                    fields["provider"] = .string(model.provider)
+                    fields["model"] = .string(model.model)
+                    return .object(fields)
+                }
+            }
             sessions[key] = row
             transcripts[key] = messages
         }

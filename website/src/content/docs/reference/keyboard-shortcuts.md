@@ -8,6 +8,7 @@ description: Keyboard shortcuts for Pincer on macOS (and iPad with a keyboard).
 | Action | Shortcut |
 | --- | --- |
 | New Chat | <kbd>⌘</kbd> <kbd>N</kbd> |
+| Command Palette | <kbd>⌘</kbd> <kbd>K</kbd> |
 | Next Unread Chat | <kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>↓</kbd> |
 | Gateway Settings | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>,</kbd> |
 | Settings | <kbd>⌘</kbd> <kbd>,</kbd> |
@@ -45,6 +46,44 @@ Change or turn off the shortcut in **Settings → General → Quick Capture**. S
 | Complete | <kbd>Tab</kbd> or <kbd>Return</kbd> |
 | Hide | <kbd>Esc</kbd> |
 
+## Go
+
+| Action | Shortcut |
+| --- | --- |
+| Command palette | <kbd>⌘</kbd> <kbd>K</kbd> |
+| Back | <kbd>⌘</kbd> <kbd>[</kbd> |
+| Forward | <kbd>⌘</kbd> <kbd>]</kbd> |
+| Open pinned chat 1–9 (selected gateway, sidebar order) | <kbd>⌘</kbd> <kbd>1</kbd> … <kbd>⌘</kbd> <kbd>9</kbd> |
+
+See [Command palette & navigation](../../guides/command-palette-and-navigation/).
+
+## Command palette
+
+| Action | Shortcut |
+| --- | --- |
+| Move through results | <kbd>↑</kbd> <kbd>↓</kbd> |
+| Run | <kbd>Return</kbd> |
+| Back to commands, or close | <kbd>Esc</kbd> |
+| Back to commands (models page) | <kbd>Delete</kbd> in an empty field |
+
+## Find in Chat
+
+| Action | Shortcut |
+| --- | --- |
+| Find in Chat | <kbd>⌘</kbd> <kbd>F</kbd> |
+| Next match | <kbd>⌘</kbd> <kbd>G</kbd> or <kbd>Return</kbd> |
+| Previous match | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>G</kbd> |
+| Close | <kbd>Esc</kbd> |
+
+## Agent questions
+
+| Action | Shortcut |
+| --- | --- |
+| Pick an option | <kbd>1</kbd> … <kbd>9</kbd> |
+| Submit, or go to the next question | <kbd>Return</kbd> |
+
+Number keys work while the question card is selected, not while you're typing an answer. <kbd>Return</kbd> also submits from the answer field.
+
 ## Gateway Settings
 
 | Action | Shortcut |
@@ -52,3 +91,12 @@ Change or turn off the shortcut in **Settings → General → Quick Capture**. S
 | Save (opens Review Changes) | <kbd>⌘</kbd> <kbd>S</kbd> |
 | Search the log (Gateway Logs, macOS) | <kbd>⌘</kbd> <kbd>F</kbd> |
 | Copy selected log lines (Gateway Logs, macOS) | <kbd>⌘</kbd> <kbd>C</kbd> |
+
+## Usage (macOS)
+
+In the **Sessions** table on the [Usage](../../guides/usage-and-cost/) page:
+
+| Action | Shortcut |
+| --- | --- |
+| Open the selected session's usage | <kbd>Return</kbd> or double-click |
+| Move between sessions | <kbd>↑</kbd> <kbd>↓</kbd> |

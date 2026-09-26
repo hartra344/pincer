@@ -25,6 +25,10 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `MOCK_PAIRING` | `auto` | `auto` approves new devices after about 3 seconds, `off` accepts them right away, `manual` waits for you to type the `requestId`. |
 | `MOCK_BACKGROUND` | off | Set to `1` for simulated Discord traffic. |
 | `MOCK_NO_LOGS` | off | Set to `1` to look like a gateway without `logs.tail`: it's left out of `hello-ok` and answers `UNKNOWN_METHOD`. |
+| `MOCK_NO_USAGE` | off | Set to `1` to act like a gateway without usage: the five usage methods are left out of `hello-ok` and answer `UNKNOWN_METHOD`. |
+| `MOCK_USAGE_FORBIDDEN` | off | Set to `1` to refuse `usage.cost` with `FORBIDDEN`, as for an operator whose role can't see every session. |
+| `MOCK_CHANNEL_PAIRING` | on | Set to `off` to hide the `channels.pairing.*` methods, like an older gateway. |
+| `MOCK_CHANNEL_PAIRING_EVERY` | off | Seconds between new channel pairing requests. |
 
 ## Message triggers
 
@@ -50,6 +54,15 @@ The mock serves a small config and plugin catalog for Gateway Settings. It suppo
 `logs.tail` reads an in-memory log file the way the gateway reads its real one: by byte offset, returning `{ file, cursor, size, lines, truncated, reset, skippedBytes? }`. It takes only `cursor`, `limit` (1–5000, default 500) and `maxBytes` (1–1,000,000, default 250,000) and rejects anything else with `INVALID_REQUEST`. It needs `operator.read`.
 
 The file is called `/tmp/openclaw/openclaw-YYYY-MM-DD.log` (nothing is written to disk). It starts with about 130 tslog-style JSON lines across every level, plus plain-text and ANSI-colored lines, and a timer adds 1–3 lines a second. Chats and approvals add lines too. Use the `[mock:*-logs]` triggers above to test rotation, truncation, falling behind and read errors.
+## Usage and cost
+
+The mock serves 30 days of deterministic usage for its seeded chats, for the [Usage](../../guides/usage-and-cost/) page. It supports `usage.status`, `usage.cost`, `sessions.usage`, `sessions.usage.timeseries` and `sessions.usage.logs`, with the gateway's validation: `startDate` and `endDate` must come together, `agentScope: "all"` can't be combined with a `key`, and a missing or unknown `key` fails with `INVALID_REQUEST`.
+
+The data covers the cases the page handles: one model with some unpriced requests (partial cost), one session with no pricing at all (unknown cost), a rate limit window above 90% that resets within the hour, a provider with an error, and, for ranges starting more than 31 days ago, a session that's still being counted.
+
+## Channel pairing
+
+The mock serves `channels.pairing.list`, `channels.pairing.approve` and `channels.pairing.dismiss` with two pairing accounts (Telegram "Home bot" and Discord "Family server") and three requests, one of which expires about 2 minutes after the mock starts. Every method needs `operator.pairing` or `operator.admin`, so set **Access** to **Full Management** to see them in Pincer. Approving or dismissing a request that's already gone fails with "pending DM access request no longer exists". `MOCK_PAIRING` is about device pairing, not these.
 
 ## Selftest and live checks
 
@@ -60,6 +73,10 @@ cd mock-gateway && npm ci && npm run selftest
 
 # in another terminal, with the mock running:
 PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+
+# a gateway without usage, on another port:
+MOCK_NO_USAGE=1 PORT=18790 npm start
+PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token
 ```
 
 The unit tests (`swift test`) don't need the mock: they never open a socket. See [Building from source](../building/#unit-tests).

@@ -135,6 +135,17 @@ public final class GatewayStore: Identifiable {
     /// The Gateway's recent log lines (memory only); polled while Gateway Logs is showing.
     @ObservationIgnored public private(set) lazy var gatewayLogs = GatewayLogsModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
+    /// Command Policy (the exec approvals file); loaded when its page opens. The demo may write
+    /// it without `operator.admin`.
+    @ObservationIgnored public private(set) lazy var execPolicy = ExecPolicyModel(
+        connection: self.connection, hello: { [weak self] in self?.hello },
+        allowsWritesWithoutAdmin: self.profile.isDemo)
+    /// Token and cost usage; loaded when the Usage page opens.
+    @ObservationIgnored public private(set) lazy var usage = UsageModel(
+        connection: self.connection, hello: { [weak self] in self?.hello })
+    /// Pending DM pairing requests from channels; loaded when Gateway Settings opens.
+    @ObservationIgnored public private(set) lazy var pairingInbox = PairingInboxModel(
+        connection: self.connection, hello: { [weak self] in self?.hello })
 
     /// Where per-gateway sidebar and selection preferences persist.
     @ObservationIgnored let defaults: UserDefaults
@@ -224,12 +235,14 @@ public final class GatewayStore: Identifiable {
     private func update(state: ConnectionState, hello: GatewayHello?) {
         self.state = state
         if case let .failed(message) = state { self.lastError = message }
+        if !state.isConnected { self.pairingInbox.reset() }
         guard state == .connected, let hello else { return }
         self.hasConnected = true
         self.hello = hello
         self.connectionEpoch += 1
         self.lastError = nil
         Task { await self.bootstrap() }
+        self.execPolicy.handleReconnect()
     }
 
     private func bootstrap() async {
@@ -399,6 +412,7 @@ public final class GatewayStore: Identifiable {
                 self.clearApprovalNotifications(id)
             }
             self.approvalHistory.handleApprovalResolved()
+            self.execPolicy.handleApprovalResolved()
         default:
             break
         }
