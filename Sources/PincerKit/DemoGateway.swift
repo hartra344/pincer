@@ -34,7 +34,8 @@ actor DemoGateway {
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
         "approval.history", "approval.get", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
-    ]
+        "exec.approvals.get", "exec.approvals.set",
+    ] + DemoUsage.methods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -52,6 +53,9 @@ actor DemoGateway {
     private var resolvedApprovals: [String: String] = [:]
     /// Terminal approvals, newest first (`approval.history`).
     private var approvalHistory: [JSONValue] = []
+    /// The exec approvals file (`exec.approvals.get/set`). The demo keeps no socket token.
+    var execApprovals = DemoGateway.seedExecApprovals()
+    var execApprovalsExists = true
     /// `ask_user` prompts by id, in the order they were asked.
     private var questions: [String: JSONValue] = [:]
     private var questionOrder: [String] = []
@@ -218,6 +222,7 @@ actor DemoGateway {
                                        details: ["reason": "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE"])
             }
             self.resolvedApprovals[id] = decision
+            if decision == "allow-always" { self.appendAllowAlways(approval) }
             self.approvalHistory.insert(Self.resolvedRecord(approval, decision: decision), at: 0)
             self.approvals[id] = nil
             self.approvalOrder.removeAll { $0 == id }
@@ -227,6 +232,12 @@ actor DemoGateway {
             return try self.approvalHistoryPage(params)
         case "approval.get":
             return try self.approvalSnapshot(params)
+        case "exec.approvals.get":
+            return try self.execApprovalsGet(params)
+        case "exec.approvals.set":
+            return try self.execApprovalsSet(params)
+        case _ where DemoUsage.methods.contains(method):
+            return try DemoUsage.handle(method, params, knownKeys: Set(self.sessions.keys))
         case "channels.pairing.list":
             return self.pairingList()
         case "channels.pairing.approve":
@@ -1026,9 +1037,20 @@ actor DemoGateway {
         return ["card": self.progressCards[key] ?? .null]
     }
 
+    /// Multiplier for simulated run delays. `PINCER_DEMO_DELAY_SCALE=0` lets headless checks skip the pacing.
+    private static let delayScale: Double = {
+        guard let raw = ProcessInfo.processInfo.environment["PINCER_DEMO_DELAY_SCALE"], let scale = Double(raw) else { return 1 }
+        return max(0, scale)
+    }()
+
     /// Sleeps, then reports whether the run should keep going.
     private func pause(_ runId: String, milliseconds: Int) async -> Bool {
-        try? await Task.sleep(for: .milliseconds(milliseconds))
+        let scaled = Int((Double(milliseconds) * Self.delayScale).rounded())
+        if scaled > 0 {
+            try? await Task.sleep(for: .milliseconds(scaled))
+        } else {
+            await Task.yield()
+        }
         return !Task.isCancelled && self.runs[runId] != nil
     }
 
@@ -1159,11 +1181,11 @@ actor DemoGateway {
         return parts
     }
 
-    private static func now() -> JSONValue {
+    static func now() -> JSONValue {
         .number((Date().timeIntervalSince1970 * 1000).rounded())
     }
 
-    private static func shortId(_ prefix: String = "") -> String {
+    static func shortId(_ prefix: String = "") -> String {
         prefix + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12).lowercased()
     }
 
@@ -1235,6 +1257,18 @@ actor DemoGateway {
             row.merge(["totalTokens": 24_000, "totalTokensFresh": true, "inputTokens": 24_000, "outputTokens": 900,
                        "contextTokens": JSONValue(Self.contextTokens)]) { _, new in new }
             row.merge(extra) { _, new in new }
+            var messages = messages
+            // Each chat runs on the model its sample usage is billed to.
+            if let model = DemoUsage.model(for: key) {
+                row["model"] = .string(model.model)
+                row["modelProvider"] = .string(model.provider)
+                messages = messages.map { message in
+                    guard case var .object(fields) = message, fields["role"]?.string == "assistant" else { return message }
+                    fields["provider"] = .string(model.provider)
+                    fields["model"] = .string(model.model)
+                    return .object(fields)
+                }
+            }
             sessions[key] = row
             transcripts[key] = messages
         }

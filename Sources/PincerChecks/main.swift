@@ -11,6 +11,7 @@ import UserNotifications
 // Self-checks that run without XCTest (unavailable with Command Line Tools only).
 //   swift run PincerChecks                  → unit checks
 //   swift run PincerChecks --live URL TOKEN → end-to-end against a (mock) Gateway
+//   swift run PincerChecks --live-no-usage URL TOKEN → a Gateway without usage (mock with MOCK_NO_USAGE=1)
 // Run with PINCER_KEYCHAIN=memory so nothing touches the real Keychain.
 
 var failures = 0
@@ -404,9 +405,11 @@ do {
     let retry = await store.resolveApproval(id: "a1", decision: "allow-once", connectWithin: 0.5, timeout: 0.5)
     check(retry == .unreachable, "a dropped decision can be retried, never buffered")
 
-    let model = AppModel()
+    let (modelDefaults, modelSuite) = scratchDefaults()
+    let model = AppModel(defaults: modelDefaults)
     let unknown = await model.respondToApproval(gatewayId: UUID(), approvalId: "a1", decision: "allow-once")
     check(unknown == .unknownGateway, "notification for a removed gateway → no longer in Pincer, nothing sent")
+    UserDefaults.standard.removePersistentDomain(forName: modelSuite)
 }
 
 print("Approval history")
@@ -491,8 +494,12 @@ do {
           && ApprovalHistoryModel.KindFilter.all.emptyMessage == nil, "filtered empty messages")
 }
 await checkApprovalHistoryModel()
+await checkExecPolicy()
 print("Pairing requests")
 await checkPairingInboxModel()
+
+print("Usage & cost")
+await checkUsage()
 
 print("Agent questions")
 do {
@@ -1386,6 +1393,10 @@ if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count
     print("Scope upgrade fallback against \(arguments[index + 1])")
     await runScopeUpgrade(url: arguments[index + 1], token: arguments[index + 2])
 }
+if let index = arguments.firstIndex(of: "--live-no-usage"), arguments.count > index + 2 {
+    print("Gateway without usage at \(arguments[index + 1])")
+    await runLiveNoUsage(url: arguments[index + 1], token: arguments[index + 2])
+}
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
@@ -1566,11 +1577,11 @@ func checkApprovalHistoryModel() async {
 }
 
 @MainActor
-func waitFor(_ label: String, timeout: Double = 15, _ condition: () -> Bool) async -> Bool {
+func waitFor(_ label: String, timeout: Double = 15, every interval: Int = 100, _ condition: () -> Bool) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         if condition() { return true }
-        try? await Task.sleep(for: .milliseconds(100))
+        try? await Task.sleep(for: .milliseconds(interval))
     }
     print("    … timed out waiting for \(label)")
     return condition()
@@ -1650,7 +1661,8 @@ func runDemo() async {
     await chat.send("show me a tool and an image")
     var sawThinking = false
     var sawTool = false
-    let finished = await waitFor("demo reply", timeout: 20) {
+    // Polls quickly so the streaming phases stay visible when CI shortens the demo's pacing.
+    let finished = await waitFor("demo reply", timeout: 20, every: 10) {
         if case let .assistant(turn)? = chat.entries.last, turn.isStreaming {
             if !turn.thinking.isEmpty { sawThinking = true }
             if !turn.tools.isEmpty { sawTool = true }
@@ -1707,6 +1719,8 @@ func runDemo() async {
     } else {
         check(false, "demo history has a plugin")
     }
+
+    await checkUsageDemo(gateway)
     await history.loadMore()
     check(history.items.count == 10 && history.hasMore, "demo second page before resolving")
 
@@ -1849,6 +1863,7 @@ func runDemo() async {
     await gateway.patch(coderKey, ["pinned": false])
     let unpinned = await waitFor("unpin") { gateway.pinnedChats.count == 3 }
     check(unpinned && Set(gateway.pinnedChats.map(\.key)) == seededPins, "unpinning restores the seeded pins")
+    await runDemoExecPolicy(gateway, chat: chat)
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
     let pairing = gateway.pairingInbox
@@ -1993,15 +2008,11 @@ func runNavigation() async {
 /// Quick Capture's target list and send flow through `AppModel` and the demo Gateway.
 @MainActor
 func runQuickCaptureDemo() async {
-    let app = AppModel()
-    guard app.gateways.isEmpty else {
-        check(false, "Quick Capture checks need an empty profile list (found \(app.gateways.count))")
-        return
-    }
+    // A scratch suite, so concurrent check runs never see each other's saved gateways.
     let (defaults, suite) = scratchDefaults()
+    let app = AppModel(defaults: defaults)
     defer {
         for gateway in app.gateways { app.remove(gateway.id) }
-        UserDefaults.standard.removeObject(forKey: "pincer.selectedGateway")
         UserDefaults.standard.removePersistentDomain(forName: suite)
     }
     let gateway = app.add(.demo(), secret: nil)
@@ -2131,15 +2142,11 @@ func runQuickCaptureDemo() async {
 /// The mock refuses a `chat.send` whose text has `[mock:fail-send]` and drops the connection on `[mock:drop]`.
 @MainActor
 func runQuickCaptureLive(url: String, token: String) async {
-    let app = AppModel()
-    guard app.gateways.isEmpty else {
-        check(false, "Quick Capture live checks need an empty profile list (found \(app.gateways.count))")
-        return
-    }
+    // A scratch suite, so concurrent check runs never see each other's saved gateways.
     let (defaults, suite) = scratchDefaults()
+    let app = AppModel(defaults: defaults)
     defer {
         for gateway in app.gateways { app.remove(gateway.id) }
-        UserDefaults.standard.removeObject(forKey: AppModel.selectedGatewayKey)
         UserDefaults.standard.removePersistentDomain(forName: suite)
     }
     let home = app.add(GatewayProfile(name: "Mock home", url: url, authMode: .token), secret: token)
@@ -2690,6 +2697,7 @@ func runLive(url: String, token: String) async {
     await history.loadDetail("nope_missing")
     check(history.detailState["nope_missing"]?.error == "This approval is no longer on the Gateway.", "approval.get not found")
 
+    await checkUsageLive(gateway)
     // Pairing Requests: Pincer doesn't ask for operator.pairing, so standard access can't list.
     let standardPairing = gateway.pairingInbox
     check(gateway.hello?.methods.contains("channels.pairing.list") == true && standardPairing.supported, "hello advertises channels.pairing.list")
@@ -2941,6 +2949,7 @@ func runLive(url: String, token: String) async {
     } else {
         check(false, "nothing left to compact (\(String(describing: papers.compaction)))")
     }
+    await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
     admin.stop()
 
     for store in [gateway, other] {
