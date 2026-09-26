@@ -11,7 +11,7 @@ Press <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd> anywhere, or choose **Go �
 
 The panel opens near the top of the screen your pointer is on. It works over full-screen apps and when Pincer's main window is closed. The app you were using stays in front, and focus goes back to it when the panel closes.
 
-Pincer has to be running for the shortcut to work. It doesn't need Accessibility permission.
+Pincer has to be running for the shortcut to work. It doesn't need Accessibility permission. To have it ready after you log in, turn on [Open at Login](#start-pincer-at-login).
 
 ## Pick where to send
 
@@ -61,3 +61,11 @@ Open **Settings → General → Quick Capture**:
 - **Reset to Default** goes back to <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd>.
 
 A shortcut needs at least one of <kbd>⌘</kbd>, <kbd>⌃</kbd> or <kbd>⌥</kbd>, except the function keys, which can be used on their own. Shortcuts macOS uses, such as <kbd>⌘</kbd> <kbd>Space</kbd>, can't be picked.
+
+## Start Pincer at login
+
+Turn on **Open at Login** in **Settings → General → Launch** to start Pincer when you log in, so the shortcut works right away. It's off by default and is macOS only.
+
+If macOS needs your approval, Settings says so. Click **Open Login Items Settings…** and allow Pincer under **System Settings → General → Login Items & Extensions**.
+
+To stop Pincer starting at login, turn **Open at Login** off, or remove Pincer in **System Settings → General → Login Items & Extensions**.

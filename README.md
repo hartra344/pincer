@@ -42,6 +42,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - Return sends (`chat.send`, after `sessions.create` for a new chat) without leaving what you're doing. ⌘Return sends and opens the chat in Pincer, ⌘O opens it without sending, and Esc closes and keeps your text.
   - Paste or drag in images and files, as in the main composer.
   - Change or turn off the shortcut in Settings → General → Quick Capture. It uses a standard system hotkey, so no Accessibility permission is needed. It's also in the **Go** menu.
+  - Turn on **Open at Login** in Settings → General → Launch so Pincer, and the shortcut, is ready after you log in. It's off by default. If macOS asks you to approve it, use **Open Login Items Settings…**.
 - **Transcript:**
   - live streaming, with a collapsible **thinking** section and **tool cards** showing arguments and results. Choose whether to show thinking steps never, only live, or for every turn;
   - the full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer quietly caches every chat (most recently active first) and skips chats that haven't changed. Opening one shows the cached transcript at once, then fetches only what's new;
