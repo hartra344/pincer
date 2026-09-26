@@ -47,6 +47,7 @@ export default defineConfig({
 						{ slug: 'guides/composer' },
 						{ slug: 'guides/approvals-and-notifications' },
 						{ slug: 'guides/gateway-settings' },
+						{ slug: 'guides/command-policy' },
 						{ slug: 'guides/appearance' },
 					],
 				},

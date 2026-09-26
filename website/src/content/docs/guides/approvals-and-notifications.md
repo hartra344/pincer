@@ -13,6 +13,8 @@ When an agent wants to run something that needs your OK, Pincer shows the reques
 
 You can answer from the notification without opening Pincer.
 
+Everything you've chosen **Always allow** for is listed per agent in Gateway Settings → [**Command Policy**](../command-policy/), where you can review it and remove anything you no longer want to allow.
+
 :::note
 Answering approvals uses the `operator.approvals` scope, which Pincer requests with both access levels.
 :::

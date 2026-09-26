@@ -28,7 +28,7 @@ struct CommandPaletteView: View {
     enum Page { case root, models }
 
     private enum Command: String {
-        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory
+        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -219,6 +219,8 @@ struct CommandPaletteView: View {
                 item(.automations, "Automations…", "clock", keywords: ["cron", "jobs", "schedule"]),
                 item(.approvalHistory, "Approval History…", "checkmark.shield",
                      keywords: ["approvals", "audit", "log", "exec", "plugin", "decisions"]),
+                item(.execPolicy, "Command Policy…", "lock.shield",
+                     keywords: ["exec", "allowlist", "always allow", "approval policy", "ask", "security", "commands"]),
             ]
         }
         return items
@@ -343,6 +345,8 @@ struct CommandPaletteView: View {
             if let gateway { self.openAutomations(gateway) }
         case .approvalHistory:
             if let gateway { self.openGatewaySettings(gateway, at: .approvals) }
+        case .execPolicy:
+            if let gateway { self.openGatewaySettings(gateway, at: .execPolicy) }
         }
     }
 }

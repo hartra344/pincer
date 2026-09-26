@@ -57,9 +57,14 @@ private struct GatewaySettingsRoot: View {
     @Environment(SettingsNavigator.self) private var navigator
     @State private var search = ""
     @State private var confirmClose = false
+    @State private var confirmPolicyClose = false
+    /// Close once the Command Policy save that the close dialog started (maybe after confirming loosening) succeeds.
+    @State private var closeAfterPolicySave = false
     @State private var toast: (outcome: ConfigApplyOutcome, id: UUID)?
+    @State private var policyToast: UUID?
 
     private var settings: GatewaySettingsModel { self.gateway.settings }
+    private var policy: ExecPolicyModel { self.gateway.execPolicy }
 
     var body: some View {
         @Bindable var navigator = self.navigator
@@ -73,7 +78,7 @@ private struct GatewaySettingsRoot: View {
                     if self.close != nil {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Done") {
-                                if settings.hasChanges { self.confirmClose = true } else { self.close?() }
+                                if settings.hasChanges { self.confirmClose = true } else { self.closeAfterConfig() }
                             }
                         }
                     }
@@ -87,6 +92,7 @@ private struct GatewaySettingsRoot: View {
                         case let .list(path): StringListPage(path: path)
                         case let .plugin(id): PluginPage(pluginId: id)
                         case let .approval(id): ApprovalDetailPage(approvalId: id)
+                        case let .execAgent(id): ExecAgentPage(agentId: id)
                         }
                     }
             }
@@ -114,22 +120,62 @@ private struct GatewaySettingsRoot: View {
         .confirmationDialog("Save changes to \(self.gateway.profile.name)?", isPresented: self.$confirmClose,
                             titleVisibility: .visible) {
             Button("Save") {
-                Task { if await settings.save() { self.close?() } }
+                Task {
+                    guard await settings.save() else { return }
+                    // Let this dialog dismiss before the Command Policy one can present.
+                    await Task.yield()
+                    self.closeAfterConfig()
+                }
             }
             .disabled(settings.saveBlocker != nil || !settings.canEdit)
             Button("Discard Changes", role: .destructive) {
                 settings.discardChanges()
-                self.close?()
+                Task { @MainActor in
+                    await Task.yield()
+                    self.closeAfterConfig()
+                }
             }
             Button("Keep Editing", role: .cancel) {}
         } message: {
             Text("You have \(settings.changeCount) unsaved change\(settings.changeCount == 1 ? "" : "s").")
         }
+        .confirmationDialog("Save changes to Command Policy?", isPresented: self.$confirmPolicyClose,
+                            titleVisibility: .visible) {
+            Button("Save") { Task { await self.savePolicyThenClose() } }
+                .disabled(!self.policy.canWrite || !self.gateway.state.isConnected)
+            Button("Discard", role: .destructive) {
+                self.policy.revert()
+                self.close?()
+            }
+            Button("Keep Editing", role: .cancel) {}
+        } message: {
+            Text("Your changes to the command policy haven't been saved.")
+        }
+        .confirmationDialog("Loosen command policy?", isPresented: Binding(
+            get: { self.policy.pendingLoosening != nil },
+            set: { if !$0 { self.policy.pendingLoosening = nil } }
+        ), titleVisibility: .visible) {
+            Button("Save Anyway", role: .destructive) {
+                let names = ExecPolicyUI.agentNames(self.gateway)
+                Task {
+                    let result = await self.policy.save(allowLoosening: true, agentNames: names)
+                    if result == .saved, self.closeAfterPolicySave { self.close?() }
+                    self.closeAfterPolicySave = false
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                self.policy.pendingLoosening = nil
+                self.closeAfterPolicySave = false
+            }
+        } message: {
+            Text((self.policy.pendingLoosening ?? []).joined(separator: "\n"))
+        }
         #if os(iOS)
-        .interactiveDismissDisabled(settings.hasChanges)
+        .interactiveDismissDisabled(settings.hasChanges || self.policy.hasChanges)
         #endif
         .overlay(alignment: .bottom) { self.toastView }
         .onChange(of: settings.lastSave?.id) { self.showToast() }
+        .onChange(of: self.policy.lastSave) { self.showPolicyToast() }
         .onAppear(perform: self.takeRequest)
         .onChange(of: settings.requestedDestination) { self.takeRequest() }
         .task(id: LoadKey(settings: ObjectIdentifier(settings), connected: self.gateway.state.isConnected)) {
@@ -147,6 +193,7 @@ private struct GatewaySettingsRoot: View {
         case .connection: ConnectionPage()
         case .overview: OverviewPage()
         case .approvals: ApprovalHistoryPage()
+        case .execPolicy: ExecPolicyPage()
         case let .page(id):
             if let page = SettingsCatalog.page(id) { CuratedPage(page: page) }
         case .plugins: PluginsPage()
@@ -158,8 +205,40 @@ private struct GatewaySettingsRoot: View {
         }
     }
 
+    /// After the config's close dialog: ask about the Command Policy draft too, else close.
+    private func closeAfterConfig() {
+        if self.policy.hasChanges { self.confirmPolicyClose = true } else { self.close?() }
+    }
+
+    private func savePolicyThenClose() async {
+        switch await self.policy.save(agentNames: ExecPolicyUI.agentNames(self.gateway)) {
+        case .saved: self.close?()
+        case .needsConfirmation: self.closeAfterPolicySave = true
+        default: break
+        }
+    }
+
+    private func showPolicyToast() {
+        guard let id = self.policy.lastSave else { return }
+        withAnimation { self.policyToast = id }
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            if self.policyToast == id { withAnimation { self.policyToast = nil } }
+        }
+    }
+
     @ViewBuilder private var toastView: some View {
-        if let toast = self.toast {
+        if self.policyToast != nil {
+            Label("Command policy saved", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.callout)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .glassSurface(in: Capsule())
+                .padding(.bottom, 20)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .onTapGesture { withAnimation { self.policyToast = nil } }
+        } else if let toast = self.toast {
             SaveOutcomeLabel(outcome: toast.outcome)
                 .font(.callout)
                 .padding(.horizontal, 16)
@@ -208,6 +287,8 @@ private struct SettingsSidebar: View {
                     self.row("Connection", symbol: "network", .connection)
                     self.row("Overview", symbol: "info.circle", .overview)
                     self.row("Approval History", symbol: "checkmark.shield", .approvals)
+                    self.row("Command Policy", symbol: "lock.shield", .execPolicy,
+                             unsaved: self.gateway.execPolicy.hasChanges)
                 }
                 if settings.hasLoaded {
                     Section("Settings") {
@@ -237,14 +318,21 @@ private struct SettingsSidebar: View {
         #else
         .searchable(text: self.$search, prompt: "Search Settings")
         #endif
-        .disabled(!settings.hasLoaded && !self.search.isEmpty)
+        .disabled(!settings.hasLoaded && !self.search.isEmpty && SettingsCatalog.destinations(matching: self.search).isEmpty)
     }
 
     private func row(_ title: String, symbol: String, _ destination: SettingsDestination, badge: Int = 0,
-                     attention: Bool = false) -> some View {
+                     attention: Bool = false, unsaved: Bool = false) -> some View {
         Label {
             HStack {
                 Text(title)
+                if unsaved {
+                    Spacer()
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 7))
+                        .foregroundStyle(.tint)
+                        .accessibilityLabel("Unsaved changes")
+                }
                 if attention {
                     Spacer()
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
@@ -266,8 +354,18 @@ private struct SearchResults: View {
 
     var body: some View {
         let results = self.results
-        if results.isEmpty {
+        let pages = SettingsCatalog.destinations(matching: self.query)
+        if results.isEmpty, pages.isEmpty {
             Text("No settings match “\(self.query)”.").foregroundStyle(.secondary)
+        }
+        ForEach(pages) { page in
+            Button {
+                self.navigator.destination = page.destination
+            } label: {
+                Label(page.title, systemImage: page.symbol)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
         ForEach(results) { field in
             Button {

@@ -20,6 +20,8 @@ Settings are read-only unless this device's **Access** is set to **Full Manageme
 | --- | --- |
 | **Connection** | This device's URL, token, access level and TLS pin. **Apply** reconnects. |
 | **Overview** | The gateway's version, config file and health. |
+| **Approval History** | Past decisions on commands, plugins and system changes. |
+| **Command Policy** | Which commands agents can run and when they ask, and what you've always allowed. See [Command Policy](../command-policy/). |
 | **Gateway** | Core gateway settings. |
 | **Agents & Models** | Agents, their models and defaults. |
 | **Channels** | Messaging channels, such as Discord. |
@@ -36,7 +38,9 @@ The curated pages are built from the gateway's own schema, so they match what yo
 
 ## Making changes
 
-Edits from every page go into a single draft:
+Edits from every page except **Command Policy** go into a single draft. Command Policy has its own draft and **Save** button, because it's a separate file on the gateway.
+
+For the config draft:
 
 1. Change whatever you need, across as many pages as you like. The toolbar shows how many changes aren't saved yet.
 2. Choose **Save** (<kbd>⌘</kbd> <kbd>S</kbd>). **Review Changes** lists every change.

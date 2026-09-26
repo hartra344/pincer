@@ -21,6 +21,14 @@ Pincer connects to a Gateway you already run and speaks the Gateway WebSocket pr
 
 `operator.admin` is only requested when you choose **Full Management**, and the gateway has to approve it separately.
 
+## Command policy
+
+The gateway's command policy (which commands agents may run, and their allowlists) can only be read or changed with `operator.admin`, so Pincer shows it only with **Full Management**. See [Command Policy](../../guides/command-policy/).
+
+- **Loosening asks first:** if a save would make any agent's effective policy less safe, Pincer lists each change under **Loosen command policy?** and saves only after **Save Anyway**. When the previous value isn't known, only a move to the loosest choice (or to a value Pincer doesn't recognize) counts as loosening. Stricter changes and removed entries save directly.
+- **No lost updates:** every save carries the hash of the version it was based on (`baseHash`). If the file changed on the gateway in the meantime, the gateway refuses the save, and Pincer loads the latest version instead of overwriting it.
+- **The socket token is never sent:** the gateway leaves the approval socket's token out of what it sends, and Pincer never includes `socket.token` in a save. The gateway keeps its own.
+
 ## Device identity
 
 Each install creates its own **Ed25519 device key**, stored in the Keychain and marked *this device only*, so it never syncs to other devices or backups. The gateway must approve each device once.

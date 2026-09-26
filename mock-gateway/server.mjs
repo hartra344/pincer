@@ -5,6 +5,7 @@ import { WebSocketServer } from 'ws';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
+import { EXEC_APPROVALS_METHODS, createExecApprovalsState, execApprovalsDisabled, handleExecApprovalsRequest, recordAllowAlways } from './exec-approvals.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
@@ -30,6 +31,7 @@ const METHODS = [
   'exec.approval.list',
   'exec.approval.resolve',
   ...APPROVAL_HISTORY_METHODS,
+  ...EXEC_APPROVALS_METHODS,
   'question.list',
   'question.resolve',
   'users.prefs.get',
@@ -457,6 +459,7 @@ function createSeedState() {
     webPushState: createWebPushState(),
     cronState: createCronState(base),
     approvalHistoryState: createApprovalHistoryState(base),
+    execApprovalsState: createExecApprovalsState(base),
   };
 }
 
@@ -590,12 +593,17 @@ function setupManualPairing(state, enabled) {
   process.stdin.resume();
 }
 
+function advertisedMethods() {
+  const hidden = [...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []), ...(execApprovalsDisabled() ? EXEC_APPROVALS_METHODS : [])];
+  return METHODS.filter((m) => !hidden.includes(m));
+}
+
 function makeHelloPayload(state, params, connId, deviceId) {
   return {
     type: 'hello-ok',
     protocol: 4,
     server: { version: 'mock-2026.1', connId },
-    features: { methods: approvalHistoryDisabled() ? METHODS.filter((m) => !APPROVAL_HISTORY_METHODS.includes(m)) : METHODS, events: EVENTS },
+    features: { methods: advertisedMethods(), events: EVENTS },
     snapshot: {},
     auth: { role: 'operator', scopes: params.scopes ?? [], deviceToken: deviceTokenFor(state, deviceId) },
     policy: {
@@ -986,6 +994,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession })) return;
   if (handleWebPushRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleExecApprovalsRequest(state, conn, msg, { sendRes, sendErr })) return;
   switch (method) {
     case 'progressCard.get': {
       const key = params.sessionKey;
@@ -1327,6 +1336,7 @@ function handleAuthedRequest(state, conn, msg) {
         return sendErr(conn, id, 'INVALID_REQUEST', 'invalid decision');
       }
       recordExecResolution(state, approval, params.decision, conn.deviceId);
+      if (params.decision === 'allow-always') recordAllowAlways(state, approval);
       state.pendingApprovals.delete(params.id);
       state.resolvedApprovals.set(params.id, params.decision);
       broadcast(state, 'exec.approval.resolved', { id: params.id, decision: params.decision });

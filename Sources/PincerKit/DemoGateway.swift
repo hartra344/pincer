@@ -33,7 +33,7 @@ actor DemoGateway {
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
-        "approval.history", "approval.get",
+        "approval.history", "approval.get", "exec.approvals.get", "exec.approvals.set",
     ]
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
@@ -52,6 +52,9 @@ actor DemoGateway {
     private var resolvedApprovals: [String: String] = [:]
     /// Terminal approvals, newest first (`approval.history`).
     private var approvalHistory: [JSONValue] = []
+    /// The exec approvals file (`exec.approvals.get/set`). The demo keeps no socket token.
+    var execApprovals = DemoGateway.seedExecApprovals()
+    var execApprovalsExists = true
     /// `ask_user` prompts by id, in the order they were asked.
     private var questions: [String: JSONValue] = [:]
     private var questionOrder: [String] = []
@@ -214,6 +217,7 @@ actor DemoGateway {
                                        details: ["reason": "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE"])
             }
             self.resolvedApprovals[id] = decision
+            if decision == "allow-always" { self.appendAllowAlways(approval) }
             self.approvalHistory.insert(Self.resolvedRecord(approval, decision: decision), at: 0)
             self.approvals[id] = nil
             self.approvalOrder.removeAll { $0 == id }
@@ -223,6 +227,10 @@ actor DemoGateway {
             return try self.approvalHistoryPage(params)
         case "approval.get":
             return try self.approvalSnapshot(params)
+        case "exec.approvals.get":
+            return try self.execApprovalsGet(params)
+        case "exec.approvals.set":
+            return try self.execApprovalsSet(params)
         case "question.list":
             return ["questions": .array(self.questionOrder.compactMap { self.questions[$0] }
                     .filter { $0["status"]?.string == "pending" })]
@@ -1006,11 +1014,11 @@ actor DemoGateway {
         return parts
     }
 
-    private static func now() -> JSONValue {
+    static func now() -> JSONValue {
         .number((Date().timeIntervalSince1970 * 1000).rounded())
     }
 
-    private static func shortId(_ prefix: String = "") -> String {
+    static func shortId(_ prefix: String = "") -> String {
         prefix + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12).lowercased()
     }
 
