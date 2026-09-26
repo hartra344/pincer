@@ -4,6 +4,12 @@ description: View and edit your OpenClaw Gateway's configuration and plugins fro
 ---
 
 import DocScreenshot from '../../../components/DocScreenshot.astro';
+import settingsIOS from '../../../assets/screenshots/ios/gateway-settings.png';
+import pluginsIOS from '../../../assets/screenshots/ios/plugins.png';
+import history from '../../../assets/screenshots/approval-history.png';
+import historyIOS from '../../../assets/screenshots/ios/approval-history.png';
+import pairing from '../../../assets/screenshots/pairing-requests.png';
+import pairingIOS from '../../../assets/screenshots/ios/pairing-requests.png';
 import settings from '../../../assets/screenshots/gateway-settings.png';
 import review from '../../../assets/screenshots/review-changes.png';
 import plugins from '../../../assets/screenshots/plugins.png';
@@ -52,7 +58,7 @@ The curated pages are built from the gateway's own schema, so they match what yo
 
 **Search** in the sidebar finds any setting and jumps to it.
 
-<DocScreenshot src={settings} alt="Gateway Settings showing the Agents and Models page and editable default model, thinking level, and timeout." caption="Local mock gateway with Full Management. Pages depend on the schema your gateway provides." />
+<DocScreenshot src={settings} ios={settingsIOS} iosAlt="iPhone Agents and Models defaults with a model, thinking level, and timeout value of 600." alt="Gateway Settings showing the Agents and Models page and editable default model, thinking level, and timeout." caption="Local mock gateway with Full Management. Pages depend on the schema your gateway provides." />
 
 ## Making changes
 
@@ -83,13 +89,15 @@ On the **Plugins** page you can:
 - **remove**, **enable** and **disable** plugins;
 - fill in each plugin's settings and credentials.
 
-<DocScreenshot src={plugins} alt="Plugins page showing Browser and LanceDB Memory off, and Weather needing setup." caption="Local mock plugin states. Installing, removing, enabling, and disabling plugins takes effect immediately." />
+<DocScreenshot src={plugins} ios={pluginsIOS} alt="Plugins page showing Browser and LanceDB Memory off, and Weather needing setup." caption="Local mock plugin states. Installing, removing, enabling, and disabling plugins takes effect immediately." />
 
 ## Raw Config
 
 For anything the forms don't cover, **Raw Config** lets you edit the whole configuration as JSON5 and apply it in one go.
 
 ## Approval History
+
+<DocScreenshot src={history} ios={historyIOS} alt="Approval History with sample allowed, denied, expired, and cancelled requests." caption="Review earlier decisions without reopening an active approval. All entries shown here are demo fixtures." />
 
 **Approval History** lists the gateway's decisions on commands, plugins and system changes from the last 30 days, newest first. Besides the Gateway Settings sidebar, you can open it with **Approval History…** in the Organize menu or the command palette.
 
@@ -122,6 +130,8 @@ Select an entry for the details:
 If the gateway doesn't keep a history, the page says "Approval History Isn't Available". Update OpenClaw to see past decisions.
 
 ## Pairing Requests
+
+<DocScreenshot src={pairing} ios={pairingIOS} alt="Pairing Requests with fictional Telegram and Discord senders and Approve and Dismiss controls." caption="The demo includes fictional people and account identifiers. No real account is paired by these examples." />
 
 When a channel account uses `dmPolicy: "pairing"`, someone new who messages it has to be let in before they can talk to your agents. **Pairing Requests** lists who's waiting, newest first, and the sidebar badge shows how many.
 

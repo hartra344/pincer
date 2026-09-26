@@ -3,7 +3,13 @@ title: Gateway health & restart
 description: See whether your OpenClaw Gateway is healthy, who's connected, and restart it safely from Pincer.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import mac from '../../../assets/screenshots/gateway-health.png';
+import ios from '../../../assets/screenshots/ios/gateway-health.png';
+
 The **Health** page shows how your gateway is doing and lets you restart it without a terminal.
+
+<DocScreenshot src={mac} ios={ios} iosAlt="iPhone Gateway Health scrolled to channel status, connected clients, and Restart Gateway." alt="Gateway Health showing a simulated Telegram connection issue and channel status." caption="The demo deliberately includes a disconnected Telegram channel so you can explore a degraded gateway." />
 
 ## Opening it
 

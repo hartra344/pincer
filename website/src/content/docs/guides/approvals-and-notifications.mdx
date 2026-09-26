@@ -4,6 +4,7 @@ description: Answering exec approvals and agent questions, from the app, a notif
 ---
 
 import DocScreenshot from '../../../components/DocScreenshot.astro';
+import approvalIOS from '../../../assets/screenshots/ios/exec-approval.png';
 import approval from '../../../assets/screenshots/exec-approval.png';
 import question from '../../../assets/screenshots/agent-question.png';
 
@@ -29,7 +30,7 @@ Everything you've chosen **Always allow** for is listed per agent in Gateway Set
 Answering approvals uses the `operator.approvals` scope, which Pincer requests with both access levels.
 :::
 
-<DocScreenshot focus={{ x: 580, y: 105, width: 1765, height: 225 }} src={approval} alt="Orange command approval banner with Deny and the Allow Once and Always Allow menu." caption="Built-in demo: a simulated rm -rf ./build approval. No command is executed on your Mac." />
+<DocScreenshot focus={{ x: 580, y: 105, width: 1765, height: 225 }} src={approval} ios={approvalIOS} iosAlt="iPhone approval banner for a simulated git push, with Deny and Allow." iosCaption="Built-in demo: Forge asks to push a fictional fix. No command is executed." alt="Orange command approval banner with Deny and the Allow Once and Always Allow menu." caption="Built-in demo: a simulated rm -rf ./build approval. No command is executed on your Mac." />
 
 ### Answering from a notification
 

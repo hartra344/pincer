@@ -4,6 +4,8 @@ description: Sending messages, attachments, stopping runs and using slash comman
 ---
 
 import DocScreenshot from '../../../components/DocScreenshot.astro';
+import contextIOS from '../../../assets/screenshots/ios/context-meter.png';
+import commandsIOS from '../../../assets/screenshots/ios/slash-commands.png';
 import commands from '../../../assets/screenshots/slash-commands.png';
 import context from '../../../assets/screenshots/context-meter.png';
 
@@ -58,7 +60,7 @@ Click the ring for details:
 - **Last run:** tokens in and out;
 - **Instructions (optional)** and **Compact Now**.
 
-<DocScreenshot focus={{ x: 1670, y: 1010, width: 670, height: 535 }} src={context} alt="Context Window popover showing 172k of 200k tokens, optional instructions, and Compact Now." caption="Built-in demo, Lobster theme. Open the ring to inspect usage before compacting." />
+<DocScreenshot focus={{ x: 1670, y: 1010, width: 670, height: 535 }} src={context} ios={contextIOS} iosAlt="iPhone Context Window showing 172k of 200k tokens and Compact Now." iosCaption="Inspect the demo context usage before compacting." alt="Context Window popover showing 172k of 200k tokens, optional instructions, and Compact Now." caption="Built-in demo, Lobster theme. Open the ring to inspect usage before compacting." />
 
 ### Compact Now
 
@@ -88,7 +90,7 @@ A few notes:
 - `/clear` is sent as `/reset`, like the Control UI.
 - Gateways that don't support `commands.list` get a built-in list of common commands.
 
-<DocScreenshot focus={{ x: 580, y: 870, width: 1765, height: 675 }} src={commands} alt="Slash command suggestions above the composer, including help, status, compact, and model." caption="Type / without sending it to browse available commands. This example uses the built-in demo." />
+<DocScreenshot focus={{ x: 580, y: 870, width: 1765, height: 675 }} src={commands} ios={commandsIOS} iosAlt="Slash command suggestions above the iPhone keyboard." iosCaption="Type / to browse commands in the built-in demo." alt="Slash command suggestions above the composer, including help, status, compact, and model." caption="Type / without sending it to browse available commands. This example uses the built-in demo." />
 
 ### Handy commands
 

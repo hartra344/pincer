@@ -4,6 +4,7 @@ description: Explore Pincer with a simulated gateway that runs entirely on your 
 ---
 
 import DocScreenshot from '../../../components/DocScreenshot.astro';
+import overviewIOS from '../../../assets/screenshots/ios/transcript.png';
 import overview from '../../../assets/screenshots/transcript.png';
 
 Pincer has a built-in demo, so you can look around before you set up a gateway. It runs a simulated Gateway on your device. **Nothing leaves your device.** It includes:
@@ -28,7 +29,7 @@ Choose **Try the Demo**:
 
 The demo shows up in the rail like any other gateway. You can remove it whenever you like.
 
-<DocScreenshot src={overview} alt="Pincer demo showing sample agents, grouped chats, and a disk status reply with a chart." caption="A real macOS capture using only synthetic demo content. The name Alex is a documentation persona." />
+<DocScreenshot src={overview} ios={overviewIOS} iosAlt="A demo conversation on iPhone showing a disk status reply and chart." iosCaption="A real iPhone simulator capture using synthetic demo content. Alex is a fictional documentation persona." alt="Pincer demo showing sample agents, grouped chats, and a disk status reply with a chart." caption="A real macOS capture using only synthetic demo content. The name Alex is a documentation persona." />
 
 ## Trigger words
 

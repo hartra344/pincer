@@ -4,6 +4,8 @@ description: Streaming replies, thinking, tool cards, images, models and message
 ---
 
 import DocScreenshot from '../../../components/DocScreenshot.astro';
+import toolsIOS from '../../../assets/screenshots/ios/tool-details.png';
+import overviewIOS from '../../../assets/screenshots/ios/transcript.png';
 import tools from '../../../assets/screenshots/tool-details.png';
 import overview from '../../../assets/screenshots/transcript.png';
 
@@ -15,7 +17,7 @@ Replies stream in as the agent writes them. Markdown is fully supported, includi
 
 Every message ends with **Copy**, **Reply** and **React** buttons and its details: the model that wrote it and the full date and time it was sent.
 
-<DocScreenshot src={overview} alt="A demo conversation showing Alex, Claw, a disk summary, code, and an inline chart." caption="macOS, built-in demo. The reply combines formatted text, a code block, and an image." />
+<DocScreenshot src={overview} ios={overviewIOS} iosAlt="A demo disk status reply with formatted text and an inline chart on iPhone." iosCaption="iOS, built-in demo. Alex is a fictional documentation persona." alt="A demo conversation showing Alex, Claw, a disk summary, code, and an inline chart." caption="macOS, built-in demo. The reply combines formatted text, a code block, and an image." />
 
 ## Thinking
 
@@ -49,7 +51,7 @@ Each tool call is shown as a card with its arguments and result. When a tool cal
 
 Open **Claw → Main**, set **Thinking Steps → All** in the chat’s ⋯ menu, then expand **Thinking** and **exec df -h**. The card separates the command’s input from its output; the disk figures are simulated.
 
-<DocScreenshot focus={{ x: 580, y: 280, width: 1750, height: 770 }} src={tools} alt="Expanded exec tool card showing the df -h input and simulated filesystem output." caption="Expand the tool card to inspect both the arguments and the result." />
+<DocScreenshot focus={{ x: 580, y: 280, width: 1750, height: 770 }} src={tools} ios={toolsIOS} iosAlt="An expanded Thinking section and collapsed exec tool card in the iPhone transcript." iosCaption="Thinking and tool calls appear alongside the reply. Tap the exec card to inspect its arguments and result." alt="Expanded exec tool card showing the df -h input and simulated filesystem output." caption="Expand the tool card to inspect both the arguments and the result." />
 
 
 ## Find in Chat
