@@ -3,7 +3,17 @@ title: Try the demo
 description: Explore Pincer with a simulated gateway that runs entirely on your device.
 ---
 
-Pincer has a built-in demo, so you can look around before you set up a gateway. It runs a simulated Gateway on your device with sample agents, chats, streamed replies, a chart, an exec approval, a sample approval history, an editable command policy and sample usage and cost data. **Nothing leaves your device.**
+Pincer has a built-in demo, so you can look around before you set up a gateway. It runs a simulated Gateway on your device. **Nothing leaves your device.** It includes:
+
+- three agents: **Claw** 🦞, **Scout** 🔭 and **Forge** 🛠️;
+- chats sorted into groups, with three of them pinned;
+- a long transcript (*Japan trip*) to scroll, page through and search;
+- streamed replies with thinking and tool cards, plus an inline chart;
+- exec approvals, and a sample **Approval History**;
+- `ask_user` question cards and a task progress card;
+- a context meter on each chat, and compaction;
+- an editable command policy and sample pairing requests;
+- 90 days of sample usage and cost data.
 
 ## Open the demo
 
@@ -14,33 +24,50 @@ Choose **Try the Demo**:
 
 The demo shows up in the rail like any other gateway. You can remove it whenever you like.
 
-## Things to try
+## Trigger words
 
-Send a message and watch the reply stream in. A few words trigger special behavior:
+Send a message and watch the reply stream in. A few words trigger special behavior, wherever they appear in your message:
 
-| Include this word | What happens |
+| Include this | What happens |
 | --- | --- |
 | `tool` or `disk` | The agent streams a tool call, shown as a card with arguments and a result. |
-| `image` | The reply also includes an inline image. Click it for a Quick Look-style preview. |
+| `image` | The reply also includes an inline chart. Click it for a Quick Look-style preview. |
 | `approve` | The agent asks for an exec approval. Try **Allow once**, **Always allow** or **Deny**. |
-| `approve once-only` | An exec approval without **Always allow**, like a command the gateway won't allow for good. |
-| `ask` | The agent asks you a question in a card above the composer: "What do you want removed?" |
-| `plan` | The agent works through a three-step plan, shown in a card above the composer. |
-| `/compact` | The chat is compacted, the same as **Compact Now**. |
+| `approve once-only` | The same, but without **Always allow**, like a command the gateway won't allow for good. |
+| `approve later` | The reply finishes first, then an approval arrives a few seconds later. On a Mac, switch to another app or lock the screen and answer it from the notification. |
+| `ask` | The agent asks a question with a card of choices. Pick one, type your own answer, or skip it. |
+| `plan` | A progress card above the composer ticks through three steps. |
+| `/compact` | Compacts the chat's context and shows the divider, with the token count before and after. |
 
-While you're there, try:
+:::note
+On iOS, Pincer is suspended in the background, so `approve later` can't reach you there. Send `approve` instead, then long-press the banner, or answer it from Notification Center.
+:::
 
-- the **layout** menu at the top of the sidebar, to switch between *By server*, *By agent*, *By group* and *Recent*;
-- typing `/` in the composer to see slash commands;
-- **Thinking Steps** in the chat's ⋯ menu, to choose how much of the agent's work you see;
-- **Usage & Cost…** in the gateway's menu, to see the [usage dashboard](../../guides/usage-and-cost/);
-- **Settings → Appearance**, to try a different theme;
-- the **context meter** next to **Send**, which shows how full each demo chat's context is;
-- **Approval History…** in the Organize menu, which has sample decisions, and answering an approval in the demo adds to it;
-- **Gateway Settings → Command Policy** (or ⌘K → "Command Policy…"), to see which commands each agent may run. **Recently allowed** lists allowed commands such as `/usr/bin/git`, `/usr/bin/rg` and `/opt/homebrew/bin/npm`; open an agent to change its settings, or remove an allowed command or tool. Changes are saved to the demo gateway only;
-- **Gateway Settings → Pairing Requests**, to approve or dismiss the sample people waiting to message your agents on Telegram and Discord;
-- **Gateway Settings → Health**: Telegram has lost its connection, so the gateway shows **Degraded**, with its channels, last heartbeat and the three clients connected (this device, a Control UI and a node). **Restart Gateway…** simulates a safe restart: nothing real restarts, your chats are still there afterwards, and Telegram reconnects, so the gateway comes back **Healthy**. Start a reply first to see the restart wait for it, then try **Restart Now Anyway**. It works with the demo's default access, since nothing real restarts;
-- <kbd>⌘</kbd> <kbd>K</kbd>, to open the command palette.
+## Things to try
+
+- **Approval History:** open it from [Gateway Settings](../../guides/gateway-settings/) or the command palette (<kbd>⌘</kbd> <kbd>K</kbd> → **Approval History…**) to browse past decisions of every kind.
+- **Find in Chat:** press <kbd>⌘</kbd> <kbd>F</kbd> (on iOS, use the chat's ⋯ menu) and search for "onsen" in *Japan trip*.
+- **Command palette:** press <kbd>⌘</kbd> <kbd>K</kbd> to jump anywhere. <kbd>⌘</kbd> <kbd>1</kbd>–<kbd>⌘</kbd> <kbd>3</kbd> open the pinned chats, and <kbd>⌘</kbd> <kbd>[</kbd> / <kbd>⌘</kbd> <kbd>]</kbd> go back and forward.
+- **[Quick Capture](../../guides/quick-capture/)** (macOS): press <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd> from any app and send a message into a demo chat.
+- **Drafts:** start typing in one chat, switch to another, and come back. Each chat keeps its own draft.
+- **Context ring:** the ring by the composer shows how full a chat's context is. *Main* is orange; *Japan trip* is red, so open the ring and choose **Compact Now**.
+- **Usage & Cost:** open it from the gateway menu or command palette to explore sample usage, model costs and rate limits. A chat's **Session Usage…** opens its usage history.
+- **Command Policy:** open **Gateway Settings → Command Policy** (or ⌘K → **Command Policy…**) to inspect and change the demo's allowed commands and tools.
+- The **layout** menu at the top of the sidebar, to switch between *By server*, *By agent*, *By group* and *Recent* (see [Organizing chats](../../guides/organizing-chats/)).
+- Typing `/` in the composer to see [slash commands](../../guides/composer/#slash-commands).
+- **Thinking Steps** in the chat's ⋯ menu, to choose how much of the agent's work you see.
+- **Settings → Appearance**, to try a different [theme](../../guides/appearance/).
+- **Gateway Settings → Pairing Requests:** review and approve or dismiss the sample people waiting to message your agents on Telegram and Discord.
+- **Gateway Settings → Health:** Telegram is disconnected, so the demo gateway shows **Degraded**. Inspect the channels, heartbeat and connected clients, then try **Restart Gateway…** to simulate a safe restart. Nothing real restarts; chats remain available and Telegram reconnects. Start a reply first to see the restart wait for it, then try **Restart Now Anyway**.
+
+See [Keyboard shortcuts](../../reference/keyboard-shortcuts/) for the rest.
+
+## What the demo doesn't do
+
+- **It doesn't remember.** Everything lives in memory and resets each time Pincer launches. If you answer a notification left over from a previous launch, you'll see "That approval expired. Nothing was run."
+- **No push notifications.** There's no push relay, and the demo never registers for push. Notifications come from Pincer itself while it's running.
+- **The Share extension has its own demo.** It runs in a separate process with its own demo instance, so it lists the demo chats and sends successfully, but the shared message won't appear in the app's demo.
+- **Limited administration.** The demo simulates command policy and pairing requests, not general Gateway Settings, automations or plugins. For broader administration workflows, use the [mock gateway](../../development/mock-gateway/).
 
 ### Search the demo's messages
 
@@ -48,9 +75,9 @@ Press **⇧⌘F** (on a Mac, or an iPad with a keyboard), or type in the sidebar
 
 | Search for | What you'll find |
 | --- | --- |
-| `backup` | Matches in three chats: a Time Machine backup in Claw's *Main*, a backup script in Forge's *Main* and a failed NAS backup in *home-lab*. |
-| `onsen` | Two days in the *Japan trip*'s older history, well above what's loaded when you open the chat. |
-| `cafe` | *Café Lumière* in Claw's *Main* and cafés all through the *Japan trip*. Accents and case don't matter. |
+| `backup` | Matches in four chats: a Time Machine backup in Claw's *Main*, a backup script in Forge's *Main*, a failed NAS backup in *home-lab* and a rainy-day backup plan in the *Japan trip*. |
+| `ghibli` | Ghibli Museum ideas in the *Japan trip*'s older history, well above what's loaded when you open the chat. |
+| `cafe` | *Café Lumière* in Claw's *Main* and a sentō turned café in the *Japan trip*. Accents and case don't matter. |
 | `todai` | Tōdai-ji in the *Japan trip*. The macron over the ō doesn't matter. |
 | `ramen` | Lots of matches in the *Japan trip*. Choose **More matches in Japan trip…** to open Find in Chat on all of them. |
 
