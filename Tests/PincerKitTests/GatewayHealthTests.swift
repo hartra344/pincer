@@ -309,3 +309,317 @@ struct GatewayHealthModelTests {
         #expect(model.uptimeMs == nil && model.uptime() == nil)
     }
 }
+
+@Suite("Gateway health dismissals")
+struct GatewayHealthDismissalTests {
+    static let now = Date(timeIntervalSince1970: 1_000_000)
+
+    static func issues(_ text: String, heartbeat: GatewayHeartbeat? = nil) throws -> [GatewayHealthIssue] {
+        let health = try #require(GatewayHealthSummary(Fixtures.json(text)))
+        return GatewayHealthRules.issues(health: health, heartbeat: heartbeat, now: Self.now)
+    }
+
+    static func queue(_ count: Int) throws -> GatewayHealthIssue {
+        try #require(Self.issues(#"{"deliveryQueues":{"failed":[{"queueName":"q","count":\#(count)}]}}"#).first)
+    }
+
+    @Test func fingerprints() throws {
+        let issues = try Self.issues(#"""
+        {"heartbeatSeconds":60,
+         "channels":{"a":{"running":false},"b":{"running":true,"connected":false},"c":{"lastError":"boom"}},
+         "plugins":{"errors":[{"id":"w","error":"bad manifest"}],"unavailable":["v"]},
+         "deliveryQueues":{"failed":[{"queueName":"q","count":2}]},"contextEngines":{"quarantined":["e"]}}
+        """#, heartbeat: GatewayHeartbeat(["ts": 0, "status": "failed", "reason": "timeout"]))
+        let prints = Dictionary(uniqueKeysWithValues: issues.map { ($0.id, $0.fingerprint) })
+        #expect(prints == [
+            "channel:a:default": "state=not-running", "channel:b:default": "state=not-connected",
+            "channel:c:default": "state=error", "plugin:w": "error=bad manifest", "plugin-unavailable:v": "unavailable",
+            "queue:q": "count=2", "engine:e": "quarantined", "heartbeat:failed": "reason=timeout", "heartbeat:late": "every=60",
+        ])
+        #expect(issues.filter(\.canAlwaysIgnore).map(\.kind).allSatisfy { $0 == .channel || $0 == .plugin })
+        #expect(issues.filter(\.canAlwaysIgnore).count == 5)
+    }
+
+    @Test func storedValues() {
+        #expect(GatewayHealthDismissal(stored: "always") == .always)
+        #expect(GatewayHealthDismissal(stored: "until:count=3") == .untilChanged("count=3"))
+        #expect(GatewayHealthDismissal(stored: "until:") == .untilChanged(""))
+        #expect(GatewayHealthDismissal(stored: "later") == nil && GatewayHealthDismissal(stored: "") == nil)
+        for value in [GatewayHealthDismissal.always, .untilChanged("state=error")] {
+            #expect(GatewayHealthDismissal(stored: value.stored) == value)
+        }
+    }
+
+    @Test func queueCountsCompareAsNumbers() throws {
+        let dismissedAt1 = GatewayHealthDismissal.untilChanged("count=1")
+        #expect(GatewayHealthRules.isDismissed(try Self.queue(1), by: dismissedAt1))
+        #expect(!GatewayHealthRules.isDismissed(try Self.queue(2), by: dismissedAt1))
+        #expect(!GatewayHealthRules.isDismissed(try Self.queue(3), by: .untilChanged("count=2")))
+        #expect(GatewayHealthRules.isDismissed(try Self.queue(2), by: .untilChanged("count=3")))
+        #expect(GatewayHealthRules.isDismissed(try Self.queue(10), by: .untilChanged("count=10")))
+        #expect(!GatewayHealthRules.isDismissed(try Self.queue(1), by: .always))
+        #expect(!GatewayHealthRules.isDismissed(try Self.queue(1), by: nil))
+    }
+
+    @Test func channelStateChangeBringsItBack() throws {
+        let before = try #require(Self.issues(#"{"channels":{"t":{"running":true,"connected":false,"lastError":"retry 1"}}}"#).first)
+        let dismissal = GatewayHealthDismissal.untilChanged(before.fingerprint)
+        let newError = try #require(Self.issues(#"{"channels":{"t":{"running":true,"connected":false,"lastError":"retry 2"}}}"#).first)
+        #expect(GatewayHealthRules.isDismissed(newError, by: dismissal))
+        let stopped = try #require(Self.issues(#"{"channels":{"t":{"running":false,"lastError":"retry 2"}}}"#).first)
+        #expect(!GatewayHealthRules.isDismissed(stopped, by: dismissal))
+        #expect(GatewayHealthRules.isDismissed(stopped, by: .always))
+    }
+
+    @Test func pruningBySource() throws {
+        let dismissals = [
+            "queue:q": "until:count=1", "channel:t:default": "always", "plugin:w": "until:error=x",
+            "heartbeat:late": "until:every=60", "heartbeat:failed": "until:reason=", "engine:e": "garbage",
+            "queue:old": "always", "unknown": "until:x",
+        ]
+        // A fresh `health` without `deliveryQueues` or the plugin: only health-sourced until-changed entries go.
+        let pruned = GatewayHealthRules.pruned(dismissals, current: try Self.issues(#"{"ok":true}"#), source: .health)
+        #expect(pruned == ["channel:t:default": "always", "heartbeat:late": "until:every=60", "heartbeat:failed": "until:reason=",
+                           "unknown": "until:x"])
+        // Still reported: kept.
+        let kept = GatewayHealthRules.pruned(["queue:q": "until:count=1"], current: [try Self.queue(4)], source: .health)
+        #expect(kept == ["queue:q": "until:count=1"])
+        // A heartbeat result prunes heartbeat ids only.
+        let beat = GatewayHealthRules.pruned(dismissals, current: [], source: .heartbeat)
+        #expect(beat["heartbeat:late"] == nil && beat["heartbeat:failed"] == nil && beat["queue:q"] != nil && beat["plugin:w"] != nil)
+    }
+
+    @MainActor
+    @Test func modelCountsActiveIssuesOnly() async throws {
+        let model = GatewayHealthModel(dismissals: ["plugin:gone": "always"]) { _, _ in .null }
+        var synced: [[String: String?]] = []
+        model.onDismissalsChanged = { synced.append($0) }
+        // An empty hello snapshot doesn't prune.
+        model.seed(snapshot: ["health": [:]])
+        #expect(model.dismissals == ["plugin:gone": "always"] && synced.isEmpty)
+        model.handle(event: "health", payload: Fixtures.json(#"""
+        {"channels":{"t":{"running":true,"connected":false}},"deliveryQueues":{"failed":[{"queueName":"q","count":1}]}}
+        """#))
+        #expect(model.level == .degraded && model.indicator == .degraded(issues: 2))
+        #expect(model.ignoredButAbsent.map(\.id) == ["plugin:gone"] && model.ignoredButAbsent.first?.title == "Plugin gone")
+        let issues = model.activeIssues
+        for issue in issues { model.dismiss(issue) }
+        #expect(model.level == .healthy && model.indicator == nil && model.activeIssues.isEmpty)
+        #expect(model.dismissedIssues.count == 2 && model.issues.count == 2)
+        #expect(model.dismissals["queue:q"] == "until:count=1" && model.dismissals["channel:t:default"] == "until:state=not-connected")
+        model.dismiss(try #require(issues.first { $0.kind == .delivery }), always: true)
+        #expect(model.dismissals["queue:q"] == "until:count=1", "failed deliveries can't be always ignored")
+        model.restore(id: "channel:t:default")
+        #expect(model.level == .degraded && model.indicator == .degraded(issues: 1))
+        #expect(synced.last == ["channel:t:default": String?.none])
+        // Down and Restarting don't care about dismissals.
+        model.connectionChanged(.reconnecting(attempt: 1, delaySeconds: 1, reason: "x"), hello: nil)
+        #expect(model.level == .down && model.indicator == nil && model.ignoredButAbsent.isEmpty)
+        model.connectionChanged(.connected, hello: nil)
+        // The queue cleared: its entry is pruned and synced; the always entry stays.
+        model.handle(event: "health", payload: Fixtures.json(#"{"channels":{"t":{"running":true,"connected":false}}}"#))
+        #expect(model.dismissals == ["plugin:gone": "always"] && synced.last == ["queue:q": String?.none])
+    }
+
+    @Test func placeholderTitles() {
+        #expect(GatewayHealthIssue.placeholder(id: "channel:telegram:default").title == "Telegram (default)")
+        #expect(GatewayHealthIssue.placeholder(id: "plugin-unavailable:voice").title == "Plugin voice")
+        #expect(GatewayHealthIssue.placeholder(id: "plugin:a:b").kind == .plugin)
+    }
+}
+
+@MainActor
+@Suite("Gateway health dismissal rules and syncing")
+struct GatewayHealthDismissalMoreTests {
+    static let now = GatewayHealthDismissalTests.now
+    static var nowMs: Double { Date().timeIntervalSince1970 * 1000 }
+
+    static func issue(_ text: String, heartbeat: GatewayHeartbeat? = nil, now: Date = Self.now) throws -> GatewayHealthIssue {
+        let health = try #require(GatewayHealthSummary(Fixtures.json(text)))
+        return try #require(GatewayHealthRules.issues(health: health, heartbeat: heartbeat, now: now).first)
+    }
+
+    @Test func pluginErrorChangeBringsItBack() throws {
+        let before = try Self.issue(#"{"plugins":{"errors":[{"id":"w","error":"bad manifest"}]}}"#)
+        let dismissal = GatewayHealthDismissal.untilChanged(before.fingerprint)
+        #expect(GatewayHealthRules.isDismissed(before, by: dismissal))
+        let after = try Self.issue(#"{"plugins":{"errors":[{"id":"w","error":"missing entry point"}]}}"#)
+        #expect(!GatewayHealthRules.isDismissed(after, by: dismissal))
+        #expect(GatewayHealthRules.isDismissed(after, by: .always) && after.canAlwaysIgnore)
+        let unavailable = try Self.issue(#"{"plugins":{"unavailable":["v"]}}"#)
+        #expect(GatewayHealthRules.isDismissed(unavailable, by: .untilChanged("unavailable")) && unavailable.canAlwaysIgnore)
+    }
+
+    @Test func heartbeatReasonAndIntervalChangesBringItBack() throws {
+        let failed = { (reason: String) in
+            GatewayHealthRules.issues(health: nil, heartbeat: GatewayHeartbeat(["ts": 0, "status": "failed", "reason": .string(reason)]),
+                                      now: Self.now).first { $0.id == "heartbeat:failed" }
+        }
+        let timeout = try #require(failed("timeout"))
+        #expect(GatewayHealthRules.isDismissed(try #require(failed("timeout")), by: .untilChanged(timeout.fingerprint)))
+        #expect(!GatewayHealthRules.isDismissed(try #require(failed("model error")), by: .untilChanged(timeout.fingerprint)))
+        let noReason = try #require(GatewayHealthRules.issues(health: nil, heartbeat: GatewayHeartbeat(["ts": 0, "status": "failed"]),
+                                                              now: Self.now).first)
+        #expect(noReason.fingerprint == "reason=")
+
+        let beat = GatewayHeartbeat(["ts": 0, "status": "ok-token"])
+        let late60 = try Self.issue(#"{"heartbeatSeconds":60}"#, heartbeat: beat)
+        let late120 = try Self.issue(#"{"heartbeatSeconds":120}"#, heartbeat: beat)
+        #expect(late60.id == "heartbeat:late" && late120.id == "heartbeat:late")
+        #expect(GatewayHealthRules.isDismissed(late60, by: .untilChanged("every=60")))
+        #expect(!GatewayHealthRules.isDismissed(late120, by: .untilChanged("every=60")))
+        // Later still late: the same interval, so it stays dismissed.
+        let later = try Self.issue(#"{"heartbeatSeconds":60}"#, heartbeat: beat, now: Self.now.addingTimeInterval(86_400))
+        #expect(GatewayHealthRules.isDismissed(later, by: .untilChanged("every=60")))
+    }
+
+    @Test func alwaysOnlyCountsForChannelsAndPlugins() throws {
+        let engine = try Self.issue(#"{"contextEngines":{"quarantined":["e"]}}"#)
+        let failed = try #require(GatewayHealthRules.issues(health: nil, heartbeat: GatewayHeartbeat(["ts": 0, "status": "failed"]),
+                                                            now: Self.now).first)
+        for issue in [engine, failed] {
+            #expect(!issue.canAlwaysIgnore && !GatewayHealthRules.isDismissed(issue, by: .always))
+        }
+        #expect(engine.offersRestart && !failed.offersRestart)
+        #expect(!(try Self.issue(#"{"deliveryQueues":{"failed":[{"queueName":"q","count":1}]}}"#)).offersRestart)
+        // Pruning drops an `always` on an issue that can't be always ignored.
+        let pruned = GatewayHealthRules.pruned(["engine:e": "always", "heartbeat:failed": "always", "plugin-unavailable:v": "always"],
+                                               current: [], source: .health)
+        #expect(pruned == ["heartbeat:failed": "always", "plugin-unavailable:v": "always"])
+        #expect(GatewayHealthRules.pruned(pruned, current: [], source: .heartbeat) == ["plugin-unavailable:v": "always"])
+    }
+
+    @Test func unknownStoredValuesDontHide() throws {
+        let issue = try Self.issue(#"{"channels":{"t":{"running":false}}}"#)
+        for stored in ["", "later", "ALWAYS", "until", "state=not-running"] {
+            #expect(!GatewayHealthRules.isDismissed(issue, by: GatewayHealthDismissal(stored: stored)), "\(stored)")
+        }
+        let model = GatewayHealthModel(dismissals: ["channel:t:default": "later"]) { _, _ in .null }
+        model.handle(event: "health", payload: Fixtures.json(#"{"channels":{"t":{"running":false}}}"#))
+        #expect(model.activeIssues.count == 1 && model.dismissedIssues.isEmpty && model.level == .degraded)
+        // Kept while reported, and Restore removes it.
+        #expect(model.dismissals == ["channel:t:default": "later"])
+        model.restore(id: "channel:t:default")
+        #expect(model.dismissals.isEmpty)
+    }
+
+    @Test func queueGoingUpThenBackDownStaysActiveUntilPruned() {
+        let model = GatewayHealthModel { _, _ in .null }
+        let queue = { (count: Int) in
+            model.handle(event: "health", payload: Fixtures.json(#"{"deliveryQueues":{"failed":[{"queueName":"q","count":\#(count)}]}}"#))
+        }
+        queue(3)
+        model.dismiss(model.activeIssues[0])
+        #expect(model.dismissals == ["queue:q": "until:count=3"] && model.level == .healthy)
+        queue(2)
+        #expect(model.level == .healthy, "fewer failures stay hidden")
+        queue(4)
+        #expect(model.level == .degraded && model.dismissals == ["queue:q": "until:count=3"], "stale entry kept, no effect")
+        // The queue drained: the entry goes; failures later show as active.
+        model.handle(event: "health", payload: Fixtures.json(#"{"ok":true}"#))
+        #expect(model.dismissals.isEmpty && model.level == .healthy)
+        queue(1)
+        #expect(model.level == .degraded)
+    }
+
+    @Test func nothingPrunesWithoutAFreshResult() async {
+        let dismissals = ["queue:q": "until:count=1", "heartbeat:failed": "until:reason=x", "heartbeat:late": "until:every=60"]
+        let model = GatewayHealthModel(dismissals: dismissals) { method, _ in
+            throw GatewayError.rpc(code: "UNAVAILABLE", message: "\(method) unavailable", details: nil)
+        }
+        var synced: [[String: String?]] = []
+        model.onDismissalsChanged = { synced.append($0) }
+        // Failed / UNAVAILABLE calls, empty payloads and snapshots.
+        await model.load()
+        model.handle(event: "health", payload: [:])
+        model.seed(snapshot: ["health": [:]])
+        model.seed(snapshot: ["uptimeMs": 1000])
+        #expect(model.dismissals == dismissals && synced.isEmpty)
+        // Disconnected: a health event doesn't prune.
+        model.connectionChanged(.reconnecting(attempt: 1, delaySeconds: 1, reason: "x"), hello: nil)
+        model.handle(event: "health", payload: Fixtures.json(#"{"ok":true}"#))
+        model.handle(event: "heartbeat", payload: ["ts": .number(Self.nowMs), "status": "ok-token"])
+        #expect(model.dismissals == dismissals && synced.isEmpty)
+    }
+
+    @Test func healthAndHeartbeatPruneTheirOwnIds() async {
+        let dismissals = ["queue:q": "until:count=1", "heartbeat:failed": "until:reason=x", "channel:t:default": "always"]
+        let model = GatewayHealthModel(dismissals: dismissals) { method, _ in
+            switch method {
+            case "health": return Fixtures.json(#"{"ok":true,"heartbeatSeconds":1800}"#)
+            case "last-heartbeat": return ["ts": .number(Date().timeIntervalSince1970 * 1000), "status": "ok-token"]
+            default: return .array([])
+            }
+        }
+        model.handle(event: "heartbeat", payload: ["ts": .number(Self.nowMs), "status": "ok-token"])
+        #expect(model.dismissals == ["queue:q": "until:count=1", "channel:t:default": "always"])
+        model.seed(snapshot: ["health": Fixtures.json(#"{"ok":true}"#)])
+        #expect(model.dismissals == ["channel:t:default": "always"])
+        #expect(model.ignoredButAbsent.map(\.title) == ["T (default)"])
+        await model.load()
+        #expect(model.dismissals == ["channel:t:default": "always"])
+    }
+
+    @Test func heartbeatBeforeHealthKeepsLateDismissal() {
+        let model = GatewayHealthModel(dismissals: ["heartbeat:late": "until:every=60"]) { _, _ in .null }
+        model.handle(event: "heartbeat", payload: ["ts": 0, "status": "ok-token"])
+        #expect(model.dismissals == ["heartbeat:late": "until:every=60"], "no health yet, so late can't be judged")
+        model.handle(event: "health", payload: Fixtures.json(#"{"heartbeatSeconds":60}"#))
+        #expect(model.dismissedIssues.map(\.id) == ["heartbeat:late"] && model.level == .healthy)
+        model.handle(event: "heartbeat", payload: ["ts": .number(Self.nowMs), "status": "ok-token"])
+        #expect(model.dismissals.isEmpty && model.level == .healthy)
+    }
+
+    @Test func restartingIgnoresDismissals() {
+        let model = GatewayHealthModel(scopes: { [GatewayConnection.adminScope] }) { _, _ in .null }
+        model.handle(event: "health", payload: Fixtures.json(#"{"channels":{"t":{"running":false}}}"#))
+        model.dismiss(model.activeIssues[0])
+        #expect(model.level == .healthy)
+        model.handle(event: "shutdown", payload: ["restartExpectedMs": 1500])
+        #expect(model.level == .restarting && model.restartState == .restarting)
+        model.connectionChanged(.reconnecting(attempt: 1, delaySeconds: 1, reason: "x"), hello: nil)
+        #expect(model.level == .restarting && model.issues.isEmpty && model.activeIssues.isEmpty && model.dismissedIssues.isEmpty)
+    }
+
+    @Test func noDismissalsLeavesBehaviorUnchanged() {
+        let model = GatewayHealthModel { _, _ in .null }
+        model.handle(event: "health", payload: Fixtures.json(#"{"channels":{"t":{"running":false}},"contextEngines":{"quarantined":["e"]}}"#))
+        #expect(model.activeIssues == model.issues && model.dismissedIssues.isEmpty && model.ignoredButAbsent.isEmpty)
+        #expect(model.level == .degraded && model.indicator == .degraded(issues: 2))
+    }
+
+    @Test func storeKeepsDismissalsInDefaultsAndTheModel() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let profile = GatewayProfile(name: "Health", url: "ws://127.0.0.1:9", authMode: .none)
+        let store = GatewayStore(profile: profile, defaults: scratch.defaults, identity: Fixtures.identity())
+        let key = "pincer.healthDismissals.\(profile.id.uuidString)"
+        store.health.dismiss(GatewayHealthIssue(id: "queue:q", kind: .delivery, title: "1 failed delivery", fingerprint: "count=1"))
+        #expect(store.healthDismissals == ["queue:q": "until:count=1"])
+        #expect(scratch.defaults.dictionary(forKey: key) as? [String: String] == ["queue:q": "until:count=1"])
+        // A pull (another device) updates the model too.
+        store.healthDismissals = ["plugin:w": "always"]
+        #expect(store.health.dismissals == ["plugin:w": "always"])
+        // A relaunch reads the local copy.
+        let relaunched = GatewayStore(profile: profile, defaults: scratch.defaults, identity: Fixtures.identity())
+        #expect(relaunched.healthDismissals == ["plugin:w": "always"] && relaunched.health.dismissals == ["plugin:w": "always"])
+        store.health.restore(id: "plugin:w")
+        #expect(store.healthDismissals.isEmpty && scratch.defaults.dictionary(forKey: key) as? [String: String] == [:])
+    }
+
+    @Test func removingAGatewayForgetsLocalDismissals() async {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let app = AppModel(defaults: scratch.defaults)
+        let store = app.add(GatewayProfile(name: "Health", url: "ws://127.0.0.1:9", authMode: .none), secret: nil)
+        let id = store.id.uuidString
+        store.healthDismissals = ["channel:t:default": "always"]
+        scratch.defaults.set(true, forKey: "pincer.healthDismissalsSynced.\(id)")
+        #expect(scratch.defaults.dictionary(forKey: "pincer.healthDismissals.\(id)") != nil)
+        app.remove(store.id)
+        #expect(scratch.defaults.object(forKey: "pincer.healthDismissals.\(id)") == nil)
+        #expect(scratch.defaults.object(forKey: "pincer.healthDismissalsSynced.\(id)") == nil)
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(scratch.defaults.object(forKey: "pincer.healthDismissals.\(id)") == nil)
+    }
+}

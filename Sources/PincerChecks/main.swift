@@ -3268,6 +3268,26 @@ func runDemo() async {
     check(health.presence.count == 3 && health.sortedPresence.first.map(health.isThisDevice) == true, "demo clients, this device first")
     check(health.heartbeat?.status == .okToken && (health.uptime() ?? 0) > 3 * 86_400, "demo heartbeat and uptime")
     check(health.canRestart, "demo can restart")
+    // Dismissing the Telegram issue makes the Gateway Healthy until it changes; Restore brings it back.
+    if let telegram = health.activeIssues.first(where: { $0.id.hasPrefix("channel:telegram") }) {
+        let firstSync = await waitFor("demo health dismissals first sync") {
+            UserDefaults.standard.bool(forKey: "pincer.healthDismissalsSynced.\(gateway.id.uuidString)")
+        }
+        check(firstSync, "demo health dismissals synced with users.prefs")
+        health.dismiss(telegram)
+        check(health.level == .healthy && health.indicator == nil && health.dismissedIssues.map(\.id) == [telegram.id]
+              && gateway.healthDismissals[telegram.id] == "until:state=not-connected", "demo dismiss hides the Telegram issue")
+        // The demo's users.prefs.set echoes users.prefs.changed and the store re-reads users.prefs.get,
+        // replacing the local copy with the Gateway's.
+        try? await Task.sleep(for: .milliseconds(500))
+        check(gateway.healthDismissals == [telegram.id: "until:state=not-connected"] && health.level == .healthy,
+              "demo dismissal kept after re-reading users.prefs (\(gateway.healthDismissals))")
+        health.restore(id: telegram.id)
+        check(health.level == .degraded && health.dismissedIssues.isEmpty && gateway.healthDismissals.isEmpty, "demo restore")
+        health.dismiss(telegram)
+    } else {
+        check(false, "demo Telegram issue to dismiss")
+    }
     health.markRestartRequired("Saved. Restart the Gateway to finish applying it.")
     check(health.indicator == .restartNeeded, "restart needed indicator")
     await health.restart()
@@ -3282,6 +3302,9 @@ func runDemo() async {
     let recovered = await waitFor("demo health reloaded") { health.level == .healthy }
     check(recovered && health.issues.isEmpty
           && health.health?.channels.first { $0.id == "telegram" }?.status == .connected, "Telegram recovers after the demo restart")
+    check(gateway.healthDismissals.isEmpty, "the recovered Telegram issue's dismissal is pruned (\(gateway.healthDismissals))")
+    try? await Task.sleep(for: .milliseconds(500))
+    check(gateway.healthDismissals.isEmpty, "the prune synced to users.prefs (\(gateway.healthDismissals))")
     check(health.presence.first(where: health.isThisDevice)?.host?.hasPrefix("Pincer on ") == true, "this device named, not \"This device\"")
 
     // A streaming reply defers the restart; "Restart Now Anyway" goes ahead.
@@ -3303,6 +3326,9 @@ func runDemo() async {
     }
     check(forced && !running.isRunning, "Restart Now Anyway restarts without waiting (\(health.restartState))")
     gateway.stop()
+    for prefix in ["healthDismissals", "healthDismissalsSynced"] {
+        UserDefaults.standard.removeObject(forKey: "pincer.\(prefix).\(gateway.id.uuidString)")
+    }
 }
 
 /// The demo's `channels.pairing.*` replies use exactly the upstream keys (closed objects).
@@ -4487,7 +4513,38 @@ func runLive(url: String, token: String) async {
     // Health and a safe restart. Last, since a restart drops every client.
     let health = admin.health
     await health.load()
-    check(health.hasLoaded && health.level == .healthy && health.health?.channels.first?.id == "discord", "health loads (\(health.issues.map(\.title)))")
+    let deliveryId = "queue:outbound-prepared-v1"
+    check(health.hasLoaded && health.level == .degraded && health.activeIssues.map(\.id) == [deliveryId]
+          && health.health?.channels.first?.id == "discord", "health loads, degraded by the mock's failed delivery (\(health.issues.map(\.title)))")
+    // Dismissing on one device hides it on another device of the same user, through users.prefs.
+    let secondProfile = GatewayProfile(name: "Mock health", url: url, authMode: .token)
+    secondProfile.secret = token
+    let second = GatewayStore(profile: secondProfile)
+    second.start()
+    let secondReady = await waitFor("second health device") { second.state.isConnected && !second.sessions.isEmpty }
+    await second.health.load()
+    if secondReady, let delivery = health.activeIssues.first(where: { $0.id == deliveryId }) {
+        check(!delivery.canAlwaysIgnore && delivery.fingerprint == "count=1", "failed deliveries dismiss until the count goes up")
+        let prefsSynced = await waitFor("health dismissals first sync") {
+            UserDefaults.standard.bool(forKey: "pincer.healthDismissalsSynced.\(admin.id.uuidString)")
+                && UserDefaults.standard.bool(forKey: "pincer.healthDismissalsSynced.\(second.id.uuidString)")
+        }
+        check(prefsSynced, "health dismissals pulled on both devices")
+        health.dismiss(delivery)
+        check(health.level == .healthy && health.indicator == nil, "dismissed delivery doesn't count")
+        let dismissedElsewhere = await waitFor("dismissal sync") { second.health.level == .healthy }
+        check(dismissedElsewhere && second.health.dismissedIssues.map(\.id) == [deliveryId]
+              && second.healthDismissals[deliveryId] == "until:count=1", "dismissal syncs to the other device")
+        second.health.restore(id: deliveryId)
+        let restored = await waitFor("restore sync") { health.level == .degraded }
+        check(restored && admin.healthDismissals.isEmpty, "restore syncs back")
+    } else {
+        check(false, "second device and the mock's failed delivery issue")
+    }
+    second.stop()
+    for prefix in ["serverNames", "serverNamesSynced", "chatIcons", "chatIconsSynced", "healthDismissals", "healthDismissalsSynced"] {
+        UserDefaults.standard.removeObject(forKey: "pincer.\(prefix).\(second.id.uuidString)")
+    }
     check(health.heartbeat?.status == .okToken && health.presence.contains(where: health.isThisDevice), "heartbeat and this device's presence")
     check((health.uptime() ?? 0) > 3600, "uptime from the hello snapshot")
     check(!gateway.health.canRestart && admin.health.canRestart, "restart needs admin")
@@ -4510,7 +4567,7 @@ func runLive(url: String, token: String) async {
     admin.stop()
 
     for store in [gateway, other] {
-        for prefix in ["serverNames", "serverNamesSynced", "chatIcons", "chatIconsSynced"] {
+        for prefix in ["serverNames", "serverNamesSynced", "chatIcons", "chatIconsSynced", "healthDismissals", "healthDismissalsSynced"] {
             UserDefaults.standard.removeObject(forKey: "pincer.\(prefix).\(store.id.uuidString)")
         }
     }

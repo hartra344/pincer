@@ -27,10 +27,13 @@ These are Pincer extras that OpenClaw's session data can't hold:
 | `pincer.groupIcons` | Group header icons |
 | `pincer.chatOrder` | The order of chats within a group. This wins over pinning and activity. |
 | `pincer.groups` | Groups, on gateways without the group catalog |
+| `pincer.healthDismissals` | Gateway Health issues you dismissed or always ignore |
 
 :::note
 If the gateway has no durable identity for your connection, these preferences stay on the current device instead of syncing.
 :::
+
+Removing a gateway from Pincer clears this device's copy of `pincer.healthDismissals` only. The gateway keeps it for your other devices, and adding the gateway again brings it back.
 
 ## Kept on each device
 

@@ -30,6 +30,8 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `MOCK_CHANNEL_PAIRING` | on | Set to `off` to hide the `channels.pairing.*` methods, like an older gateway. |
 | `MOCK_CHANNEL_PAIRING_EVERY` | off | Seconds between new channel pairing requests. |
 | `MOCK_NO_HEALTH` | off | Set to `1` to drop the health and restart methods, like an older gateway. |
+| `MOCK_FAILED_DELIVERY` | on | Set to `off` to drop the mock's one failed delivery, so Health shows Healthy. |
+| `MOCK_FAILED_DELIVERY_EVERY` | off | Seconds between new failed deliveries. Each one raises the count and sends `health`, so a dismissed issue comes back. |
 
 ## Message triggers
 
@@ -67,7 +69,7 @@ The mock serves `channels.pairing.list`, `channels.pairing.approve` and `channel
 
 ## Health and restart
 
-The mock serves `health`, `status`, `last-heartbeat` and `system-presence` for the [Health page](../../guides/gateway-health/), and its hello snapshot includes presence, health and uptime. Every connected client shows up in presence, next to a `kitchen-pi` node.
+The mock serves `health`, `status`, `last-heartbeat` and `system-presence` for the [Health page](../../guides/gateway-health/), and its hello snapshot includes presence, health and uptime. Every connected client shows up in presence, next to a `kitchen-pi` node. `health` also reports one failed delivery in the `outbound-prepared-v1` queue that stays failed, so the page shows a Degraded issue you can [dismiss](../../guides/gateway-health/#dismissing-issues).
 
 `gateway.restart.request` needs the `operator.admin` scope. It answers `deferred` while a chat run is active, `coalesced` if a restart is already pending, and `scheduled` otherwise. The simulated restart broadcasts `shutdown` with `restartExpectedMs: 1500`, closes every socket with code 1012, refuses connections for 1.5 seconds, then comes back with a fresh uptime. Sessions and config survive.
 

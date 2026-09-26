@@ -13,10 +13,23 @@ export function healthDisabled() {
   return process.env.MOCK_NO_HEALTH === '1';
 }
 
+/** The failed delivery queue the mock reports, unless `MOCK_FAILED_DELIVERY=off`. */
+export const FAILED_DELIVERY_QUEUE = 'outbound-prepared-v1';
+
+export function failedDeliveryDisabled() {
+  return process.env.MOCK_FAILED_DELIVERY === 'off';
+}
+
 export function createHealthState(base = Date.now()) {
+  const startedAt = base - (26 * 3600 + 12 * 60) * 1000;
   return {
     // A Gateway that has been up for a while.
-    startedAt: base - (26 * 3600 + 12 * 60) * 1000,
+    startedAt,
+    // One outbound delivery that failed a few hours after start and stays failed. It's kept on
+    // disk upstream, so it survives restarts too.
+    failedDelivery: failedDeliveryDisabled()
+      ? undefined
+      : { queueName: FAILED_DELIVERY_QUEUE, count: 1, oldestFailedAt: startedAt + 3 * 3600 * 1000 },
     restartingUntil: 0,
     pendingRestart: undefined,
     restartCount: 0,
@@ -93,7 +106,7 @@ export function healthSummary(state) {
     })),
     sessions: { count: state.sessions.size, recent: [] },
     plugins: { loaded: ['discord', 'memory-core'], errors: [], unavailable: [] },
-    deliveryQueues: { failed: [] },
+    deliveryQueues: { failed: state.healthState.failedDelivery ? [{ ...state.healthState.failedDelivery }] : [] },
     contextEngines: { quarantined: [] },
     modelPricing: { state: 'ok', sources: [] },
     configReload: { hotReloadStatus: 'active' },
@@ -152,6 +165,14 @@ export function helloSnapshot(state) {
     stateVersion: { presence: state.healthState.restartCount + 1, health: state.healthState.restartCount + 1 },
     uptimeMs: uptimeMs(state),
   };
+}
+
+/** `MOCK_FAILED_DELIVERY_EVERY`: one more delivery fails, and `health` goes out, so a dismissed issue comes back. */
+export function addFailedDelivery(state, broadcast) {
+  const failed = state.healthState.failedDelivery;
+  if (!failed || healthDisabled()) return;
+  failed.count += 1;
+  broadcast(state, 'health', healthSummary(state));
 }
 
 export function broadcastPresence(state, broadcast) {

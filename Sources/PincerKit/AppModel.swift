@@ -224,11 +224,14 @@ public final class AppModel {
         Task {
             await push.forget(store)
             store.stop()
+            // A prefs pull that was in flight may have written them back.
+            store.forgetLocalHealthDismissals()
         }
         store.profile.forgetCredentials()
         TranscriptCache.removeAll(gatewayId: id, permanently: true)
         self.history.prune { $0.gatewayId != id }
         DraftStore.removeAll(gatewayId: id)
+        store.forgetLocalHealthDismissals()
         self.persist()
         if self.selectedGatewayId == id { self.selectedGatewayId = self.gateways.first?.id }
     }

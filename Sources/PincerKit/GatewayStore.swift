@@ -167,6 +167,8 @@ public final class GatewayStore: Identifiable {
             guard let self, self.settings.hasLoaded else { return }
             Task { await self.settings.load() }
         }
+        health.dismissals = self.healthDismissals
+        health.onDismissalsChanged = { [weak self] changes in self?.applyHealthDismissals(changes) }
         return health
     }()
 
@@ -195,6 +197,7 @@ public final class GatewayStore: Identifiable {
         self.groupPositions = defaults.dictionary(forKey: "pincer.groups.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.groupIcons = defaults.dictionary(forKey: "pincer.groupIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.chatPositions = defaults.dictionary(forKey: "pincer.chatOrder.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.healthDismissals = defaults.dictionary(forKey: "pincer.healthDismissals.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.selectedKey = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)")
         self.sectionCollapse = defaults.dictionary(forKey: "pincer.collapsed.\(profile.id.uuidString)") as? [String: Bool] ?? [:]
         let images = ArtifactImageLoader()
@@ -307,6 +310,7 @@ public final class GatewayStore: Identifiable {
         Task { await self.pullChatColors() }
         Task { await self.pull(self.syncedMap(Self.chatOrderPref)) }
         Task { await self.pull(self.syncedMap(Self.groupIconsPref)) }
+        Task { await self.pull(self.syncedMap(Self.healthDismissalsPref)) }
         Task { await self.loadGroups() }
         // Only pick a chat on the first connect: on iPhone, going back to the sidebar clears the
         // selection, and re-selecting on every reconnect would push a chat the user left.
@@ -974,6 +978,9 @@ public final class GatewayStore: Identifiable {
     static let chatOrderPref = "pincer.chatOrder"
     /// SF Symbol names by group name. The gateway's group catalog has no icon field.
     static let groupIconsPref = "pincer.groupIcons"
+    /// Gateway Health issues dismissed until they change (`until:<fingerprint>`) or always ignored
+    /// (`always`), by issue id.
+    static let healthDismissalsPref = "pincer.healthDismissals"
 
     private struct SyncedMap {
         let pref: String
@@ -995,6 +1002,8 @@ public final class GatewayStore: Identifiable {
                       syncedDefaultsKey: "pincer.chatOrderSynced.\(self.id.uuidString)"),
             SyncedMap(pref: Self.groupIconsPref, local: \.groupIcons,
                       syncedDefaultsKey: "pincer.groupIconsSynced.\(self.id.uuidString)"),
+            SyncedMap(pref: Self.healthDismissalsPref, local: \.healthDismissals,
+                      syncedDefaultsKey: "pincer.healthDismissalsSynced.\(self.id.uuidString)"),
         ]
     }
 
@@ -1081,6 +1090,31 @@ public final class GatewayStore: Identifiable {
         }
         guard let result = try? await self.connection.request("users.prefs.set", ["entries": entries], timeout: 15) else { return false }
         return result["status"]?.string == "ok"
+    }
+
+    // MARK: Health dismissals
+
+    /// Dismissed Gateway Health issues, synced through `users.prefs` (`pincer.healthDismissals`).
+    public var healthDismissals: [String: String] {
+        didSet {
+            guard self.healthDismissals != oldValue else { return }
+            self.defaults.set(self.healthDismissals, forKey: "pincer.healthDismissals.\(self.id.uuidString)")
+            if self.health.dismissals != self.healthDismissals { self.health.dismissals = self.healthDismissals }
+        }
+    }
+
+    private func applyHealthDismissals(_ changes: [String: String?]) {
+        var next = self.healthDismissals
+        for (id, value) in changes { next[id] = value }
+        self.healthDismissals = next
+        Task { await self.push(self.syncedMap(Self.healthDismissalsPref), changes) }
+    }
+
+    /// Forgets this device's copy of the dismissals when the gateway is removed. The gateway's
+    /// user prefs keep them for other devices, and re-adding the gateway pulls them back.
+    func forgetLocalHealthDismissals() {
+        self.defaults.removeObject(forKey: "pincer.healthDismissals.\(self.id.uuidString)")
+        self.defaults.removeObject(forKey: "pincer.healthDismissalsSynced.\(self.id.uuidString)")
     }
 
     // MARK: Chat icons
