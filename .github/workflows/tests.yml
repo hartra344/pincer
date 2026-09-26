@@ -1,0 +1,77 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mock-gateway:
+    name: Mock gateway selftest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mock-gateway
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mock-gateway/package-lock.json
+      - run: npm ci
+      - run: npm run selftest
+
+  swift:
+    name: Swift build and checks
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      PINCER_KEYCHAIN: memory
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select newest Xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mock-gateway/package-lock.json
+
+      - name: Build all targets
+        run: swift build
+
+      - name: Self-checks
+        run: swift run PincerChecks
+
+      - name: Demo checks
+        run: swift run PincerChecks --demo
+
+      - name: Live checks against the mock gateway
+        run: |
+          (cd mock-gateway && npm ci)
+          node mock-gateway/server.mjs > "$RUNNER_TEMP/mock-gateway.log" 2>&1 &
+          for _ in $(seq 1 30); do nc -z 127.0.0.1 18789 && break; sleep 1; done
+          swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+
+      - name: Upload mock gateway log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mock-gateway-log
+          path: ${{ runner.temp }}/mock-gateway.log
+          if-no-files-found: ignore
