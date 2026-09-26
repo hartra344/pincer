@@ -175,7 +175,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 
 ## Testing without a real gateway
 
-The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, chats, streamed replies, a chart, an exec approval, a sample approval history, an editable command policy, three pairing requests, 90 days of sample usage and cost data and gateway health (Telegram is disconnected, so it shows Degraded; **Restart Gateway** simulates a restart), and nothing leaves the device. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too.
+The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, grouped and pinned chats, a long searchable transcript, streamed replies, a chart, exec approvals (including one that arrives later, to answer from a notification), `ask_user` question cards, a context meter with compaction, sample approval history, an editable command policy, three pairing requests, 90 days of sample usage and cost data, and gateway health (Telegram is disconnected, so it shows Degraded; **Restart Gateway** simulates a restart). Nothing leaves the device. It doesn't use push notifications, and the Share extension runs its own separate demo, so shared messages don't show up in the app's demo. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too.
 
 For the full protocol, including Gateway Settings, run the Node mock:
 
