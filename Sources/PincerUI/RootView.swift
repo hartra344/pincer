@@ -182,6 +182,7 @@ private struct SettingsForm: View {
     @AppStorage(ThinkingDisplay.storageKey) private var thinkingDisplay = ThinkingDisplay.defaultValue
     @AppStorage("pincer.loadWebImages") private var loadWebImages = true
     @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
+    @AppStorage("pincer.showMessagePreviews") private var showMessagePreviews = true
     @AppStorage(AppTheme.presetKey) private var preset = ThemePreset.standard
     @AppStorage(AppTheme.modeKey) private var mode = AppearanceMode.system
     @Environment(\.appTheme) private var theme
@@ -255,6 +256,10 @@ private struct SettingsForm: View {
             }
         case .sidebar:
             SwiftUI.Section("Sidebar") {
+                Toggle(isOn: self.$showMessagePreviews) {
+                    Text("Show last message under each chat")
+                    Text("A one-line preview of the latest message in the chat list.")
+                }
                 Toggle(isOn: self.$showSubagentRuns) {
                     Text("List subagent runs under their chat")
                     Text("Off keeps one thread per chat, like Discord. Open a run from its tool call instead.")

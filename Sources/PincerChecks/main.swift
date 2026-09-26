@@ -59,6 +59,14 @@ check(row.parentKey == "agent:research:main", "parent key → thread")
 check(row.originLabel == "Discord", "origin label")
 check(row.activityMs == 1_700_000_000_000, "activity uses latest timestamp")
 check(SessionRow(json(#"{"label":"no key"}"#)) == nil, "rows without key rejected")
+do {
+    let withPreview = SessionRow(json(#"{"key":"p","lastMessagePreview":"Found 3 rentals"}"#))!
+    let bareUpdate = SessionRow(json(#"{"key":"p","pinned":true}"#))!
+    let newer = SessionRow(json(#"{"key":"p","lastMessagePreview":"Booked a viewing"}"#))!
+    check(bareUpdate.keepingPreview(of: withPreview).preview == "Found 3 rentals", "partial row keeps previous preview")
+    check(bareUpdate.keepingPreview(of: withPreview).isPinned, "partial row keeps its own fields")
+    check(newer.keepingPreview(of: withPreview).preview == "Booked a viewing", "new preview replaces old")
+}
 
 print("Discord channels")
 let discord = SessionRow(json(##"{"key":"agent:main:discord:channel:1300000000000000001","displayName":"1100000000000000001 #finances","channel":"discord","chatType":"channel","groupChannel":"#finances","space":"1100000000000000001","origin":{"label":"Home Lab #finances channel id:1300000000000000001","provider":"discord","chatType":"channel"}}"##))!
@@ -748,6 +756,79 @@ func runLive(url: String, token: String) async {
         other.setIcon(nil, for: iconKey)
         let iconCleared = await waitFor("icon clear") { gateway.customIcon(for: iconKey) == nil }
         check(iconCleared, "clearing a chat icon syncs")
+    }
+
+    // Groups: created empty, kept when emptied, reordered, and chats arranged by hand.
+    do {
+        let savedOrganization = gateway.organization
+        gateway.organization = .group
+        other.organization = .group
+        func groupSection(_ store: GatewayStore, _ name: String) -> SidebarSection? {
+            store.sections().first { $0.kind == .group(name) }
+        }
+        let created = await gateway.createGroup("Empty")
+        check(created && groupSection(gateway, "Empty")?.channels.isEmpty == true, "empty group created")
+        let duplicate = await gateway.createGroup("Empty")
+        check(!duplicate, "duplicate group name rejected")
+        let seen = await waitFor("empty group on other device") { other.groupNames.contains("Empty") }
+        check(seen && groupSection(other, "Empty") != nil, "empty group shows on other devices")
+        check(gateway.sections(search: "zzz-no-match").allSatisfy { $0.kind != .group("Empty") }, "empty group hidden while searching")
+
+        await gateway.moveGroup("Empty", before: gateway.groupNames.first)
+        check(gateway.groupNames.first == "Empty", "group moved to the top (\(gateway.groupNames))")
+        let reordered = await waitFor("group order sync") { other.groupNames.first == "Empty" }
+        check(reordered, "group order syncs")
+        await gateway.moveGroup("Empty", before: nil)
+        check(gateway.groupNames.last == "Empty", "group moved to the end (\(gateway.groupNames))")
+
+        let personal = gateway.groupOrder("Personal")
+        if let only = personal.first {
+            await gateway.moveChat(only, toGroup: "Empty", before: nil)
+            let moved = await waitFor("chat into Empty") { gateway.sessions[only]?.category == "Empty" }
+            check(moved, "chat moved into a new group")
+            let emptied = await waitFor("Personal emptied") { gateway.groupOrder("Personal").isEmpty }
+            check(emptied && groupSection(gateway, "Personal") != nil && gateway.groupNames.contains("Personal"),
+                  "group stays after its last chat leaves")
+            await gateway.moveChat(only, toGroup: "Personal", before: nil)
+            _ = await waitFor("chat back") { gateway.sessions[only]?.category == "Personal" }
+        }
+
+        // Arrange chats within a group by hand.
+        let workKeys = gateway.sessions.values.filter { !$0.isSubagent && !$0.isArchived }.map(\.key).sorted().prefix(3)
+        for key in workKeys where gateway.sessions[key]?.category != "Work" {
+            await gateway.moveChat(key, toGroup: "Work", before: nil)
+        }
+        let filled = await waitFor("work filled") { workKeys.allSatisfy { gateway.sessions[$0]?.category == "Work" } }
+        check(filled, "chats moved into a group")
+        let work = gateway.groupOrder("Work")
+        if work.count >= 2, let last = work.last {
+            await gateway.moveChat(last, toGroup: "Work", before: work.first)
+            check(gateway.groupOrder("Work").first == last, "chat moved to the top of its group")
+            check(groupSection(gateway, "Work")?.channels.first?.id == last, "sidebar shows the new chat order")
+            let orderSynced = await waitFor("chat order sync") { other.groupOrder("Work").first == last }
+            check(orderSynced, "chat order syncs through users.prefs")
+            await gateway.moveChat(last, toGroup: "Work", before: nil)
+            check(gateway.groupOrder("Work").last == last, "chat moved to the end of its group")
+        }
+
+        gateway.setGroupIcon("star.fill", for: "Empty")
+        let iconSynced = await waitFor("group icon sync") { other.groupIcon(for: "Empty") == "star.fill" }
+        check(iconSynced, "group icon syncs through users.prefs")
+        await gateway.renameGroup("Empty", to: "Renamed")
+        let renamed = await waitFor("rename group") { gateway.groupNames.contains("Renamed") && !gateway.groupNames.contains("Empty") }
+        check(renamed, "empty group renamed")
+        check(gateway.groupIcon(for: "Renamed") == "star.fill" && gateway.groupIcon(for: "Empty") == nil, "group icon follows a rename")
+        let members = gateway.groupOrder("Work")
+        await gateway.deleteGroup("Work")
+        let deleted = await waitFor("delete group") {
+            !gateway.groupNames.contains("Work") && members.allSatisfy { gateway.sessions[$0]?.category == nil }
+        }
+        check(deleted && members.allSatisfy { gateway.sessions[$0] != nil }, "deleting a group ungroups its chats")
+        let deletedOther = await waitFor("delete sync") { !other.groupNames.contains("Work") }
+        check(deletedOther, "group deletion syncs")
+        await gateway.deleteGroup("Renamed")
+        check(gateway.groupIcon(for: "Renamed") == nil, "deleting a group clears its icon")
+        gateway.organization = savedOrganization
     }
     other.stop()
 

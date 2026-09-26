@@ -10,17 +10,19 @@ struct ChannelList: View {
     /// Called when the reader picks a chat, so compact layouts can show it.
     var openChat: () -> Void = {}
     @State private var search = ""
-    @State private var collapsed: Set<String> = []
-    @State private var newSessionAgent: String?
+    @State private var newChat: NewChatRequest?
     @State private var renaming: SessionRow?
     @State private var changingIcon: SessionRow?
+    @State private var changingGroupIcon: String?
     @State private var pickingColor: SessionRow?
     @State private var showingSettings = false
     @State private var showingGatewaySettings = false
     @State private var expandedThreads: Set<String> = []
     @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
+    @AppStorage("pincer.showMessagePreviews") private var showMessagePreviews = true
     @Environment(\.appTheme) private var theme
     @State private var prompt: TextPrompt?
+    @State private var confirmation: ConfirmPrompt?
 
     var body: some View {
         @Bindable var gateway = self.gateway
@@ -33,8 +35,9 @@ struct ChannelList: View {
             #endif
             ConnectionStatusRow()
             SidebarList(
-                model: SidebarModel.build(gateway: self.gateway, search: self.search, collapsed: self.collapsed,
-                                          expandedThreads: self.expandedThreads, showSubagentRuns: self.showSubagentRuns),
+                model: SidebarModel.build(gateway: self.gateway, search: self.search, collapsed: self.gateway.collapsedSections,
+                                          expandedThreads: self.expandedThreads, showSubagentRuns: self.showSubagentRuns,
+                                          showPreviews: self.showMessagePreviews),
                 selectedKey: self.gateway.selectedKey,
                 gateway: self.gateway,
                 actions: self.actions,
@@ -52,6 +55,10 @@ struct ChannelList: View {
                     }
                     .pickerStyle(.inline)
                     Toggle("Show Archived", isOn: $gateway.showArchived)
+                    if self.gateway.organization == .group || self.gateway.organization == .servers {
+                        Button("New Group…") { SidebarMenus.newGroup(gateway: self.gateway, actions: self.actions) }
+                            .disabled(!self.gateway.state.isConnected)
+                    }
                     Divider()
                     Button("Gateway Settings…") { self.showingGatewaySettings = true }
                         .disabled(!self.gateway.state.isConnected)
@@ -63,7 +70,7 @@ struct ChannelList: View {
             }
             ToolbarItem {
                 Button {
-                    self.newSessionAgent = self.gateway.defaultAgentId
+                    self.newChat = NewChatRequest(agentId: self.gateway.defaultAgentId)
                 } label: {
                     Label("New Chat", systemImage: "square.and.pencil")
                 }
@@ -71,14 +78,17 @@ struct ChannelList: View {
                 .disabled(!self.gateway.state.isConnected)
             }
         }
-        .sheet(item: self.$newSessionAgent) { agentId in
-            NewSessionSheet(initialAgentId: agentId, onCreated: self.openChat)
+        .sheet(item: self.$newChat) { request in
+            NewSessionSheet(initialAgentId: request.agentId, initialGroup: request.group, onCreated: self.openChat)
         }
         .sheet(item: self.$renaming) { row in
             RenameSheet(row: row)
         }
         .sheet(item: self.$changingIcon) { row in
             IconPickerSheet(row: row)
+        }
+        .sheet(item: self.$changingGroupIcon) { group in
+            GroupIconPickerSheet(group: group)
         }
         .sheet(item: self.$pickingColor) { row in
             ChatColorSheet(row: row)
@@ -88,6 +98,14 @@ struct ChannelList: View {
         }
         .sheet(isPresented: self.$showingGatewaySettings) {
             GatewaySettingsView()
+        }
+        .confirmationDialog(self.confirmation?.title ?? "", isPresented: Binding(
+            get: { self.confirmation != nil }, set: { if !$0 { self.confirmation = nil } }
+        ), titleVisibility: .visible, presenting: self.confirmation) { confirmation in
+            Button(confirmation.action, role: .destructive, action: confirmation.onConfirm)
+            Button("Cancel", role: .cancel) {}
+        } message: { confirmation in
+            Text(confirmation.message)
         }
         #if os(iOS)
         .toolbar {
@@ -110,19 +128,26 @@ struct ChannelList: View {
                 self.gateway.selectedKey = key
                 self.openChat()
             },
-            newChat: { self.newSessionAgent = $0 },
+            newChat: { self.newChat = NewChatRequest(agentId: $0) },
+            newChatInGroup: { self.newChat = NewChatRequest(agentId: self.gateway.defaultAgentId, group: $0) },
             rename: { self.renaming = $0 },
             changeIcon: { self.changingIcon = $0 },
+            changeGroupIcon: { self.changingGroupIcon = $0 },
             pickColor: { self.pickingColor = $0 },
             prompt: { self.prompt = $0 },
+            confirm: { self.confirmation = $0 },
             toggleThreads: { key in
                 if self.expandedThreads.contains(key) { self.expandedThreads.remove(key) } else { self.expandedThreads.insert(key) }
             },
-            setCollapsed: { id, collapsed in
-                if collapsed { self.collapsed.insert(id) } else { self.collapsed.remove(id) }
-            },
+            setCollapsed: { id, collapsed in self.gateway.setSectionCollapsed(id, collapsed) },
             refresh: { await self.gateway.refreshSessions() })
     }
+}
+
+struct NewChatRequest: Identifiable {
+    let id = UUID()
+    let agentId: String
+    var group: String?
 }
 
 extension String: @retroactive Identifiable {
@@ -215,6 +240,7 @@ private struct PairingStatusRow: View {
 
 struct NewSessionSheet: View {
     let initialAgentId: String
+    var initialGroup: String?
     var onCreated: () -> Void = {}
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.dismiss) private var dismiss
@@ -260,7 +286,10 @@ struct NewSessionSheet: View {
         #if os(macOS)
         .frame(minWidth: 380, minHeight: 260)
         #endif
-        .onAppear { self.agentId = self.initialAgentId }
+        .onAppear {
+            self.agentId = self.initialAgentId
+            if let group = self.initialGroup { self.group = group }
+        }
     }
 }
 
@@ -297,16 +326,49 @@ struct RenameSheet: View {
     }
 }
 
-/// Searchable grid of curated SF Symbols; the pick syncs to every device through the gateway.
+/// Icon picker for a chat; the pick syncs to every device through the gateway.
 struct IconPickerSheet: View {
     let row: SessionRow
     @Environment(GatewayStore.self) private var gateway
+
+    var body: some View {
+        SymbolPickerSheet(
+            current: ChannelRowStyle.customSymbol(for: self.row, gateway: self.gateway),
+            defaultSymbol: ChannelRowStyle.defaultSymbol(for: self.row, isThread: self.row.isSubagent),
+            tint: ChannelRowStyle.color(for: self.row, gateway: self.gateway) ?? .secondary,
+            hasCustom: self.gateway.customIcon(for: self.row.key) != nil
+        ) { symbol in
+            self.gateway.setIcon(symbol, for: self.row.key)
+        }
+    }
+}
+
+/// Icon picker for a group's header; the pick syncs to every device through the gateway.
+struct GroupIconPickerSheet: View {
+    let group: String
+    @Environment(GatewayStore.self) private var gateway
+
+    var body: some View {
+        SymbolPickerSheet(
+            current: SymbolCatalog.symbol(for: self.gateway.groupIcon(for: self.group)),
+            defaultSymbol: ChannelRowStyle.headerSymbol(for: .group(self.group)) ?? "folder",
+            tint: .secondary,
+            hasCustom: self.gateway.groupIcon(for: self.group) != nil
+        ) { symbol in
+            self.gateway.setGroupIcon(symbol, for: self.group)
+        }
+    }
+}
+
+/// Searchable grid of curated SF Symbols. `onPick(nil)` means go back to the default.
+struct SymbolPickerSheet: View {
+    let current: String?
+    let defaultSymbol: String
+    let tint: Color
+    let hasCustom: Bool
+    let onPick: (String?) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var search = ""
-
-    private var current: String? { ChannelRowStyle.customSymbol(for: self.row, gateway: self.gateway) }
-    private var defaultSymbol: String { ChannelRowStyle.defaultSymbol(for: self.row, isThread: self.row.isSubagent) }
-    private var tint: Color { ChannelRowStyle.color(for: self.row, gateway: self.gateway) ?? .secondary }
 
     var body: some View {
         NavigationStack {
@@ -342,10 +404,10 @@ struct IconPickerSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { self.dismiss() } }
                 ToolbarItem(placement: .destructiveAction) {
                     Button("Use Default") {
-                        self.gateway.setIcon(nil, for: self.row.key)
+                        self.onPick(nil)
                         self.dismiss()
                     }
-                    .disabled(self.gateway.customIcon(for: self.row.key) == nil)
+                    .disabled(!self.hasCustom)
                 }
             }
         }
@@ -357,7 +419,7 @@ struct IconPickerSheet: View {
     private func cell(_ symbol: String) -> some View {
         let selected = symbol == (self.current ?? self.defaultSymbol)
         return Button {
-            self.gateway.setIcon(symbol, for: self.row.key)
+            self.onPick(symbol)
             self.dismiss()
         } label: {
             Image(systemName: symbol)
@@ -380,6 +442,14 @@ struct TextPrompt: Identifiable {
     let field: String
     let initial: String
     let onSave: (String) -> Void
+}
+
+struct ConfirmPrompt: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let action: String
+    let onConfirm: () -> Void
 }
 
 struct TextPromptSheet: View {

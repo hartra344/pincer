@@ -16,9 +16,16 @@ struct SidebarModel: Equatable {
         let isCollapsed: Bool
         /// Agent a new chat started from this header's + button goes to, if it has one.
         let newChatAgent: String?
+        /// Custom SF Symbol for a group (already checked for this OS).
+        var icon: String?
+
+        /// The symbol the header shows, if any.
+        var symbol: String? {
+            self.section.emoji == nil ? self.icon ?? ChannelRowStyle.headerSymbol(for: self.section.kind) : nil
+        }
 
         static func == (lhs: Header, rhs: Header) -> Bool {
-            lhs.id == rhs.id && lhs.isCollapsed == rhs.isCollapsed && lhs.newChatAgent == rhs.newChatAgent
+            lhs.id == rhs.id && lhs.isCollapsed == rhs.isCollapsed && lhs.newChatAgent == rhs.newChatAgent && lhs.icon == rhs.icon
                 && lhs.section.title == rhs.section.title && lhs.section.emoji == rhs.section.emoji
                 && lhs.section.kind == rhs.section.kind && lhs.section.unreadCount == rhs.section.unreadCount
         }
@@ -37,6 +44,8 @@ struct SidebarModel: Equatable {
         let hiddenUnreadThreads: Int
         let threadsExpanded: Bool
         let showSubagentRuns: Bool
+        /// Last-message line under the title, or `nil` when previews are off or there's none.
+        let preview: String?
     }
 
     struct Group: Equatable {
@@ -51,7 +60,8 @@ struct SidebarModel: Equatable {
 
     @MainActor
     static func build(gateway: GatewayStore, search: String, collapsed: Set<String>,
-                      expandedThreads: Set<String>, showSubagentRuns: Bool) -> SidebarModel
+                      expandedThreads: Set<String>, showSubagentRuns: Bool,
+                      showPreviews: Bool) -> SidebarModel
     {
         let selected = gateway.selectedKey
         var model = SidebarModel()
@@ -70,7 +80,8 @@ struct SidebarModel: Equatable {
                     runningSubagents: subagents.filter(\.hasActiveRun).count,
                     hiddenUnreadThreads: expanded ? 0 : subagents.filter { $0.isUnread && !$0.hasActiveRun }.count,
                     threadsExpanded: expanded,
-                    showSubagentRuns: showSubagentRuns))
+                    showSubagentRuns: showSubagentRuns,
+                    preview: showPreviews ? channel.row.preview : nil))
                 // Like Discord, helper runs live inside the conversation (as "Open run" on their
                 // tool call) unless the sidebar is set to list them.
                 let visible: [SessionRow]
@@ -86,12 +97,15 @@ struct SidebarModel: Equatable {
                                          icon: ChannelRowStyle.customSymbol(for: thread, gateway: gateway),
                                          color: ChannelRowStyle.colorName(for: thread, gateway: gateway), isThread: true, subagentCount: 0,
                                          runningSubagents: 0, hiddenUnreadThreads: 0, threadsExpanded: false,
-                                         showSubagentRuns: showSubagentRuns))
+                                         showSubagentRuns: showSubagentRuns,
+                                         preview: showPreviews ? thread.preview : nil))
                 }
             }
             let newChatAgent = section.agentId ?? (gateway.organization == .recent ? gateway.defaultAgentId : nil)
+            var icon: String?
+            if case let .group(name) = section.kind { icon = SymbolCatalog.symbol(for: gateway.groupIcon(for: name)) }
             let header = Header(id: self.headerId(section.id), section: section,
-                                isCollapsed: collapsed.contains(section.id), newChatAgent: newChatAgent)
+                                isCollapsed: collapsed.contains(section.id), newChatAgent: newChatAgent, icon: icon)
             model.groups.append(Group(header: header, entries: entries))
         }
         return model
@@ -103,10 +117,14 @@ struct SidebarModel: Equatable {
 struct SidebarActions {
     var select: (String) -> Void
     var newChat: (String) -> Void
+    /// Opens New Chat with a group already picked.
+    var newChatInGroup: (String) -> Void
     var rename: (SessionRow) -> Void
     var changeIcon: (SessionRow) -> Void
+    var changeGroupIcon: (String) -> Void
     var pickColor: (SessionRow) -> Void
     var prompt: (TextPrompt) -> Void
+    var confirm: (ConfirmPrompt) -> Void
     var toggleThreads: (String) -> Void
     var setCollapsed: (String, Bool) -> Void
     var refresh: () async -> Void
@@ -206,15 +224,16 @@ enum SidebarMenus {
             Task { await gateway.patch(row.key, fields) }
         }
         var groups: [SidebarMenuItem] = gateway.groupNames.map { name in
-            .action(name) { patch(["category": .string(name)]) }
+            .action(name, checked: row.category == name) {
+                guard row.category != name else { return }
+                Task { await gateway.moveChat(row.key, toGroup: name, before: nil) }
+            }
         }
         if !groups.isEmpty { groups.append(.divider) }
         groups.append(.action("New Group…") {
-            actions.prompt(TextPrompt(title: "New Group", field: "Name", initial: "") { name in
-                let value = name.trimmingCharacters(in: .whitespaces)
-                guard !value.isEmpty else { return }
-                patch(["category": .string(value)])
-            })
+            self.newGroup(gateway: gateway, actions: actions) { name in
+                await gateway.moveChat(row.key, toGroup: name, before: nil)
+            }
         })
         if row.category != nil {
             groups.append(.action("Remove from Group") { patch(["category": .null]) })
@@ -281,23 +300,94 @@ enum SidebarMenus {
                 })
             }]
         case let .group(name):
-            return [.action("Rename Group…", image: "pencil") {
-                actions.prompt(TextPrompt(title: "Rename Group", field: "Name", initial: name) { newName in
-                    let value = newName.trimmingCharacters(in: .whitespaces)
-                    Task {
-                        for channel in section.channels {
-                            await gateway.patch(channel.row.key, ["category": value.isEmpty ? .null : .string(value)])
-                        }
-                    }
+            let names = gateway.groupNames
+            let index = names.firstIndex(of: name) ?? 0
+            var items: [SidebarMenuItem] = [
+                .action("New Chat in Group…", image: "square.and.pencil") { actions.newChatInGroup(name) },
+                .action("Rename Group…", image: "pencil") {
+                    actions.prompt(TextPrompt(title: "Rename Group", field: "Name", initial: name) { newName in
+                        Task { await gateway.renameGroup(name, to: newName) }
+                    })
+                },
+                .action("Change Icon…", image: "face.smiling") { actions.changeGroupIcon(name) },
+            ]
+            if gateway.groupIcon(for: name) != nil {
+                items.append(.action("Reset Icon", image: "arrow.uturn.backward") { gateway.setGroupIcon(nil, for: name) })
+            }
+            if index > 0 {
+                items.append(.action("Move Up", image: "arrow.up") {
+                    Task { await gateway.moveGroup(name, before: names[index - 1]) }
                 })
-            }]
+            }
+            if index < names.count - 1 {
+                items.append(.action("Move Down", image: "arrow.down") {
+                    Task { await gateway.moveGroup(name, before: index + 2 < names.count ? names[index + 2] : nil) }
+                })
+            }
+            items += [
+                .divider,
+                .action("New Group…", image: "folder.badge.plus") { self.newGroup(gateway: gateway, actions: actions) },
+                .divider,
+                .action("Delete Group…", image: "trash", destructive: true) {
+                    let count = gateway.groupOrder(name).count
+                    guard count > 0 else {
+                        Task { await gateway.deleteGroup(name) }
+                        return
+                    }
+                    actions.confirm(ConfirmPrompt(
+                        title: "Delete “\(name)”?",
+                        message: count == 1 ? "Its chat won’t be deleted; it just won’t be in a group."
+                            : "Its \(count) chats won’t be deleted; they just won’t be in a group.",
+                        action: "Delete Group") {
+                        Task { await gateway.deleteGroup(name) }
+                    })
+                },
+            ]
+            return items
+        case .other where section.id == "group:":
+            return [.action("New Group…", image: "folder.badge.plus") { self.newGroup(gateway: gateway, actions: actions) }]
         default:
             return []
         }
     }
+
+    /// Asks for a name and creates an empty group, then runs `then` with it.
+    static func newGroup(gateway: GatewayStore, actions: SidebarActions, then: (@MainActor (String) async -> Void)? = nil) {
+        actions.prompt(TextPrompt(title: "New Group", field: "Name", initial: "") { name in
+            let value = name.trimmingCharacters(in: .whitespaces)
+            guard !value.isEmpty else { return }
+            Task {
+                if !gateway.groupNames.contains(value) { await gateway.createGroup(value) }
+                await then?(value)
+            }
+        })
+    }
 }
 
-/// Pasteboard type for a chat dragged within the sidebar.
+/// Pasteboard types for things dragged within the sidebar.
 enum SidebarDrag {
     static let typeIdentifier = "chat.pincer.session-key"
+    static let groupTypeIdentifier = "chat.pincer.group-name"
+}
+
+/// What a sidebar drag carries (the local object of a UIKit drag).
+enum SidebarDragPayload {
+    case chat(String)
+    case group(String)
+}
+
+extension SidebarModel {
+    var groupNamesInOrder: [String] {
+        self.groups.compactMap { group in
+            if case let .group(name) = group.header.section.kind { return name }
+            return nil
+        }
+    }
+
+    /// The first chat at or after `index` in a section's entries that isn't `excluding`, which a
+    /// chat dropped at `index` goes in front of. `nil` means the end of the group.
+    static func chat(atOrAfter index: Int, in entries: [Entry], excluding key: String) -> String? {
+        guard index < entries.count else { return nil }
+        return entries[max(0, index)...].first { !$0.isThread && $0.row.key != key }?.row.key
+    }
 }

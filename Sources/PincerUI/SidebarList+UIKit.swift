@@ -34,8 +34,6 @@ struct SidebarList: UIViewRepresentable {
         private var hasLoaded = false
         private var headers: [String: SidebarModel.Header] = [:]
         private var entries: [String: SidebarModel.Entry] = [:]
-        /// Section header id for each item.
-        private var sectionOf: [String: String] = [:]
         private var selectedKey: String?
         private var isProgrammatic = false
         private var timer: Timer?
@@ -141,13 +139,10 @@ struct SidebarList: UIViewRepresentable {
         private func rebuildIndex() {
             self.headers = [:]
             self.entries = [:]
-            self.sectionOf = [:]
             for group in self.model.groups {
                 self.headers[group.header.id] = group.header
-                self.sectionOf[group.header.id] = group.header.id
                 for entry in group.entries {
                     self.entries[entry.id] = entry
-                    self.sectionOf[entry.id] = group.header.id
                 }
             }
         }
@@ -325,48 +320,97 @@ struct SidebarList: UIViewRepresentable {
             }
         }
 
-        // MARK: Drag and drop between groups
+        // MARK: Drag and drop
 
         func collectionView(_ collectionView: UICollectionView, itemsForBeginning session: UIDragSession,
                             at indexPath: IndexPath) -> [UIDragItem]
         {
-            guard let entry = self.entry(at: indexPath), !entry.isThread, !entry.row.isSubagent else { return [] }
+            guard let id = self.dataSource?.itemIdentifier(for: indexPath) else { return [] }
+            let payload: SidebarDragPayload
+            let type: String
+            let value: String
+            if let header = self.headers[id] {
+                guard case let .group(name) = header.section.kind else { return [] }
+                (payload, type, value) = (.group(name), SidebarDrag.groupTypeIdentifier, name)
+            } else if let entry = self.entries[id], !entry.isThread, !entry.row.isSubagent {
+                (payload, type, value) = (.chat(entry.row.key), SidebarDrag.typeIdentifier, entry.row.key)
+            } else {
+                return []
+            }
             let provider = NSItemProvider()
-            let key = entry.row.key
-            provider.registerDataRepresentation(forTypeIdentifier: SidebarDrag.typeIdentifier, visibility: .ownProcess) { completion in
-                completion(Data(key.utf8), nil)
+            provider.registerDataRepresentation(forTypeIdentifier: type, visibility: .ownProcess) { completion in
+                completion(Data(value.utf8), nil)
                 return nil
             }
             let item = UIDragItem(itemProvider: provider)
-            item.localObject = key
+            item.localObject = payload
             return [item]
         }
 
         func collectionView(_ collectionView: UICollectionView, canHandle session: UIDropSession) -> Bool {
-            session.localDragSession?.items.first?.localObject is String
+            session.localDragSession?.items.first?.localObject is SidebarDragPayload
+        }
+
+        /// Where a drop lands.
+        private enum Drop {
+            case group(String, before: String?)
+            case chatInGroup(String, group: String, before: String?)
+            case chatOnSection(String, SidebarSection)
+
+            var isInsertion: Bool {
+                if case .chatOnSection = self { return false }
+                return true
+            }
         }
 
         func collectionView(_ collectionView: UICollectionView, dropSessionDidUpdate session: UIDropSession,
                             withDestinationIndexPath destinationIndexPath: IndexPath?) -> UICollectionViewDropProposal
         {
-            guard self.dropTarget(session, destinationIndexPath) != nil else {
+            guard let drop = self.drop(session, destinationIndexPath) else {
                 return UICollectionViewDropProposal(operation: .forbidden)
             }
-            return UICollectionViewDropProposal(operation: .move, intent: .insertIntoDestinationIndexPath)
+            return UICollectionViewDropProposal(operation: .move,
+                                                intent: drop.isInsertion ? .insertAtDestinationIndexPath : .insertIntoDestinationIndexPath)
         }
 
         func collectionView(_ collectionView: UICollectionView, performDropWith coordinator: UICollectionViewDropCoordinator) {
-            guard let (key, section) = self.dropTarget(coordinator.session, coordinator.destinationIndexPath) else { return }
-            Task { await self.gateway.moveToGroup(key, droppedOn: section) }
+            switch self.drop(coordinator.session, coordinator.destinationIndexPath) {
+            case let .group(name, before):
+                Task { await self.gateway.moveGroup(name, before: before) }
+            case let .chatInGroup(key, group, before):
+                Task { await self.gateway.moveChat(key, toGroup: group, before: before) }
+            case let .chatOnSection(key, section):
+                Task { await self.gateway.moveToGroup(key, droppedOn: section) }
+            case nil:
+                break
+            }
         }
 
-        private func dropTarget(_ session: UIDropSession, _ path: IndexPath?) -> (String, SidebarSection)? {
-            guard let key = session.localDragSession?.items.first?.localObject as? String, let path,
-                  let id = self.dataSource?.itemIdentifier(for: path) ?? self.dataSource?.snapshot().sectionIdentifiers[safe: path.section],
-                  let sectionId = self.sectionOf[id], let header = self.headers[sectionId],
-                  self.gateway.groupDropValue(for: key, onto: header.section) != nil
+        private func drop(_ session: UIDropSession, _ path: IndexPath?) -> Drop? {
+            guard let payload = session.localDragSession?.items.first?.localObject as? SidebarDragPayload, let path,
+                  let group = self.model.groups[safe: path.section]
             else { return nil }
-            return (key, header.section)
+            switch payload {
+            case let .group(name):
+                let names = self.model.groupNamesInOrder
+                guard let source = names.firstIndex(of: name) else { return nil }
+                // Sections before the first group land in front of it; sections after the last one, at the end.
+                let groupsBefore = self.model.groups[..<path.section].filter {
+                    if case .group = $0.header.section.kind { return true }
+                    return false
+                }.count
+                var target = groupsBefore
+                if case .group = group.header.section.kind, groupsBefore > source { target += 1 }
+                return .group(name, before: names[safe: target])
+            case let .chat(key):
+                guard let row = self.gateway.sessions[key], !row.isSubagent else { return nil }
+                if case let .group(name) = group.header.section.kind, !group.header.isCollapsed, path.item > 0 {
+                    return .chatInGroup(key, group: name,
+                                        before: SidebarModel.chat(atOrAfter: path.item - 1, in: group.entries, excluding: key))
+                }
+                guard self.gateway.groupDropValue(for: key, onto: group.header.section) != nil else { return nil }
+                return .chatOnSection(key, group.header.section)
+            }
         }
     }
 }
@@ -437,7 +481,7 @@ private final class SidebarChatListCell: UICollectionViewListCell {
         content.textProperties.numberOfLines = 1
         content.textProperties.lineBreakMode = .byTruncatingTail
         content.textProperties.adjustsFontForContentSizeCategory = true
-        content.secondaryText = row.preview
+        content.secondaryText = entry.preview
         content.secondaryTextProperties.numberOfLines = 1
         content.secondaryTextProperties.lineBreakMode = .byTruncatingTail
         content.secondaryTextProperties.color = .secondaryLabel
@@ -487,7 +531,7 @@ private final class SidebarChatListCell: UICollectionViewListCell {
         if row.isPinned { label += ", pinned" }
         if unread { label += ", unread" }
         if working { label += ", working" }
-        if let preview = row.preview { label += ", \(preview)" }
+        if let preview = entry.preview { label += ", \(preview)" }
         self.accessibilityLabel = label
         self.accessibilityHint = ChannelRowStyle.help(for: row)
         self.accessibilityTraits.insert(.button)
@@ -529,7 +573,7 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
         let title = section.emoji.map { "\($0)  \(section.title)" } ?? section.title
         content.text = title
         content.textProperties.numberOfLines = 1
-        if section.emoji == nil, let symbol = ChannelRowStyle.headerSymbol(for: section.kind) {
+        if let symbol = header.symbol {
             content.image = UIImage(systemName: symbol)
             content.imageProperties.tintColor = .secondaryLabel
         }

@@ -10,6 +10,9 @@ const METHODS = [
   'sessions.subscribe',
   'sessions.list',
   'sessions.groups.list',
+  'sessions.groups.put',
+  'sessions.groups.rename',
+  'sessions.groups.delete',
   'sessions.messages.subscribe',
   'sessions.messages.unsubscribe',
   'chat.history',
@@ -382,6 +385,8 @@ function createSeedState() {
     pendingPairing: new Map(),
     pendingApprovals: new Map(),
     progressCards: new Map(),
+    // Gateway-owned custom group catalog: names in display order, kept even when empty.
+    groups: ['Home', 'Personal', 'Work'],
     idempotency: new Map(),
     activeRuns: new Map(),
     connections: new Set(),
@@ -429,6 +434,27 @@ function updateSessionRow(row, patch = {}) {
 
 function broadcastSessionChanged(state, sessionKey, reason, session) {
   broadcast(state, 'sessions.changed', { sessionKey, reason, session: clone(session) }, (conn) => conn.sessionSubscribed);
+}
+
+function groupCatalog(state) {
+  return { groups: state.groups.map((name, position) => ({ name, position })), sectionOrder: [] };
+}
+
+// Like the real gateway, a category assigned through sessions.patch/create joins the catalog.
+function registerGroup(state, name) {
+  const trimmed = typeof name === 'string' ? name.trim() : '';
+  if (trimmed && !state.groups.includes(trimmed)) state.groups.push(trimmed);
+}
+
+function moveGroupMembers(state, from, to) {
+  let updated = 0;
+  for (const row of state.sessions.values()) {
+    if (row.category !== from) continue;
+    row.category = to ?? undefined;
+    updated += 1;
+    broadcastSessionChanged(state, row.key, 'patch', row);
+  }
+  return updated;
 }
 
 function broadcastSessionMessage(state, sessionKey, message, messageSeq) {
@@ -775,7 +801,42 @@ function handleAuthedRequest(state, conn, msg) {
       break;
     }
     case 'sessions.groups.list': {
-      sendRes(conn, id, { groups: [{ name: 'Home' }, { name: 'Personal' }, { name: 'Work' }], sectionOrder: [] });
+      sendRes(conn, id, groupCatalog(state));
+      break;
+    }
+    case 'sessions.groups.put': {
+      if (!Array.isArray(params.names)) return sendErr(conn, id, 'INVALID_REQUEST', 'names required');
+      const names = [...new Set(params.names.map((n) => String(n).trim()).filter(Boolean))];
+      const dropped = state.groups.filter((name) => !names.includes(name)
+        && [...state.sessions.values()].some((row) => row.category === name));
+      if (dropped.length) {
+        return sendErr(conn, id, 'INVALID_REQUEST', `sessions.groups.put cannot drop groups that still have member sessions: ${dropped.join(', ')}`);
+      }
+      state.groups = names;
+      sendRes(conn, id, { ok: true, ...groupCatalog(state) });
+      broadcast(state, 'sessions.changed', { reason: 'groups' }, (c) => c.sessionSubscribed);
+      break;
+    }
+    case 'sessions.groups.rename': {
+      const from = String(params.name ?? '').trim();
+      const to = String(params.to ?? '').trim();
+      if (!from || !to) return sendErr(conn, id, 'INVALID_REQUEST', 'group rename requires non-empty names');
+      if (!state.groups.includes(from)) return sendErr(conn, id, 'INVALID_REQUEST', `unknown session group: ${from}`);
+      const updatedSessions = from === to ? 0 : moveGroupMembers(state, from, to);
+      state.groups = state.groups.includes(to) && from !== to
+        ? state.groups.filter((name) => name !== from)
+        : state.groups.map((name) => (name === from ? to : name));
+      sendRes(conn, id, { ok: true, ...groupCatalog(state), updatedSessions });
+      broadcast(state, 'sessions.changed', { reason: 'groups' }, (c) => c.sessionSubscribed);
+      break;
+    }
+    case 'sessions.groups.delete': {
+      const name = String(params.name ?? '').trim();
+      if (!name) return sendErr(conn, id, 'INVALID_REQUEST', 'group delete requires a non-empty name');
+      const updatedSessions = moveGroupMembers(state, name, null);
+      state.groups = state.groups.filter((group) => group !== name);
+      sendRes(conn, id, { ok: true, ...groupCatalog(state), updatedSessions });
+      broadcast(state, 'sessions.changed', { reason: 'groups' }, (c) => c.sessionSubscribed);
       break;
     }
     case 'sessions.messages.subscribe': {
@@ -872,6 +933,7 @@ function handleAuthedRequest(state, conn, msg) {
         }
       }
       if (Object.hasOwn(params, 'label')) row.derivedTitle = params.label ?? (row.isMain ? 'Main' : row.derivedTitle);
+      if (Object.hasOwn(params, 'category')) registerGroup(state, params.category);
       updateSessionRow(row, { lastActivityAt: nowMs() });
       sendRes(conn, id, { ok: true, key: params.key, entry: clone(row) });
       broadcastSessionChanged(state, params.key, 'patch', row);
@@ -919,6 +981,7 @@ function handleAuthedRequest(state, conn, msg) {
         activeRunIds: [],
       };
       state.sessions.set(key, row);
+      registerGroup(state, params.category);
       state.transcripts.set(key, params.message ? [makeMessage('user', [textBlock(String(params.message))])] : []);
       sendRes(conn, id, { key, sessionId: row.sessionId, session: clone(row) });
       broadcastSessionChanged(state, key, 'create', row);

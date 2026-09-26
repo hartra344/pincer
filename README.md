@@ -24,7 +24,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
 
 - **Layout:**
   - by default, a **"Like Discord"** layout: each Discord server gets a section with its `#channels`, automations get their own section, and everything else is grouped under its agent. You can also group by agent, by group, or by recency;
-  - server names come from the gateway's Discord config (`channels.discord.guilds.<id>.slug`) when it's set; otherwise the section is just called "Discord". Discord categories aren't sent at all. To name a server yourself, right-click its header and choose **Rename Server…**. Names you set sync to your other devices through the gateway's user preferences (`users.prefs`, key `pincer.serverNames`); if the gateway has no durable identity for your connection, they stay on this device. To recreate categories, right-click a channel and choose **Move to Group → New Group…**. Groups sync through the gateway;
+  - server names come from the gateway's Discord config (`channels.discord.guilds.<id>.slug`) when it's set; otherwise the section is just called "Discord". Discord categories aren't sent at all. To name a server yourself, right-click its header and choose **Rename Server…**. Names you set sync to your other devices through the gateway's user preferences (`users.prefs`, key `pincer.serverNames`); if the gateway has no durable identity for your connection, they stay on this device. To recreate categories, choose **New Group…** from the Organize menu (or a group header's menu), or right-click a channel and choose **Move to Group → New Group…**. Groups sync through the gateway;
   - subagent (helper) runs stay out of the sidebar, like Discord: open one from the **Open run** button on the tool call that started it, and a spinner on the parent shows helpers are working. Settings → Sidebar can list them under their parent (behind a ✨ count chip) instead. They never add to unread counts or notifications;
   - custom chat icons: right-click a chat and choose **Change Icon…** to pick an SF Symbol (tinted with the chat's color), or **Reset Icon** to go back to the default. Icons sync to your other devices through `users.prefs` (key `pincer.chatIcons`), since the gateway's session `icon` only takes emoji, named glyphs or SVG. Named glyphs set by other OpenClaw clients are shown too;
   - pinned chats. New chats you start are listed on their own, like in the Control UI; only forks and branches nest under their parent;
@@ -50,7 +50,8 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - changes are saved with `config.patch`, so the gateway validates, persists and hot-applies them; invalid values come back with the field and reason, and changes that need a gateway restart say so;
   - secrets are shown only as "saved" and are never sent back to the gateway unless you change them;
   - editing needs **Manage Gateway settings** turned on for the gateway; without it, settings are read-only.
-- **Per-session actions:** pin, rename, group, color, reasoning level and archive. **Color → Custom…** picks any color; since `sessions.patch` only takes OpenClaw's named colors, custom colors sync through `users.prefs` (key `pincer.chatColors`) and win over the named one. Drag a chat onto a group (or **Ungrouped**) to move it; in **Like Discord**, dropping a grouped chat on its own server or agent takes it out of the group.
+- **Per-session actions:** pin, rename, group, color, reasoning level and archive. **Color → Custom…** picks any color; since `sessions.patch` only takes OpenClaw's named colors, custom colors sync through `users.prefs` (key `pincer.chatColors`) and win over the named one. Drag a chat onto a group (or **Ungrouped**) to move it, or between chats to put it at that spot; in **Like Discord**, dropping a grouped chat on its own server or agent takes it out of the group.
+- **Groups:** create empty groups and keep them until you delete them (**Delete Group…** on the header leaves its chats ungrouped). Drag a group header, or use **Move Up**/**Move Down**, to reorder groups. **Change Icon…** on a group's header picks its SF Symbol; group icons sync through `users.prefs` (key `pincer.groupIcons`). Groups, their order and renames live in the gateway's group catalog (`sessions.groups.*`); on gateways without it, they sync through `users.prefs` (key `pincer.groups`). The order of chats within a group syncs through `users.prefs` (key `pincer.chatOrder`) and wins over pinning and activity.
 
 ## Connecting to your home gateway over Tailscale
 
@@ -159,7 +160,6 @@ To see what the gateway says about each request, run the app with `open --env PI
 
 - iOS runs in the simulator (connect, sidebar, history), but hasn't been tried on a real device yet.
 - Gateway Settings has been tested against the mock only. It doesn't browse the ClawHub catalog, show install progress, or edit lists of objects in forms (use the raw editor).
-- Session groups are derived from each session's category; `sessions.groups.list` isn't used yet.
 
 ## License
 

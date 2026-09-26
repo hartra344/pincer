@@ -59,6 +59,15 @@ public struct SessionRow: Identifiable, Hashable, Sendable {
         let line = Self.plainLine(text)
         return line.isEmpty ? nil : line
     }
+    /// Incremental Gateway rows often leave out the last-message preview; keep the one we had
+    /// so the sidebar doesn't flicker between showing and hiding it.
+    public func keepingPreview(of previous: SessionRow?) -> SessionRow {
+        guard case var .object(fields) = self.raw, fields["lastMessagePreview"]?.text == nil,
+              let preview = previous?.raw["lastMessagePreview"], preview.text != nil,
+              let merged = SessionRow(.object({ fields["lastMessagePreview"] = preview; return fields }()))
+        else { return self }
+        return merged
+    }
     public var parentKey: String? { self.raw["parentSessionKey"]?.text ?? self.raw["spawnedBy"]?.text }
     public var model: String? { self.raw["model"]?.text }
     public var modelProvider: String? { self.raw["modelProvider"]?.text }

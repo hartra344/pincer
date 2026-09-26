@@ -50,6 +50,7 @@ struct SidebarList: NSViewRepresentable {
         private weak var outline: NSOutlineView?
 
         private static let dragType = NSPasteboard.PasteboardType(SidebarDrag.typeIdentifier)
+        private static let groupDragType = NSPasteboard.PasteboardType(SidebarDrag.groupTypeIdentifier)
 
         init(gateway: GatewayStore, actions: SidebarActions) {
             self.gateway = gateway
@@ -74,7 +75,7 @@ struct SidebarList: NSViewRepresentable {
             outline.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
             outline.dataSource = self
             outline.delegate = self
-            outline.registerForDraggedTypes([Self.dragType])
+            outline.registerForDraggedTypes([Self.dragType, Self.groupDragType])
             outline.setDraggingSourceOperationMask(.move, forLocal: true)
             outline.draggingDestinationFeedbackStyle = .sourceList
             let menu = NSMenu()
@@ -165,7 +166,7 @@ struct SidebarList: NSViewRepresentable {
                 } else if let entry = self.entries[id], let previous = oldEntries[id], entry != previous {
                     (outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarChatCell)?
                         .configure(entry, actions: self.actions)
-                    if (entry.row.preview == nil) != (previous.row.preview == nil) { resized.insert(row) }
+                    if (entry.preview == nil) != (previous.preview == nil) { resized.insert(row) }
                 }
             }
             if !resized.isEmpty { outline.noteHeightOfRows(withIndexesChanged: resized) }
@@ -248,7 +249,7 @@ struct SidebarList: NSViewRepresentable {
             guard let node = item as? Node else { return 24 }
             if self.headers[node.id] != nil { return 30 }
             // macOS 26 sidebars use roomier rows with rounded, inset selection.
-            return self.entries[node.id]?.row.preview == nil ? 30 : 42
+            return self.entries[node.id]?.preview == nil ? 30 : 42
         }
 
         func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
@@ -308,33 +309,121 @@ struct SidebarList: NSViewRepresentable {
             self.syncSelection()
         }
 
-        // MARK: Drag and drop between groups
+        // MARK: Drag and drop
 
         func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
-            guard let node = item as? Node, let entry = self.entries[node.id], !entry.isThread, !entry.row.isSubagent else { return nil }
+            guard let node = item as? Node else { return nil }
+            if let header = self.headers[node.id] {
+                guard case let .group(name) = header.section.kind else { return nil }
+                let pasteboardItem = NSPasteboardItem()
+                pasteboardItem.setString(name, forType: Self.groupDragType)
+                return pasteboardItem
+            }
+            guard let entry = self.entries[node.id], !entry.isThread, !entry.row.isSubagent else { return nil }
             let pasteboardItem = NSPasteboardItem()
             pasteboardItem.setString(entry.row.key, forType: Self.dragType)
             return pasteboardItem
         }
 
+        /// Where a drop lands once retargeted.
+        private enum Drop {
+            /// A group moved in front of another group, or to the end.
+            case group(String, before: String?, rootIndex: Int)
+            /// A chat placed at a position in a group.
+            case chatInGroup(String, header: Node, group: String, childIndex: Int)
+            /// A chat dropped on a section as a whole.
+            case chatOnSection(String, header: Node, SidebarSection)
+        }
+
+        private func drop(_ info: NSDraggingInfo, item: Any?, index: Int) -> Drop? {
+            let pasteboard = info.draggingPasteboard
+            if let name = pasteboard.string(forType: Self.groupDragType) {
+                return self.groupDrop(name, item: item, index: index)
+            }
+            guard let key = pasteboard.string(forType: Self.dragType), let row = self.gateway.sessions[key], !row.isSubagent
+            else { return nil }
+            // Between sections: the end of the section above.
+            if item == nil {
+                guard index > 0, let above = self.roots[safe: index - 1], let header = self.headers[above.id],
+                      case let .group(group) = header.section.kind, !header.isCollapsed
+                else { return nil }
+                return .chatInGroup(key, header: above, group: group, childIndex: self.children[above.id]?.count ?? 0)
+            }
+            guard let target = self.headerNode(for: item), let header = self.headers[target.id] else { return nil }
+            if case let .group(group) = header.section.kind, !header.isCollapsed {
+                if let node = item as? Node, node !== target {
+                    // Dropped on a chat: go in front of it, or after it when moving down its own group.
+                    guard var childIndex = self.children[target.id]?.firstIndex(where: { $0 === node }) else { return nil }
+                    let current = self.children[target.id]?.firstIndex { self.entries[$0.id]?.row.key == key }
+                    if let current, current < childIndex { childIndex += 1 }
+                    return .chatInGroup(key, header: target, group: group, childIndex: childIndex)
+                }
+                if index >= 0 {
+                    return .chatInGroup(key, header: target, group: group, childIndex: index)
+                }
+            }
+            guard self.gateway.groupDropValue(for: key, onto: header.section) != nil else { return nil }
+            return .chatOnSection(key, header: target, header.section)
+        }
+
+        private func groupDrop(_ name: String, item: Any?, index: Int) -> Drop? {
+            let groupIndices = self.roots.indices.filter { index in
+                if case .group = self.headers[self.roots[index].id]?.section.kind { return true }
+                return false
+            }
+            guard let first = groupIndices.first, let last = groupIndices.last,
+                  let source = self.roots.firstIndex(where: {
+                      if case let .group(group) = self.headers[$0.id]?.section.kind { return group == name }
+                      return false
+                  })
+            else { return nil }
+            var rootIndex: Int
+            if item == nil {
+                guard index >= 0 else { return nil }
+                rootIndex = index
+            } else {
+                guard let target = self.headerNode(for: item), let targetIndex = self.roots.firstIndex(where: { $0 === target })
+                else { return nil }
+                rootIndex = targetIndex > source ? targetIndex + 1 : targetIndex
+            }
+            rootIndex = min(max(rootIndex, first), last + 1)
+            var before: String?
+            if let node = self.roots[safe: rootIndex], case let .group(group) = self.headers[node.id]?.section.kind {
+                before = group
+            }
+            return .group(name, before: before, rootIndex: rootIndex)
+        }
+
         func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo,
                          proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation
         {
-            guard let key = info.draggingPasteboard.string(forType: Self.dragType),
-                  let target = self.headerNode(for: item), let header = self.headers[target.id],
-                  self.gateway.groupDropValue(for: key, onto: header.section) != nil
-            else { return [] }
-            // Highlight the whole section rather than a gap between rows.
-            outlineView.setDropItem(target, dropChildIndex: NSOutlineViewDropOnItemIndex)
+            switch self.drop(info, item: item, index: index) {
+            case let .group(_, _, rootIndex):
+                outlineView.setDropItem(nil, dropChildIndex: rootIndex)
+            case let .chatInGroup(_, header, _, childIndex):
+                outlineView.setDropItem(header, dropChildIndex: childIndex)
+            case let .chatOnSection(_, header, _):
+                // Highlight the whole section rather than a gap between rows.
+                outlineView.setDropItem(header, dropChildIndex: NSOutlineViewDropOnItemIndex)
+            case nil:
+                return []
+            }
             return .move
         }
 
         func outlineView(_ outlineView: NSOutlineView, acceptDrop info: NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
-            guard let key = info.draggingPasteboard.string(forType: Self.dragType),
-                  let target = self.headerNode(for: item), let header = self.headers[target.id],
-                  self.gateway.groupDropValue(for: key, onto: header.section) != nil
-            else { return false }
-            Task { await self.gateway.moveToGroup(key, droppedOn: header.section) }
+            switch self.drop(info, item: item, index: index) {
+            case let .group(name, before, _):
+                Task { await self.gateway.moveGroup(name, before: before) }
+            case let .chatInGroup(key, header, group, childIndex):
+                let entries = (self.children[header.id] ?? []).compactMap { self.entries[$0.id] }
+                let before = SidebarModel.chat(atOrAfter: childIndex, in: entries, excluding: key)
+                Task { await self.gateway.moveChat(key, toGroup: group, before: before) }
+            case let .chatOnSection(key, _, section):
+                Task { await self.gateway.moveToGroup(key, droppedOn: section) }
+            case nil:
+                return false
+            }
             return true
         }
 
@@ -355,6 +444,12 @@ struct SidebarList: NSViewRepresentable {
                 SidebarMenuBuilder.populate(menu, SidebarMenus.header(header.section, gateway: self.gateway, actions: self.actions))
             }
         }
+    }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 
@@ -462,8 +557,8 @@ private final class SidebarChatCell: NSTableCellView {
         self.title.font = .systemFont(ofSize: NSFont.systemFontSize, weight: row.isUnread && !row.isSubagent ? .semibold : .regular)
         self.title.textColor = row.isSubagent || row.isArchived ? .secondaryLabelColor : .labelColor
         self.pin.isHidden = !(row.isPinned && !entry.isThread)
-        self.preview.stringValue = row.preview ?? ""
-        self.preview.isHidden = row.preview == nil
+        self.preview.stringValue = entry.preview ?? ""
+        self.preview.isHidden = entry.preview == nil
         self.toolTip = ChannelRowStyle.help(for: row)
 
         let showChip = entry.showSubagentRuns && entry.subagentCount > 0
@@ -563,7 +658,7 @@ private final class SidebarHeaderCell: NSTableCellView {
         let section = header.section
         self.emoji.stringValue = section.emoji ?? ""
         self.emoji.isHidden = section.emoji == nil
-        let symbol = section.emoji == nil ? ChannelRowStyle.headerSymbol(for: section.kind) : nil
+        let symbol = header.symbol
         self.icon.image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
         self.icon.isHidden = symbol == nil
         self.title.stringValue = section.title

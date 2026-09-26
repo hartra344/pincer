@@ -27,7 +27,8 @@ actor DemoGateway {
          "unavailableReason": "missing-auth"],
     ]
     private static let methods = [
-        "agents.list", "sessions.subscribe", "sessions.list", "sessions.groups.list", "sessions.messages.subscribe",
+        "agents.list", "sessions.subscribe", "sessions.list", "sessions.groups.list", "sessions.groups.put",
+        "sessions.groups.rename", "sessions.groups.delete", "sessions.messages.subscribe",
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put",
@@ -44,6 +45,8 @@ actor DemoGateway {
     private var approvals: [String: JSONValue] = [:]
     private var approvalOrder: [String] = []
     private var prefs: [String: JSONValue] = [:]
+    /// Custom group catalog in display order; groups stay until deleted, even when empty.
+    private var groups = ["Home", "Personal", "Work"]
     private var progressCards: [String: JSONValue] = [:]
     private var idempotency: [String: String] = [:]
     private var runs: [String: Run] = [:]
@@ -129,7 +132,13 @@ actor DemoGateway {
         case "sessions.list":
             return self.sessionList(params)
         case "sessions.groups.list":
-            return ["groups": [["name": "Home"], ["name": "Personal"], ["name": "Work"]], "sectionOrder": []]
+            return self.groupCatalog()
+        case "sessions.groups.put":
+            return try self.putGroups(params)
+        case "sessions.groups.rename":
+            return try self.renameGroup(params)
+        case "sessions.groups.delete":
+            return try self.deleteGroup(params)
         case "sessions.messages.subscribe":
             let key = try self.knownSession(params["key"])
             self.messageSubscriptions.insert(key)
@@ -243,6 +252,7 @@ actor DemoGateway {
         for field in ["unread", "pinned", "label", "category", "color", "archived"] {
             if let value = params[field] { row[field] = value }
         }
+        self.registerGroup(params["category"]?.string)
         if let model = params["model"] {
             if model.isNull {
                 row["model"] = .string(Self.defaultModel.model)
@@ -278,12 +288,88 @@ actor DemoGateway {
                            preview: message.map { String($0.prefix(120)) } ?? "New chat created.")
         row["label"] = params["label"] ?? .null
         row["category"] = params["category"] ?? .null
+        self.registerGroup(params["category"]?.string)
         row["parentSessionKey"] = params["parentSessionKey"] ?? .null
         row["spawnedBy"] = params["parentSessionKey"] ?? .null
         self.sessions[key] = row
         self.transcripts[key] = message.map { [Self.message("user", [Self.text($0)])] } ?? []
         self.sessionChanged(key, reason: "create")
         return ["key": .string(key), "sessionId": row["sessionId"] ?? .null, "session": .object(row)]
+    }
+
+    // MARK: Groups
+
+    private func groupCatalog(_ extra: Row = [:]) -> JSONValue {
+        var result: Row = [
+            "groups": .array(self.groups.enumerated().map { ["name": .string($1), "position": JSONValue($0)] }),
+            "sectionOrder": [],
+        ]
+        result.merge(extra) { $1 }
+        return .object(result)
+    }
+
+    private func registerGroup(_ name: String?) {
+        guard let name = name?.trimmingCharacters(in: .whitespaces), !name.isEmpty, !self.groups.contains(name) else { return }
+        self.groups.append(name)
+    }
+
+    private func groupsChanged() {
+        guard self.sessionsSubscribed else { return }
+        self.emit("sessions.changed", ["reason": "groups"])
+    }
+
+    private func moveMembers(of name: String, to category: JSONValue) -> Int {
+        let keys = self.sessions.filter { $0.value["category"]?.string == name }.map(\.key)
+        for key in keys {
+            self.sessions[key]?["category"] = category
+            self.sessionChanged(key, reason: "patch")
+        }
+        return keys.count
+    }
+
+    private func putGroups(_ params: JSONValue) throws -> JSONValue {
+        guard let raw = params["names"]?.array else {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "names required", details: nil)
+        }
+        var names: [String] = []
+        for name in raw.compactMap(\.string).map({ $0.trimmingCharacters(in: .whitespaces) }) where !name.isEmpty && !names.contains(name) {
+            names.append(name)
+        }
+        let dropped = self.groups.filter { name in !names.contains(name) && self.sessions.values.contains { $0["category"]?.string == name } }
+        guard dropped.isEmpty else {
+            throw GatewayError.rpc(code: "INVALID_REQUEST",
+                                   message: "sessions.groups.put cannot drop groups that still have member sessions", details: nil)
+        }
+        self.groups = names
+        self.groupsChanged()
+        return self.groupCatalog(["ok": true])
+    }
+
+    private func renameGroup(_ params: JSONValue) throws -> JSONValue {
+        guard let from = params["name"]?.string?.trimmingCharacters(in: .whitespaces), !from.isEmpty,
+              let to = params["to"]?.string?.trimmingCharacters(in: .whitespaces), !to.isEmpty
+        else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "group rename requires non-empty names", details: nil) }
+        guard self.groups.contains(from) else {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "unknown session group: \(from)", details: nil)
+        }
+        let updated = from == to ? 0 : self.moveMembers(of: from, to: .string(to))
+        if from != to, self.groups.contains(to) {
+            self.groups.removeAll { $0 == from }
+        } else {
+            self.groups = self.groups.map { $0 == from ? to : $0 }
+        }
+        self.groupsChanged()
+        return self.groupCatalog(["ok": true, "updatedSessions": JSONValue(updated)])
+    }
+
+    private func deleteGroup(_ params: JSONValue) throws -> JSONValue {
+        guard let name = params["name"]?.string?.trimmingCharacters(in: .whitespaces), !name.isEmpty else {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "group delete requires a non-empty name", details: nil)
+        }
+        let updated = self.moveMembers(of: name, to: .null)
+        self.groups.removeAll { $0 == name }
+        self.groupsChanged()
+        return self.groupCatalog(["ok": true, "updatedSessions": JSONValue(updated)])
     }
 
     private func setPrefs(_ params: JSONValue) -> JSONValue {

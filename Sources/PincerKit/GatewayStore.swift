@@ -127,7 +127,11 @@ public final class GatewayStore: Identifiable {
         self.serverNameOverrides = UserDefaults.standard.dictionary(forKey: "pincer.serverNames.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.chatIcons = UserDefaults.standard.dictionary(forKey: "pincer.chatIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.chatColors = UserDefaults.standard.dictionary(forKey: "pincer.chatColors.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.groupPositions = UserDefaults.standard.dictionary(forKey: "pincer.groups.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.groupIcons = UserDefaults.standard.dictionary(forKey: "pincer.groupIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.chatPositions = UserDefaults.standard.dictionary(forKey: "pincer.chatOrder.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.selectedKey = UserDefaults.standard.string(forKey: "pincer.selected.\(profile.id.uuidString)")
+        self.sectionCollapse = UserDefaults.standard.dictionary(forKey: "pincer.collapsed.\(profile.id.uuidString)") as? [String: Bool] ?? [:]
         let images = ArtifactImageLoader()
         self.images = images
         self.files = FileContentLoader(images: images)
@@ -217,6 +221,9 @@ public final class GatewayStore: Identifiable {
         Task { await self.pullServerNames() }
         Task { await self.pullChatIcons() }
         Task { await self.pullChatColors() }
+        Task { await self.pull(self.syncedMap(Self.chatOrderPref)) }
+        Task { await self.pull(self.syncedMap(Self.groupIconsPref)) }
+        Task { await self.loadGroups() }
         // Only pick a chat on the first connect: on iPhone, going back to the sidebar clears the
         // selection, and re-selecting on every reconnect would push a chat the user left.
         let selectionGone = self.selectedKey.map { self.sessions[$0] == nil } ?? false
@@ -257,7 +264,7 @@ public final class GatewayStore: Identifiable {
     }
 
     private var listParams: [String: JSONValue] {
-        ["limit": 300, "ownerFirst": true, "archived": self.showArchived ? "all" : false]
+        ["limit": 300, "ownerFirst": true, "includeLastMessage": true, "archived": self.showArchived ? "all" : false]
     }
 
     public func refreshSessions() async {
@@ -317,7 +324,7 @@ public final class GatewayStore: Identifiable {
             if let key { self.chats[key]?.handleAgent(payload) }
         case "session.message":
             let key = payload["sessionKey"]?.text ?? payload["session"]?["key"]?.text
-            if let row = payload["session"].flatMap(SessionRow.init) { self.sessions[row.key] = row }
+            if let row = payload["session"].flatMap(SessionRow.init) { self.sessions[row.key] = row.keepingPreview(of: self.sessions[row.key]) }
             if let key { self.chats[key]?.handleSessionMessage(payload) }
         case "progressCard.changed":
             guard let key = payload["sessionKey"]?.text else { return }
@@ -349,11 +356,11 @@ public final class GatewayStore: Identifiable {
             DebugLog.write("← sessions.changed key=\(row?["key"]?.text ?? payload["key"]?.text ?? "?") reason=\(payload["reason"]?.text ?? "-") \(fields.joined(separator: " "))")
         }
         for ancestor in payload["ancestorSessions"]?.array?.compactMap(SessionRow.init) ?? [] {
-            self.sessions[ancestor.key] = ancestor
+            self.sessions[ancestor.key] = ancestor.keepingPreview(of: self.sessions[ancestor.key])
         }
         if let row = payload["session"].flatMap(SessionRow.init) {
             let previous = self.sessions[row.key]
-            self.sessions[row.key] = row
+            self.sessions[row.key] = row.keepingPreview(of: previous)
             if self.bootstrapped, let previous, !row.isSubagent,
                row.activityMs > previous.activityMs, row.isUnread, !row.hasActiveRun,
                previous.hasActiveRun || !previous.isUnread
@@ -363,6 +370,9 @@ public final class GatewayStore: Identifiable {
             return
         }
         let reason = payload["reason"]?.string
+        if reason == "groups" {
+            Task { await self.loadGroups() }
+        }
         if let key = payload["key"]?.text ?? payload["sessionKey"]?.text, reason == "delete" || reason == "deleted" {
             let removedId = payload["sessionId"]?.text
             if removedId == nil || self.sessions[key]?.sessionId == removedId {
@@ -575,6 +585,12 @@ public final class GatewayStore: Identifiable {
     /// Custom "#RRGGBB" colors by session key. Kept in prefs because `sessions.patch` only accepts
     /// OpenClaw's named colors for a session's `color`.
     static let chatColorsPref = "pincer.chatColors"
+    /// Group names to display positions, for gateways without the `sessions.groups.*` catalog.
+    static let groupsPref = "pincer.groups"
+    /// Session keys to positions within their group, so chats can be arranged by hand.
+    static let chatOrderPref = "pincer.chatOrder"
+    /// SF Symbol names by group name. The gateway's group catalog has no icon field.
+    static let groupIconsPref = "pincer.groupIcons"
 
     private struct SyncedMap {
         let pref: String
@@ -590,6 +606,12 @@ public final class GatewayStore: Identifiable {
                       syncedDefaultsKey: "pincer.chatIconsSynced.\(self.id.uuidString)"),
             SyncedMap(pref: Self.chatColorsPref, local: \.chatColors,
                       syncedDefaultsKey: "pincer.chatColorsSynced.\(self.id.uuidString)"),
+            SyncedMap(pref: Self.groupsPref, local: \.groupPositions,
+                      syncedDefaultsKey: "pincer.groupsSynced.\(self.id.uuidString)"),
+            SyncedMap(pref: Self.chatOrderPref, local: \.chatPositions,
+                      syncedDefaultsKey: "pincer.chatOrderSynced.\(self.id.uuidString)"),
+            SyncedMap(pref: Self.groupIconsPref, local: \.groupIcons,
+                      syncedDefaultsKey: "pincer.groupIconsSynced.\(self.id.uuidString)"),
         ]
     }
 
@@ -641,13 +663,17 @@ public final class GatewayStore: Identifiable {
     }
 
     private func push(_ map: SyncedMap, _ id: String, _ value: String?) async {
-        guard UserDefaults.standard.bool(forKey: map.syncedDefaultsKey) else { return }
+        await self.push(map, [id: value])
+    }
+
+    private func push(_ map: SyncedMap, _ changes: [String: String?]) async {
+        guard !changes.isEmpty, UserDefaults.standard.bool(forKey: map.syncedDefaultsKey) else { return }
         // Optimistic write; on a conflict (another device changed it at the same time) re-read and retry.
         for _ in 0..<3 {
             let cached = self.remotePrefMaps[map.pref]
             guard let current = cached == nil ? await self.fetchRemoteMap(map.pref) : .some(cached) else { return }
             var next = current ?? [:]
-            next[id] = value
+            for (id, value) in changes { next[id] = value }
             if await self.writeRemoteMap(map.pref, next, expected: current) {
                 self.remotePrefMaps[map.pref] = next
                 return
@@ -734,7 +760,7 @@ public final class GatewayStore: Identifiable {
         case .agent:
             return self.agentSections(channels)
         case .group:
-            var sections = self.groupSections(channels.filter { $0.row.category != nil })
+            var sections = self.groupSections(channels.filter { $0.row.category != nil }, includeEmpty: query.isEmpty)
             let ungrouped = channels.filter { $0.row.category == nil }
             if !ungrouped.isEmpty {
                 sections.append(SidebarSection(id: "group:", title: "Ungrouped", emoji: nil, channels: ungrouped, kind: .other))
@@ -763,13 +789,9 @@ public final class GatewayStore: Identifiable {
                     channels: Self.channelOrder(byServer[server.id] ?? []),
                     kind: .server(server)))
             }
-            sections += self.groupSections(grouped).map { section in
-                var section = section
-                section.channels = Self.channelOrder(section.channels)
-                return section
-            }
+            sections += self.groupSections(Self.channelOrder(grouped), includeEmpty: query.isEmpty)
             if !automations.isEmpty {
-                sections.append(SidebarSection(id: "automations", title: "Automations", emoji: nil,
+                sections.append(SidebarSection(id: Self.automationsSectionId, title: "Automations", emoji: nil,
                                                channels: Self.channelOrder(automations), kind: .automations))
             }
             return sections
@@ -799,6 +821,15 @@ public final class GatewayStore: Identifiable {
     @discardableResult
     public func moveToGroup(_ key: String, droppedOn section: SidebarSection) async -> Bool {
         guard let value = self.groupDropValue(for: key, onto: section) else { return false }
+        if case let .group(name) = section.kind {
+            await self.moveChat(key, toGroup: name, before: nil)
+            return true
+        }
+        if let old = self.sessions[key]?.category { self.registerGroups([old]) }
+        if self.chatPositions[key] != nil {
+            self.chatPositions[key] = nil
+            Task { await self.push(self.syncedMap(Self.chatOrderPref), key, nil) }
+        }
         await self.patch(key, ["category": value])
         return true
     }
@@ -819,12 +850,21 @@ public final class GatewayStore: Identifiable {
         }
     }
 
-    private func groupSections(_ channels: [SidebarChannel]) -> [SidebarSection] {
+    /// One section per group, in the catalog's order. Empty groups stay until they're deleted;
+    /// chats arranged by hand come first in their order, the rest keep the order they came in.
+    private func groupSections(_ channels: [SidebarChannel], includeEmpty: Bool) -> [SidebarSection] {
         let grouped = Dictionary(grouping: channels, by: { $0.row.category ?? "" })
-        let names = grouped.keys.filter { !$0.isEmpty }.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-        return names.map { name in
-            SidebarSection(id: "group:\(name)", title: name, emoji: nil, channels: grouped[name] ?? [], kind: .group(name))
+        return self.groupNames.compactMap { name in
+            let members = grouped[name] ?? []
+            guard includeEmpty || !members.isEmpty else { return nil }
+            return SidebarSection(id: "group:\(name)", title: name, emoji: nil, channels: self.arranged(members), kind: .group(name))
         }
+    }
+
+    private func arranged(_ channels: [SidebarChannel]) -> [SidebarChannel] {
+        let positioned = channels.compactMap { channel in self.chatPositions[channel.id].flatMap(Int.init).map { (channel, $0) } }
+        let rest = channels.filter { self.chatPositions[$0.id].flatMap(Int.init) == nil }
+        return positioned.sorted { $0.1 < $1.1 }.map(\.0) + rest
     }
 
     /// Stable, name-ordered channels like a Discord server; pinned first.
@@ -856,7 +896,258 @@ public final class GatewayStore: Identifiable {
         }
     }
 
+    // MARK: Groups
+
+    /// Every group in display order: the catalog, then any category a chat has that isn't in it.
     public var groupNames: [String] {
-        Array(Set(self.sessions.values.compactMap(\.category))).sorted()
+        let catalog = self.usesGroupCatalog
+            ? self.groupCatalog
+            : self.groupPositions.sorted { lhs, rhs in
+                let (l, r) = (Int(lhs.value) ?? .max, Int(rhs.value) ?? .max)
+                return l != r ? l < r : lhs.key.localizedCaseInsensitiveCompare(rhs.key) == .orderedAscending
+            }.map(\.key)
+        let known = Set(catalog)
+        let extra = Set(self.sessions.values.compactMap(\.category)).subtracting(known)
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        return catalog + extra
+    }
+
+    /// The gateway's custom group catalog (`sessions.groups.list`), in display order.
+    public private(set) var groupCatalog: [String] = []
+    @ObservationIgnored private var groupCatalogUnsupported = false
+
+    /// Fallback for gateways without the catalog: group names to positions, synced through `users.prefs`.
+    public var groupPositions: [String: String] {
+        didSet { UserDefaults.standard.set(self.groupPositions, forKey: "pincer.groups.\(self.id.uuidString)") }
+    }
+
+    /// SF Symbol names by group name, synced through `users.prefs` (`pincer.groupIcons`).
+    public var groupIcons: [String: String] {
+        didSet { UserDefaults.standard.set(self.groupIcons, forKey: "pincer.groupIcons.\(self.id.uuidString)") }
+    }
+
+    /// The SF Symbol chosen for a group, if any. Callers still validate it for the running OS.
+    public func groupIcon(for name: String) -> String? { self.groupIcons[name] }
+
+    /// Sidebar sections the reader expanded or collapsed, by section id. Sections without an
+    /// entry start expanded, except Automations, which starts collapsed.
+    public private(set) var sectionCollapse: [String: Bool] {
+        didSet { UserDefaults.standard.set(self.sectionCollapse, forKey: "pincer.collapsed.\(self.id.uuidString)") }
+    }
+
+    public var collapsedSections: Set<String> {
+        var ids = Set(self.sectionCollapse.filter(\.value).keys)
+        if self.sectionCollapse[Self.automationsSectionId] == nil { ids.insert(Self.automationsSectionId) }
+        return ids
+    }
+
+    public func setSectionCollapsed(_ id: String, _ collapsed: Bool) {
+        guard self.collapsedSections.contains(id) != collapsed else { return }
+        self.sectionCollapse[id] = collapsed
+    }
+
+    static let automationsSectionId = "automations"
+
+    /// Sets (or with `nil`, clears) a group's icon on every device.
+    public func setGroupIcon(_ symbol: String?, for name: String) {
+        let value = symbol?.trimmingCharacters(in: .whitespaces).nilIfEmpty
+        guard self.groupIcons[name] != value else { return }
+        self.groupIcons[name] = value
+        Task { await self.push(self.syncedMap(Self.groupIconsPref), name, value) }
+    }
+
+    /// Carries a group's icon over to its new name (or drops it with `nil`).
+    private func moveGroupIcon(from name: String, to newName: String?) {
+        guard let icon = self.groupIcons[name] else { return }
+        var changes: [String: String?] = [name: String?.none]
+        if let newName, self.groupIcons[newName] == nil { changes[newName] = icon }
+        for (key, value) in changes { self.groupIcons[key] = value }
+        Task { await self.push(self.syncedMap(Self.groupIconsPref), changes) }
+    }
+
+    /// Session keys to their position within their group, synced through `users.prefs`.
+    public var chatPositions: [String: String] {
+        didSet { UserDefaults.standard.set(self.chatPositions, forKey: "pincer.chatOrder.\(self.id.uuidString)") }
+    }
+
+    /// Whether groups live in the gateway's catalog. Gateways that don't list their methods get a try.
+    var usesGroupCatalog: Bool {
+        guard !self.groupCatalogUnsupported else { return false }
+        let methods = self.hello?.methods ?? []
+        return methods.isEmpty || methods.contains("sessions.groups.put")
+    }
+
+    func loadGroups() async {
+        if self.usesGroupCatalog {
+            do {
+                let result = try await self.connection.request("sessions.groups.list", [:], timeout: 15)
+                self.applyGroupCatalog(result)
+                return
+            } catch GatewayError.rpc {
+                self.groupCatalogUnsupported = true
+            } catch {
+                return
+            }
+        }
+        await self.pull(self.syncedMap(Self.groupsPref))
+        // Chats already in a group keep it listed once they leave it.
+        self.registerGroups(Set(self.sessions.values.compactMap(\.category)))
+    }
+
+    private func applyGroupCatalog(_ result: JSONValue) {
+        guard let groups = result["groups"]?.array else { return }
+        let names = groups.enumerated().compactMap { index, group -> (String, Int)? in
+            guard let name = group["name"]?.text?.trimmingCharacters(in: .whitespaces).nilIfEmpty else { return nil }
+            return (name, group["position"]?.int ?? index)
+        }
+        let ordered = names.sorted { $0.1 < $1.1 }.map(\.0)
+        if ordered != self.groupCatalog { self.groupCatalog = ordered }
+    }
+
+    /// Adds groups to the fallback list so they stay after their last chat leaves.
+    private func registerGroups(_ names: Set<String>) {
+        guard !self.usesGroupCatalog else { return }
+        let missing = names.subtracting(self.groupPositions.keys).sorted()
+        guard !missing.isEmpty else { return }
+        let next = (self.groupPositions.values.compactMap { Int($0) }.max() ?? -1) + 1
+        let changes = Dictionary(uniqueKeysWithValues: missing.enumerated().map { ($1, String(next + $0)) })
+        self.groupPositions.merge(changes) { $1 }
+        Task { await self.push(self.syncedMap(Self.groupsPref), changes) }
+    }
+
+    /// Replaces the group order; with the catalog this is also how groups are created.
+    private func setGroupOrder(_ names: [String]) async -> Bool {
+        if self.usesGroupCatalog {
+            let previous = self.groupCatalog
+            self.groupCatalog = names
+            do {
+                let result = try await self.connection.request("sessions.groups.put", ["names": .array(names.map(JSONValue.string))], timeout: 15)
+                self.applyGroupCatalog(result)
+                return true
+            } catch {
+                self.groupCatalog = previous
+                self.lastError = error.localizedDescription
+                await self.loadGroups()
+                return false
+            }
+        }
+        var changes: [String: String?] = [:]
+        for (index, name) in names.enumerated() where self.groupPositions[name] != String(index) {
+            changes[name] = String(index)
+        }
+        for name in self.groupPositions.keys where !names.contains(name) {
+            changes[name] = .some(nil)
+        }
+        for (name, value) in changes { self.groupPositions[name] = value }
+        await self.push(self.syncedMap(Self.groupsPref), changes)
+        return true
+    }
+
+    /// Creates an empty group at the end. Returns false if the name is empty or already taken.
+    @discardableResult
+    public func createGroup(_ name: String) async -> Bool {
+        let value = name.trimmingCharacters(in: .whitespaces)
+        let names = self.groupNames
+        guard !value.isEmpty, !names.contains(value) else { return false }
+        return await self.setGroupOrder(names + [value])
+    }
+
+    /// Moves a group before another one (`nil` moves it to the end).
+    public func moveGroup(_ name: String, before: String?) async {
+        var names = self.groupNames
+        guard names.contains(name), name != before else { return }
+        names.removeAll { $0 == name }
+        let index = before.flatMap { names.firstIndex(of: $0) } ?? names.count
+        names.insert(name, at: index)
+        guard names != self.groupNames else { return }
+        _ = await self.setGroupOrder(names)
+    }
+
+    /// Renames a group; its chats move with it.
+    public func renameGroup(_ name: String, to newName: String) async {
+        let value = newName.trimmingCharacters(in: .whitespaces)
+        guard !value.isEmpty, value != name else { return }
+        if self.usesGroupCatalog {
+            let previous = self.groupCatalog
+            if self.groupCatalog.contains(value) {
+                self.groupCatalog.removeAll { $0 == name }
+            } else {
+                self.groupCatalog = self.groupCatalog.map { $0 == name ? value : $0 }
+            }
+            do {
+                let result = try await self.connection.request("sessions.groups.rename", ["name": .string(name), "to": .string(value)], timeout: 30)
+                self.applyGroupCatalog(result)
+                self.moveGroupIcon(from: name, to: value)
+                return
+            } catch {
+                self.groupCatalog = previous
+                self.lastError = error.localizedDescription
+                await self.loadGroups()
+                return
+            }
+        }
+        self.moveGroupIcon(from: name, to: value)
+        var changes: [String: String?] = [name: String?.none]
+        if self.groupPositions[value] == nil { changes[value] = self.groupPositions[name] ?? String(self.groupPositions.count) }
+        for (key, change) in changes { self.groupPositions[key] = change }
+        Task { await self.push(self.syncedMap(Self.groupsPref), changes) }
+        for key in self.memberKeys(of: name) {
+            await self.patch(key, ["category": .string(value)])
+        }
+    }
+
+    /// Deletes a group. Its chats stay, without a group.
+    public func deleteGroup(_ name: String) async {
+        if self.usesGroupCatalog {
+            let previous = self.groupCatalog
+            self.groupCatalog.removeAll { $0 == name }
+            do {
+                let result = try await self.connection.request("sessions.groups.delete", ["name": .string(name)], timeout: 30)
+                self.applyGroupCatalog(result)
+                self.moveGroupIcon(from: name, to: nil)
+                return
+            } catch {
+                self.groupCatalog = previous
+                self.lastError = error.localizedDescription
+                await self.loadGroups()
+                return
+            }
+        }
+        self.groupPositions[name] = nil
+        Task { await self.push(self.syncedMap(Self.groupsPref), name, nil) }
+        self.moveGroupIcon(from: name, to: nil)
+        for key in self.memberKeys(of: name) {
+            await self.patch(key, ["category": .null])
+        }
+    }
+
+    private func memberKeys(of group: String) -> [String] {
+        self.sessions.values.filter { $0.category == group }.map(\.key)
+    }
+
+    /// Chats of a group in the order the sidebar shows them.
+    public func groupOrder(_ name: String) -> [String] {
+        let rows = self.sortedRows.filter { $0.category == name && !$0.isSubagent }
+        let channels = rows.map { SidebarChannel(row: $0, threads: []) }
+        return self.arranged(self.organization == .servers ? Self.channelOrder(channels) : channels).map(\.row.key)
+    }
+
+    /// Puts a chat in a group before another of its chats (`nil` puts it last), moving it
+    /// there first if it's in another group.
+    public func moveChat(_ key: String, toGroup name: String, before: String?) async {
+        guard let row = self.sessions[key], !row.isSubagent, key != before else { return }
+        var order = self.groupOrder(name).filter { $0 != key }
+        let index = before.flatMap { order.firstIndex(of: $0) } ?? order.count
+        order.insert(key, at: index)
+        var changes: [String: String?] = [:]
+        for (position, key) in order.enumerated() where self.chatPositions[key] != String(position) {
+            changes[key] = String(position)
+        }
+        for (key, value) in changes { self.chatPositions[key] = value }
+        Task { await self.push(self.syncedMap(Self.chatOrderPref), changes) }
+        if row.category != name {
+            self.registerGroups(Set([name] + (row.category.map { [$0] } ?? [])))
+            await self.patch(key, ["category": .string(name)])
+        }
     }
 }
