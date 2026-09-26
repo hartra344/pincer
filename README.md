@@ -18,6 +18,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - You can pin a TLS certificate by its SHA-256 fingerprint.
   - Images are fetched only from the gateway itself: inline, through `artifacts.download`, or from the gateway's own host.
 - **Local cache:** transcripts are cached in `~/Library/Caches/Pincer/Transcripts/<gateway>/`, one file per chat, up to 20,000 messages each. Files use complete file protection, and removing a gateway deletes its cache. Set `PINCER_CACHE_DIR=off` to turn the cache off, or set it to a path to use another folder.
+- **Drafts:** each chat keeps its unsent text and pending attachments when you switch chats or relaunch. They're saved in `~/Library/Application Support/Pincer/Drafts/<gateway>/`, one folder per chat, using complete file protection. A draft is deleted when you send it, when its chat is deleted, or when you remove its gateway. Set `PINCER_DRAFTS_DIR=off` to turn draft saving off, or set it to a path to use another folder.
 - **Sandbox:** the Xcode-built macOS app is sandboxed, with outgoing network access and read-only access to files you pick. The quick `scripts/bundle-mac.sh` dev bundle is only ad-hoc signed.
 
 ## Features
@@ -31,16 +32,22 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - compaction doesn't start a new chat. It shows up inline as a "Compacting context…" line while it runs, then as a divider in the same thread;
   - search, unread dots and dock badge;
   - "Next Unread Chat" (⌥⇧↓).
+- **Command palette and quick switching** (**Go** menu):
+  - ⌘K opens a palette to jump to any chat on any gateway (recently visited first), start a new chat with an agent, change the chat's model, pin or unpin it, show or hide thinking steps, switch gateways, or open Settings, Gateway Settings or Automations. Type to filter (fuzzy, so `jptr` finds "Japan trip"), use ↑/↓ to move, Return to run and Esc to go back or close;
+  - Back (⌘[) and Forward (⌘]) move through the chats you've visited, like a browser;
+  - ⌘1–⌘9 open the selected gateway's pinned chats, in sidebar order.
 - **Transcript:**
   - live streaming, with a collapsible **thinking** section and **tool cards** showing arguments and results. Choose whether to show thinking steps never, only live, or for every turn;
   - the full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer quietly caches every chat (most recently active first) and skips chats that haven't changed. Opening one shows the cached transcript at once, then fetches only what's new;
   - Markdown, including tables and code blocks with a Copy button;
+  - **Find in Chat** (⌘F, or the Session menu): highlights every match with a count, and ⌘G / ⇧⌘G (or Return) step through them, scrolling to each one. Matches in thinking and tool input/output are optional (the find bar's options menu) and are expanded when you land on them;
   - every message ends with a **Copy** button and its details: the model that wrote it and the full date and time it was sent. Back-to-back messages from the agent each get their own footer and some space, and replies from a different run start a new row;
   - **inline images** with a Quick Look-style preview and sharing. This covers attachments and the agent's `MEDIA:` lines, the same as the web UI. Local files are fetched through the gateway's `assistant-media` route. Public `https` images are downloaded directly, with no credentials or cookies sent; you can turn this off in Settings with "Load images the agent links from the web".
 - **Appearance:** Settings → Appearance picks Light, Dark or System and a theme: Default (your system accent), Lobster, Ocean, Forest, Grape, Sunset, Graphite or Midnight. Themes color the accent, links, both avatars, and the chat, sidebar and code backgrounds, with separate shades for light and dark mode. Any of those colors can be overridden with your own pick, and reset back to the theme's.
 - **Owner attribution:** messages from you appear under your own name (set in Settings, default is your macOS full name), even when they came in through Discord. A small "via Discord" tag shows where they came from.
 - **Models:** the chat toolbar shows the session's model; pick another (from the Gateway's `models.list`) or go back to the agent's default, and new messages use it. Each reply's footer shows the model the Gateway recorded for it, so earlier replies keep their original model after a switch.
 - **Composer:** Return sends and ⇧/⌥-Return adds a new line. You can paste, drag in or pick images and files; they are downscaled to fit the gateway's limits. Stop a run with ⌘.
+- **Context meter:** a ring next to Send shows how full the chat's context window is, from the session's token snapshot (the row's context limit or prompt budget, else the model's window from `models.list`, else the Gateway default). It turns orange at 85% and red at 95%. Click it for used/limit, the last run's tokens and **Compact Now**, with optional instructions for what to keep; the result reads "Compacted 172k → 31k tokens." With Full Management it calls `sessions.compact`; otherwise, or with instructions, it sends `/compact`.
 - **Slash commands:** typing `/` suggests the commands the gateway offers for that chat (`commands.list`: built-ins, skills and plugins), then their arguments: listed choices (`/verbose on`), the agent's models for `/model`, and the session's thinking levels for `/think`. Use ↑/↓ to move, Tab or Return to complete, Esc to hide; Return sends once the command is complete. `/clear` is sent as `/reset`, like the Control UI. Gateways without `commands.list` get a built-in list of common commands.
 - **Approvals:** exec approvals appear as a banner and as actionable notifications (Allow once, Always allow, Deny).
 - **Notifications:** one notification thread per chat, a reply action, and no notification for the chat you're already looking at.
@@ -99,6 +106,10 @@ To produce signed macOS and iOS apps, generate the Xcode project with [XcodeGen]
 xcodegen generate
 open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pincer-iOS
 ```
+
+### Tests on CI
+
+`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs `PincerChecks` in offline, `--demo` and `--live` (against the mock gateway) modes, and runs the mock gateway's selftest.
 
 ### TestFlight
 

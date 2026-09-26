@@ -3,12 +3,13 @@ import Observation
 
 /// Pending attachment in the composer. `data` is already sized for the Gateway's limits.
 public struct OutgoingAttachment: Identifiable, Hashable, Sendable {
-    public let id = UUID()
+    public let id: UUID
     public let fileName: String
     public let mimeType: String
     public let data: Data
 
-    public init(fileName: String, mimeType: String, data: Data) {
+    public init(id: UUID = UUID(), fileName: String, mimeType: String, data: Data) {
+        self.id = id
         self.fileName = fileName
         self.mimeType = mimeType
         self.data = data
@@ -65,6 +66,20 @@ public final class ChatStore: Identifiable {
     public private(set) var sawThinking = false
     /// The agent's task checklist for this session, shown above the composer.
     public private(set) var progressCard: ProgressCard?
+    /// Unsent composer text and attachments, kept across chat switches and saved to disk.
+    public var draft = ComposerDraft() {
+        didSet {
+            guard !self.headless, !self.restoringDraft, self.draft != oldValue else { return }
+            self.draftEdited = true
+            self.scheduleDraftSave()
+        }
+    }
+    /// The latest "Compact now" request, for the composer's context meter.
+    public private(set) var compaction: CompactionState? {
+        didSet { if oldValue?.isRunning != self.compaction?.isRunning { self.rebuild(itemsChanged: false) } }
+    }
+    /// The `/compact` run whose end finishes `compaction`, when it was sent as a command.
+    @ObservationIgnored private var compactionRunId: String?
 
     @ObservationIgnored private let historyLimit = 120
     @ObservationIgnored private let gatewayId: UUID
@@ -90,6 +105,11 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored private var recoveryAttempted: Set<String> = []
     /// Largest text field requested per message, matching the Control UI.
     @ObservationIgnored private let fullMessageMaxChars = 500_000
+    @ObservationIgnored private var draftChecked = false
+    /// The draft changed here, so a saved one arriving late must not replace it.
+    @ObservationIgnored private var draftEdited = false
+    @ObservationIgnored private var draftSaveTask: Task<Void, Never>?
+    @ObservationIgnored private var restoringDraft = false
 
     init(sessionKey: String, agentId: String?, gateway: GatewayStore, headless: Bool = false) {
         self.sessionKey = sessionKey
@@ -108,6 +128,7 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored private var loadInFlight = false
 
     public func load(force: Bool = false) async {
+        await self.restoreDraft()
         await self.restoreFromCache()
         guard let gateway, gateway.state.isConnected else { return }
         if self.hasLoaded, !force { return }
@@ -149,6 +170,40 @@ public final class ChatStore: Identifiable {
         self.hasMoreHistory = !snapshot.complete
         self.hasPagedOlder = true
         self.items = snapshot.items
+    }
+
+    /// Brings back the draft saved on disk, unless one was started here in the meantime.
+    private func restoreDraft() async {
+        guard !self.draftChecked, !self.headless else { return }
+        self.draftChecked = true
+        guard let saved = await DraftStore.load(gatewayId: self.gatewayId, sessionKey: self.sessionKey),
+              !self.draftEdited
+        else { return }
+        self.restoringDraft = true
+        self.draft = saved
+        self.restoringDraft = false
+    }
+
+    private func scheduleDraftSave(after delay: Duration = .milliseconds(400)) {
+        let previous = self.draftSaveTask
+        previous?.cancel()
+        let draft = self.draft
+        self.draftSaveTask = Task { [gatewayId, sessionKey] in
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+                if Task.isCancelled { return }
+            }
+            // Saves land in order, so an older draft never overwrites a newer one.
+            await previous?.value
+            await DraftStore.save(draft, gatewayId: gatewayId, sessionKey: sessionKey)
+        }
+    }
+
+    /// Writes a pending draft now, e.g. before the app is suspended.
+    public func flushDraft() async {
+        guard self.draftSaveTask != nil else { return }
+        self.scheduleDraftSave(after: .zero)
+        await self.draftSaveTask?.value
     }
 
     /// Brings the on-disk cache up to date with the full history, without touching the UI.
@@ -294,6 +349,10 @@ public final class ChatStore: Identifiable {
             self.live = run
             self.gateway?.track(runId: runId, sessionKey: self.sessionKey)
         } else if history["sessionInfo"]?["hasActiveRun"]?.bool == false {
+            // A `/compact` run that ended while events were missed (e.g. a reconnect) still settles.
+            if let runId = self.compactionRunId, self.live?.runId == runId {
+                Task { await self.finishCompaction(runId: runId) }
+            }
             self.live = nil
         }
     }
@@ -365,9 +424,10 @@ public final class ChatStore: Identifiable {
 
     // MARK: Sending
 
-    public func send(_ text: String, attachments: [OutgoingAttachment] = []) async {
+    @discardableResult
+    public func send(_ text: String, attachments: [OutgoingAttachment] = []) async -> String? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || !attachments.isEmpty, let gateway else { return }
+        guard !trimmed.isEmpty || !attachments.isEmpty, let gateway else { return nil }
         let idempotencyKey = UUID().uuidString.lowercased()
         var blocks: [ContentBlock] = trimmed.isEmpty ? [] : [.text(trimmed)]
         for attachment in attachments {
@@ -399,15 +459,71 @@ public final class ChatStore: Identifiable {
         }
         do {
             let result = try await gateway.connection.request("chat.send", .object(params), timeout: 60)
-            if let runId = result["runId"]?.text {
+            let runId = result["runId"]?.text
+            if let runId {
                 gateway.track(runId: runId, sessionKey: self.sessionKey)
                 if self.live?.runId != runId { self.live = LiveRun(runId: runId) }
             }
             self.errorMessage = nil
+            return runId
         } catch {
             self.items.removeAll { $0.idempotencyKey == idempotencyKey && $0.isPending }
             self.errorMessage = "Couldn’t send: \(error.localizedDescription)"
+            return nil
         }
+    }
+
+    /// Compacts the session's context now, reporting token counts before and after in `compaction`.
+    /// Uses `sessions.compact` when allowed (it needs `operator.admin`); instructions, or a connection
+    /// without admin, go through the `/compact` command instead.
+    public func compact(instructions: String = "") async {
+        guard let gateway, self.compaction?.isRunning != true else { return }
+        let before = gateway.sessions[self.sessionKey]?.totalTokens
+        let instructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.compaction = .running(before: before)
+        guard instructions.isEmpty, gateway.canCompactDirectly else {
+            let runId = await self.send(instructions.isEmpty ? "/compact" : "/compact \(instructions)")
+            if let runId {
+                self.compactionRunId = runId
+            } else {
+                self.compaction = .failed(self.errorMessage ?? "Couldn’t start compaction.")
+            }
+            return
+        }
+        do {
+            let result = try await gateway.connection.request(
+                "sessions.compact", .object(self.params(keyName: "key")), timeout: 300)
+            let reason = result["reason"]?.text
+            if result["ok"]?.bool == false {
+                self.compaction = .failed(reason.map { "Couldn’t compact: \($0)" } ?? "Compaction failed.")
+            } else if result["compacted"]?.bool == false {
+                self.compaction = .skipped(reason ?? "There was nothing to compact.")
+            } else {
+                let tokensBefore = result["result"]?["tokensBefore"]?.int ?? before
+                var tokensAfter = result["result"]?["tokensAfter"]?.int
+                if tokensAfter == nil {
+                    await gateway.refreshSessions()
+                    tokensAfter = gateway.sessions[self.sessionKey]?.totalTokens
+                }
+                self.compaction = .finished(before: tokensBefore, after: tokensAfter)
+            }
+            self.scheduleReload()
+        } catch {
+            self.compaction = .failed("Couldn’t compact: \(error.localizedDescription)")
+        }
+    }
+
+    /// Forgets a finished compaction's result (a running one stays).
+    public func clearCompaction() {
+        guard self.compaction?.isRunning != true else { return }
+        self.compaction = nil
+    }
+
+    private func finishCompaction(runId: String) async {
+        guard self.compactionRunId == runId, case let .running(before) = self.compaction else { return }
+        self.compactionRunId = nil
+        await self.gateway?.refreshSessions()
+        self.compaction = .finished(before: before, after: self.gateway?.sessions[self.sessionKey]?.totalTokens)
     }
 
     public func abort() async {
@@ -453,6 +569,10 @@ public final class ChatStore: Identifiable {
         case "final", "aborted", "error":
             if state == "error" {
                 self.errorMessage = payload["errorMessage"]?.text ?? "The run failed."
+            }
+            if state != "final", runId == self.compactionRunId {
+                self.compactionRunId = nil
+                self.compaction = .failed(state == "error" ? self.errorMessage ?? "Compaction failed." : "Compaction was stopped.")
             }
             self.finishRun(runId)
         default:
@@ -622,6 +742,7 @@ public final class ChatStore: Identifiable {
         self.reloadTask = Task { [weak self] in
             await self?.load(force: true)
             if self?.live?.runId == runId { self?.live = nil }
+            await self?.finishCompaction(runId: runId)
         }
     }
 
@@ -656,6 +777,8 @@ public final class ChatStore: Identifiable {
             }
             entries.append(.assistant(turn))
             if live.isCompacting { entries.append(.marker(id: "live-compaction-\(live.runId)", label: "Compacting context…")) }
+        } else if self.compaction?.isRunning == true {
+            entries.append(.marker(id: "live-compaction", label: "Compacting context…"))
         }
         if entries != self.entries { self.entries = entries }
     }

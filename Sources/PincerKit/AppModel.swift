@@ -16,10 +16,16 @@ public final class AppModel {
     public let push = PushRegistrar.shared
     /// Counts `open(_:)` calls (from notifications), so the UI can bring the chat on screen.
     public private(set) var openRequests = 0
+    /// Chats visited, for Back/Forward and the palette's recent chats.
+    public private(set) var history = ChatHistory<Notifier.Target>()
     public var appIsActive = true {
         didSet {
             self.notifier.appIsActive = self.appIsActive
             if self.appIsActive, !oldValue { self.gateways.forEach { $0.reconnectIfNeeded() } }
+            if !self.appIsActive, oldValue {
+                let gateways = self.gateways
+                Task { for gateway in gateways { await gateway.flushDrafts() } }
+            }
         }
     }
 
@@ -74,14 +80,44 @@ public final class AppModel {
         let target = Notifier.Target(gatewayId: gateway.id, sessionKey: key)
         self.notifier.visible = target
         self.notifier.clear(target: target)
+        self.history.visit(target)
     }
 
     public func open(_ target: Notifier.Target) {
         guard let gateway = self.gateways.first(where: { $0.id == target.gatewayId }) else { return }
-        self.selectedGatewayId = gateway.id
+        // Key first, so switching Gateways doesn't briefly record the other Gateway's last chat.
         gateway.selectedKey = gateway.resolveSessionKey(target.sessionKey)
+        self.selectedGatewayId = gateway.id
         self.updateVisible()
         self.openRequests += 1
+    }
+
+    // MARK: Navigation
+
+    public var canGoBack: Bool { self.history.canGoBack }
+    public var canGoForward: Bool { self.history.canGoForward }
+
+    public func goBack() {
+        if let target = self.history.goBack(where: self.exists) { self.open(target) }
+    }
+
+    public func goForward() {
+        if let target = self.history.goForward(where: self.exists) { self.open(target) }
+    }
+
+    /// Opens the selected Gateway's `number`th pinned chat (1-based, as in ⌘1–⌘9).
+    public func openPinned(_ number: Int) {
+        guard let gateway = self.selectedGateway, number >= 1 else { return }
+        let pinned = gateway.pinnedChats
+        guard number <= pinned.count else { return }
+        self.open(Notifier.Target(gatewayId: gateway.id, sessionKey: pinned[number - 1].key))
+    }
+
+    /// A visited chat can still be opened: its Gateway is saved and, once sessions are listed,
+    /// the session is one of them.
+    private func exists(_ target: Notifier.Target) -> Bool {
+        guard let gateway = self.gateways.first(where: { $0.id == target.gatewayId }) else { return false }
+        return gateway.sessions.isEmpty || gateway.sessions[target.sessionKey] != nil
     }
 
     // MARK: Profiles
@@ -132,6 +168,8 @@ public final class AppModel {
         }
         store.profile.forgetCredentials()
         TranscriptCache.removeAll(gatewayId: id)
+        self.history.prune { $0.gatewayId != id }
+        DraftStore.removeAll(gatewayId: id)
         self.persist()
         if self.selectedGatewayId == id { self.selectedGatewayId = self.gateways.first?.id }
     }

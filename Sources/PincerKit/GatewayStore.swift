@@ -77,6 +77,8 @@ public final class GatewayStore: Identifiable {
     public private(set) var loadingModelCatalogs: Set<String> = []
     /// The model sessions use when nobody picked one (`sessions.list` `defaults`).
     public private(set) var defaultModelRef: String?
+    /// Context window sessions get when their row doesn't say (`sessions.list` `defaults.contextTokens`).
+    public private(set) var defaultContextTokens: Int?
     struct CommandCatalog {
         let commands: [SlashCommand]
         let fetchedAt: Date
@@ -287,6 +289,9 @@ public final class GatewayStore: Identifiable {
         if let defaults = list["defaults"], let model = defaults["model"]?.text {
             self.defaultModelRef = ModelRef.qualified(model, provider: defaults["modelProvider"]?.text)
         }
+        if let defaults = list["defaults"] {
+            self.defaultContextTokens = defaults["contextTokens"]?.int.flatMap { $0 > 0 ? $0 : nil }
+        }
     }
 
     private func scheduleRefresh() {
@@ -383,6 +388,7 @@ public final class GatewayStore: Identifiable {
             let removedId = payload["sessionId"]?.text
             if removedId == nil || self.sessions[key]?.sessionId == removedId {
                 self.sessions.removeValue(forKey: key)
+                self.discardDraft(key)
             }
             return
         }
@@ -406,6 +412,22 @@ public final class GatewayStore: Identifiable {
         let store = ChatStore(sessionKey: key, agentId: self.sessions[key]?.agentId, gateway: self)
         self.chats[key] = store
         return store
+    }
+
+    /// Saves every chat's pending draft now, e.g. before the app is suspended.
+    func flushDrafts() async {
+        for chat in self.chats.values {
+            await chat.flushDraft()
+        }
+    }
+
+    private func discardDraft(_ key: String) {
+        if let chat = self.chats[key] {
+            chat.draft = ComposerDraft()
+        } else {
+            let id = self.id
+            Task { await DraftStore.remove(gatewayId: id, sessionKey: key) }
+        }
     }
 
     private func openChat(_ key: String) async {
@@ -461,11 +483,50 @@ public final class GatewayStore: Identifiable {
         else { return }
         defer { self.loadingModelCatalogs.remove(agentId) }
         do {
-            let result = try await self.connection.request("models.list", ["agentId": .string(agentId)], timeout: 30)
+            // `includeDetails` adds each model's effective `contextTokens`; released Gateways reject it.
+            let result: JSONValue
+            if let detailed = try? await self.connection.request(
+                "models.list", ["agentId": .string(agentId), "includeDetails": true], timeout: 30)
+            {
+                result = detailed
+            } else {
+                result = try await self.connection.request("models.list", ["agentId": .string(agentId)], timeout: 30)
+            }
             self.modelCatalogs[agentId] = result["models"]?.array?.compactMap(ModelChoice.init) ?? []
         } catch {
             self.lastError = error.localizedDescription
         }
+    }
+
+    /// How full a session's context is. The row's own limits win; otherwise the serving model's window
+    /// from `models.list` (see `loadModels`), then the Gateway default.
+    public func contextUsage(for key: String) -> ContextUsage? {
+        guard let row = self.sessions[key] else { return nil }
+        return ContextUsage(row: row, fallbackLimit: self.fallbackContextLimit(for: row))
+    }
+
+    /// Whether `contextUsage` needs the agent's model catalog to find a limit.
+    public func needsModelCatalogForContext(_ key: String) -> Bool {
+        guard let row = self.sessions[key], row.totalTokens != nil,
+              row.promptBudgetTokens == nil, row.contextTokens == nil
+        else { return false }
+        return self.modelCatalogs[row.agentId] == nil
+    }
+
+    private func fallbackContextLimit(for row: SessionRow) -> Int? {
+        let refs = [row.activeModelRef, row.modelRef, self.defaultModelRef].compactMap(\.self)
+        let catalog = self.modelCatalogs[row.agentId] ?? []
+        for ref in refs {
+            if let limit = catalog.first(where: { $0.ref == ref || $0.modelId == ref })?.contextTokens { return limit }
+        }
+        return self.defaultContextTokens
+    }
+
+    /// `sessions.compact` needs `operator.admin`; without it, "Compact now" sends `/compact` instead.
+    public var canCompactDirectly: Bool {
+        guard self.hello?.scopes.contains(GatewayConnection.adminScope) == true else { return false }
+        let methods = self.hello?.methods ?? []
+        return methods.isEmpty || methods.contains("sessions.compact")
     }
 
     /// Slash commands for a session (Gateway `commands.list` plus client commands). Falls back to a

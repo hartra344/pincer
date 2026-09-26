@@ -11,7 +11,7 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// notification that launched the app is delivered.
     public static let shared = Notifier()
 
-    public struct Target: Equatable, Sendable {
+    public struct Target: Hashable, Sendable {
         public let gatewayId: UUID
         public let sessionKey: String
 

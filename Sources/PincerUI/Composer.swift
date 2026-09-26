@@ -4,12 +4,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct Composer: View {
-    let chat: ChatStore
+    @Bindable var chat: ChatStore
     let placeholder: String
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.appTheme) private var theme
-    @State private var text = ""
-    @State private var attachments: [OutgoingAttachment] = []
     @State private var importing = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var attachmentError: String?
@@ -21,7 +19,7 @@ struct Composer: View {
 
     private static let corner: CGFloat = 22
     /// Height of a single-line field, which the side controls match.
-    fileprivate static let controlHeight: CGFloat = 40
+    static let controlHeight: CGFloat = 40
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -45,7 +43,7 @@ struct Composer: View {
                 self.attachMenu
                 ComposerTextView(
                     placeholder: self.placeholder,
-                    text: self.$text,
+                    text: self.$chat.draft.text,
                     menuActive: !self.suggestions.isEmpty,
                     onSubmit: self.submit,
                     onMedia: self.ingest,
@@ -53,6 +51,7 @@ struct Composer: View {
                     onCaretAtEnd: { if self.caretAtEnd != $0 { self.caretAtEnd = $0 } })
                     .padding(.vertical, 11)
                     .frame(minHeight: Self.controlHeight)
+                ContextMeter(chat: self.chat)
                 if self.chat.isRunning {
                     Button {
                         Task { await self.chat.abort() }
@@ -117,6 +116,12 @@ struct Composer: View {
             await self.gateway.loadCommands(sessionKey: self.chat.sessionKey, agentId: self.agentId)
             await self.gateway.loadModels(agentId: self.agentId)
         }
+        .task(id: self.chat.sessionKey) {
+            // The meter falls back to the model's context window when the session row has none.
+            if self.gateway.needsModelCatalogForContext(self.chat.sessionKey) {
+                await self.gateway.loadModels(agentId: self.agentId)
+            }
+        }
         .onChange(of: self.photoItems) { _, items in
             guard !items.isEmpty else { return }
             Task {
@@ -171,6 +176,16 @@ struct Composer: View {
         #endif
     }
 
+    private var text: String {
+        get { self.chat.draft.text }
+        nonmutating set { self.chat.draft.text = newValue }
+    }
+
+    private var attachments: [OutgoingAttachment] {
+        get { self.chat.draft.attachments }
+        nonmutating set { self.chat.draft.attachments = newValue }
+    }
+
     private var canSend: Bool {
         self.gateway.state.isConnected
             && (!self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty)
@@ -185,8 +200,7 @@ struct Composer: View {
         guard self.canSend else { return }
         let text = SlashCommand.outgoingText(self.text, commands: self.gateway.slashCommands(for: self.chat.sessionKey))
         let attachments = self.attachments
-        self.text = ""
-        self.attachments = []
+        self.chat.draft = ComposerDraft()
         self.attachmentError = nil
         Task { await self.chat.send(text, attachments: attachments) }
     }
