@@ -73,6 +73,21 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
 - **Per-session actions:** pin, rename, group, color, reasoning level and archive. **Color → Custom…** picks any color; since `sessions.patch` only takes OpenClaw's named colors, custom colors sync through `users.prefs` (key `pincer.chatColors`) and win over the named one. Drag a chat onto a group (or **Ungrouped**) to move it, or between chats to put it at that spot; in **By server**, dropping a grouped chat on its own server or agent takes it out of the group.
 - **Groups:** create empty groups and keep them until you delete them (**Delete Group…** on the header leaves its chats ungrouped). Drag a group header, or use **Move Up**/**Move Down**, to reorder groups. **Change Icon…** on a group's header picks its SF Symbol; group icons sync through `users.prefs` (key `pincer.groupIcons`). Groups, their order and renames live in the gateway's group catalog (`sessions.groups.*`); on gateways without it, they sync through `users.prefs` (key `pincer.groups`). The order of chats within a group syncs through `users.prefs` (key `pincer.chatOrder`) and wins over pinning and activity.
 
+## Shortcuts & Siri
+
+Pincer's actions show up in the Shortcuts app, Siri, Spotlight and, on iPhone, the Action Button (Settings → Action Button → Shortcut → Pincer). They work without opening the app: Pincer reuses its connection if it's running, otherwise it connects once as the app's already approved device, the way the Share extension does.
+
+| Action | What it does |
+| --- | --- |
+| **Ask Agent** | Sends a prompt to an agent's main chat (or a new chat if it has none) and returns the reply as text; Siri reads the first ~500 characters. Optional agent, gateway, **Wait for Reply** (on) and timeout (60 s, 5–300). If the reply takes longer, the message was still delivered. |
+| **Send to Chat** | Sends a message to a chat without waiting. |
+| **Start Chat with Agent** | Creates a chat, optionally sends a first message, and opens it in Pincer. |
+| **Get Unread Chats** | Returns the chats counted in the unread badge, on one gateway or all of them. |
+| **Get Pending Approvals** | Returns how many exec approvals are waiting, and the first command. Read-only: answer them in the app or from their notifications. |
+| **Open Chat** | Opens a chat in Pincer. |
+
+Say "Ask Pincer", "Ask *agent* in Pincer", "What's unread in Pincer" or "Pending approvals in Pincer". With one gateway it's used silently; with several, the one selected in the app, unless you pick another. Every action except Open Chat requires an unlocked device, since they return reply content or send messages that can make an agent act. Main chats appear under their agent's name unless renamed, and spoken errors leave out gateway error codes. Pincer never logs prompts or replies. So saved shortcuts can show names offline, it keeps the agent and chat names it last listed (no messages) in the App Group; Siri learns those names once the app has loaded an agent list, so open Pincer once after installing it. The website's Shortcuts & Siri guide covers every parameter and error.
+
 ## Connecting to your home gateway over Tailscale
 
 1. On the gateway host, expose the gateway with Tailscale Serve, following the OpenClaw remote-access docs.
@@ -144,6 +159,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 | `Sources/PincerUI` | Shared UI for macOS and iOS. The app shell is SwiftUI. The chat transcript and sidebar are native for performance: `NSTableView`/`NSOutlineView` on macOS and `UICollectionView` on iOS. Markdown is laid out once with TextKit (`TranscriptSupport`, `TranscriptRowView`), and the same part views are shared by both platforms. |
 | `Apps/macOS`, `Apps/iOS` | `@main` app shells used by the Xcode project. |
 | `Apps/Shared` | Resources shared by both apps, including the app icon (`AppIcon.icon`) and the Info.plist keys that name the App Group and Keychain group. |
+| `Apps/Intents` | App Intents (Shortcuts, Siri, Action Button) compiled into both apps; the logic (`IntentService`) lives in PincerKit. |
 | `Apps/ShareExtension` | Share extensions for iOS and macOS: a view controller per platform plus the shared SwiftUI sheet. The logic (`ShareModel`, `SharedContent`) lives in PincerKit. |
 | `Design/AppIcon` | Flattened reference artwork for the app icon (`Pincer.svg`). The shipped icon is `Apps/Shared/AppIcon.icon`, a layered Icon Composer file (gradient background + glass speech-bubble layer) with Default, Dark, Clear and Tinted appearances; edit it in Icon Composer (Xcode ▸ Open Developer Tool). Xcode renders flat fallbacks for iOS 18 / macOS 15. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |

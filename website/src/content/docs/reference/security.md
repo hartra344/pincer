@@ -66,6 +66,14 @@ Transcripts are cached so chats open instantly:
 
 To turn the cache off, set `PINCER_CACHE_DIR=off`. To use another folder, set it to a path.
 
+## Shortcuts and Siri
+
+[Shortcuts & Siri](../../guides/shortcuts-and-siri/) actions connect with the same device identity and access level as the app. They don't pair a new device or ask for more scopes.
+
+- Every action except **Open Chat** requires an **unlocked device**, because they return reply content or send messages that can make an agent act.
+- Prompts and replies are handed to Shortcuts or Siri and are **never logged or saved** by the actions.
+- So saved shortcuts can show names while a gateway is offline, the agent and chat names Pincer last listed are kept in its **App Group**: agent names and emoji, chat titles and agent names, up to 1,000 entries. No messages are stored there.
+
 ## Drafts
 
 Unsent text and attachments are saved per chat, so they survive switching chats and relaunching:

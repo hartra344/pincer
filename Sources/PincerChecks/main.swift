@@ -1373,6 +1373,9 @@ do {
 print("Share extension")
 await runShareChecks()
 
+print("Shortcuts & Siri")
+await runIntentChecks()
+
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     let url = arguments[index + 1]
@@ -1389,6 +1392,8 @@ if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
+    print("Shortcuts on the demo")
+    await runDemoIntents()
     print("Chat navigation")
     await runNavigation()
     print("Quick Capture (demo)")
@@ -1588,6 +1593,9 @@ func runDemo() async {
     guard connected else { return }
     check(gateway.agents.count >= 3, "agents (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions (\(gateway.sessions.count))")
+    check(gateway.approvals.map(\.id) == ["approval_demo_push"] && gateway.approvals.first?.isExpired() == false
+          && gateway.approvals.first?.command == "git push origin fix/login-timeout", "demo opens with one pending approval")
+    check(gateway.totalUnread >= 3, "demo opens with unread chats (\(gateway.totalUnread))")
 
     let key = "agent:main:main"
     await gateway.loadCommands(sessionKey: key, agentId: "main")
@@ -1670,14 +1678,15 @@ func runDemo() async {
     await history.loadMore()
     check(history.items.count == 10 && history.hasMore, "demo second page before resolving")
 
+    let seededApprovals = Set(gateway.approvals.map(\.id))
     await chat.send("please approve this")
-    let approvalSeen = await waitFor("approval") { !gateway.approvals.isEmpty }
+    let approvalSeen = await waitFor("approval") { gateway.approvals.contains { !seededApprovals.contains($0.id) } }
     check(approvalSeen, "demo approval surfaced")
-    if let approval = gateway.approvals.first {
+    if let approval = gateway.approvals.first(where: { !seededApprovals.contains($0.id) }) {
         await history.loadDetail(approval.id)
         check(history.details[approval.id]?.status == .pending, "demo approval.get returns a pending approval")
         await gateway.resolveApproval(approval, decision: "allow-once")
-        check(gateway.approvals.isEmpty, "demo approval resolved")
+        check(gateway.approvals.map(\.id) == Array(seededApprovals), "demo approval resolved, the seeded one still waits")
         let merged = await waitFor("history refresh after resolve", timeout: 5) { history.items.first?.id == approval.id }
         check(merged && history.items.count == 11, "resolved approval shows first after exec.approval.resolved (\(history.items.count))")
         if let top = history.items.first {
@@ -2683,6 +2692,7 @@ func runLive(url: String, token: String) async {
     coder.clearCompaction()
     check(coder.compaction == nil, "result cleared when the popover closes")
     await checkPushLive(gateway)
+    await runLiveIntents(profile: profile, gateway: gateway)
     gateway.stop()
 
     let adminProfile = GatewayProfile(id: profile.id, name: "Mock", url: url, authMode: .token, access: .admin)

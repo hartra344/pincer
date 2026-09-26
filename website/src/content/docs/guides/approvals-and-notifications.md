@@ -17,6 +17,8 @@ In the banner, **Deny** is a button, and **Allow Once** and **Always Allow** are
 
 An approval you answer somewhere else, such as on another device or in the Control UI, disappears from Pincer on its own, including its banner and notifications.
 
+To check how many approvals are waiting, you can also ask Siri "Pending approvals in Pincer". Siri can't answer them, though. See [Shortcuts & Siri](../shortcuts-and-siri/#get-pending-approvals).
+
 :::note
 Answering approvals uses the `operator.approvals` scope, which Pincer requests with both access levels.
 :::
