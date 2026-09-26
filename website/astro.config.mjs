@@ -43,9 +43,12 @@ export default defineConfig({
 					label: 'Using Pincer',
 					items: [
 						{ slug: 'guides/organizing-chats' },
+						{ slug: 'guides/command-palette-and-navigation' },
 						{ slug: 'guides/transcript' },
 						{ slug: 'guides/composer' },
+						{ slug: 'guides/sharing-to-pincer' },
 						{ slug: 'guides/approvals-and-notifications' },
+						{ slug: 'guides/push-notifications' },
 						{ slug: 'guides/gateway-settings' },
 						{ slug: 'guides/appearance' },
 					],
