@@ -102,6 +102,14 @@ See [Quick Capture](../../guides/quick-capture/).
 
 See [Start Pincer at login](../../guides/quick-capture/#start-pincer-at-login).
 
+## The menu bar item doesn't appear
+
+- Check that **Show Pincer in the menu bar** is on in **Settings → General → Menu Bar**. Dragging the item out of the menu bar turns it off.
+- When the menu bar is full, macOS hides items that don't fit, for example behind the camera notch. Quit some menu bar apps, or hold <kbd>⌘</kbd> and drag items to make room.
+- The menu bar item is macOS only.
+
+See [Menu bar](../../guides/menu-bar/).
+
 ## Quick Capture won't send
 
 - Send is turned off while the chat's gateway is offline or still connecting. The panel shows the gateway's state, and you can keep typing until it reconnects.

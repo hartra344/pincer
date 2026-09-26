@@ -66,6 +66,7 @@ On iOS, Pincer is suspended in the background, so `approve later` can't reach yo
 - **Gateway Settings → Pairing Requests:** review and approve or dismiss the sample people waiting to message your agents on Telegram and Discord.
 - **Gateway Logs:** open **Organize → Gateway Logs…** (or ⌘K → **Gateway Logs…**) to watch the simulated gateway's log grow. Send a message or trigger an approval and it shows up there. Try the level buttons, search, **Pause** and **Export…**.
 - **Gateway Settings → Health:** Telegram is disconnected, so the demo gateway shows **Degraded**. Inspect the channels, heartbeat and connected clients, then try **Restart Gateway…** to simulate a safe restart. Nothing real restarts; chats remain available and Telegram reconnects. Start a reply first to see the restart wait for it, then try **Restart Now Anyway**.
+- **[Menu bar](../../guides/menu-bar/)** (macOS): turn it on in **Settings → General → Menu Bar**. The demo's pending approval, `git push origin fix/login-timeout`, is listed under **Needs You**, and *home-lab* and *Paper digest* under **Unread**. Say **approve** in a chat to add another, and send any message to see the chat under **Running** while the reply streams. The demo's status reads **Degraded** until you restart it, because of Telegram.
 
 See [Keyboard shortcuts](../../reference/keyboard-shortcuts/) for the rest.
 

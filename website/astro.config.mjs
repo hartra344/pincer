@@ -48,6 +48,7 @@ export default defineConfig({
 						{ slug: 'guides/search' },
 						{ slug: 'guides/composer' },
 						{ slug: 'guides/quick-capture' },
+						{ slug: 'guides/menu-bar' },
 						{ slug: 'guides/shortcuts-and-siri' },
 						{ slug: 'guides/sharing-to-pincer' },
 						{ slug: 'guides/approvals-and-notifications' },

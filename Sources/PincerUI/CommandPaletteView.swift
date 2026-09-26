@@ -669,7 +669,7 @@ struct GoCommands: Commands {
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 .disabled(self.palette == nil || self.searchMessages == nil || self.app.selectedGateway == nil)
             #if os(macOS)
-            Button(QuickCaptureController.shared.displayShortcut.map { "Quick Capture…  \($0)" } ?? "Quick Capture…") {
+            Button(QuickCaptureController.shared.menuTitle) {
                 QuickCaptureController.shared.show()
             }
             #endif

@@ -46,3 +46,4 @@ If the gateway has no durable identity for your connection, these preferences st
 - Find in Chat options (**Include Thinking** and **Include Tool Output**)
 - Unsent [drafts](../../guides/composer/#drafts)
 - The last gateway and chat you [shared to](../../guides/sharing-to-pincer/)
+- Whether to show Pincer in the [menu bar](../../guides/menu-bar/) (macOS)
