@@ -4,6 +4,8 @@ import Foundation
 public enum SettingsDestination: Hashable, Codable, Sendable {
     case connection
     case overview
+    /// Approval History: past decisions on commands, plugins and system changes.
+    case approvals
     /// A curated page from `SettingsCatalog`, by id.
     case page(String)
     case plugins
@@ -18,6 +20,8 @@ public enum SettingsRoute: Hashable, Codable, Sendable {
     /// A list of strings, edited row by row.
     case list([String])
     case plugin(String)
+    /// One entry of Approval History, by approval id.
+    case approval(String)
 }
 
 /// Where a setting lives in the UI: the sidebar row, the pages pushed on top, and the field.
