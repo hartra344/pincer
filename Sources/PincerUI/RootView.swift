@@ -259,7 +259,7 @@ struct SettingsView: View {
         #if os(macOS)
         TabView {
             Tab("General", systemImage: "gearshape") {
-                SettingsForm(sections: [.you, .quickCapture, .device])
+                SettingsForm(sections: [.you, .launch, .quickCapture, .device])
             }
             Tab("Appearance", systemImage: "paintpalette") {
                 SettingsForm(sections: [.appearance, .colors], scrolls: true)
@@ -281,14 +281,14 @@ struct SettingsView: View {
 
 private struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, quickCapture, appearance, colors, conversation, sidebar, notifications, device
+        case you, launch, quickCapture, appearance, colors, conversation, sidebar, notifications, device
 
         /// Sections that exist on this platform.
         static var available: [Self] {
             #if os(macOS)
             Self.allCases
             #else
-            Self.allCases.filter { $0 != .quickCapture }
+            Self.allCases.filter { $0 != .launch && $0 != .quickCapture }
             #endif
         }
     }
@@ -342,6 +342,10 @@ private struct SettingsForm: View {
             } footer: {
                 Text("Your messages show under this name, whichever channel they came from.")
             }
+        case .launch:
+            #if os(macOS)
+            LaunchAtLoginSettingsSection()
+            #endif
         case .quickCapture:
             #if os(macOS)
             QuickCaptureSettingsSection()

@@ -87,11 +87,20 @@ Pincer uses the server's slug from the gateway's Discord config when it's set. O
 ## The Quick Capture shortcut does nothing
 
 - Pincer has to be running. The shortcut stops working when you quit it.
+- Pincer isn't running after you log in: turn on **Open at Login** in **Settings → General → Launch**.
 - Check that **Quick Capture shortcut** is on in **Settings → General → Quick Capture**.
 - If Settings says the shortcut "is used by another app", another app already registered that combination. Record a different one, or change it in the other app.
 - Quick Capture is macOS only.
 
 See [Quick Capture](../../guides/quick-capture/).
+
+## Open at Login doesn't stick or says it needs approval
+
+- If Settings says to allow Pincer, click **Open Login Items Settings…** and turn Pincer on under **System Settings → General → Login Items & Extensions**. The toggle updates when you come back to Pincer.
+- If Settings says it couldn't turn Open at Login on or off, try again, or add or remove Pincer yourself in **System Settings → General → Login Items & Extensions**.
+- Open at Login is macOS only.
+
+See [Start Pincer at login](../../guides/quick-capture/#start-pincer-at-login).
 
 ## Quick Capture won't send
 
