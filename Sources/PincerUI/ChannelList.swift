@@ -42,6 +42,10 @@ struct ChannelList: View {
                 gateway: self.gateway,
                 actions: self.actions,
                 theme: self.theme)
+                #if os(iOS)
+                // Scroll under the bottom search bar instead of stopping at its edge.
+                .ignoresSafeArea(.container, edges: .bottom)
+                #endif
         }
         #if os(iOS)
         .searchable(text: self.$search, placement: .sidebar, prompt: "Find a chat")

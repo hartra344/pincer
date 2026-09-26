@@ -85,6 +85,7 @@ struct SidebarList: UIViewRepresentable {
             }
             let chat = UICollectionView.CellRegistration<SidebarChatListCell, String> { [weak self] cell, _, id in
                 guard let self, let entry = self.entries[id] else { return }
+                cell.fill = self.rowFill
                 cell.configure(entry, actions: self.actions)
             }
             let dataSource = UICollectionViewDiffableDataSource<String, String>(collectionView: view) { [weak self] view, path, id in
@@ -191,12 +192,24 @@ struct SidebarList: UIViewRepresentable {
                 if let header = self.headers[id], let cell = cell as? SidebarHeaderListCell {
                     cell.configure(header, actions: self.actions)
                 } else if let entry = self.entries[id], let cell = cell as? SidebarChatListCell {
+                    cell.fill = self.rowFill
                     cell.configure(entry, actions: self.actions)
                 }
             }
         }
 
         private var theme = AppTheme()
+
+        /// Grouped rows on iPhone sit on cards. With a themed sidebar the stock gray card clashes,
+        /// so the card is the sidebar color raised a little.
+        private var rowFill: UIColor? {
+            guard let base = self.theme.platformColor(.sidebarBackground) else { return nil }
+            return UIColor { traits in
+                let color = base.resolvedColor(with: traits)
+                return traits.userInterfaceStyle == .dark ? color.mixed(with: .white, amount: 0.07)
+                    : color.mixed(with: .white, amount: 0.7)
+            }
+        }
 
         private func themeChanged() {
             self.collectionView?.tintColor = self.theme.platformColor(.accent)
@@ -415,6 +428,17 @@ struct SidebarList: UIViewRepresentable {
     }
 }
 
+private extension UIColor {
+    func mixed(with other: UIColor, amount: CGFloat) -> UIColor {
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        guard self.getRed(&r1, green: &g1, blue: &b1, alpha: &a1),
+              other.getRed(&r2, green: &g2, blue: &b2, alpha: &a2) else { return self }
+        return UIColor(red: r1 + (r2 - r1) * amount, green: g1 + (g2 - g1) * amount,
+                       blue: b1 + (b2 - b1) * amount, alpha: a1 + (a2 - a1) * amount)
+    }
+}
+
 private extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
@@ -428,6 +452,18 @@ private final class SidebarChatListCell: UICollectionViewListCell {
     private let spinner = UIActivityIndicatorView(style: .medium)
     private let unreadDot = UIImageView(image: UIImage(systemName: "circle.fill"))
     private var onToggleThreads: (() -> Void)?
+    var fill: UIColor? {
+        didSet { if fill != oldValue { self.setNeedsUpdateConfiguration() } }
+    }
+
+    override func updateConfiguration(using state: UICellConfigurationState) {
+        super.updateConfiguration(using: state)
+        var background = self.defaultBackgroundConfiguration().updated(for: state)
+        if let fill, !state.isSelected, !state.isHighlighted, !state.isSwiped {
+            background.backgroundColor = fill
+        }
+        self.backgroundConfiguration = background
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
