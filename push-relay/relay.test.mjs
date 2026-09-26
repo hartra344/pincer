@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import http2 from 'node:http2';
 import { after, before, beforeEach, test } from 'node:test';
-import { apnsHeaders, createProviderToken, createRelay, openId, sealId } from './relay.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { apnsHeaders, createProviderToken, createRelay, loadEnvFile, openId, sealId } from './relay.mjs';
 
 const SECRET = 'test-secret-that-is-at-least-32-characters';
 const TOKEN = 'ab'.repeat(32);
@@ -184,4 +187,12 @@ test('end to end: a Gateway Web Push reaches APNs still encrypted, and decrypts 
   const message = JSON.parse(decryptWebPush(Buffer.from(payload.pincer.p, 'base64url'), { privateKey: device.getPrivateKey(), auth }));
   assert.equal(message.url, 'approve/appr-1');
   assert.equal(message.title, 'OpenClaw approval requested');
+});
+
+test('.env files: comments, quotes and empty values', () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'relay-env-')), '.env');
+  fs.writeFileSync(file, '# comment\nRELAY_SECRET=abc=def\nAPNS_KEY_ID = "KEY 1"\nAPNS_TEAM_ID=\n  PORT=9000\r\nnot a line\n');
+  assert.deepEqual(loadEnvFile(file), { RELAY_SECRET: 'abc=def', APNS_KEY_ID: 'KEY 1', PORT: '9000' });
+  assert.deepEqual(loadEnvFile(path.join(path.dirname(file), 'missing')), {});
+  fs.rmSync(path.dirname(file), { recursive: true });
 });

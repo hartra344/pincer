@@ -1,14 +1,19 @@
 import fs from 'node:fs';
-import { createRelay } from './relay.mjs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRelay, loadEnvFile } from './relay.mjs';
 
-const env = process.env;
+const here = path.dirname(fileURLToPath(import.meta.url));
+const env = { ...loadEnvFile(process.env.RELAY_ENV_FILE ?? path.join(here, '.env')), ...process.env };
+
 for (const name of ['RELAY_SECRET', 'APNS_KEY_ID', 'APNS_TEAM_ID']) {
   if (!env[name]) {
     console.error(`${name} is required (see README.md)`);
     process.exit(64);
   }
 }
-const key = env.APNS_KEY ?? (env.APNS_KEY_FILE ? fs.readFileSync(env.APNS_KEY_FILE, 'utf8') : undefined);
+// A relative APNS_KEY_FILE is relative to this folder, so the .p8 can sit next to .env.
+const key = env.APNS_KEY ?? (env.APNS_KEY_FILE ? fs.readFileSync(path.resolve(here, env.APNS_KEY_FILE), 'utf8') : undefined);
 if (!key) {
   console.error('APNS_KEY or APNS_KEY_FILE is required (see README.md)');
   process.exit(64);

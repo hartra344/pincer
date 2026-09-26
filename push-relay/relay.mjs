@@ -7,6 +7,7 @@
 // `id` is the APNs token sealed with the relay secret, so the relay keeps no state and a Gateway
 // only ever learns an opaque endpoint. The relay never sees notification content.
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import http from 'node:http';
 import http2 from 'node:http2';
 
@@ -252,4 +253,20 @@ export function createRelay(options) {
   });
   server.on('close', () => apns.close());
   return server;
+}
+
+/** Reads `.env`: `KEY=value` lines and `#` comments, with optional quotes. Empty values are skipped. */
+export function loadEnvFile(file) {
+  if (!fs.existsSync(file)) return {};
+  const values = {};
+  for (const raw of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!match) continue;
+    let value = match[2];
+    if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
+    if (value) values[match[1]] = value;
+  }
+  return values;
 }
