@@ -1474,7 +1474,7 @@ func runLive(url: String, token: String) async {
         let recent = SidebarSection(id: "recent", title: "Recent", emoji: nil, channels: [], kind: .other)
         check(gateway.groupDropValue(for: newKey, onto: recent) == nil, "drop onto Recent is ignored")
         check(gateway.groupDropValue(for: "agent:nope:missing", onto: home) == nil, "unknown dropped key is ignored")
-        // Like Discord: a grouped chat dropped on its home agent section leaves its group.
+        // By server: a grouped chat dropped on its home agent section leaves its group.
         gateway.organization = .servers
         await gateway.patch(newKey, ["category": "Work"])
         _ = await waitFor("regroup") { gateway.sessions[newKey]?.category == "Work" }

@@ -341,7 +341,7 @@ private struct SettingsForm: View {
                 }
                 Toggle(isOn: self.$showSubagentRuns) {
                     Text("List subagent runs under their chat")
-                    Text("Off keeps one thread per chat, like Discord. Open a run from its tool call instead.")
+                    Text("Off keeps one thread per chat. Open a run from its tool call instead.")
                 }
             }
         case .notifications:

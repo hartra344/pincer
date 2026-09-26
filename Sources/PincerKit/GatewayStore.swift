@@ -11,7 +11,7 @@ public enum SidebarOrganization: String, CaseIterable, Identifiable, Sendable {
     public var id: String { self.rawValue }
     public var label: String {
         switch self {
-        case .servers: "Like Discord"
+        case .servers: "By server"
         case .agent: "By agent"
         case .group: "By group"
         case .recent: "Recent"
@@ -982,7 +982,7 @@ public final class GatewayStore: Identifiable {
         case .other where section.id == "group:":
             return row.category == nil ? nil : .null
         case .server, .agent, .automations:
-            // Like Discord: a grouped chat can go back to the section it lives in without a group.
+            // By server: a grouped chat can go back to the section it lives in without a group.
             guard self.organization == .servers, row.category != nil,
                   Self.ungroupedHome(of: row) == section.kind else { return nil }
             return .null
