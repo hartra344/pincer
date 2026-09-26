@@ -38,7 +38,7 @@ If the gateway has no durable identity for your connection, these preferences st
 - Thinking Steps (None, Live Only, All)
 - Your display name
 - Whether to load images the agent links from the web
-- The transcript cache
+- The transcript cache and its message search index
 - Whether to show the last message under each chat, and whether to list subagent runs under their chat
 - Notifications on or off (**Notify about replies and approvals**)
 - The push relay URL (iOS)

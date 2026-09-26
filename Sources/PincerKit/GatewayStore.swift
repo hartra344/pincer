@@ -115,6 +115,14 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var didPickInitialChat = false
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
+    @ObservationIgnored private var reconcileTask: Task<Void, Never>?
+    /// When a failed search last asked for the index to be rebuilt; searches that keep failing
+    /// don't keep rebuilding it (each rebuild re-runs the search).
+    @ObservationIgnored private var lastFailureReconcile: ContinuousClock.Instant?
+    /// Full-text index of this Gateway's cached transcripts, for message search.
+    public var messageIndex: MessageIndex { MessageIndex.shared(gatewayId: self.id) }
+    /// Whether message search is ready, still indexing cached chats, or off (no transcript cache).
+    public private(set) var messageIndexProgress: MessageIndex.Status = .ready
     @ObservationIgnored weak var notifier: Notifier?
     /// Approvals this session settled (answered, expired or answered elsewhere), so a later duplicate
     /// action is a no-op rather than another RPC and follow-up.
@@ -171,6 +179,9 @@ public final class GatewayStore: Identifiable {
         self.profile = profile
         self.id = profile.id
         self.defaults = defaults
+        // The demo's chats are always at hand, so its search works even with the cache off.
+        if profile.isDemo { MessageIndex.allowInMemory(gatewayId: profile.id) }
+        self.messageIndexProgress = MessageIndex.status(gatewayId: profile.id)
         self.identity = identity
         self.connection = GatewayConnection(profile: profile, identity: identity)
         self.organization = SidebarOrganization(
@@ -225,6 +236,7 @@ public final class GatewayStore: Identifiable {
         self.pumpTask?.cancel()
         self.pumpTask = nil
         self.prefetchTask?.cancel()
+        self.reconcileTask?.cancel()
         Task { await connection.stop() }
     }
 
@@ -308,6 +320,74 @@ public final class GatewayStore: Identifiable {
             await chat.load(force: true)
         }
         self.startPrefetch()
+        self.reconcileMessageIndex()
+    }
+
+    /// Indexes cached transcripts the message index hasn't seen yet (caches from before it
+    /// existed, or after it was rebuilt), in the background.
+    private func reconcileMessageIndex() {
+        guard MessageIndex.status(gatewayId: self.id) != .unavailable else {
+            self.messageIndexProgress = .unavailable
+            return
+        }
+        self.reconcileTask?.cancel()
+        let keys = self.sessions.values.filter { !$0.isSubagent }.map(\.key)
+        let index = self.messageIndex
+        self.reconcileTask = Task.detached(priority: .utility) { [weak self] in
+            await index.reconcile(sessionKeys: keys) { status in
+                await MainActor.run { self?.messageIndexProgress = status }
+            }
+        }
+    }
+
+    /// Chats message search may show: listed, not subagent runs, archived only while listed.
+    var searchableSessionKeys: Set<String> {
+        Set(self.sessions.values.filter { !$0.isSubagent && (self.showArchived || !$0.isArchived) }.map(\.key))
+    }
+
+    /// Messages matching `query` across this Gateway's cached chats, grouped by chat. Throws
+    /// `CancellationError` when a newer search replaced this one.
+    public func searchMessages(_ query: String) async throws -> MessageSearch.Results {
+        let query = TranscriptSearch.normalized(query)
+        guard MessageSearch.ftsQuery(query) != nil else { return MessageSearch.Results(query: query) }
+        let index = self.messageIndex
+        let allowed = self.searchableSessionKeys
+        let candidates: [MessageSearch.Hit]
+        do {
+            // Cancelling this task interrupts the search.
+            candidates = try await index.search(query)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // The index may have been deleted; refill it from the transcripts, at most once a minute.
+            let now = ContinuousClock.now
+            if self.lastFailureReconcile.map({ now - $0 >= .seconds(60) }) ?? true {
+                self.lastFailureReconcile = now
+                self.reconcileMessageIndex()
+            }
+            return MessageSearch.Results(query: query, failed: true)
+        }
+        let groups = await Task.detached(priority: .userInitiated) {
+            MessageSearch.collect(candidates, query: query, allowed: allowed)
+        }.value
+        try Task.checkCancellation()
+        let snippets = await Task.detached(priority: .userInitiated) {
+            groups.map { $0.hits.map { MessageSearch.snippet(query: query, markdown: $0.text) } }
+        }.value
+        try Task.checkCancellation()
+        let chats: [MessageSearch.Chat] = zip(groups, snippets).compactMap { group, snippets in
+            guard let row = self.sessions[group.sessionKey] else { return nil }
+            let agent = self.agent(row.agentId).name
+            let messages = zip(group.hits, snippets).map { hit, snippet in
+                MessageSearch.Message(
+                    hit: hit,
+                    sender: hit.role == .user ? hit.via.map { "via \($0)" } ?? "You" : agent,
+                    snippet: snippet)
+            }
+            return MessageSearch.Chat(sessionKey: row.key, title: row.title, isArchived: row.isArchived,
+                                      messages: messages, hasMore: group.hasMore)
+        }
+        return MessageSearch.Results(query: query, chats: chats)
     }
 
     /// Quietly caches every chat's full history, most recently active first, so opening any

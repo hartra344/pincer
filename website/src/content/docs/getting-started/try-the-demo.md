@@ -69,6 +69,20 @@ See [Keyboard shortcuts](../../reference/keyboard-shortcuts/) for the rest.
 - **The Share extension has its own demo.** It runs in a separate process with its own demo instance, so it lists the demo chats and sends successfully, but the shared message won't appear in the app's demo.
 - **Limited administration.** The demo simulates command policy and pairing requests, not general Gateway Settings, automations or plugins. For broader administration workflows, use the [mock gateway](../../development/mock-gateway/).
 
+### Search the demo's messages
+
+Press **⇧⌘F** (on a Mac, or an iPad with a keyboard), or type in the sidebar's **Find a chat** field and choose **Search messages for …**, then try:
+
+| Search for | What you'll find |
+| --- | --- |
+| `backup` | Matches in four chats: a Time Machine backup in Claw's *Main*, a backup script in Forge's *Main*, a failed NAS backup in *home-lab* and a rainy-day backup plan in the *Japan trip*. |
+| `ghibli` | Ghibli Museum ideas in the *Japan trip*'s older history, well above what's loaded when you open the chat. |
+| `cafe` | *Café Lumière* in Claw's *Main* and a sentō turned café in the *Japan trip*. Accents and case don't matter. |
+| `todai` | Tōdai-ji in the *Japan trip*. The macron over the ō doesn't matter. |
+| `ramen` | Lots of matches in the *Japan trip*. Choose **More matches in Japan trip…** to open Find in Chat on all of them. |
+
+Picking a result opens the chat with that message highlighted. See [Search messages](../../guides/search/) for the matching rules.
+
 ## Try Shortcuts and Siri
 
 Pincer's [Shortcuts & Siri](../../guides/shortcuts-and-siri/) actions work with the demo too, with no gateway or pairing needed. Open the demo once, then try:

@@ -69,6 +69,10 @@ The options menu in the bar has two toggles:
 
 When a match is inside folded thinking or a tool card, it opens when you get to it. The options are remembered on this device.
 
+### Searching every chat
+
+To search every chat at once, use [Search messages](../search/) (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd>). Opening one of its results opens that chat with Find in Chat already showing your query and the message you picked selected. Every search result is also a match in Find, though Find matches inside words too.
+
 ## Images
 
 Pincer shows images inline, with a Quick Look-style preview and sharing. This covers:
@@ -93,4 +97,4 @@ Each reply's footer shows the model the gateway recorded for it, so earlier repl
 
 The full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer caches every chat, most recently active first, and skips chats that haven't changed. Opening a chat shows the cached transcript right away, then fetches only what's new.
 
-The cache location and how to turn it off are described in [Security & privacy](../../reference/security/#local-cache).
+[Search messages](../search/) covers everything in this cache. The cache location and how to turn it off are described in [Security & privacy](../../reference/security/#local-cache).

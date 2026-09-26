@@ -8,6 +8,7 @@ struct ChannelList: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.openAutomations) private var openAutomations
+    @Environment(\.searchMessages) private var searchMessages
     /// Called when the reader picks a chat, so compact layouts can show it.
     var openChat: () -> Void = {}
     @State private var search = ""
@@ -22,6 +23,25 @@ struct ChannelList: View {
     @State private var prompt: TextPrompt?
     @State private var confirmation: ConfirmPrompt?
 
+    /// While filtering chats by name, offers to search their messages instead.
+    @ViewBuilder private var searchMessagesRow: some View {
+        let query = TranscriptSearch.normalized(self.search)
+        if !query.isEmpty {
+            Button {
+                self.searchMessages(query)
+            } label: {
+                Label("Search messages for “\(query)”", systemImage: "text.magnifyingglass")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .accessibilityIdentifier("sidebar-search-messages")
+        }
+    }
+
     var body: some View {
         @Bindable var gateway = self.gateway
         VStack(spacing: 0) {
@@ -31,6 +51,7 @@ struct ChannelList: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, 6)
             #endif
+            self.searchMessagesRow
             ConnectionStatusRow()
             ChannelListRows(search: self.search, expandedThreads: self.expandedThreads,
                             actions: self.actions, theme: self.theme)

@@ -90,7 +90,7 @@ struct RootView: View {
     @State private var automationsRequest: AutomationsRequest?
     /// iOS: app Settings opened from the command palette.
     @State private var showingAppSettings = false
-    @State private var showsCommandPalette = false
+    @State private var paletteRequest: PaletteRequest?
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -120,10 +120,11 @@ struct RootView: View {
             }
         }
         .overlay {
-            CommandPaletteOverlay(isPresented: self.$showsCommandPalette, openAppSettings: { self.showingAppSettings = true })
+            CommandPaletteOverlay(request: self.$paletteRequest, openAppSettings: { self.showingAppSettings = true })
         }
-        .animation(.snappy(duration: 0.15), value: self.showsCommandPalette)
-        .focusedSceneValue(\.commandPalette, self.$showsCommandPalette)
+        .animation(.snappy(duration: 0.15), value: self.paletteRequest)
+        .focusedSceneValue(\.commandPalette, self.showsCommandPalette)
+        .focusedSceneValue(\.searchMessages, self.app.selectedGateway == nil ? nil : self.searchMessagesAction)
         .sheet(isPresented: self.$addingGateway) { ConnectionSheet() }
         #if os(iOS)
         .sheet(isPresented: self.$showingAppSettings) {
@@ -141,6 +142,7 @@ struct RootView: View {
         }
         .environment(\.openGatewaySettings, self.settingsOpener)
         .environment(\.openAutomations, self.automationsOpener)
+        .environment(\.searchMessages, self.searchMessagesAction)
         .onChange(of: self.scenePhase, initial: true) { _, phase in
             self.app.appIsActive = phase == .active
         }
@@ -151,6 +153,18 @@ struct RootView: View {
             #if os(macOS)
             QuickCaptureController.shared.openWindow = self.openWindow
             #endif
+        }
+    }
+
+    /// ⌘K: the palette's root page.
+    private var showsCommandPalette: Binding<Bool> {
+        Binding(get: { self.paletteRequest != nil },
+                set: { self.paletteRequest = $0 ? self.paletteRequest ?? PaletteRequest() : nil })
+    }
+
+    private var searchMessagesAction: SearchMessagesAction {
+        SearchMessagesAction { query in
+            self.paletteRequest = PaletteRequest(page: .messages, query: query)
         }
     }
 

@@ -17,6 +17,8 @@ public final class AppModel {
     public let push = PushRegistrar.shared
     /// Counts `open(_:)` calls (from notifications), so the UI can bring the chat on screen.
     public private(set) var openRequests = 0
+    /// Find in Chat to open with a chat, e.g. after picking a message search result.
+    public private(set) var findRequest: FindRequest?
     /// Chats visited, for Back/Forward and the palette's recent chats.
     public private(set) var history = ChatHistory<Notifier.Target>()
     public var appIsActive = true {
@@ -124,9 +126,29 @@ public final class AppModel {
         guard let gateway = self.gateways.first(where: { $0.id == target.gatewayId }) else { return }
         // Key first, so switching Gateways doesn't briefly record the other Gateway's last chat.
         if !target.sessionKey.isEmpty { gateway.selectedKey = gateway.resolveSessionKey(target.sessionKey) }
+        // A find request for another chat was never taken; it mustn't surface when that chat opens later.
+        if let request = self.findRequest,
+           request.target.gatewayId != gateway.id
+           || gateway.resolveSessionKey(request.target.sessionKey) != gateway.selectedKey
+        {
+            self.findRequest = nil
+        }
         self.selectedGatewayId = gateway.id
         self.updateVisible()
         self.openRequests += 1
+    }
+
+    /// Opens a chat with Find in Chat showing `query`, `match` (if given) selected.
+    public func open(_ target: Notifier.Target, find query: String, match: TranscriptSearch.Match?) {
+        self.findRequest = FindRequest(target: target, query: query, match: match)
+        self.open(target)
+    }
+
+    /// The pending find request for `target`, once: it's cleared when taken.
+    public func takeFindRequest(for target: Notifier.Target) -> FindRequest? {
+        guard let request = self.findRequest, request.target == target else { return nil }
+        self.findRequest = nil
+        return request
     }
 
     // MARK: Navigation
@@ -204,7 +226,7 @@ public final class AppModel {
             store.stop()
         }
         store.profile.forgetCredentials()
-        TranscriptCache.removeAll(gatewayId: id)
+        TranscriptCache.removeAll(gatewayId: id, permanently: true)
         self.history.prune { $0.gatewayId != id }
         DraftStore.removeAll(gatewayId: id)
         self.persist()
@@ -221,5 +243,20 @@ public final class AppModel {
 
     private func persist() {
         GatewayProfileStore.save(self.gateways.map(\.profile), to: self.sharedDefaults)
+    }
+}
+
+/// Find in Chat to show when a chat opens.
+public struct FindRequest: Hashable, Sendable {
+    public let id: UUID
+    public let target: Notifier.Target
+    public let query: String
+    public let match: TranscriptSearch.Match?
+
+    public init(target: Notifier.Target, query: String, match: TranscriptSearch.Match?) {
+        self.id = UUID()
+        self.target = target
+        self.query = query
+        self.match = match
     }
 }
