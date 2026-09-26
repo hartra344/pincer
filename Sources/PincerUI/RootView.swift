@@ -3,16 +3,27 @@ import SwiftUI
 
 /// The whole app: shared by the macOS and iOS targets.
 public struct PincerScene: Scene {
-    @State private var app = AppModel()
+    /// One for the app's lifetime, so launch work (connecting, the Quick Capture hotkey) doesn't
+    /// wait for a main window, which may never be created.
+    @State private var app = AppModel.shared
 
-    public init() {}
+    public init() {
+        #if os(macOS)
+        QuickCaptureController.shared.install(app: AppModel.shared)
+        #endif
+    }
 
     public var body: some Scene {
         WindowGroup("Pincer", id: "main") {
             RootView()
                 .environment(self.app)
                 .themed()
-                .task { self.app.start() }
+                .task {
+                    self.app.start()
+                    #if os(macOS)
+                    QuickCaptureController.shared.launch()
+                    #endif
+                }
         }
         #if os(macOS)
         .defaultSize(width: 1180, height: 780)
@@ -137,6 +148,9 @@ struct RootView: View {
         .background { UnreadBadgeSync() }
         .onAppear {
             if self.app.gateways.isEmpty { self.addingGateway = true }
+            #if os(macOS)
+            QuickCaptureController.shared.openWindow = self.openWindow
+            #endif
         }
     }
 
@@ -244,7 +258,7 @@ struct SettingsView: View {
         #if os(macOS)
         TabView {
             Tab("General", systemImage: "gearshape") {
-                SettingsForm(sections: [.you, .device])
+                SettingsForm(sections: [.you, .quickCapture, .device])
             }
             Tab("Appearance", systemImage: "paintpalette") {
                 SettingsForm(sections: [.appearance, .colors], scrolls: true)
@@ -258,7 +272,7 @@ struct SettingsView: View {
         }
         .frame(width: 520)
         #else
-        SettingsForm(sections: SettingsForm.Section.allCases)
+        SettingsForm(sections: SettingsForm.Section.available)
             .navigationTitle("Settings")
         #endif
     }
@@ -266,7 +280,16 @@ struct SettingsView: View {
 
 private struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, appearance, colors, conversation, sidebar, notifications, device
+        case you, quickCapture, appearance, colors, conversation, sidebar, notifications, device
+
+        /// Sections that exist on this platform.
+        static var available: [Self] {
+            #if os(macOS)
+            Self.allCases
+            #else
+            Self.allCases.filter { $0 != .quickCapture }
+            #endif
+        }
     }
 
     let sections: [Section]
@@ -318,6 +341,10 @@ private struct SettingsForm: View {
             } footer: {
                 Text("Your messages show under this name, whichever channel they came from.")
             }
+        case .quickCapture:
+            #if os(macOS)
+            QuickCaptureSettingsSection()
+            #endif
         case .appearance:
             SwiftUI.Section {
                 Picker("Appearance", selection: self.$mode) {

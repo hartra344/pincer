@@ -33,17 +33,17 @@ enum TranscriptCache {
             .appending(path: "Pincer/Transcripts", directoryHint: .isDirectory)
     }
 
-    static func directory(gatewayId: UUID) -> URL? {
-        self.root?.appending(path: gatewayId.uuidString, directoryHint: .isDirectory)
+    static func directory(gatewayId: UUID, root: URL? = Self.root) -> URL? {
+        root?.appending(path: gatewayId.uuidString, directoryHint: .isDirectory)
     }
 
-    static func file(gatewayId: UUID, sessionKey: String) -> URL? {
+    static func file(gatewayId: UUID, sessionKey: String, root: URL? = Self.root) -> URL? {
         let digest = SHA256.hash(data: Data(sessionKey.utf8)).map { String(format: "%02x", $0) }.joined()
-        return self.directory(gatewayId: gatewayId)?.appending(path: "\(digest).json")
+        return self.directory(gatewayId: gatewayId, root: root)?.appending(path: "\(digest).json")
     }
 
-    static func meta(gatewayId: UUID, sessionKey: String) async -> Meta? {
-        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey)?.appendingPathExtension("meta") else {
+    static func meta(gatewayId: UUID, sessionKey: String, root: URL? = Self.root) async -> Meta? {
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root)?.appendingPathExtension("meta") else {
             return nil
         }
         return await Task.detached(priority: .utility) {
@@ -51,8 +51,8 @@ enum TranscriptCache {
         }.value
     }
 
-    static func load(gatewayId: UUID, sessionKey: String) async -> Snapshot? {
-        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey) else { return nil }
+    static func load(gatewayId: UUID, sessionKey: String, root: URL? = Self.root) async -> Snapshot? {
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else { return nil }
         return await Task.detached(priority: .userInitiated) {
             guard let data = try? Data(contentsOf: url),
                   let snapshot = try? JSONDecoder().decode(Snapshot.self, from: data),
@@ -62,13 +62,13 @@ enum TranscriptCache {
         }.value
     }
 
-    static func save(_ snapshot: Snapshot, gatewayId: UUID, sessionKey: String) async {
-        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey) else { return }
+    static func save(_ snapshot: Snapshot, gatewayId: UUID, sessionKey: String, root: URL? = Self.root) async {
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else { return }
         await Writer.shared.write(snapshot, to: url)
     }
 
-    static func removeAll(gatewayId: UUID) {
-        guard let directory = self.directory(gatewayId: gatewayId) else { return }
+    static func removeAll(gatewayId: UUID, root: URL? = Self.root) {
+        guard let directory = self.directory(gatewayId: gatewayId, root: root) else { return }
         try? FileManager.default.removeItem(at: directory)
     }
 

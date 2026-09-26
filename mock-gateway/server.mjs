@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
@@ -28,6 +29,7 @@ const METHODS = [
   'artifacts.download',
   'exec.approval.list',
   'exec.approval.resolve',
+  ...APPROVAL_HISTORY_METHODS,
   'question.list',
   'question.resolve',
   'users.prefs.get',
@@ -442,6 +444,8 @@ function createSeedState() {
     pairedDevices: new Map(),
     pendingPairing: new Map(),
     pendingApprovals: new Map(),
+    // Resolved approvals keep their decision so identical retries stay idempotent, as on the Gateway.
+    resolvedApprovals: new Map(),
     questions: new Map(),
     progressCards: new Map(),
     // Gateway-owned custom group catalog: names in display order, kept even when empty.
@@ -452,6 +456,7 @@ function createSeedState() {
     configState: createConfigState(),
     webPushState: createWebPushState(),
     cronState: createCronState(base),
+    approvalHistoryState: createApprovalHistoryState(base),
   };
 }
 
@@ -590,7 +595,7 @@ function makeHelloPayload(state, params, connId, deviceId) {
     type: 'hello-ok',
     protocol: 4,
     server: { version: 'mock-2026.1', connId },
-    features: { methods: METHODS, events: EVENTS },
+    features: { methods: approvalHistoryDisabled() ? METHODS.filter((m) => !APPROVAL_HISTORY_METHODS.includes(m)) : METHODS, events: EVENTS },
     snapshot: {},
     auth: { role: 'operator', scopes: params.scopes ?? [], deviceToken: deviceTokenFor(state, deviceId) },
     policy: {
@@ -828,13 +833,25 @@ async function simulateRun(state, run, params) {
     if (compact) return await simulateCompactCommand(state, run, sessionKey, row, compact[1]?.trim() ?? '');
 
     if (/\bapprove\b/i.test(String(text ?? ''))) {
+      // `approve once-only` leaves allow-always out of allowedDecisions; `approve short-lived` expires in 3 s.
+      const onceOnly = /\bonce-only\b/i.test(String(text ?? ''));
+      const ttlMs = /\bshort-lived\b/i.test(String(text ?? '')) ? 3_000 : 120_000;
       const approval = {
         id: shortId('approval_'),
-        request: { command: 'rm -rf ./build', cwd: '/home/claw/project', sessionKey, agentId: row.agentId },
+        request: {
+          command: 'rm -rf ./build',
+          cwd: '/home/claw/project',
+          sessionKey,
+          agentId: row.agentId,
+          allowedDecisions: onceOnly ? ['allow-once', 'deny'] : ['allow-once', 'allow-always', 'deny'],
+        },
         createdAtMs: nowMs(),
-        expiresAtMs: nowMs() + 120_000,
+        expiresAtMs: nowMs() + ttlMs,
       };
       state.pendingApprovals.set(approval.id, approval);
+      setTimeout(() => {
+        if (state.pendingApprovals.get(approval.id) === approval) state.pendingApprovals.delete(approval.id);
+      }, ttlMs).unref?.();
       broadcast(state, 'exec.approval.requested', clone(approval));
     }
 
@@ -968,6 +985,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
   if (handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession })) return;
   if (handleWebPushRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr })) return;
   switch (method) {
     case 'progressCard.get': {
       const key = params.sessionKey;
@@ -1101,6 +1119,10 @@ function handleAuthedRequest(state, conn, msg) {
       const key = params.sessionKey;
       if (!params.idempotencyKey) return sendErr(conn, id, 'INVALID_REQUEST', 'idempotencyKey is required');
       if (!state.sessions.has(key)) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown session');
+      // Test hooks: `[mock:fail-send]` in the message refuses it; `[mock:drop]` drops this connection.
+      const message = String(params.message ?? '');
+      if (message.includes('[mock:fail-send]')) return sendErr(conn, id, 'UNAVAILABLE', 'mock send failure');
+      if (message.includes('[mock:drop]')) return conn.ws.close(1012, 'mock drop');
       if (state.idempotency.has(params.idempotencyKey)) {
         return sendRes(conn, id, { runId: state.idempotency.get(params.idempotencyKey), status: 'started' });
       }
@@ -1282,14 +1304,35 @@ function handleAuthedRequest(state, conn, msg) {
       break;
     }
     case 'exec.approval.list': {
-      sendRes(conn, id, { approvals: [...state.pendingApprovals.values()].map(clone) });
+      const now = nowMs();
+      sendRes(conn, id, { approvals: [...state.pendingApprovals.values()].filter((a) => a.expiresAtMs > now).map(clone) });
       break;
     }
     case 'exec.approval.resolve': {
+      // Mirrors openclaw exec-approval.ts / approval-shared.ts / approval-errors.ts.
       if (!['allow-once', 'allow-always', 'deny'].includes(params.decision)) {
         return sendErr(conn, id, 'INVALID_REQUEST', 'invalid decision');
       }
+      const resolvedDecision = state.resolvedApprovals.get(params.id);
+      if (resolvedDecision !== undefined) {
+        if (resolvedDecision === params.decision) return sendRes(conn, id, { ok: true });
+        return sendErr(conn, id, 'INVALID_REQUEST', 'approval already resolved', { reason: 'APPROVAL_ALREADY_RESOLVED' });
+      }
+      const approval = state.pendingApprovals.get(params.id);
+      if (!approval || approval.expiresAtMs <= nowMs()) {
+        if (approval) state.pendingApprovals.delete(params.id);
+        return sendErr(conn, id, 'INVALID_REQUEST', 'approval expired or not found', { reason: 'APPROVAL_NOT_FOUND' });
+      }
+      const allowed = approval.request?.allowedDecisions;
+      if (Array.isArray(allowed) && !allowed.includes(params.decision)) {
+        if (params.decision === 'allow-always') {
+          return sendErr(conn, id, 'INVALID_REQUEST', 'allow-always is unavailable for this command', { reason: 'APPROVAL_ALLOW_ALWAYS_UNAVAILABLE' });
+        }
+        return sendErr(conn, id, 'INVALID_REQUEST', 'invalid decision');
+      }
+      recordExecResolution(state, approval, params.decision, conn.deviceId);
       state.pendingApprovals.delete(params.id);
+      state.resolvedApprovals.set(params.id, params.decision);
       broadcast(state, 'exec.approval.resolved', { id: params.id, decision: params.decision });
       sendRes(conn, id, { ok: true, id: params.id, decision: params.decision });
       break;

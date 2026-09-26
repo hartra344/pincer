@@ -5,6 +5,7 @@ import http from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import { startServer } from './server.mjs';
+import { SEEDED_HISTORY_COUNTS } from './approvals.mjs';
 import { decryptWebPush, sessionPath } from './webpush.mjs';
 
 function b64url(buf) {
@@ -202,6 +203,21 @@ try {
   assert.ok(deltaCount > 0, 'expected chat deltas');
   assert.equal(sawTool, true, 'expected tool result event');
 
+  // Test hooks for failed sends: one refused, one that drops the connection.
+  const refused = await client.call('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'nope [mock:fail-send]',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.error.code, 'UNAVAILABLE');
+  const dropped = await connectClient(url, device, deviceToken, true);
+  const closed = new Promise((resolve) => dropped.ws.once('close', resolve));
+  dropped.call('chat.send', { sessionKey: 'agent:main:main', message: 'bye [mock:drop]', idempotencyKey: `idem_${crypto.randomUUID()}` });
+  assert.equal(await closed, 1012);
+  const afterHooks = await client.send('chat.history', { sessionKey: 'agent:main:main' });
+  assert.ok(!afterHooks.messages.some((m) => JSON.stringify(m.content).includes('[mock:')), 'hooked sends leave no messages');
+
   // Web Push: finished replies and approvals are encrypted to the subscription's keys.
   const pushed = [];
   const pushSink = http.createServer((req, res) => {
@@ -257,11 +273,126 @@ try {
   assert.equal(approvalPush.url, `approve/${requested.id}`);
   assert.equal(approvalPush.title, 'OpenClaw approval requested');
   assert.equal(pushed.find((p) => p.headers.urgency === 'high')?.headers.ttl, '120');
+  const pendingLookup = await client.send('approval.get', { id: requested.id });
+  assert.equal(pendingLookup.approval.status, 'pending');
+  assert.equal(pendingLookup.approval.presentation.commandText, 'rm -rf ./build');
+  assert.ok(!JSON.stringify(pendingLookup).includes('/home/claw'), 'approval snapshots never carry cwd');
   await client.send('exec.approval.resolve', { id: requested.id, decision: 'deny' });
+  assert.deepEqual(requested.request.allowedDecisions, ['allow-once', 'allow-always', 'deny']);
+  // Identical retry is idempotent; a conflicting one is already resolved (openclaw approval-shared.ts).
+  assert.equal((await client.send('exec.approval.resolve', { id: requested.id, decision: 'deny' })).ok, true);
+  const conflicting = await client.call('exec.approval.resolve', { id: requested.id, decision: 'allow-once' });
+  assert.equal(conflicting.ok, false);
+  assert.equal(conflicting.error.code, 'INVALID_REQUEST');
+  assert.equal(conflicting.error.message, 'approval already resolved');
+  assert.equal(conflicting.error.details.reason, 'APPROVAL_ALREADY_RESOLVED');
+  assert.ok(!(await client.send('exec.approval.list')).approvals.some((a) => a.id === requested.id));
+  const unknown = await client.call('exec.approval.resolve', { id: 'approval_missing', decision: 'allow-once' });
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.error.code, 'INVALID_REQUEST');
+  assert.equal(unknown.error.message, 'approval expired or not found');
+  assert.equal(unknown.error.details.reason, 'APPROVAL_NOT_FOUND');
+  assert.equal((await client.call('exec.approval.resolve', { id: 'approval_missing', decision: 'maybe' })).error.message, 'invalid decision');
+
+  // Approval history: newest-first terminal ledger with opaque cursors and a kind filter.
+  const seededTotal = Object.values(SEEDED_HISTORY_COUNTS).reduce((a, b) => a + b, 0);
+  assert.ok(client.hello.features.methods.includes('approval.history'));
+  assert.ok(client.hello.features.methods.includes('approval.get'));
+  const page1 = await client.send('approval.history', {});
+  assert.equal(page1.items.length, 50, 'default limit is 50');
+  assert.ok(page1.nextCursor);
+  const page2 = await client.send('approval.history', { cursor: page1.nextCursor });
+  assert.equal(page2.nextCursor, undefined);
+  const allItems = [...page1.items, ...page2.items];
+  assert.equal(allItems.length, seededTotal + 1, 'seeded history plus the approval just resolved');
+  assert.equal(new Set(allItems.map((r) => r.id)).size, allItems.length, 'no duplicates across pages');
+  assert.ok(allItems.every((r, i) => i === 0 || allItems[i - 1].resolvedAtMs >= r.resolvedAtMs), 'newest first');
+  assert.ok(allItems.every((r) => r.status !== 'pending' && !('cwd' in r.presentation)));
+  assert.deepEqual(new Set(allItems.map((r) => r.status)), new Set(['allowed', 'denied', 'expired', 'cancelled']));
+  assert.deepEqual(new Set(allItems.map((r) => r.resolver?.kind ?? 'none')), new Set(['device', 'channel', 'runtime', 'system', 'none']));
+  const [top] = page1.items;
+  assert.equal(top.id, requested.id, 'resolved approval is at the top');
+  assert.equal(top.status, 'denied');
+  assert.equal(top.decision, 'deny');
+  assert.equal(top.reason, 'user');
+  assert.deepEqual(top.resolver, { kind: 'device', id: device.id });
+  assert.deepEqual(top.source, { agentId: 'main', sessionKey: 'agent:main:main' });
+  const resolvedLookup = await client.send('approval.get', { id: requested.id });
+  assert.equal(resolvedLookup.approval.status, 'denied');
+  assert.equal((await client.send('approval.history', { limit: 100 })).items.length, seededTotal + 1);
+  assert.equal((await client.call('approval.history', { limit: 101 })).error.code, 'INVALID_REQUEST');
+  assert.equal((await client.call('approval.history', { limit: 0 })).error.code, 'INVALID_REQUEST');
+  assert.equal((await client.call('approval.history', { kind: 'bogus' })).error.code, 'INVALID_REQUEST');
+  for (const kind of ['exec', 'plugin', 'system-agent']) {
+    const expected = SEEDED_HISTORY_COUNTS[kind] + (kind === 'exec' ? 1 : 0);
+    const small1 = await client.send('approval.history', { kind, limit: 7 });
+    assert.ok(small1.items.every((r) => r.presentation.kind === kind), `${kind} filter`);
+    const filtered = [...small1.items];
+    let cursor = small1.nextCursor;
+    while (cursor) {
+      const next = await client.send('approval.history', { kind, limit: 7, cursor });
+      assert.ok(next.items.every((r) => r.presentation.kind === kind));
+      filtered.push(...next.items);
+      cursor = next.nextCursor;
+    }
+    assert.equal(filtered.length, expected, `${kind} total`);
+    assert.equal(new Set(filtered.map((r) => r.id)).size, expected);
+  }
+  const execCursor = (await client.send('approval.history', { kind: 'exec', limit: 5 })).nextCursor;
+  const kindMismatch = await client.call('approval.history', { kind: 'plugin', cursor: execCursor });
+  assert.equal(kindMismatch.error.code, 'INVALID_REQUEST', 'cursor is bound to its filter');
+  for (const cursor of ['not-a-cursor', Buffer.from('{"v":1,"after":"nope"}').toString('base64url')]) {
+    const badCursor = await client.call('approval.history', { cursor });
+    assert.equal(badCursor.ok, false);
+    assert.equal(badCursor.error.code, 'INVALID_REQUEST');
+    assert.equal(badCursor.error.message, 'invalid approval.history cursor');
+  }
+  const plugin = allItems.find((r) => r.presentation.kind === 'plugin');
+  assert.deepEqual((await client.send('approval.get', { id: plugin.id })).approval, plugin, 'approval.get round-trips a history row');
+  const system = allItems.find((r) => r.presentation.kind === 'system-agent');
+  assert.deepEqual((await client.send('approval.get', { id: system.id })).approval, system);
+  const missing = await client.call('approval.get', { id: 'approval_missing' });
+  assert.equal(missing.error.code, 'INVALID_REQUEST');
+  assert.equal(missing.error.details.reason, 'APPROVAL_NOT_FOUND');
   assert.equal((await client.send('push.web.unsubscribe', { endpoint })).removed, true);
   pushSink.close();
 
-  // ask_user: question.requested blocks the run until question.resolve settles it.
+  // `approve once-only` leaves allow-always out; asking for it anyway keeps the approval pending.
+  const onceOnlyP = client.waitEvent('exec.approval.requested');
+  const onceOnlyRun = await client.send('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'approve once-only',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  const onceOnly = await onceOnlyP;
+  assert.deepEqual(onceOnly.request.allowedDecisions, ['allow-once', 'deny']);
+  const always = await client.call('exec.approval.resolve', { id: onceOnly.id, decision: 'allow-always' });
+  assert.equal(always.ok, false);
+  assert.equal(always.error.code, 'INVALID_REQUEST');
+  assert.equal(always.error.message, 'allow-always is unavailable for this command');
+  assert.equal(always.error.details.reason, 'APPROVAL_ALLOW_ALWAYS_UNAVAILABLE');
+  assert.ok((await client.send('exec.approval.list')).approvals.some((a) => a.id === onceOnly.id), 'still pending');
+  const onceResolvedEvent = client.waitEvent('exec.approval.resolved', (p) => p.id === onceOnly.id);
+  assert.equal((await client.send('exec.approval.resolve', { id: onceOnly.id, decision: 'allow-once' })).ok, true);
+  assert.equal((await onceResolvedEvent).decision, 'allow-once');
+  await client.waitEvent('chat', (p) => p.runId === onceOnlyRun.runId && p.state === 'final', 10_000);
+
+  // `approve short-lived` expires after 3 s and then reads as not found.
+  const shortP = client.waitEvent('exec.approval.requested');
+  const shortRun = await client.send('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'approve short-lived',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  const shortLived = await shortP;
+  assert.ok(shortLived.expiresAtMs - shortLived.createdAtMs <= 3_000);
+  await client.waitEvent('chat', (p) => p.runId === shortRun.runId && p.state === 'final', 10_000);
+  await delay(Math.max(0, shortLived.expiresAtMs - Date.now()) + 50);
+  assert.ok(!(await client.send('exec.approval.list')).approvals.some((a) => a.id === shortLived.id), 'expired approval is not listed');
+  const expired = await client.call('exec.approval.resolve', { id: shortLived.id, decision: 'deny' });
+  assert.equal(expired.error.details.reason, 'APPROVAL_NOT_FOUND');
+  assert.equal(expired.error.message, 'approval expired or not found');
+
   const asked = await client.send('chat.send', {
     sessionKey: 'agent:main:main',
     message: 'ask me something',
@@ -461,6 +592,27 @@ try {
   assert.equal(coderRow.totalTokens, 34_200);
   reader.ws.close();
   admin.ws.close();
+
+  // Approval history needs operator.approvals; MOCK_NO_APPROVAL_HISTORY=1 hides it entirely.
+  const noApprovals = await connectClient(url, device, 'dev-token', true, ['operator.read']);
+  const noScope = await noApprovals.call('approval.history', {});
+  assert.equal(noScope.error.details.code, 'MISSING_SCOPE');
+  noApprovals.ws.close();
+  process.env.MOCK_NO_APPROVAL_HISTORY = '1';
+  try {
+    const legacy = await connectClient(url, device, deviceToken, true);
+    assert.ok(!legacy.hello.features.methods.includes('approval.history'));
+    assert.ok(!legacy.hello.features.methods.includes('approval.get'));
+    assert.ok(legacy.hello.features.methods.includes('exec.approval.resolve'));
+    for (const method of ['approval.history', 'approval.get']) {
+      const unknown = await legacy.call(method, { id: 'x' });
+      assert.equal(unknown.error.code, 'UNKNOWN_METHOD');
+      assert.equal(unknown.error.message, `unknown method: ${method}`);
+    }
+    legacy.ws.close();
+  } finally {
+    delete process.env.MOCK_NO_APPROVAL_HISTORY;
+  }
   console.log('PASS');
 } finally {
   await server.close();

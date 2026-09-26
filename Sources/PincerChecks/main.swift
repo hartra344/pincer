@@ -6,6 +6,7 @@ import Network
 import PincerKit
 import PincerPush
 import UniformTypeIdentifiers
+import UserNotifications
 
 // Self-checks that run without XCTest (unavailable with Command Line Tools only).
 //   swift run PincerChecks                  → unit checks
@@ -18,6 +19,9 @@ var passes = 0
 // Drafts go to a scratch folder so checks never touch the real ones.
 let draftsRoot = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-drafts-\(UUID().uuidString)")
 setenv("PINCER_DRAFTS_DIR", draftsRoot.path(percentEncoded: false), 1)
+// Same for the transcript cache, so concurrent runs (and `swift test`) never share one.
+let cacheRoot = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-cache-\(UUID().uuidString)")
+setenv("PINCER_CACHE_DIR", cacheRoot.path(percentEncoded: false), 1)
 
 @MainActor
 func check(_ condition: @autoclosure () -> Bool, _ label: String, line: UInt = #line) {
@@ -248,6 +252,245 @@ check(roundTrip?.modelRef == "anthropic/claude-opus-4-8", "model survives the tr
 print("Exec approvals")
 let approval = ExecApproval(json(#"{"id":"ap1","request":{"command":"rm -rf build","cwd":"/p","sessionKey":"agent:main:main"},"expiresAtMs":1}"#))
 check(approval?.id == "ap1" && approval?.command == "rm -rf build" && approval?.cwd == "/p", "approval payload")
+check(approval?.allowedDecisions == nil && approval?.allowsAlways == true && approval.map(Notifier.category(for:)) == "approval",
+      "no allowedDecisions (older gateway) → all three actions")
+check(approval?.isExpired() == true && approval?.isExpired(at: Date(timeIntervalSince1970: 0)) == false, "expiresAtMs past → expired")
+let onceOnlyApproval = ExecApproval(json(#"{"id":"ap2","request":{"command":"x","allowedDecisions":["allow-once","deny"]},"expiresAtMs":4102444800000}"#))
+check(onceOnlyApproval?.allowedDecisions == ["allow-once", "deny"] && onceOnlyApproval?.allowsAlways == false
+      && onceOnlyApproval.map(Notifier.category(for:)) == "approval-once" && onceOnlyApproval?.isExpired() == false,
+      "allowedDecisions without allow-always → approval-once")
+let alwaysApproval = ExecApproval(json(#"{"id":"ap3","request":{"command":"x","allowedDecisions":["allow-once","allow-always","deny"]}}"#))
+check(alwaysApproval?.allowsAlways == true && alwaysApproval.map(Notifier.category(for:)) == "approval"
+      && alwaysApproval?.isExpired() == false, "allowedDecisions with allow-always → approval, no expiry")
+
+print("Approval notification actions")
+do {
+    let categories = Dictionary(uniqueKeysWithValues: Notifier.categories().map { ($0.identifier, $0) })
+    check(Set(categories.keys) == ["reply", "approval", "approval-once", "approval-push"], "registered categories")
+    check(categories["approval"]?.actions.map(\.identifier) == ["approve-once", "approve-always", "deny"]
+          && categories["approval"]?.actions.map(\.title) == ["Allow once", "Always allow", "Deny"],
+          "approval: Allow once, Always allow, Deny in order")
+    check(categories["approval-push"]?.actions.map(\.identifier) == ["approve-once", "approve-always", "deny"],
+          "legacy approval-push keeps the same actions")
+    check(categories["approval-once"]?.actions.map(\.identifier) == ["approve-once", "deny"], "approval-once has no Always allow")
+    check(categories["reply"]?.actions.isEmpty == true, "reply has no actions")
+    let approvalActions = Notifier.approvalCategories.flatMap { categories[$0]?.actions ?? [] }
+    check(approvalActions.count == 8 && approvalActions.allSatisfy { !$0.options.contains(.foreground) }, "no approval action opens the app")
+    check(approvalActions.filter { $0.identifier != "deny" }.allSatisfy { $0.options.contains(.authenticationRequired) }, "Allow actions need unlocking")
+    check(approvalActions.filter { $0.identifier == "deny" }.allSatisfy { !$0.options.contains(.authenticationRequired) && $0.options.contains(.destructive) },
+          "Deny is destructive and works locked")
+    check(Notifier.approvalCategories == ["approval", "approval-once", "approval-push"], "approval categories")
+
+    check(Notifier.approvalDecision(for: "approve-once") == "allow-once" && Notifier.approvalDecision(for: "approve-always") == "allow-always"
+          && Notifier.approvalDecision(for: "deny") == "deny", "action → decision")
+    check([UNNotificationDefaultActionIdentifier, UNNotificationDismissActionIdentifier, "allow-once", "open", ""]
+          .allSatisfy { Notifier.approvalDecision(for: $0) == nil }, "tap, dismiss and unknown actions decide nothing")
+
+    let gw = UUID()
+    let info: [AnyHashable: Any] = ["gateway": gw.uuidString, "approval": "a1", "session": "agent:main:main"]
+    for (action, decision) in [("approve-once", "allow-once"), ("approve-always", "allow-always"), ("deny", "deny")] {
+        check(Notifier.interpret(actionIdentifier: action, categoryIdentifier: "approval", userInfo: info)
+              == .resolve(gatewayId: gw, approvalId: "a1", decision: decision), "\(action) resolves on its own gateway")
+    }
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval-push", userInfo: info)
+          == .resolve(gatewayId: gw, approvalId: "a1", decision: "deny")
+          && Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval-once", userInfo: info)
+          == .resolve(gatewayId: gw, approvalId: "a1", decision: "allow-once"), "legacy and once-only categories resolve")
+    check(Notifier.interpret(actionIdentifier: UNNotificationDefaultActionIdentifier, categoryIdentifier: "approval", userInfo: info)
+          == .open(Notifier.Target(gatewayId: gw, sessionKey: "agent:main:main")), "plain tap opens the chat")
+    check(Notifier.interpret(actionIdentifier: UNNotificationDismissActionIdentifier, categoryIdentifier: "approval", userInfo: info) == .none,
+          "dismiss sends nothing")
+    check(Notifier.interpret(actionIdentifier: "bogus", categoryIdentifier: "approval", userInfo: info) == .none, "unknown action does nothing")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "reply", userInfo: info) == .none,
+          "approval action on a reply notification is dropped")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval", userInfo: ["approval": "a1"]) == .none,
+          "missing gateway → nothing sent")
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval", userInfo: ["gateway": "not-a-uuid", "approval": "a1"]) == .none,
+          "invalid gateway → nothing sent")
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval", userInfo: ["gateway": gw.uuidString]) == .none
+          && Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval", userInfo: ["gateway": gw.uuidString, "approval": ""]) == .none,
+          "missing approval id → nothing sent")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval",
+                             userInfo: ["pincer": ["g": gw.uuidString, "p": "sealed"]]) == .open(Notifier.Target(gatewayId: gw, sessionKey: "")),
+          "undecrypted push (only pincer.g) never resolves, opens its gateway")
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval",
+                             userInfo: ["gateway": gw.uuidString.lowercased(), "approval": "a1"])
+          == .resolve(gatewayId: gw, approvalId: "a1", decision: "deny"), "lowercase gateway UUID → same gateway")
+}
+
+print("Approval outcomes")
+do {
+    func rpc(_ code: String, _ message: String, _ details: JSONValue? = nil) -> Error {
+        GatewayError.rpc(code: code, message: message, details: details)
+    }
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval expired or not found", ["reason": "APPROVAL_NOT_FOUND"])) == .expired,
+          "APPROVAL_NOT_FOUND → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "something", ["reason": "APPROVAL_NOT_FOUND"])) == .expired, "reason alone → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "unknown or expired approval id")) == .expired, "legacy message → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval expired or not found")) == .expired, "message without details → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval already resolved", ["reason": "APPROVAL_ALREADY_RESOLVED"]))
+          == .answeredElsewhere(decision: nil), "APPROVAL_ALREADY_RESOLVED → answered elsewhere")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval already resolved")) == .answeredElsewhere(decision: nil),
+          "already-resolved message → answered elsewhere")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval already resolved", ["reason": "APPROVAL_ALREADY_RESOLVED", "decision": "deny"]))
+          == .answeredElsewhere(decision: "deny"), "decision carried when the Gateway sends it")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "allow-always is unavailable for this command", ["reason": "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE"]))
+          == .allowAlwaysUnavailable, "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE → still pending")
+    check([GatewayError.timeout("exec.approval.resolve"), .notConnected, .closed("gone")].allSatisfy { ApprovalOutcome.classify($0) == .unreachable }
+          && ApprovalOutcome.classify(rpc("UNAVAILABLE", "gateway restarting")) == .unreachable,
+          "timeout, not connected, closed, UNAVAILABLE → unreachable")
+    check(ApprovalOutcome.classify(rpc("FORBIDDEN", "nope")) == .notPermitted
+          && ApprovalOutcome.classify(rpc("INVALID_REQUEST", "missing scope: operator.approvals")) == .notPermitted,
+          "FORBIDDEN or missing scope → not permitted")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "invalid decision")) == .failed("invalid decision"), "other error keeps its message")
+
+    let removing: [ApprovalOutcome] = [.resolved, .expired, .answeredElsewhere(decision: nil)]
+    let keeping: [ApprovalOutcome] = [.alreadyHandled, .allowAlwaysUnavailable, .unreachable, .notPermitted, .unknownGateway, .failed("x")]
+    check(removing.allSatisfy(\.removesApproval) && !keeping.contains(where: \.removesApproval), "which outcomes remove the approval")
+
+    let name = "Home Lab"
+    check(ApprovalOutcome.resolved.followUpBody(gatewayName: name) == nil && ApprovalOutcome.alreadyHandled.followUpBody(gatewayName: name) == nil,
+          "no follow-up on success or a duplicate")
+    check(ApprovalOutcome.expired.followUpBody(gatewayName: name) == "That approval expired. Nothing was run.", "expired copy")
+    check(ApprovalOutcome.answeredElsewhere(decision: nil).followUpBody(gatewayName: name) == "Already answered elsewhere."
+          && ApprovalOutcome.answeredElsewhere(decision: "deny").followUpBody(gatewayName: name) == "Already denied elsewhere.",
+          "answered elsewhere copy")
+    check(ApprovalOutcome.allowAlwaysUnavailable.followUpBody(gatewayName: name) == "Always allow isn't available for this command.",
+          "allow-always unavailable copy")
+    check(ApprovalOutcome.unreachable.followUpBody(gatewayName: name) == "Couldn't reach Home Lab — the command is still waiting.",
+          "unreachable copy names the gateway")
+    check(ApprovalOutcome.notPermitted.followUpBody(gatewayName: name) == "This device can't approve commands on Home Lab. Open Pincer for details.",
+          "not permitted copy names the gateway")
+    check(ApprovalOutcome.unknownGateway.followUpBody(gatewayName: nil) == "This gateway is no longer in Pincer.", "unknown gateway copy")
+    check(ApprovalOutcome.failed("boom").followUpBody(gatewayName: name) == "boom"
+          && (ApprovalOutcome.failed(String(repeating: "x", count: 500)).followUpBody(gatewayName: name)?.count ?? 0) <= 220,
+          "other errors show the clipped message")
+
+    check(ApprovalOutcome.allowAlwaysUnavailable.followUpCategory(original: "approval") == "approval-once", "still pending: Allow once and Deny")
+    check(ApprovalOutcome.unreachable.followUpCategory(original: "approval") == "approval"
+          && ApprovalOutcome.unreachable.followUpCategory(original: "approval-push") == "approval"
+          && ApprovalOutcome.unreachable.followUpCategory(original: "approval-once") == "approval-once", "unreachable keeps the actions")
+    check([ApprovalOutcome.expired, .answeredElsewhere(decision: nil), .notPermitted, .unknownGateway, .failed("x")]
+          .allSatisfy { $0.followUpCategory(original: "approval") == "reply" }, "final outcomes have no actions")
+    check(ApprovalOutcome.resolved.inAppMessage(gatewayName: name) == nil && ApprovalOutcome.expired.inAppMessage(gatewayName: name) == nil
+          && ApprovalOutcome.unreachable.inAppMessage(gatewayName: name)?.contains("Home Lab") == true, "in-app messages")
+
+    let gw = UUID()
+    let command = "rm -rf ./build"
+    let all: [ApprovalOutcome] = [.expired, .answeredElsewhere(decision: "allow-once"), .allowAlwaysUnavailable, .unreachable, .notPermitted, .unknownGateway, .failed("bad")]
+    let contents = all.map {
+        Notifier.followUpContent(for: $0, gatewayId: gw, gatewayName: name, context: "Build chat", approvalId: "a1",
+                                 sessionKey: "agent:main:main", threadIdentifier: "\(gw.uuidString)|agent:main:main", originalCategory: "approval")
+    }
+    check(contents.allSatisfy { $0 != nil }, "a follow-up for every stale or failed outcome")
+    check(contents.compactMap(\.self).allSatisfy { !$0.body.contains(command) && !$0.title.contains(command) && $0.title.contains(name) },
+          "follow-ups name the gateway and never the command")
+    check(contents.compactMap(\.self).allSatisfy {
+        $0.interruptionLevel != .timeSensitive && $0.threadIdentifier == "\(gw.uuidString)|agent:main:main"
+            && $0.userInfo["gateway"] as? String == gw.uuidString && $0.userInfo["approval"] as? String == "a1"
+    }, "follow-ups keep the thread and ids, not time-sensitive")
+    check(contents.first??.title.contains("Build chat") == true, "follow-up names the chat")
+    check(Notifier.followUpContent(for: .resolved, gatewayId: gw, gatewayName: name, context: nil, approvalId: "a1",
+                                   sessionKey: nil, threadIdentifier: nil, originalCategory: "approval") == nil, "no follow-up on success")
+
+    // In-flight guard: a second resolve of the same id while the first waits sends nothing.
+    let offline = GatewayProfile(name: "Offline", url: "ws://127.0.0.1:9", authMode: .none)
+    let store = GatewayStore(profile: offline)
+    async let first = store.resolveApproval(id: "a1", decision: "allow-once", connectWithin: 1, timeout: 1)
+    async let second = store.resolveApproval(id: "a1", decision: "allow-once", connectWithin: 1, timeout: 1)
+    let pair = await [first, second]
+    check(pair.contains(.unreachable) && pair.contains(.alreadyHandled), "concurrent resolves: one attempt, one no-op (\(pair))")
+    check(store.lastError?.contains("Offline") == true, "unreachable shows in lastError")
+    let retry = await store.resolveApproval(id: "a1", decision: "allow-once", connectWithin: 0.5, timeout: 0.5)
+    check(retry == .unreachable, "a dropped decision can be retried, never buffered")
+
+    let model = AppModel()
+    let unknown = await model.respondToApproval(gatewayId: UUID(), approvalId: "a1", decision: "allow-once")
+    check(unknown == .unknownGateway, "notification for a removed gateway → no longer in Pincer, nothing sent")
+}
+
+print("Approval history")
+do {
+    let localDevice = String(repeating: "d", count: 64)
+    let exec = ApprovalRecord(json(#"""
+    {"id":"exec_1","urlPath":"/approve/exec_1","createdAtMs":1000,"expiresAtMs":121000,"resolvedAtMs":5000,
+     "status":"allowed","decision":"allow-once","reason":"user",
+     "source":{"agentId":"coder","sessionKey":"agent:coder:main"},"resolver":{"kind":"device","id":"\#(localDevice)"},
+     "presentation":{"kind":"exec","commandText":"rm -rf ./build","commandPreview":"rm -rf …","warningText":"Deletes files.",
+      "host":"node","nodeId":"node-1","agentId":"main","allowedDecisions":["allow-once","allow-always","deny"]}}
+    """#))
+    check(exec?.id == "exec_1" && exec?.kind == .exec && exec?.status == .allowed && exec?.decision == .allowOnce
+          && exec?.reason == .user && exec?.urlPath == "/approve/exec_1", "exec snapshot decodes")
+    check(exec?.commandText == "rm -rf ./build" && exec?.commandPreview == "rm -rf …" && exec?.warningText == "Deletes files."
+          && exec?.host == "node" && exec?.nodeId == "node-1" && exec?.displayTitle == "rm -rf ./build", "exec presentation fields")
+    check(exec?.createdAt == Date(timeIntervalSince1970: 1) && exec?.expiresAt == Date(timeIntervalSince1970: 121)
+          && exec?.resolvedAt == Date(timeIntervalSince1970: 5), "timestamps from *AtMs")
+    check(exec?.agentId == "coder" && exec?.sessionKey == "agent:coder:main", "source wins over presentation agent")
+    check(exec?.statusLabel == "Allowed once" && exec?.tone == .allowed, "allowed once capsule")
+    check(exec?.decidedBy(localDeviceId: localDevice) == "This device", "resolver matching this device → This device")
+    check(exec?.decidedBy(localDeviceId: "other") == "Another device (dddddd…)", "resolver on another device")
+    check(exec?.decidedBy(localDeviceId: nil) == "Another device (dddddd…)", "no local id → another device")
+
+    let plugin = ApprovalRecord(json(#"""
+    {"id":"plugin_1","createdAtMs":1,"expiresAtMs":2,"resolvedAtMs":3,"status":"allowed","decision":"allow-always","reason":"user",
+     "resolver":{"kind":"channel","id":"discord:ops"},
+     "presentation":{"kind":"plugin","title":"Send email","description":"Email 3 people.","detail":"To: a@example.com",
+      "severity":"warning","pluginId":"mail","toolName":"send_email","agentId":"main","allowedDecisions":["allow-once","deny"]}}
+    """#))
+    check(plugin?.kind == .plugin && plugin?.title == "Send email" && plugin?.description == "Email 3 people."
+          && plugin?.detail == "To: a@example.com" && plugin?.severity == "warning" && plugin?.pluginId == "mail"
+          && plugin?.toolName == "send_email", "plugin presentation fields")
+    check(plugin?.agentId == "main" && plugin?.sessionKey == nil, "agent from presentation without source")
+    check(plugin?.displayTitle == "Send email" && plugin?.statusLabel == "Always allowed" && plugin?.tone == .allowed, "always allowed capsule")
+    check(plugin?.decidedBy(localDeviceId: localDevice) == "Channel · discord:ops", "channel resolver")
+
+    let system = ApprovalRecord(json(#"""
+    {"id":"sys_1","status":"denied","decision":"deny","reason":"no-route","resolver":{"kind":"system"},
+     "presentation":{"kind":"system-agent","title":"Enable plugin","description":"Enable browser.","proposalHash":"ab","agentId":"main"}}
+    """#))
+    check(system?.kind == .systemAgent && system?.kind.rawValue == "system-agent" && system?.title == "Enable plugin", "system-agent decodes")
+    check(system?.statusLabel == "Denied · No reviewer" && system?.tone == .denied, "denied no-route capsule")
+    check(system?.decidedBy(localDeviceId: localDevice) == "OpenClaw (automatic)", "system resolver")
+    check(system?.reason?.explanation.isEmpty == false, "reason explained")
+
+    let malformed = ApprovalRecord(json(#"{"id":"d2","status":"denied","decision":"deny","reason":"malformed-verdict","resolver":{"kind":"runtime"},"presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(malformed?.statusLabel == "Denied · Invalid response" && malformed?.decidedBy(localDeviceId: nil) == "Runtime",
+          "denied malformed-verdict capsule, runtime resolver")
+    let byUser = ApprovalRecord(json(#"{"id":"d3","status":"denied","decision":"deny","reason":"user","presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(byUser?.statusLabel == "Denied" && byUser?.decidedBy(localDeviceId: nil) == "Unknown", "denied by user, missing resolver → Unknown")
+    let expired = ApprovalRecord(json(#"{"id":"e1","status":"expired","reason":"timeout","presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(expired?.status == .expired && expired?.decision == nil && expired?.statusLabel == "Expired" && expired?.tone == .neutral,
+          "expired capsule")
+    let cancelled = ApprovalRecord(json(#"{"id":"c1","status":"cancelled","reason":"gateway-restart","presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(cancelled?.status == .cancelled && cancelled?.reason == .gatewayRestart && cancelled?.statusLabel == "Cancelled"
+          && cancelled?.tone == .neutral, "cancelled capsule")
+    let pending = ApprovalRecord(json(#"{"id":"p1","status":"pending","sourceSessionKey":"agent:main:main","presentation":{"kind":"exec","commandText":"ls"}}"#))
+    check(pending?.status == .pending && pending?.sessionKey == "agent:main:main" && pending?.resolvedAt == nil, "pending approval.get snapshot")
+
+    let unknown = ApprovalRecord(json(#"""
+    {"id":"u1","status":"escalated","reason":"quorum-lost","futureField":{"x":1},"resolver":{"kind":"committee","id":"c9"},
+     "presentation":{"kind":"mcp-tool","title":"Call tool","extra":true}}
+    """#))
+    check(unknown?.kind == .other("mcp-tool") && unknown?.kind.rawValue == "mcp-tool" && unknown?.kind.label == "Mcp tool",
+          "unknown kind kept raw, capitalized")
+    check(unknown?.status == .other("escalated") && unknown?.statusLabel == "Escalated" && unknown?.reason == .other("quorum-lost")
+          && unknown?.reason?.shortLabel == "Quorum lost", "unknown status/reason kept raw, extra fields ignored")
+    check(unknown?.decidedBy(localDeviceId: nil) == "Committee · c9", "unknown resolver kind humanized")
+    check(ApprovalRecord(json(#"{"status":"allowed","presentation":{"kind":"exec","commandText":"ls"}}"#)) == nil, "record without id rejected")
+    check(ApprovalRecord(json(#"{"id":""}"#)) == nil && ApprovalRecord(json(#""ap1""#)) == nil, "empty id and non-objects rejected")
+    let legacy = ApprovalRecord(json(#"{"id":"l1","kind":"exec","command":"make","decision":"deny","requestedAtMs":2000,"decidedAtMs":4000,"agentId":"main","sessionKey":"agent:main:main"}"#))
+    check(legacy?.kind == .exec && legacy?.commandText == "make" && legacy?.status == .denied
+          && legacy?.createdAt == Date(timeIntervalSince1970: 2) && legacy?.resolvedAt == Date(timeIntervalSince1970: 4)
+          && legacy?.agentId == "main" && legacy?.sessionKey == "agent:main:main", "flat legacy record, status from decision, requested/decidedAtMs")
+    check(ApprovalRecord(json(#"{"id":"l2","decision":"allow-always"}"#))?.status == .allowed, "missing status derived from allow decision")
+    check(ApprovalRecord(json(#"{"id":"l3","presentation":{"commandText":"ls"}}"#))?.kind == .exec, "kind inferred from commandText")
+    check(ApprovalHistoryModel.KindFilter.allCases.map(\.label) == ["All", "Commands", "Plugins", "System"]
+          && ApprovalHistoryModel.KindFilter.all.wireValue == nil && ApprovalHistoryModel.KindFilter.systemAgent.wireValue == "system-agent",
+          "kind filter labels and wire values")
+    check(ApprovalHistoryModel.KindFilter.exec.emptyMessage == "No command approvals in the last 30 days."
+          && ApprovalHistoryModel.KindFilter.all.emptyMessage == nil, "filtered empty messages")
+}
+await checkApprovalHistoryModel()
 
 print("Agent questions")
 do {
@@ -713,8 +956,15 @@ do {
           "chat push threads with its chat")
     check(chatMessage?.userInfo == ["gateway": gatewayId.uuidString, "push": "1", "session": "agent:main:main"], "chat push userInfo")
     let pending = PushMessage(json: Data(#"{"title":"OpenClaw approval requested","body":"exec","url":"approve/a1"}"#.utf8), gatewayId: gatewayId)
-    check(pending?.kind == .approval(id: "a1", pending: true) && pending?.categoryIdentifier == "approval-push"
+    check(pending?.kind == .approval(id: "a1", pending: true) && pending?.categoryIdentifier == "approval"
           && pending?.userInfo["approval"] == "a1", "pending approval push has actions")
+    if let pending {
+        check(pending.userInfo["gateway"] == gatewayId.uuidString
+              && Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: pending.categoryIdentifier, userInfo: pending.userInfo)
+              == .resolve(gatewayId: gatewayId, approvalId: "a1", decision: "deny"), "pending approval push actions resolve on its gateway")
+        check(Notifier.categories().first { $0.identifier == pending.categoryIdentifier }?.actions.count == 3,
+              "pending approval push offers all three actions")
+    }
     let updated = PushMessage(json: Data(#"{"title":"OpenClaw approval updated","body":"denied","url":"approve/a1"}"#.utf8), gatewayId: gatewayId)
     check(updated?.kind == .approval(id: "a1", pending: false) && updated?.categoryIdentifier == "reply", "resolved approval push has none")
     check(PushMessage(json: Data(#"{"url":"chat/main"}"#.utf8), gatewayId: gatewayId) == nil, "push without text ignored")
@@ -726,6 +976,8 @@ do {
     let apns: [AnyHashable: Any] = ["aps": ["mutable-content": 1], "pincer": ["g": gatewayId.uuidString, "p": body.base64URL]]
     check(PushMessage(apnsPayload: apns) == chatMessage, "relay payload decrypted with the stored keys")
     check(PushMessage(apnsPayload: ["pincer": ["g": UUID().uuidString, "p": body.base64URL]]) == nil, "unknown gateway ignored")
+    check(PushMessage(apnsPayload: ["pincer": ["g": gatewayId.uuidString.lowercased(), "p": body.base64URL]]) == chatMessage,
+          "lowercase pincer.g → same gateway")
     check(PushMessage(apnsPayload: ["aps": ["alert": "x"]]) == nil, "non-Pincer payload ignored")
     PushKeyStore.delete(for: gatewayId)
     check(PushKeyStore.keys(for: gatewayId) == nil, "push keys deleted")
@@ -898,8 +1150,17 @@ func checkDrafts() async {
           "switching chats keeps each chat's draft")
     check(first.chat(for: "agent:main:beta").draft.text == "/model", "drafts are per chat")
 
-    let saved = await waitFor("debounced draft save", timeout: 5) { folders().count == 2 }
+    // Each folder is created before its draft.json, so wait for the manifests, not the folders.
+    func manifests() -> Int {
+        folders().filter { name in
+            FileManager.default.fileExists(atPath: gatewayFolder.appending(path: name).appending(path: "draft.json").path(percentEncoded: false))
+        }.count
+    }
+    let saved = await waitFor("debounced draft save", timeout: 5) { manifests() == 2 }
     check(saved, "drafts are saved without an explicit flush")
+    // Let any save still queued behind the first one land before "relaunching".
+    await alpha.flushDraft()
+    await beta.flushDraft()
 
     // Relaunch: a fresh store for the same Gateway.
     let second = GatewayStore(profile: profile)
@@ -989,6 +1250,124 @@ do {
 
 // MARK: Live
 
+print("Quick Capture")
+do {
+    let standard = HotKeyShortcut.default
+    check(standard.keyCode == 49 && standard.modifiers == [.control, .shift] && standard.carbonModifiers == 0x1200
+          && standard.displayString == "⌃⇧Space", "default shortcut is ⌃⇧Space (\(standard.displayString))")
+    let all = HotKeyShortcut(keyCode: 40, modifiers: [.command, .option, .shift, .control])
+    check(all.displayString == "⌃⌥⇧⌘K", "modifiers show in Apple order (\(all.displayString))")
+    check(HotKeyShortcut(storageValue: all.storageValue) == all && HotKeyShortcut(storageValue: "garbage") == nil
+          && HotKeyShortcut(storageValue: "") == nil, "shortcut storage round-trips (\(all.storageValue))")
+    check(HotKeyShortcut(keyCode: 40, modifiers: []).validationError != nil
+          && HotKeyShortcut(keyCode: 40, modifiers: [.shift]).validationError != nil
+          && HotKeyShortcut(keyCode: 96, modifiers: []).validationError == nil
+          && HotKeyShortcut(keyCode: 40, modifiers: [.control, .option]).validationError == nil
+          && HotKeyShortcut(keyCode: 49, modifiers: [.command]).validationError != nil,
+          "shortcut validation")
+    let (defaults, suite) = scratchDefaults()
+    let settings = QuickCaptureSettings(defaults: defaults)
+    check(settings.isEnabled && settings.shortcut == .default, "Quick Capture starts on with the default")
+    settings.shortcut = all
+    settings.isEnabled = false
+    check(settings.activeShortcut == nil && settings.shortcut == all, "turning it off keeps the combo")
+    settings.reset()
+    check(settings.isEnabled && settings.shortcut == .default, "reset restores the default")
+    let target = QuickCaptureTarget(gatewayId: UUID(), target: .newChat(agentId: "research"))
+    settings.lastTarget = target
+    check(settings.lastTarget == target && QuickCaptureTarget(storageValue: "nope|chat:x") == nil,
+          "last target storage round-trips")
+
+    // Key names, Carbon and NSEvent conversions.
+    func named(_ keyCode: UInt32) -> String { HotKeyShortcut.keyName(for: keyCode) }
+    check(named(36) == "↩" && named(48) == "⇥" && named(123) == "←" && named(124) == "→" && named(125) == "↓"
+          && named(126) == "↑" && named(96) == "F5" && named(111) == "F12" && named(40) == "K",
+          "Return, Tab, arrows and F-keys have readable names")
+    check(HotKeyShortcut(keyCode: 49, carbonModifiers: 0x1200) == .default
+          && HotKeyShortcut(keyCode: 40, carbonModifiers: 0x100 | 0x200 | 0x800 | 0x1000) == all
+          && all.carbonModifiers == 0x1B00, "Carbon modifiers round-trip")
+    check(HotKeyShortcut(keyCode: 55, carbonModifiers: 0x100) == nil && HotKeyShortcut(keyCode: 56, eventModifierFlags: 1 << 17) == nil,
+          "a modifier key on its own isn't a shortcut")
+    check(HotKeyShortcut(keyCode: 49, eventModifierFlags: (1 << 17) | (1 << 18) | (1 << 16)) == .default,
+          "NSEvent flags map to modifiers, ignoring caps lock")
+    check(HotKeyShortcut(storageValue: "49:") == HotKeyShortcut(keyCode: 49, modifiers: [])
+          && HotKeyShortcut(storageValue: "49:control,hyper") == nil && HotKeyShortcut(storageValue: "x:control") == nil
+          && HotKeyShortcut(storageValue: "55:command") == nil && HotKeyShortcut(storageValue: HotKeyShortcut.default.storageValue) == .default,
+          "shortcut storage rejects unknown modifiers and bad key codes")
+    check(HotKeyShortcut(keyCode: 49, modifiers: [.control, .option]).validationError != nil
+          && HotKeyShortcut(keyCode: 96, modifiers: [.shift]).validationError == nil
+          && HotKeyShortcut(keyCode: 45, modifiers: [.control, .option, .command]).validationError == nil
+          && HotKeyShortcut.default.validationError == nil
+          && HotKeyShortcut(keyCode: 12, modifiers: [.command]).validationError != nil,
+          "⌃⌥Space and ⌘Q are taken; F-keys, ⌃⌥⌘N and the default are fine")
+
+    // Settings: garbage loads the default; off and on again keeps the combo.
+    defaults.set("garbage", forKey: QuickCaptureSettings.shortcutKey)
+    check(settings.shortcut == .default && settings.isDefault, "an unreadable stored shortcut loads the default")
+    settings.shortcut = all
+    settings.isEnabled = false
+    check(QuickCaptureSettings(defaults: defaults).activeShortcut == nil, "turning it off is saved")
+    settings.isEnabled = true
+    check(QuickCaptureSettings(defaults: defaults).activeShortcut == all && !settings.isDefault,
+          "turning it back on restores the recorded combo")
+    settings.isEnabled = false
+    settings.reset()
+    check(settings.activeShortcut == .default, "reset turns it back on with the default")
+    settings.lastTarget = nil
+    check(settings.lastTarget == nil && defaults.string(forKey: QuickCaptureSettings.lastTargetKey) == nil, "last target can be cleared")
+
+    // Targets.
+    let gatewayId = UUID()
+    let chatTarget = QuickCaptureTarget(gatewayId: gatewayId, target: .chat("agent:main:dashboard:trip"))
+    check(QuickCaptureTarget(storageValue: chatTarget.storageValue) == chatTarget
+          && chatTarget.storageValue == "\(gatewayId.uuidString)|\(ShareTarget.chat("agent:main:dashboard:trip").storageValue)"
+          && QuickCaptureTarget(storageValue: target.storageValue) == target
+          && QuickCaptureTarget(storageValue: "") == nil && QuickCaptureTarget(storageValue: "\(gatewayId.uuidString)|") == nil,
+          "target storage is <gateway>|<share target> (\(chatTarget.storageValue))")
+    check(chatTarget.sessionKey == "agent:main:dashboard:trip" && target.sessionKey == nil, "only chat targets have a session key")
+    let chatItem = PaletteItem(id: "x", title: "Japan trip", symbol: "x", section: .chats,
+                               action: .openChat(Notifier.Target(gatewayId: gatewayId, sessionKey: "agent:main:dashboard:trip")))
+    let newItem = PaletteItem(id: "y", title: "New Chat with Scout", symbol: "x", section: .newChat,
+                              action: .newChat(gatewayId: gatewayId, agentId: "research"))
+    check(QuickCaptureTarget(item: chatItem) == chatTarget && QuickCaptureTarget(item: newItem)?.target == .newChat(agentId: "research")
+          && QuickCaptureTarget(item: PaletteItem(id: "z", title: "Settings", symbol: "x", section: .chats, action: .command("x"))) == nil,
+          "palette items map to targets")
+
+    func sessionRow(_ fields: String) -> SessionRow { SessionRow(json("{\(fields)}"))! }
+    check(QuickCapture.isEligible(sessionRow(#""key":"agent:main:dashboard:trip""#))
+          && !QuickCapture.isEligible(sessionRow(#""key":"agent:research:subagent:abc","spawnedBy":"agent:research:main""#))
+          && !QuickCapture.isEligible(sessionRow(#""key":"agent:main:cron:disk-check""#))
+          && !QuickCapture.isEligible(sessionRow(#""key":"agent:main:slash:abc""#))
+          && !QuickCapture.isEligible(sessionRow(#""key":"agent:main:dashboard:old","archived":true"#)),
+          "helper runs, automations, slash-command sessions and archived chats aren't targets")
+    check(QuickCapture.statusText(.connected) == nil && QuickCapture.statusText(.connecting) == "Connecting…"
+          && QuickCapture.statusText(.reconnecting(attempt: 1, delaySeconds: 2, reason: "x")) == "Reconnecting…"
+          && QuickCapture.statusText(.failed("x")) == "Offline", "disabled rows say why")
+
+    // Default target priority, with a Gateway that hasn't listed its sessions yet.
+    let offline = GatewayStore(profile: GatewayProfile(name: "Offline", url: "ws://127.0.0.1:1", authMode: .none))
+    func chat(_ key: String, on gateway: UUID? = nil) -> QuickCaptureTarget {
+        QuickCaptureTarget(gatewayId: gateway ?? offline.id, target: .chat(key))
+    }
+    let current = Notifier.Target(gatewayId: offline.id, sessionKey: "agent:main:current")
+    func pick(draft: QuickCaptureTarget?, last: QuickCaptureTarget?, current: Notifier.Target?) -> QuickCaptureTarget? {
+        QuickCapture.defaultTarget(draft: draft, lastTarget: last, current: current, gateways: [offline], selectedGatewayId: offline.id)
+    }
+    check(pick(draft: chat("draft"), last: chat("last"), current: current) == chat("draft"), "the draft's target comes first")
+    check(pick(draft: nil, last: chat("last"), current: current) == chat("last"), "then the last target")
+    check(pick(draft: nil, last: chat("last", on: UUID()), current: current) == chat("agent:main:current"),
+          "a last target on a removed Gateway is skipped for the current chat")
+    check(pick(draft: chat("gone", on: UUID()), last: nil, current: nil)
+          == QuickCaptureTarget(gatewayId: offline.id, target: ShareModel.defaultTarget(remembered: nil, chats: [], agents: [], defaultAgentId: "main")),
+          "then the selected Gateway's share default")
+    check(!QuickCapture.isAvailable(chat("x", on: UUID()), gateways: [offline])
+          && QuickCapture.defaultTarget(draft: nil, lastTarget: chat("x"), current: nil, gateways: [], selectedGatewayId: nil) == nil,
+          "an unknown Gateway resolves to nothing")
+    check(QuickCapture.targetItems(gateways: [offline], selectedGatewayId: offline.id, recent: [current]).isEmpty,
+          "a Gateway that isn't connected offers no New Chat items")
+    UserDefaults.standard.removePersistentDomain(forName: suite)
+}
+
 print("Share extension")
 await runShareChecks()
 
@@ -998,6 +1377,8 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     let token = arguments[index + 2]
     print("Live against \(url)")
     await runLive(url: url, token: token)
+    print("Quick Capture (live)")
+    await runQuickCaptureLive(url: url, token: token)
 }
 if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count > index + 2 {
     print("Scope upgrade fallback against \(arguments[index + 1])")
@@ -1008,11 +1389,179 @@ if arguments.contains("--demo") {
     await runDemo()
     print("Chat navigation")
     await runNavigation()
+    print("Quick Capture (demo)")
+    await runQuickCaptureDemo()
 }
 
 print("\n\(passes) passed, \(failures) failed")
 try? FileManager.default.removeItem(at: draftsRoot)
+try? FileManager.default.removeItem(at: cacheRoot)
 exit(failures == 0 ? 0 : 1)
+
+/// `ApprovalHistoryModel` against a scripted Gateway: aliases, paging, cursors, errors and unsupported gateways.
+@MainActor
+func checkApprovalHistoryModel() async {
+    func row(_ id: String, kind: String = "exec") -> JSONValue {
+        json(#"{"id":"\#(id)","status":"allowed","decision":"allow-once","reason":"user","resolvedAtMs":1,"presentation":{"kind":"\#(kind)","title":"t","commandText":"c"}}"#)
+    }
+    var calls: [(String, JSONValue)] = []
+
+    let aliased = ApprovalHistoryModel { method, params in
+        calls.append((method, params))
+        return ["approvals": .array([row("a1"), row("a2"), row("a1")])]
+    }
+    await aliased.load()
+    check(aliased.items.map(\.id) == ["a1", "a2"] && aliased.hasLoaded && aliased.supported && !aliased.hasMore,
+          "approvals alias decodes, duplicate ids dropped")
+    check(calls.first?.0 == "approval.history" && calls.first?.1["limit"]?.int == 50 && calls.first?.1["cursor"] == nil
+          && calls.first?.1["kind"] == nil, "first page asks for 50 without cursor or kind")
+    let bare = ApprovalHistoryModel { _, _ in .array([row("b1"), json(#"{"status":"allowed"}"#)]) }
+    await bare.load()
+    check(bare.items.map(\.id) == ["b1"], "bare array result, records without id skipped")
+    let entries = ApprovalHistoryModel { _, _ in ["entries": .array([row("e1")])] }
+    await entries.load()
+    check(entries.items.map(\.id) == ["e1"], "entries alias decodes")
+
+    // Paging: cursors echoed, pages appended without duplicates, a repeated cursor stops.
+    calls = []
+    let paged = ApprovalHistoryModel { method, params in
+        calls.append((method, params))
+        switch params["cursor"]?.string {
+        case nil: return ["items": .array([row("p1"), row("p2")]), "nextCursor": "c1"]
+        case "c1": return ["items": .array([row("p2"), row("p3")]), "nextCursor": "c2"]
+        case "c2": return ["items": .array([row("p4")]), "nextCursor": "c1"]
+        default: return ["items": []]
+        }
+    }
+    paged.pageSize = 2
+    await paged.load()
+    check(paged.items.map(\.id) == ["p1", "p2"] && paged.nextCursor == "c1" && calls.last?.1["limit"]?.int == 2, "page size override")
+    await paged.loadMore()
+    check(paged.items.map(\.id) == ["p1", "p2", "p3"] && calls.last?.1["cursor"]?.string == "c1", "loadMore echoes the cursor, dedups by id")
+    await paged.loadMore()
+    check(paged.items.map(\.id) == ["p1", "p2", "p3", "p4"] && !paged.hasMore, "repeated cursor stops paging")
+    let callsBefore = calls.count
+    await paged.loadMore()
+    check(calls.count == callsBefore, "no request without a cursor")
+    await paged.refresh()
+    check(paged.items.map(\.id) == ["p1", "p2"] && paged.nextCursor == "c1", "refresh replaces with page 1")
+
+    let emptyPage = ApprovalHistoryModel { _, params in
+        params["cursor"] == nil ? ["items": .array([row("x1")]), "nextCursor": "more"] : ["items": [], "nextCursor": "again"]
+    }
+    await emptyPage.load()
+    await emptyPage.loadMore()
+    check(emptyPage.items.map(\.id) == ["x1"] && !emptyPage.hasMore, "empty page stops paging")
+
+    // Kind filter goes to the server and resets paging.
+    calls = []
+    let filtered = ApprovalHistoryModel { method, params in
+        calls.append((method, params))
+        let kind = params["kind"]?.string ?? "exec"
+        return ["items": .array([row("\(kind)-1", kind: kind)]), "nextCursor": params["kind"] == nil ? "n" : nil]
+    }
+    await filtered.load()
+    await filtered.setKindFilter(.plugin)
+    check(filtered.kindFilter == .plugin && calls.last?.1["kind"]?.string == "plugin" && calls.last?.1["cursor"] == nil
+          && filtered.items.map(\.id) == ["plugin-1"] && !filtered.hasMore, "kind filter reloads page 1 with kind")
+    await filtered.setKindFilter(.systemAgent)
+    check(calls.last?.1["kind"]?.string == "system-agent" && filtered.items.first?.kind == .systemAgent, "system filter sends system-agent")
+    let filterCalls = calls.count
+    await filtered.setKindFilter(.systemAgent)
+    check(calls.count == filterCalls, "same filter doesn't reload")
+    await filtered.setKindFilter(.all)
+    check(calls.last?.1["kind"] == nil, "All omits kind")
+
+    // A stale cursor reloads page 1 once.
+    var historyCalls = 0
+    let stale = ApprovalHistoryModel { _, params in
+        historyCalls += 1
+        if params["cursor"] != nil {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid approval.history cursor", details: nil)
+        }
+        return ["items": .array([row("s1")]), "nextCursor": "gone"]
+    }
+    await stale.load()
+    await stale.loadMore()
+    check(historyCalls == 3 && stale.items.map(\.id) == ["s1"] && stale.loadState == .idle && stale.loadMoreState == .idle,
+          "invalid cursor → one fresh reload, no error")
+
+    // Other load-more failures keep the rows.
+    let flaky = ApprovalHistoryModel { _, params in
+        if params["cursor"] != nil { throw GatewayError.rpc(code: "UNAVAILABLE", message: "storage unavailable", details: nil) }
+        return ["items": .array([row("f1")]), "nextCursor": "next"]
+    }
+    await flaky.load()
+    await flaky.loadMore()
+    check(flaky.items.map(\.id) == ["f1"] && flaky.loadMoreState.error == "storage unavailable" && flaky.hasMore,
+          "load-more failure keeps rows and cursor")
+
+    // Errors.
+    let noScope = ApprovalHistoryModel { _, _ in
+        throw GatewayError.rpc(code: "FORBIDDEN", message: "missing scope: operator.approvals",
+                               details: ["code": "MISSING_SCOPE", "scope": "operator.approvals"])
+    }
+    await noScope.load()
+    check(noScope.supported && noScope.hasLoaded && noScope.loadState.error == ApprovalHistoryModel.missingScopeMessage
+          && ApprovalHistoryModel.missingScopeMessage.contains("operator.approvals"), "missing scope → approve operator.approvals message")
+    let failing = ApprovalHistoryModel { _, _ in throw GatewayError.rpc(code: "UNAVAILABLE", message: "ledger offline", details: nil) }
+    await failing.load()
+    check(failing.loadState.error == "ledger offline" && failing.supported, "other errors show the gateway's message")
+
+    // Unsupported gateways: hello without approval.history, or UNKNOWN_METHOD.
+    var requested = false
+    let legacyHello = ApprovalHistoryModel(methods: { ["chat.send", "exec.approval.resolve"] }) { _, _ in
+        requested = true
+        return ["items": []]
+    }
+    await legacyHello.load()
+    check(!legacyHello.supported && legacyHello.hasLoaded && !requested && legacyHello.loadState == .idle,
+          "hello without approval.history → unsupported, no request, no error")
+    let unknownMethod = ApprovalHistoryModel(methods: { [] }) { method, _ in
+        throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "unknown method: \(method)", details: nil)
+    }
+    await unknownMethod.load()
+    check(!unknownMethod.supported && unknownMethod.hasLoaded && unknownMethod.loadState == .idle && unknownMethod.items.isEmpty,
+          "UNKNOWN_METHOD → unsupported, no error")
+    let advertised = ApprovalHistoryModel(methods: { ["approval.history", "approval.get"] }) { method, _ in
+        if method == "approval.get" { throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "unknown method: approval.get", details: nil) }
+        return ["items": .array([row("g1")])]
+    }
+    await advertised.load()
+    check(advertised.supported && advertised.items.count == 1, "advertised approval.history loads")
+
+    // approval.get is optional: detail upgrades the row, failures keep it.
+    let detailed = ApprovalHistoryModel(localDeviceId: "me") { method, params in
+        switch method {
+        case "approval.get":
+            if params["id"]?.string == "missing" {
+                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "approval not found", details: ["reason": "APPROVAL_NOT_FOUND"])
+            }
+            return ["approval": json(#"{"id":"d1","status":"allowed","decision":"allow-once","reason":"user","resolver":{"kind":"device","id":"me"},"presentation":{"kind":"exec","commandText":"full command","warningText":"careful"}}"#)]
+        default:
+            return ["items": .array([row("d1"), row("missing")])]
+        }
+    }
+    await detailed.load()
+    check(detailed.record("d1")?.warningText == nil, "row before approval.get")
+    await detailed.loadDetail("d1")
+    check(detailed.record("d1")?.commandText == "full command" && detailed.record("d1")?.warningText == "careful"
+          && detailed.detailState["d1"] == .idle, "approval.get detail replaces the row")
+    check(detailed.record("d1").map(detailed.decidedBy) == "This device", "model decidedBy uses its device id")
+    await detailed.loadDetail("missing")
+    check(detailed.record("missing")?.id == "missing" && detailed.detailState["missing"]?.error != nil, "approval.get failure keeps the row")
+    check(detailed.record(nil) == nil && detailed.record("nope") == nil, "unknown ids have no record")
+    await advertised.loadDetail("g1")
+    check(advertised.record("g1") != nil && advertised.detailState["g1"] == .idle, "approval.get unknown method is quiet")
+    var getCalled = false
+    let noGet = ApprovalHistoryModel(methods: { ["approval.history"] }) { method, _ in
+        if method == "approval.get" { getCalled = true }
+        return ["items": .array([row("n1")])]
+    }
+    await noGet.load()
+    await noGet.loadDetail("n1")
+    check(!getCalled && noGet.record("n1") != nil, "hello without approval.get skips the request")
+}
 
 @MainActor
 func waitFor(_ label: String, timeout: Double = 15, _ condition: () -> Bool) async -> Bool {
@@ -1087,16 +1636,60 @@ func runDemo() async {
     check(gateway.automations.hasLoaded && !gateway.automations.supported && gateway.automations.jobs.isEmpty,
           "gateway without cron.* shows automations unavailable")
 
+    // Approval History: 12 seeded decisions (7 commands, 3 plugins, 2 system changes).
+    let history = gateway.approvalHistory
+    history.pageSize = 5
+    await history.load()
+    check(history.supported && history.hasLoaded && history.items.count == 5 && history.hasMore, "demo approval.history first page")
+    await history.loadMore()
+    await history.loadMore()
+    let demoIds = history.items.map(\.id)
+    check(demoIds.count == 12 && Set(demoIds).count == 12 && !history.hasMore, "demo history paged to the end, no duplicates (\(demoIds.count))")
+    check(zip(history.items, history.items.dropFirst()).allSatisfy { ($0.resolvedAt ?? .distantPast) >= ($1.resolvedAt ?? .distantPast) },
+          "demo history newest first")
+    check(Set(history.items.map(\.status)) == [.allowed, .denied, .expired, .cancelled], "demo covers every terminal status")
+    check(Set(history.items.map { history.decidedBy($0) }).isSuperset(of: ["This device", "OpenClaw (automatic)", "Unknown", "Runtime"])
+          && history.items.contains { history.decidedBy($0).hasPrefix("Another device (") }
+          && history.items.contains { history.decidedBy($0).hasPrefix("Channel") }, "demo resolvers in plain words")
+    for (filter, count) in [(ApprovalHistoryModel.KindFilter.exec, 7), (.plugin, 3), (.systemAgent, 2)] {
+        await history.setKindFilter(filter)
+        while history.hasMore { await history.loadMore() }
+        check(history.items.count == count && history.items.allSatisfy { $0.kind.rawValue == filter.rawValue },
+              "demo \(filter.label) filter (\(history.items.count))")
+    }
+    await history.setKindFilter(.all)
+    if let plugin = history.items.first(where: { $0.kind == .plugin }) {
+        await history.loadDetail(plugin.id)
+        check(history.details[plugin.id]?.detail != nil || history.record(plugin.id)?.title == plugin.title, "demo approval.get detail")
+        check(history.detailState[plugin.id] == .idle && history.record(plugin.id)?.pluginId == plugin.pluginId, "demo detail round-trips")
+    } else {
+        check(false, "demo history has a plugin")
+    }
+    await history.loadMore()
+    check(history.items.count == 10 && history.hasMore, "demo second page before resolving")
+
     await chat.send("please approve this")
     let approvalSeen = await waitFor("approval") { !gateway.approvals.isEmpty }
     check(approvalSeen, "demo approval surfaced")
     if let approval = gateway.approvals.first {
+        await history.loadDetail(approval.id)
+        check(history.details[approval.id]?.status == .pending, "demo approval.get returns a pending approval")
         await gateway.resolveApproval(approval, decision: "allow-once")
         check(gateway.approvals.isEmpty, "demo approval resolved")
+        let merged = await waitFor("history refresh after resolve", timeout: 5) { history.items.first?.id == approval.id }
+        check(merged && history.items.count == 11, "resolved approval shows first after exec.approval.resolved (\(history.items.count))")
+        if let top = history.items.first {
+            check(top.statusLabel == "Allowed once" && history.decidedBy(top) == "This device" && top.sessionKey == key,
+                  "resolved entry decided by this device in its chat")
+        }
+        await history.refresh()
+        check(history.items.first?.id == approval.id && history.items.count == 5, "refresh keeps the resolved entry first")
     }
+    history.pageSize = ApprovalHistoryModel.defaultPageSize
 
     let settled = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
     check(settled, "demo approval run finished")
+    await checkApprovalOutcomes(gateway, chat: chat, label: "demo")
 
     await chat.send("ask me what to remove")
     let demoAsked = await waitFor("demo question") { !gateway.pendingQuestions(for: key).isEmpty }
@@ -1185,14 +1778,15 @@ func runDemo() async {
 /// Back/forward and ⌘1–⌘9 through `AppModel`, across two demo Gateways.
 @MainActor
 func runNavigation() async {
-    let app = AppModel()
+    let (defaults, defaultsName) = scratchDefaults()
+    let app = AppModel(defaults: defaults)
     guard app.gateways.isEmpty else {
         check(false, "navigation checks need an empty profile list (found \(app.gateways.count))")
         return
     }
     defer {
         for gateway in app.gateways { app.remove(gateway.id) }
-        UserDefaults.standard.removeObject(forKey: "pincer.selectedGateway")
+        UserDefaults.standard.removePersistentDomain(forName: defaultsName)
     }
     let first = app.add(.demo(), secret: nil)
     let ready = await waitFor("demo connection") { first.state.isConnected && !first.sessions.isEmpty }
@@ -1242,6 +1836,328 @@ func runNavigation() async {
           "removing a gateway drops its chats from history")
     app.goBack()
     check(app.selectedGatewayId == first.id, "Back still works after removing a gateway")
+}
+
+/// Quick Capture's target list and send flow through `AppModel` and the demo Gateway.
+@MainActor
+func runQuickCaptureDemo() async {
+    let app = AppModel()
+    guard app.gateways.isEmpty else {
+        check(false, "Quick Capture checks need an empty profile list (found \(app.gateways.count))")
+        return
+    }
+    let (defaults, suite) = scratchDefaults()
+    defer {
+        for gateway in app.gateways { app.remove(gateway.id) }
+        UserDefaults.standard.removeObject(forKey: "pincer.selectedGateway")
+        UserDefaults.standard.removePersistentDomain(forName: suite)
+    }
+    let gateway = app.add(.demo(), secret: nil)
+    let ready = await waitFor("demo connection") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    check(ready, "Quick Capture demo connected")
+    guard ready else { return }
+    let items = QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: app.selectedGatewayId, recent: [])
+    check(!items.contains { item in
+        guard case let .openChat(target) = item.action, let row = gateway.sessions[target.sessionKey] else { return false }
+        return row.isSubagent || row.isAutomation || row.isArchived
+    } && items.contains { $0.section == .newChat }, "target list leaves out helper runs and offers new chats")
+    check(QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: app.selectedGatewayId, recent: [], query: "jptr")
+        .first?.title == "Japan trip", "target search is fuzzy")
+
+    gateway.selectedKey = "agent:main:main"
+    let model = QuickCaptureModel(app: app, defaults: defaults)
+    model.target = QuickCaptureTarget(gatewayId: gateway.id, target: .chat("agent:main:dashboard:trip"))
+    model.prepare()
+    model.text = "quick thought"
+    let sent = await model.send()
+    check(sent && model.text.isEmpty && gateway.selectedKey == "agent:main:main"
+          && gateway.chat(for: "agent:main:dashboard:trip").items.contains { $0.role == .user && $0.plainText.contains("quick thought") },
+          "sends to an existing chat without switching the main window")
+
+    let sessionsBefore = gateway.sessions.count
+    model.target = QuickCaptureTarget(gatewayId: gateway.id, target: .newChat(agentId: "research"))
+    model.text = "new idea"
+    let created = await model.send()
+    check(created && gateway.sessions.count == sessionsBefore + 1 && gateway.selectedKey == "agent:main:main"
+          && app.selectedGatewayId == gateway.id, "a new chat is created and sent to without selecting it")
+    check(QuickCaptureModel(app: app, defaults: defaults).settings.lastTarget?.sessionKey?.hasPrefix("agent:research:") == true,
+          "the last target is remembered as the created chat")
+
+    let opens = app.openRequests
+    model.target = QuickCaptureTarget(gatewayId: gateway.id, target: .chat("agent:main:dashboard:trip"))
+    model.text = "and open it"
+    let revealed = await model.send(reveal: true)
+    check(revealed && gateway.selectedKey == "agent:main:dashboard:trip" && app.openRequests == opens + 1,
+          "Send & Open reveals the chat")
+
+    // Open in Pincer keeps the draft.
+    gateway.selectedKey = "agent:main:main"
+    model.prepare()
+    check(model.target?.sessionKey == "agent:main:dashboard:trip", "a new panel starts at the last target")
+    model.text = "not yet"
+    let opensBefore = app.openRequests
+    check(model.revealTarget() && gateway.selectedKey == "agent:main:dashboard:trip" && app.openRequests == opensBefore + 1
+          && model.text == "not yet", "Open in Pincer reveals the chat and keeps the draft")
+    model.target = QuickCaptureTarget(gatewayId: gateway.id, target: .newChat(agentId: "research"))
+    check(!model.revealTarget(), "a new chat can't be revealed before it exists")
+    model.text = "  \n"
+    check(!model.canSend, "blank text can't be sent")
+
+    // One Gateway: recent chats first, no duplicates, no Gateway name.
+    func chat(_ store: GatewayStore, _ key: String) -> Notifier.Target { Notifier.Target(gatewayId: store.id, sessionKey: key) }
+    func chatRows(_ items: [PaletteItem], on store: GatewayStore) -> [PaletteItem] {
+        items.filter { if case let .openChat(target) = $0.action { target.gatewayId == store.id } else { false } }
+    }
+    func newChatRows(_ items: [PaletteItem], on store: GatewayStore) -> [PaletteItem] {
+        items.filter { if case let .newChat(id, _) = $0.action { id == store.id } else { false } }
+    }
+    let papers = chat(gateway, "agent:research:dashboard:papers")
+    let single = QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: gateway.id,
+                                          recent: [papers, chat(gateway, "agent:main:dashboard:trip")],
+                                          current: chat(gateway, "agent:main:main"))
+    check(single.prefix(3).map(\.id) == [chat(gateway, "agent:main:main"), papers, chat(gateway, "agent:main:dashboard:trip")]
+        .map { "chat:\($0.gatewayId.uuidString):\($0.sessionKey)" }, "the current chat, then recent chats, come first")
+    check(Set(single.map(\.id)).count == single.count, "no duplicate rows")
+    check(!single.contains { $0.subtitle?.contains(gateway.profile.name) == true }, "one Gateway: no Gateway name in subtitles")
+    check(newChatRows(single, on: gateway).count == gateway.agents.count && single.allSatisfy(\.isEnabled),
+          "a New Chat item per agent on a connected Gateway")
+    check(single.firstIndex { $0.section == .newChat }! > single.lastIndex { $0.section == .chats }!, "chats before new chats")
+
+    // Picker navigation.
+    model.openPicker()
+    check(model.isPickerOpen && model.highlighted(in: model.items)?.id == model.target?.itemId, "the picker highlights the current target")
+    let pickerItems = model.items
+    model.moveHighlight(by: 1)
+    let moved = model.highlightedId
+    model.moveHighlight(by: -1)
+    check(moved != nil && model.highlightedId == model.target?.itemId, "↓ then ↑ comes back")
+    model.query = "jptr"
+    check(model.highlightedId == nil && model.highlighted(in: model.items)?.title == "Japan trip", "typing resets the highlight")
+    check(model.pickHighlighted() && model.target?.sessionKey == "agent:main:dashboard:trip" && !model.isPickerOpen && model.query.isEmpty,
+          "Return picks the highlighted row and closes the picker")
+    check(!model.pick(PaletteItem(id: pickerItems[0].id, title: pickerItems[0].title, symbol: pickerItems[0].symbol, section: pickerItems[0].section,
+                                  action: pickerItems[0].action, isEnabled: false)), "disabled rows can't be picked")
+    if let pinned = model.items.first(where: { $0.shortcut == "⌘1" }) {
+        check(model.pickPinned(1) && model.target?.itemId == pinned.id, "⌘1 picks the first pinned chat")
+    }
+
+    // Two Gateways plus one that never connects.
+    var secondProfile = GatewayProfile.demo()
+    secondProfile.name = "Second demo"
+    let second = app.add(secondProfile, secret: nil)
+    let offline = app.add(GatewayProfile(name: "Unreachable", url: "ws://127.0.0.1:1", authMode: .none), secret: nil)
+    let secondReady = await waitFor("second demo") { second.state.isConnected && !second.sessions.isEmpty }
+    check(secondReady && !offline.state.isConnected, "second demo connected")
+    app.selectedGatewayId = gateway.id
+    let multi = QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: gateway.id, recent: [])
+    check(!chatRows(multi, on: gateway).isEmpty && chatRows(multi, on: gateway).allSatisfy { $0.subtitle?.contains(gateway.profile.name) == true }
+          && !chatRows(multi, on: second).isEmpty && chatRows(multi, on: second).allSatisfy { $0.subtitle?.contains("Second demo") == true },
+          "several Gateways: each chat's subtitle names its Gateway")
+    check(newChatRows(multi, on: second).allSatisfy { $0.subtitle?.contains("Second demo") == true }
+          && newChatRows(multi, on: second).count == second.agents.count && newChatRows(multi, on: offline).isEmpty,
+          "New Chat items for each connected Gateway, none for one that isn't connected")
+    check(multi.firstIndex { chatRows([$0], on: gateway).count == 1 }! < multi.firstIndex { chatRows([$0], on: second).count == 1 }!,
+          "the selected Gateway's chats come first")
+    check(Set(multi.map(\.id)).count == multi.count, "no duplicates across Gateways")
+    let selectedBefore = app.selectedGatewayId
+    model.target = QuickCaptureTarget(gatewayId: second.id, target: .chat("agent:main:dashboard:trip"))
+    model.text = "to the other gateway"
+    let crossSent = await model.send()
+    check(crossSent && app.selectedGatewayId == selectedBefore
+          && second.chat(for: "agent:main:dashboard:trip").items.contains { $0.plainText.contains("to the other gateway") }
+          && !gateway.chat(for: "agent:main:dashboard:trip").items.contains { $0.plainText.contains("to the other gateway") },
+          "sends to another Gateway without switching to it")
+    model.target = QuickCaptureTarget(gatewayId: offline.id, target: .newChat(agentId: "main"))
+    model.text = "nowhere"
+    check(!model.canSend && model.connectionStatus != nil, "can't send to a Gateway that isn't connected (\(model.connectionStatus ?? "-"))")
+    let offlineSent = await model.send()
+    check(!offlineSent && model.text == "nowhere" && model.target?.gatewayId == offline.id
+          && model.settings.lastTarget?.gatewayId == second.id, "a refused send keeps the draft and the last target")
+}
+
+/// Quick Capture's send flows against the mock, across two Gateways (both on the same mock).
+/// The mock refuses a `chat.send` whose text has `[mock:fail-send]` and drops the connection on `[mock:drop]`.
+@MainActor
+func runQuickCaptureLive(url: String, token: String) async {
+    let app = AppModel()
+    guard app.gateways.isEmpty else {
+        check(false, "Quick Capture live checks need an empty profile list (found \(app.gateways.count))")
+        return
+    }
+    let (defaults, suite) = scratchDefaults()
+    defer {
+        for gateway in app.gateways { app.remove(gateway.id) }
+        UserDefaults.standard.removeObject(forKey: AppModel.selectedGatewayKey)
+        UserDefaults.standard.removePersistentDomain(forName: suite)
+    }
+    let home = app.add(GatewayProfile(name: "Mock home", url: url, authMode: .token), secret: token)
+    let work = app.add(GatewayProfile(name: "Mock work", url: url, authMode: .token), secret: token)
+    let ready = await waitFor("Quick Capture gateways", timeout: 25) {
+        [home, work].allSatisfy { $0.state.isConnected && !$0.sessions.isEmpty }
+    }
+    check(ready, "two Gateways connected for Quick Capture")
+    guard ready else { return }
+    app.selectedGatewayId = home.id
+    home.selectedKey = "agent:main:main"
+    work.selectedKey = "agent:research:main"
+    let nonce = String(UUID().uuidString.prefix(8))
+    let model = QuickCaptureModel(app: app, defaults: defaults)
+    let note = OutgoingAttachment(fileName: "note.txt", mimeType: "text/plain", data: Data("quick note".utf8))
+
+    /// User messages with `text` in the chat's history as the Gateway has it.
+    func delivered(_ store: GatewayStore, _ key: String, _ text: String) async -> Int {
+        let chat = store.chat(for: key)
+        _ = await waitFor("run on \(key)", timeout: 20) { !chat.isRunning }
+        await chat.load(force: true)
+        return chat.items.filter { $0.role == .user && $0.plainText.contains(text) }.count
+    }
+    func selectionUnchanged() -> Bool {
+        app.selectedGatewayId == home.id && home.selectedKey == "agent:main:main" && work.selectedKey == "agent:research:main"
+    }
+    /// Sessions that appeared since `before`; when none are expected it just gives `sessions.changed` time to arrive.
+    func created(on store: GatewayStore, since before: Set<String>, expected: Bool = true) async -> [String] {
+        if expected {
+            _ = await waitFor("sessions.changed", timeout: 3) { Set(store.sessions.keys).count > before.count }
+        } else {
+            try? await Task.sleep(for: .seconds(1))
+        }
+        return Array(Set(store.sessions.keys).subtracting(before))
+    }
+
+    // The list: both Gateways, no helper runs or automations.
+    let items = QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: app.selectedGatewayId, recent: [])
+    let keys = items.compactMap { item -> String? in if case let .openChat(target) = item.action { target.sessionKey } else { nil } }
+    check(!keys.isEmpty && !keys.contains { $0.contains(":cron:") || $0.contains(":subagent:") } && items.allSatisfy(\.isEnabled),
+          "live target list leaves out automations and helper runs")
+    check(items.filter { $0.section == .newChat }.count == home.agents.count + work.agents.count
+          && items.contains { $0.subtitle?.contains("Mock work") == true }, "live target list covers both Gateways")
+
+    // 9. An existing chat: one chat.send, no sessions.create, nothing selected.
+    let trip = "agent:main:dashboard:trip"
+    var workKeys = Set(work.sessions.keys)
+    let opens = app.openRequests
+    model.prepare()
+    model.target = QuickCaptureTarget(gatewayId: work.id, target: .chat(trip))
+    model.text = "qc existing \(nonce)"
+    model.attachments = [note]
+    let sentExisting = await model.send()
+    check(sentExisting && model.text.isEmpty && model.attachments.isEmpty && model.error == nil && model.target == nil,
+          "existing chat: send succeeds and clears the draft")
+    let createdByExisting = await created(on: work, since: workKeys, expected: false)
+    let existingCount = await delivered(work, trip, "qc existing \(nonce)")
+    check(existingCount == 1 && createdByExisting.isEmpty, "existing chat: exactly one message and no new session (\(existingCount), \(createdByExisting))")
+    check(selectionUnchanged() && app.openRequests == opens, "existing chat: the main window's selection is unchanged")
+    check(model.settings.lastTarget == QuickCaptureTarget(gatewayId: work.id, target: .chat(trip))
+          && defaults.string(forKey: QuickCaptureSettings.lastTargetKey) == "\(work.id.uuidString)|\(ShareTarget.chat(trip).storageValue)",
+          "14. the last target is saved as <gateway>|<target>")
+    let fresh = QuickCaptureModel(app: app, defaults: defaults)
+    fresh.prepare()
+    check(fresh.target == QuickCaptureTarget(gatewayId: work.id, target: .chat(trip)), "14. a new model starts at the last target")
+
+    // 10. A new chat: sessions.create, then chat.send to the new key; nothing selected.
+    workKeys = Set(work.sessions.keys)
+    model.target = QuickCaptureTarget(gatewayId: work.id, target: .newChat(agentId: "research"))
+    model.text = "qc new \(nonce)"
+    let sentNew = await model.send()
+    let newKeys = await created(on: work, since: workKeys)
+    check(sentNew && newKeys.count == 1 && newKeys.first?.hasPrefix("agent:research:") == true,
+          "new chat: exactly one session created (\(newKeys))")
+    if let newKey = newKeys.first {
+        let newCount = await delivered(work, newKey, "qc new \(nonce)")
+        check(newCount == 1, "new chat: the message went to the created chat (\(newCount))")
+    }
+    check(selectionUnchanged() && app.openRequests == opens, "new chat: selectedKey and selectedGatewayId unchanged")
+    check(model.settings.lastTarget == newKeys.first.map { QuickCaptureTarget(gatewayId: work.id, target: .chat($0)) },
+          "new chat: the last target is the created chat (\(model.settings.lastTarget?.storageValue ?? "nil"))")
+
+    // 11. Reveal: the created chat on the other Gateway is opened.
+    workKeys = Set(work.sessions.keys)
+    model.target = QuickCaptureTarget(gatewayId: work.id, target: .newChat(agentId: "main"))
+    model.text = "qc reveal \(nonce)"
+    let revealed = await model.send(reveal: true)
+    let revealedKeys = await created(on: work, since: workKeys)
+    check(revealed && revealedKeys.count == 1 && app.selectedGatewayId == work.id && work.selectedKey == revealedKeys.first
+          && app.openRequests == opens + 1 && app.history.current?.sessionKey == revealedKeys.first,
+          "reveal: the new chat's Gateway and chat are selected")
+    app.selectedGatewayId = home.id
+    work.selectedKey = "agent:research:main"
+
+    // 12. A refused send keeps everything.
+    let lastBefore = model.settings.lastTarget
+    model.target = QuickCaptureTarget(gatewayId: home.id, target: .chat(trip))
+    model.text = "qc refused [mock:fail-send] \(nonce)"
+    model.attachments = [note]
+    let refused = await model.send()
+    check(!refused && model.text == "qc refused [mock:fail-send] \(nonce)" && model.attachments == [note]
+          && model.target == QuickCaptureTarget(gatewayId: home.id, target: .chat(trip)) && !model.isSending,
+          "refused send: returns false and keeps the text, attachments and target")
+    check(model.error?.hasPrefix("Couldn’t send:") == true, "refused send: an error is shown (\(model.error ?? "none"))")
+    check(model.settings.lastTarget == lastBefore, "refused send: the last target isn't updated")
+    check(!home.chat(for: trip).items.contains { $0.plainText.contains("qc refused") }, "refused send: no stray message in the chat")
+    model.text = "qc retried \(nonce)"
+    let retried = await model.send()
+    check(retried && model.error == nil && model.settings.lastTarget == QuickCaptureTarget(gatewayId: home.id, target: .chat(trip)),
+          "refused send: a retry goes through and clears the error")
+
+    // 13. sessions.create succeeds but chat.send fails: the retry goes to the created chat.
+    var homeKeys = Set(home.sessions.keys)
+    let lastBeforeCreate = model.settings.lastTarget
+    model.target = QuickCaptureTarget(gatewayId: home.id, target: .newChat(agentId: "research"))
+    model.text = "qc half [mock:fail-send] \(nonce)"
+    let half = await model.send()
+    let halfKeys = await created(on: home, since: homeKeys)
+    check(!half && halfKeys.count == 1 && model.target == halfKeys.first.map { QuickCaptureTarget(gatewayId: home.id, target: .chat($0)) }
+          && model.text.contains("qc half") && model.error != nil && model.settings.lastTarget == lastBeforeCreate,
+          "create ok, send failed: the target becomes the created chat (\(halfKeys))")
+    check(selectionUnchanged(), "create ok, send failed: nothing selected")
+    homeKeys = Set(home.sessions.keys)
+    model.text = "qc half retried \(nonce)"
+    let halfRetried = await model.send()
+    let extraKeys = await created(on: home, since: homeKeys, expected: false)
+    if let halfKey = halfKeys.first {
+        let halfCount = await delivered(home, halfKey, "qc half retried \(nonce)")
+        check(halfRetried && extraKeys.isEmpty && halfCount == 1
+              && model.settings.lastTarget == QuickCaptureTarget(gatewayId: home.id, target: .chat(halfKey)),
+              "create ok, send failed: the retry doesn't create a second chat")
+
+        // A chat archived elsewhere drops out of the list and isn't the default any more.
+        await home.patch(halfKey, ["archived": true])
+        let archived = await waitFor("archive") { home.sessions[halfKey]?.isArchived == true }
+        let listed = QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: home.id, recent: [])
+        check(archived && !listed.contains { $0.id == "chat:\(home.id.uuidString):\(halfKey)" }, "archived chats leave the list")
+        let reopened = QuickCaptureModel(app: app, defaults: defaults)
+        reopened.prepare()
+        check(reopened.target == QuickCaptureTarget(gatewayId: home.id, target: .chat("agent:main:main")),
+              "an archived last target falls back to the current chat (\(reopened.target?.storageValue ?? "nil"))")
+    }
+
+    // 12. The connection drops mid-send: the draft stays, rows go disabled, and Send comes back on reconnect.
+    model.target = QuickCaptureTarget(gatewayId: work.id, target: .chat(trip))
+    model.text = "qc dropped [mock:drop] \(nonce)"
+    model.attachments = [note]
+    let dropped = await model.send()
+    check(!dropped && model.text.contains("qc dropped") && model.attachments == [note] && model.error != nil,
+          "dropped connection: the draft is kept and an error shown (\(model.error ?? "none"))")
+    let lost = await waitFor("connection lost", timeout: 5) { !work.state.isConnected }
+    let offlineItems = model.items
+    let workRows = offlineItems.filter { if case let .openChat(target) = $0.action { target.gatewayId == work.id } else { false } }
+    check(lost && !model.canSend && model.connectionStatus != nil, "dropped connection: Send is disabled (\(model.connectionStatus ?? "-"))")
+    check(!workRows.isEmpty && workRows.allSatisfy { !$0.isEnabled && $0.subtitle?.contains("Mock work") == true }
+          && !offlineItems.contains { if case let .newChat(id, _) = $0.action { id == work.id } else { false } }
+          && offlineItems.contains { $0.isEnabled },
+          "dropped connection: that Gateway's chats are disabled and its New Chat items gone")
+    check(workRows.first.map { !model.pick($0) } ?? false, "a disabled row can't be picked")
+    model.openPicker()
+    for _ in 0..<offlineItems.count { model.moveHighlight(by: 1) }
+    check(model.highlighted(in: model.items)?.isEnabled == true, "↑/↓ skip disabled rows")
+    model.closePicker()
+    let back = await waitFor("reconnect", timeout: 20) { work.state.isConnected }
+    check(back && model.canSend && model.target?.gatewayId == work.id, "Send is enabled again once the Gateway reconnects")
+    model.text = "qc after drop \(nonce)"
+    let afterDrop = await model.send()
+    let afterDropCount = await delivered(work, trip, "qc after drop \(nonce)")
+    check(afterDrop && afterDropCount == 1, "a send after reconnecting goes through (\(afterDropCount))")
+    check(selectionUnchanged(), "no send changed the main window's selection")
 }
 
 /// Needs a mock started with MOCK_PAIRING=auto MOCK_LEGACY_PAIRING=1, so the first pairing
@@ -1433,6 +2349,8 @@ func runLive(url: String, token: String) async {
     }
 
     _ = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
+    await checkApprovalOutcomes(gateway, chat: chat, label: "live")
+    await checkLiveApprovals(profile: profile, gateway: gateway, chat: chat)
     await chat.send("ask me something")
     let asked = await waitFor("question.requested") { !gateway.pendingQuestions(for: key).isEmpty }
     check(asked, "ask_user question surfaced over the wire")
@@ -1588,6 +2506,37 @@ func runLive(url: String, token: String) async {
         gateway.organization = savedOrganization
     }
     other.stop()
+
+    // Approval History against the mock's 60 seeded decisions (30 exec, 18 plugin, 12 system-agent),
+    // plus any approvals resolved earlier in this run.
+    let history = gateway.approvalHistory
+    check(gateway.hello?.methods.contains("approval.history") == true, "hello advertises approval.history")
+    await history.load()
+    check(history.supported && history.loadState == .idle && history.items.count == 50 && history.hasMore, "approval.history page 1 (\(history.items.count))")
+    await history.loadMore()
+    let seededIds = history.items.map(\.id).filter { $0.contains("_hist_") }
+    let resolvedHere = history.items.filter { !$0.id.contains("_hist_") }
+    check(seededIds.count == 60 && history.items.count == 60 + resolvedHere.count && Set(history.items.map(\.id)).count == history.items.count
+          && !history.hasMore, "two pages = 60 seeded + \(resolvedHere.count) resolved, no duplicates")
+    check(!resolvedHere.isEmpty && history.items.first?.id == resolvedHere.first?.id && resolvedHere.first?.status == .denied
+          && resolvedHere.first.map(history.decidedBy) == "This device", "approval denied earlier is first, decided by this device")
+    check(history.items.allSatisfy { $0.status != .pending } && Set(history.items.map(\.status)) == [.allowed, .denied, .expired, .cancelled],
+          "terminal statuses only")
+    for (filter, seeded) in [(ApprovalHistoryModel.KindFilter.exec, 30), (.plugin, 18), (.systemAgent, 12)] {
+        await history.setKindFilter(filter)
+        while history.hasMore { await history.loadMore() }
+        let expected = seeded + (filter == .exec ? resolvedHere.count : 0)
+        check(history.items.count == expected && history.items.allSatisfy { $0.kind.rawValue == filter.rawValue },
+              "\(filter.label) filter (\(history.items.count)/\(expected))")
+    }
+    await history.setKindFilter(.all)
+    await history.loadDetail("plugin_hist_001")
+    check(history.details["plugin_hist_001"]?.kind == .plugin && history.details["plugin_hist_001"]?.title != nil
+          && history.detailState["plugin_hist_001"] == .idle, "approval.get plugin_hist_001")
+    await history.loadDetail("sys_hist_001")
+    check(history.details["sys_hist_001"]?.kind == .systemAgent, "approval.get sys_hist_001")
+    await history.loadDetail("nope_missing")
+    check(history.detailState["nope_missing"]?.error == "This approval is no longer on the Gateway.", "approval.get not found")
 
     // Automations: read-only without admin, then run, pause, edit, create and delete.
     let automations = gateway.automations
@@ -2095,6 +3044,127 @@ final class PushSink: @unchecked Sendable {
     func stop() { self.listener.cancel() }
 }
 
+/// Stale and duplicate answers, shared by the demo and the mock (AC test cases 7, 10–12).
+@MainActor
+func checkApprovalOutcomes(_ gateway: GatewayStore, chat: ChatStore, label: String) async {
+    print("Approval outcomes (\(label))")
+    func raise(_ text: String) async -> ExecApproval? {
+        let known = Set(gateway.approvals.map(\.id))
+        await chat.send(text)
+        _ = await waitFor("\(text) approval") { gateway.approvals.contains { !known.contains($0.id) } }
+        return gateway.approvals.first { !known.contains($0.id) }
+    }
+
+    guard let full = await raise("please approve this") else { return check(false, "\(label): approval surfaced") }
+    check(full.allowedDecisions == ["allow-once", "allow-always", "deny"] && Notifier.category(for: full) == "approval",
+          "\(label): allowedDecisions parsed, all three actions")
+    async let first = gateway.resolveApproval(id: full.id, decision: "allow-once")
+    async let second = gateway.resolveApproval(id: full.id, decision: "allow-once")
+    let pair = await [first, second]
+    check(pair.contains(.resolved) && pair.contains(.alreadyHandled), "\(label): concurrent resolves send once (\(pair))")
+    check(!gateway.approvals.contains { $0.id == full.id }, "\(label): resolved approval removed")
+    let again = await gateway.resolveApproval(id: full.id, decision: "deny")
+    check(again == .alreadyHandled,
+          "\(label): acting again after success is a quiet no-op")
+    _ = await waitFor("\(label) run", timeout: 20) { !chat.isRunning }
+
+    guard let once = await raise("approve once-only") else { return check(false, "\(label): once-only approval surfaced") }
+    check(once.allowedDecisions == ["allow-once", "deny"] && !once.allowsAlways && Notifier.category(for: once) == "approval-once",
+          "\(label): approve once-only leaves out Always allow")
+    let always = await gateway.resolveApproval(once, decision: "allow-always")
+    check(always == .allowAlwaysUnavailable, "\(label): allow-always → unavailable (\(always))")
+    check(gateway.approvals.contains { $0.id == once.id }, "\(label): approval stays pending")
+    check(gateway.lastError == "Always allow isn't available for this command.", "\(label): banner error in lastError")
+    let allowed = await gateway.resolveApproval(once, decision: "allow-once")
+    check(allowed == .resolved && !gateway.approvals.contains { $0.id == once.id }, "\(label): then Allow once succeeds (\(allowed))")
+    _ = await waitFor("\(label) run", timeout: 20) { !chat.isRunning }
+
+    let missingId = "approval_missing_\(UUID().uuidString.prefix(6))"
+    let missing = await gateway.resolveApproval(id: missingId, decision: "deny")
+    check(missing == .expired, "\(label): unknown id → expired (\(missing))")
+    let missingAgain = await gateway.resolveApproval(id: missingId, decision: "allow-once")
+    check(missingAgain == .alreadyHandled, "\(label): acting again on an expired approval is a quiet no-op (\(missingAgain))")
+
+    // A resolve that's out of time or cancelled never reaches the Gateway, and the approval stays pending.
+    guard let late = await raise("please approve this") else { return check(false, "\(label): approval surfaced") }
+    let pastDeadline = await gateway.resolveApproval(id: late.id, decision: "allow-once", connectWithin: 0)
+    check(pastDeadline == .unreachable, "\(label): deadline already passed → unreachable (\(pastDeadline))")
+    let cancelled = Task { await gateway.resolveApproval(id: late.id, decision: "allow-once") }
+    cancelled.cancel()
+    let cancelledOutcome = await cancelled.value
+    check(cancelledOutcome == .unreachable, "\(label): cancelled resolve → unreachable (\(cancelledOutcome))")
+    try? await Task.sleep(for: .milliseconds(500))
+    check(gateway.approvals.contains { $0.id == late.id }, "\(label): neither sent an RPC, approval still pending")
+    _ = await waitFor("\(label) reconnect") { gateway.state.isConnected }
+    let answered = await gateway.resolveApproval(id: late.id, decision: "deny")
+    check(answered == .resolved && !gateway.approvals.contains { $0.id == late.id }, "\(label): a later action still resolves it (\(answered))")
+    _ = await waitFor("\(label) run", timeout: 20) { !chat.isRunning }
+}
+
+/// Mock-only approval paths (AC test cases 9–11, 13, 14).
+@MainActor
+func checkLiveApprovals(profile: GatewayProfile, gateway: GatewayStore, chat: ChatStore) async {
+    print("Approval resolution (live)")
+    func raise(_ text: String) async -> ExecApproval? {
+        let known = Set(gateway.approvals.map(\.id))
+        await chat.send(text)
+        _ = await waitFor("\(text) approval") { gateway.approvals.contains { !known.contains($0.id) } }
+        return gateway.approvals.first { !known.contains($0.id) }
+    }
+
+    // A store that just started, like a background launch: resolves once connected.
+    guard let pending = await raise("please approve this") else { return check(false, "approval surfaced") }
+    let cold = GatewayStore(profile: profile)
+    cold.start()
+    let started = Date()
+    let outcome = await cold.resolveApproval(id: pending.id, decision: "deny")
+    check(outcome == .resolved && Date().timeIntervalSince(started) < 25, "cold store resolves by id within the budget (\(outcome))")
+    let cleared = await waitFor("exec.approval.resolved from another client") { !gateway.approvals.contains { $0.id == pending.id } }
+    check(cleared, "resolved by another client → removed from this store")
+    check(cold.approvals.isEmpty, "cold store keeps no approval")
+    // Another device retrying: the same decision is idempotent, a different one was answered elsewhere.
+    let other = GatewayStore(profile: profile)
+    other.start()
+    let identical = await other.resolveApproval(id: pending.id, decision: "deny")
+    check(identical == .resolved, "identical retry from another client → success")
+    let conflict = await other.resolveApproval(id: pending.id, decision: "allow-once")
+    check(conflict == .alreadyHandled, "different decision after answering here → quiet no-op (\(conflict))")
+    let fresh = GatewayStore(profile: profile)
+    fresh.start()
+    let conflictFresh = await fresh.resolveApproval(id: pending.id, decision: "allow-once")
+    check(conflictFresh == .answeredElsewhere(decision: nil), "different decision from a fresh client → answered elsewhere (\(conflictFresh))")
+    check(fresh.approvals.isEmpty, "answered elsewhere leaves nothing pending")
+    let freshAgain = await fresh.resolveApproval(id: pending.id, decision: "allow-once")
+    check(freshAgain == .alreadyHandled, "acting again after answered elsewhere → quiet no-op (\(freshAgain))")
+    for store in [cold, other, fresh] { store.stop() }
+    _ = await waitFor("approval run", timeout: 20) { !chat.isRunning }
+
+    // Gateway B's approval id sent to A never reaches B; A reads it as not found.
+    guard let mine = await raise("please approve this") else { return check(false, "approval surfaced") }
+    let foreign = await gateway.resolveApproval(id: "approval_on_gateway_b", decision: "allow-once")
+    check(foreign == .expired && gateway.approvals.contains { $0.id == mine.id }, "another gateway's id → not found, own approval untouched")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval",
+                             userInfo: ["gateway": UUID().uuidString, "approval": mine.id])
+          != .resolve(gatewayId: gateway.id, approvalId: mine.id, decision: "allow-once"), "action routes only to the notification's gateway")
+    await gateway.resolveApproval(mine, decision: "deny")
+    _ = await waitFor("approval run", timeout: 20) { !chat.isRunning }
+
+    // The mock's short-lived approval expires after 3 s.
+    guard let short = await raise("approve short-lived") else { return check(false, "short-lived approval surfaced") }
+    try? await Task.sleep(for: .seconds(max(0, (short.expiresAt ?? Date()).timeIntervalSinceNow) + 0.3))
+    check(short.isExpired(), "short-lived approval past expiresAt")
+    let expired = await gateway.resolveApproval(short, decision: "allow-once")
+    check(expired == .expired && !gateway.approvals.contains { $0.id == short.id }, "resolve after expiry → expired, removed (\(expired))")
+    let viaRPC = GatewayStore(profile: profile)
+    viaRPC.start()
+    let expiredRPC = await viaRPC.resolveApproval(id: short.id, decision: "allow-once")
+    check(expiredRPC == .expired, "Gateway reports the expired id as not found")
+    let expiredAgain = await viaRPC.resolveApproval(id: short.id, decision: "deny")
+    check(expiredAgain == .alreadyHandled, "acting again after expired → quiet no-op (\(expiredAgain))")
+    viaRPC.stop()
+    _ = await waitFor("approval run", timeout: 20) { !chat.isRunning }
+}
+
 @MainActor
 func checkPushLive(_ gateway: GatewayStore) async {
     print("Push (live)")
@@ -2134,12 +3204,22 @@ func checkPushLive(_ gateway: GatewayStore) async {
     let before = sink.deliveries.count
     await chat.send("please approve this")
     let approvalSeen = await waitFor("approval push", timeout: 20) {
-        sink.deliveries.dropFirst(before).contains { PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString, "p": $0.body.base64URL]])?.categoryIdentifier == "approval-push" }
+        sink.deliveries.dropFirst(before).contains { PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString, "p": $0.body.base64URL]])?.categoryIdentifier == "approval" }
     }
     check(approvalSeen, "approval push carries approve/deny actions")
-    if let id = gateway.approvals.first?.id {
-        await gateway.resolveApproval(id: id, decision: "deny")
-        check(gateway.approvals.isEmpty, "approval resolved by id from a push action")
+    let approvalMessage = sink.deliveries.dropFirst(before).lazy
+        .compactMap { PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString.lowercased(), "p": $0.body.base64URL]]) }
+        .first { $0.categoryIdentifier == "approval" }
+    if let approvalMessage, case let .approval(id, _) = approvalMessage.kind {
+        let action = Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: approvalMessage.categoryIdentifier,
+                                        userInfo: approvalMessage.userInfo)
+        check(action == .resolve(gatewayId: gateway.id, approvalId: id, decision: "deny"), "Deny on the decrypted push targets its gateway")
+        if case let .resolve(gatewayId, approvalId, decision) = action, gatewayId == gateway.id {
+            let outcome = await gateway.resolveApproval(id: approvalId, decision: decision)
+            check(outcome == .resolved && gateway.approvals.isEmpty, "approval resolved by id from a push action (\(outcome))")
+        }
+    } else {
+        check(false, "approval push decrypted")
     }
     _ = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
 
