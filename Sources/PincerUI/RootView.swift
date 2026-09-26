@@ -3,16 +3,27 @@ import SwiftUI
 
 /// The whole app: shared by the macOS and iOS targets.
 public struct PincerScene: Scene {
-    @State private var app = AppModel()
+    /// One for the app's lifetime, so launch work (connecting, the Quick Capture hotkey) doesn't
+    /// wait for a main window, which may never be created.
+    @State private var app = AppModel.shared
 
-    public init() {}
+    public init() {
+        #if os(macOS)
+        QuickCaptureController.shared.install(app: AppModel.shared)
+        #endif
+    }
 
     public var body: some Scene {
         WindowGroup("Pincer", id: "main") {
             RootView()
                 .environment(self.app)
                 .themed()
-                .task { self.app.start() }
+                .task {
+                    self.app.start()
+                    #if os(macOS)
+                    QuickCaptureController.shared.launch()
+                    #endif
+                }
         }
         #if os(macOS)
         .defaultSize(width: 1180, height: 780)
@@ -79,7 +90,7 @@ struct RootView: View {
     @State private var automationsRequest: AutomationsRequest?
     /// iOS: app Settings opened from the command palette.
     @State private var showingAppSettings = false
-    @State private var showsCommandPalette = false
+    @State private var paletteRequest: PaletteRequest?
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -99,7 +110,7 @@ struct RootView: View {
                         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
                         #endif
                 } detail: {
-                    self.detail(gateway)
+                    GatewayDetail(gateway: gateway)
                         .background { self.theme.background(.chatBackground)?.ignoresSafeArea() }
                 }
             } else {
@@ -109,10 +120,11 @@ struct RootView: View {
             }
         }
         .overlay {
-            CommandPaletteOverlay(isPresented: self.$showsCommandPalette, openAppSettings: { self.showingAppSettings = true })
+            CommandPaletteOverlay(request: self.$paletteRequest, openAppSettings: { self.showingAppSettings = true })
         }
-        .animation(.snappy(duration: 0.15), value: self.showsCommandPalette)
-        .focusedSceneValue(\.commandPalette, self.$showsCommandPalette)
+        .animation(.snappy(duration: 0.15), value: self.paletteRequest)
+        .focusedSceneValue(\.commandPalette, self.showsCommandPalette)
+        .focusedSceneValue(\.searchMessages, self.app.selectedGateway == nil ? nil : self.searchMessagesAction)
         .sheet(isPresented: self.$addingGateway) { ConnectionSheet() }
         #if os(iOS)
         .sheet(isPresented: self.$showingAppSettings) {
@@ -130,24 +142,35 @@ struct RootView: View {
         }
         .environment(\.openGatewaySettings, self.settingsOpener)
         .environment(\.openAutomations, self.automationsOpener)
+        .environment(\.searchMessages, self.searchMessagesAction)
         .onChange(of: self.scenePhase, initial: true) { _, phase in
             self.app.appIsActive = phase == .active
         }
-        .onChange(of: self.app.selectedGateway?.selectedKey) { self.app.updateVisible() }
         .onChange(of: self.app.openRequests) { self.compactColumn = .detail }
-        .onChange(of: self.app.totalUnread, initial: true) { _, count in
-            self.app.notifier.setBadge(count)
-            #if os(macOS)
-            NSApplication.shared.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
-            #endif
-        }
+        .background { UnreadBadgeSync() }
         .onAppear {
             if self.app.gateways.isEmpty { self.addingGateway = true }
+            #if os(macOS)
+            QuickCaptureController.shared.openWindow = self.openWindow
+            #endif
+        }
+    }
+
+    /// ⌘K: the palette's root page.
+    private var showsCommandPalette: Binding<Bool> {
+        Binding(get: { self.paletteRequest != nil },
+                set: { self.paletteRequest = $0 ? self.paletteRequest ?? PaletteRequest() : nil })
+    }
+
+    private var searchMessagesAction: SearchMessagesAction {
+        SearchMessagesAction { query in
+            self.paletteRequest = PaletteRequest(page: .messages, query: query)
         }
     }
 
     private var settingsOpener: GatewaySettingsOpener {
-        GatewaySettingsOpener { gateway, destination in
+        GatewaySettingsOpener { gateway, destination, routes in
+            gateway.settings.requestedRoutes = routes
             gateway.settings.requestedDestination = destination
             #if os(macOS)
             self.openWindow(id: "gateway-settings", value: gateway.id)
@@ -166,18 +189,51 @@ struct RootView: View {
             #endif
         }
     }
+}
 
-    private func detail(_ gateway: GatewayStore) -> some View {
+/// Keeps the app badge in sync with unread chats. Its own view because the count reads every
+/// session: watching it from `RootView` rebuilt the sidebar whenever a chat was read.
+private struct UnreadBadgeSync: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        Color.clear
+            .onChange(of: self.app.totalUnread, initial: true) { _, count in
+                self.app.notifier.setBadge(count)
+                #if os(macOS)
+                NSApplication.shared.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+                #endif
+            }
+    }
+}
+
+/// The split view's detail column. Its own view so only it, not `RootView` and the sidebar it
+/// builds, re-renders when the selected chat changes.
+private struct GatewayDetail: View {
+    let gateway: GatewayStore
+    @Environment(AppModel.self) private var app
+    @Environment(\.openGatewaySettings) private var openGatewaySettings
+
+    var body: some View {
+        let gateway = self.gateway
         Group {
             switch gateway.state {
             case let .awaitingPairing(requestId, deviceId):
                 PairingView(requestId: requestId, deviceId: deviceId)
             case let .failed(message) where gateway.sessions.isEmpty:
-                FailedView(message: message) { self.settingsOpener(gateway, at: .connection) }
+                FailedView(message: message) { self.openGatewaySettings(gateway, at: .connection) }
             default:
                 if let key = gateway.selectedKey {
-                    ChatView(chat: gateway.chat(for: key))
-                        .id("\(gateway.id)|\(key)")
+                    let chat = gateway.chat(for: key)
+                    // The per-chat `.id` stays inside a stable, full-size container, with the title and
+                    // toolbar outside it. Replacing the view under the toolbar, or the toolbar with
+                    // it, makes macOS redraw every toolbar button on each switch.
+                    ZStack {
+                        ChatView(chat: chat)
+                            .id("\(gateway.id)|\(key)")
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .modifier(ChatChrome())
                 } else if gateway.state.isConnected {
                     ContentUnavailableView("Pick a chat", systemImage: "bubble.left.and.bubble.right",
                                            description: Text("Choose a session from the sidebar or start a new one."))
@@ -187,6 +243,7 @@ struct RootView: View {
             }
         }
         .environment(gateway)
+        .onChange(of: gateway.selectedKey) { self.app.updateVisible() }
     }
 }
 
@@ -216,7 +273,7 @@ struct SettingsView: View {
         #if os(macOS)
         TabView {
             Tab("General", systemImage: "gearshape") {
-                SettingsForm(sections: [.you, .device])
+                SettingsForm(sections: [.you, .launch, .quickCapture, .device])
             }
             Tab("Appearance", systemImage: "paintpalette") {
                 SettingsForm(sections: [.appearance, .colors], scrolls: true)
@@ -230,7 +287,7 @@ struct SettingsView: View {
         }
         .frame(width: 520)
         #else
-        SettingsForm(sections: SettingsForm.Section.allCases)
+        SettingsForm(sections: SettingsForm.Section.available)
             .navigationTitle("Settings")
         #endif
     }
@@ -238,7 +295,16 @@ struct SettingsView: View {
 
 private struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, appearance, colors, conversation, sidebar, notifications, device
+        case you, launch, quickCapture, appearance, colors, conversation, sidebar, notifications, device
+
+        /// Sections that exist on this platform.
+        static var available: [Self] {
+            #if os(macOS)
+            Self.allCases
+            #else
+            Self.allCases.filter { $0 != .launch && $0 != .quickCapture }
+            #endif
+        }
     }
 
     let sections: [Section]
@@ -290,6 +356,14 @@ private struct SettingsForm: View {
             } footer: {
                 Text("Your messages show under this name, whichever channel they came from.")
             }
+        case .launch:
+            #if os(macOS)
+            LaunchAtLoginSettingsSection()
+            #endif
+        case .quickCapture:
+            #if os(macOS)
+            QuickCaptureSettingsSection()
+            #endif
         case .appearance:
             SwiftUI.Section {
                 Picker("Appearance", selection: self.$mode) {

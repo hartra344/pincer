@@ -33,7 +33,12 @@ actor DemoGateway {
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
-    ]
+        "approval.history", "approval.get", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
+        "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
+        "exec.approvals.get", "exec.approvals.set",
+    ] + DemoUsage.methods
+    /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
+    static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
     private let agents: [JSONValue] = [
         ["id": "main", "name": "Claw", "identity": ["name": "Claw", "emoji": "🦞"]],
@@ -45,9 +50,18 @@ actor DemoGateway {
     private var artifacts: [String: (mimeType: String, data: Data)] = [:]
     private var approvals: [String: JSONValue] = [:]
     private var approvalOrder: [String] = []
+    /// Answered approvals and their decision, so retries behave like the Gateway's.
+    private var resolvedApprovals: [String: String] = [:]
+    /// Terminal approvals, newest first (`approval.history`).
+    private var approvalHistory: [JSONValue] = []
+    /// The exec approvals file (`exec.approvals.get/set`). The demo keeps no socket token.
+    var execApprovals = DemoGateway.seedExecApprovals()
+    var execApprovalsExists = true
     /// `ask_user` prompts by id, in the order they were asked.
     private var questions: [String: JSONValue] = [:]
     private var questionOrder: [String] = []
+    /// Pending DM pairing requests (`channels.pairing.*`).
+    private var pairingRequests: [JSONValue] = []
     private var prefs: [String: JSONValue] = [:]
     /// Custom group catalog in display order; groups stay until deleted, even when empty.
     private var groups = ["Home", "Personal", "Work"]
@@ -58,11 +72,24 @@ actor DemoGateway {
     private var messageSubscriptions: Set<String> = []
     private var eventSeq = 0
     private var sink: (@Sendable (GatewayEvent) -> Void)?
+    /// When the simulated Gateway process started; reset by a restart.
+    private var startedAt = Date().addingTimeInterval(-(3 * 86400 + 4 * 3600 + 17 * 60))
+    /// While set, a simulated restart is under way and `attach` waits until then.
+    private var restartingUntil: Date?
+    private var restartTask: Task<Void, Never>?
+    private static let restartExpectedMs = 1500
 
     init() {
         let seeded = Self.seed()
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
+        self.approvalHistory = Self.seedApprovalHistory()
+        let pending = Self.seedPendingApproval()
+        if let id = pending["id"]?.string {
+            self.approvals[id] = pending
+            self.approvalOrder.append(id)
+        }
+        self.pairingRequests = Self.seedPairingRequests()
         self.artifacts["demo-chart"] = ("image/png", Self.chartPNG())
         self.artifacts["demo-script"] = ("text/x-shellscript", Data(Self.diskScript.utf8))
     }
@@ -107,7 +134,15 @@ actor DemoGateway {
 
     // MARK: Connection
 
-    func attach(_ sink: @escaping @Sendable (GatewayEvent) -> Void) -> JSONValue {
+    func attach(_ sink: @escaping @Sendable (GatewayEvent) -> Void) async -> JSONValue {
+        // Like a Gateway coming back up: nobody gets in until the restart is done.
+        while let until = self.restartingUntil, until > Date() {
+            try? await Task.sleep(for: .milliseconds(max(50, Int(until.timeIntervalSinceNow * 1000))))
+        }
+        if self.restartingUntil != nil {
+            self.restartingUntil = nil
+            self.startedAt = Date()
+        }
         self.sink = sink
         self.sessionsSubscribed = false
         self.messageSubscriptions.removeAll()
@@ -116,8 +151,14 @@ actor DemoGateway {
             "protocol": .number(Double(GatewayConnection.protocolVersion)),
             "server": ["version": "demo", "connId": .string(Self.shortId("conn_"))],
             "features": ["methods": JSONValue(Self.methods), "events": []],
-            "snapshot": [:],
-            "auth": ["role": "operator", "scopes": JSONValue(GatewayConnection.scopes)],
+            "snapshot": [
+                "presence": .array(self.presence()),
+                "health": self.health(),
+                "stateVersion": ["presence": 1, "health": 1],
+                "uptimeMs": .number((Date().timeIntervalSince(self.startedAt) * 1000).rounded()),
+            ],
+            // operator.pairing lets the demo show Pairing Requests without making settings editable.
+            "auth": ["role": "operator", "scopes": JSONValue(GatewayConnection.scopes + [PairingInboxModel.pairingScope])],
             "policy": [
                 "maxPayload": 26_214_400,
                 "tickIntervalMs": 15000,
@@ -186,18 +227,465 @@ actor DemoGateway {
             guard let id = params["id"]?.string, let decision = params["decision"]?.string,
                   ["allow-once", "allow-always", "deny"].contains(decision)
             else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid decision", details: nil) }
+            if let previous = self.resolvedApprovals[id] {
+                guard previous == decision else {
+                    throw GatewayError.rpc(code: "INVALID_REQUEST", message: "approval already resolved",
+                                           details: ["reason": "APPROVAL_ALREADY_RESOLVED"])
+                }
+                return ["ok": true, "id": .string(id), "decision": .string(decision)]
+            }
+            guard let approval = self.approvals[id],
+                  (approval["expiresAtMs"]?.double ?? .infinity) > (Self.now().double ?? 0)
+            else {
+                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "approval expired or not found",
+                                       details: ["reason": "APPROVAL_NOT_FOUND"])
+            }
+            if decision == "allow-always",
+               approval["request"]?["allowedDecisions"]?.array?.contains(.string("allow-always")) == false
+            {
+                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "allow-always is unavailable for this command",
+                                       details: ["reason": "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE"])
+            }
+            self.resolvedApprovals[id] = decision
+            if decision == "allow-always" { self.appendAllowAlways(approval) }
+            self.approvalHistory.insert(Self.resolvedRecord(approval, decision: decision), at: 0)
             self.approvals[id] = nil
             self.approvalOrder.removeAll { $0 == id }
             self.emit("exec.approval.resolved", ["id": .string(id), "decision": .string(decision)])
+            if id == Self.seededApprovalId { self.finishSeededPush(approved: decision != "deny") }
             return ["ok": true, "id": .string(id), "decision": .string(decision)]
+        case "approval.history":
+            return try self.approvalHistoryPage(params)
+        case "approval.get":
+            return try self.approvalSnapshot(params)
+        case "exec.approvals.get":
+            return try self.execApprovalsGet(params)
+        case "exec.approvals.set":
+            return try self.execApprovalsSet(params)
+        case _ where DemoUsage.methods.contains(method):
+            return try DemoUsage.handle(method, params, knownKeys: Set(self.sessions.keys))
+        case "channels.pairing.list":
+            return self.pairingList()
+        case "channels.pairing.approve":
+            return try self.resolvePairing(params, approve: true)
+        case "channels.pairing.dismiss":
+            return try self.resolvePairing(params, approve: false)
         case "question.list":
             return ["questions": .array(self.questionOrder.compactMap { self.questions[$0] }
                     .filter { $0["status"]?.string == "pending" })]
         case "question.resolve":
             return try self.resolveQuestion(params)
+        case "health":
+            return self.health()
+        case "status":
+            return ["ok": true, "version": "demo", "uptimeMs": .number((Date().timeIntervalSince(self.startedAt) * 1000).rounded()),
+                    "sessions": ["count": JSONValue(self.sessions.count)]]
+        case "last-heartbeat":
+            return self.lastHeartbeat()
+        case "system-presence":
+            return .array(self.presence())
+        case "gateway.restart.request":
+            return self.requestRestart(params)
         default:
             throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "The demo doesn't support \(method).", details: nil)
         }
+    }
+
+    // MARK: Channel pairing
+
+    private static let pairingAccounts: [JSONValue] = [
+        ["channel": "telegram", "channelLabel": "Telegram", "accountId": "home", "accountLabel": "Home bot", "notifySupported": true],
+        ["channel": "discord", "channelLabel": "Discord", "accountId": "family", "accountLabel": "Family server", "notifySupported": false],
+    ]
+    private static let pairingTTL: TimeInterval = 60 * 60
+
+    private static func iso(_ date: Date) -> JSONValue {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return .string(formatter.string(from: date))
+    }
+
+    private static func seedPairingRequests(now: Date = Date()) -> [JSONValue] {
+        func request(_ id: String, account: Int, senderId: String, senderLabel: String, metadata: [String: JSONValue]?,
+                     createdAgo: TimeInterval, lastSeenAgo: TimeInterval) -> JSONValue
+        {
+            let account = Self.pairingAccounts[account]
+            let created = now.addingTimeInterval(-createdAgo)
+            var row: [String: JSONValue] = [
+                "requestId": .string(id), "channel": account["channel"] ?? .null, "channelLabel": account["channelLabel"] ?? .null,
+                "accountId": account["accountId"] ?? .null, "accountLabel": account["accountLabel"] ?? .null,
+                "senderId": .string(senderId), "senderLabel": .string(senderLabel),
+                "createdAt": Self.iso(created), "lastSeenAt": Self.iso(now.addingTimeInterval(-lastSeenAgo)),
+                "expiresAt": Self.iso(created.addingTimeInterval(Self.pairingTTL)),
+                "notifySupported": account["notifySupported"] ?? false,
+            ]
+            if let metadata { row["metadata"] = .object(metadata) }
+            return .object(row)
+        }
+        return [
+            request("pr_demo_maya", account: 0, senderId: "5550142", senderLabel: "Telegram user id",
+                    metadata: ["name": "Maya Chen", "username": "mayac", "languageCode": "en"],
+                    createdAgo: 5 * 60, lastSeenAgo: 2 * 60),
+            request("pr_demo_discord", account: 1, senderId: "418820017734812160", senderLabel: "Discord user id",
+                    metadata: nil, createdAgo: 20 * 60, lastSeenAgo: 20 * 60),
+            request("pr_demo_soon", account: 0, senderId: "5550199", senderLabel: "Telegram user id",
+                    metadata: ["username": "night_owl"], createdAgo: Self.pairingTTL - 2 * 60, lastSeenAgo: Self.pairingTTL - 2 * 60),
+        ]
+    }
+
+    private func pairingList() -> JSONValue {
+        let now = Date()
+        let pending = self.pairingRequests.filter { PairingRequest($0).map { !$0.isExpired(at: now) } ?? false }
+        return [
+            "accounts": .array(Self.pairingAccounts),
+            "requests": .array(pending),
+            "commandOwnerConfigured": true,
+            "limits": ["pendingPerAccount": 3, "ttlMs": .number(Self.pairingTTL * 1000)],
+        ]
+    }
+
+    private func resolvePairing(_ params: JSONValue, approve: Bool) throws -> JSONValue {
+        guard let channel = params["channel"]?.string, let accountId = params["accountId"]?.string,
+              let requestId = params["requestId"]?.string
+        else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "channel, accountId and requestId are required", details: nil) }
+        guard let account = Self.pairingAccounts.first(where: {
+            $0["channel"]?.string == channel && $0["accountId"]?.string == accountId
+        }) else {
+            throw GatewayError.rpc(code: "INVALID_REQUEST",
+                                   message: "channel account does not use DM pairing: \(channel):\(accountId)", details: nil)
+        }
+        let now = Date()
+        guard let index = self.pairingRequests.firstIndex(where: {
+            $0["requestId"]?.string == requestId && $0["channel"]?.string == channel && $0["accountId"]?.string == accountId
+        }), PairingRequest(self.pairingRequests[index])?.isExpired(at: now) == false else {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "pending DM access request no longer exists", details: nil)
+        }
+        let senderId = self.pairingRequests[index]["senderId"] ?? .null
+        self.pairingRequests.remove(at: index)
+        guard approve else { return ["requestId": .string(requestId), "senderId": senderId] }
+        let notification: String = switch params["notify"]?.bool {
+        case true?: account["notifySupported"]?.bool == true ? "sent" : "unsupported"
+        default: "not-requested"
+        }
+        return [
+            "requestId": .string(requestId), "senderId": senderId, "notification": .string(notification),
+            "commandOwnerBootstrap": params["bootstrapCommandOwner"]?.bool == true ? "already-configured" : "not-requested",
+        ]
+    }
+
+    // MARK: Health and restart
+
+    /// Discord is fine; Telegram lost its connection until a restart, so the demo starts out degraded.
+    private func health() -> JSONValue {
+        let now = Self.now()
+        let nowMs = now.double ?? 0
+        return [
+            "ok": true, "ts": now, "durationMs": 42,
+            "channels": [
+                "discord": [
+                    "accountId": "default", "name": "Discord", "enabled": true, "configured": true, "running": true,
+                    "connected": true, "restartPending": false, "reconnectAttempts": 0,
+                    "lastConnectedAt": .number(self.startedAt.timeIntervalSince1970 * 1000), "lifecycle": "ready",
+                ],
+                "telegram": self.telegramRecovered ? [
+                    "accountId": "default", "name": "Telegram", "enabled": true, "configured": true, "running": true,
+                    "connected": true, "restartPending": false, "reconnectAttempts": 0,
+                    "lastConnectedAt": .number(self.startedAt.timeIntervalSince1970 * 1000), "lifecycle": "ready",
+                ] : [
+                    "accountId": "default", "name": "Telegram", "enabled": true, "configured": true, "running": true,
+                    "connected": false, "restartPending": false, "reconnectAttempts": 4,
+                    "lastConnectedAt": .number(nowMs - 25 * 60_000), "lifecycle": "recovering",
+                    "lastError": "Telegram API timed out (getUpdates). Retrying.",
+                ],
+            ],
+            "channelOrder": ["discord", "telegram"],
+            "channelLabels": ["discord": "Discord", "telegram": "Telegram"],
+            "heartbeatSeconds": 1800,
+            "agents": .array(self.agents.map { agent in
+                let id = agent["id"] ?? "main"
+                return [
+                    "agentId": id, "name": agent["name"] ?? id, "isDefault": .bool(id == "main"),
+                    "heartbeat": ["enabled": .bool(id == "main"), "every": "30m", "everyMs": .number(1_800_000)],
+                ]
+            }),
+            "sessions": ["count": JSONValue(self.sessions.count), "recent": []],
+            "plugins": ["loaded": ["discord", "telegram", "memory-core"], "errors": [], "unavailable": []],
+            "deliveryQueues": ["failed": []],
+            "contextEngines": ["quarantined": []],
+            "modelPricing": ["state": "ok"],
+            "configReload": ["hotReloadStatus": "active"],
+        ]
+    }
+
+    private func lastHeartbeat() -> JSONValue {
+        [
+            "ts": .number((Self.now().double ?? 0) - 7 * 60_000), "status": "ok-token", "to": "discord:#home",
+            "channel": "discord", "durationMs": 3200, "indicatorType": "ok",
+        ]
+    }
+
+    private static var thisDeviceName: String {
+        #if os(macOS)
+        "Pincer on Mac"
+        #else
+        "Pincer on \(GatewayConnection.deviceFamily)"
+        #endif
+    }
+
+    /// This device plus two others.
+    private func presence() -> [JSONValue] {
+        let nowMs = Self.now().double ?? 0
+        return [
+            [
+                "text": "Pincer", "host": .string(Self.thisDeviceName), "clientId": .string(GatewayConnection.clientId),
+                "platform": .string(GatewayConnection.platform), "deviceFamily": .string(GatewayConnection.deviceFamily),
+                "mode": "ui", "roles": ["operator"], "deviceId": .string(Self.deviceId), "ts": .number(nowMs),
+                "onlineSince": .number(nowMs - 12 * 60_000), "lastActivityAt": .number(nowMs - 20_000),
+            ],
+            [
+                "text": "Control UI", "host": "Studio iMac", "clientId": "openclaw-control-ui", "platform": "web",
+                "deviceFamily": "Browser", "mode": "webchat", "roles": ["operator"], "ts": .number(nowMs - 60_000),
+                "deviceId": "demo0device0000000000000000000000000000000000000000000000000002",
+                "onlineSince": .number(nowMs - 3 * 3_600_000), "lastActivityAt": .number(nowMs - 9 * 60_000),
+            ],
+            [
+                "text": "Node", "host": "kitchen-pi", "clientId": "node-host", "platform": "linux", "deviceFamily": "Raspberry Pi",
+                "mode": "node", "roles": ["node"], "ts": .number(nowMs - 30_000),
+                "deviceId": "demo0device0000000000000000000000000000000000000000000000000003",
+                "onlineSince": .number(nowMs - 2 * 86_400_000), "lastActivityAt": .number(nowMs - 45 * 60_000),
+            ],
+        ]
+    }
+
+    /// Like `gateway.restart.request`: deferred while a reply is streaming (unless `skipDeferral`),
+    /// then `shutdown`, the connection drops, and the next attach sees a fresh uptime.
+    private func requestRestart(_ params: JSONValue) -> JSONValue {
+        let active = self.runs.count
+        let skip = params["skipDeferral"]?.bool == true
+        let counts: JSONValue = [
+            "queueSize": 0, "pendingReplies": 0, "embeddedRuns": JSONValue(active), "cronRuns": 0,
+            "backgroundExecSessions": 0, "rootRequests": 0, "activeTasks": 0, "totalActive": JSONValue(active),
+        ]
+        let blockers: [JSONValue] = active == 0 ? [] : [["message": .string("\(active) active agent run\(active == 1 ? "" : "s")")]]
+        let preflight: JSONValue = [
+            "safe": .bool(active == 0), "counts": counts, "blockers": .array(blockers),
+            "summary": .string(active == 0 ? "restart safe now" : "restart deferred: \(active) active agent run\(active == 1 ? "" : "s")"),
+        ]
+        if self.restartTask != nil {
+            // "Restart Now Anyway" escalates the pending restart.
+            if skip { self.restartSkipsDeferral = true }
+            return ["ok": true, "status": "coalesced", "preflight": preflight, "restart": ["coalesced": true]]
+        }
+        let deferred = active > 0 && !skip
+        self.restartSkipsDeferral = false
+        self.restartTask = Task { [weak self] in
+            if deferred {
+                while await self?.waitingForRuns == true {
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+            await self?.shutdownForRestart(reason: params["reason"]?.text)
+        }
+        return ["ok": true, "status": .string(deferred ? "deferred" : "scheduled"), "preflight": preflight,
+                "restart": ["coalesced": false, "delayMs": 0]]
+    }
+
+    private var restartSkipsDeferral = false
+    private var telegramRecovered = false
+    private var waitingForRuns: Bool { !self.runs.isEmpty && !self.restartSkipsDeferral }
+
+    private func shutdownForRestart(reason: String?) {
+        self.restartTask = nil
+        // A fresh start reconnects Telegram, so the restart visibly fixes the demo's one problem.
+        self.telegramRecovered = true
+        for id in self.runs.keys { self.abort(sessionKey: nil, runId: id) }
+        self.restartingUntil = Date().addingTimeInterval(Double(Self.restartExpectedMs) / 1000)
+        self.emit("shutdown", ["reason": .string(reason ?? "gateway restart"), "restartExpectedMs": JSONValue(Self.restartExpectedMs)])
+        self.sink = nil
+    }
+
+    // MARK: Approval history
+
+    private func approvalHistoryPage(_ params: JSONValue) throws -> JSONValue {
+        let limit = max(1, min(100, params["limit"]?.int ?? 50))
+        var offset = 0
+        if let cursor = params["cursor"]?.string {
+            guard let data = Data(base64Encoded: cursor), let text = String(data: data, encoding: .utf8),
+                  let value = Int(text), value >= 0
+            else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid approval.history cursor", details: nil) }
+            offset = value
+        }
+        let kind = params["kind"]?.string
+        let matching = self.approvalHistory.filter { kind == nil || $0["presentation"]?["kind"]?.string == kind }
+        let page = Array(matching.dropFirst(offset).prefix(limit))
+        var result: Row = ["items": .array(page)]
+        if offset + page.count < matching.count {
+            result["nextCursor"] = .string(Data(String(offset + page.count).utf8).base64EncodedString())
+        }
+        return .object(result)
+    }
+
+    private func approvalSnapshot(_ params: JSONValue) throws -> JSONValue {
+        let id = params["id"]?.string
+        if let id, let pending = self.approvals[id] {
+            let request = pending["request"] ?? [:]
+            var snapshot: Row = [
+                "id": .string(id), "urlPath": .string("/approve/\(id)"), "status": "pending",
+                "createdAtMs": pending["createdAtMs"] ?? Self.now(), "expiresAtMs": pending["expiresAtMs"] ?? Self.now(),
+                "presentation": Self.execPresentation(request),
+            ]
+            if let key = request["sessionKey"] { snapshot["sourceSessionKey"] = key }
+            return ["approval": .object(snapshot)]
+        }
+        guard let id, let record = self.approvalHistory.first(where: { $0["id"]?.string == id }) else {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "approval not found",
+                                   details: ["reason": "APPROVAL_NOT_FOUND"])
+        }
+        return ["approval": record]
+    }
+
+    private static func execPresentation(_ request: JSONValue) -> JSONValue {
+        var presentation: Row = [
+            "kind": "exec", "commandText": request["command"] ?? "(command)",
+            "allowedDecisions": ["allow-once", "allow-always", "deny"],
+        ]
+        if let agentId = request["agentId"] { presentation["agentId"] = agentId }
+        if let warning = request["warningText"] { presentation["warningText"] = warning }
+        return .object(presentation)
+    }
+
+    /// A decision made in Pincer, as the Gateway's ledger records it.
+    private static func resolvedRecord(_ pending: JSONValue, decision: String) -> JSONValue {
+        let request = pending["request"] ?? [:]
+        let id = pending["id"]?.string ?? Self.shortId("approval_")
+        var source: Row = [:]
+        if let agentId = request["agentId"] { source["agentId"] = agentId }
+        if let key = request["sessionKey"] { source["sessionKey"] = key }
+        return [
+            "id": .string(id), "urlPath": .string("/approve/\(id)"),
+            "createdAtMs": pending["createdAtMs"] ?? Self.now(), "expiresAtMs": pending["expiresAtMs"] ?? Self.now(),
+            "resolvedAtMs": Self.now(), "status": decision == "deny" ? "denied" : "allowed",
+            "decision": .string(decision), "reason": "user", "source": .object(source),
+            "resolver": ["kind": "device", "id": .string(Self.deviceId)],
+            "presentation": Self.execPresentation(request),
+        ]
+    }
+
+    /// The approval waiting when the demo opens.
+    static let seededApprovalId = "approval_demo_push"
+
+    /// Forge's reply once the seeded push is answered, so the demo's story ends.
+    private func finishSeededPush(approved: Bool) {
+        let key = "agent:coder:main"
+        let reply = approved ? "Pushed fix/login-timeout to origin." : "OK, I won't push."
+        self.append(key, Self.message("assistant", [Self.text(reply)]))
+        self.updateRow(key, reason: "approval-resolved") { row in
+            row["lastMessagePreview"] = .string(reply)
+            row["unread"] = true
+        }
+    }
+
+    /// One command already waiting when the demo opens, so approvals (and Shortcuts' Pending
+    /// Approvals) have something to show. It lasts longer than a real one, for a leisurely look.
+    private static func seedPendingApproval() -> JSONValue {
+        let created = (Self.now().double ?? 0) - 45_000
+        return [
+            "id": .string(Self.seededApprovalId),
+            "request": ["command": "git push origin fix/login-timeout", "cwd": "/home/claw/projects/pincer",
+                        "sessionKey": "agent:coder:main", "agentId": "coder", "host": "gateway",
+                        "allowedDecisions": ["allow-once", "allow-always", "deny"]],
+            "createdAtMs": .number(created),
+            "expiresAtMs": .number(created + 30 * 60_000),
+        ]
+    }
+
+    /// A dozen past decisions covering every kind, status and resolver.
+    private static func seedApprovalHistory() -> [JSONValue] {
+        let now = (Date().timeIntervalSince1970 * 1000).rounded()
+        let minute = 60_000.0
+        func record(_ id: String, ago minutes: Double, status: String, decision: String?, reason: String,
+                    agent: String, session: String?, resolver: JSONValue?, presentation: JSONValue) -> JSONValue
+        {
+            let resolved = now - minutes * minute
+            var row: Row = [
+                "id": .string(id), "urlPath": .string("/approve/\(id)"),
+                "createdAtMs": .number(resolved - 45_000), "expiresAtMs": .number(resolved - 45_000 + 120_000),
+                "resolvedAtMs": .number(resolved), "status": .string(status), "reason": .string(reason),
+                "presentation": presentation,
+            ]
+            if let decision { row["decision"] = .string(decision) }
+            var source: Row = ["agentId": .string(agent)]
+            if let session { source["sessionKey"] = .string(session) }
+            row["source"] = .object(source)
+            if let resolver { row["resolver"] = resolver }
+            return .object(row)
+        }
+        func exec(_ command: String, agent: String, warning: String? = nil, host: String? = nil) -> JSONValue {
+            var presentation: Row = ["kind": "exec", "commandText": .string(command), "agentId": .string(agent),
+                                     "allowedDecisions": ["allow-once", "allow-always", "deny"]]
+            if let warning { presentation["warningText"] = .string(warning) }
+            if let host { presentation["host"] = .string(host) }
+            return .object(presentation)
+        }
+        func plugin(_ title: String, _ description: String, detail: String? = nil, severity: String, pluginId: String,
+                    tool: String, agent: String) -> JSONValue
+        {
+            var presentation: Row = [
+                "kind": "plugin", "title": .string(title), "description": .string(description), "severity": .string(severity),
+                "pluginId": .string(pluginId), "toolName": .string(tool), "agentId": .string(agent),
+                "allowedDecisions": ["allow-once", "deny"],
+            ]
+            if let detail { presentation["detail"] = .string(detail) }
+            return .object(presentation)
+        }
+        func system(_ title: String, _ description: String, agent: String) -> JSONValue {
+            ["kind": "system-agent", "title": .string(title), "description": .string(description),
+             "proposalHash": .string(String(repeating: "ab", count: 32)), "agentId": .string(agent),
+             "allowedDecisions": ["allow-once", "deny"]]
+        }
+        let me: JSONValue = ["kind": "device", "id": .string(Self.deviceId)]
+        let laptop: JSONValue = ["kind": "device", "id": "7f3a9c2e1b8d4f6a0c5e9b2d7a1f3c8e6b4d0a9f2c7e5b1d8a3f6c0e9b2d4a7f"]
+        let discord: JSONValue = ["kind": "channel", "id": "discord"]
+        let systemResolver: JSONValue = ["kind": "system"]
+        return [
+            record("hist_disk", ago: 12, status: "allowed", decision: "allow-once", reason: "user", agent: "main",
+                   session: "agent:main:main", resolver: me, presentation: exec("df -h /", agent: "main", host: "gateway")),
+            record("hist_brew", ago: 55, status: "allowed", decision: "allow-always", reason: "user", agent: "coder",
+                   session: "agent:coder:main", resolver: laptop, presentation: exec("brew upgrade --quiet", agent: "coder")),
+            record("hist_rm", ago: 130, status: "denied", decision: "deny", reason: "user", agent: "coder",
+                   session: "agent:coder:main", resolver: me,
+                   presentation: exec("rm -rf ~/Library/Caches", agent: "coder", warning: "Deletes files outside the workspace.")),
+            record("hist_email", ago: 240, status: "allowed", decision: "allow-once", reason: "user", agent: "main",
+                   session: "agent:main:dashboard:trip", resolver: discord,
+                   presentation: plugin("Send email", "Email the Kyoto itinerary to 2 recipients.",
+                                        detail: "To: travel@example.com, family@example.com\nSubject: Kyoto day plan",
+                                        severity: "warning", pluginId: "mail", tool: "send_email", agent: "main")),
+            record("hist_curl", ago: 360, status: "expired", decision: nil, reason: "timeout", agent: "research",
+                   session: "agent:research:dashboard:papers", resolver: nil,
+                   presentation: exec("curl -sSL https://arxiv.org/list/cs.AI/new | head -n 200", agent: "research")),
+            record("hist_config", ago: 600, status: "allowed", decision: "allow-once", reason: "user", agent: "main",
+                   session: "agent:main:main", resolver: me,
+                   presentation: system("Turn on nightly backups", "Adds a nightly backup automation for the workspace.", agent: "main")),
+            record("hist_orphan", ago: 900, status: "denied", decision: "deny", reason: "no-route", agent: "research",
+                   session: "agent:research:main", resolver: systemResolver,
+                   presentation: exec("pip install --user feedparser", agent: "research")),
+            record("hist_payment", ago: 1_440, status: "denied", decision: "deny", reason: "malformed-verdict", agent: "main",
+                   session: "agent:main:discord:channel:123", resolver: discord,
+                   presentation: plugin("Buy domain", "Register pincer-demo.dev for $12.", severity: "critical",
+                                        pluginId: "registrar", tool: "purchase", agent: "main")),
+            record("hist_git", ago: 2_000, status: "cancelled", decision: nil, reason: "run-aborted", agent: "coder",
+                   session: "agent:coder:main", resolver: nil,
+                   presentation: exec("git push --force origin main", agent: "coder", warning: "Force-pushes over remote history.")),
+            record("hist_restart", ago: 3_100, status: "cancelled", decision: nil, reason: "gateway-restart", agent: "main",
+                   session: nil, resolver: nil, presentation: system("Update OpenClaw", "Installs OpenClaw 2026.9.2 and restarts.", agent: "main")),
+            record("hist_notes", ago: 5_000, status: "allowed", decision: "allow-always", reason: "user", agent: "research",
+                   session: "agent:research:main", resolver: ["kind": "runtime"],
+                   presentation: plugin("Read notes", "Read the Research folder in Notes.", severity: "info",
+                                        pluginId: "notes", tool: "read_notes", agent: "research")),
+            record("hist_ls", ago: 8_000, status: "allowed", decision: "allow-once", reason: "user", agent: "main",
+                   session: "agent:main:main", resolver: laptop, presentation: exec("ls -la ~/projects", agent: "main")),
+        ]
     }
 
     // MARK: Sessions
@@ -440,12 +928,17 @@ actor DemoGateway {
                                        instructions: text.dropFirst("/compact".count).trimmingCharacters(in: .whitespaces))
             return
         }
-        if lowered.range(of: #"\bapprove\b"#, options: .regularExpression) != nil {
+        let approvesLater = Self.wantsLaterApproval(lowered)
+        if !approvesLater, lowered.range(of: #"\bapprove\b"#, options: .regularExpression) != nil {
             let id = Self.shortId("approval_")
+            // `approve once-only` leaves out Always allow, like a command the Gateway won't grant for good.
+            let allowed: JSONValue = lowered.contains("once-only")
+                ? ["allow-once", "deny"] : ["allow-once", "allow-always", "deny"]
             let approval: JSONValue = [
                 "id": .string(id),
                 "request": ["command": "rm -rf ./build", "cwd": "/home/claw/project", "sessionKey": .string(key),
-                            "agentId": self.sessions[key]?["agentId"] ?? "main"],
+                            "agentId": self.sessions[key]?["agentId"] ?? "main",
+                            "allowedDecisions": allowed],
                 "createdAtMs": Self.now(),
                 "expiresAtMs": .number((Self.now().double ?? 0) + 120_000),
             ]
@@ -489,7 +982,8 @@ actor DemoGateway {
                                           extra: ["toolCallId": .string(callId), "toolName": "exec", "isError": false]))
         }
 
-        let reply = answered ?? Self.reply(to: text, usedTool: wantsTool)
+        let reply = answered ?? Self.reply(to: text, usedTool: wantsTool,
+                                           note: approvesLater ? Self.laterApprovalNote : nil)
         var out = ""
         for word in Self.words(reply) {
             guard await self.pause(runId, milliseconds: 30) else { return }
@@ -519,6 +1013,50 @@ actor DemoGateway {
                 row["totalTokens"] = JSONValue(min(Self.contextTokens, total + 1_200 + output))
             }
         }
+        if approvesLater { self.scheduleLaterApproval(sessionKey: key) }
+    }
+
+    // MARK: Demo showcase: approve later
+
+    /// How long after an "approve later" reply the approval arrives, long enough to switch apps or lock the
+    /// screen. `PINCER_DEMO_LATER_APPROVAL_MS` overrides it (checks use a short delay).
+    static var laterApprovalDelay: Duration {
+        if let raw = ProcessInfo.processInfo.environment["PINCER_DEMO_LATER_APPROVAL_MS"], let ms = Int(raw), ms >= 0 {
+            return .milliseconds(ms)
+        }
+        return .seconds(8)
+    }
+
+    private static let laterApprovalNote =
+        "I'll ask for approval in a few seconds — switch apps or lock the screen to answer it from the notification."
+
+    private static func wantsLaterApproval(_ lowered: String) -> Bool {
+        lowered.range(of: #"\bapprove\b"#, options: .regularExpression) != nil && lowered.contains("later")
+    }
+
+    /// Raises an approval outside any run, a while after the reply, so it can be answered from a notification.
+    private func scheduleLaterApproval(sessionKey key: String) {
+        let delay = Self.laterApprovalDelay
+        Task {
+            try? await Task.sleep(for: delay)
+            self.raiseLaterApproval(sessionKey: key)
+        }
+    }
+
+    private func raiseLaterApproval(sessionKey key: String) {
+        guard self.sessions[key] != nil else { return }
+        let id = Self.shortId("approval_")
+        let approval: JSONValue = [
+            "id": .string(id),
+            "request": ["command": "brew upgrade --greedy", "cwd": "/home/claw", "sessionKey": .string(key),
+                        "agentId": self.sessions[key]?["agentId"] ?? "main",
+                        "allowedDecisions": ["allow-once", "allow-always", "deny"]],
+            "createdAtMs": Self.now(),
+            "expiresAtMs": .number((Self.now().double ?? 0) + 600_000),
+        ]
+        self.approvals[id] = approval
+        self.approvalOrder.append(id)
+        self.emit("exec.approval.requested", approval)
     }
 
     /// `/compact [instructions]`: summarizes the context, like the Gateway's command.
@@ -696,9 +1234,20 @@ actor DemoGateway {
         return ["card": self.progressCards[key] ?? .null]
     }
 
+    /// Multiplier for simulated run delays. `PINCER_DEMO_DELAY_SCALE=0` lets headless checks skip the pacing.
+    private static let delayScale: Double = {
+        guard let raw = ProcessInfo.processInfo.environment["PINCER_DEMO_DELAY_SCALE"], let scale = Double(raw) else { return 1 }
+        return max(0, scale)
+    }()
+
     /// Sleeps, then reports whether the run should keep going.
     private func pause(_ runId: String, milliseconds: Int) async -> Bool {
-        try? await Task.sleep(for: .milliseconds(milliseconds))
+        let scaled = Int((Double(milliseconds) * Self.delayScale).rounded())
+        if scaled > 0 {
+            try? await Task.sleep(for: .milliseconds(scaled))
+        } else {
+            await Task.yield()
+        }
         return !Task.isCancelled && self.runs[runId] != nil
     }
 
@@ -780,23 +1329,38 @@ actor DemoGateway {
 
     // MARK: Content
 
-    private static func reply(to text: String, usedTool: Bool) -> String {
+    private static func reply(to text: String, usedTool: Bool, note: String? = nil) -> String {
         let quoted = text.split(separator: "\n").map { "> \($0)" }.joined(separator: "\n")
         return """
-        \(quoted.isEmpty ? "" : quoted + "\n\n")This is **Pincer's demo mode**, so this reply is canned. \
-        Connect your own OpenClaw Gateway to chat with real agents.
+        \(quoted.isEmpty ? "" : quoted + "\n\n")\(note.map { $0 + "\n\n" } ?? "")This is **Pincer's demo mode**, \
+        so this reply is canned. Connect your own OpenClaw Gateway to chat with real agents.
 
-        ## Things to try
-
-        - Mention **tool** or **disk** to watch a live tool call\(usedTool ? " (like the one above)" : "").
-        - Ask for an **image** to get an inline chart.
-        - Say **approve** to raise a command approval.
-        - Ask it to follow a **plan** to watch the task progress card.
-        - Switch models from the toolbar, or pin, rename and group chats in the sidebar.
+        \(Self.thingsToTry(usedTool: usedTool))
 
         ```text
         streaming: ok · markdown: ok · tools: \(usedTool ? "ran" : "on request")
         ```
+        """
+    }
+
+    // MARK: Demo showcase: tips
+
+    /// Trigger words match anywhere in a message, so each tip names only its own.
+    private static func thingsToTry(usedTool: Bool) -> String {
+        """
+        ## Things to try
+
+        - **tool** or **disk** runs a live tool call\(usedTool ? " (like the one above)" : "").
+        - **image** adds an inline chart.
+        - **approve** raises a command approval; **approve once-only** leaves out Always allow, and \
+        **approve later** sends one a few seconds after the reply.
+        - **ask** brings up a question card.
+        - **plan** walks the task progress card.
+        - Send **/compact**, or use **Compact Now** in the context ring.
+        - **⌘F** searches the chat — try "onsen" in *Japan trip*.
+        - **⌘K** opens the command palette, and **⌘1–⌘3** jump to pinned chats.
+        - On a Mac, **⌃⇧Space** opens Quick Capture.
+        - Switch models, or pin, rename and group chats in the sidebar.
         """
     }
 
@@ -814,11 +1378,11 @@ actor DemoGateway {
         return parts
     }
 
-    private static func now() -> JSONValue {
+    static func now() -> JSONValue {
         .number((Date().timeIntervalSince1970 * 1000).rounded())
     }
 
-    private static func shortId(_ prefix: String = "") -> String {
+    static func shortId(_ prefix: String = "") -> String {
         prefix + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12).lowercased()
     }
 
@@ -852,12 +1416,13 @@ actor DemoGateway {
 
     private static func message(
         _ role: String, _ content: [JSONValue], runId: String? = nil, idempotencyKey: String? = nil,
-        model: (provider: String, model: String)? = nil, extra: Row = [:]) -> JSONValue
+        model: (provider: String, model: String)? = nil, ago: Double = 0, extra: Row = [:]) -> JSONValue
     {
         var openclaw: Row = ["id": .string(UUID().uuidString.lowercased())]
         if let runId { openclaw["runId"] = .string(runId) }
         if let idempotencyKey { openclaw["idempotencyKey"] = .string(idempotencyKey) }
-        var message: Row = ["role": .string(role), "content": .array(content), "timestamp": Self.now(),
+        let timestamp = ago > 0 ? JSONValue.number(((Date().timeIntervalSince1970 - ago) * 1000).rounded()) : Self.now()
+        var message: Row = ["role": .string(role), "content": .array(content), "timestamp": timestamp,
                             "__openclaw": .object(openclaw)]
         if role == "assistant" {
             let model = model ?? Self.defaultModel
@@ -890,23 +1455,63 @@ actor DemoGateway {
             row.merge(["totalTokens": 24_000, "totalTokensFresh": true, "inputTokens": 24_000, "outputTokens": 900,
                        "contextTokens": JSONValue(Self.contextTokens)]) { _, new in new }
             row.merge(extra) { _, new in new }
+            var messages = messages
+            // Each chat runs on the model its sample usage is billed to.
+            if let model = DemoUsage.model(for: key) {
+                row["model"] = .string(model.model)
+                row["modelProvider"] = .string(model.provider)
+                messages = messages.map { message in
+                    guard case var .object(fields) = message, fields["role"]?.string == "assistant" else { return message }
+                    fields["provider"] = .string(model.provider)
+                    fields["model"] = .string(model.model)
+                    return .object(fields)
+                }
+            }
             sessions[key] = row
             transcripts[key] = messages
         }
 
         let dfCall = "call_seed_df"
+        let minute = 60.0, hour = 3600.0, day = 86400.0
+        /// A seeded message sent `ago` seconds before launch, so results show realistic dates.
+        func said(_ role: String, _ text: String, ago: Double, extra: Row = [:]) -> JSONValue {
+            Self.message(role, [Self.text(text)], ago: ago, extra: extra)
+        }
         add("agent:main:main", agent: "main", title: "Main", preview: "Disk looks healthy.", age: 10_000,
             ["isMain": true, "totalTokens": 172_000, "inputTokens": 172_000], messages: [
-                Self.message("user", [Self.text("Can you check disk usage and show me a quick status?")]),
+                said("user", "Every weekday at 7:30, send me a morning briefing: weather, calendar and anything urgent in my inbox.",
+                     ago: 9 * day),
+                said("assistant", """
+                Done. The morning briefing runs weekdays at 7:30 and posts here. Tomorrow's includes the forecast, \
+                your first three meetings and any flagged mail.
+                """, ago: 9 * day - minute),
+                said("user", "Remind me to renew my passport before the Japan trip.", ago: 6 * day),
+                said("assistant", """
+                Reminder set for Monday at 9:00: **renew your passport**. Renewals take about four weeks, which \
+                still leaves plenty of time before the flight to Tokyo.
+                """, ago: 6 * day - minute),
+                said("user", "Did last night's Time Machine backup finish?", ago: 5 * day),
+                said("assistant", """
+                Yes. The backup finished at 02:14 and copied 3.2 GB. The oldest snapshot still kept is from March.
+                """, ago: 5 * day - minute),
+                said("user", "Book a table for two at Café Lumière on Friday at 8.", ago: 3 * day),
+                said("assistant", """
+                Café Lumière has nothing at 8:00 on Friday, but 8:15 is free. I've held 8:15 for two under your \
+                name; reply *confirm* to keep it.
+                """, ago: 3 * day - minute),
+                said("user", "confirm", ago: 3 * day - 5 * minute),
+                said("assistant", "Confirmed: Café Lumière, Friday at 8:15 pm, two people. It's in your calendar with the address.",
+                     ago: 3 * day - 6 * minute),
+                Self.message("user", [Self.text("Can you check disk usage and show me a quick status?")], ago: 20 * minute),
                 Self.message("assistant", [
                     Self.thinking("I should look at disk usage and summarize the main volumes."),
                     Self.toolCall(dfCall, "exec", ["command": "df -h"]),
-                ]),
+                ], ago: 20 * minute - 5),
                 Self.message("toolResult", [Self.text("""
                 Filesystem      Size  Used Avail Use% Mounted on
                 /dev/disk3s1   926G  411G  490G  46% /
                 /dev/disk3s6   926G  7.0G  490G   2% /System/Volumes/VM
-                """)], extra: ["toolCallId": .string(dfCall), "toolName": "exec", "isError": false]),
+                """)], ago: 20 * minute - 10, extra: ["toolCallId": .string(dfCall), "toolName": "exec", "isError": false]),
                 Self.message("assistant", [
                     Self.text("""
                     ## Disk status
@@ -922,8 +1527,8 @@ actor DemoGateway {
                     """),
                     Self.image("demo-chart", alt: "Disk usage chart"),
                     Self.file("demo-script", name: "disk-report.sh", mimeType: "text/x-shellscript"),
-                ]),
-                Self.message("user", [Self.text("Can you sketch that as a little gauge?")]),
+                ], ago: 20 * minute - 15),
+                Self.message("user", [Self.text("Can you sketch that as a little gauge?")], ago: 15 * minute),
                 Self.message("assistant", [Self.text("""
                 Here's the root volume as a gauge:
 
@@ -934,51 +1539,271 @@ actor DemoGateway {
                   <text x="120" y="112" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="30" font-weight="600" fill="#34a37a">46%</text>
                 </svg>
                 ```
-                """)]),
+                """)], ago: 15 * minute - 10),
                 Self.message("assistant", [Self.text("""
                 👋 **Welcome to the Pincer demo.** Everything here is simulated on your device, so no Gateway \
-                is needed. Send a message to see a streamed reply. Try the words *tool*, *image* or *approve*.
-                """)]),
+                is needed. Send a message to see a streamed reply. Try the words *tool*, *image*, *approve*, *ask* or *plan*, \
+                or send */compact*.
+                """)], ago: 10),
             ])
+        let discord: Row = ["provenance": ["sourceChannel": "discord"]]
         add("agent:main:discord:channel:123", agent: "main", title: "home-lab", preview: "Discord bridge is online.",
             age: 20_000, ["label": "home-lab", "category": "Home", "channel": "discord", "pinned": true, "unread": true],
             messages: [
-                Self.message("user", [Self.text("The lab temperature sensor looks noisy tonight.")],
-                             extra: ["provenance": ["sourceChannel": "discord"]]),
-                Self.message("assistant", [Self.text("I'll keep an eye on the home-lab channel and flag anything unusual.")]),
+                said("user", "Nightly backup to the NAS failed again, can you check why?", ago: 12 * day, extra: discord),
+                said("assistant", """
+                The backup job stopped at 03:02 because the NAS share ran out of space: old photo library \
+                snapshots take 1.1 TB. Want me to prune everything older than 90 days?
+                """, ago: 12 * day - minute),
+                said("user", "Yes, prune them and rerun it.", ago: 12 * day - 10 * minute, extra: discord),
+                said("assistant", "Pruned 412 snapshots (780 GB freed) and reran the backup. It finished in 41 minutes with no errors.",
+                     ago: 12 * day - 55 * minute),
+                said("user", "What's drawing so much power on the rack?", ago: 8 * day, extra: discord),
+                said("assistant", """
+                The UPS reports 186 W. The old Dell server idles at 95 W of that; the switch, the NAS and the \
+                Raspberry Pis share the rest.
+                """, ago: 8 * day - minute),
+                said("user", "Add the new Zigbee door sensor to Home Assistant.", ago: 4 * day, extra: discord),
+                said("assistant", """
+                Paired it as `binary_sensor.garage_door`. It reports open, closed and battery level, and it's on \
+                the Security dashboard now.
+                """, ago: 4 * day - 2 * minute),
+                said("user", "Is the Grafana dashboard still showing the Pi-hole stats?", ago: day, extra: discord),
+                said("assistant", """
+                Yes. Pi-hole blocked 18% of 42,000 queries in the last 24 hours; the panel came back after the \
+                container restarted.
+                """, ago: day - minute),
+                said("user", "The lab temperature sensor looks noisy tonight.", ago: minute, extra: discord),
+                said("assistant", "I'll keep an eye on the home-lab channel and flag anything unusual.", ago: 20),
             ])
-        var trip: [JSONValue] = []
-        for day in 1...150 {
-            trip.append(Self.message("user", [Self.text("Idea for day \(day)?")]))
-            trip.append(Self.message("assistant", [Self.text("Day \(day): a slow morning, one museum, and **ramen** nearby.")]))
-        }
-        trip.append(Self.message("user", [Self.text("Plan a gentle first day in Tokyo.")]))
-        trip.append(Self.message("assistant", [Self.text("Start with Meiji Shrine, a low-key lunch, and an early evening in Shinjuku.")]))
         add("agent:main:dashboard:trip", agent: "main", title: "Japan trip", preview: "Kyoto day plan drafted.",
-            age: 60_000, ["label": "Japan trip", "category": "Personal", "color": "pink"], messages: trip)
+            age: 60_000, ["label": "Japan trip", "category": "Personal", "color": "pink", "pinned": true,
+                          "totalTokens": 192_000, "inputTokens": 192_000],
+            messages: Self.seedTripTranscript())
         add("agent:research:main", agent: "research", title: "Main", preview: "Research queue is clear.", age: 90_000,
             ["isMain": true], messages: [
-                Self.message("assistant", [Self.text("Scout is ready to dig into papers, repos, and docs.")]),
+                said("assistant", "Scout is ready to dig into papers, repos, and docs.", ago: 14 * day),
+                said("user", "Compare SQLite FTS5 and Tantivy for searching chat history on a phone.", ago: 6 * day),
+                said("assistant", """
+                FTS5 is the better fit on a phone: it ships with the OS, adds nothing to the app's size and \
+                searches a few hundred thousand messages in milliseconds. Tantivy is faster at larger scale but \
+                adds about 5 MB and a Rust toolchain.
+                """, ago: 6 * day - 2 * minute),
+                said("user", "Find the best reviewed noise-cancelling headphones for long flights.", ago: 3 * minute),
+                said("assistant", """
+                Reviewers agree on the Sony WH-1000XM6 for noise cancelling and battery life. The Bose \
+                QuietComfort Ultra is more comfortable on a long flight, like the one to Tokyo.
+                """, ago: 90),
             ])
         add("agent:research:dashboard:papers", agent: "research", title: "Paper digest",
-            preview: "Three papers summarized.", age: 120_000, ["label": "Paper digest", "category": "Work", "unread": true],
+            preview: "Three papers summarized.", age: 120_000,
+            ["label": "Paper digest", "category": "Work", "unread": true, "pinned": true],
             messages: [
-                Self.message("user", [Self.text("Summarize the latest diffusion papers.")]),
-                Self.message("assistant", [Self.text("The main themes are consistency models, faster sampling, and video generation.")]),
+                said("user", "What's new in speculative decoding?", ago: 5 * day),
+                said("assistant", """
+                Two themes this week: draft models that share the target model's KV cache, and tree-based \
+                verification that accepts several tokens per step. Both report 2–3× faster generation with \
+                identical outputs.
+                """, ago: 5 * day - 2 * minute),
+                said("user", "Summarize the latest diffusion papers.", ago: 3 * minute),
+                said("assistant", "The main themes are consistency models, faster sampling, and video generation.",
+                     ago: 2 * minute),
             ])
         add("agent:research:subagent:abc", agent: "research", title: "Summarize arXiv 2401.x",
             preview: "Subagent found the main contribution.", age: 180_000,
             ["label": "Summarize arXiv 2401.x", "parentSessionKey": "agent:research:dashboard:papers",
              "spawnedBy": "agent:research:dashboard:papers"],
             messages: [
-                Self.message("assistant", [Self.text("The paper mainly improves how retrieval-augmented summaries are evaluated.")]),
+                said("assistant", "The paper mainly improves how retrieval-augmented summaries are evaluated.", ago: 3 * minute),
             ])
-        add("agent:coder:main", agent: "coder", title: "Main", preview: "No active coding run.", age: 240_000,
-            ["isMain": true], messages: [
-                Self.message("assistant", [Self.text("Forge can edit code, run builds, and report back briefly.")]),
+        add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
+            ["isMain": true, "unread": true], messages: [
+                said("assistant", "Forge can edit code, run builds, and report back briefly.", ago: 14 * day),
+                said("user", "The login test is flaky on CI again.", ago: 10 * day),
+                said("assistant", """
+                It races the token refresh: the test signs in before the mock clock advances. I pinned the clock \
+                in `LoginTests.setUp()`, and it has passed 50 runs in a row.
+                """, ago: 10 * day - 4 * minute),
+                said("user", "Write a script that backs up the Postgres database every night.", ago: 7 * day),
+                said("assistant", """
+                Added `scripts/backup-db.sh`. It runs `pg_dump`, gzips the output to \
+                `/backups/db-$(date +%F).sql.gz` and keeps the last 14 days. A cron entry runs the backup at 02:30.
+                """, ago: 7 * day - 3 * minute),
+                said("user", "Why is the release build slower than debug?", ago: 2 * day),
+                said("assistant", """
+                Whole-module optimization was off in the Release configuration, so every file compiled on its \
+                own. Turning it on cut the build from 6 min 40 s to 2 min 55 s.
+                """, ago: 2 * day - 2 * minute),
+                said("user", "Fix the login timeout and push it.", ago: 3 * minute),
+                said("assistant", """
+                Raised the login timeout to 30 s and the tests pass. I've asked to run \
+                `git push origin fix/login-timeout`; approve it and I'll push.
+                """, ago: 45),
             ])
         return (sessions, transcripts)
     }
+
+    // MARK: Demo showcase: Japan trip
+
+    /// 151 exchanges: early planning cycles through a few ideas; the latest 60 (one history page) walk the
+    /// actual route, so Find in Chat has real hits for "onsen", "Kyoto" and "ramen".
+    private static func seedTripTranscript() -> [JSONValue] {
+        let ideas: [(ask: String, answer: String)] = [
+            ("Another idea for a slow morning?", "a stroll through Yanaka's old lanes, with coffee at a sentō turned café"),
+            ("Something for a rainy afternoon?", "a depachika food-hall crawl, sampling as you go"),
+            ("Any good neighbourhoods for wandering?", "Kagurazaka's stone alleys, then dinner at a small French-Japanese bistro"),
+            ("What about something outdoorsy?", "the Mount Takao hike, with soba at the top"),
+            ("A cheap dinner idea?", "a late bowl of ramen at a counter near the hotel"),
+            ("Somewhere for a view?", "Shibuya Sky around sunset — book the slot a week out"),
+            ("A museum we shouldn't miss?", "the Ghibli Museum, if we can get tickets on the 10th of the month before"),
+        ]
+        var messages: [JSONValue] = []
+        // Planned over about a month, newest a minute ago, so search results show realistic dates.
+        let pairs = 91 + Self.tripRoute.count
+        func pair(_ user: String, _ assistant: String) {
+            let ago = Double(pairs - 1 - messages.count / 2) * 5 * 3600 + 60
+            messages.append(Self.message("user", [Self.text(user)], ago: ago + 60))
+            messages.append(Self.message("assistant", [Self.text(assistant)], ago: ago))
+        }
+        for index in 0..<91 {
+            let idea = ideas[index % ideas.count]
+            pair(idea.ask, "Idea #\(index + 1): \(idea.answer).")
+        }
+        for (user, assistant) in Self.tripRoute { pair(user, assistant) }
+        return messages
+    }
+
+    private static let tripRoute: [(String, String)] = [
+        ("Flights are booked — we land at Haneda at 6:40 am on the 3rd.",
+         "Nice, an early arrival gives you a full first day. Pick up a Suica card at the airport for trains and konbini."),
+        ("How do we get from Haneda to the hotel in Asakusa?",
+         "The Keikyu line runs straight through to Asakusa in about 40 minutes, no transfers. Try to beat the 8 am rush."),
+        ("Can we check in that early?",
+         "Probably not before 3 pm, but the hotel will hold your bags. Drop them and head out light."),
+        ("What should the first morning look like?",
+         "Keep it easy: Sensō-ji before the crowds, melon pan on Nakamise-dōri, then a nap if the jet lag hits."),
+        ("Is Tsukiji still worth it for breakfast?",
+         "Yes — the wholesale market moved to Toyosu, but Tsukiji's outer market is still great in the morning: tamagoyaki, grilled scallops and a small bowl of fresh tuna over rice."),
+        ("What time should we get there?",
+         "Around 7:30. Most stalls open at 7 and the lanes are packed by 10."),
+        ("Any tips for eating at the market?",
+         "Carry cash and coins, eat at the stall where you buy, and don't eat while walking — there are usually standing spots."),
+        ("Afternoon on day two?",
+         "Walk from Tsukiji to Ginza, then take the Hibiya line up to Ueno Park for the museums if you still have energy."),
+        ("We want one really good bowl of ramen in Tokyo.",
+         "Try a shoyu counter in Ebisu, or the tsukemen shops on Tokyo Station's underground Ramen Street. Expect a queue at lunch; evenings are calmer."),
+        ("Do we need reservations for dinner in Shibuya?",
+         "For izakaya, usually not. For sushi counters and anywhere with fewer than ten seats, book a week or two ahead."),
+        ("Is teamLab worth the ticket?",
+         "If you like immersive art, yes. Book an early-evening slot and wear shorts — some rooms have ankle-deep water."),
+        ("A rainy-day backup in Tokyo?",
+         "The Tokyo National Museum, or an afternoon in Jimbōchō's secondhand bookshops."),
+        ("Should we get the JR Pass?",
+         "Probably not since the price went up. For Tokyo → Hakone → Kyoto → Osaka → Tokyo, single tickets come out a little cheaper."),
+        ("How much would single tickets cost?",
+         "Roughly ¥14,000 each for the long Shinkansen leg, plus local trains. I'll make a table once the dates are fixed."),
+        ("Let's add a night in Hakone.",
+         "Good call. It's 85 minutes from Shinjuku on the Romancecar, and one night is enough for the loop and a long soak."),
+        ("Find us a ryokan with a private onsen.",
+         "Look for rooms with an open-air bath of their own. Gōra and Sengokuhara have several in a mid-range budget, and dinner and breakfast are usually included."),
+        ("Any onsen etiquette we should know?",
+         "Wash thoroughly at the shower stools first, keep the small towel out of the water, and tie up long hair. Shared onsen can be strict about tattoos — another reason to book a private one."),
+        ("What's the Hakone loop?",
+         "Romancecar to Hakone-Yumoto, the switchback train to Gōra, cable car and ropeway over Ōwakudani, then a boat across Lake Ashi. It fills most of a day."),
+        ("Will we see Mount Fuji?",
+         "Only on clear days, and mornings are your best bet. Check the live cameras before heading up the ropeway."),
+        ("What's a kaiseki dinner like?",
+         "A long run of small seasonal courses, served in your room or a private dining room. Mention allergies when you book — they plan the menu ahead."),
+        ("Can we send our big bags ahead?",
+         "Yes, with takkyūbin from the hotel front desk. Send them two days early and they'll be waiting at the next hotel."),
+        ("Hakone onward — what's the route west?",
+         "Bus down to Odawara, then the Hikari Shinkansen. About two and a half hours door to door."),
+        ("Which side of the Shinkansen has the Fuji view?",
+         "Heading west, the right side — seat E in ordinary cars. The view only lasts a few minutes around Shin-Fuji."),
+        ("Should we reserve seats?",
+         "Yes, it's autumn. Reserved seats are cheap insurance, and oversized-luggage seats must be booked if you keep a big bag."),
+        ("What should we grab for the train?",
+         "An ekiben from Odawara station — aji sushi is the local speciality. Eating on the Shinkansen is completely normal."),
+        ("Where should we stay in Kyoto?",
+         "Near Shijō or Karasuma Oike: central, walkable to Gion, and on the subway line to the station."),
+        ("Fushimi Inari at dawn — worth the early alarm?",
+         "Absolutely. At 6 am the torii tunnels are nearly empty and the light is soft. Climb at least to Yotsutsuji for the view over the city."),
+        ("How long is the full hike?",
+         "Two to three hours to the summit and back. Most people turn around at Yotsutsuji, about 45 minutes up."),
+        ("Breakfast after the shrine?",
+         "Little is open at 8 am nearby, so bring onigiri from a konbini or ride one stop back toward the station."),
+        ("Arashiyama bamboo grove — morning or afternoon?",
+         "Morning, before 8 if you can; after that it's shoulder to shoulder. Pair it with Tenryū-ji's garden, which opens at 8:30."),
+        ("What else is in Arashiyama?",
+         "The Togetsukyō bridge, a riverside walk, the monkey park on the hill, and Ōkōchi Sansō villa, where matcha and a sweet come with admission."),
+        ("Can we fit in a tea ceremony?",
+         "Yes — small hosted ceremonies in Gion run about an hour. Book a morning slot and bring socks."),
+        ("Where should we eat in Gion?",
+         "Walk Pontochō at dusk and pick somewhere with a menu out front. For something special, book an obanzai counter a few days ahead."),
+        ("Is Kinkaku-ji worth the crowds?",
+         "It's busy but beautiful. Go right at opening, then walk on to Ryōan-ji's rock garden."),
+        ("How do we get around between temples?",
+         "Buses cover everything but get slow and packed. Mix the subway with taxis for short hops — they're reasonable split two ways."),
+        ("Day trip to Nara?",
+         "Easy: the Kintetsu line takes about 45 minutes from Kyoto. Tōdai-ji, the deer park and Kasuga Taisha fit in a relaxed half day."),
+        ("Are the Nara deer friendly?",
+         "Mostly, but they're bold. Buy shika senbei, bow and they'll often bow back, and keep the crackers hidden until you're ready — they nibble maps."),
+        ("What should we eat in Nara?",
+         "Kakinoha-zushi wrapped in persimmon leaves, and a mochi from Nakatanidō, where they pound it at startling speed."),
+        ("Then on to Osaka?",
+         "Yes, Nara to Namba is about 40 minutes. Staying there puts you right by Dōtonbori."),
+        ("Best takoyaki in Osaka?",
+         "Try a few stands along Dōtonbori and compare — crisp outside, molten inside. Give them a minute to cool."),
+        ("And ramen in Osaka?",
+         "Look for a rich tonkotsu or a light shio ramen around Namba. Many shops use ticket machines, so keep ¥1,000 notes handy."),
+        ("What's okonomiyaki?",
+         "A savoury cabbage pancake cooked on a griddle at your table. Osaka style is mixed; Hiroshima style is layered with noodles."),
+        ("Is Osaka Castle worth visiting?",
+         "The park and moat are lovely; the museum inside is modern. It makes a nice morning walk."),
+        ("Should we do Universal Studios?",
+         "Only if Super Nintendo World is a must — it's a full day with timed entry. Otherwise spend it in Shinsekai and Kuromon market."),
+        ("What's good at Kuromon?",
+         "Wagyu skewers, uni, strawberries on sticks and fresh oysters. It's pricier than it looks, so set a budget."),
+        ("How do we get back to Tokyo at the end?",
+         "Nozomi from Shin-Osaka, about two and a half hours. Book early afternoon so the last day isn't rushed."),
+        ("Last night in Tokyo — anything special?",
+         "A slow dinner in Shimokitazawa, then a nightcap in a tiny Golden Gai bar. Many charge a small seat fee."),
+        ("Could we squeeze in one more onsen in Tokyo?",
+         "A neighbourhood sentō or a big spa complex works for a quick soak, but nothing will match the Hakone ryokan."),
+        ("Help me with a packing list.",
+         "Layers for warm days and cool nights, slip-on shoes for temples, a small towel, a coin purse, a power bank and a foldable bag for souvenirs."),
+        ("Do we need much cash?",
+         "Some. Cards work in cities, but shrines, markets and small restaurants often want cash. 7-Eleven ATMs take foreign cards."),
+        ("SIM or pocket Wi-Fi?",
+         "An eSIM is easiest — install it before you fly and switch it on when you land. 20 GB is plenty for two weeks of maps."),
+        ("Any apps we should install?",
+         "A transit app for platforms and transfers, a maps app for walking, and a translator with camera mode for menus."),
+        ("How does tipping work?",
+         "It doesn't — there's no tipping. A sincere thank-you is all that's expected."),
+        ("What should we bring back as gifts?",
+         "Tea from Uji, a kitchen knife from Sennichimae Dōguyasuji, and boxed sweets from any station — they're beautifully wrapped."),
+        ("Recap the route for me?",
+         "Tokyo (4 nights) → Hakone (1) → Kyoto (4) → Osaka (2) → Tokyo (1). Twelve nights and two long Shinkansen legs."),
+        ("Is that too much moving around?",
+         "It's comfortable: three hotel changes plus the ryokan, with bags sent ahead twice. Most transfers are just a day pack."),
+        ("What if it rains on our Hakone day?",
+         "Skip the ropeway and linger in the onsen — rain on an open-air bath is lovely. Do the loop the next morning if it clears."),
+        ("Rough budget per day?",
+         "Around ¥25,000 each, not counting hotels: food, transport, temples and a little shopping. The ryokan night is the splurge."),
+        ("Can you draft our first full day in Kyoto?",
+         "Sure — an early start, the big sights before lunch, and an unhurried afternoon."),
+        ("Go ahead, lay it out.",
+         """
+         ## Kyoto, day one
+
+         - **6:00** Fushimi Inari before the crowds; turn back at Yotsutsuji.
+         - **9:30** Kiyomizu-dera, then down the Sannenzaka and Ninenzaka lanes.
+         - **12:30** Yudōfu lunch near Nanzen-ji.
+         - **14:00** Rest at the hotel.
+         - **16:30** The Philosopher's Path to Ginkaku-ji.
+         - **19:00** Dinner in Pontochō, by the river.
+         """),
+    ]
 
     /// A small bar chart, drawn rather than bundled so the demo needs no assets.
     private static func chartPNG() -> Data {

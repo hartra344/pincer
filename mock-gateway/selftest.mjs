@@ -5,6 +5,8 @@ import http from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import { startServer } from './server.mjs';
+import { SEEDED_HISTORY_COUNTS } from './approvals.mjs';
+import { PAIRING_TTL_MS, PENDING_PER_ACCOUNT, addChannelPairingRequest, createChannelPairingState } from './pairing.mjs';
 import { decryptWebPush, sessionPath } from './webpush.mjs';
 
 function b64url(buf) {
@@ -202,6 +204,21 @@ try {
   assert.ok(deltaCount > 0, 'expected chat deltas');
   assert.equal(sawTool, true, 'expected tool result event');
 
+  // Test hooks for failed sends: one refused, one that drops the connection.
+  const refused = await client.call('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'nope [mock:fail-send]',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.error.code, 'UNAVAILABLE');
+  const dropped = await connectClient(url, device, deviceToken, true);
+  const closed = new Promise((resolve) => dropped.ws.once('close', resolve));
+  dropped.call('chat.send', { sessionKey: 'agent:main:main', message: 'bye [mock:drop]', idempotencyKey: `idem_${crypto.randomUUID()}` });
+  assert.equal(await closed, 1012);
+  const afterHooks = await client.send('chat.history', { sessionKey: 'agent:main:main' });
+  assert.ok(!afterHooks.messages.some((m) => JSON.stringify(m.content).includes('[mock:')), 'hooked sends leave no messages');
+
   // Web Push: finished replies and approvals are encrypted to the subscription's keys.
   const pushed = [];
   const pushSink = http.createServer((req, res) => {
@@ -257,11 +274,126 @@ try {
   assert.equal(approvalPush.url, `approve/${requested.id}`);
   assert.equal(approvalPush.title, 'OpenClaw approval requested');
   assert.equal(pushed.find((p) => p.headers.urgency === 'high')?.headers.ttl, '120');
+  const pendingLookup = await client.send('approval.get', { id: requested.id });
+  assert.equal(pendingLookup.approval.status, 'pending');
+  assert.equal(pendingLookup.approval.presentation.commandText, 'rm -rf ./build');
+  assert.ok(!JSON.stringify(pendingLookup).includes('/home/claw'), 'approval snapshots never carry cwd');
   await client.send('exec.approval.resolve', { id: requested.id, decision: 'deny' });
+  assert.deepEqual(requested.request.allowedDecisions, ['allow-once', 'allow-always', 'deny']);
+  // Identical retry is idempotent; a conflicting one is already resolved (openclaw approval-shared.ts).
+  assert.equal((await client.send('exec.approval.resolve', { id: requested.id, decision: 'deny' })).ok, true);
+  const conflicting = await client.call('exec.approval.resolve', { id: requested.id, decision: 'allow-once' });
+  assert.equal(conflicting.ok, false);
+  assert.equal(conflicting.error.code, 'INVALID_REQUEST');
+  assert.equal(conflicting.error.message, 'approval already resolved');
+  assert.equal(conflicting.error.details.reason, 'APPROVAL_ALREADY_RESOLVED');
+  assert.ok(!(await client.send('exec.approval.list')).approvals.some((a) => a.id === requested.id));
+  const unknown = await client.call('exec.approval.resolve', { id: 'approval_missing', decision: 'allow-once' });
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.error.code, 'INVALID_REQUEST');
+  assert.equal(unknown.error.message, 'approval expired or not found');
+  assert.equal(unknown.error.details.reason, 'APPROVAL_NOT_FOUND');
+  assert.equal((await client.call('exec.approval.resolve', { id: 'approval_missing', decision: 'maybe' })).error.message, 'invalid decision');
+
+  // Approval history: newest-first terminal ledger with opaque cursors and a kind filter.
+  const seededTotal = Object.values(SEEDED_HISTORY_COUNTS).reduce((a, b) => a + b, 0);
+  assert.ok(client.hello.features.methods.includes('approval.history'));
+  assert.ok(client.hello.features.methods.includes('approval.get'));
+  const page1 = await client.send('approval.history', {});
+  assert.equal(page1.items.length, 50, 'default limit is 50');
+  assert.ok(page1.nextCursor);
+  const page2 = await client.send('approval.history', { cursor: page1.nextCursor });
+  assert.equal(page2.nextCursor, undefined);
+  const allItems = [...page1.items, ...page2.items];
+  assert.equal(allItems.length, seededTotal + 1, 'seeded history plus the approval just resolved');
+  assert.equal(new Set(allItems.map((r) => r.id)).size, allItems.length, 'no duplicates across pages');
+  assert.ok(allItems.every((r, i) => i === 0 || allItems[i - 1].resolvedAtMs >= r.resolvedAtMs), 'newest first');
+  assert.ok(allItems.every((r) => r.status !== 'pending' && !('cwd' in r.presentation)));
+  assert.deepEqual(new Set(allItems.map((r) => r.status)), new Set(['allowed', 'denied', 'expired', 'cancelled']));
+  assert.deepEqual(new Set(allItems.map((r) => r.resolver?.kind ?? 'none')), new Set(['device', 'channel', 'runtime', 'system', 'none']));
+  const [top] = page1.items;
+  assert.equal(top.id, requested.id, 'resolved approval is at the top');
+  assert.equal(top.status, 'denied');
+  assert.equal(top.decision, 'deny');
+  assert.equal(top.reason, 'user');
+  assert.deepEqual(top.resolver, { kind: 'device', id: device.id });
+  assert.deepEqual(top.source, { agentId: 'main', sessionKey: 'agent:main:main' });
+  const resolvedLookup = await client.send('approval.get', { id: requested.id });
+  assert.equal(resolvedLookup.approval.status, 'denied');
+  assert.equal((await client.send('approval.history', { limit: 100 })).items.length, seededTotal + 1);
+  assert.equal((await client.call('approval.history', { limit: 101 })).error.code, 'INVALID_REQUEST');
+  assert.equal((await client.call('approval.history', { limit: 0 })).error.code, 'INVALID_REQUEST');
+  assert.equal((await client.call('approval.history', { kind: 'bogus' })).error.code, 'INVALID_REQUEST');
+  for (const kind of ['exec', 'plugin', 'system-agent']) {
+    const expected = SEEDED_HISTORY_COUNTS[kind] + (kind === 'exec' ? 1 : 0);
+    const small1 = await client.send('approval.history', { kind, limit: 7 });
+    assert.ok(small1.items.every((r) => r.presentation.kind === kind), `${kind} filter`);
+    const filtered = [...small1.items];
+    let cursor = small1.nextCursor;
+    while (cursor) {
+      const next = await client.send('approval.history', { kind, limit: 7, cursor });
+      assert.ok(next.items.every((r) => r.presentation.kind === kind));
+      filtered.push(...next.items);
+      cursor = next.nextCursor;
+    }
+    assert.equal(filtered.length, expected, `${kind} total`);
+    assert.equal(new Set(filtered.map((r) => r.id)).size, expected);
+  }
+  const execCursor = (await client.send('approval.history', { kind: 'exec', limit: 5 })).nextCursor;
+  const kindMismatch = await client.call('approval.history', { kind: 'plugin', cursor: execCursor });
+  assert.equal(kindMismatch.error.code, 'INVALID_REQUEST', 'cursor is bound to its filter');
+  for (const cursor of ['not-a-cursor', Buffer.from('{"v":1,"after":"nope"}').toString('base64url')]) {
+    const badCursor = await client.call('approval.history', { cursor });
+    assert.equal(badCursor.ok, false);
+    assert.equal(badCursor.error.code, 'INVALID_REQUEST');
+    assert.equal(badCursor.error.message, 'invalid approval.history cursor');
+  }
+  const plugin = allItems.find((r) => r.presentation.kind === 'plugin');
+  assert.deepEqual((await client.send('approval.get', { id: plugin.id })).approval, plugin, 'approval.get round-trips a history row');
+  const system = allItems.find((r) => r.presentation.kind === 'system-agent');
+  assert.deepEqual((await client.send('approval.get', { id: system.id })).approval, system);
+  const missing = await client.call('approval.get', { id: 'approval_missing' });
+  assert.equal(missing.error.code, 'INVALID_REQUEST');
+  assert.equal(missing.error.details.reason, 'APPROVAL_NOT_FOUND');
   assert.equal((await client.send('push.web.unsubscribe', { endpoint })).removed, true);
   pushSink.close();
 
-  // ask_user: question.requested blocks the run until question.resolve settles it.
+  // `approve once-only` leaves allow-always out; asking for it anyway keeps the approval pending.
+  const onceOnlyP = client.waitEvent('exec.approval.requested');
+  const onceOnlyRun = await client.send('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'approve once-only',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  const onceOnly = await onceOnlyP;
+  assert.deepEqual(onceOnly.request.allowedDecisions, ['allow-once', 'deny']);
+  const always = await client.call('exec.approval.resolve', { id: onceOnly.id, decision: 'allow-always' });
+  assert.equal(always.ok, false);
+  assert.equal(always.error.code, 'INVALID_REQUEST');
+  assert.equal(always.error.message, 'allow-always is unavailable for this command');
+  assert.equal(always.error.details.reason, 'APPROVAL_ALLOW_ALWAYS_UNAVAILABLE');
+  assert.ok((await client.send('exec.approval.list')).approvals.some((a) => a.id === onceOnly.id), 'still pending');
+  const onceResolvedEvent = client.waitEvent('exec.approval.resolved', (p) => p.id === onceOnly.id);
+  assert.equal((await client.send('exec.approval.resolve', { id: onceOnly.id, decision: 'allow-once' })).ok, true);
+  assert.equal((await onceResolvedEvent).decision, 'allow-once');
+  await client.waitEvent('chat', (p) => p.runId === onceOnlyRun.runId && p.state === 'final', 10_000);
+
+  // `approve short-lived` expires after 3 s and then reads as not found.
+  const shortP = client.waitEvent('exec.approval.requested');
+  const shortRun = await client.send('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'approve short-lived',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  const shortLived = await shortP;
+  assert.ok(shortLived.expiresAtMs - shortLived.createdAtMs <= 3_000);
+  await client.waitEvent('chat', (p) => p.runId === shortRun.runId && p.state === 'final', 10_000);
+  await delay(Math.max(0, shortLived.expiresAtMs - Date.now()) + 50);
+  assert.ok(!(await client.send('exec.approval.list')).approvals.some((a) => a.id === shortLived.id), 'expired approval is not listed');
+  const expired = await client.call('exec.approval.resolve', { id: shortLived.id, decision: 'deny' });
+  assert.equal(expired.error.details.reason, 'APPROVAL_NOT_FOUND');
+  assert.equal(expired.error.message, 'approval expired or not found');
+
   const asked = await client.send('chat.send', {
     sessionKey: 'agent:main:main',
     message: 'ask me something',
@@ -422,6 +554,91 @@ try {
   const bundled = await admin.call('plugins.uninstall', { pluginId: 'browser' });
   assert.equal(bundled.ok, false);
 
+  // Command policy (exec.approvals.get/set): operator.admin only, token redacted, base-hash CAS.
+  assert.ok(admin.hello.features.methods.includes('exec.approvals.get'));
+  assert.ok(admin.hello.features.methods.includes('exec.approvals.set'));
+  const policyReader = await connectClient(url, device, deviceToken, true);
+  for (const method of ['exec.approvals.get', 'exec.approvals.set']) {
+    const gated = await policyReader.call(method, {});
+    assert.equal(gated.error.code, 'FORBIDDEN', 'operator.approvals alone is not enough');
+    assert.equal(gated.error.message, 'missing scope: operator.admin');
+    assert.deepEqual(gated.error.details, { code: 'MISSING_SCOPE', scope: 'operator.admin' });
+  }
+  policyReader.ws.close();
+  const policy = await admin.send('exec.approvals.get', {});
+  assert.equal(policy.path, '~/.openclaw/exec-approvals.json');
+  assert.equal(policy.exists, true);
+  assert.match(policy.hash, /^[0-9a-f]{64}$/);
+  assert.deepEqual(policy.file.socket, { path: '~/.openclaw/exec-approvals.sock' }, 'socket token redacted');
+  assert.ok(!JSON.stringify(policy).includes('mock-secret'));
+  assert.deepEqual(policy.file.defaults, { security: 'allowlist', ask: 'on-miss' });
+  assert.deepEqual(policy.resolvedDefaults, { security: 'allowlist', ask: 'on-miss', askFallback: 'deny', autoAllowSkills: false });
+  assert.equal(policy.file.agents.main.allowlist.length, 2);
+  assert.equal(policy.file.agents.main.allowlist.filter((e) => e.source === 'allow-always').length, 1);
+  assert.equal(policy.file.agents.main.mcpTools.length, 1);
+  assert.equal(policy.file.agents.research.ask, 'always');
+  assert.ok(!agents.agents.some((a) => a.id === 'ghost') && policy.file.agents.ghost.allowlist.length === 1);
+  const badGet = await admin.call('exec.approvals.get', { extra: true });
+  assert.equal(badGet.error.code, 'INVALID_REQUEST');
+  assert.match(badGet.error.message, /^invalid exec\.approvals\.get params: /);
+
+  const schemaErrors = [
+    { file: { ...policy.file, extra: 1 }, baseHash: policy.hash },
+    { file: { ...policy.file, version: 2 }, baseHash: policy.hash },
+    { file: { version: 1, agents: { main: { allowlist: [{ source: 'allow-always' }] } } }, baseHash: policy.hash },
+    { file: { version: 1, agents: { main: { mcpTools: [{ server: 'github', tool: 'x', source: 'allow-always' }] } } }, baseHash: policy.hash },
+    { file: { version: 1, defaults: { autoAllowSkills: 'yes' } }, baseHash: policy.hash },
+    { file: policy.file, baseHash: policy.hash, extra: 1 },
+  ];
+  for (const params of schemaErrors) {
+    const res = await admin.call('exec.approvals.set', params);
+    assert.equal(res.error.code, 'INVALID_REQUEST', JSON.stringify(params));
+    assert.match(res.error.message, /^invalid exec\.approvals\.set params: /);
+  }
+  // Schema errors come before hash checks, like upstream.
+  assert.match((await admin.call('exec.approvals.set', { file: { version: 2 } })).error.message, /^invalid exec\.approvals\.set params/);
+  const noBase = await admin.call('exec.approvals.set', { file: policy.file });
+  assert.equal(noBase.error.code, 'INVALID_REQUEST');
+  assert.equal(noBase.error.message, 'exec approvals base hash required; re-run exec.approvals.get and retry');
+  const staleSet = await admin.call('exec.approvals.set', { file: policy.file, baseHash: 'deadbeef' });
+  assert.equal(staleSet.error.message, 'exec approvals changed since last load; re-run exec.approvals.get and retry');
+  assert.equal((await admin.call('exec.approvals.set', { baseHash: policy.hash })).error.message, 'exec approvals file is required');
+
+  // Round trip without the token: unknown enum values survive, the stored token is kept.
+  const edited = structuredClone(policy.file);
+  edited.defaults.ask = 'off';
+  edited.agents.research.security = 'future-mode';
+  edited.agents.main.allowlist = edited.agents.main.allowlist.slice(0, 1);
+  const saved = await admin.send('exec.approvals.set', { file: edited, baseHash: policy.hash });
+  assert.notEqual(saved.hash, policy.hash);
+  assert.deepEqual(saved.file, edited);
+  assert.equal(server.state.execApprovalsState.file.socket.token, 'mock-secret', 'socket token preserved');
+  assert.deepEqual(await admin.send('exec.approvals.get', {}), saved);
+  const lostUpdate = await admin.call('exec.approvals.set', { file: policy.file, baseHash: policy.hash });
+  assert.match(lostUpdate.error.message, /changed since last load/);
+  const noSocket = structuredClone(saved.file);
+  delete noSocket.socket;
+  const savedAgain = await admin.send('exec.approvals.set', { file: noSocket, baseHash: saved.hash });
+  assert.deepEqual(savedAgain.file.socket, { path: '~/.openclaw/exec-approvals.sock' });
+  assert.equal(server.state.execApprovalsState.file.socket.token, 'mock-secret');
+
+  // Always allow in chat adds the command to that agent's allowlist and changes the hash.
+  const coderChat = await admin.send('sessions.create', { agentId: 'coder', label: 'Policy selftest' });
+  const alwaysRequested = admin.waitEvent('exec.approval.requested', (p) => p.request.sessionKey === coderChat.key);
+  const alwaysRun = await admin.send('chat.send', { sessionKey: coderChat.key, message: 'approve this', idempotencyKey: `idem_${crypto.randomUUID()}` });
+  const alwaysApproval = await alwaysRequested;
+  await admin.send('exec.approval.resolve', { id: alwaysApproval.id, decision: 'allow-always' });
+  await admin.waitEvent('chat', (p) => p.runId === alwaysRun.runId && p.state === 'final', 10_000);
+  const afterAlways = await admin.send('exec.approvals.get', {});
+  assert.notEqual(afterAlways.hash, savedAgain.hash);
+  assert.ok(!savedAgain.file.agents.coder, 'coder had no policy entry before');
+  const coderEntry = afterAlways.file.agents.coder.allowlist.at(-1);
+  assert.equal(coderEntry.source, 'allow-always');
+  assert.equal(coderEntry.pattern, 'rm -rf ./build');
+  assert.equal(coderEntry.commandText, 'rm -rf ./build');
+  assert.ok(coderEntry.id && coderEntry.lastUsedAt > Date.now() - 60_000);
+  assert.match((await admin.call('exec.approvals.set', { file: afterAlways.file, baseHash: savedAgain.hash })).error.message, /changed since last load/);
+
   // Context usage and compaction.
   const reader = await connectClient(url, device, deviceToken, true);
   const rows = (await reader.send('sessions.list', { limit: 50 })).sessions;
@@ -461,6 +678,349 @@ try {
   assert.equal(coderRow.totalTokens, 34_200);
   reader.ws.close();
   admin.ws.close();
+
+  // Approval history needs operator.approvals; MOCK_NO_APPROVAL_HISTORY=1 hides it entirely.
+  const noApprovals = await connectClient(url, device, 'dev-token', true, ['operator.read']);
+  const noScope = await noApprovals.call('approval.history', {});
+  assert.equal(noScope.error.details.code, 'MISSING_SCOPE');
+  noApprovals.ws.close();
+  process.env.MOCK_NO_APPROVAL_HISTORY = '1';
+  try {
+    const legacy = await connectClient(url, device, deviceToken, true);
+    assert.ok(!legacy.hello.features.methods.includes('approval.history'));
+    assert.ok(!legacy.hello.features.methods.includes('approval.get'));
+    assert.ok(legacy.hello.features.methods.includes('exec.approval.resolve'));
+    for (const method of ['approval.history', 'approval.get']) {
+      const unknown = await legacy.call(method, { id: 'x' });
+      assert.equal(unknown.error.code, 'UNKNOWN_METHOD');
+      assert.equal(unknown.error.message, `unknown method: ${method}`);
+    }
+    legacy.ws.close();
+  } finally {
+    delete process.env.MOCK_NO_APPROVAL_HISTORY;
+  }
+
+  // MOCK_NO_EXEC_APPROVALS=1 hides the command policy methods, like an older Gateway.
+  process.env.MOCK_NO_EXEC_APPROVALS = '1';
+  try {
+    const legacy = await connectClient(url, device, deviceToken, true, adminScopes);
+    assert.ok(!legacy.hello.features.methods.some((m) => m.startsWith('exec.approvals.')));
+    assert.ok(legacy.hello.features.methods.includes('exec.approval.resolve'));
+    for (const method of ['exec.approvals.get', 'exec.approvals.set']) {
+      const unknown = await legacy.call(method, {});
+      assert.equal(unknown.error.code, 'UNKNOWN_METHOD');
+      assert.equal(unknown.error.message, `unknown method: ${method}`);
+    }
+    legacy.ws.close();
+  } finally {
+    delete process.env.MOCK_NO_EXEC_APPROVALS;
+  }
+
+  // MOCK_EXEC_APPROVALS_MISSING=1 starts without a policy file; saving creates it.
+  process.env.MOCK_EXEC_APPROVALS_MISSING = '1';
+  const missingServer = await startServer({ host: '127.0.0.1', port: 0, pairing: 'off', mockToken: 'dev-token' });
+  delete process.env.MOCK_EXEC_APPROVALS_MISSING;
+  try {
+    const fresh = await connectClient(`ws://127.0.0.1:${missingServer.address().port}`, makeDevice(), 'dev-token', true, adminScopes);
+    const empty = await fresh.send('exec.approvals.get', {});
+    assert.equal(empty.exists, false);
+    assert.deepEqual(empty.file, { version: 1 });
+    assert.match(empty.hash, /^[0-9a-f]{64}$/);
+    assert.deepEqual(empty.resolvedDefaults, { security: 'full', ask: 'off', askFallback: 'deny', autoAllowSkills: false });
+    const wrongBase = await fresh.call('exec.approvals.set', { file: { version: 1 }, baseHash: 'deadbeef' });
+    assert.equal(wrongBase.error.message, 'exec approvals changed since last load; re-run exec.approvals.get and retry');
+    const created = await fresh.send('exec.approvals.set', { file: { version: 1, defaults: { security: 'deny' } }, baseHash: empty.hash });
+    assert.equal(created.exists, true);
+    assert.notEqual(created.hash, empty.hash);
+    assert.deepEqual(created.file, { version: 1, defaults: { security: 'deny' } });
+    assert.deepEqual(created.resolvedDefaults, { security: 'deny', ask: 'off', askFallback: 'deny', autoAllowSkills: false }, 'unset fields use built-in values');
+    const requiredNow = await fresh.call('exec.approvals.set', { file: created.file });
+    assert.match(requiredNow.error.message, /base hash required/);
+    fresh.ws.close();
+  } finally {
+    await missingServer.close();
+  }
+
+  // Usage & cost: shapes and the Gateway's validation; MOCK_NO_USAGE=1 hides all five methods.
+  const usage = await connectClient(url, device, deviceToken, true);
+  for (const method of ['usage.status', 'usage.cost', 'sessions.usage', 'sessions.usage.timeseries', 'sessions.usage.logs']) {
+    assert.ok(usage.hello.features.methods.includes(method), method);
+  }
+  const zone = { mode: 'specific', timeZone: 'Asia/Kolkata', utcOffset: 'UTC+5:30' };
+  const status = await usage.send('usage.status', {});
+  assert.ok(status.updatedAt > 0);
+  assert.ok(status.providers.length >= 2);
+  assert.ok(status.providers.some((p) => p.windows.some((w) => w.usedPercent >= 90 && w.resetAt - Date.now() < 3_600_000)));
+  assert.ok(status.providers.some((p) => p.error));
+  assert.ok(status.providers.some((p) => p.billing?.some((b) => b.type === 'budget')));
+  const week = { startDate: '2000-01-01', endDate: '2000-01-07' };
+  const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const shift = (key, days) => { const [y, m, d] = key.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10); };
+  const last7 = { ...zone, startDate: shift(todayKey, -6), endDate: todayKey };
+  const cost = await usage.send('usage.cost', { ...last7, agentScope: 'all' });
+  assert.equal(cost.days, 7);
+  assert.ok(cost.daily.length > 0 && cost.daily.every((d) => d.date >= last7.startDate && d.date <= last7.endDate));
+  assert.ok(cost.totals.totalTokens > 0 && cost.totals.totalCost > 0);
+  const mainOnly = await usage.send('usage.cost', last7);
+  assert.ok(mainOnly.totals.totalTokens < cost.totals.totalTokens, 'without agentScope only main is counted');
+  // Like the Gateway, timeZone only counts with mode "specific"; +14 and -11 are always on different days.
+  const today = async (params) => (await usage.send('usage.cost', { days: 1, agentScope: 'all', ...params })).daily.map((d) => d.date);
+  const utcToday = new Date().toISOString().slice(0, 10);
+  assert.deepEqual(await today({ timeZone: 'Pacific/Kiritimati' }), [utcToday], 'timeZone without mode is UTC');
+  assert.notDeepEqual(await today({ mode: 'specific', timeZone: 'Pacific/Kiritimati' }), await today({ mode: 'specific', timeZone: 'Pacific/Pago_Pago' }));
+  assert.deepEqual(await today({ mode: 'specific', timeZone: 'Nope/Zone', utcOffset: 'UTC+0' }), [utcToday], 'bad zone falls back to utcOffset');
+  const empty = await usage.send('usage.cost', { ...week, agentScope: 'all' });
+  assert.deepEqual(empty.daily, []);
+  assert.equal(empty.totals.totalTokens, 0);
+  const sessionsUsage = await usage.send('sessions.usage', { ...last7, agentScope: 'all', groupBy: 'instance', limit: 3, includeContextWeight: false });
+  assert.equal(sessionsUsage.startDate, last7.startDate);
+  assert.equal(sessionsUsage.endDate, last7.endDate);
+  assert.equal(sessionsUsage.sessions.length, 3);
+  assert.ok(sessionsUsage.aggregates.sessionCount > 3, 'aggregates cover sessions beyond the limit');
+  assert.equal(sessionsUsage.totals.totalTokens, cost.totals.totalTokens);
+  assert.ok(sessionsUsage.aggregates.byModel.some((m) => m.totals.missingCostEntries > 0 && m.totals.totalCost > 0), 'partial cost');
+  assert.ok(sessionsUsage.aggregates.byModel.some((m) => m.totals.missingCostEntries > 0 && m.totals.totalCost === 0), 'unknown cost');
+  assert.deepEqual(sessionsUsage.aggregates.byAgent.map((a) => a.agentId), ['coder', 'main', 'research']);
+  assert.ok(sessionsUsage.aggregates.daily.length > 0 && sessionsUsage.aggregates.costDaily.length > 0);
+  const quarter = await usage.send('sessions.usage', { ...zone, startDate: shift(todayKey, -89), endDate: todayKey, agentScope: 'all', limit: 200 });
+  const computingRow = quarter.sessions.find((s) => s.computing);
+  assert.equal(computingRow.usage, null);
+  assert.equal(quarter.cacheStatus.status, 'partial');
+  const one = await usage.send('sessions.usage', { ...last7, key: 'agent:main:main', agentId: 'main', limit: 1 });
+  assert.equal(one.sessions.length, 1);
+  assert.equal(one.sessions[0].key, 'agent:main:main');
+  assert.ok(one.sessions[0].usage.totalTokens > 0);
+  assert.ok(one.sessions[0].usage.messageCounts.total > 0);
+  const quiet = await usage.send('sessions.usage', { ...last7, key: 'agent:main:cron:disk-check', limit: 1 });
+  assert.equal(quiet.sessions.length, 1);
+  assert.equal(quiet.sessions[0].usage.totalTokens, 0);
+  const expectInvalid = async (method, params, message) => {
+    const { error } = await usage.call(method, params);
+    assert.equal(error?.code, 'INVALID_REQUEST', `${method} ${JSON.stringify(params)}`);
+    if (message) assert.match(error.message, message);
+  };
+  await expectInvalid('usage.cost', { startDate: '2026-01-01' }, /startDate and endDate must be provided together/);
+  await expectInvalid('sessions.usage', { endDate: '2026-01-01' }, /provided together/);
+  await expectInvalid('usage.cost', { startDate: '2026-02-30', endDate: '2026-03-01' }, /invalid startDate/);
+  await expectInvalid('usage.cost', { startDate: '2026-03-02', endDate: '2026-03-01' }, /must not be after/);
+  await expectInvalid('usage.cost', { startDate: '2026-02-30' }, /invalid startDate/);
+  await expectInvalid('usage.cost', { mode: 'specific', timeZone: 'Nope/Zone' }, /invalid timeZone/);
+  await expectInvalid('usage.cost', { mode: 'specific', utcOffset: 'UTC+15' }, /invalid utcOffset/);
+  await expectInvalid('usage.cost', { agentScope: 'all', agentId: 'main' }, /agentScope=all cannot be combined with agentId/);
+  await expectInvalid('sessions.usage', { agentScope: 'all', key: 'agent:main:main' }, /agentScope=all cannot be combined with key or agentId/);
+  await expectInvalid('sessions.usage', { key: 'agent:main:nope' }, /Invalid session key: agent:main:nope/);
+  await expectInvalid('sessions.usage.timeseries', {}, /key is required for timeseries/);
+  await expectInvalid('sessions.usage.logs', {}, /key is required for logs/);
+  await expectInvalid('sessions.usage.timeseries', { key: 'agent:main:nope' }, /Invalid session key/);
+  await expectInvalid('sessions.usage.logs', { key: 'agent:main:nope' }, /Invalid session key/);
+  await expectInvalid('sessions.usage.timeseries', { key: 'agent:main:cron:disk-check' }, /No transcript found for session/);
+  const series = await usage.send('sessions.usage.timeseries', { key: 'agent:main:main', agentId: 'main' });
+  assert.ok(series.points.length > 0 && series.points.length <= 50);
+  assert.ok(series.points.every((p, i) => i === 0 || p.cumulativeTokens >= series.points[i - 1].cumulativeTokens));
+  const logs = await usage.send('sessions.usage.logs', { key: 'agent:main:main', limit: 200 });
+  assert.equal(logs.logs.length, 20);
+  assert.deepEqual([...new Set(logs.logs.map((l) => l.role))].sort(), ['assistant', 'tool', 'toolResult', 'user']);
+  assert.equal((await usage.send('sessions.usage.logs', { key: 'agent:main:main', limit: 5 })).logs.length, 5);
+  usage.ws.close();
+  process.env.MOCK_USAGE_FORBIDDEN = '1';
+  try {
+    const restricted = await connectClient(url, device, deviceToken, true);
+    assert.equal((await restricted.call('usage.cost', { agentScope: 'all' })).error.code, 'FORBIDDEN');
+    restricted.ws.close();
+  } finally {
+    delete process.env.MOCK_USAGE_FORBIDDEN;
+  }
+  process.env.MOCK_NO_USAGE = '1';
+  try {
+    const legacy = await connectClient(url, device, deviceToken, true);
+    for (const method of ['usage.status', 'usage.cost', 'sessions.usage', 'sessions.usage.timeseries', 'sessions.usage.logs']) {
+      assert.ok(!legacy.hello.features.methods.includes(method), method);
+      const unknown = await legacy.call(method, { key: 'agent:main:main' });
+      assert.equal(unknown.error.code, 'UNKNOWN_METHOD');
+    }
+    assert.ok(legacy.hello.features.methods.includes('sessions.list'));
+    legacy.ws.close();
+  } finally {
+    delete process.env.MOCK_NO_USAGE;
+  }
+  // Channel pairing: operator.pairing (or operator.admin) for every method, upstream-shaped results.
+  const unpaired = await connectClient(url, device, deviceToken, true);
+  assert.ok(unpaired.hello.features.methods.includes('channels.pairing.list'));
+  const pairingDenied = await unpaired.call('channels.pairing.list', {});
+  assert.equal(pairingDenied.error.code, 'FORBIDDEN');
+  assert.equal(pairingDenied.error.details.code, 'MISSING_SCOPE');
+  assert.equal(pairingDenied.error.details.missingScope, 'operator.pairing');
+  assert.deepEqual(pairingDenied.error.details.requiredScopes, ['operator.pairing']);
+  assert.equal((await unpaired.call('channels.pairing.dismiss', { channel: 'telegram', accountId: 'home', requestId: 'pr_maya' })).error.details.code,
+    'MISSING_SCOPE');
+  unpaired.ws.close();
+  const pairer = await connectClient(url, device, deviceToken, true, [...BASE_SCOPES, 'operator.pairing']);
+  const pairingList = await pairer.send('channels.pairing.list', {});
+  assert.deepEqual(pairingList.accounts.map((a) => `${a.channel}:${a.accountId}:${a.notifySupported}`),
+    ['telegram:home:true', 'discord:family:false']);
+  assert.deepEqual(pairingList.requests.map((r) => r.requestId), ['pr_maya', 'pr_discord', 'pr_soon']);
+  assert.equal(pairingList.commandOwnerConfigured, true);
+  assert.deepEqual(pairingList.limits, { pendingPerAccount: PENDING_PER_ACCOUNT, ttlMs: PAIRING_TTL_MS });
+  // Closed objects: exactly the upstream keys, optional ones only when present.
+  const sortedKeys = (o) => Object.keys(o).sort();
+  assert.deepEqual(sortedKeys(pairingList), ['accounts', 'commandOwnerConfigured', 'limits', 'requests']);
+  const ACCOUNT_KEYS = ['accountId', 'accountLabel', 'channel', 'channelLabel', 'notifySupported'];
+  for (const a of pairingList.accounts) {
+    assert.deepEqual(sortedKeys(a).filter((k) => k !== 'accountLabel'), ACCOUNT_KEYS.filter((k) => k !== 'accountLabel'));
+    assert.ok(sortedKeys(a).every((k) => ACCOUNT_KEYS.includes(k)));
+    assert.equal(typeof a.notifySupported, 'boolean');
+  }
+  const REQUEST_KEYS = ['accountId', 'accountLabel', 'channel', 'channelLabel', 'createdAt', 'expiresAt', 'lastSeenAt', 'metadata',
+    'notifySupported', 'requestId', 'senderId', 'senderLabel'];
+  const REQUIRED_REQUEST_KEYS = REQUEST_KEYS.filter((k) => k !== 'accountLabel' && k !== 'metadata');
+  for (const r of pairingList.requests) {
+    assert.ok(sortedKeys(r).every((k) => REQUEST_KEYS.includes(k)), `request keys ${sortedKeys(r)}`);
+    assert.ok(REQUIRED_REQUEST_KEYS.every((k) => k in r), `required request keys ${sortedKeys(r)}`);
+    assert.ok(Object.values(r.metadata ?? {}).every((v) => typeof v === 'string'));
+    for (const k of ['createdAt', 'lastSeenAt', 'expiresAt']) assert.equal(new Date(r[k]).toISOString(), r[k]);
+  }
+  const maya = pairingList.requests[0];
+  assert.equal(maya.metadata.name, 'Maya Chen');
+  assert.equal(maya.senderLabel, 'Telegram user id');
+  assert.ok(Date.parse(maya.expiresAt) - Date.parse(maya.createdAt) === PAIRING_TTL_MS && !Number.isNaN(Date.parse(maya.lastSeenAt)));
+  assert.equal(pairingList.requests[1].metadata, undefined);
+  assert.ok(Date.parse(pairingList.requests[2].expiresAt) - Date.now() < 3 * 60_000);
+  assert.deepEqual((await pairer.send('channels.pairing.list', { channel: 'discord' })).requests.map((r) => r.requestId), ['pr_discord']);
+  assert.match((await pairer.call('channels.pairing.list', { channel: 'signal' })).error.message, /^unknown pairing channel: signal$/);
+  assert.equal((await pairer.call('channels.pairing.list', { limit: 5 })).error.code, 'INVALID_REQUEST');
+  assert.equal((await pairer.call('channels.pairing.approve', { channel: 'telegram', accountId: 'home', requestId: 'pr_maya', code: 'x' })).error.code,
+    'INVALID_REQUEST', 'approve params are closed');
+  const ownerDenied = await pairer.call('channels.pairing.approve', { channel: 'telegram', accountId: 'home', requestId: 'pr_maya', bootstrapCommandOwner: true });
+  assert.equal(ownerDenied.error.details.missingScope, 'operator.admin', 'bootstrapCommandOwner needs operator.admin');
+  assert.deepEqual(await pairer.send('channels.pairing.approve', { channel: 'telegram', accountId: 'home', requestId: 'pr_maya', notify: true }),
+    { requestId: 'pr_maya', senderId: '5550142', notification: 'sent', commandOwnerBootstrap: 'not-requested' });
+  const staleApprove = await pairer.call('channels.pairing.approve', { channel: 'telegram', accountId: 'home', requestId: 'pr_maya' });
+  assert.equal(staleApprove.error.code, 'INVALID_REQUEST');
+  assert.equal(staleApprove.error.message, 'pending DM access request no longer exists');
+  assert.equal((await pairer.call('channels.pairing.dismiss', { channel: 'slack', accountId: 'work', requestId: 'pr_discord' })).error.message,
+    'channel account does not use DM pairing: slack:work');
+  assert.deepEqual(await pairer.send('channels.pairing.dismiss', { channel: 'discord', accountId: 'family', requestId: 'pr_discord' }),
+    { requestId: 'pr_discord', senderId: '418820017734812160' });
+  assert.equal((await pairer.call('channels.pairing.dismiss', { channel: 'discord', accountId: 'family', requestId: 'pr_discord' })).error.message,
+    'pending DM access request no longer exists');
+  assert.equal((await pairer.call('channels.pairing.approve', { channel: 'telegram', accountId: 'home', requestId: 'pr_soon', notify: 'yes' })).error.code,
+    'INVALID_REQUEST', 'notify must be a boolean');
+  const newRequest = addChannelPairingRequest(server.state);
+  const afterAdd = await pairer.send('channels.pairing.list', {});
+  assert.deepEqual(afterAdd.requests.map((r) => r.requestId).sort(), ['pr_soon', newRequest.requestId].sort());
+  assert.ok(afterAdd.requests.every((r) => sortedKeys(r).every((k) => REQUEST_KEYS.includes(k))), 'added requests keep the upstream shape');
+  // Discord can't notify; notify omitted → not-requested.
+  const discordAdded = addChannelPairingRequest(server.state);
+  assert.equal(discordAdded.channel, 'discord');
+  assert.deepEqual(await pairer.send('channels.pairing.approve',
+    { channel: 'discord', accountId: 'family', requestId: discordAdded.requestId, notify: true }),
+    { requestId: discordAdded.requestId, senderId: discordAdded.senderId, notification: 'unsupported', commandOwnerBootstrap: 'not-requested' });
+  const quietAdded = addChannelPairingRequest(server.state);
+  assert.deepEqual(sortedKeys(await pairer.send('channels.pairing.approve',
+    { channel: quietAdded.channel, accountId: quietAdded.accountId, requestId: quietAdded.requestId })),
+  ['commandOwnerBootstrap', 'notification', 'requestId', 'senderId']);
+  assert.equal(server.state.channelPairingState.requests.some((r) => r.requestId === quietAdded.requestId), false);
+  // Expired requests are dropped from the list and can't be approved.
+  const expiredAdded = addChannelPairingRequest(server.state, Date.now() - PAIRING_TTL_MS - 1000);
+  assert.ok(!(await pairer.send('channels.pairing.list', {})).requests.some((r) => r.requestId === expiredAdded.requestId));
+  assert.equal((await pairer.call('channels.pairing.approve',
+    { channel: expiredAdded.channel, accountId: expiredAdded.accountId, requestId: expiredAdded.requestId })).error.message,
+  'pending DM access request no longer exists');
+  // A full account drops its oldest request.
+  const cap = createChannelPairingState();
+  const capState = { channelPairingState: cap };
+  for (let i = 0; i < 9; i += 1) addChannelPairingRequest(capState);
+  for (const account of ['telegram:home', 'discord:family']) {
+    assert.ok(cap.requests.filter((r) => `${r.channel}:${r.accountId}` === account).length <= PENDING_PER_ACCOUNT, `cap on ${account}`);
+  }
+  pairer.ws.close();
+  const pairingAdmin = await connectClient(url, device, deviceToken, true, [...BASE_SCOPES, 'operator.admin']);
+  server.state.channelPairingState.commandOwnerConfigured = false;
+  assert.deepEqual(await pairingAdmin.send('channels.pairing.approve',
+    { channel: newRequest.channel, accountId: newRequest.accountId, requestId: newRequest.requestId, notify: true, bootstrapCommandOwner: true }),
+    { requestId: newRequest.requestId, senderId: newRequest.senderId, notification: newRequest.notifySupported ? 'sent' : 'unsupported', commandOwnerBootstrap: 'configured' });
+  assert.equal((await pairingAdmin.send('channels.pairing.list', {})).commandOwnerConfigured, true, 'admin covers operator.pairing');
+  pairingAdmin.ws.close();
+  process.env.MOCK_CHANNEL_PAIRING = 'off';
+  try {
+    const noPairing = await connectClient(url, device, deviceToken, true, [...BASE_SCOPES, 'operator.admin']);
+    for (const method of ['channels.pairing.list', 'channels.pairing.approve', 'channels.pairing.dismiss']) {
+      assert.ok(!noPairing.hello.features.methods.includes(method));
+      const unknown = await noPairing.call(method, {});
+      assert.equal(unknown.error.code, 'UNKNOWN_METHOD');
+      assert.equal(unknown.error.message, `unknown method: ${method}`);
+    }
+    noPairing.ws.close();
+  } finally {
+    delete process.env.MOCK_CHANNEL_PAIRING;
+  }
+
+  // Health, presence and a safe restart.
+  const watcher = await connectClient(url, device, deviceToken, true);
+  for (const method of ['health', 'status', 'last-heartbeat', 'system-presence', 'gateway.restart.request']) {
+    assert.ok(watcher.hello.features.methods.includes(method), method);
+  }
+  for (const event of ['health', 'heartbeat', 'presence', 'shutdown']) assert.ok(watcher.hello.features.events.includes(event), event);
+  const helloSnap = watcher.hello.snapshot;
+  assert.ok(Array.isArray(helloSnap.presence) && helloSnap.presence.some((p) => p.deviceId === device.id));
+  assert.equal(helloSnap.health.ok, true);
+  assert.ok(helloSnap.uptimeMs > 86_400_000, 'mock has been up for a day');
+  const healthNow = await watcher.send('health');
+  assert.equal(healthNow.channels.discord.connected, true);
+  assert.equal(healthNow.heartbeatSeconds, 1800);
+  assert.equal((await watcher.send('last-heartbeat')).status, 'ok-token');
+  assert.ok((await watcher.send('system-presence')).some((p) => p.mode === 'node'));
+  assert.ok((await watcher.send('status')).uptimeMs > 0);
+  const restartDenied = await watcher.call('gateway.restart.request', { reason: 'nope' });
+  assert.equal(restartDenied.error.details.code, 'MISSING_SCOPE');
+
+  const restarter = await connectClient(url, device, deviceToken, true, adminScopes);
+  // A live run defers the restart; skipDeferral escalates it (coalesced into the pending one).
+  const liveRun = await watcher.send('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'keep going for a while',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  assert.ok(server.state.activeRuns.size > 0);
+  const deferredRestart = await restarter.send('gateway.restart.request', { reason: 'selftest' });
+  assert.equal(deferredRestart.status, 'deferred');
+  assert.equal(deferredRestart.preflight.safe, false);
+  assert.ok(deferredRestart.preflight.blockers[0].message.includes('active agent run'));
+  const shutdownSeen = restarter.waitEvent('shutdown');
+  const restarterClosed = new Promise((resolve) => restarter.ws.once('close', (code) => resolve(code)));
+  const coalescedRestart = await restarter.send('gateway.restart.request', { reason: 'selftest', skipDeferral: true });
+  assert.equal(coalescedRestart.status, 'coalesced');
+  const shutdownPayload = await shutdownSeen;
+  assert.equal(shutdownPayload.restartExpectedMs, 1500);
+  assert.equal(await restarterClosed, 1012);
+  void liveRun;
+  const refusedSocket = new WebSocket(url);
+  const refusedCode = await new Promise((resolve) => refusedSocket.once('close', (code) => resolve(code)));
+  assert.equal(refusedCode, 1013, 'refuses connections while restarting');
+  await delay(1700);
+  const back = await connectClient(url, device, deviceToken, true, adminScopes);
+  assert.ok(back.hello.snapshot.uptimeMs < 60_000, 'fresh uptime after restart');
+  // Nothing running: scheduled right away.
+  const backClosed = new Promise((resolve) => back.ws.once('close', (code) => resolve(code)));
+  const scheduled = await back.send('gateway.restart.request', { reason: 'selftest again' });
+  assert.equal(scheduled.status, 'scheduled');
+  assert.equal(scheduled.preflight.safe, true);
+  assert.equal(await backClosed, 1012);
+  await delay(1700);
+
+  // MOCK_NO_HEALTH=1 is an older Gateway without any of it.
+  process.env.MOCK_NO_HEALTH = '1';
+  try {
+    const old = await connectClient(url, device, deviceToken, true, adminScopes);
+    assert.ok(!old.hello.features.methods.includes('health'));
+    assert.ok(!old.hello.features.methods.includes('gateway.restart.request'));
+    assert.deepEqual(old.hello.snapshot, {});
+    assert.equal((await old.call('health')).error.code, 'UNKNOWN_METHOD');
+    assert.equal((await old.call('gateway.restart.request', {})).error.code, 'UNKNOWN_METHOD');
+    old.ws.close();
+  } finally {
+    delete process.env.MOCK_NO_HEALTH;
+  }
   console.log('PASS');
 } finally {
   await server.close();

@@ -24,10 +24,12 @@ targets:
     type: application
     scheme: {}
     platform: macOS
-    sources: [Apps/macOS, Apps/Shared]
+    sources: [Apps/macOS, Apps/Shared, Apps/Intents]
     dependencies:
       - package: Pincer
         product: PincerUI
+      - package: Pincer
+        product: PincerKit
       - target: PincerShare-macOS
     settings:
       base:
@@ -46,7 +48,7 @@ targets:
     type: application
     scheme: {}
     platform: iOS
-    sources: [Apps/iOS, Apps/Shared]
+    sources: [Apps/iOS, Apps/Shared, Apps/Intents]
     dependencies:
       - package: Pincer
         product: PincerUI
@@ -103,6 +105,7 @@ targets:
         PRODUCT_NAME: PincerShare
         PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios.share
         CODE_SIGN_ENTITLEMENTS: Apps/ShareExtension/iOS/PincerShare.entitlements
+        PINCER_APP_GROUP: group.chat.pincer
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: Apps/ShareExtension/iOS/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Pincer

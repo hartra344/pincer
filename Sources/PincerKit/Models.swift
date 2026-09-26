@@ -823,6 +823,8 @@ public struct ExecApproval: Identifiable, Hashable, Sendable {
     public let agentId: String?
     public let warning: String?
     public let expiresAt: Date?
+    /// `request.allowedDecisions`; nil from Gateways that don't send it, where every decision is offered.
+    public let allowedDecisions: [String]?
 
     public init?(_ payload: JSONValue) {
         let request = payload["request"] ?? payload
@@ -835,6 +837,14 @@ public struct ExecApproval: Identifiable, Hashable, Sendable {
         self.agentId = request["agentId"]?.text ?? payload["agentId"]?.text
         self.warning = request["warningText"]?.text
         self.expiresAt = (payload["expiresAtMs"]?.double).map { Date(timeIntervalSince1970: $0 / 1000) }
+        self.allowedDecisions = (request["allowedDecisions"] ?? payload["allowedDecisions"])?.array?.compactMap(\.string)
+    }
+
+    /// Whether "Always allow" may be offered.
+    public var allowsAlways: Bool { self.allowedDecisions?.contains("allow-always") ?? true }
+
+    public func isExpired(at date: Date = Date()) -> Bool {
+        self.expiresAt.map { $0 <= date } ?? false
     }
 }
 
@@ -856,7 +866,7 @@ public enum MediaDirectives {
     ]
 
     public static func extract(from text: String) -> Result {
-        guard text.range(of: "MEDIA:", options: .caseInsensitive) != nil else {
+        guard self.mayContainDirective(text), text.range(of: "MEDIA:", options: .caseInsensitive) != nil else {
             return Result(text: text, images: [], files: [])
         }
         var kept: [Substring] = []
@@ -880,6 +890,21 @@ public enum MediaDirectives {
             .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return Result(text: joined, images: images, files: files)
+    }
+
+    /// A byte scan that rules out "MEDIA:" in almost every message, much faster than a
+    /// case-insensitive search. Only true negatives: any non-ASCII text just before a colon
+    /// counts as a maybe.
+    static func mayContainDirective(_ text: String) -> Bool {
+        let media: UInt64 = 0x6D_65_64_69_61 // "media"
+        var last: UInt64 = 0
+        var sinceNonASCII = 0
+        for byte in text.utf8 {
+            if byte == 0x3A, sinceNonASCII < 5 || last & 0xFF_FFFF_FFFF == media { return true }
+            sinceNonASCII = byte >= 0x80 ? 0 : sinceNonASCII + 1
+            last = last << 8 | UInt64(byte >= 0x41 && byte <= 0x5A ? byte | 0x20 : byte)
+        }
+        return false
     }
 
     /// Mid-stream, the last line may be a directive that hasn't finished arriving.

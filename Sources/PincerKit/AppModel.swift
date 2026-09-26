@@ -9,7 +9,7 @@ public final class AppModel {
     public var selectedGatewayId: UUID? {
         didSet {
             // Shared so the Share extension starts on the same gateway.
-            SharedContainer.defaults.set(self.selectedGatewayId?.uuidString, forKey: Self.selectedGatewayKey)
+            self.sharedDefaults.set(self.selectedGatewayId?.uuidString, forKey: Self.selectedGatewayKey)
             self.updateVisible()
         }
     }
@@ -17,6 +17,8 @@ public final class AppModel {
     public let push = PushRegistrar.shared
     /// Counts `open(_:)` calls (from notifications), so the UI can bring the chat on screen.
     public private(set) var openRequests = 0
+    /// Find in Chat to open with a chat, e.g. after picking a message search result.
+    public private(set) var findRequest: FindRequest?
     /// Chats visited, for Back/Forward and the palette's recent chats.
     public private(set) var history = ChatHistory<Notifier.Target>()
     public var appIsActive = true {
@@ -32,27 +34,58 @@ public final class AppModel {
 
     public static let selectedGatewayKey = "pincer.selectedGateway"
 
-    public init() {
-        let profiles = GatewayProfileStore.load()
-        SharedContainer.shareKeychainItems(for: profiles)
-        self.gateways = profiles.map(GatewayStore.init(profile:))
-        let saved = (SharedContainer.defaults.string(forKey: Self.selectedGatewayKey)
-            ?? UserDefaults.standard.string(forKey: Self.selectedGatewayKey)).flatMap(UUID.init(uuidString:))
+    /// The app's model. Created on first use, by the scene or, when iOS launches Pincer in the
+    /// background for a notification action, by `Notifier` before any scene exists.
+    public static let shared = AppModel()
+
+    /// Saved gateways and the selected one (shared with the Share extension).
+    @ObservationIgnored private let sharedDefaults: UserDefaults
+    /// Per-gateway preferences, and where lists saved before the App Group existed are read from.
+    @ObservationIgnored private let localDefaults: UserDefaults
+
+    public convenience init() {
+        self.init(sharedDefaults: SharedContainer.defaults, localDefaults: .standard)
+    }
+
+    /// Keeps every preference in `defaults`, e.g. a scratch suite for checks.
+    public convenience init(defaults: UserDefaults) {
+        self.init(sharedDefaults: defaults, localDefaults: defaults)
+    }
+
+    private init(sharedDefaults: UserDefaults, localDefaults: UserDefaults) {
+        self.sharedDefaults = sharedDefaults
+        self.localDefaults = localDefaults
+        let profiles = GatewayProfileStore.load(from: sharedDefaults, legacy: localDefaults)
+        SharedContainer.shareKeychainItems(for: profiles, defaults: sharedDefaults)
+        self.gateways = profiles.map { GatewayStore(profile: $0, defaults: localDefaults, identity: .loadOrCreate()) }
+        let saved = (sharedDefaults.string(forKey: Self.selectedGatewayKey)
+            ?? localDefaults.string(forKey: Self.selectedGatewayKey)).flatMap(UUID.init(uuidString:))
         self.selectedGatewayId = self.gateways.first { $0.id == saved }?.id ?? self.gateways.first?.id
         self.notifier.onOpen = { [weak self] target in self?.open(target) }
-        self.notifier.onApprovalAction = { [weak self] gatewayId, approvalId, decision in
-            guard let gateway = self?.gateways.first(where: { $0.id == gatewayId }) else { return }
-            Task { await gateway.resolveApproval(id: approvalId, decision: decision) }
+        self.notifier.approvalResolver = { [weak self] gatewayId, approvalId, decision in
+            await self?.respondToApproval(gatewayId: gatewayId, approvalId: approvalId, decision: decision) ?? .unknownGateway
         }
+        self.notifier.gatewayLookup = { [weak self] id in self?.gateways.first { $0.id == id } }
+        self.notifier.pushDelivers = { [weak self] id in self?.push.isActive(id) ?? false }
+        self.notifier.isConnected = { [weak self] id in
+            self?.gateways.first { $0.id == id }?.state.isConnected ?? false
+        }
+    }
+
+    /// Answers an approval on exactly the gateway the notification came from. Works before
+    /// `start()` (a background launch has no scene): only that gateway is connected then.
+    public func respondToApproval(gatewayId: UUID, approvalId: String, decision: String) async -> ApprovalOutcome {
+        guard let gateway = self.gateways.first(where: { $0.id == gatewayId }) else { return .unknownGateway }
+        if !self.started {
+            gateway.notifier = self.notifier
+            gateway.start()
+        }
+        return await gateway.resolveApproval(id: approvalId, decision: decision)
     }
 
     public func start() {
         guard !self.started else { return }
         self.started = true
-        self.notifier.pushDelivers = { [weak self] id in self?.push.isActive(id) ?? false }
-        self.notifier.isConnected = { [weak self] id in
-            self?.gateways.first { $0.id == id }?.state.isConnected ?? false
-        }
         self.push.onTokenChange = { [weak self] in self?.syncPush() }
         self.notifier.activate()
         for gateway in self.gateways {
@@ -92,10 +125,30 @@ public final class AppModel {
     public func open(_ target: Notifier.Target) {
         guard let gateway = self.gateways.first(where: { $0.id == target.gatewayId }) else { return }
         // Key first, so switching Gateways doesn't briefly record the other Gateway's last chat.
-        gateway.selectedKey = gateway.resolveSessionKey(target.sessionKey)
+        if !target.sessionKey.isEmpty { gateway.selectedKey = gateway.resolveSessionKey(target.sessionKey) }
+        // A find request for another chat was never taken; it mustn't surface when that chat opens later.
+        if let request = self.findRequest,
+           request.target.gatewayId != gateway.id
+           || gateway.resolveSessionKey(request.target.sessionKey) != gateway.selectedKey
+        {
+            self.findRequest = nil
+        }
         self.selectedGatewayId = gateway.id
         self.updateVisible()
         self.openRequests += 1
+    }
+
+    /// Opens a chat with Find in Chat showing `query`, `match` (if given) selected.
+    public func open(_ target: Notifier.Target, find query: String, match: TranscriptSearch.Match?) {
+        self.findRequest = FindRequest(target: target, query: query, match: match)
+        self.open(target)
+    }
+
+    /// The pending find request for `target`, once: it's cleared when taken.
+    public func takeFindRequest(for target: Notifier.Target) -> FindRequest? {
+        guard let request = self.findRequest, request.target == target else { return nil }
+        self.findRequest = nil
+        return request
     }
 
     // MARK: Navigation
@@ -131,7 +184,7 @@ public final class AppModel {
     @discardableResult
     public func add(_ profile: GatewayProfile, secret: String?) -> GatewayStore {
         profile.secret = secret
-        let store = GatewayStore(profile: profile)
+        let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: .loadOrCreate())
         store.notifier = self.notifier
         self.gateways.append(store)
         self.persist()
@@ -157,7 +210,7 @@ public final class AppModel {
             profile.secret = secret
             profile.forgetDeviceToken()
         }
-        let store = GatewayStore(profile: profile)
+        let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: .loadOrCreate())
         store.notifier = self.notifier
         self.gateways[index] = store
         self.persist()
@@ -173,7 +226,7 @@ public final class AppModel {
             store.stop()
         }
         store.profile.forgetCredentials()
-        TranscriptCache.removeAll(gatewayId: id)
+        TranscriptCache.removeAll(gatewayId: id, permanently: true)
         self.history.prune { $0.gatewayId != id }
         DraftStore.removeAll(gatewayId: id)
         self.persist()
@@ -189,6 +242,21 @@ public final class AppModel {
     }
 
     private func persist() {
-        GatewayProfileStore.save(self.gateways.map(\.profile))
+        GatewayProfileStore.save(self.gateways.map(\.profile), to: self.sharedDefaults)
+    }
+}
+
+/// Find in Chat to show when a chat opens.
+public struct FindRequest: Hashable, Sendable {
+    public let id: UUID
+    public let target: Notifier.Target
+    public let query: String
+    public let match: TranscriptSearch.Match?
+
+    public init(target: Notifier.Target, query: String, match: TranscriptSearch.Match?) {
+        self.id = UUID()
+        self.target = target
+        self.query = query
+        self.match = match
     }
 }

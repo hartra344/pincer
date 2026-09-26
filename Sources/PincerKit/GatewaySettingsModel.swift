@@ -31,8 +31,13 @@ public final class GatewaySettingsModel {
     public var pendingConfirmation: PluginConfirmation?
     /// Where an open settings window should go next (e.g. "Edit Connection…" from the sidebar).
     public var requestedDestination: SettingsDestination?
+    /// Pages to push on top of `requestedDestination` (e.g. a session's usage from its chat).
+    public var requestedRoutes: [SettingsRoute] = []
 
     public static let installKey = "__install__"
+
+    /// Told when a change is saved but only takes effect after a Gateway restart.
+    @ObservationIgnored var onRestartRequired: (@MainActor (String) -> Void)?
 
     @ObservationIgnored private let client: GatewayConfigClient
     @ObservationIgnored private let scopes: () -> [String]
@@ -295,7 +300,12 @@ public final class GatewaySettingsModel {
     private func finishWrite(_ outcome: ConfigApplyOutcome, touchedPlugins: Bool) async {
         await self.reloadAfterWrite(touchedPlugins: touchedPlugins)
         self.saveState = .idle
+        self.record(outcome)
+    }
+
+    private func record(_ outcome: ConfigApplyOutcome) {
         self.lastSave = (outcome, UUID())
+        if outcome.needsManualRestart { self.onRestartRequired?(outcome.message) }
     }
 
     private func reloadAfterWrite(touchedPlugins: Bool) async {
@@ -323,7 +333,7 @@ public final class GatewaySettingsModel {
                 await self.reloadAfterWrite(touchedPlugins: touchedPlugins)
             }
             self.saveState = .idle
-            self.lastSave = (.savedNotApplied(message), UUID())
+            self.record(.savedNotApplied(message))
             return true
         case .staleHash:
             await self.reloadConfig()
@@ -372,7 +382,7 @@ public final class GatewaySettingsModel {
         do {
             let result = try await self.client.pluginChange(method, params, timeout: timeout)
             self.pluginOperations[key] = nil
-            self.lastSave = (ConfigApplyOutcome(pluginChange: result), UUID())
+            self.record(ConfigApplyOutcome(pluginChange: result))
             await self.reloadPlugins()
             await self.reloadConfig()
             return true

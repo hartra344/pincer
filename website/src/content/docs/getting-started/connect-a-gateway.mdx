@@ -68,7 +68,7 @@ Plain `ws://` is only allowed for loopback, private LAN and Tailscale addresses.
 
 | Level | Scopes | What you can do |
 | --- | --- | --- |
-| **Chat & Approvals** (default) | `operator.read`, `operator.write`, `operator.approvals` | Chat, read history and answer approvals. Gateway settings are read-only. |
+| **Chat & Approvals** (default) | `operator.read`, `operator.write`, `operator.approvals`, `operator.questions` | Chat, read history, answer approvals and agent questions, and see Approval History. Gateway settings are read-only. |
 | **Full Management** | Also `operator.admin` | Also change the gateway's settings and plugins. |
 
 Switching to **Full Management** asks the gateway for more access, so the gateway host needs to approve the device again. You can change this later under **Gateway Settings → Connection**.

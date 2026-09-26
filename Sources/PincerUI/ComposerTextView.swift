@@ -79,6 +79,8 @@ struct ComposerTextView: View {
     let placeholder: String
     @Binding var text: String
     var maxLines = 12
+    /// Off while a send is in flight, so the text can't change under it.
+    var isEditable = true
     /// A suggestion menu is showing: arrow keys, Tab, Escape (and Return on iOS) go to `onKey`/`onSubmit`.
     var menuActive = false
     let onSubmit: () -> Void
@@ -87,11 +89,14 @@ struct ComposerTextView: View {
     var onKey: (ComposerKey) -> Bool = { _ in false }
     /// Whether the caret is an insertion point at the end of the text.
     var onCaretAtEnd: (Bool) -> Void = { _ in }
+    /// Asked just before the field focuses itself on appearing; false leaves focus where it is
+    /// (e.g. Find in Chat opening with the chat).
+    var autoFocus: @MainActor () -> Bool = { true }
 
     var body: some View {
         PlatformComposerTextView(
-            text: self.$text, maxLines: self.maxLines, menuActive: self.menuActive, onSubmit: self.onSubmit,
-            onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd)
+            text: self.$text, maxLines: self.maxLines, isEditable: self.isEditable, menuActive: self.menuActive, onSubmit: self.onSubmit,
+            onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd, autoFocus: self.autoFocus)
             .overlay(alignment: .topLeading) {
                 if self.text.isEmpty {
                     Text(self.placeholder)
@@ -129,6 +134,7 @@ private typealias PlatformFont = NSFont
 
 final class ComposerNSTextView: NSTextView {
     var onMedia: (([PastedMedia]) -> Void)?
+    var autoFocus: (@MainActor () -> Bool)?
     private var didAutoFocus = false
 
     override func paste(_ sender: Any?) {
@@ -156,18 +162,23 @@ final class ComposerNSTextView: NSTextView {
         super.viewDidMoveToWindow()
         guard let window, !self.didAutoFocus else { return }
         self.didAutoFocus = true
-        DispatchQueue.main.async { window.makeFirstResponder(self) }
+        DispatchQueue.main.async {
+            guard self.window === window, self.autoFocus?() ?? true else { return }
+            window.makeFirstResponder(self)
+        }
     }
 }
 
 private struct PlatformComposerTextView: NSViewRepresentable {
     @Binding var text: String
     let maxLines: Int
+    let isEditable: Bool
     let menuActive: Bool
     let onSubmit: () -> Void
     let onMedia: ([PastedMedia]) -> Void
     let onKey: (ComposerKey) -> Bool
     let onCaretAtEnd: (Bool) -> Void
+    let autoFocus: @MainActor () -> Bool
 
     private static let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
     private static let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
@@ -193,6 +204,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         textView.autoresizingMask = [.width]
         textView.string = self.text
         textView.onMedia = self.onMedia
+        textView.autoFocus = self.autoFocus
 
         let scrollView = NSScrollView()
         scrollView.drawsBackground = false
@@ -208,6 +220,8 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? ComposerNSTextView else { return }
         textView.onMedia = self.onMedia
+        textView.autoFocus = self.autoFocus
+        if textView.isEditable != self.isEditable { textView.isEditable = self.isEditable }
         if textView.string != self.text {
             textView.string = self.text
             textView.setSelectedRange(NSRange(location: (self.text as NSString).length, length: 0))
@@ -271,6 +285,7 @@ final class ComposerUITextView: UITextView {
     var onMedia: (([PastedMedia]) -> Void)?
     var menuActive = false
     var onKey: ((ComposerKey) -> Bool)?
+    var autoFocus: (@MainActor () -> Bool)?
     private var didAutoFocus = false
 
     private static let menuKeys: [(String, ComposerKey)] = [
@@ -314,18 +329,23 @@ final class ComposerUITextView: UITextView {
         // With a software keyboard, focusing here brings the keyboard up in the middle of the
         // navigation push. That stalls the main thread and resizes the transcript while it animates.
         guard GCKeyboard.coalesced != nil else { return }
-        DispatchQueue.main.async { self.becomeFirstResponder() }
+        DispatchQueue.main.async {
+            guard self.window != nil, self.autoFocus?() ?? true else { return }
+            self.becomeFirstResponder()
+        }
     }
 }
 
 private struct PlatformComposerTextView: UIViewRepresentable {
     @Binding var text: String
     let maxLines: Int
+    let isEditable: Bool
     let menuActive: Bool
     let onSubmit: () -> Void
     let onMedia: ([PastedMedia]) -> Void
     let onKey: (ComposerKey) -> Bool
     let onCaretAtEnd: (Bool) -> Void
+    let autoFocus: @MainActor () -> Bool
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -343,6 +363,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         textView.onMedia = self.onMedia
         textView.menuActive = self.menuActive
         textView.onKey = self.onKey
+        textView.autoFocus = self.autoFocus
         return textView
     }
 
@@ -351,6 +372,8 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         textView.onMedia = self.onMedia
         textView.menuActive = self.menuActive
         textView.onKey = self.onKey
+        textView.autoFocus = self.autoFocus
+        if textView.isEditable != self.isEditable { textView.isEditable = self.isEditable }
         if textView.text != self.text {
             textView.text = self.text
             textView.selectedRange = NSRange(location: (self.text as NSString).length, length: 0)

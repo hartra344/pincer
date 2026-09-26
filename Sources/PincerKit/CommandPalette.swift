@@ -70,10 +70,16 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
         case setModel(String?)
         /// A command the UI defines and runs (settings, thinking display, …).
         case command(String)
+        /// Opens the messages page searching for this.
+        case searchMessages(String)
+        /// Opens a chat with Find in Chat on this message.
+        case openMessage(Notifier.Target, query: String, match: TranscriptSearch.Match)
+        /// Opens a chat with Find in Chat showing `query`, its newest match selected.
+        case findInChat(Notifier.Target, query: String)
     }
 
     public enum Section: Int, Comparable, Sendable {
-        case chats, newChat, commands, models
+        case chats, newChat, commands, models, messages
 
         public var title: String {
             switch self {
@@ -81,6 +87,7 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
             case .newChat: "New Chat"
             case .commands: "Commands"
             case .models: "Models"
+            case .messages: "Messages"
             }
         }
 
@@ -97,10 +104,23 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
     public let section: Section
     public let action: Action
     public let isEnabled: Bool
+    /// A heading over the rows after it (a chat's message results); never selected.
+    public let isHeader: Bool
+    /// A message result's text, with the matches to highlight.
+    public let snippet: MessageSearch.Snippet?
+    /// When a message result was sent.
+    public let date: Date?
+
+    /// Can be moved to and run.
+    public var isSelectable: Bool { self.isEnabled && !self.isHeader }
 
     public init(id: String, title: String, subtitle: String? = nil, symbol: String, keywords: [String] = [],
-                shortcut: String? = nil, section: Section, action: Action, isEnabled: Bool = true)
+                shortcut: String? = nil, section: Section, action: Action, isEnabled: Bool = true,
+                isHeader: Bool = false, snippet: MessageSearch.Snippet? = nil, date: Date? = nil)
     {
+        self.isHeader = isHeader
+        self.snippet = snippet
+        self.date = date
         self.id = id
         self.title = title
         self.subtitle = subtitle
@@ -206,10 +226,12 @@ extension GatewayStore {
 public enum CommandPalette {
     /// Chats across every Gateway: recently visited first, then the selected Gateway's chats in
     /// sidebar order, then the other Gateways'. Subagent runs are left out, like the sidebar does
-    /// by default.
+    /// by default. `include` leaves out more rows, and `order` replaces the sidebar order.
     @MainActor
     public static func chatItems(gateways: [GatewayStore], selectedGatewayId: UUID?,
-                                 recent: [Notifier.Target] = []) -> [PaletteItem]
+                                 recent: [Notifier.Target] = [],
+                                 include: (SessionRow) -> Bool = { _ in true },
+                                 order: ((GatewayStore) -> [SessionRow])? = nil) -> [PaletteItem]
     {
         let multiple = gateways.count > 1
         let byId = Dictionary(uniqueKeysWithValues: gateways.map { ($0.id, $0) })
@@ -221,7 +243,7 @@ public enum CommandPalette {
 
         func add(_ row: SessionRow, in gateway: GatewayStore) {
             let target = Notifier.Target(gatewayId: gateway.id, sessionKey: row.key)
-            guard !row.isSubagent, !row.isArchived, seen.insert(target).inserted else { return }
+            guard !row.isSubagent, !row.isArchived, include(row), seen.insert(target).inserted else { return }
             let agent = gateway.agent(row.agentId)
             var subtitle = [agent.name]
             if let origin = row.originLabel { subtitle.append(origin) }
@@ -243,7 +265,7 @@ public enum CommandPalette {
         }
         let ordered = gateways.sorted { lhs, _ in lhs.id == selectedGatewayId }
         for gateway in ordered {
-            for row in gateway.sortedRows { add(row, in: gateway) }
+            for row in order?(gateway) ?? gateway.sortedRows { add(row, in: gateway) }
         }
         return items
     }
@@ -278,6 +300,60 @@ public enum CommandPalette {
                 section: .commands,
                 action: .selectGateway(gateway.id))
         }
+    }
+
+    /// "Search Messages for “q”" on the root page, once the query is long enough to search.
+    public static func searchMessagesItem(query: String) -> PaletteItem? {
+        let query = TranscriptSearch.normalized(query)
+        guard query.count >= MessageSearch.minimumQueryLength else { return nil }
+        return PaletteItem(
+            id: "command:searchMessages", title: "Search Messages for “\(query)”", symbol: "text.magnifyingglass",
+            shortcut: "⇧⌘F", section: .commands, action: .searchMessages(query))
+    }
+
+    /// Ranked root-page results with "Search Messages for “q”" right after the last chat (first
+    /// when no chat matches), so Return on a query that names no chat searches messages.
+    public static func addingSearchMessages(to ranked: [PaletteItem], query: String, gatewaySelected: Bool) -> [PaletteItem] {
+        guard gatewaySelected, let item = self.searchMessagesItem(query: query) else { return ranked }
+        var items = ranked
+        let position = items.lastIndex { $0.section == .chats }.map { $0 + 1 } ?? 0
+        items.insert(item, at: position)
+        return items
+    }
+
+    /// The messages page: per chat, a header, its newest matches, and "More matches in …" when
+    /// there are more than shown.
+    @MainActor
+    public static func messageItems(_ results: MessageSearch.Results, gateway: GatewayStore,
+                                    now: Date = Date(), calendar: Calendar = .current) -> [PaletteItem]
+    {
+        let prefix = gateway.id.uuidString
+        var items: [PaletteItem] = []
+        for chat in results.chats {
+            let target = Notifier.Target(gatewayId: gateway.id, sessionKey: chat.sessionKey)
+            items.append(PaletteItem(
+                id: "messages:chat:\(prefix):\(chat.sessionKey)",
+                title: chat.isArchived ? "\(chat.title) · Archived" : chat.title,
+                symbol: "bubble.left", section: .messages, action: .openChat(target), isHeader: true))
+            for message in chat.messages {
+                items.append(PaletteItem(
+                    id: "message:\(prefix):\(chat.sessionKey):\(message.hit.entryId):\(message.hit.section)",
+                    title: message.sender,
+                    symbol: message.hit.role == .user ? "person" : "sparkle",
+                    shortcut: message.hit.timestamp.map { MessageSearch.dateLabel($0, now: now, calendar: calendar) },
+                    section: .messages,
+                    action: .openMessage(target, query: results.query, match: message.match),
+                    snippet: message.snippet,
+                    date: message.hit.timestamp))
+            }
+            if chat.hasMore {
+                items.append(PaletteItem(
+                    id: "messages:more:\(prefix):\(chat.sessionKey)",
+                    title: "More matches in \(chat.title)…", symbol: "ellipsis",
+                    section: .messages, action: .findInChat(target, query: results.query)))
+            }
+        }
+        return items
     }
 
     /// The models page: the agent's default, then every model it can use.

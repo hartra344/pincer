@@ -94,12 +94,12 @@ public final class GatewayStore: Identifiable {
     public var selectedKey: String? {
         didSet {
             guard oldValue != self.selectedKey, let key = self.selectedKey else { return }
-            UserDefaults.standard.set(key, forKey: "pincer.selected.\(self.id.uuidString)")
+            self.defaults.set(key, forKey: "pincer.selected.\(self.id.uuidString)")
             Task { await self.openChat(key) }
         }
     }
     public var organization: SidebarOrganization {
-        didSet { UserDefaults.standard.set(self.organization.rawValue, forKey: "pincer.org.v2.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.organization.rawValue, forKey: "pincer.org.v2.\(self.id.uuidString)") }
     }
     public var showArchived = false {
         didSet {
@@ -115,37 +115,92 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var didPickInitialChat = false
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
+    @ObservationIgnored private var reconcileTask: Task<Void, Never>?
+    /// When a failed search last asked for the index to be rebuilt; searches that keep failing
+    /// don't keep rebuilding it (each rebuild re-runs the search).
+    @ObservationIgnored private var lastFailureReconcile: ContinuousClock.Instant?
+    /// Full-text index of this Gateway's cached transcripts, for message search.
+    public var messageIndex: MessageIndex { MessageIndex.shared(gatewayId: self.id) }
+    /// Whether message search is ready, still indexing cached chats, or off (no transcript cache).
+    public private(set) var messageIndexProgress: MessageIndex.Status = .ready
     @ObservationIgnored weak var notifier: Notifier?
+    /// Approvals this session settled (answered, expired or answered elsewhere), so a later duplicate
+    /// action is a no-op rather than another RPC and follow-up.
+    @ObservationIgnored private var answeredApprovals: Set<String> = []
+    @ObservationIgnored private var resolvingApprovals: [String: Task<ApprovalOutcome, Never>] = [:]
     public let images: ArtifactImageLoader
     public let files: FileContentLoader
     /// Gateway config and plugins; loaded when the settings screen opens.
-    @ObservationIgnored public private(set) lazy var settings = GatewaySettingsModel(
-        connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] })
+    @ObservationIgnored public private(set) lazy var settings: GatewaySettingsModel = {
+        let settings = GatewaySettingsModel(connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] })
+        settings.onRestartRequired = { [weak self] reason in self?.health.markRestartRequired(reason) }
+        return settings
+    }()
     /// Cron jobs; loaded when the Automations view opens.
     @ObservationIgnored public private(set) lazy var automations = AutomationsModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
+    /// Past approval decisions; loaded when Approval History opens.
+    @ObservationIgnored public private(set) lazy var approvalHistory = ApprovalHistoryModel(
+        connection: self.connection, hello: { [weak self] in self?.hello },
+        localDeviceId: self.profile.isDemo ? DemoGateway.deviceId : self.deviceId)
+    /// Command Policy (the exec approvals file); loaded when its page opens. The demo may write
+    /// it without `operator.admin`.
+    @ObservationIgnored public private(set) lazy var execPolicy = ExecPolicyModel(
+        connection: self.connection, hello: { [weak self] in self?.hello },
+        allowsWritesWithoutAdmin: self.profile.isDemo)
+    /// Token and cost usage; loaded when the Usage page opens.
+    @ObservationIgnored public private(set) lazy var usage = UsageModel(
+        connection: self.connection, hello: { [weak self] in self?.hello })
+    /// Pending DM pairing requests from channels; loaded when Gateway Settings opens.
+    @ObservationIgnored public private(set) lazy var pairingInbox = PairingInboxModel(
+        connection: self.connection, hello: { [weak self] in self?.hello })
+    /// Health, uptime, connected clients and restart; seeded from every hello and kept current by events.
+    @ObservationIgnored public private(set) lazy var health: GatewayHealthModel = {
+        let health = GatewayHealthModel(
+            connection: self.connection, hello: { [weak self] in self?.hello },
+            localDeviceId: self.profile.isDemo ? DemoGateway.deviceId : self.deviceId,
+            simulatedRestart: self.profile.isDemo)
+        health.onRestarted = { [weak self] in
+            guard let self, self.settings.hasLoaded else { return }
+            Task { await self.settings.load() }
+        }
+        return health
+    }()
 
-    public init(profile: GatewayProfile) {
+    /// Where per-gateway sidebar and selection preferences persist.
+    @ObservationIgnored let defaults: UserDefaults
+    @ObservationIgnored private let identity: DeviceIdentity
+
+    public convenience init(profile: GatewayProfile) {
+        self.init(profile: profile, defaults: .standard, identity: .loadOrCreate())
+    }
+
+    init(profile: GatewayProfile, defaults: UserDefaults, identity: DeviceIdentity) {
         self.profile = profile
         self.id = profile.id
-        self.connection = GatewayConnection(profile: profile)
+        self.defaults = defaults
+        // The demo's chats are always at hand, so its search works even with the cache off.
+        if profile.isDemo { MessageIndex.allowInMemory(gatewayId: profile.id) }
+        self.messageIndexProgress = MessageIndex.status(gatewayId: profile.id)
+        self.identity = identity
+        self.connection = GatewayConnection(profile: profile, identity: identity)
         self.organization = SidebarOrganization(
-            rawValue: UserDefaults.standard.string(forKey: "pincer.org.v2.\(profile.id.uuidString)") ?? "") ?? .servers
-        self.serverNameOverrides = UserDefaults.standard.dictionary(forKey: "pincer.serverNames.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.chatIcons = UserDefaults.standard.dictionary(forKey: "pincer.chatIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.chatColors = UserDefaults.standard.dictionary(forKey: "pincer.chatColors.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.groupPositions = UserDefaults.standard.dictionary(forKey: "pincer.groups.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.groupIcons = UserDefaults.standard.dictionary(forKey: "pincer.groupIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.chatPositions = UserDefaults.standard.dictionary(forKey: "pincer.chatOrder.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.selectedKey = UserDefaults.standard.string(forKey: "pincer.selected.\(profile.id.uuidString)")
-        self.sectionCollapse = UserDefaults.standard.dictionary(forKey: "pincer.collapsed.\(profile.id.uuidString)") as? [String: Bool] ?? [:]
+            rawValue: defaults.string(forKey: "pincer.org.v2.\(profile.id.uuidString)") ?? "") ?? .servers
+        self.serverNameOverrides = defaults.dictionary(forKey: "pincer.serverNames.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.chatIcons = defaults.dictionary(forKey: "pincer.chatIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.chatColors = defaults.dictionary(forKey: "pincer.chatColors.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.groupPositions = defaults.dictionary(forKey: "pincer.groups.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.groupIcons = defaults.dictionary(forKey: "pincer.groupIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.chatPositions = defaults.dictionary(forKey: "pincer.chatOrder.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.selectedKey = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)")
+        self.sectionCollapse = defaults.dictionary(forKey: "pincer.collapsed.\(profile.id.uuidString)") as? [String: Bool] ?? [:]
         let images = ArtifactImageLoader()
         self.images = images
         self.files = FileContentLoader(images: images)
         images.gateway = self
     }
 
-    public var deviceId: String { DeviceIdentity.loadOrCreate().deviceId }
+    public var deviceId: String { self.identity.deviceId }
 
     private enum Inbound: Sendable {
         case event(GatewayEvent)
@@ -181,6 +236,7 @@ public final class GatewayStore: Identifiable {
         self.pumpTask?.cancel()
         self.pumpTask = nil
         self.prefetchTask?.cancel()
+        self.reconcileTask?.cancel()
         Task { await connection.stop() }
     }
 
@@ -203,12 +259,18 @@ public final class GatewayStore: Identifiable {
     private func update(state: ConnectionState, hello: GatewayHello?) {
         self.state = state
         if case let .failed(message) = state { self.lastError = message }
-        guard state == .connected, let hello else { return }
+        if !state.isConnected { self.pairingInbox.reset() }
+        guard state == .connected, let hello else {
+            self.health.connectionChanged(state, hello: nil)
+            return
+        }
         self.hasConnected = true
         self.hello = hello
+        self.health.connectionChanged(state, hello: hello)
         self.connectionEpoch += 1
         self.lastError = nil
         Task { await self.bootstrap() }
+        self.execPolicy.handleReconnect()
     }
 
     private func bootstrap() async {
@@ -221,6 +283,7 @@ public final class GatewayStore: Identifiable {
         if let agents = await agents {
             self.agents = agents["agents"]?.array?.compactMap(AgentSummary.init) ?? []
             self.defaultAgentId = agents["defaultId"]?.text ?? self.agents.first?.id ?? "main"
+            Self.agentsDidLoad?()
         }
         if let list = await subscribed?["list"] {
             self.applySnapshot(list)
@@ -257,6 +320,74 @@ public final class GatewayStore: Identifiable {
             await chat.load(force: true)
         }
         self.startPrefetch()
+        self.reconcileMessageIndex()
+    }
+
+    /// Indexes cached transcripts the message index hasn't seen yet (caches from before it
+    /// existed, or after it was rebuilt), in the background.
+    private func reconcileMessageIndex() {
+        guard MessageIndex.status(gatewayId: self.id) != .unavailable else {
+            self.messageIndexProgress = .unavailable
+            return
+        }
+        self.reconcileTask?.cancel()
+        let keys = self.sessions.values.filter { !$0.isSubagent }.map(\.key)
+        let index = self.messageIndex
+        self.reconcileTask = Task.detached(priority: .utility) { [weak self] in
+            await index.reconcile(sessionKeys: keys) { status in
+                await MainActor.run { self?.messageIndexProgress = status }
+            }
+        }
+    }
+
+    /// Chats message search may show: listed, not subagent runs, archived only while listed.
+    var searchableSessionKeys: Set<String> {
+        Set(self.sessions.values.filter { !$0.isSubagent && (self.showArchived || !$0.isArchived) }.map(\.key))
+    }
+
+    /// Messages matching `query` across this Gateway's cached chats, grouped by chat. Throws
+    /// `CancellationError` when a newer search replaced this one.
+    public func searchMessages(_ query: String) async throws -> MessageSearch.Results {
+        let query = TranscriptSearch.normalized(query)
+        guard MessageSearch.ftsQuery(query) != nil else { return MessageSearch.Results(query: query) }
+        let index = self.messageIndex
+        let allowed = self.searchableSessionKeys
+        let candidates: [MessageSearch.Hit]
+        do {
+            // Cancelling this task interrupts the search.
+            candidates = try await index.search(query)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // The index may have been deleted; refill it from the transcripts, at most once a minute.
+            let now = ContinuousClock.now
+            if self.lastFailureReconcile.map({ now - $0 >= .seconds(60) }) ?? true {
+                self.lastFailureReconcile = now
+                self.reconcileMessageIndex()
+            }
+            return MessageSearch.Results(query: query, failed: true)
+        }
+        let groups = await Task.detached(priority: .userInitiated) {
+            MessageSearch.collect(candidates, query: query, allowed: allowed)
+        }.value
+        try Task.checkCancellation()
+        let snippets = await Task.detached(priority: .userInitiated) {
+            groups.map { $0.hits.map { MessageSearch.snippet(query: query, markdown: $0.text) } }
+        }.value
+        try Task.checkCancellation()
+        let chats: [MessageSearch.Chat] = zip(groups, snippets).compactMap { group, snippets in
+            guard let row = self.sessions[group.sessionKey] else { return nil }
+            let agent = self.agent(row.agentId).name
+            let messages = zip(group.hits, snippets).map { hit, snippet in
+                MessageSearch.Message(
+                    hit: hit,
+                    sender: hit.role == .user ? hit.via.map { "via \($0)" } ?? "You" : agent,
+                    snippet: snippet)
+            }
+            return MessageSearch.Chat(sessionKey: row.key, title: row.title, isArchived: row.isArchived,
+                                      messages: messages, hasMore: group.hasMore)
+        }
+        return MessageSearch.Results(query: query, chats: chats)
     }
 
     /// Quietly caches every chat's full history, most recently active first, so opening any
@@ -292,7 +423,7 @@ public final class GatewayStore: Identifiable {
         self.applySnapshot(list)
     }
 
-    private func applySnapshot(_ list: JSONValue) {
+    func applySnapshot(_ list: JSONValue) {
         var next: [String: SessionRow] = [:]
         for row in list["sessions"]?.array?.compactMap(SessionRow.init) ?? [] {
             next[row.key] = row
@@ -322,7 +453,25 @@ public final class GatewayStore: Identifiable {
 
     // MARK: Events
 
+    /// Called after any Gateway's agent list loads, e.g. so the app can refresh Siri's App Shortcut phrases.
+    public static var agentsDidLoad: (@MainActor () -> Void)?
+
+    @ObservationIgnored private var eventTaps: [Int: @MainActor (GatewayEvent) -> Void] = [:]
+    @ObservationIgnored private var nextEventTap = 0
+
+    /// Sees every event this store handles, in wire order (for Shortcuts reusing this connection).
+    func addEventTap(_ tap: @escaping @MainActor (GatewayEvent) -> Void) -> Int {
+        self.nextEventTap += 1
+        self.eventTaps[self.nextEventTap] = tap
+        return self.nextEventTap
+    }
+
+    func removeEventTap(_ token: Int) {
+        self.eventTaps.removeValue(forKey: token)
+    }
+
     private func handle(_ event: GatewayEvent) {
+        for tap in self.eventTaps.values { tap(event) }
         let payload = event.payload
         switch event.name {
         case "sessions.changed":
@@ -372,10 +521,15 @@ public final class GatewayStore: Identifiable {
             self.automations.handleCronEvent(payload)
         case "plugins.changed":
             self.settings.handlePluginsChanged()
+        case "health", "heartbeat", "presence", "shutdown":
+            self.health.handle(event: event.name, payload: payload)
         case "exec.approval.resolved":
             if let id = payload["id"]?.text ?? payload["request"]?["id"]?.text {
                 self.approvals.removeAll { $0.id == id }
+                self.clearApprovalNotifications(id)
             }
+            self.approvalHistory.handleApprovalResolved()
+            self.execPolicy.handleApprovalResolved()
         default:
             break
         }
@@ -465,7 +619,8 @@ public final class GatewayStore: Identifiable {
 
     // MARK: Mutations
 
-    public func createSession(agentId: String?, label: String?, category: String? = nil) async -> String? {
+    /// Creates a chat and, with `select`, opens it in the main window.
+    public func createSession(agentId: String?, label: String?, category: String? = nil, select: Bool = true) async -> String? {
         var params: [String: JSONValue] = ["agentId": .string(agentId ?? self.defaultAgentId)]
         if let label = label?.nilIfEmpty { params["label"] = .string(label) }
         if let category = category?.nilIfEmpty { params["category"] = .string(category) }
@@ -477,7 +632,7 @@ public final class GatewayStore: Identifiable {
             } else {
                 await self.refreshSessions()
             }
-            self.selectedKey = key
+            if select { self.selectedKey = key }
             return key
         } catch {
             self.lastError = error.localizedDescription
@@ -588,23 +743,74 @@ public final class GatewayStore: Identifiable {
         await self.patch(key, ["model": ref.map(JSONValue.string) ?? .null])
     }
 
-    public func resolveApproval(_ approval: ExecApproval, decision: String) async {
+    /// From the chat banner. Same guard, stale handling and cleanup as a notification action; a
+    /// problem shows in `lastError`.
+    @discardableResult
+    public func resolveApproval(_ approval: ExecApproval, decision: String) async -> ApprovalOutcome {
         await self.resolveApproval(id: approval.id, decision: decision)
     }
 
-    /// From a notification action, which may have launched the app: waits for the connection.
-    public func resolveApproval(id: String, decision: String, waitingUpTo seconds: Double = 20) async {
-        let deadline = Date().addingTimeInterval(seconds)
-        while !self.state.isConnected, Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(250))
+    /// Sends `exec.approval.resolve` once per approval, from a notification action (which may have
+    /// launched the app) or the banner. A socket that went stale while suspended is replaced first.
+    /// The decision must leave within `connectWithin` seconds of the call (wall clock, so time spent
+    /// suspended counts) and the RPC gets `timeout`; past that, or if the calling task is cancelled,
+    /// it's dropped (`.unreachable`), never sent later. A second call for an approval that's in
+    /// flight or already settled here sends nothing and returns `.alreadyHandled`.
+    @discardableResult
+    public func resolveApproval(
+        id: String, decision: String, connectWithin: Double = 15, timeout: Double = 10) async -> ApprovalOutcome
+    {
+        let deadline = Date().addingTimeInterval(connectWithin)
+        if self.answeredApprovals.contains(id) { return .alreadyHandled }
+        if let inFlight = self.resolvingApprovals[id] {
+            _ = await inFlight.value
+            return .alreadyHandled
         }
-        do {
-            _ = try await self.connection.request(
-                "exec.approval.resolve",
-                ["id": .string(id), "decision": .string(decision)])
+        let outcome: ApprovalOutcome
+        if self.approvals.first(where: { $0.id == id })?.isExpired() == true {
+            outcome = .expired
+        } else {
+            let connection = self.connection
+            let task = Task { () -> ApprovalOutcome in
+                await Self.send(id: id, decision: decision, on: connection, deadline: deadline, timeout: timeout)
+            }
+            self.resolvingApprovals[id] = task
+            outcome = await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+            self.resolvingApprovals[id] = nil
+        }
+        if outcome.removesApproval { self.answeredApprovals.insert(id) }
+        if outcome.removesApproval {
             self.approvals.removeAll { $0.id == id }
+            await self.notifier?.removeApproval(gatewayId: self.id, id: id)
+        } else if let message = outcome.inAppMessage(gatewayName: self.profile.name) {
+            self.lastError = message
+        }
+        return outcome
+    }
+
+    /// Resolved elsewhere (or here): its delivered notifications go too.
+    private func clearApprovalNotifications(_ id: String) {
+        guard let notifier = self.notifier else { return }
+        let gatewayId = self.id
+        Task { await notifier.removeApproval(gatewayId: gatewayId, id: id) }
+    }
+
+    private static func send(
+        id: String, decision: String, on connection: GatewayConnection, deadline: Date, timeout: Double) async -> ApprovalOutcome
+    {
+        await connection.reconnectNow()
+        while await !connection.isReady {
+            guard Date() < deadline, !Task.isCancelled else { return .unreachable }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        // Re-checked right before sending: a suspension during the wait mustn't let a stale allow through.
+        guard Date() < deadline, !Task.isCancelled else { return .unreachable }
+        do {
+            _ = try await connection.request(
+                "exec.approval.resolve", ["id": .string(id), "decision": .string(decision)], timeout: timeout)
+            return .resolved
         } catch {
-            self.lastError = error.localizedDescription
+            return ApprovalOutcome.classify(error)
         }
     }
 
@@ -708,7 +914,7 @@ public final class GatewayStore: Identifiable {
     public var totalUnread: Int { self.sessions.values.filter { $0.isUnread && !$0.isArchived && !$0.isSubagent }.count }
 
     public var serverNameOverrides: [String: String] {
-        didSet { UserDefaults.standard.set(self.serverNameOverrides, forKey: "pincer.serverNames.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.serverNameOverrides, forKey: "pincer.serverNames.\(self.id.uuidString)") }
     }
 
     /// Server names from the gateway's channel config (e.g. Discord `guilds.<id>.slug`).
@@ -819,7 +1025,7 @@ public final class GatewayStore: Identifiable {
 
     private func pull(_ map: SyncedMap) async {
         guard let fetched = await self.fetchRemoteMap(map.pref) else { return }
-        let defaults = UserDefaults.standard
+        let defaults = self.defaults
         if !defaults.bool(forKey: map.syncedDefaultsKey) {
             // First sync from this device: keep values already set here, remote wins on conflicts.
             var merged = self[keyPath: map.local]
@@ -841,7 +1047,7 @@ public final class GatewayStore: Identifiable {
     }
 
     private func push(_ map: SyncedMap, _ changes: [String: String?]) async {
-        guard !changes.isEmpty, UserDefaults.standard.bool(forKey: map.syncedDefaultsKey) else { return }
+        guard !changes.isEmpty, self.defaults.bool(forKey: map.syncedDefaultsKey) else { return }
         // Optimistic write; on a conflict (another device changed it at the same time) re-read and retry.
         for _ in 0..<3 {
             let cached = self.remotePrefMaps[map.pref]
@@ -878,7 +1084,7 @@ public final class GatewayStore: Identifiable {
 
     /// Custom SF Symbol names by session key, synced through `users.prefs` (`pincer.chatIcons`).
     public var chatIcons: [String: String] {
-        didSet { UserDefaults.standard.set(self.chatIcons, forKey: "pincer.chatIcons.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.chatIcons, forKey: "pincer.chatIcons.\(self.id.uuidString)") }
     }
 
     /// The SF Symbol chosen for a chat, if any. Callers still validate it for the running OS.
@@ -896,7 +1102,7 @@ public final class GatewayStore: Identifiable {
 
     /// Custom "#RRGGBB" colors by session key, synced through `users.prefs` (`pincer.chatColors`).
     public var chatColors: [String: String] {
-        didSet { UserDefaults.standard.set(self.chatColors, forKey: "pincer.chatColors.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.chatColors, forKey: "pincer.chatColors.\(self.id.uuidString)") }
     }
 
     /// The custom color picked for a chat, if any. It wins over the session's named `color`.
@@ -1092,12 +1298,12 @@ public final class GatewayStore: Identifiable {
 
     /// Fallback for gateways without the catalog: group names to positions, synced through `users.prefs`.
     public var groupPositions: [String: String] {
-        didSet { UserDefaults.standard.set(self.groupPositions, forKey: "pincer.groups.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.groupPositions, forKey: "pincer.groups.\(self.id.uuidString)") }
     }
 
     /// SF Symbol names by group name, synced through `users.prefs` (`pincer.groupIcons`).
     public var groupIcons: [String: String] {
-        didSet { UserDefaults.standard.set(self.groupIcons, forKey: "pincer.groupIcons.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.groupIcons, forKey: "pincer.groupIcons.\(self.id.uuidString)") }
     }
 
     /// The SF Symbol chosen for a group, if any. Callers still validate it for the running OS.
@@ -1106,7 +1312,7 @@ public final class GatewayStore: Identifiable {
     /// Sidebar sections the reader expanded or collapsed, by section id. Sections without an
     /// entry start expanded, except Automations, which starts collapsed.
     public private(set) var sectionCollapse: [String: Bool] {
-        didSet { UserDefaults.standard.set(self.sectionCollapse, forKey: "pincer.collapsed.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.sectionCollapse, forKey: "pincer.collapsed.\(self.id.uuidString)") }
     }
 
     public var collapsedSections: Set<String> {
@@ -1141,7 +1347,7 @@ public final class GatewayStore: Identifiable {
 
     /// Session keys to their position within their group, synced through `users.prefs`.
     public var chatPositions: [String: String] {
-        didSet { UserDefaults.standard.set(self.chatPositions, forKey: "pincer.chatOrder.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.chatPositions, forKey: "pincer.chatOrder.\(self.id.uuidString)") }
     }
 
     /// Whether groups live in the gateway's catalog. Gateways that don't list their methods get a try.

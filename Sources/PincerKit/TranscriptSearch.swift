@@ -149,23 +149,36 @@ public enum TranscriptSearch {
         }
     }
 
+    /// Occurrences of `query` in one message as the transcript shows it (Markdown rendered, link
+    /// targets dropped). What Find counts for a `.message` section.
+    public static func messageMatchCount(_ query: String, markdown: String) -> Int {
+        let query = self.normalized(query)
+        guard !query.isEmpty else { return 0 }
+        return self.markdownCount(of: query, words: self.prefilterWords(query), in: markdown)
+    }
+
+    /// Rendering Markdown only removes or adds punctuation (and renumbers ordered lists), so a
+    /// message can only match if every run of letters in the query is in its source. That skips
+    /// parsing almost every message.
+    private static func prefilterWords(_ query: String) -> [String] {
+        query.rangeOfCharacter(from: .decimalDigits) != nil ? []
+            : query.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+    }
+
+    private static func markdownCount(of query: String, words: [String], in source: String) -> Int {
+        guard words.allSatisfy({ source.range(of: $0, options: self.compareOptions) != nil }) else { return 0 }
+        return self.renderedTexts(markdown: source).reduce(0) { $0 + self.count(of: query, in: $1) }
+    }
+
     public static func matches(_ query: String, in entries: [TranscriptEntry], options: Options = Options()) -> [Match] {
         let query = self.normalized(query)
         guard !query.isEmpty else { return [] }
         var matches: [Match] = []
-        // Rendering Markdown only removes or adds punctuation (and renumbers ordered lists), so
-        // a message can only match if every run of letters in the query is in its source. That
-        // skips parsing almost every message.
-        let words = query.rangeOfCharacter(from: .decimalDigits) != nil ? []
-            : query.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
-        func mayMatch(_ source: String) -> Bool {
-            words.allSatisfy { source.range(of: $0, options: self.compareOptions) != nil }
-        }
+        let words = self.prefilterWords(query)
         func addMarkdown(_ source: String, entry: String, section: Section) {
-            guard mayMatch(source) else { return }
-            var found = 0
-            for text in self.renderedTexts(markdown: source) {
-                found += add(text, entry: entry, section: section, from: found)
+            let count = self.markdownCount(of: query, words: words, in: source)
+            for occurrence in 0..<count {
+                matches.append(Match(entryId: entry, section: section, occurrence: occurrence))
             }
         }
         func add(_ text: String, entry: String, section: Section, from start: Int = 0) -> Int {
@@ -211,9 +224,13 @@ public enum TranscriptSearch {
     /// Which match to select when the matches change (the query was edited, a message arrived):
     /// the same match if it's still there; else the latest match at or above the row the reader
     /// was on (`near`, a row index); else the first. With no reference, the latest match, since
-    /// the newest messages are the likeliest target.
-    public static func reselect(_ previous: Match?, in matches: [Match], rowIndex: [String: Int], near row: Int?) -> Int? {
+    /// the newest messages are the likeliest target. A `preferred` match (a message search result
+    /// being opened) wins over all of these when it's there.
+    public static func reselect(_ previous: Match?, in matches: [Match], rowIndex: [String: Int], near row: Int?,
+                                preferred: Match? = nil) -> Int?
+    {
         guard !matches.isEmpty else { return nil }
+        if let preferred, let index = matches.firstIndex(of: preferred) { return index }
         if let previous, let same = matches.firstIndex(of: previous) { return same }
         guard let row else { return matches.count - 1 }
         return matches.lastIndex(where: { (rowIndex[$0.entryId] ?? .max) <= row }) ?? 0

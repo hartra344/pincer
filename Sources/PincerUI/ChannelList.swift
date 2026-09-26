@@ -8,6 +8,7 @@ struct ChannelList: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.openAutomations) private var openAutomations
+    @Environment(\.searchMessages) private var searchMessages
     /// Called when the reader picks a chat, so compact layouts can show it.
     var openChat: () -> Void = {}
     @State private var search = ""
@@ -18,11 +19,28 @@ struct ChannelList: View {
     @State private var pickingColor: SessionRow?
     @State private var showingSettings = false
     @State private var expandedThreads: Set<String> = []
-    @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
-    @AppStorage("pincer.showMessagePreviews") private var showMessagePreviews = true
     @Environment(\.appTheme) private var theme
     @State private var prompt: TextPrompt?
     @State private var confirmation: ConfirmPrompt?
+
+    /// While filtering chats by name, offers to search their messages instead.
+    @ViewBuilder private var searchMessagesRow: some View {
+        let query = TranscriptSearch.normalized(self.search)
+        if !query.isEmpty {
+            Button {
+                self.searchMessages(query)
+            } label: {
+                Label("Search messages for “\(query)”", systemImage: "text.magnifyingglass")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+            .accessibilityIdentifier("sidebar-search-messages")
+        }
+    }
 
     var body: some View {
         @Bindable var gateway = self.gateway
@@ -33,15 +51,10 @@ struct ChannelList: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, 6)
             #endif
+            self.searchMessagesRow
             ConnectionStatusRow()
-            SidebarList(
-                model: SidebarModel.build(gateway: self.gateway, search: self.search, collapsed: self.gateway.collapsedSections,
-                                          expandedThreads: self.expandedThreads, showSubagentRuns: self.showSubagentRuns,
-                                          showPreviews: self.showMessagePreviews),
-                selectedKey: self.gateway.selectedKey,
-                gateway: self.gateway,
-                actions: self.actions,
-                theme: self.theme)
+            ChannelListRows(search: self.search, expandedThreads: self.expandedThreads,
+                            actions: self.actions, theme: self.theme)
                 #if os(iOS)
                 // Scroll under the bottom search bar instead of stopping at its edge.
                 .ignoresSafeArea(.container, edges: .bottom)
@@ -65,6 +78,9 @@ struct ChannelList: View {
                     }
                     Divider()
                     Button("Automations…") { self.openAutomations(self.gateway) }
+                    Button("Approval History…") { self.openGatewaySettings(self.gateway, at: .approvals) }
+                    Button("Command Policy…") { self.openGatewaySettings(self.gateway, at: .execPolicy) }
+                    Button("Usage & Cost…") { self.openGatewaySettings(self.gateway, at: .usage) }
                     Button("Gateway Settings…") { self.openGatewaySettings(self.gateway) }
                         .keyboardShortcut(",", modifiers: [.command, .shift])
                     Button("Edit Connection…") { self.openGatewaySettings(self.gateway, at: .connection) }
@@ -147,6 +163,30 @@ struct ChannelList: View {
     }
 }
 
+/// The native list, in its own view so selection and session updates re-render only it, not
+/// `ChannelList` and its toolbar. The `@AppStorage` lives here too: it re-renders its view on
+/// any UserDefaults write, and picking a chat writes one.
+private struct ChannelListRows: View {
+    let search: String
+    let expandedThreads: Set<String>
+    let actions: SidebarActions
+    let theme: AppTheme
+    @Environment(GatewayStore.self) private var gateway
+    @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
+    @AppStorage("pincer.showMessagePreviews") private var showPreviews = true
+
+    var body: some View {
+        SidebarList(
+            model: SidebarModel.build(gateway: self.gateway, search: self.search, collapsed: self.gateway.collapsedSections,
+                                      expandedThreads: self.expandedThreads, showSubagentRuns: self.showSubagentRuns,
+                                      showPreviews: self.showPreviews),
+            selectedKey: self.gateway.selectedKey,
+            gateway: self.gateway,
+            actions: self.actions,
+            theme: self.theme)
+    }
+}
+
 struct NewChatRequest: Identifiable {
     let id = UUID()
     let agentId: String
@@ -161,15 +201,33 @@ private struct ConnectionStatusRow: View {
     @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
+        let indicator = self.gateway.health.indicator
         switch self.gateway.state {
         case .connected, .idle:
-            EmptyView()
+            if let indicator {
+                self.padded(GatewayHealthIndicatorRow(indicator: indicator))
+            }
         default:
-            self.status
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+            switch indicator {
+            case .restarting?, .reconnecting?:
+                // A restart this device asked for (or announced by `shutdown`) reads as such.
+                self.padded(GatewayHealthIndicatorRow(indicator: indicator!))
+            case .notBack?:
+                self.padded(VStack(alignment: .leading, spacing: 4) {
+                    GatewayHealthIndicatorRow(indicator: .notBack)
+                    self.status
+                })
+            default:
+                self.padded(self.status)
+            }
         }
+    }
+
+    private func padded(_ content: some View) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
     }
 
     @ViewBuilder private var status: some View {

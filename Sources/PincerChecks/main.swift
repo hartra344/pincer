@@ -5,11 +5,16 @@ import ImageIO
 import Network
 import PincerKit
 import PincerPush
+import SQLite3
+import Synchronization
 import UniformTypeIdentifiers
+import UserNotifications
 
 // Self-checks that run without XCTest (unavailable with Command Line Tools only).
 //   swift run PincerChecks                  → unit checks
 //   swift run PincerChecks --live URL TOKEN → end-to-end against a (mock) Gateway
+//   swift run -c release PincerChecks --perf → message index at 20 chats × 20k messages
+//   swift run PincerChecks --live-no-usage URL TOKEN → a Gateway without usage (mock with MOCK_NO_USAGE=1)
 // Run with PINCER_KEYCHAIN=memory so nothing touches the real Keychain.
 
 var failures = 0
@@ -18,6 +23,10 @@ var passes = 0
 // Drafts go to a scratch folder so checks never touch the real ones.
 let draftsRoot = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-drafts-\(UUID().uuidString)")
 setenv("PINCER_DRAFTS_DIR", draftsRoot.path(percentEncoded: false), 1)
+// Same for the transcript cache and the message search index inside it (demo and live runs fill
+// them), so concurrent runs (and `swift test`) never share one.
+let cacheRoot = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-cache-\(UUID().uuidString)")
+setenv("PINCER_CACHE_DIR", cacheRoot.path(percentEncoded: false), 1)
 
 @MainActor
 func check(_ condition: @autoclosure () -> Bool, _ label: String, line: UInt = #line) {
@@ -248,6 +257,254 @@ check(roundTrip?.modelRef == "anthropic/claude-opus-4-8", "model survives the tr
 print("Exec approvals")
 let approval = ExecApproval(json(#"{"id":"ap1","request":{"command":"rm -rf build","cwd":"/p","sessionKey":"agent:main:main"},"expiresAtMs":1}"#))
 check(approval?.id == "ap1" && approval?.command == "rm -rf build" && approval?.cwd == "/p", "approval payload")
+check(approval?.allowedDecisions == nil && approval?.allowsAlways == true && approval.map(Notifier.category(for:)) == "approval",
+      "no allowedDecisions (older gateway) → all three actions")
+check(approval?.isExpired() == true && approval?.isExpired(at: Date(timeIntervalSince1970: 0)) == false, "expiresAtMs past → expired")
+let onceOnlyApproval = ExecApproval(json(#"{"id":"ap2","request":{"command":"x","allowedDecisions":["allow-once","deny"]},"expiresAtMs":4102444800000}"#))
+check(onceOnlyApproval?.allowedDecisions == ["allow-once", "deny"] && onceOnlyApproval?.allowsAlways == false
+      && onceOnlyApproval.map(Notifier.category(for:)) == "approval-once" && onceOnlyApproval?.isExpired() == false,
+      "allowedDecisions without allow-always → approval-once")
+let alwaysApproval = ExecApproval(json(#"{"id":"ap3","request":{"command":"x","allowedDecisions":["allow-once","allow-always","deny"]}}"#))
+check(alwaysApproval?.allowsAlways == true && alwaysApproval.map(Notifier.category(for:)) == "approval"
+      && alwaysApproval?.isExpired() == false, "allowedDecisions with allow-always → approval, no expiry")
+
+print("Approval notification actions")
+do {
+    let categories = Dictionary(uniqueKeysWithValues: Notifier.categories().map { ($0.identifier, $0) })
+    check(Set(categories.keys) == ["reply", "approval", "approval-once", "approval-push"], "registered categories")
+    check(categories["approval"]?.actions.map(\.identifier) == ["approve-once", "approve-always", "deny"]
+          && categories["approval"]?.actions.map(\.title) == ["Allow once", "Always allow", "Deny"],
+          "approval: Allow once, Always allow, Deny in order")
+    check(categories["approval-push"]?.actions.map(\.identifier) == ["approve-once", "approve-always", "deny"],
+          "legacy approval-push keeps the same actions")
+    check(categories["approval-once"]?.actions.map(\.identifier) == ["approve-once", "deny"], "approval-once has no Always allow")
+    check(categories["reply"]?.actions.isEmpty == true, "reply has no actions")
+    let approvalActions = Notifier.approvalCategories.flatMap { categories[$0]?.actions ?? [] }
+    check(approvalActions.count == 8 && approvalActions.allSatisfy { !$0.options.contains(.foreground) }, "no approval action opens the app")
+    check(approvalActions.filter { $0.identifier != "deny" }.allSatisfy { $0.options.contains(.authenticationRequired) }, "Allow actions need unlocking")
+    check(approvalActions.filter { $0.identifier == "deny" }.allSatisfy { !$0.options.contains(.authenticationRequired) && $0.options.contains(.destructive) },
+          "Deny is destructive and works locked")
+    check(Notifier.approvalCategories == ["approval", "approval-once", "approval-push"], "approval categories")
+
+    check(Notifier.approvalDecision(for: "approve-once") == "allow-once" && Notifier.approvalDecision(for: "approve-always") == "allow-always"
+          && Notifier.approvalDecision(for: "deny") == "deny", "action → decision")
+    check([UNNotificationDefaultActionIdentifier, UNNotificationDismissActionIdentifier, "allow-once", "open", ""]
+          .allSatisfy { Notifier.approvalDecision(for: $0) == nil }, "tap, dismiss and unknown actions decide nothing")
+
+    let gw = UUID()
+    let info: [AnyHashable: Any] = ["gateway": gw.uuidString, "approval": "a1", "session": "agent:main:main"]
+    for (action, decision) in [("approve-once", "allow-once"), ("approve-always", "allow-always"), ("deny", "deny")] {
+        check(Notifier.interpret(actionIdentifier: action, categoryIdentifier: "approval", userInfo: info)
+              == .resolve(gatewayId: gw, approvalId: "a1", decision: decision), "\(action) resolves on its own gateway")
+    }
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval-push", userInfo: info)
+          == .resolve(gatewayId: gw, approvalId: "a1", decision: "deny")
+          && Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval-once", userInfo: info)
+          == .resolve(gatewayId: gw, approvalId: "a1", decision: "allow-once"), "legacy and once-only categories resolve")
+    check(Notifier.interpret(actionIdentifier: UNNotificationDefaultActionIdentifier, categoryIdentifier: "approval", userInfo: info)
+          == .open(Notifier.Target(gatewayId: gw, sessionKey: "agent:main:main")), "plain tap opens the chat")
+    check(Notifier.interpret(actionIdentifier: UNNotificationDismissActionIdentifier, categoryIdentifier: "approval", userInfo: info) == .none,
+          "dismiss sends nothing")
+    check(Notifier.interpret(actionIdentifier: "bogus", categoryIdentifier: "approval", userInfo: info) == .none, "unknown action does nothing")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "reply", userInfo: info) == .none,
+          "approval action on a reply notification is dropped")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval", userInfo: ["approval": "a1"]) == .none,
+          "missing gateway → nothing sent")
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval", userInfo: ["gateway": "not-a-uuid", "approval": "a1"]) == .none,
+          "invalid gateway → nothing sent")
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval", userInfo: ["gateway": gw.uuidString]) == .none
+          && Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval", userInfo: ["gateway": gw.uuidString, "approval": ""]) == .none,
+          "missing approval id → nothing sent")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval",
+                             userInfo: ["pincer": ["g": gw.uuidString, "p": "sealed"]]) == .open(Notifier.Target(gatewayId: gw, sessionKey: "")),
+          "undecrypted push (only pincer.g) never resolves, opens its gateway")
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval",
+                             userInfo: ["gateway": gw.uuidString.lowercased(), "approval": "a1"])
+          == .resolve(gatewayId: gw, approvalId: "a1", decision: "deny"), "lowercase gateway UUID → same gateway")
+}
+
+print("Approval outcomes")
+do {
+    func rpc(_ code: String, _ message: String, _ details: JSONValue? = nil) -> Error {
+        GatewayError.rpc(code: code, message: message, details: details)
+    }
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval expired or not found", ["reason": "APPROVAL_NOT_FOUND"])) == .expired,
+          "APPROVAL_NOT_FOUND → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "something", ["reason": "APPROVAL_NOT_FOUND"])) == .expired, "reason alone → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "unknown or expired approval id")) == .expired, "legacy message → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval expired or not found")) == .expired, "message without details → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval already resolved", ["reason": "APPROVAL_ALREADY_RESOLVED"]))
+          == .answeredElsewhere(decision: nil), "APPROVAL_ALREADY_RESOLVED → answered elsewhere")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval already resolved")) == .answeredElsewhere(decision: nil),
+          "already-resolved message → answered elsewhere")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval already resolved", ["reason": "APPROVAL_ALREADY_RESOLVED", "decision": "deny"]))
+          == .answeredElsewhere(decision: "deny"), "decision carried when the Gateway sends it")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "allow-always is unavailable for this command", ["reason": "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE"]))
+          == .allowAlwaysUnavailable, "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE → still pending")
+    check([GatewayError.timeout("exec.approval.resolve"), .notConnected, .closed("gone")].allSatisfy { ApprovalOutcome.classify($0) == .unreachable }
+          && ApprovalOutcome.classify(rpc("UNAVAILABLE", "gateway restarting")) == .unreachable,
+          "timeout, not connected, closed, UNAVAILABLE → unreachable")
+    check(ApprovalOutcome.classify(rpc("FORBIDDEN", "nope")) == .notPermitted
+          && ApprovalOutcome.classify(rpc("INVALID_REQUEST", "missing scope: operator.approvals")) == .notPermitted,
+          "FORBIDDEN or missing scope → not permitted")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "invalid decision")) == .failed("invalid decision"), "other error keeps its message")
+
+    let removing: [ApprovalOutcome] = [.resolved, .expired, .answeredElsewhere(decision: nil)]
+    let keeping: [ApprovalOutcome] = [.alreadyHandled, .allowAlwaysUnavailable, .unreachable, .notPermitted, .unknownGateway, .failed("x")]
+    check(removing.allSatisfy(\.removesApproval) && !keeping.contains(where: \.removesApproval), "which outcomes remove the approval")
+
+    let name = "Home Lab"
+    check(ApprovalOutcome.resolved.followUpBody(gatewayName: name) == nil && ApprovalOutcome.alreadyHandled.followUpBody(gatewayName: name) == nil,
+          "no follow-up on success or a duplicate")
+    check(ApprovalOutcome.expired.followUpBody(gatewayName: name) == "That approval expired. Nothing was run.", "expired copy")
+    check(ApprovalOutcome.answeredElsewhere(decision: nil).followUpBody(gatewayName: name) == "Already answered elsewhere."
+          && ApprovalOutcome.answeredElsewhere(decision: "deny").followUpBody(gatewayName: name) == "Already denied elsewhere.",
+          "answered elsewhere copy")
+    check(ApprovalOutcome.allowAlwaysUnavailable.followUpBody(gatewayName: name) == "Always allow isn't available for this command.",
+          "allow-always unavailable copy")
+    check(ApprovalOutcome.unreachable.followUpBody(gatewayName: name) == "Couldn't reach Home Lab — the command is still waiting.",
+          "unreachable copy names the gateway")
+    check(ApprovalOutcome.notPermitted.followUpBody(gatewayName: name) == "This device can't approve commands on Home Lab. Open Pincer for details.",
+          "not permitted copy names the gateway")
+    check(ApprovalOutcome.unknownGateway.followUpBody(gatewayName: nil) == "This gateway is no longer in Pincer.", "unknown gateway copy")
+    check(ApprovalOutcome.failed("boom").followUpBody(gatewayName: name) == "boom"
+          && (ApprovalOutcome.failed(String(repeating: "x", count: 500)).followUpBody(gatewayName: name)?.count ?? 0) <= 220,
+          "other errors show the clipped message")
+
+    check(ApprovalOutcome.allowAlwaysUnavailable.followUpCategory(original: "approval") == "approval-once", "still pending: Allow once and Deny")
+    check(ApprovalOutcome.unreachable.followUpCategory(original: "approval") == "approval"
+          && ApprovalOutcome.unreachable.followUpCategory(original: "approval-push") == "approval"
+          && ApprovalOutcome.unreachable.followUpCategory(original: "approval-once") == "approval-once", "unreachable keeps the actions")
+    check([ApprovalOutcome.expired, .answeredElsewhere(decision: nil), .notPermitted, .unknownGateway, .failed("x")]
+          .allSatisfy { $0.followUpCategory(original: "approval") == "reply" }, "final outcomes have no actions")
+    check(ApprovalOutcome.resolved.inAppMessage(gatewayName: name) == nil && ApprovalOutcome.expired.inAppMessage(gatewayName: name) == nil
+          && ApprovalOutcome.unreachable.inAppMessage(gatewayName: name)?.contains("Home Lab") == true, "in-app messages")
+
+    let gw = UUID()
+    let command = "rm -rf ./build"
+    let all: [ApprovalOutcome] = [.expired, .answeredElsewhere(decision: "allow-once"), .allowAlwaysUnavailable, .unreachable, .notPermitted, .unknownGateway, .failed("bad")]
+    let contents = all.map {
+        Notifier.followUpContent(for: $0, gatewayId: gw, gatewayName: name, context: "Build chat", approvalId: "a1",
+                                 sessionKey: "agent:main:main", threadIdentifier: "\(gw.uuidString)|agent:main:main", originalCategory: "approval")
+    }
+    check(contents.allSatisfy { $0 != nil }, "a follow-up for every stale or failed outcome")
+    check(contents.compactMap(\.self).allSatisfy { !$0.body.contains(command) && !$0.title.contains(command) && $0.title.contains(name) },
+          "follow-ups name the gateway and never the command")
+    check(contents.compactMap(\.self).allSatisfy {
+        $0.interruptionLevel != .timeSensitive && $0.threadIdentifier == "\(gw.uuidString)|agent:main:main"
+            && $0.userInfo["gateway"] as? String == gw.uuidString && $0.userInfo["approval"] as? String == "a1"
+    }, "follow-ups keep the thread and ids, not time-sensitive")
+    check(contents.first??.title.contains("Build chat") == true, "follow-up names the chat")
+    check(Notifier.followUpContent(for: .resolved, gatewayId: gw, gatewayName: name, context: nil, approvalId: "a1",
+                                   sessionKey: nil, threadIdentifier: nil, originalCategory: "approval") == nil, "no follow-up on success")
+
+    // In-flight guard: a second resolve of the same id while the first waits sends nothing.
+    let offline = GatewayProfile(name: "Offline", url: "ws://127.0.0.1:9", authMode: .none)
+    let store = GatewayStore(profile: offline)
+    async let first = store.resolveApproval(id: "a1", decision: "allow-once", connectWithin: 1, timeout: 1)
+    async let second = store.resolveApproval(id: "a1", decision: "allow-once", connectWithin: 1, timeout: 1)
+    let pair = await [first, second]
+    check(pair.contains(.unreachable) && pair.contains(.alreadyHandled), "concurrent resolves: one attempt, one no-op (\(pair))")
+    check(store.lastError?.contains("Offline") == true, "unreachable shows in lastError")
+    let retry = await store.resolveApproval(id: "a1", decision: "allow-once", connectWithin: 0.5, timeout: 0.5)
+    check(retry == .unreachable, "a dropped decision can be retried, never buffered")
+
+    let (modelDefaults, modelSuite) = scratchDefaults()
+    let model = AppModel(defaults: modelDefaults)
+    let unknown = await model.respondToApproval(gatewayId: UUID(), approvalId: "a1", decision: "allow-once")
+    check(unknown == .unknownGateway, "notification for a removed gateway → no longer in Pincer, nothing sent")
+    UserDefaults.standard.removePersistentDomain(forName: modelSuite)
+}
+
+print("Approval history")
+do {
+    let localDevice = String(repeating: "d", count: 64)
+    let exec = ApprovalRecord(json(#"""
+    {"id":"exec_1","urlPath":"/approve/exec_1","createdAtMs":1000,"expiresAtMs":121000,"resolvedAtMs":5000,
+     "status":"allowed","decision":"allow-once","reason":"user",
+     "source":{"agentId":"coder","sessionKey":"agent:coder:main"},"resolver":{"kind":"device","id":"\#(localDevice)"},
+     "presentation":{"kind":"exec","commandText":"rm -rf ./build","commandPreview":"rm -rf …","warningText":"Deletes files.",
+      "host":"node","nodeId":"node-1","agentId":"main","allowedDecisions":["allow-once","allow-always","deny"]}}
+    """#))
+    check(exec?.id == "exec_1" && exec?.kind == .exec && exec?.status == .allowed && exec?.decision == .allowOnce
+          && exec?.reason == .user && exec?.urlPath == "/approve/exec_1", "exec snapshot decodes")
+    check(exec?.commandText == "rm -rf ./build" && exec?.commandPreview == "rm -rf …" && exec?.warningText == "Deletes files."
+          && exec?.host == "node" && exec?.nodeId == "node-1" && exec?.displayTitle == "rm -rf ./build", "exec presentation fields")
+    check(exec?.createdAt == Date(timeIntervalSince1970: 1) && exec?.expiresAt == Date(timeIntervalSince1970: 121)
+          && exec?.resolvedAt == Date(timeIntervalSince1970: 5), "timestamps from *AtMs")
+    check(exec?.agentId == "coder" && exec?.sessionKey == "agent:coder:main", "source wins over presentation agent")
+    check(exec?.statusLabel == "Allowed once" && exec?.tone == .allowed, "allowed once capsule")
+    check(exec?.decidedBy(localDeviceId: localDevice) == "This device", "resolver matching this device → This device")
+    check(exec?.decidedBy(localDeviceId: "other") == "Another device (dddddd…)", "resolver on another device")
+    check(exec?.decidedBy(localDeviceId: nil) == "Another device (dddddd…)", "no local id → another device")
+
+    let plugin = ApprovalRecord(json(#"""
+    {"id":"plugin_1","createdAtMs":1,"expiresAtMs":2,"resolvedAtMs":3,"status":"allowed","decision":"allow-always","reason":"user",
+     "resolver":{"kind":"channel","id":"discord:ops"},
+     "presentation":{"kind":"plugin","title":"Send email","description":"Email 3 people.","detail":"To: a@example.com",
+      "severity":"warning","pluginId":"mail","toolName":"send_email","agentId":"main","allowedDecisions":["allow-once","deny"]}}
+    """#))
+    check(plugin?.kind == .plugin && plugin?.title == "Send email" && plugin?.description == "Email 3 people."
+          && plugin?.detail == "To: a@example.com" && plugin?.severity == "warning" && plugin?.pluginId == "mail"
+          && plugin?.toolName == "send_email", "plugin presentation fields")
+    check(plugin?.agentId == "main" && plugin?.sessionKey == nil, "agent from presentation without source")
+    check(plugin?.displayTitle == "Send email" && plugin?.statusLabel == "Always allowed" && plugin?.tone == .allowed, "always allowed capsule")
+    check(plugin?.decidedBy(localDeviceId: localDevice) == "Channel · discord:ops", "channel resolver")
+
+    let system = ApprovalRecord(json(#"""
+    {"id":"sys_1","status":"denied","decision":"deny","reason":"no-route","resolver":{"kind":"system"},
+     "presentation":{"kind":"system-agent","title":"Enable plugin","description":"Enable browser.","proposalHash":"ab","agentId":"main"}}
+    """#))
+    check(system?.kind == .systemAgent && system?.kind.rawValue == "system-agent" && system?.title == "Enable plugin", "system-agent decodes")
+    check(system?.statusLabel == "Denied · No reviewer" && system?.tone == .denied, "denied no-route capsule")
+    check(system?.decidedBy(localDeviceId: localDevice) == "OpenClaw (automatic)", "system resolver")
+    check(system?.reason?.explanation.isEmpty == false, "reason explained")
+
+    let malformed = ApprovalRecord(json(#"{"id":"d2","status":"denied","decision":"deny","reason":"malformed-verdict","resolver":{"kind":"runtime"},"presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(malformed?.statusLabel == "Denied · Invalid response" && malformed?.decidedBy(localDeviceId: nil) == "Runtime",
+          "denied malformed-verdict capsule, runtime resolver")
+    let byUser = ApprovalRecord(json(#"{"id":"d3","status":"denied","decision":"deny","reason":"user","presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(byUser?.statusLabel == "Denied" && byUser?.decidedBy(localDeviceId: nil) == "Unknown", "denied by user, missing resolver → Unknown")
+    let expired = ApprovalRecord(json(#"{"id":"e1","status":"expired","reason":"timeout","presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(expired?.status == .expired && expired?.decision == nil && expired?.statusLabel == "Expired" && expired?.tone == .neutral,
+          "expired capsule")
+    let cancelled = ApprovalRecord(json(#"{"id":"c1","status":"cancelled","reason":"gateway-restart","presentation":{"kind":"exec","commandText":"x"}}"#))
+    check(cancelled?.status == .cancelled && cancelled?.reason == .gatewayRestart && cancelled?.statusLabel == "Cancelled"
+          && cancelled?.tone == .neutral, "cancelled capsule")
+    let pending = ApprovalRecord(json(#"{"id":"p1","status":"pending","sourceSessionKey":"agent:main:main","presentation":{"kind":"exec","commandText":"ls"}}"#))
+    check(pending?.status == .pending && pending?.sessionKey == "agent:main:main" && pending?.resolvedAt == nil, "pending approval.get snapshot")
+
+    let unknown = ApprovalRecord(json(#"""
+    {"id":"u1","status":"escalated","reason":"quorum-lost","futureField":{"x":1},"resolver":{"kind":"committee","id":"c9"},
+     "presentation":{"kind":"mcp-tool","title":"Call tool","extra":true}}
+    """#))
+    check(unknown?.kind == .other("mcp-tool") && unknown?.kind.rawValue == "mcp-tool" && unknown?.kind.label == "Mcp tool",
+          "unknown kind kept raw, capitalized")
+    check(unknown?.status == .other("escalated") && unknown?.statusLabel == "Escalated" && unknown?.reason == .other("quorum-lost")
+          && unknown?.reason?.shortLabel == "Quorum lost", "unknown status/reason kept raw, extra fields ignored")
+    check(unknown?.decidedBy(localDeviceId: nil) == "Committee · c9", "unknown resolver kind humanized")
+    check(ApprovalRecord(json(#"{"status":"allowed","presentation":{"kind":"exec","commandText":"ls"}}"#)) == nil, "record without id rejected")
+    check(ApprovalRecord(json(#"{"id":""}"#)) == nil && ApprovalRecord(json(#""ap1""#)) == nil, "empty id and non-objects rejected")
+    let legacy = ApprovalRecord(json(#"{"id":"l1","kind":"exec","command":"make","decision":"deny","requestedAtMs":2000,"decidedAtMs":4000,"agentId":"main","sessionKey":"agent:main:main"}"#))
+    check(legacy?.kind == .exec && legacy?.commandText == "make" && legacy?.status == .denied
+          && legacy?.createdAt == Date(timeIntervalSince1970: 2) && legacy?.resolvedAt == Date(timeIntervalSince1970: 4)
+          && legacy?.agentId == "main" && legacy?.sessionKey == "agent:main:main", "flat legacy record, status from decision, requested/decidedAtMs")
+    check(ApprovalRecord(json(#"{"id":"l2","decision":"allow-always"}"#))?.status == .allowed, "missing status derived from allow decision")
+    check(ApprovalRecord(json(#"{"id":"l3","presentation":{"commandText":"ls"}}"#))?.kind == .exec, "kind inferred from commandText")
+    check(ApprovalHistoryModel.KindFilter.allCases.map(\.label) == ["All", "Commands", "Plugins", "System"]
+          && ApprovalHistoryModel.KindFilter.all.wireValue == nil && ApprovalHistoryModel.KindFilter.systemAgent.wireValue == "system-agent",
+          "kind filter labels and wire values")
+    check(ApprovalHistoryModel.KindFilter.exec.emptyMessage == "No command approvals in the last 30 days."
+          && ApprovalHistoryModel.KindFilter.all.emptyMessage == nil, "filtered empty messages")
+}
+await checkApprovalHistoryModel()
+await checkExecPolicy()
+print("Pairing requests")
+await checkPairingInboxModel()
+await checkGatewayHealth()
+
+print("Usage & cost")
+await checkUsage()
 
 print("Agent questions")
 do {
@@ -496,7 +753,7 @@ check(ConfigIssue.from(GatewayError.rpc(code: "INVALID_REQUEST", message: "boom"
 check(ConfigApplyOutcome(configWrite: json(#"{"ok":true,"noop":true}"#)) == .noChange, "noop patch")
 check(ConfigApplyOutcome(configWrite: json(#"{"ok":true,"restart":{"delayMs":2000}}"#)) == .restarting, "restart scheduled")
 check(ConfigApplyOutcome(configWrite: json(#"{"ok":true,"hash":"h"}"#)) == .applied, "hot-applied")
-check(ConfigApplyOutcome(pluginChange: json(#"{"ok":true,"restartRequired":true}"#)) == .restarting, "plugin restart")
+check(ConfigApplyOutcome(pluginChange: json(#"{"ok":true,"restartRequired":true}"#)) == .restartRequired, "plugin restart needed")
 
 let plugin = PluginInfo(json(#"{"id":"weather","name":"Weather","installed":true,"enabled":true,"state":"needs-setup","origin":"clawhub","runtime":{"state":"disabled"}}"#))
 check(plugin?.needsSetup == true && plugin?.statusLabel == "Needs setup" && plugin?.removable == true, "plugin entry")
@@ -713,8 +970,15 @@ do {
           "chat push threads with its chat")
     check(chatMessage?.userInfo == ["gateway": gatewayId.uuidString, "push": "1", "session": "agent:main:main"], "chat push userInfo")
     let pending = PushMessage(json: Data(#"{"title":"OpenClaw approval requested","body":"exec","url":"approve/a1"}"#.utf8), gatewayId: gatewayId)
-    check(pending?.kind == .approval(id: "a1", pending: true) && pending?.categoryIdentifier == "approval-push"
+    check(pending?.kind == .approval(id: "a1", pending: true) && pending?.categoryIdentifier == "approval"
           && pending?.userInfo["approval"] == "a1", "pending approval push has actions")
+    if let pending {
+        check(pending.userInfo["gateway"] == gatewayId.uuidString
+              && Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: pending.categoryIdentifier, userInfo: pending.userInfo)
+              == .resolve(gatewayId: gatewayId, approvalId: "a1", decision: "deny"), "pending approval push actions resolve on its gateway")
+        check(Notifier.categories().first { $0.identifier == pending.categoryIdentifier }?.actions.count == 3,
+              "pending approval push offers all three actions")
+    }
     let updated = PushMessage(json: Data(#"{"title":"OpenClaw approval updated","body":"denied","url":"approve/a1"}"#.utf8), gatewayId: gatewayId)
     check(updated?.kind == .approval(id: "a1", pending: false) && updated?.categoryIdentifier == "reply", "resolved approval push has none")
     check(PushMessage(json: Data(#"{"url":"chat/main"}"#.utf8), gatewayId: gatewayId) == nil, "push without text ignored")
@@ -726,6 +990,8 @@ do {
     let apns: [AnyHashable: Any] = ["aps": ["mutable-content": 1], "pincer": ["g": gatewayId.uuidString, "p": body.base64URL]]
     check(PushMessage(apnsPayload: apns) == chatMessage, "relay payload decrypted with the stored keys")
     check(PushMessage(apnsPayload: ["pincer": ["g": UUID().uuidString, "p": body.base64URL]]) == nil, "unknown gateway ignored")
+    check(PushMessage(apnsPayload: ["pincer": ["g": gatewayId.uuidString.lowercased(), "p": body.base64URL]]) == chatMessage,
+          "lowercase pincer.g → same gateway")
     check(PushMessage(apnsPayload: ["aps": ["alert": "x"]]) == nil, "non-Pincer payload ignored")
     PushKeyStore.delete(for: gatewayId)
     check(PushKeyStore.keys(for: gatewayId) == nil, "push keys deleted")
@@ -874,6 +1140,919 @@ do {
 print("Composer drafts")
 await checkDrafts()
 
+print("Message search")
+checkMessageSearchLogic()
+
+print("Message index")
+await checkMessageIndex()
+
+print("Message search in the palette")
+checkPaletteMessages()
+
+func messageItem(_ id: String, _ role: ChatRole, _ text: String, at seconds: Double, via: String? = nil) -> ChatItem {
+    var item = ChatItem(id: id, role: role, blocks: [.text(text)], timestamp: Date(timeIntervalSince1970: seconds))
+    item.transcriptId = id
+    item.via = via
+    return item
+}
+
+func messageHit(_ key: String, _ entry: String, section: Int = 0, at seconds: Double?, text: String = "hit") -> MessageSearch.Hit {
+    MessageSearch.Hit(sessionKey: key, entryId: entry, section: section, role: .assistant,
+                      timestamp: seconds.map { Date(timeIntervalSince1970: $0) }, text: text)
+}
+
+/// Pure message search logic: what's indexed, query building, verification, snippets, grouping, dates.
+@MainActor
+func checkMessageSearchLogic() {
+    check(MessageSearch.ftsQuery("  Café  Tokyo ") == #""cafe"* "tokyo"*"#, "query words become folded, quoted prefixes")
+    check(MessageSearch.ftsQuery("a") == nil && MessageSearch.ftsQuery("??") == nil && MessageSearch.ftsQuery("") == nil
+          && MessageSearch.ftsQuery("   ") == nil, "too short or no words: nothing to search")
+    check(MessageSearch.ftsQuery("a tokyo") == #""tokyo"*"#, "one-letter words are dropped")
+    let hostile = MessageSearch.ftsQuery(#"foo AND "bar" NEAR( -x*"#)
+    check(hostile == #""foo"* "and"* "bar"* "near"*"#, "FTS syntax typed is quoted as words (\(hostile ?? "nil"))")
+
+    let items = [
+        messageItem("u1", .user, "Hello from the lab", at: 1000, via: "Discord"),
+        ChatItem(json(#"{"role":"assistant","content":[{"type":"thinking","thinking":"secret thinking"},{"type":"text","text":"First reply"},{"type":"toolCall","id":"t1","name":"exec","arguments":{"command":"grep toolword"}}],"timestamp":2000,"__openclaw":{"id":"a1"}}"#), fallbackIndex: 1)!,
+        ChatItem(json(#"{"role":"toolResult","toolCallId":"t1","toolName":"exec","content":[{"type":"text","text":"toolword output"}],"timestamp":2500,"__openclaw":{"id":"t1r"}}"#), fallbackIndex: 2)!,
+        ChatItem(json(#"{"role":"assistant","content":[{"type":"text","text":"Second reply"}],"timestamp":3000,"__openclaw":{"id":"a2"}}"#), fallbackIndex: 3)!,
+        ChatItem(json(#"{"role":"marker","kind":"compaction","__openclaw":{"id":"m1","kind":"compaction"}}"#), fallbackIndex: 4)!,
+        ChatItem(id: "p1", role: .user, blocks: [.text("pending words")], isPending: true),
+    ]
+    let documents = MessageSearch.documents(sessionKey: "k", items: items)
+    let entries = TranscriptBuilder.build(items.filter { !$0.isPending })
+    check(documents.count == 3, "documents: a user message and an assistant turn's two texts (got \(documents.count))")
+    if documents.count == 3 {
+        let user = documents[0]
+        check(user.entryId == entries[0].id && user.section == 0 && user.role == .user && user.via == "Discord"
+              && user.timestamp == Date(timeIntervalSince1970: 1000) && user.text == "Hello from the lab", "user message document keeps via")
+        check(documents[1].entryId == entries[1].id && documents[2].entryId == entries[1].id
+              && documents.dropFirst().map(\.section) == [0, 1] && documents.dropFirst().allSatisfy { $0.role == .assistant },
+              "assistant texts are sections of the turn's entry")
+        check(documents[1].timestamp == Date(timeIntervalSince1970: 2000) && documents[2].timestamp == Date(timeIntervalSince1970: 3000),
+              "each assistant text has its own timestamp")
+        check(documents.allSatisfy { $0.sessionKey == "k" } && documents[1].match
+              == TranscriptSearch.Match(entryId: entries[1].id, section: .message(0), occurrence: 0), "document match is Find's")
+    }
+    check(!documents.contains { $0.text.contains("secret") || $0.text.contains("toolword") || $0.text.contains("pending") },
+          "thinking, tools, markers and pending messages aren't indexed")
+
+    check(!MessageSearch.verify(query: "zebra", markdown: "See [the docs](https://zebra.example) now"), "link target alone doesn't verify")
+    check(MessageSearch.verify(query: "hello world", markdown: "**hello** world"), "phrase verifies across styling")
+    check(!MessageSearch.verify(query: "japan trip", markdown: "Japan, trip"), "punctuation breaks a phrase")
+    check(MessageSearch.verify(query: "CAFÉ", markdown: "the cafe"), "verification ignores case and accents")
+
+    // Every verified document is a match Find reports, and every message match Find reports is verified.
+    let fixture = json(#"""
+    [
+     {"role":"user","content":"Where is the Café receipt? The **hello** world receipt.","__openclaw":{"id":"f1"}},
+     {"role":"assistant","content":[{"type":"text","text":"See [docs](https://x.example/receipt) and the receipt."}],"__openclaw":{"id":"f2"}},
+     {"role":"assistant","content":[{"type":"text","text":"Day 7? Hello, world. `receipt` in code."}],"__openclaw":{"id":"f3"}},
+     {"role":"user","content":"Japan, trip. trip to Japan","__openclaw":{"id":"f4"}},
+     {"role":"assistant","content":[{"type":"thinking","thinking":"receipt thinking"},{"type":"text","text":"| a | b |\n|---|---|\n| cafe | day 7? |"}],"__openclaw":{"id":"f5"}}
+    ]
+    """#).array!.enumerated().compactMap { ChatItem($1, fallbackIndex: $0) }
+    let fixtureEntries = TranscriptBuilder.build(fixture)
+    let fixtureDocuments = MessageSearch.documents(sessionKey: "k", items: fixture)
+    var agrees = true
+    for query in ["receipt", "hello world", "café", "the", "day 7?", "japan trip", "trip to", "world.", "x.example"] {
+        let verified = Set(fixtureDocuments.filter { MessageSearch.verify(query: query, markdown: $0.text) }.map(\.match))
+        let found = TranscriptSearch.matches(query, in: fixtureEntries)
+        let firsts = Set(found.filter { $0.occurrence == 0 })
+        if verified != firsts {
+            agrees = false
+            print("    \(query): verified \(verified.map(\.entryId).sorted()) vs Find \(firsts.map(\.entryId).sorted())")
+        }
+    }
+    check(agrees, "verified hits are exactly the messages Find in Chat matches")
+
+    let lobster = MessageSearch.snippet(query: "lobster", markdown: "🦞 **lobster** time and lobster again")
+    check(lobster.text == "🦞 lobster time and lobster again"
+          && lobster.highlights == [NSRange(location: 3, length: 7), NSRange(location: 20, length: 7)],
+          "snippet highlights are UTF-16 ranges (\(lobster.highlights))")
+    let far = MessageSearch.snippet(query: "target", markdown: String(repeating: "filler ", count: 60) + "the target word " + String(repeating: "tail ", count: 40))
+    let farText = far.text as NSString
+    check(far.text.hasPrefix("…") && far.text.hasSuffix("…") && far.highlights.count == 1
+          && far.highlights.first.map { farText.substring(with: $0) } == "target", "far match: leading … and the match in view")
+    check(farText.length <= 140, "snippet respects the length cap (\(farText.length))")
+    let lines = MessageSearch.snippet(query: "two", markdown: "line one\nline two\n\n- item   three\n\n```\ncode  block\n```")
+    check(!lines.text.contains("\n") && !lines.text.contains("\u{2028}") && !lines.text.contains("  ")
+          && lines.text.contains("line one line two"), "snippet collapses newlines and spaces (\(lines.text.debugDescription))")
+    let capped = MessageSearch.snippet(query: "start", markdown: "start " + String(repeating: "word ", count: 200), maxLength: 60)
+    check((capped.text as NSString).length <= 60 && capped.text.hasPrefix("start") && capped.text.hasSuffix("…"),
+          "custom cap, match at the start keeps no leading …")
+    let emoji = MessageSearch.snippet(query: "end", markdown: String(repeating: "🦞", count: 100) + " end", maxLength: 50)
+    check((emoji.text as NSString).length <= 50 && emoji.highlights.count == 1 && !emoji.text.unicodeScalars.contains { $0.value == 0xFFFD },
+          "cuts never split a surrogate pair")
+
+    let groups = MessageSearch.group([
+        messageHit("A", "a1", at: 10), messageHit("B", "b1", at: 20), messageHit("A", "a2", at: 5),
+        messageHit("A", "a3", at: 4), messageHit("A", "a4", at: 3), messageHit("C", "c1", at: 30),
+        messageHit("B", "b0", at: nil),
+    ], allowed: ["A", "B"])
+    check(groups.map(\.sessionKey) == ["B", "A"], "chats ordered by newest hit; keys not allowed dropped")
+    check(groups.last?.hits.map(\.entryId) == ["a1", "a2", "a3"] && groups.last?.hasMore == true, "3 per chat, the 4th sets hasMore")
+    check(groups.first?.hits.map(\.entryId) == ["b1", "b0"] && groups.first?.hasMore == false, "undated hits sort last")
+    let three = MessageSearch.group((1...3).map { messageHit("A", "a\($0)", at: Double($0)) }, allowed: ["A"])
+    check(three.first?.hits.count == 3 && three.first?.hasMore == false, "exactly 3 hits: no More")
+    let many = MessageSearch.group((0..<5).map { messageHit("K\($0)", "e", at: Double($0)) }, allowed: Set((0..<5).map { "K\($0)" }), maxChats: 2)
+    check(many.map(\.sessionKey) == ["K4", "K3"], "maxChats caps the chats")
+    let collected = MessageSearch.collect([
+        messageHit("A", "x1", at: 9, text: "the Japan trip"), messageHit("A", "x2", at: 8, text: "Japan, trip"),
+        messageHit("A", "x3", at: 7, text: "japan trip"), messageHit("A", "x4", at: 6, text: "JAPAN TRIP"),
+        messageHit("A", "x5", at: 5, text: "japan trip"), messageHit("Z", "z1", at: 99, text: "japan trip"),
+    ], query: "japan trip", allowed: ["A"])
+    check(collected.count == 1 && collected[0].hits.map(\.entryId) == ["x1", "x3", "x4"] && collected[0].hasMore,
+          "collect verifies, caps and drops other chats")
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    let locale = Locale(identifier: "en_US")
+    let now = Date(timeIntervalSince1970: 1_790_434_800) // Sat Sep 26 2026 15:00 UTC
+    func label(_ seconds: Double) -> String {
+        MessageSearch.dateLabel(Date(timeIntervalSince1970: seconds), now: now, calendar: calendar, locale: locale)
+            .replacingOccurrences(of: "\u{202F}", with: " ")
+    }
+    check(label(1_790_413_500) == "9:05 AM", "today: the time (\(label(1_790_413_500)))")
+    check(label(1_790_434_800 - 2 * 86400) == "Thursday", "this week: the weekday (\(label(1_790_434_800 - 2 * 86400)))")
+    check(label(1_790_434_800 - 7 * 86400) == "Sep 19", "a week ago: the date (\(label(1_790_434_800 - 7 * 86400)))")
+    check(label(1_772_632_800) == "Mar 4", "this year: month and day (\(label(1_772_632_800)))")
+    check(label(1_741_096_800) == "Mar 4, 2025", "older: with the year (\(label(1_741_096_800)))")
+
+    let matches = [
+        TranscriptSearch.Match(entryId: "u-1", section: .message(0), occurrence: 0),
+        TranscriptSearch.Match(entryId: "a-2", section: .message(1), occurrence: 0),
+        TranscriptSearch.Match(entryId: "a-3", section: .message(0), occurrence: 0),
+    ]
+    let rows = ["u-1": 0, "a-2": 1, "a-3": 2]
+    check(TranscriptSearch.reselect(nil, in: matches, rowIndex: rows, near: nil, preferred: matches[0]) == 0,
+          "the preferred match wins over the latest")
+    check(TranscriptSearch.reselect(matches[2], in: matches, rowIndex: rows, near: 2, preferred: matches[1]) == 1,
+          "the preferred match wins over the previous selection")
+    let missing = TranscriptSearch.Match(entryId: "gone", section: .message(0), occurrence: 0)
+    check(TranscriptSearch.reselect(nil, in: matches, rowIndex: rows, near: nil, preferred: missing) == 2
+          && TranscriptSearch.reselect(matches[0], in: matches, rowIndex: rows, near: 0, preferred: missing) == 0,
+          "a missing preferred match falls back to the usual rules")
+    check(TranscriptSearch.messageMatchCount("receipt", markdown: "receipt, [receipt](https://receipt.example) **receipt**") == 3
+          && TranscriptSearch.messageMatchCount("  ", markdown: "x") == 0, "messageMatchCount counts rendered occurrences")
+}
+
+func allTrue(_ values: Bool...) -> Bool { values.allSatisfy { $0 } }
+
+@MainActor
+func checkAsync(_ condition: () async -> Bool, _ label: String, line: UInt = #line) async {
+    let passed = await condition()
+    check(passed, label, line: line)
+}
+
+/// Runs `body` with the transcript cache and message index in a fresh scratch folder.
+@MainActor
+func withScratchCache(_ body: (URL) async -> Void) async {
+    let previous = ProcessInfo.processInfo.environment["PINCER_CACHE_DIR"]
+    let root = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-index-\(UUID().uuidString)")
+    setenv("PINCER_CACHE_DIR", root.path(percentEncoded: false), 1)
+    await body(root)
+    if let previous { setenv("PINCER_CACHE_DIR", previous, 1) } else { unsetenv("PINCER_CACHE_DIR") }
+    try? FileManager.default.removeItem(at: root)
+}
+
+func indexHits(_ gatewayId: UUID, _ query: String) async -> [MessageSearch.Hit] {
+    (try? await MessageIndex.shared(gatewayId: gatewayId).search(query)) ?? []
+}
+
+func indexResults(_ gatewayId: UUID, _ query: String, keys: Set<String>) async -> [MessageSearch.ChatGroup] {
+    MessageSearch.collect(await indexHits(gatewayId, query), query: query, allowed: keys)
+}
+
+/// Integers from one query against an index file, opened separately from `MessageIndex`.
+func sqliteInts(_ url: URL?, _ sql: String) -> [Int64] {
+    guard let url else { return [] }
+    var db: OpaquePointer?
+    guard sqlite3_open_v2(url.path(percentEncoded: false), &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db else { return [] }
+    defer { sqlite3_close_v2(db) }
+    var statement: OpaquePointer?
+    guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { return [] }
+    defer { sqlite3_finalize(statement) }
+    var values: [Int64] = []
+    while sqlite3_step(statement) == SQLITE_ROW {
+        for column in 0..<sqlite3_column_count(statement) { values.append(sqlite3_column_int64(statement, column)) }
+    }
+    return values
+}
+
+func sqliteExec(_ url: URL, _ sql: String) -> Bool {
+    var db: OpaquePointer?
+    guard sqlite3_open_v2(url.path(percentEncoded: false), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK, let db
+    else { return false }
+    defer { sqlite3_close_v2(db) }
+    return sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK
+}
+
+func fileExists(_ url: URL?) -> Bool {
+    url.map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
+}
+
+/// Writes a transcript cache file without going through `TranscriptCache.save` (so it isn't indexed).
+func writeCacheFile(_ snapshot: TranscriptCache.Snapshot, gatewayId: UUID, sessionKey: String) -> Bool {
+    guard let url = TranscriptCache.file(gatewayId: gatewayId, sessionKey: sessionKey),
+          (try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)) != nil,
+          let data = try? JSONEncoder().encode(snapshot)
+    else { return false }
+    return (try? data.write(to: url)) != nil
+}
+
+actor StatusLog {
+    private(set) var statuses: [MessageIndex.Status] = []
+    private(set) var times: [ContinuousClock.Instant] = []
+    func add(_ status: MessageIndex.Status) {
+        self.statuses.append(status)
+        self.times.append(.now)
+    }
+}
+
+/// The SQLite message index, each part in its own scratch cache.
+@MainActor
+func checkMessageIndex() async {
+    await checkMessageSearchSmoke()
+
+    await withScratchCache { _ in
+        let gatewayId = UUID()
+        let index = MessageIndex.shared(gatewayId: gatewayId)
+        await checkAsync({ await (index.status == .ready) }, "status is ready with a cache")
+        var items = [
+            messageItem("u1", .user, "Planning a café visit in Tokyo", at: 1000),
+            messageItem("a1", .assistant, "The Café is open. We go on a trip to Japan.", at: 2000),
+        ]
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "k")
+        let keys: Set<String> = ["k"]
+        await checkAsync({ await (indexResults(gatewayId, "tokyo", keys: keys).first?.hits.map(\.entryId) == ["u-u1"]) }, "saved text is found")
+        await checkAsync({ await (indexResults(gatewayId, "CAFE", keys: keys).first?.hits.map(\.entryId) == ["a-a1", "u-u1"]) },
+              "CAFE finds café and Café, newest first")
+        await checkAsync({ await (indexResults(gatewayId, "cafe", keys: keys).first?.hits.contains { $0.entryId == "a-a1" } == true) }, "cafe finds Café")
+        await checkAsync({ await (indexResults(gatewayId, "tok", keys: keys).first?.hits.map(\.entryId) == ["u-u1"]) }, "a word's start matches")
+        await checkAsync({ await (indexHits(gatewayId, "kyo").isEmpty) }, "a word's middle doesn't")
+        await checkAsync({ await (indexResults(gatewayId, "japan trip", keys: keys).isEmpty) }, "words out of order don't match a phrase")
+        await checkAsync({ await (indexResults(gatewayId, "trip to japan", keys: keys).first?.hits.map(\.entryId) == ["a-a1"]) }, "the phrase does")
+        await checkAsync({ await (indexHits(gatewayId, "a").isEmpty) }, "one letter searches nothing")
+        do {
+            let hostile = try await index.search(#"foo AND "bar" NEAR( -x* café)"#)
+            check(hostile.isEmpty, "FTS syntax in a query is harmless")
+        } catch {
+            check(false, "FTS syntax in a query throws \(error)")
+        }
+        await checkAsync({ await allTrue(indexHits(gatewayId, "tokyo").count == 1, fileExists(MessageIndex.url(gatewayId: gatewayId))) },
+              "index intact after a hostile query")
+
+        items.append(messageItem("u2", .user, "Appending a walrus note", at: 3000))
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "k")
+        await checkAsync({ await (indexHits(gatewayId, "walrus").map(\.entryId) == ["u-u2"]) }, "an appended message is found")
+        items[1] = messageItem("a1", .assistant, "Changed plans: Kyoto instead.", at: 2000)
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "k")
+        await checkAsync({ await allTrue(indexHits(gatewayId, "japan").isEmpty, indexHits(gatewayId, "kyoto").map(\.entryId) == ["a-a1"]) },
+              "a replaced message stops matching its old text")
+        let url = MessageIndex.url(gatewayId: gatewayId)
+        let rowsBefore = sqliteInts(url, "SELECT count(*), max(id), sum(id) FROM docs")
+        let infoBefore = await index.chatInfo(sessionKey: "k")
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "k")
+        let infoAfter = await index.chatInfo(sessionKey: "k")
+        check(rowsBefore.count == 3 && rowsBefore[0] == 3 && sqliteInts(url, "SELECT count(*), max(id), sum(id) FROM docs") == rowsBefore
+              && infoBefore?.digest == infoAfter?.digest && infoBefore?.itemCount == 3 && infoAfter?.lastItemId == "u2",
+              "saving an unchanged transcript rewrites no rows (\(rowsBefore))")
+        await checkAsync({ await allTrue(index.isIndexed(sessionKey: "k"), !(index.isIndexed(sessionKey: "other"))) }, "isIndexed")
+        let stale = TranscriptCache.Snapshot(items: [messageItem("s1", .user, "stale snapshot porcupine", at: 1)], complete: true)
+        await index.index(sessionKey: "k", snapshot: stale, fileMtime: .distantPast)
+        await checkAsync({ await allTrue(indexHits(gatewayId, "porcupine").isEmpty, indexHits(gatewayId, "walrus").count == 1) },
+              "an older snapshot than the one indexed is ignored")
+        check(sqliteInts(url, "SELECT count(*) FROM messages WHERE messages MATCH 'japan'") == [0]
+              && sqliteInts(url, "SELECT count(*) FROM messages WHERE messages MATCH 'kyoto'") == [1],
+              "the FTS table has no leftover terms for replaced text")
+        let integrity = sqliteExec(url!, "INSERT INTO messages(messages) VALUES('integrity-check')")
+        check(integrity, "FTS integrity-check passes after updates")
+
+        let other = UUID()
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("n1", .user, "Only narwhal here", at: 5)], complete: true),
+                                   gatewayId: other, sessionKey: "k")
+        await checkAsync({ await allTrue(indexHits(gatewayId, "narwhal").isEmpty, indexHits(other, "narwhal").count == 1, indexHits(other, "walrus").isEmpty) }, "gateways have separate indexes")
+        check(MessageIndex.url(gatewayId: gatewayId) != MessageIndex.url(gatewayId: other), "one index file per gateway")
+
+        TranscriptCache.removeAll(gatewayId: other)
+        await checkAsync({ await allTrue(!fileExists(MessageIndex.url(gatewayId: other)), indexHits(other, "narwhal").isEmpty) },
+              "removeAll deletes the index; searching after is empty")
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("n2", .user, "Narwhal returns", at: 6)], complete: true),
+                                   gatewayId: other, sessionKey: "k")
+        await checkAsync({ await allTrue(indexHits(other, "narwhal").map(\.entryId) == ["u-n2"], fileExists(MessageIndex.url(gatewayId: other))) },
+              "saving after removeAll rebuilds the index")
+        TranscriptCache.removeAll(gatewayId: other)
+
+        // Garbage and old-version files are replaced.
+        let garbage = UUID()
+        if let garbageURL = MessageIndex.url(gatewayId: garbage) {
+            try? FileManager.default.createDirectory(at: garbageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? Data(repeating: 0x42, count: 8192).write(to: garbageURL)
+        }
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("g1", .user, "Garbage replaced by gazelle", at: 7)], complete: true),
+                                   gatewayId: garbage, sessionKey: "k")
+        await checkAsync({ await (indexHits(garbage, "gazelle").count == 1) }, "a garbage index file is rebuilt")
+        let oldVersion = UUID()
+        if let oldURL = MessageIndex.url(gatewayId: oldVersion) {
+            try? FileManager.default.createDirectory(at: oldURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            _ = sqliteExec(oldURL, "CREATE TABLE docs (x); PRAGMA user_version = 1;")
+        }
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("o1", .user, "Old version ocelot", at: 8)], complete: true),
+                                   gatewayId: oldVersion, sessionKey: "k")
+        let version = sqliteInts(MessageIndex.url(gatewayId: oldVersion), "PRAGMA user_version").first ?? 0
+        await checkAsync({ await allTrue(indexHits(oldVersion, "ocelot").count == 1, version > 1) }, "an index with a lower user_version is rebuilt (\(version))")
+        // Corrupted while open: the failing search reports an error once, the index recovers from the transcripts.
+        let corrupt = UUID()
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("c1", .user, "Corrupt cheetah", at: 9)], complete: true),
+                                   gatewayId: corrupt, sessionKey: "k")
+        if let corruptURL = MessageIndex.url(gatewayId: corrupt) {
+            await MessageIndex.shared(gatewayId: corrupt).close()
+            try? Data(repeating: 0x42, count: 8192).write(to: corruptURL)
+            for suffix in ["-wal", "-shm"] { try? FileManager.default.removeItem(at: URL(filePath: corruptURL.path(percentEncoded: false) + suffix)) }
+        }
+        _ = try? await MessageIndex.shared(gatewayId: corrupt).search("cheetah")
+        await MessageIndex.shared(gatewayId: corrupt).reconcile(sessionKeys: ["k"])
+        await checkAsync({ await (indexHits(corrupt, "cheetah").count == 1) }, "a corrupted index is refilled by reconcile")
+
+        // Reconcile picks up transcripts cached while there was no index.
+        let fresh = UUID()
+        let written = writeCacheFile(TranscriptCache.Snapshot(items: [messageItem("r1", .user, "Reconciled raccoon", at: 10)], complete: true),
+                                     gatewayId: fresh, sessionKey: "r1")
+            && writeCacheFile(TranscriptCache.Snapshot(items: [messageItem("r2", .assistant, "Another raccoon", at: 11)], complete: true),
+                              gatewayId: fresh, sessionKey: "r2")
+        await checkAsync({ await allTrue(written, indexHits(fresh, "raccoon").isEmpty) }, "cache files written without indexing")
+        let log = StatusLog()
+        await MessageIndex.shared(gatewayId: fresh).reconcile(sessionKeys: ["r1", "r2", "missing", "r1"]) { await log.add($0) }
+        let statuses = await log.statuses
+        await checkAsync({ await (indexHits(fresh, "raccoon").map(\.entryId) == ["a-r2", "u-r1"]) }, "reconcile indexes cached transcripts")
+        check(statuses.first == .building(done: 0, total: 2) && statuses.last == .ready, "reconcile reports progress (\(statuses))")
+        let quiet = StatusLog()
+        let freshRows = sqliteInts(MessageIndex.url(gatewayId: fresh), "SELECT count(*), max(id) FROM docs")
+        await MessageIndex.shared(gatewayId: fresh).reconcile(sessionKeys: ["r1", "r2"]) { await quiet.add($0) }
+        await checkAsync({ await allTrue(quiet.statuses == [.ready], sqliteInts(MessageIndex.url(gatewayId: fresh), "SELECT count(*), max(id) FROM docs") == freshRows) },
+              "reconcile skips chats already indexed")
+
+        await checkMessageIndexCancellation(gatewayId: gatewayId)
+        await checkMessageIndexPerfSmoke()
+    }
+
+    await withScratchCache { root in
+        setenv("PINCER_CACHE_DIR", "off", 1)
+        let gatewayId = UUID()
+        let index = MessageIndex.shared(gatewayId: gatewayId)
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("x", .user, "Nowhere to go", at: 1)], complete: true),
+                                   gatewayId: gatewayId, sessionKey: "k")
+        let hits = try? await index.search("nowhere")
+        await index.reconcile(sessionKeys: ["k"])
+        await checkAsync({ await allTrue(index.status == .unavailable, hits == [], MessageIndex.url(gatewayId: gatewayId) == nil) },
+              "cache off: index unavailable, search empty")
+        let store = GatewayStore(profile: GatewayProfile(name: "Off", url: "ws://127.0.0.1:1", authMode: .none))
+        check(store.messageIndexProgress == .unavailable, "cache off: the gateway reports search unavailable")
+        let empty = (try? await store.searchMessages("nowhere")) ?? MessageSearch.Results(query: "x", failed: true)
+        check(empty.isEmpty && !empty.failed, "cache off: searchMessages is empty, not failed")
+        check(!FileManager.default.fileExists(atPath: root.path(percentEncoded: false)) && !fileExists(URL(filePath: "off")),
+              "cache off: no files written")
+    }
+}
+
+/// A newer search stops the one still running; its result is the one that counts.
+@MainActor
+func checkMessageIndexCancellation(gatewayId: UUID) async {
+    let index = MessageIndex.shared(gatewayId: gatewayId)
+    let many = (0..<3000).map { messageItem("c\($0)", $0.isMultiple(of: 2) ? .user : .assistant, "common words number \($0) and more common", at: Double(10_000 + $0)) }
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: many + [messageItem("uniq", .user, "the unique quokka", at: 99_999)], complete: true),
+                               gatewayId: gatewayId, sessionKey: "busy")
+    for round in 0..<5 {
+        let older = Task { @MainActor in
+            try await withTaskCancellationHandler {
+                try await index.search("common", candidateLimit: 1_000_000)
+            } onCancel: {
+                index.interrupt()
+            }
+        }
+        if round > 0 { try? await Task.sleep(for: .milliseconds(round)) }
+        older.cancel()
+        let latest = (try? await index.search("quokka")) ?? []
+        let outcome = await older.result
+        var olderOK = false
+        switch outcome {
+        case .success(let hits): olderOK = hits.count == 3000
+        case .failure(let error): olderOK = error is CancellationError
+        }
+        check(latest.map(\.entryId) == ["u-uniq"] && olderOK, "back-to-back searches: the latest wins (round \(round))")
+    }
+    // Cancelling one search mustn't stop another that wasn't cancelled (e.g. a second window's).
+    var bystanderOK = 0
+    for _ in 0..<5 {
+        let bystander = Task { @MainActor in try await index.search("common", candidateLimit: 1_000_000) }
+        try? await Task.sleep(for: .milliseconds(1))
+        let cancelled = Task { @MainActor in
+            try await withTaskCancellationHandler { try await index.search("quokka") } onCancel: { index.interrupt() }
+        }
+        cancelled.cancel()
+        _ = await cancelled.result
+        if case let .success(hits) = await bystander.result, hits.count == 3000 { bystanderOK += 1 }
+    }
+    check(bystanderOK == 5, "cancelling one search doesn't interrupt another (\(bystanderOK)/5 survived)")
+    await checkAsync({ await allTrue(indexHits(gatewayId, "quokka").count == 1, indexHits(gatewayId, "common").count == 2000, fileExists(MessageIndex.url(gatewayId: gatewayId))) }, "interrupting a search leaves the index intact")
+}
+
+// MARK: Synthetic transcripts (perf)
+
+enum Synthetic {
+    static let syllables = ["ka", "lo", "mi", "ren", "to", "sha", "vel", "dor", "qui", "nex", "bra", "fu", "zel", "po", "tri", "gan"]
+    static let words: [String] = (0..<4096).map { n in
+        syllables[n & 15] + syllables[(n >> 4) & 15] + syllables[(n >> 8) & 15]
+    }
+
+    /// About 400 characters per message. Every message has "the" and "and"; every 100th has "lantern glow",
+    /// every 150th "harbor light"; message 1000 + chat has "zephyr<chat>".
+    static func items(chat: Int, count: Int) -> [ChatItem] {
+        var state = UInt64(chat + 1) &* 0x9E37_79B9_7F4A_7C15
+        let start = 1_700_000_000.0 + Double(chat) * 7
+        return (0..<count).map { i in
+            var text = "the"
+            var n = 0
+            while text.utf8.count < 390 {
+                state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                text += " " + words[Int(state >> 52)]
+                n += 1
+                if n == 20 { text += " and" }
+            }
+            if i % 100 == 7 { text += " lantern glow" }
+            if i % 150 == 11 { text += " harbor light" }
+            if i == 1000 + chat { text += " zephyr\(chat)" }
+            text += "."
+            var item = ChatItem(id: "c\(chat)-\(i)", role: i.isMultiple(of: 2) ? .user : .assistant, blocks: [.text(text)],
+                                timestamp: Date(timeIntervalSince1970: start + Double(i) * 60))
+            item.transcriptId = item.id
+            return item
+        }
+    }
+}
+
+/// Resident size and physical footprint, bytes.
+func memoryUsage() -> (resident: UInt64, footprint: UInt64) {
+    var info = rusage_info_v4()
+    let result = withUnsafeMutablePointer(to: &info) { pointer in
+        pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(getpid(), RUSAGE_INFO_V4, $0) }
+    }
+    return result == 0 ? (info.ri_resident_size, info.ri_phys_footprint) : (0, 0)
+}
+
+/// Samples memory on a background thread until stopped; keeps the peak.
+final class MemorySampler: Sendable {
+    private let state = Mutex<(peakResident: UInt64, peakFootprint: UInt64, running: Bool)>((0, 0, true))
+
+    init() {
+        let thread = Thread { [self] in
+            while self.state.withLock({ $0.running }) {
+                let usage = memoryUsage()
+                self.state.withLock { $0.peakResident = max($0.peakResident, usage.resident); $0.peakFootprint = max($0.peakFootprint, usage.footprint) }
+                usleep(10000)
+            }
+        }
+        thread.start()
+    }
+
+    func stop() -> (resident: UInt64, footprint: UInt64) {
+        let usage = memoryUsage()
+        return self.state.withLock {
+            $0.running = false
+            return (max($0.peakResident, usage.resident), max($0.peakFootprint, usage.footprint))
+        }
+    }
+}
+
+func mb(_ bytes: Int64) -> String { String(format: "%.1f MB", Double(bytes) / 1_048_576) }
+
+func directorySize(_ url: URL, _ include: (String) -> Bool) -> Int64 {
+    let names = (try? FileManager.default.contentsOfDirectory(atPath: url.path(percentEncoded: false))) ?? []
+    return names.filter(include).reduce(0) { total, name in
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.appending(path: name).path(percentEncoded: false))
+        return total + ((attributes?[.size] as? NSNumber)?.int64Value ?? 0)
+    }
+}
+
+/// Always on: 2 chats × 5k messages build in ≤ 3 s; a selective query ≤ 100 ms.
+@MainActor
+func checkMessageIndexPerfSmoke() async {
+    let gatewayId = UUID()
+    let chats = (0..<2).map { Synthetic.items(chat: $0, count: 5000) }
+    let clock = ContinuousClock()
+    let build = await clock.measure {
+        for (chat, items) in chats.enumerated() {
+            await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "perf\(chat)")
+        }
+    }
+    check(build <= .seconds(3), "perf smoke: 2 × 5k messages saved and indexed in \(build.formatted(.units(allowed: [.milliseconds])))")
+    let keys: Set<String> = ["perf0", "perf1"]
+    var worst = Duration.zero
+    var groups: [MessageSearch.ChatGroup] = []
+    for _ in 0..<5 {
+        let elapsed = await clock.measure { groups = await indexResults(gatewayId, "lantern glow", keys: keys) }
+        worst = max(worst, elapsed)
+    }
+    check(groups.count == 2 && groups.allSatisfy { $0.hits.count == 3 && $0.hasMore } && groups.first?.sessionKey == "perf1",
+          "perf smoke: selective query results")
+    check(worst <= .milliseconds(100), "perf smoke: selective query, slowest of 5: \(worst.formatted(.units(allowed: [.milliseconds])))")
+    // Cancelling one search mustn't stop another that wasn't cancelled (e.g. a second window's).
+    let index = MessageIndex.shared(gatewayId: gatewayId)
+    var bystanderOK = 0
+    for delay in [0, 250, 500, 1000, 2000] {
+        let bystander = Task { @MainActor in try await index.search("the", candidateLimit: 1_000_000) }
+        if delay == 0 { await Task.yield() } else { try? await Task.sleep(for: .microseconds(delay)) }
+        let cancelled = Task { @MainActor in
+            try await withTaskCancellationHandler { try await index.search("lantern") } onCancel: { index.interrupt() }
+        }
+        cancelled.cancel()
+        _ = await cancelled.result
+        if case let .success(hits) = await bystander.result, hits.count == 10_000 { bystanderOK += 1 }
+    }
+    check(bystanderOK == 5, "cancelling one search doesn't interrupt another, larger index (\(bystanderOK)/5 survived)")
+    var appended = chats[0]
+    appended.append(messageItem("new", .user, "freshly appended pelican", at: 1_800_000_000))
+    let incremental = await clock.measure {
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: appended, complete: true), gatewayId: gatewayId, sessionKey: "perf0")
+    }
+    await checkAsync({ await allTrue(indexHits(gatewayId, "pelican").count == 1, incremental <= .milliseconds(1000)) },
+          "perf smoke: append to a 5k chat saved and indexed in \(incremental.formatted(.units(allowed: [.milliseconds])))")
+    TranscriptCache.removeAll(gatewayId: gatewayId)
+}
+
+/// `--perf`: 20 chats × 20k messages against the §4 targets.
+@MainActor
+func runMessageIndexPerf() async {
+    await withScratchCache { _ in
+        let gatewayId = UUID()
+        let chatCount = 20
+        let perChat = 20_000
+        let keys = (0..<chatCount).map { "perf:\($0)" }
+        let clock = ContinuousClock()
+        let generation = clock.measure {
+            for chat in 0..<chatCount {
+                _ = writeCacheFile(TranscriptCache.Snapshot(items: Synthetic.items(chat: chat, count: perChat), complete: true),
+                                   gatewayId: gatewayId, sessionKey: keys[chat])
+            }
+        }
+        print("  · wrote \(chatCount) × \(perChat) synthetic transcripts in \(generation.formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 1))))")
+        let directory = TranscriptCache.directory(gatewayId: gatewayId)!
+        let jsonSize = directorySize(directory) { $0.hasSuffix(".json") }
+
+        let index = MessageIndex.shared(gatewayId: gatewayId)
+        let baseline = memoryUsage()
+        let sampler = MemorySampler()
+        let log = StatusLog()
+        let start = clock.now
+        await index.reconcile(sessionKeys: keys) { await log.add($0) }
+        let total = clock.now - start
+        let peak = sampler.stop()
+        let stamps = await log.times
+        let perChatTimes = zip(stamps.dropFirst(), stamps).map { $0 - $1 }
+        let slowest = perChatTimes.max() ?? .zero
+        await checkAsync({ await allTrue(log.statuses.count == chatCount + 1, (log.statuses).last == .ready) }, "perf: reconcile built every chat")
+        let buildGrowth = Int64(peak.footprint) - Int64(baseline.footprint)
+        print("  · build: \(total.formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 2)))) total, slowest chat \(slowest.formatted(.units(allowed: [.milliseconds])))")
+        print("  · build memory: footprint +\(mb(buildGrowth)) peak, resident +\(mb(Int64(peak.resident) - Int64(baseline.resident))) peak")
+        check(total <= .seconds(20), "perf: full build ≤ 20 s")
+        check(slowest <= .milliseconds(1500), "perf: ≤ 1.5 s per chat")
+        check(buildGrowth <= 100 * 1_048_576, "perf: build peak ≤ 100 MB above baseline (footprint)")
+
+        let indexSize = directorySize(directory) { $0.hasPrefix("search-index.sqlite") }
+        let walSize = directorySize(directory) { $0 == "search-index.sqlite-wal" }
+        let pages = sqliteInts(MessageIndex.url(gatewayId: gatewayId), "PRAGMA page_count")
+        let freePages = sqliteInts(MessageIndex.url(gatewayId: gatewayId), "PRAGMA freelist_count")
+        print("  · index files: main \(mb(indexSize - walSize)), WAL \(mb(walSize)); pages \(pages.first ?? 0), free \(freePages.first ?? 0)")
+        print("  · index \(mb(indexSize)) vs transcript JSON \(mb(jsonSize)) (\(String(format: "%.0f", Double(indexSize) / Double(jsonSize) * 100))%)")
+        check(indexSize <= jsonSize, "perf: index size ≤ transcript JSON size")
+
+        var appended = Synthetic.items(chat: 0, count: perChat)
+        appended.append(messageItem("perf-new", .user, "incremental ibex arrives", at: 1_900_000_000))
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: appended, complete: true), gatewayId: gatewayId, sessionKey: keys[0])
+        appended.append(messageItem("perf-new2", .user, "second ibex", at: 1_900_000_100))
+        let snapshot = TranscriptCache.Snapshot(items: appended, complete: true)
+        let incremental = await clock.measure { await index.index(sessionKey: keys[0], snapshot: snapshot, fileMtime: Date()) }
+        let unchanged = await clock.measure { await index.index(sessionKey: keys[0], snapshot: snapshot, fileMtime: Date()) }
+        print("  · incremental update of a 20k chat: \(incremental.formatted(.units(allowed: [.milliseconds]))), unchanged: \(unchanged.formatted(.units(allowed: [.milliseconds])))")
+        await checkAsync({ await allTrue(indexHits(gatewayId, "ibex").count == 2, incremental <= .milliseconds(300)) }, "perf: incremental update ≤ 300 ms")
+
+        let allowed = Set(keys)
+        let queries: [(kind: String, text: String)] =
+            (0..<8).map { ("rare", "zephyr\($0 * 2)") }
+            + [("selective", "lantern"), ("selective", "lantern glow"), ("selective", "harbor light"), ("selective", "harbor")]
+            + [("common", "the"), ("common", "and"), ("common", "The"), ("common", "AND")]
+            + [("prefix", "ka"), ("prefix", "lo"), ("prefix", "mi"), ("prefix", "to")]
+        let searchBaseline = memoryUsage()
+        let searchSampler = MemorySampler()
+        var byKind: [String: [Duration]] = [:]
+        var all: [Duration] = []
+        var ok = true
+        for query in queries {
+            var groups: [MessageSearch.ChatGroup] = []
+            let elapsed = await clock.measure {
+                groups = MessageSearch.collect((try? await index.search(query.text)) ?? [], query: query.text, allowed: allowed)
+            }
+            byKind[query.kind, default: []].append(elapsed)
+            all.append(elapsed)
+            if query.kind == "rare", groups.count != 1 || groups[0].hits.count != 1 { ok = false; print("    \(query.text): \(groups.count) chats") }
+            if query.kind == "selective", groups.count != 20 { ok = false; print("    \(query.text): \(groups.count) chats") }
+        }
+        let searchPeak = searchSampler.stop()
+        func p95(_ values: [Duration]) -> Duration {
+            let sorted = values.sorted()
+            return sorted[max(0, Int((Double(sorted.count) * 0.95).rounded(.up)) - 1)]
+        }
+        func ms(_ duration: Duration) -> String { duration.formatted(.units(allowed: [.milliseconds])) }
+        for kind in ["rare", "selective", "common", "prefix"] {
+            let values = byKind[kind] ?? []
+            print("  · \(kind): p95 \(ms(p95(values))), max \(ms(values.max() ?? .zero)) over \(values.count)")
+        }
+        print("  · all 20 queries: p95 \(ms(p95(all)))")
+        let searchGrowth = Int64(searchPeak.footprint) - Int64(searchBaseline.footprint)
+        print("  · search memory: footprint +\(mb(searchGrowth)) peak")
+        check(ok, "perf: queries find what was planted")
+        check(p95((byKind["rare"] ?? []) + (byKind["selective"] ?? [])) <= .milliseconds(100), "perf: selective query p95 ≤ 100 ms")
+        check((byKind["common"] ?? []).max()! <= .milliseconds(500) && (byKind["prefix"] ?? []).max()! <= .milliseconds(500),
+              "perf: common and 2-letter queries ≤ 500 ms")
+        check(searchGrowth <= 30 * 1_048_576, "perf: searching grows memory ≤ 30 MB")
+
+        // A huge search is cancellable.
+        let uncancelled = await clock.measure { _ = try? await index.search("the", candidateLimit: 10_000_000) }
+        let big = Task { @MainActor in
+            try await withTaskCancellationHandler {
+                try await index.search("the", candidateLimit: 10_000_000)
+            } onCancel: { index.interrupt() }
+        }
+        let cancelStart = clock.now
+        try? await Task.sleep(for: .milliseconds(20))
+        big.cancel()
+        let bigOutcome = await big.result
+        let cancelled = clock.now - cancelStart
+        var wasCancelled = false
+        if case let .failure(error) = bigOutcome { wasCancelled = error is CancellationError }
+        print("  · unlimited \"the\": \(ms(uncancelled)); cancelled after 20 ms: stopped at \(ms(cancelled)) (cancelled: \(wasCancelled))")
+        check(cancelled <= .milliseconds(200) || !wasCancelled, "perf: a huge search stops soon after cancelling")
+        TranscriptCache.removeAll(gatewayId: gatewayId)
+    }
+}
+
+/// Message results as palette rows.
+@MainActor
+func checkPaletteMessages() {
+    let gateway = GatewayStore(profile: GatewayProfile(name: "Palette", url: "ws://127.0.0.1:1", authMode: .none))
+    let prefix = gateway.id.uuidString
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    let now = Date(timeIntervalSince1970: 1_790_434_800)
+    let userHit = MessageSearch.Hit(sessionKey: "trip", entryId: "u-1", section: 0, role: .user, via: "Discord",
+                                    timestamp: Date(timeIntervalSince1970: 1_790_413_500), text: "ramen tonight")
+    let agentHit = MessageSearch.Hit(sessionKey: "trip", entryId: "a-2", section: 1, role: .assistant,
+                                     timestamp: Date(timeIntervalSince1970: 1_741_096_800), text: "more ramen")
+    let oldHit = MessageSearch.Hit(sessionKey: "old", entryId: "u-9", section: 0, role: .user, timestamp: nil, text: "ramen")
+    let snippet = MessageSearch.Snippet(text: "ramen tonight", highlights: [NSRange(location: 0, length: 5)])
+    let results = MessageSearch.Results(query: "ramen", chats: [
+        MessageSearch.Chat(sessionKey: "trip", title: "Japan trip", messages: [
+            MessageSearch.Message(hit: userHit, sender: "via Discord", snippet: snippet),
+            MessageSearch.Message(hit: agentHit, sender: "Main", snippet: snippet),
+        ], hasMore: true),
+        MessageSearch.Chat(sessionKey: "old", title: "Old", isArchived: true,
+                           messages: [MessageSearch.Message(hit: oldHit, sender: "You", snippet: snippet)]),
+    ])
+    let items = CommandPalette.messageItems(results, gateway: gateway, now: now, calendar: calendar)
+    let trip = Notifier.Target(gatewayId: gateway.id, sessionKey: "trip")
+    check(items.map(\.id) == [
+        "messages:chat:\(prefix):trip", "message:\(prefix):trip:u-1:0", "message:\(prefix):trip:a-2:1", "messages:more:\(prefix):trip",
+        "messages:chat:\(prefix):old", "message:\(prefix):old:u-9:0",
+    ] && Set(items.map(\.id)).count == items.count, "rows: header, messages, More; unique ids")
+    check(items.allSatisfy { $0.section == .messages }, "all in the Messages section")
+    check(items[0].isHeader && !items[0].isSelectable && items[0].title == "Japan trip" && items[4].title == "Old · Archived"
+          && items.filter(\.isHeader).count == 2, "headers: chat title, archived marked, not selectable")
+    check(items[1].title == "via Discord" && items[2].title == "Main" && items[1].snippet == snippet && items[1].isSelectable
+          && items[1].date == userHit.timestamp && items[5].date == nil && items[5].shortcut == nil, "rows: sender, snippet, date")
+    let today = items[1].shortcut?.replacingOccurrences(of: "\u{202F}", with: " ")
+    check(today == MessageSearch.dateLabel(userHit.timestamp!, now: now, calendar: calendar).replacingOccurrences(of: "\u{202F}", with: " ")
+          && items[2].shortcut == MessageSearch.dateLabel(agentHit.timestamp!, now: now, calendar: calendar), "rows: date label (\(today ?? "nil"))")
+    check(items[1].action == .openMessage(trip, query: "ramen", match: TranscriptSearch.Match(entryId: "u-1", section: .message(0), occurrence: 0))
+          && items[2].action == .openMessage(trip, query: "ramen", match: TranscriptSearch.Match(entryId: "a-2", section: .message(1), occurrence: 0)),
+          "a row opens its chat at its match")
+    check(items[3].action == .findInChat(trip, query: "ramen") && items[3].title.contains("Japan trip") && items[3].isSelectable,
+          "More opens Find in the chat")
+    check(CommandPalette.messageItems(MessageSearch.Results(query: "x"), gateway: gateway).isEmpty, "no results, no rows")
+
+    check(CommandPalette.searchMessagesItem(query: "a") == nil && CommandPalette.searchMessagesItem(query: " a  ") == nil
+          && CommandPalette.searchMessagesItem(query: "") == nil, "Search Messages needs 2 characters")
+    let search = CommandPalette.searchMessagesItem(query: "  ab ")
+    check(search?.action == .searchMessages("ab") && search?.title.contains("“ab”") == true, "Search Messages for “q”")
+    func row(_ id: String, _ section: PaletteItem.Section) -> PaletteItem {
+        PaletteItem(id: id, title: id, symbol: "x", section: section, action: .command(id))
+    }
+    let ranked = [row("chat1", .chats), row("chat2", .chats), row("new", .newChat), row("cmd", .commands)]
+    check(CommandPalette.addingSearchMessages(to: ranked, query: "ab", gatewaySelected: true).map(\.id)
+          == ["chat1", "chat2", "command:searchMessages", "new", "cmd"], "Search Messages right after the chats")
+    check(CommandPalette.addingSearchMessages(to: [row("cmd", .commands)], query: "ab", gatewaySelected: true).map(\.id)
+          == ["command:searchMessages", "cmd"], "first when no chat matches")
+    check(CommandPalette.addingSearchMessages(to: [], query: "ab", gatewaySelected: true).map(\.id) == ["command:searchMessages"],
+          "alone when nothing matches")
+    check(CommandPalette.addingSearchMessages(to: ranked, query: "ab", gatewaySelected: false) == ranked
+          && CommandPalette.addingSearchMessages(to: ranked, query: "a", gatewaySelected: true) == ranked,
+          "not without a gateway or with a 1-character query")
+}
+
+/// Polls message search until `condition` holds.
+@MainActor
+func waitForSearch(_ gateway: GatewayStore, _ query: String, timeout: Double = 5,
+                   _ condition: (MessageSearch.Results) -> Bool) async -> MessageSearch.Results?
+{
+    let deadline = Date().addingTimeInterval(timeout)
+    repeat {
+        if let results = try? await gateway.searchMessages(query), condition(results) { return results }
+        try? await Task.sleep(for: .milliseconds(100))
+    } while Date() < deadline
+    print("    … timed out waiting for message search “\(query)”")
+    return nil
+}
+
+/// Demo: older history found in its chat, only listed chats, back-to-back searches, and new messages.
+@MainActor
+func checkDemoMessageSearch(_ gateway: GatewayStore, trip: ChatStore) async {
+    let tripKey = "agent:main:dashboard:trip"
+    let findMatches = TranscriptSearch.matches("idea #12", in: trip.entries)
+    let olderIndex = findMatches.first.flatMap { match in trip.entries.firstIndex { $0.id == match.entryId } } ?? .max
+    check(findMatches.count == 1 && olderIndex < trip.entries.count - 120,
+          "idea #12 is in older history (row \(olderIndex) of \(trip.entries.count))")
+    let dayResults = await waitForSearch(gateway, "idea #12") { $0.chats.contains { $0.sessionKey == tripKey } }
+    let dayChat = dayResults?.chats.first { $0.sessionKey == tripKey }
+    let dayMessage = dayChat?.messages.first
+    check(dayChat?.title == "Japan trip" && dayChat?.messages.count == 1 && dayMessage?.hit.entryId == findMatches.first?.entryId
+          && dayMessage?.sender != "You", "older history is found in its chat (\(dayChat?.messages.map(\.hit.entryId) ?? []))")
+    check(dayMessage.map { findMatches.contains($0.match) } == true, "the result is a match Find in Chat selects")
+    check(dayMessage?.snippet.highlights.first.map { (dayMessage!.snippet.text as NSString).substring(with: $0) } == "Idea #12",
+          "the snippet highlights the match")
+    let ramen = await waitForSearch(gateway, "ramen") { $0.chats.first?.sessionKey == tripKey }
+    check(ramen?.chats.first?.messages.count == 3 && ramen?.chats.first?.hasMore == true, "common word: newest 3 and More")
+
+    let papers = await waitForSearch(gateway, "consistency models", timeout: 15) {
+        $0.chats.contains { $0.sessionKey == "agent:research:dashboard:papers" }
+    }
+    check(papers != nil, "a chat never opened is found once prefetched")
+    let subagent = (try? await gateway.searchMessages("retrieval-augmented")) ?? MessageSearch.Results(query: "")
+    check(!subagent.chats.contains { $0.sessionKey.contains(":subagent:") }, "subagent runs never appear")
+
+    let stale = Task { @MainActor in try await gateway.searchMessages("ramen") }
+    stale.cancel()
+    let latest = try? await gateway.searchMessages("consistency models")
+    var staleCancelled = false
+    if case let .failure(error) = await stale.result { staleCancelled = error is CancellationError }
+    check(staleCancelled && latest?.chats.map(\.sessionKey) == ["agent:research:dashboard:papers"],
+          "back-to-back searches: the replaced one is cancelled, the latest answers")
+    await checkAsync({ await ((try? gateway.searchMessages("x"))?.isEmpty == true) }, "a 1-character search is empty")
+}
+
+/// Demo: the seeded search terms suggested in the docs hit the chats they're written into.
+@MainActor
+func checkDemoSeededSearchTerms(_ gateway: GatewayStore, trip: ChatStore) async {
+    let tripKey = "agent:main:dashboard:trip", mainKey = "agent:main:main", homeLab = "agent:main:discord:channel:123"
+    let forge = "agent:coder:main", scout = "agent:research:main"
+    // Every chat is prefetched in the background; wait until the last of them is searchable.
+    let backup = await waitForSearch(gateway, "backup", timeout: 20) { $0.chats.count >= 4 }
+    let newestHits = backup?.chats.map { $0.messages.compactMap(\.hit.timestamp).max() ?? .distantPast } ?? []
+    check(backup.map { Set($0.chats.map(\.sessionKey)) } == [mainKey, homeLab, forge, tripKey]
+          && newestHits == newestHits.sorted(by: >),
+          "“backup” is found in four chats, newest first (\(backup?.chats.map(\.title) ?? []))")
+    check(backup?.chats.first { $0.sessionKey == homeLab }?.messages.contains { $0.sender == "via Discord" } == true,
+          "a bridged message names its channel as the sender")
+
+    let ghibli = await waitForSearch(gateway, "ghibli") { !$0.isEmpty }
+    let ghibliIds = ghibli?.chats.first?.messages.map(\.hit.entryId) ?? []
+    let firstPage = Set(trip.entries.suffix(120).map(\.id))
+    check(ghibli?.chats.map(\.sessionKey) == [tripKey] && ghibliIds.count == 3 && ghibli?.chats.first?.hasMore == true
+          && ghibliIds.allSatisfy { !firstPage.contains($0) },
+          "“ghibli” is only in the trip's older history (\(ghibliIds))")
+    check(ghibli?.chats.first?.messages.first.map { message in
+        message.snippet.highlights.map { (message.snippet.text as NSString).substring(with: $0) } == ["Ghibli"]
+    } == true, "the Ghibli snippet highlights the word")
+    let onsen = try? await gateway.searchMessages("onsen")
+    check(onsen?.chats.map(\.sessionKey) == [tripKey], "“onsen” is found in the trip")
+
+    for query in ["café", "cafe", "CAFE"] {
+        let results = await waitForSearch(gateway, query) { $0.chats.count >= 2 }
+        check(results.map { Set($0.chats.map(\.sessionKey)) } == [mainKey, tripKey],
+              "“\(query)” matches Café in Main and the trip (\(results?.chats.map(\.title) ?? []))")
+    }
+    let lumiere = try? await gateway.searchMessages("cafe lumiere")
+    let lumiereSnippet = lumiere?.chats.first?.messages.first?.snippet
+    check(lumiere?.chats.map(\.sessionKey) == [mainKey] && lumiere?.chats.first?.messages.count == 3
+          && lumiereSnippet.map { snippet in snippet.highlights.map { (snippet.text as NSString).substring(with: $0) } == ["Café Lumière"] } == true,
+          "an accented phrase is found without accents and highlighted as written")
+    let tokyo = try? await gateway.searchMessages("tokyo")
+    check(tokyo.map { Set($0.chats.map(\.sessionKey)).isSuperset(of: [mainKey, tripKey, scout]) } == true,
+          "“tokyo” spans Main, the trip and Scout (\(tokyo?.chats.map(\.title) ?? []))")
+    let todai = try? await gateway.searchMessages("todai")
+    check(todai?.chats.map(\.sessionKey) == [tripKey], "a macron is folded (todai finds Tōdai-ji)")
+    let passport = try? await gateway.searchMessages("passport")
+    check(passport?.chats.map(\.sessionKey) == [mainKey] && passport?.chats.first?.messages.count == 2,
+          "“passport” finds the reminder in Main")
+    let dated = backup?.chats.flatMap(\.messages).compactMap(\.hit.timestamp) ?? []
+    check(!dated.isEmpty && dated.allSatisfy { $0 < Date().addingTimeInterval(-3 * 86400) },
+          "seeded results carry their past dates")
+}
+
+/// Demo with the transcript cache off: the index lives in memory, so search still works.
+@MainActor
+func checkDemoSearchWithoutCache() async {
+    let previous = ProcessInfo.processInfo.environment["PINCER_CACHE_DIR"]
+    setenv("PINCER_CACHE_DIR", "off", 1)
+    defer {
+        if let previous { setenv("PINCER_CACHE_DIR", previous, 1) } else { unsetenv("PINCER_CACHE_DIR") }
+    }
+    let gateway = GatewayStore(profile: .demo())
+    defer {
+        gateway.stop()
+        TranscriptCache.removeAll(gatewayId: gateway.id)
+    }
+    check(gateway.messageIndexProgress == .ready && MessageIndex.location(gatewayId: gateway.id) == .memory,
+          "cache off: the demo keeps its index in memory")
+    gateway.start()
+    gateway.reconnectIfNeeded()
+    let connected = await waitFor("demo connection (cache off)") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    check(connected, "cache off: demo connected")
+    guard connected else { return }
+    let backup = await waitForSearch(gateway, "backup", timeout: 20) { $0.chats.count >= 4 }
+    check(backup?.chats.count == 4, "cache off: prefetched chats are searchable (\(backup?.chats.map(\.title) ?? []))")
+    let ghibli = await waitForSearch(gateway, "ghibli") { !$0.isEmpty }
+    check(ghibli?.chats.first?.messages.count == 3, "cache off: older history is searchable")
+    let chat = gateway.chat(for: "agent:research:main")
+    await chat.load()
+    await checkDemoSentMessageSearch(gateway, chat)
+    check(gateway.messageIndexProgress == .ready, "cache off: index ready (\(gateway.messageIndexProgress))")
+
+    let other = GatewayStore(profile: GatewayProfile(name: "Plain", url: "ws://127.0.0.1:9", authMode: .none))
+    check(other.messageIndexProgress == .unavailable && MessageIndex.location(gatewayId: other.id) == nil,
+          "cache off: other gateways still have no search")
+}
+
+/// Demo: a message sent now is searchable within 3 s.
+@MainActor
+func checkDemoSentMessageSearch(_ gateway: GatewayStore, _ chat: ChatStore) async {
+    let token = "qz" + String(UUID().uuidString.lowercased().filter(\.isLetter).prefix(8))
+    await chat.send("remember \(token) please")
+    let sent = Date()
+    let found = await waitForSearch(gateway, token, timeout: 3) { !$0.isEmpty }
+    let elapsed = Date().timeIntervalSince(sent)
+    check(found?.chats.first?.sessionKey == chat.sessionKey && found?.chats.first?.messages.first?.sender == "You",
+          "a sent message is searchable in \(String(format: "%.1f", elapsed)) s")
+    _ = await waitFor("reply after search check", timeout: 20) { !chat.isRunning }
+}
+
+/// Live: a filled chat's older history, and a chat only the background prefetch cached, are searchable.
+@MainActor
+func checkLiveMessageSearch(_ gateway: GatewayStore) async {
+    let tripKey = "agent:main:dashboard:trip"
+    let day = await waitForSearch(gateway, "day 7?", timeout: 10) { $0.chats.contains { $0.sessionKey == tripKey } }
+    let message = day?.chats.first { $0.sessionKey == tripKey }?.messages.first
+    check(message?.snippet.text == "Idea for day 7?" && message?.sender == "You", "live: older history of a filled chat is searchable")
+    let prefetched = await waitForSearch(gateway, "diffusion papers", timeout: 20) { !$0.isEmpty }
+    check(prefetched?.chats.allSatisfy { !$0.sessionKey.contains(":subagent:") } == true,
+          "live: a chat cached by the background prefetch is searchable (\(prefetched?.chats.map(\.sessionKey) ?? []))")
+    check(gateway.messageIndexProgress == .ready, "live: index ready after reconcile (\(gateway.messageIndexProgress))")
+}
+
+/// A quick end-to-end pass over the message index: save a transcript, search it, jump data.
+@MainActor
+func checkMessageSearchSmoke() async {
+    let previous = ProcessInfo.processInfo.environment["PINCER_CACHE_DIR"]
+    let root = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-index-\(UUID().uuidString)")
+    setenv("PINCER_CACHE_DIR", root.path(percentEncoded: false), 1)
+    defer {
+        if let previous { setenv("PINCER_CACHE_DIR", previous, 1) } else { unsetenv("PINCER_CACHE_DIR") }
+        try? FileManager.default.removeItem(at: root)
+    }
+    let gatewayId = UUID()
+    let items = [
+        ChatItem(json(#"{"role":"user","content":"Planning the **Japan** trip to Tōkyō","__openclaw":{"id":"u1"}}"#), fallbackIndex: 0)!,
+        ChatItem(json(#"{"role":"assistant","content":[{"type":"thinking","thinking":"secret zebra"},{"type":"text","text":"Try the café in [Kyoto](https://zebra.example)"}],"__openclaw":{"id":"a1"}}"#), fallbackIndex: 1)!,
+    ]
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "chat-1")
+    let index = MessageIndex.shared(gatewayId: gatewayId)
+    let hits = (try? await index.search("tokyo")) ?? []
+    check(hits.count == 1 && hits.first?.entryId == "u-u1", "saved transcript is searchable (accents folded)")
+    let cafe = (try? await index.search("CAFE")) ?? []
+    check(cafe.count == 1 && cafe.first?.entryId == "a-a1", "case and accents are ignored")
+    let zebra = MessageSearch.collect((try? await index.search("zebra")) ?? [], query: "zebra", allowed: ["chat-1"])
+    check(zebra.isEmpty, "thinking and link targets don't match")
+    let groups = MessageSearch.collect((try? await index.search("kyoto")) ?? [], query: "kyoto", allowed: ["chat-1"])
+    check(groups.first?.hits.first?.match == TranscriptSearch.Match(entryId: "a-a1", section: .message(0), occurrence: 0),
+          "a verified hit is the match Find reports")
+    check(MessageIndex.url(gatewayId: gatewayId).map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } == true,
+          "index file sits next to the transcripts")
+    TranscriptCache.removeAll(gatewayId: gatewayId)
+    check(MessageIndex.url(gatewayId: gatewayId).map { !FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } == true,
+          "removing the gateway deletes its index")
+    let removed = (try? await MessageIndex.shared(gatewayId: gatewayId).search("tokyo")) ?? []
+    check(removed.isEmpty, "search after removal is empty")
+}
+
 @MainActor
 func checkDrafts() async {
     let profile = GatewayProfile(name: "Drafts", url: "ws://127.0.0.1:1", authMode: .none)
@@ -898,8 +2077,17 @@ func checkDrafts() async {
           "switching chats keeps each chat's draft")
     check(first.chat(for: "agent:main:beta").draft.text == "/model", "drafts are per chat")
 
-    let saved = await waitFor("debounced draft save", timeout: 5) { folders().count == 2 }
+    // Each folder is created before its draft.json, so wait for the manifests, not the folders.
+    func manifests() -> Int {
+        folders().filter { name in
+            FileManager.default.fileExists(atPath: gatewayFolder.appending(path: name).appending(path: "draft.json").path(percentEncoded: false))
+        }.count
+    }
+    let saved = await waitFor("debounced draft save", timeout: 5) { manifests() == 2 }
     check(saved, "drafts are saved without an explicit flush")
+    // Let any save still queued behind the first one land before "relaunching".
+    await alpha.flushDraft()
+    await beta.flushDraft()
 
     // Relaunch: a fresh store for the same Gateway.
     let second = GatewayStore(profile: profile)
@@ -989,8 +2177,151 @@ do {
 
 // MARK: Live
 
+print("Quick Capture")
+do {
+    let standard = HotKeyShortcut.default
+    check(standard.keyCode == 49 && standard.modifiers == [.control, .shift] && standard.carbonModifiers == 0x1200
+          && standard.displayString == "⌃⇧Space", "default shortcut is ⌃⇧Space (\(standard.displayString))")
+    let all = HotKeyShortcut(keyCode: 40, modifiers: [.command, .option, .shift, .control])
+    check(all.displayString == "⌃⌥⇧⌘K", "modifiers show in Apple order (\(all.displayString))")
+    check(HotKeyShortcut(storageValue: all.storageValue) == all && HotKeyShortcut(storageValue: "garbage") == nil
+          && HotKeyShortcut(storageValue: "") == nil, "shortcut storage round-trips (\(all.storageValue))")
+    check(HotKeyShortcut(keyCode: 40, modifiers: []).validationError != nil
+          && HotKeyShortcut(keyCode: 40, modifiers: [.shift]).validationError != nil
+          && HotKeyShortcut(keyCode: 96, modifiers: []).validationError == nil
+          && HotKeyShortcut(keyCode: 40, modifiers: [.control, .option]).validationError == nil
+          && HotKeyShortcut(keyCode: 49, modifiers: [.command]).validationError != nil,
+          "shortcut validation")
+    let (defaults, suite) = scratchDefaults()
+    let settings = QuickCaptureSettings(defaults: defaults)
+    check(settings.isEnabled && settings.shortcut == .default, "Quick Capture starts on with the default")
+    settings.shortcut = all
+    settings.isEnabled = false
+    check(settings.activeShortcut == nil && settings.shortcut == all, "turning it off keeps the combo")
+    settings.reset()
+    check(settings.isEnabled && settings.shortcut == .default, "reset restores the default")
+    let target = QuickCaptureTarget(gatewayId: UUID(), target: .newChat(agentId: "research"))
+    settings.lastTarget = target
+    check(settings.lastTarget == target && QuickCaptureTarget(storageValue: "nope|chat:x") == nil,
+          "last target storage round-trips")
+
+    // Key names, Carbon and NSEvent conversions.
+    func named(_ keyCode: UInt32) -> String { HotKeyShortcut.keyName(for: keyCode) }
+    check(named(36) == "↩" && named(48) == "⇥" && named(123) == "←" && named(124) == "→" && named(125) == "↓"
+          && named(126) == "↑" && named(96) == "F5" && named(111) == "F12" && named(40) == "K",
+          "Return, Tab, arrows and F-keys have readable names")
+    check(HotKeyShortcut(keyCode: 49, carbonModifiers: 0x1200) == .default
+          && HotKeyShortcut(keyCode: 40, carbonModifiers: 0x100 | 0x200 | 0x800 | 0x1000) == all
+          && all.carbonModifiers == 0x1B00, "Carbon modifiers round-trip")
+    check(HotKeyShortcut(keyCode: 55, carbonModifiers: 0x100) == nil && HotKeyShortcut(keyCode: 56, eventModifierFlags: 1 << 17) == nil,
+          "a modifier key on its own isn't a shortcut")
+    check(HotKeyShortcut(keyCode: 49, eventModifierFlags: (1 << 17) | (1 << 18) | (1 << 16)) == .default,
+          "NSEvent flags map to modifiers, ignoring caps lock")
+    check(HotKeyShortcut(storageValue: "49:") == HotKeyShortcut(keyCode: 49, modifiers: [])
+          && HotKeyShortcut(storageValue: "49:control,hyper") == nil && HotKeyShortcut(storageValue: "x:control") == nil
+          && HotKeyShortcut(storageValue: "55:command") == nil && HotKeyShortcut(storageValue: HotKeyShortcut.default.storageValue) == .default,
+          "shortcut storage rejects unknown modifiers and bad key codes")
+    check(HotKeyShortcut(keyCode: 49, modifiers: [.control, .option]).validationError != nil
+          && HotKeyShortcut(keyCode: 96, modifiers: [.shift]).validationError == nil
+          && HotKeyShortcut(keyCode: 45, modifiers: [.control, .option, .command]).validationError == nil
+          && HotKeyShortcut.default.validationError == nil
+          && HotKeyShortcut(keyCode: 12, modifiers: [.command]).validationError != nil,
+          "⌃⌥Space and ⌘Q are taken; F-keys, ⌃⌥⌘N and the default are fine")
+
+    // Settings: garbage loads the default; off and on again keeps the combo.
+    defaults.set("garbage", forKey: QuickCaptureSettings.shortcutKey)
+    check(settings.shortcut == .default && settings.isDefault, "an unreadable stored shortcut loads the default")
+    settings.shortcut = all
+    settings.isEnabled = false
+    check(QuickCaptureSettings(defaults: defaults).activeShortcut == nil, "turning it off is saved")
+    settings.isEnabled = true
+    check(QuickCaptureSettings(defaults: defaults).activeShortcut == all && !settings.isDefault,
+          "turning it back on restores the recorded combo")
+    settings.isEnabled = false
+    settings.reset()
+    check(settings.activeShortcut == .default, "reset turns it back on with the default")
+    settings.lastTarget = nil
+    check(settings.lastTarget == nil && defaults.string(forKey: QuickCaptureSettings.lastTargetKey) == nil, "last target can be cleared")
+
+    // Targets.
+    let gatewayId = UUID()
+    let chatTarget = QuickCaptureTarget(gatewayId: gatewayId, target: .chat("agent:main:dashboard:trip"))
+    check(QuickCaptureTarget(storageValue: chatTarget.storageValue) == chatTarget
+          && chatTarget.storageValue == "\(gatewayId.uuidString)|\(ShareTarget.chat("agent:main:dashboard:trip").storageValue)"
+          && QuickCaptureTarget(storageValue: target.storageValue) == target
+          && QuickCaptureTarget(storageValue: "") == nil && QuickCaptureTarget(storageValue: "\(gatewayId.uuidString)|") == nil,
+          "target storage is <gateway>|<share target> (\(chatTarget.storageValue))")
+    check(chatTarget.sessionKey == "agent:main:dashboard:trip" && target.sessionKey == nil, "only chat targets have a session key")
+    let chatItem = PaletteItem(id: "x", title: "Japan trip", symbol: "x", section: .chats,
+                               action: .openChat(Notifier.Target(gatewayId: gatewayId, sessionKey: "agent:main:dashboard:trip")))
+    let newItem = PaletteItem(id: "y", title: "New Chat with Scout", symbol: "x", section: .newChat,
+                              action: .newChat(gatewayId: gatewayId, agentId: "research"))
+    check(QuickCaptureTarget(item: chatItem) == chatTarget && QuickCaptureTarget(item: newItem)?.target == .newChat(agentId: "research")
+          && QuickCaptureTarget(item: PaletteItem(id: "z", title: "Settings", symbol: "x", section: .chats, action: .command("x"))) == nil,
+          "palette items map to targets")
+
+    func sessionRow(_ fields: String) -> SessionRow { SessionRow(json("{\(fields)}"))! }
+    check(QuickCapture.isEligible(sessionRow(#""key":"agent:main:dashboard:trip""#))
+          && !QuickCapture.isEligible(sessionRow(#""key":"agent:research:subagent:abc","spawnedBy":"agent:research:main""#))
+          && !QuickCapture.isEligible(sessionRow(#""key":"agent:main:cron:disk-check""#))
+          && !QuickCapture.isEligible(sessionRow(#""key":"agent:main:slash:abc""#))
+          && !QuickCapture.isEligible(sessionRow(#""key":"agent:main:dashboard:old","archived":true"#)),
+          "helper runs, automations, slash-command sessions and archived chats aren't targets")
+    check(QuickCapture.statusText(.connected) == nil && QuickCapture.statusText(.connecting) == "Connecting…"
+          && QuickCapture.statusText(.reconnecting(attempt: 1, delaySeconds: 2, reason: "x")) == "Reconnecting…"
+          && QuickCapture.statusText(.failed("x")) == "Offline", "disabled rows say why")
+
+    // Default target priority, with a Gateway that hasn't listed its sessions yet.
+    let offline = GatewayStore(profile: GatewayProfile(name: "Offline", url: "ws://127.0.0.1:1", authMode: .none))
+    func chat(_ key: String, on gateway: UUID? = nil) -> QuickCaptureTarget {
+        QuickCaptureTarget(gatewayId: gateway ?? offline.id, target: .chat(key))
+    }
+    let current = Notifier.Target(gatewayId: offline.id, sessionKey: "agent:main:current")
+    func pick(draft: QuickCaptureTarget?, last: QuickCaptureTarget?, current: Notifier.Target?) -> QuickCaptureTarget? {
+        QuickCapture.defaultTarget(draft: draft, lastTarget: last, current: current, gateways: [offline], selectedGatewayId: offline.id)
+    }
+    check(pick(draft: chat("draft"), last: chat("last"), current: current) == chat("draft"), "the draft's target comes first")
+    check(pick(draft: nil, last: chat("last"), current: current) == chat("last"), "then the last target")
+    check(pick(draft: nil, last: chat("last", on: UUID()), current: current) == chat("agent:main:current"),
+          "a last target on a removed Gateway is skipped for the current chat")
+    check(pick(draft: chat("gone", on: UUID()), last: nil, current: nil)
+          == QuickCaptureTarget(gatewayId: offline.id, target: ShareModel.defaultTarget(remembered: nil, chats: [], agents: [], defaultAgentId: "main")),
+          "then the selected Gateway's share default")
+    check(!QuickCapture.isAvailable(chat("x", on: UUID()), gateways: [offline])
+          && QuickCapture.defaultTarget(draft: nil, lastTarget: chat("x"), current: nil, gateways: [], selectedGatewayId: nil) == nil,
+          "an unknown Gateway resolves to nothing")
+    check(QuickCapture.targetItems(gateways: [offline], selectedGatewayId: offline.id, recent: [current]).isEmpty,
+          "a Gateway that isn't connected offers no New Chat items")
+    UserDefaults.standard.removePersistentDomain(forName: suite)
+}
+
+print("Open at Login")
+do {
+    let failures: [LoginItemFailure?] = [nil, .register, .unregister]
+    for status in LoginItemStatus.allCases {
+        for failure in failures {
+            let shown = LoginItemPresentation(status: status, failure: failure)
+            let on = status == .enabled || status == .requiresApproval
+            let footer: String? = switch (failure, status) {
+            case (.register?, _): LaunchAtLogin.registerErrorFooter
+            case (.unregister?, _): LaunchAtLogin.unregisterErrorFooter
+            case (nil, .requiresApproval): LaunchAtLogin.approvalFooter
+            case (nil, _): nil
+            }
+            check(shown.isOn == on && shown.footer == footer && shown.footerIsError == (failure != nil)
+                  && shown.showsSettingsButton == (footer != nil),
+                  "\(status) with failure \(failure.map { "\($0)" } ?? "none") maps to the right toggle and footer")
+        }
+    }
+    check([LaunchAtLogin.approvalFooter, LaunchAtLogin.registerErrorFooter, LaunchAtLogin.unregisterErrorFooter]
+          .allSatisfy { $0.contains("Login Items") }, "every footer points at Login Items")
+}
+
 print("Share extension")
 await runShareChecks()
+
+print("Shortcuts & Siri")
+await runIntentChecks()
 
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
@@ -998,28 +2329,452 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     let token = arguments[index + 2]
     print("Live against \(url)")
     await runLive(url: url, token: token)
+    print("Quick Capture (live)")
+    await runQuickCaptureLive(url: url, token: token)
 }
 if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count > index + 2 {
     print("Scope upgrade fallback against \(arguments[index + 1])")
     await runScopeUpgrade(url: arguments[index + 1], token: arguments[index + 2])
 }
+if arguments.contains("--perf") {
+    print("Message index performance (20 × 20k)")
+    await runMessageIndexPerf()
+}
+if let index = arguments.firstIndex(of: "--live-no-usage"), arguments.count > index + 2 {
+    print("Gateway without usage at \(arguments[index + 1])")
+    await runLiveNoUsage(url: arguments[index + 1], token: arguments[index + 2])
+}
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
+    print("Demo message search with the cache off")
+    await checkDemoSearchWithoutCache()
+    print("Shortcuts on the demo")
+    await runDemoIntents()
     print("Chat navigation")
     await runNavigation()
+    print("Quick Capture (demo)")
+    await runQuickCaptureDemo()
 }
 
 print("\n\(passes) passed, \(failures) failed")
 try? FileManager.default.removeItem(at: draftsRoot)
+try? FileManager.default.removeItem(at: cacheRoot)
 exit(failures == 0 ? 0 : 1)
 
+/// `GatewayHealthModel` and its parsing, offline.
 @MainActor
-func waitFor(_ label: String, timeout: Double = 15, _ condition: () -> Bool) async -> Bool {
+func checkGatewayHealth() async {
+    print("Gateway health")
+    let now = Date(timeIntervalSince1970: 1_000_000)
+    let nowMs = Int(now.timeIntervalSince1970 * 1000)
+
+    // Tolerant parsing: `{}`, wrong types and nulls don't crash or invent problems.
+    let empty = GatewayHealthSummary(json("{}"))
+    check(empty != nil && empty?.channels.isEmpty == true && empty?.heartbeatEnabled == false && empty?.ok == nil,
+          "empty health parses to nothing")
+    check(GatewayHealthSummary(json("[]")) == nil && GatewayHealthSummary(.null) == nil, "non-object health rejected")
+    let messy = GatewayHealthSummary(json(#"""
+    {"ok":"yes","ts":null,"channels":{"discord":{"connected":"true","running":null},"bad":5,"x":{"accounts":{"a":7}}},
+     "channelOrder":[1,"discord"],"heartbeatSeconds":"30","agents":"nope","plugins":{"errors":[{"id":"p1"},3]},
+     "deliveryQueues":{"failed":[{"queueName":"q","count":0},{"count":2}]},"contextEngines":{"quarantined":["lossless"]}}
+    """#))
+    check(messy?.ok == nil && messy?.channels.map(\.id) == ["discord", "x"] && messy?.channels.first?.problemAccounts.isEmpty == true,
+          "wrong-typed fields ignored, non-object channels skipped")
+    check(messy?.pluginErrors.map(\.id) == ["p1"] && messy?.pluginErrors.first?.error == "Failed to load" && messy?.failedQueues.map(\.count) == [2]
+          && messy?.failedQueues.first?.queueName == "delivery" && messy?.quarantinedEngines == ["lossless"],
+          "plugin errors, failed queues (count > 0) and quarantined engines")
+
+    // Channel status and issues.
+    let health = GatewayHealthSummary(json(#"""
+    {"ok":true,"heartbeatSeconds":1800,"agents":[{"agentId":"main","heartbeat":{"enabled":true}}],
+     "channelOrder":["telegram","discord"],"channelLabels":{"discord":"Discord","telegram":"Telegram"},
+     "channels":{
+       "discord":{"accountId":"default","enabled":true,"configured":true,"running":true,"connected":true},
+       "telegram":{"accounts":{"bot":{"accountId":"bot","running":true,"connected":false,"lastError":"401 Unauthorized"},
+                               "old":{"enabled":false,"running":false}}},
+       "slack":{"enabled":false,"configured":false,"running":false},
+       "signal":{"configured":false},
+       "matrix":{"running":true,"restartPending":true}}}
+    """#))!
+    check(health.channels.map(\.id) == ["telegram", "discord", "matrix", "signal", "slack"], "channelOrder first, then the rest sorted")
+    let status = Dictionary(uniqueKeysWithValues: health.channels.map { ($0.id, $0.status) })
+    check(status["discord"] == .connected && status["telegram"] == .error && status["slack"] == .disabled
+          && status["signal"] == .notConfigured && status["matrix"] == .running, "channel statuses")
+    check(health.restartPending && health.heartbeatEnabled && health.channels[0].lastError == "401 Unauthorized",
+          "restartPending, heartbeat enabled, last error")
+    let issues = GatewayHealthRules.issues(health: health, heartbeat: nil, now: now)
+    check(issues.map(\.id) == ["channel:telegram:bot"] && issues.first?.title == "Telegram (bot) isn't connected"
+          && issues.first?.detail == "401 Unauthorized", "only the active broken account is an issue")
+    check(GatewayChannelAccountHealth(json(#"{"connected":false,"enabled":false}"#), fallbackId: "d").hasProblem == false
+          && GatewayChannelAccountHealth(json(#"{"running":false}"#), fallbackId: "d").hasProblem
+          && GatewayChannelAccountHealth(json(#"{"connected":false,"configured":false}"#), fallbackId: "d").hasProblem == false,
+          "disabled or unconfigured accounts don't count")
+
+    // Heartbeats.
+    let fresh = GatewayHeartbeat(json(#"{"ts":\#(nowMs - 1_000_000),"status":"ok-token"}"#))
+    let late = GatewayHeartbeat(json(#"{"ts":\#(nowMs - 4_000_000),"status":"sent"}"#))
+    let failed = GatewayHeartbeat(json(#"{"ts":\#(nowMs),"status":"failed","reason":"timeout"}"#))
+    check(GatewayHeartbeat(.null) == nil && GatewayHeartbeat(nil) == nil && GatewayHeartbeat(json(#"{"status":5}"#))?.status == .other("unknown"),
+          "null heartbeat is none; bad status tolerated")
+    check(!GatewayHeartbeat.isStale(fresh, heartbeatSeconds: 1800, enabled: true, now: now)
+          && GatewayHeartbeat.isStale(late, heartbeatSeconds: 1800, enabled: true, now: now)
+          && !GatewayHeartbeat.isStale(late, heartbeatSeconds: 1800, enabled: false, now: now)
+          && !GatewayHeartbeat.isStale(late, heartbeatSeconds: 0, enabled: true, now: now)
+          && !GatewayHeartbeat.isStale(nil, heartbeatSeconds: 1800, enabled: true, now: now),
+          "stale only past 2x the interval while heartbeats are on")
+    let quiet = GatewayHealthSummary(json(#"{"heartbeatSeconds":1800}"#))
+    check(GatewayHealthRules.issues(health: quiet, heartbeat: late, now: now).map(\.kind) == [.heartbeat]
+          && GatewayHealthRules.issues(health: quiet, heartbeat: failed, now: now).first?.detail == "timeout"
+          && GatewayHealthRules.issues(health: quiet, heartbeat: fresh, now: now).isEmpty, "late and failed heartbeats are issues")
+
+    // Level mapping.
+    check(GatewayHealthRules.level(connection: .connected, restarting: false, healthUnavailable: false, issueCount: 0) == .healthy
+          && GatewayHealthRules.level(connection: .connected, restarting: false, healthUnavailable: false, issueCount: 2) == .degraded
+          && GatewayHealthRules.level(connection: .connected, restarting: false, healthUnavailable: true, issueCount: 0) == .down
+          && GatewayHealthRules.level(connection: .reconnecting(attempt: 1, delaySeconds: 2, reason: "x"), restarting: false,
+                                      healthUnavailable: false, issueCount: 0) == .down
+          && GatewayHealthRules.level(connection: .idle, restarting: true, healthUnavailable: false, issueCount: 3) == .restarting,
+          "levels: healthy, degraded, down, restarting wins")
+
+    // Presence.
+    let presence = GatewayPresenceEntry.list(json(#"""
+    [{"host":"Mac","deviceId":"me","clientId":"openclaw-macos","platform":"macos","deviceFamily":"Mac","mode":"ui","roles":["operator"],"lastActivityAt":1},
+     {"clientId":"openclaw-control-ui","instanceId":"web-1","lastActivityAt":5000},
+     {"host":"pi","mode":"node","roles":["node"]}, 3, {"host":"Mac","deviceId":"me","clientId":"openclaw-macos"}]
+    """#))
+    check(presence.count == 3 && presence[1].displayName == "Control UI" && presence[0].deviceSummary == "macOS · Mac"
+          && presence[0].roleSummary == "ui · operator", "presence parses, duplicates and non-objects dropped")
+    check(GatewayPresenceEntry.list(json(#"{"presence":[{"host":"a"}]}"#)).count == 1 && GatewayPresenceEntry.list(.null).isEmpty,
+          "presence event wrapper and null")
+
+    // Restart result.
+    let deferred = GatewayRestartResult(json(#"""
+    {"status":"deferred","preflight":{"safe":false,"counts":{"totalActive":2},"blockers":[{"message":"1 active agent run"}],"summary":"restart deferred: 1 active agent run"}}
+    """#))
+    check(deferred.status == .deferred && deferred.safe == false && deferred.activeCount == 2
+          && deferred.waitingMessage == "Waiting for 2 active tasks: restart deferred: 1 active agent run", "deferred restart result")
+    let summed = GatewayRestartResult(json(#"{"status":"deferred","preflight":{"counts":{"embeddedRuns":1,"cronRuns":"x","queueSize":0}}}"#))
+    check(summed.activeCount == 1 && summed.waitingMessage == "Waiting for 1 active task"
+          && GatewayRestartResult(json("{}")).status == .scheduled && GatewayRestartResult(json(#"{"status":"coalesced"}"#)).status == .coalesced,
+          "counts summed without totalActive; missing status is scheduled")
+
+    // The model: sections, seeding, restart states.
+    let admin = [GatewayConnection.adminScope]
+    var sent: [(String, JSONValue)] = []
+    /// What the scripted Gateway answers to `gateway.restart.request`; a reference so the request closure sees changes.
+    final class RestartReply {
+        var next: () throws -> JSONValue = { json(#"{"status":"scheduled"}"#) }
+    }
+    let restartReply = RestartReply()
+    let model = GatewayHealthModel(methods: { ["health", "last-heartbeat", "system-presence", "gateway.restart.request"] },
+                                   scopes: { admin }, localDeviceId: "me") { method, params in
+        sent.append((method, params))
+        switch method {
+        case "health": return json(#"{"channels":{"telegram":{"connected":false}},"heartbeatSeconds":0}"#)
+        case "last-heartbeat": return .null
+        case "system-presence": return presence.isEmpty ? [] : json(#"[{"host":"pi"},{"host":"Mac","deviceId":"me","lastActivityAt":1}]"#)
+        case "gateway.restart.request": return try restartReply.next()
+        default: throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "unknown method: \(method)", details: nil)
+        }
+    }
+    model.notBackAfter = .milliseconds(1600)
+    model.seed(snapshot: json(#"{"uptimeMs":90000,"health":{},"presence":"bad"}"#), serverVersion: "2026.1", at: now)
+    check(model.uptimeMs == 90000 && model.startedAt == now.addingTimeInterval(-90) && model.health == nil
+          && model.serverVersion == "2026.1", "hello snapshot: uptime anchored, empty health not stored")
+    await model.load()
+    check(model.hasLoaded && model.level == .degraded && model.issues.count == 1 && model.heartbeat == nil && model.heartbeatLoaded
+          && Set(sent.map(\.0)) == ["health", "last-heartbeat", "system-presence"], "load reads three sections, degraded by a channel")
+    check(model.sortedPresence.first?.deviceId == "me" && model.isThisDevice(model.sortedPresence[0]) && model.indicator == .degraded(issues: 1),
+          "this device first; indicator shows degraded")
+    sent = []
+    await model.refresh()
+    check(Set(sent.map(\.0)) == ["health", "last-heartbeat"], "refresh skips presence")
+
+    check(model.canRestart && !model.canForceRestart, "admin can restart")
+    sent = []
+    await model.restart()
+    check(sent.first?.0 == "gateway.restart.request" && sent.first?.1["reason"]?.string == GatewayHealthModel.restartReason
+          && sent.first?.1["skipDeferral"] == nil && model.restartState == .scheduled(coalesced: false) && model.level == .restarting,
+          "scheduled restart, reason sent, no skipDeferral")
+    model.handle(event: "shutdown", payload: json(#"{"reason":"restart","restartExpectedMs":1000}"#))
+    model.connectionChanged(.reconnecting(attempt: 1, delaySeconds: 1, reason: "closed"), hello: nil)
+    check(model.restartState == .restarting && model.indicator == .restarting, "shutdown: restarting")
+    let reconnecting = await waitFor("reconnecting after expected ms", timeout: 3) { model.restartState == .reconnecting }
+    check(reconnecting, "reconnecting after restartExpectedMs")
+    let notBack = await waitFor("not back after the limit", timeout: 3) { model.restartState == .notBack }
+    check(notBack, "not back after the limit")
+    check(model.indicator == .notBack && model.restartState.message == "Gateway hasn't come back yet", "not back message")
+    model.markRestartRequired("Saved")
+    var restartedCalled = false
+    model.onRestarted = { restartedCalled = true }
+    model.connectionChanged(.connected, hello: nil)
+    check(model.restartState == .restarted(uptimeMs: 90000) && model.restartRequiredReason == nil && restartedCalled,
+          "reconnect: restarted, restart-required cleared, callback")
+    model.dismissRestartStatus()
+    check(model.restartState == .idle, "dismiss restarted status")
+
+    restartReply.next = { json(#"{"status":"deferred","preflight":{"safe":false,"counts":{"totalActive":1},"summary":"1 run"}}"#) }
+    await model.restart()
+    check(model.restartState == .waiting("Waiting for 1 active task: 1 run") && model.canForceRestart && !model.canRestart,
+          "deferred: waiting, force offered")
+    restartReply.next = { json(#"{"status":"coalesced"}"#) }
+    sent = []
+    await model.restart(skipDeferral: true)
+    check(sent.first?.1["skipDeferral"]?.bool == true && model.restartState == .scheduled(coalesced: false)
+          && model.restartState.message == "Restarting…", "force sends skipDeferral: true; coalesced reads Restarting…")
+    model.connectionChanged(.connecting, hello: nil)
+    check(model.restartState == .restarting, "losing the socket while scheduled means restarting")
+    model.connectionChanged(.connected, hello: nil)
+    check(model.restartState == .restarted(uptimeMs: 90000), "back after scheduled")
+
+    for (code, details, expected) in [
+        ("RATE_LIMITED", JSONValue?.none, "The Gateway limits how often it restarts. Try again in a minute."),
+        ("FORBIDDEN", json(#"{"code":"MISSING_SCOPE"}"#), ConfigWriteError.adminRequired.message),
+        ("INVALID_REQUEST", nil, "The Gateway refused the restart: bad reason"),
+    ] {
+        restartReply.next = { throw GatewayError.rpc(code: code, message: "bad reason", details: details) }
+        model.dismissRestartStatus()
+        await model.restart()
+        check(model.restartState == .failed(expected), "restart error \(code)")
+    }
+    restartReply.next = { throw GatewayError.closed("gone") }
+    model.dismissRestartStatus()
+    await model.restart()
+    check(model.restartState == .restarting, "socket closed mid-request means restarting")
+    model.connectionChanged(.connected, hello: nil)
+
+    // Not admin: nothing sent.
+    var readerSent: [String] = []
+    let reader = GatewayHealthModel(scopes: { ["operator.read"] }) { method, params in
+        readerSent.append(method)
+        _ = params
+        throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "unknown method: \(method)", details: nil)
+    }
+    check(!reader.canRestart && !reader.hasAdmin, "non-admin can't restart")
+    await reader.restart()
+    check(readerSent.isEmpty && reader.restartState == .failed(ConfigWriteError.adminRequired.message), "non-admin restart sends nothing")
+    await reader.load()
+    check(reader.unavailable == [.health, .heartbeat, .presence] && !reader.isAvailable(.health) && reader.level == .healthy,
+          "UNKNOWN_METHOD marks sections unavailable")
+    readerSent = []
+    await reader.load()
+    check(readerSent.isEmpty, "unavailable sections aren't asked again")
+
+    let old = GatewayHealthModel(methods: { ["chat.send"] }, scopes: { admin }) { _, _ in .null }
+    check(!old.isAvailable(.restart) && !old.canRestart && old.isAvailable(.restart) == false, "method missing from hello: no restart")
+    let down = GatewayHealthModel(scopes: { admin }) { _, _ in throw GatewayError.rpc(code: "UNAVAILABLE", message: "probe failed", details: nil) }
+    await down.load()
+    check(down.healthFailure == "probe failed" && down.level == .down, "health UNAVAILABLE is down")
+    down.connectionChanged(.reconnecting(attempt: 1, delaySeconds: 2, reason: "x"), hello: nil)
+    check(down.level == .down && down.issues.isEmpty && down.indicator == nil, "disconnected: down, no issues, no indicator")
+
+    // Events.
+    let events = GatewayHealthModel { _, _ in .null }
+    events.handle(event: "health", payload: json(#"{"channels":{"discord":{"running":false}}}"#))
+    events.handle(event: "heartbeat", payload: json(#"{"ts":\#(nowMs),"status":"failed"}"#))
+    events.handle(event: "presence", payload: json(#"{"presence":[{"host":"a"},{"host":"b"}]}"#))
+    events.handle(event: "presence", payload: json(#"{"nope":1}"#))
+    check(events.health?.channels.first?.status == .stopped && events.heartbeat?.isFailure == true && events.presence.count == 2,
+          "health, heartbeat and presence events")
+    events.markRestartRequired("x")
+    check(events.needsRestart && events.indicator == .restartNeeded, "restart required indicator")
+
+    // A terminal `shutdown` (no numeric restartExpectedMs) isn't a restart unless this device asked for one.
+    for payload in [json("{}"), json(#"{"reason":"stop","restartExpectedMs":null}"#), json(#"{"restartExpectedMs":"1500"}"#)] {
+        events.handle(event: "shutdown", payload: payload)
+        check(events.restartState == .idle && events.indicator == .restartNeeded, "terminal shutdown leaves restart state alone (\(payload))")
+    }
+    check(GatewayHealthModel.restartExpectedMs(shutdown: json(#"{"restartExpectedMs":1500}"#)) == 1500
+          && GatewayHealthModel.restartExpectedMs(shutdown: json(#"{"restartExpectedMs":-1}"#)) == nil, "restartExpectedMs must be a number")
+    events.handle(event: "shutdown", payload: json(#"{"restartExpectedMs":1500}"#))
+    check(events.restartState == .restarting, "shutdown with restartExpectedMs is a restart, even from elsewhere")
+    events.connectionChanged(.connected, hello: nil)
+    let asked = GatewayHealthModel(scopes: { admin }) { _, _ in json(#"{"status":"scheduled"}"#) }
+    await asked.restart()
+    asked.handle(event: "shutdown", payload: json("{}"))
+    check(asked.restartState == .restarting, "shutdown without restartExpectedMs after our own request is our restart")
+
+    // Restarted elsewhere since the change was saved: the flag clears on the next hello.
+    let stale = GatewayHealthModel { _, _ in .null }
+    stale.markRestartRequired("Saved", at: now.addingTimeInterval(-120))
+    stale.seed(snapshot: json(#"{"uptimeMs":600000}"#), at: now)
+    check(stale.restartRequiredReason != nil, "older process keeps restart-required")
+    stale.seed(snapshot: json(#"{"uptimeMs":30000}"#), at: now)
+    check(stale.restartRequiredReason == nil && !stale.needsRestart, "newer process clears restart-required")
+}
+
+/// `ApprovalHistoryModel` against a scripted Gateway: aliases, paging, cursors, errors and unsupported gateways.
+@MainActor
+func checkApprovalHistoryModel() async {
+    func row(_ id: String, kind: String = "exec") -> JSONValue {
+        json(#"{"id":"\#(id)","status":"allowed","decision":"allow-once","reason":"user","resolvedAtMs":1,"presentation":{"kind":"\#(kind)","title":"t","commandText":"c"}}"#)
+    }
+    var calls: [(String, JSONValue)] = []
+
+    let aliased = ApprovalHistoryModel { method, params in
+        calls.append((method, params))
+        return ["approvals": .array([row("a1"), row("a2"), row("a1")])]
+    }
+    await aliased.load()
+    check(aliased.items.map(\.id) == ["a1", "a2"] && aliased.hasLoaded && aliased.supported && !aliased.hasMore,
+          "approvals alias decodes, duplicate ids dropped")
+    check(calls.first?.0 == "approval.history" && calls.first?.1["limit"]?.int == 50 && calls.first?.1["cursor"] == nil
+          && calls.first?.1["kind"] == nil, "first page asks for 50 without cursor or kind")
+    let bare = ApprovalHistoryModel { _, _ in .array([row("b1"), json(#"{"status":"allowed"}"#)]) }
+    await bare.load()
+    check(bare.items.map(\.id) == ["b1"], "bare array result, records without id skipped")
+    let entries = ApprovalHistoryModel { _, _ in ["entries": .array([row("e1")])] }
+    await entries.load()
+    check(entries.items.map(\.id) == ["e1"], "entries alias decodes")
+
+    // Paging: cursors echoed, pages appended without duplicates, a repeated cursor stops.
+    calls = []
+    let paged = ApprovalHistoryModel { method, params in
+        calls.append((method, params))
+        switch params["cursor"]?.string {
+        case nil: return ["items": .array([row("p1"), row("p2")]), "nextCursor": "c1"]
+        case "c1": return ["items": .array([row("p2"), row("p3")]), "nextCursor": "c2"]
+        case "c2": return ["items": .array([row("p4")]), "nextCursor": "c1"]
+        default: return ["items": []]
+        }
+    }
+    paged.pageSize = 2
+    await paged.load()
+    check(paged.items.map(\.id) == ["p1", "p2"] && paged.nextCursor == "c1" && calls.last?.1["limit"]?.int == 2, "page size override")
+    await paged.loadMore()
+    check(paged.items.map(\.id) == ["p1", "p2", "p3"] && calls.last?.1["cursor"]?.string == "c1", "loadMore echoes the cursor, dedups by id")
+    await paged.loadMore()
+    check(paged.items.map(\.id) == ["p1", "p2", "p3", "p4"] && !paged.hasMore, "repeated cursor stops paging")
+    let callsBefore = calls.count
+    await paged.loadMore()
+    check(calls.count == callsBefore, "no request without a cursor")
+    await paged.refresh()
+    check(paged.items.map(\.id) == ["p1", "p2"] && paged.nextCursor == "c1", "refresh replaces with page 1")
+
+    let emptyPage = ApprovalHistoryModel { _, params in
+        params["cursor"] == nil ? ["items": .array([row("x1")]), "nextCursor": "more"] : ["items": [], "nextCursor": "again"]
+    }
+    await emptyPage.load()
+    await emptyPage.loadMore()
+    check(emptyPage.items.map(\.id) == ["x1"] && !emptyPage.hasMore, "empty page stops paging")
+
+    // Kind filter goes to the server and resets paging.
+    calls = []
+    let filtered = ApprovalHistoryModel { method, params in
+        calls.append((method, params))
+        let kind = params["kind"]?.string ?? "exec"
+        return ["items": .array([row("\(kind)-1", kind: kind)]), "nextCursor": params["kind"] == nil ? "n" : nil]
+    }
+    await filtered.load()
+    await filtered.setKindFilter(.plugin)
+    check(filtered.kindFilter == .plugin && calls.last?.1["kind"]?.string == "plugin" && calls.last?.1["cursor"] == nil
+          && filtered.items.map(\.id) == ["plugin-1"] && !filtered.hasMore, "kind filter reloads page 1 with kind")
+    await filtered.setKindFilter(.systemAgent)
+    check(calls.last?.1["kind"]?.string == "system-agent" && filtered.items.first?.kind == .systemAgent, "system filter sends system-agent")
+    let filterCalls = calls.count
+    await filtered.setKindFilter(.systemAgent)
+    check(calls.count == filterCalls, "same filter doesn't reload")
+    await filtered.setKindFilter(.all)
+    check(calls.last?.1["kind"] == nil, "All omits kind")
+
+    // A stale cursor reloads page 1 once.
+    var historyCalls = 0
+    let stale = ApprovalHistoryModel { _, params in
+        historyCalls += 1
+        if params["cursor"] != nil {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid approval.history cursor", details: nil)
+        }
+        return ["items": .array([row("s1")]), "nextCursor": "gone"]
+    }
+    await stale.load()
+    await stale.loadMore()
+    check(historyCalls == 3 && stale.items.map(\.id) == ["s1"] && stale.loadState == .idle && stale.loadMoreState == .idle,
+          "invalid cursor → one fresh reload, no error")
+
+    // Other load-more failures keep the rows.
+    let flaky = ApprovalHistoryModel { _, params in
+        if params["cursor"] != nil { throw GatewayError.rpc(code: "UNAVAILABLE", message: "storage unavailable", details: nil) }
+        return ["items": .array([row("f1")]), "nextCursor": "next"]
+    }
+    await flaky.load()
+    await flaky.loadMore()
+    check(flaky.items.map(\.id) == ["f1"] && flaky.loadMoreState.error == "storage unavailable" && flaky.hasMore,
+          "load-more failure keeps rows and cursor")
+
+    // Errors.
+    let noScope = ApprovalHistoryModel { _, _ in
+        throw GatewayError.rpc(code: "FORBIDDEN", message: "missing scope: operator.approvals",
+                               details: ["code": "MISSING_SCOPE", "scope": "operator.approvals"])
+    }
+    await noScope.load()
+    check(noScope.supported && noScope.hasLoaded && noScope.loadState.error == ApprovalHistoryModel.missingScopeMessage
+          && ApprovalHistoryModel.missingScopeMessage.contains("operator.approvals"), "missing scope → approve operator.approvals message")
+    let failing = ApprovalHistoryModel { _, _ in throw GatewayError.rpc(code: "UNAVAILABLE", message: "ledger offline", details: nil) }
+    await failing.load()
+    check(failing.loadState.error == "ledger offline" && failing.supported, "other errors show the gateway's message")
+
+    // Unsupported gateways: hello without approval.history, or UNKNOWN_METHOD.
+    var requested = false
+    let legacyHello = ApprovalHistoryModel(methods: { ["chat.send", "exec.approval.resolve"] }) { _, _ in
+        requested = true
+        return ["items": []]
+    }
+    await legacyHello.load()
+    check(!legacyHello.supported && legacyHello.hasLoaded && !requested && legacyHello.loadState == .idle,
+          "hello without approval.history → unsupported, no request, no error")
+    let unknownMethod = ApprovalHistoryModel(methods: { [] }) { method, _ in
+        throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "unknown method: \(method)", details: nil)
+    }
+    await unknownMethod.load()
+    check(!unknownMethod.supported && unknownMethod.hasLoaded && unknownMethod.loadState == .idle && unknownMethod.items.isEmpty,
+          "UNKNOWN_METHOD → unsupported, no error")
+    let advertised = ApprovalHistoryModel(methods: { ["approval.history", "approval.get"] }) { method, _ in
+        if method == "approval.get" { throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "unknown method: approval.get", details: nil) }
+        return ["items": .array([row("g1")])]
+    }
+    await advertised.load()
+    check(advertised.supported && advertised.items.count == 1, "advertised approval.history loads")
+
+    // approval.get is optional: detail upgrades the row, failures keep it.
+    let detailed = ApprovalHistoryModel(localDeviceId: "me") { method, params in
+        switch method {
+        case "approval.get":
+            if params["id"]?.string == "missing" {
+                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "approval not found", details: ["reason": "APPROVAL_NOT_FOUND"])
+            }
+            return ["approval": json(#"{"id":"d1","status":"allowed","decision":"allow-once","reason":"user","resolver":{"kind":"device","id":"me"},"presentation":{"kind":"exec","commandText":"full command","warningText":"careful"}}"#)]
+        default:
+            return ["items": .array([row("d1"), row("missing")])]
+        }
+    }
+    await detailed.load()
+    check(detailed.record("d1")?.warningText == nil, "row before approval.get")
+    await detailed.loadDetail("d1")
+    check(detailed.record("d1")?.commandText == "full command" && detailed.record("d1")?.warningText == "careful"
+          && detailed.detailState["d1"] == .idle, "approval.get detail replaces the row")
+    check(detailed.record("d1").map(detailed.decidedBy) == "This device", "model decidedBy uses its device id")
+    await detailed.loadDetail("missing")
+    check(detailed.record("missing")?.id == "missing" && detailed.detailState["missing"]?.error != nil, "approval.get failure keeps the row")
+    check(detailed.record(nil) == nil && detailed.record("nope") == nil, "unknown ids have no record")
+    await advertised.loadDetail("g1")
+    check(advertised.record("g1") != nil && advertised.detailState["g1"] == .idle, "approval.get unknown method is quiet")
+    var getCalled = false
+    let noGet = ApprovalHistoryModel(methods: { ["approval.history"] }) { method, _ in
+        if method == "approval.get" { getCalled = true }
+        return ["items": .array([row("n1")])]
+    }
+    await noGet.load()
+    await noGet.loadDetail("n1")
+    check(!getCalled && noGet.record("n1") != nil, "hello without approval.get skips the request")
+}
+
+@MainActor
+func waitFor(_ label: String, timeout: Double = 15, every interval: Int = 100, _ condition: () -> Bool) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         if condition() { return true }
-        try? await Task.sleep(for: .milliseconds(100))
+        try? await Task.sleep(for: .milliseconds(interval))
     }
     print("    … timed out waiting for \(label)")
     return condition()
@@ -1027,6 +2782,8 @@ func waitFor(_ label: String, timeout: Double = 15, _ condition: () -> Bool) asy
 
 @MainActor
 func runDemo() async {
+    // Keep "approve later" quick; the demo reads this when it schedules the approval.
+    setenv("PINCER_DEMO_LATER_APPROVAL_MS", "500", 1)
     let profile = GatewayProfile.demo()
     check(profile.isDemo && profile.authMode == .none, "demo profile")
     let gateway = GatewayStore(profile: profile)
@@ -1037,6 +2794,9 @@ func runDemo() async {
     guard connected else { return }
     check(gateway.agents.count >= 3, "agents (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions (\(gateway.sessions.count))")
+    check(gateway.approvals.map(\.id) == ["approval_demo_push"] && gateway.approvals.first?.isExpired() == false
+          && gateway.approvals.first?.command == "git push origin fix/login-timeout", "demo opens with one pending approval")
+    check(gateway.totalUnread >= 3, "demo opens with unread chats (\(gateway.totalUnread))")
 
     let key = "agent:main:main"
     await gateway.loadCommands(sessionKey: key, agentId: "main")
@@ -1051,15 +2811,56 @@ func runDemo() async {
     let trip = gateway.chat(for: "agent:main:dashboard:trip")
     await trip.load()
     check(trip.hasMoreHistory && trip.items.count == 120, "trip latest page (\(trip.items.count))")
+    // Find in Chat only searches what's loaded, so the latest page must have something to find.
+    for word in ["onsen", "Kyoto", "ramen"] {
+        let found = TranscriptSearch.matches(word, in: trip.entries)
+        check(found.count >= 3, "Find in Chat finds \"\(word)\" in the trip's latest page (\(found.count))")
+    }
+    let latestRamen = trip.items.filter { $0.plainText.localizedCaseInsensitiveContains("ramen") }.count
+    check(latestRamen * 2 <= trip.items.count, "trip isn't all ramen on the latest page (\(latestRamen)/\(trip.items.count))")
     await trip.loadOlder()
     await trip.loadOlder()
     check(!trip.hasMoreHistory && trip.items.count == 302, "trip paged to start (\(trip.items.count))")
+    await checkDemoMessageSearch(gateway, trip: trip)
+    await checkDemoSeededSearchTerms(gateway, trip: trip)
+    let allRamen = trip.items.filter { $0.plainText.localizedCaseInsensitiveContains("ramen") }.count
+    check(allRamen * 2 <= trip.items.count, "trip transcript is varied (ramen in \(allRamen)/\(trip.items.count))")
+    let tripUsage = gateway.contextUsage(for: "agent:main:dashboard:trip")
+    check(tripUsage?.used == 192_000 && tripUsage?.limit == 200_000 && tripUsage?.level == .critical,
+          "trip context meter is critical (\(tripUsage?.summary ?? "none"))")
+    let mainUsage = gateway.contextUsage(for: "agent:main:main")
+    check(mainUsage?.level == .warning, "Main context meter is a warning (\(mainUsage?.summary ?? "none"))")
+
+    // Canned replies mustn't trip other trigger words by accident.
+    let helloStart = chat.entries.count
+    let approvalsBefore = gateway.approvals.count
+    await chat.send("hello")
+    let helloDone = await waitFor("hello reply", timeout: 20) { !chat.isRunning && chat.entries.count > helloStart + 1 }
+    check(helloDone && gateway.pendingQuestions(for: key).isEmpty && gateway.approvals.count == approvalsBefore && chat.progressCard == nil,
+          "a hello reply raises no question, approval or plan")
+    if case let .assistant(turn)? = chat.entries.last {
+        check(turn.body.contains("onsen") && turn.body.contains("⌘K") && turn.body.contains("/compact"), "hello reply lists things to try")
+        // A tip read back as a message should trigger only what it describes (tool/disk/image match as substrings).
+        func triggers(_ line: String) -> Set<String> {
+            let lowered = line.lowercased()
+            var found = Set<String>()
+            if ["tool", "disk"].contains(where: lowered.contains) { found.insert("tool") }
+            if lowered.contains("image") { found.insert("image") }
+            for word in ["approve", "ask", "plan"] where lowered.range(of: "\\b\(word)\\b", options: .regularExpression) != nil {
+                found.insert(word)
+            }
+            return found
+        }
+        let crossed = turn.body.split(separator: "\n").map(String.init).filter { $0.hasPrefix("- ") && triggers($0).count > 1 }
+        check(crossed.isEmpty, "each tip triggers one thing (\(crossed))")
+    }
 
     let before = chat.entries.count
     await chat.send("show me a tool and an image")
     var sawThinking = false
     var sawTool = false
-    let finished = await waitFor("demo reply", timeout: 20) {
+    // Polls quickly so the streaming phases stay visible when CI shortens the demo's pacing.
+    let finished = await waitFor("demo reply", timeout: 20, every: 10) {
         if case let .assistant(turn)? = chat.entries.last, turn.isStreaming {
             if !turn.thinking.isEmpty { sawThinking = true }
             if !turn.tools.isEmpty { sawTool = true }
@@ -1087,16 +2888,91 @@ func runDemo() async {
     check(gateway.automations.hasLoaded && !gateway.automations.supported && gateway.automations.jobs.isEmpty,
           "gateway without cron.* shows automations unavailable")
 
-    await chat.send("please approve this")
-    let approvalSeen = await waitFor("approval") { !gateway.approvals.isEmpty }
-    check(approvalSeen, "demo approval surfaced")
-    if let approval = gateway.approvals.first {
-        await gateway.resolveApproval(approval, decision: "allow-once")
-        check(gateway.approvals.isEmpty, "demo approval resolved")
+    // Approval History: 12 seeded decisions (7 commands, 3 plugins, 2 system changes).
+    let history = gateway.approvalHistory
+    history.pageSize = 5
+    await history.load()
+    check(history.supported && history.hasLoaded && history.items.count == 5 && history.hasMore, "demo approval.history first page")
+    await history.loadMore()
+    await history.loadMore()
+    let demoIds = history.items.map(\.id)
+    check(demoIds.count == 12 && Set(demoIds).count == 12 && !history.hasMore, "demo history paged to the end, no duplicates (\(demoIds.count))")
+    check(zip(history.items, history.items.dropFirst()).allSatisfy { ($0.resolvedAt ?? .distantPast) >= ($1.resolvedAt ?? .distantPast) },
+          "demo history newest first")
+    check(Set(history.items.map(\.status)) == [.allowed, .denied, .expired, .cancelled], "demo covers every terminal status")
+    check(Set(history.items.map { history.decidedBy($0) }).isSuperset(of: ["This device", "OpenClaw (automatic)", "Unknown", "Runtime"])
+          && history.items.contains { history.decidedBy($0).hasPrefix("Another device (") }
+          && history.items.contains { history.decidedBy($0).hasPrefix("Channel") }, "demo resolvers in plain words")
+    for (filter, count) in [(ApprovalHistoryModel.KindFilter.exec, 7), (.plugin, 3), (.systemAgent, 2)] {
+        await history.setKindFilter(filter)
+        while history.hasMore { await history.loadMore() }
+        check(history.items.count == count && history.items.allSatisfy { $0.kind.rawValue == filter.rawValue },
+              "demo \(filter.label) filter (\(history.items.count))")
     }
+    await history.setKindFilter(.all)
+    if let plugin = history.items.first(where: { $0.kind == .plugin }) {
+        await history.loadDetail(plugin.id)
+        check(history.details[plugin.id]?.detail != nil || history.record(plugin.id)?.title == plugin.title, "demo approval.get detail")
+        check(history.detailState[plugin.id] == .idle && history.record(plugin.id)?.pluginId == plugin.pluginId, "demo detail round-trips")
+    } else {
+        check(false, "demo history has a plugin")
+    }
+
+    await checkUsageDemo(gateway)
+    await history.loadMore()
+    check(history.items.count == 10 && history.hasMore, "demo second page before resolving")
+
+    let seededApprovals = Set(gateway.approvals.map(\.id))
+    await chat.send("please approve this")
+    let approvalSeen = await waitFor("approval") { gateway.approvals.contains { !seededApprovals.contains($0.id) } }
+    check(approvalSeen, "demo approval surfaced")
+    if let approval = gateway.approvals.first(where: { !seededApprovals.contains($0.id) }) {
+        await history.loadDetail(approval.id)
+        check(history.details[approval.id]?.status == .pending, "demo approval.get returns a pending approval")
+        await gateway.resolveApproval(approval, decision: "allow-once")
+        check(gateway.approvals.map(\.id) == Array(seededApprovals), "demo approval resolved, the seeded one still waits")
+        let merged = await waitFor("history refresh after resolve", timeout: 5) { history.items.first?.id == approval.id }
+        check(merged && history.items.count == 11, "resolved approval shows first after exec.approval.resolved (\(history.items.count))")
+        if let top = history.items.first {
+            check(top.statusLabel == "Allowed once" && history.decidedBy(top) == "This device" && top.sessionKey == key,
+                  "resolved entry decided by this device in its chat")
+        }
+        await history.refresh()
+        check(history.items.first?.id == approval.id && history.items.count == 5, "refresh keeps the resolved entry first")
+    }
+    history.pageSize = ApprovalHistoryModel.defaultPageSize
 
     let settled = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
     check(settled, "demo approval run finished")
+    await checkApprovalOutcomes(gateway, chat: chat, label: "demo")
+
+    // "approve later" raises its approval a moment after the run, outside it (to answer from a notification).
+    let knownApprovals = Set(gateway.approvals.map(\.id))
+    await chat.send("approve later")
+    var raisedDuringRun = false
+    let laterRunDone = await waitFor("approve later run", timeout: 20) {
+        if chat.isRunning && gateway.approvals.contains(where: { !knownApprovals.contains($0.id) }) { raisedDuringRun = true }
+        return !chat.isRunning
+    }
+    check(laterRunDone && !raisedDuringRun && gateway.approvals.allSatisfy { knownApprovals.contains($0.id) },
+          "approve later: no approval during the run")
+    if case let .assistant(turn)? = chat.entries.last {
+        check(turn.body.localizedCaseInsensitiveContains("few seconds"), "approve later: the reply says it's coming")
+    }
+    let laterSeen = await waitFor("later approval", timeout: 10) { gateway.approvals.contains { !knownApprovals.contains($0.id) } }
+    check(laterSeen && !chat.isRunning, "approve later: approval arrives after the run finished")
+    if let later = gateway.approvals.first(where: { !knownApprovals.contains($0.id) }) {
+        check(later.allowsAlways && later.allowedDecisions?.count == 3 && later.sessionKey == key && later.agentId == "main"
+              && later.command.contains("brew"), "approve later: full approval for this chat (\(later.command))")
+        check((later.expiresAt?.timeIntervalSinceNow ?? 0) > 9 * 60, "approve later: expires in about 10 minutes")
+        let outcome = await gateway.resolveApproval(later, decision: "allow-once")
+        check(outcome == .resolved && !gateway.approvals.contains { $0.id == later.id }, "approve later: resolved (\(outcome))")
+        await history.refresh()
+        check(history.items.first?.id == later.id && history.items.first?.statusLabel == "Allowed once",
+              "approve later: shows first in Approval History")
+    } else {
+        check(false, "approve later: approval surfaced")
+    }
 
     await chat.send("ask me what to remove")
     let demoAsked = await waitFor("demo question") { !gateway.pendingQuestions(for: key).isEmpty }
@@ -1153,19 +3029,24 @@ func runDemo() async {
     check(newKey != nil && gateway.sessions[newKey ?? ""] != nil, "demo sessions.create")
 
     // Command palette over the demo's chats.
-    check(gateway.pinnedChats.map(\.key) == ["agent:main:discord:channel:123"], "pinned chats (\(gateway.pinnedChats.map(\.key)))")
-    let tripKey = "agent:main:dashboard:trip"
-    await gateway.patch(tripKey, ["pinned": true])
-    let pinnedTrip = await waitFor("pin") { gateway.pinnedChats.count == 2 }
-    let sidebarOrder = gateway.sections().flatMap { $0.channels.map(\.row.key) }.filter { $0 == tripKey || $0.contains("discord") }
-    check(pinnedTrip && gateway.pinnedChats.map(\.key) == sidebarOrder, "⌘1–⌘9 follow the sidebar's order")
+    let seededPins: Set<String> = ["agent:main:discord:channel:123", "agent:main:dashboard:trip", "agent:research:dashboard:papers"]
+    func sidebarPins(_ keys: Set<String>) -> [String] {
+        gateway.sections().flatMap { $0.channels.map(\.row.key) }.filter(keys.contains)
+    }
+    check(Set(gateway.pinnedChats.map(\.key)) == seededPins && gateway.pinnedChats.map(\.key) == sidebarPins(seededPins),
+          "three pinned chats in sidebar order (\(gateway.pinnedChats.map(\.key)))")
+    let coderKey = "agent:coder:main"
+    await gateway.patch(coderKey, ["pinned": true])
+    let pinnedCoder = await waitFor("pin") { gateway.pinnedChats.count == 4 }
+    check(pinnedCoder && gateway.pinnedChats.map(\.key) == sidebarPins(seededPins.union([coderKey])), "⌘1–⌘9 follow the sidebar's order")
     let recentTarget = Notifier.Target(gatewayId: gateway.id, sessionKey: "agent:research:dashboard:papers")
     let chatItems = CommandPalette.chatItems(gateways: [gateway], selectedGatewayId: gateway.id, recent: [recentTarget])
     check(chatItems.first?.action == .openChat(recentTarget), "recent chats listed first")
     check(!chatItems.contains { $0.id.contains(":subagent:") }, "subagent runs left out")
     check(Set(chatItems.map(\.id)).count == chatItems.count, "each chat listed once")
-    check(chatItems.first { $0.id.hasSuffix(gateway.pinnedChats[0].key) }?.shortcut == "⌘1"
-          && chatItems.first { $0.id.hasSuffix(gateway.pinnedChats[1].key) }?.shortcut == "⌘2", "pinned chats show their shortcut")
+    let pinnedShortcuts = gateway.pinnedChats.map { pin in chatItems.first { $0.id.hasSuffix(":" + pin.key) }?.shortcut }
+    check(pinnedShortcuts == ["⌘1", "⌘2", "⌘3", "⌘4"], "pinned chats show their shortcut (\(pinnedShortcuts))")
+    check(chatItems.filter { $0.shortcut != nil }.count == 4, "only pinned chats have shortcuts")
     check(PaletteMatcher.rank(chatItems, query: "scout digest").first?.title == "Paper digest", "chats match on agent name")
     let newChats = CommandPalette.newChatItems(gateway: gateway)
     check(newChats.count == gateway.agents.count && newChats.contains { $0.action == .newChat(gatewayId: gateway.id, agentId: "research") },
@@ -1178,21 +3059,143 @@ func runDemo() async {
         check(models.first { $0.action == .setModel("openai/gpt-5.6-sol") }?.subtitle?.hasSuffix("Current") == true,
               "models page marks the session's model")
     }
-    await gateway.patch(tripKey, ["pinned": false])
+    await gateway.patch(coderKey, ["pinned": false])
+    let unpinned = await waitFor("unpin") { gateway.pinnedChats.count == 3 }
+    check(unpinned && Set(gateway.pinnedChats.map(\.key)) == seededPins, "unpinning restores the seeded pins")
+    await checkDemoSentMessageSearch(gateway, chat)
+    await runDemoExecPolicy(gateway, chat: chat)
+
+    // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
+    let pairing = gateway.pairingInbox
+    check(pairing.canManage && !gateway.settings.canEdit && pairing.supported, "demo can review pairing requests, settings read-only")
+    await pairing.seed()
+    check(pairing.hasLoaded && pairing.requests.count == 3 && pairing.pendingCount() == 3 && pairing.accounts.count == 2,
+          "demo pairing list (\(pairing.requests.map(\.requestId)))")
+    check(pairing.showsChannelFilter && pairing.commandOwnerConfigured && !pairing.canBootstrapCommandOwner,
+          "demo spans Telegram and Discord; command owner configured")
+    check(pairing.requests.map(\.title).contains("Maya Chen") && pairing.requests.contains { $0.title == $0.senderId && $0.channel == "discord" }
+          && pairing.requests.contains { $0.title == "@night_owl" && ($0.expiresAt?.timeIntervalSinceNow ?? 0) < 180 },
+          "demo titles and the request about to expire")
+    if let maya = pairing.requests.first(where: { $0.title == "Maya Chen" }),
+       let discord = pairing.requests.first(where: { $0.channel == "discord" })
+    {
+        check(maya.notifySupported && !discord.notifySupported && discord.accountLine == "Discord · Family server", "demo notify support per account")
+        let approved = await pairing.approve(maya, notify: true)
+        check(approved && pairing.notice == nil && !pairing.requests.contains { $0.id == maya.id }, "demo approve")
+        let dismissed = await pairing.dismiss(discord)
+        check(dismissed && pairing.requests.count == 1 && pairing.pendingCount() == 1, "demo dismiss")
+        await pairing.approve(maya)
+        check(pairing.notice?.text == PairingInboxModel.staleMessage && pairing.requests.count == 1, "demo stale request")
+    }
+    await checkDemoPairingShapes()
+    // Health page and a simulated restart.
+    let health = gateway.health
+    await health.load()
+    check(health.hasLoaded && health.level == .degraded && health.issues.contains { $0.id.hasPrefix("channel:telegram") },
+          "demo health degraded by Telegram (\(health.issues.map(\.title)))")
+    check(health.presence.count == 3 && health.sortedPresence.first.map(health.isThisDevice) == true, "demo clients, this device first")
+    check(health.heartbeat?.status == .okToken && (health.uptime() ?? 0) > 3 * 86_400, "demo heartbeat and uptime")
+    check(health.canRestart, "demo can restart")
+    health.markRestartRequired("Saved. Restart the Gateway to finish applying it.")
+    check(health.indicator == .restartNeeded, "restart needed indicator")
+    await health.restart()
+    check(health.restartState == .scheduled(coalesced: false), "demo restart scheduled (\(health.restartState))")
+    let restarted = await waitFor("demo restart", timeout: 20) {
+        if case .restarted = health.restartState { return gateway.state.isConnected }
+        return false
+    }
+    check(restarted && (health.uptime() ?? .infinity) < 60 && health.restartRequiredReason == nil,
+          "demo restarted with a fresh uptime (\(health.restartState))")
+    check(gateway.sessions[key] != nil, "sessions survive the restart")
+    let recovered = await waitFor("demo health reloaded") { health.level == .healthy }
+    check(recovered && health.issues.isEmpty
+          && health.health?.channels.first { $0.id == "telegram" }?.status == .connected, "Telegram recovers after the demo restart")
+    check(health.presence.first(where: health.isThisDevice)?.host?.hasPrefix("Pincer on ") == true, "this device named, not \"This device\"")
+
+    // A streaming reply defers the restart; "Restart Now Anyway" goes ahead.
+    health.dismissRestartStatus()
+    let running = gateway.chat(for: key)
+    await running.send("show me a tool and an image")
+    let streaming = await waitFor("demo run started") { running.isRunning }
+    await health.restart()
+    if case let .waiting(message) = health.restartState {
+        check(streaming && message.hasPrefix("Waiting for 1 active task") && health.canForceRestart,
+              "demo restart waits for the running reply (\(message))")
+    } else {
+        check(false, "demo restart deferred (\(health.restartState))")
+    }
+    await health.restart(skipDeferral: true)
+    let forced = await waitFor("forced demo restart", timeout: 20) {
+        if case .restarted = health.restartState { return gateway.state.isConnected }
+        return false
+    }
+    check(forced && !running.isRunning, "Restart Now Anyway restarts without waiting (\(health.restartState))")
     gateway.stop()
+}
+
+/// The demo's `channels.pairing.*` replies use exactly the upstream keys (closed objects).
+@MainActor
+func checkDemoPairingShapes() async {
+    let connection = GatewayConnection(profile: .demo())
+    let ready = Scripted(false)
+    await connection.setHandlers(onEvent: { _ in }, onState: { state, _ in
+        if state.isConnected { Task { @MainActor in ready.value = true } }
+    })
+    await connection.start()
+    guard await waitFor("demo raw connection", timeout: 10, { ready.value }) else {
+        check(false, "demo raw connection")
+        return
+    }
+    let accountKeys: Set<String> = ["channel", "channelLabel", "accountId", "accountLabel", "notifySupported"]
+    let requestKeys: Set<String> = ["requestId", "channel", "channelLabel", "accountId", "accountLabel", "senderId", "senderLabel",
+                                    "metadata", "createdAt", "lastSeenAt", "expiresAt", "notifySupported"]
+    func keys(_ value: JSONValue?) -> Set<String> { Set(value?.object?.keys.map(\.self) ?? []) }
+    do {
+        let list = try await connection.request("channels.pairing.list", [:])
+        check(keys(list) == ["accounts", "requests", "commandOwnerConfigured", "limits"] && keys(list["limits"]) == ["pendingPerAccount", "ttlMs"],
+              "demo list result keys (\(keys(list).sorted()))")
+        check((list["accounts"]?.array ?? []).allSatisfy { keys($0).isSubset(of: accountKeys) && keys($0).isSuperset(of: accountKeys.subtracting(["accountLabel"])) },
+              "demo account keys")
+        let requests = list["requests"]?.array ?? []
+        check(requests.count == 3 && requests.allSatisfy {
+            keys($0).isSubset(of: requestKeys) && keys($0).isSuperset(of: requestKeys.subtracting(["accountLabel", "metadata"]))
+                && ($0["accountLabel"].map { $0.text != nil } ?? true)
+                && ($0["metadata"]?.object?.values.allSatisfy { $0.text != nil } ?? true)
+        }, "demo request keys")
+        check(requests.contains { $0["metadata"] == nil && $0["channel"]?.text == "discord" }, "demo Discord request has senderId only")
+        let maya = requests.first { $0["metadata"]?["name"]?.text == "Maya Chen" }
+        let approve = try await connection.request("channels.pairing.approve",
+                                                   ["channel": "telegram", "accountId": "home", "requestId": maya?["requestId"] ?? .null, "notify": true])
+        check(keys(approve) == ["requestId", "senderId", "notification", "commandOwnerBootstrap"]
+              && approve["notification"]?.text == "sent" && approve["commandOwnerBootstrap"]?.text == "not-requested", "demo approve result keys")
+        let discord = requests.first { $0["channel"]?.text == "discord" }
+        let dismiss = try await connection.request("channels.pairing.dismiss",
+                                                   ["channel": "discord", "accountId": "family", "requestId": discord?["requestId"] ?? .null])
+        check(keys(dismiss) == ["requestId", "senderId"] && dismiss["senderId"]?.text == "418820017734812160", "demo dismiss result keys")
+        do {
+            _ = try await connection.request("channels.pairing.dismiss", ["channel": "slack", "accountId": "work", "requestId": "x"])
+            check(false, "demo not-pairing account refused")
+        } catch let GatewayError.rpc(code, message, _) {
+            check(code == "INVALID_REQUEST" && message == "channel account does not use DM pairing: slack:work", "demo not-pairing account refused")
+        }
+    } catch {
+        check(false, "demo raw pairing calls (\(error))")
+    }
+    await connection.stop()
 }
 
 /// Back/forward and ⌘1–⌘9 through `AppModel`, across two demo Gateways.
 @MainActor
 func runNavigation() async {
-    let app = AppModel()
+    let (defaults, defaultsName) = scratchDefaults()
+    let app = AppModel(defaults: defaults)
     guard app.gateways.isEmpty else {
         check(false, "navigation checks need an empty profile list (found \(app.gateways.count))")
         return
     }
     defer {
         for gateway in app.gateways { app.remove(gateway.id) }
-        UserDefaults.standard.removeObject(forKey: "pincer.selectedGateway")
+        UserDefaults.standard.removePersistentDomain(forName: defaultsName)
     }
     let first = app.add(.demo(), secret: nil)
     let ready = await waitFor("demo connection") { first.state.isConnected && !first.sessions.isEmpty }
@@ -1226,6 +3229,20 @@ func runNavigation() async {
     app.openPinned(0)
     check(app.history.current == beforeMissing, "⌘ with no pinned chat at that number does nothing")
 
+    let requests = app.openRequests
+    let match = TranscriptSearch.Match(entryId: "u-x", section: .message(0), occurrence: 0)
+    app.open(trip, find: "ramen", match: match)
+    check(first.selectedKey == trip.sessionKey && app.history.current == trip && app.openRequests == requests + 1,
+          "opening a message result opens its chat and records history")
+    check(app.takeFindRequest(for: main) == nil, "a find request is only for its chat")
+    let request = app.takeFindRequest(for: trip)
+    check(request?.query == "ramen" && request?.match == match && request?.target == trip, "the chat takes its find request")
+    check(app.takeFindRequest(for: trip) == nil, "a find request is taken once")
+    app.open(papers, find: "diffusion", match: nil)
+    app.open(main, find: "welcome", match: nil)
+    check(app.takeFindRequest(for: papers) == nil && app.takeFindRequest(for: main)?.query == "welcome",
+          "a newer find request replaces an untaken one")
+
     let second = app.add(.demo(), secret: nil)
     let secondReady = await waitFor("second demo") { second.state.isConnected && !second.sessions.isEmpty }
     check(secondReady && app.selectedGatewayId == second.id, "second gateway added and selected")
@@ -1242,6 +3259,320 @@ func runNavigation() async {
           "removing a gateway drops its chats from history")
     app.goBack()
     check(app.selectedGatewayId == first.id, "Back still works after removing a gateway")
+}
+
+/// Quick Capture's target list and send flow through `AppModel` and the demo Gateway.
+@MainActor
+func runQuickCaptureDemo() async {
+    // A scratch suite, so concurrent check runs never see each other's saved gateways.
+    let (defaults, suite) = scratchDefaults()
+    let app = AppModel(defaults: defaults)
+    defer {
+        for gateway in app.gateways { app.remove(gateway.id) }
+        UserDefaults.standard.removePersistentDomain(forName: suite)
+    }
+    let gateway = app.add(.demo(), secret: nil)
+    let ready = await waitFor("demo connection") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    check(ready, "Quick Capture demo connected")
+    guard ready else { return }
+    let items = QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: app.selectedGatewayId, recent: [])
+    check(!items.contains { item in
+        guard case let .openChat(target) = item.action, let row = gateway.sessions[target.sessionKey] else { return false }
+        return row.isSubagent || row.isAutomation || row.isArchived
+    } && items.contains { $0.section == .newChat }, "target list leaves out helper runs and offers new chats")
+    check(QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: app.selectedGatewayId, recent: [], query: "jptr")
+        .first?.title == "Japan trip", "target search is fuzzy")
+
+    gateway.selectedKey = "agent:main:main"
+    let model = QuickCaptureModel(app: app, defaults: defaults)
+    model.target = QuickCaptureTarget(gatewayId: gateway.id, target: .chat("agent:main:dashboard:trip"))
+    model.prepare()
+    model.text = "quick thought"
+    let sent = await model.send()
+    check(sent && model.text.isEmpty && gateway.selectedKey == "agent:main:main"
+          && gateway.chat(for: "agent:main:dashboard:trip").items.contains { $0.role == .user && $0.plainText.contains("quick thought") },
+          "sends to an existing chat without switching the main window")
+
+    let sessionsBefore = gateway.sessions.count
+    model.target = QuickCaptureTarget(gatewayId: gateway.id, target: .newChat(agentId: "research"))
+    model.text = "new idea"
+    let created = await model.send()
+    check(created && gateway.sessions.count == sessionsBefore + 1 && gateway.selectedKey == "agent:main:main"
+          && app.selectedGatewayId == gateway.id, "a new chat is created and sent to without selecting it")
+    check(QuickCaptureModel(app: app, defaults: defaults).settings.lastTarget?.sessionKey?.hasPrefix("agent:research:") == true,
+          "the last target is remembered as the created chat")
+
+    let opens = app.openRequests
+    model.target = QuickCaptureTarget(gatewayId: gateway.id, target: .chat("agent:main:dashboard:trip"))
+    model.text = "and open it"
+    let revealed = await model.send(reveal: true)
+    check(revealed && gateway.selectedKey == "agent:main:dashboard:trip" && app.openRequests == opens + 1,
+          "Send & Open reveals the chat")
+
+    // Open in Pincer keeps the draft.
+    gateway.selectedKey = "agent:main:main"
+    model.prepare()
+    check(model.target?.sessionKey == "agent:main:dashboard:trip", "a new panel starts at the last target")
+    model.text = "not yet"
+    let opensBefore = app.openRequests
+    check(model.revealTarget() && gateway.selectedKey == "agent:main:dashboard:trip" && app.openRequests == opensBefore + 1
+          && model.text == "not yet", "Open in Pincer reveals the chat and keeps the draft")
+    model.target = QuickCaptureTarget(gatewayId: gateway.id, target: .newChat(agentId: "research"))
+    check(!model.revealTarget(), "a new chat can't be revealed before it exists")
+    model.text = "  \n"
+    check(!model.canSend, "blank text can't be sent")
+
+    // One Gateway: recent chats first, no duplicates, no Gateway name.
+    func chat(_ store: GatewayStore, _ key: String) -> Notifier.Target { Notifier.Target(gatewayId: store.id, sessionKey: key) }
+    func chatRows(_ items: [PaletteItem], on store: GatewayStore) -> [PaletteItem] {
+        items.filter { if case let .openChat(target) = $0.action { target.gatewayId == store.id } else { false } }
+    }
+    func newChatRows(_ items: [PaletteItem], on store: GatewayStore) -> [PaletteItem] {
+        items.filter { if case let .newChat(id, _) = $0.action { id == store.id } else { false } }
+    }
+    let papers = chat(gateway, "agent:research:dashboard:papers")
+    let single = QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: gateway.id,
+                                          recent: [papers, chat(gateway, "agent:main:dashboard:trip")],
+                                          current: chat(gateway, "agent:main:main"))
+    check(single.prefix(3).map(\.id) == [chat(gateway, "agent:main:main"), papers, chat(gateway, "agent:main:dashboard:trip")]
+        .map { "chat:\($0.gatewayId.uuidString):\($0.sessionKey)" }, "the current chat, then recent chats, come first")
+    check(Set(single.map(\.id)).count == single.count, "no duplicate rows")
+    check(!single.contains { $0.subtitle?.contains(gateway.profile.name) == true }, "one Gateway: no Gateway name in subtitles")
+    check(newChatRows(single, on: gateway).count == gateway.agents.count && single.allSatisfy(\.isEnabled),
+          "a New Chat item per agent on a connected Gateway")
+    check(single.firstIndex { $0.section == .newChat }! > single.lastIndex { $0.section == .chats }!, "chats before new chats")
+
+    // Picker navigation.
+    model.openPicker()
+    check(model.isPickerOpen && model.highlighted(in: model.items)?.id == model.target?.itemId, "the picker highlights the current target")
+    let pickerItems = model.items
+    model.moveHighlight(by: 1)
+    let moved = model.highlightedId
+    model.moveHighlight(by: -1)
+    check(moved != nil && model.highlightedId == model.target?.itemId, "↓ then ↑ comes back")
+    model.query = "jptr"
+    check(model.highlightedId == nil && model.highlighted(in: model.items)?.title == "Japan trip", "typing resets the highlight")
+    check(model.pickHighlighted() && model.target?.sessionKey == "agent:main:dashboard:trip" && !model.isPickerOpen && model.query.isEmpty,
+          "Return picks the highlighted row and closes the picker")
+    check(!model.pick(PaletteItem(id: pickerItems[0].id, title: pickerItems[0].title, symbol: pickerItems[0].symbol, section: pickerItems[0].section,
+                                  action: pickerItems[0].action, isEnabled: false)), "disabled rows can't be picked")
+    if let pinned = model.items.first(where: { $0.shortcut == "⌘1" }) {
+        check(model.pickPinned(1) && model.target?.itemId == pinned.id, "⌘1 picks the first pinned chat")
+    }
+
+    // Two Gateways plus one that never connects.
+    var secondProfile = GatewayProfile.demo()
+    secondProfile.name = "Second demo"
+    let second = app.add(secondProfile, secret: nil)
+    let offline = app.add(GatewayProfile(name: "Unreachable", url: "ws://127.0.0.1:1", authMode: .none), secret: nil)
+    let secondReady = await waitFor("second demo") { second.state.isConnected && !second.sessions.isEmpty }
+    check(secondReady && !offline.state.isConnected, "second demo connected")
+    app.selectedGatewayId = gateway.id
+    let multi = QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: gateway.id, recent: [])
+    check(!chatRows(multi, on: gateway).isEmpty && chatRows(multi, on: gateway).allSatisfy { $0.subtitle?.contains(gateway.profile.name) == true }
+          && !chatRows(multi, on: second).isEmpty && chatRows(multi, on: second).allSatisfy { $0.subtitle?.contains("Second demo") == true },
+          "several Gateways: each chat's subtitle names its Gateway")
+    check(newChatRows(multi, on: second).allSatisfy { $0.subtitle?.contains("Second demo") == true }
+          && newChatRows(multi, on: second).count == second.agents.count && newChatRows(multi, on: offline).isEmpty,
+          "New Chat items for each connected Gateway, none for one that isn't connected")
+    check(multi.firstIndex { chatRows([$0], on: gateway).count == 1 }! < multi.firstIndex { chatRows([$0], on: second).count == 1 }!,
+          "the selected Gateway's chats come first")
+    check(Set(multi.map(\.id)).count == multi.count, "no duplicates across Gateways")
+    let selectedBefore = app.selectedGatewayId
+    model.target = QuickCaptureTarget(gatewayId: second.id, target: .chat("agent:main:dashboard:trip"))
+    model.text = "to the other gateway"
+    let crossSent = await model.send()
+    check(crossSent && app.selectedGatewayId == selectedBefore
+          && second.chat(for: "agent:main:dashboard:trip").items.contains { $0.plainText.contains("to the other gateway") }
+          && !gateway.chat(for: "agent:main:dashboard:trip").items.contains { $0.plainText.contains("to the other gateway") },
+          "sends to another Gateway without switching to it")
+    model.target = QuickCaptureTarget(gatewayId: offline.id, target: .newChat(agentId: "main"))
+    model.text = "nowhere"
+    check(!model.canSend && model.connectionStatus != nil, "can't send to a Gateway that isn't connected (\(model.connectionStatus ?? "-"))")
+    let offlineSent = await model.send()
+    check(!offlineSent && model.text == "nowhere" && model.target?.gatewayId == offline.id
+          && model.settings.lastTarget?.gatewayId == second.id, "a refused send keeps the draft and the last target")
+}
+
+/// Quick Capture's send flows against the mock, across two Gateways (both on the same mock).
+/// The mock refuses a `chat.send` whose text has `[mock:fail-send]` and drops the connection on `[mock:drop]`.
+@MainActor
+func runQuickCaptureLive(url: String, token: String) async {
+    // A scratch suite, so concurrent check runs never see each other's saved gateways.
+    let (defaults, suite) = scratchDefaults()
+    let app = AppModel(defaults: defaults)
+    defer {
+        for gateway in app.gateways { app.remove(gateway.id) }
+        UserDefaults.standard.removePersistentDomain(forName: suite)
+    }
+    let home = app.add(GatewayProfile(name: "Mock home", url: url, authMode: .token), secret: token)
+    let work = app.add(GatewayProfile(name: "Mock work", url: url, authMode: .token), secret: token)
+    let ready = await waitFor("Quick Capture gateways", timeout: 25) {
+        [home, work].allSatisfy { $0.state.isConnected && !$0.sessions.isEmpty }
+    }
+    check(ready, "two Gateways connected for Quick Capture")
+    guard ready else { return }
+    app.selectedGatewayId = home.id
+    home.selectedKey = "agent:main:main"
+    work.selectedKey = "agent:research:main"
+    let nonce = String(UUID().uuidString.prefix(8))
+    let model = QuickCaptureModel(app: app, defaults: defaults)
+    let note = OutgoingAttachment(fileName: "note.txt", mimeType: "text/plain", data: Data("quick note".utf8))
+
+    /// User messages with `text` in the chat's history as the Gateway has it.
+    func delivered(_ store: GatewayStore, _ key: String, _ text: String) async -> Int {
+        let chat = store.chat(for: key)
+        _ = await waitFor("run on \(key)", timeout: 20) { !chat.isRunning }
+        await chat.load(force: true)
+        return chat.items.filter { $0.role == .user && $0.plainText.contains(text) }.count
+    }
+    func selectionUnchanged() -> Bool {
+        app.selectedGatewayId == home.id && home.selectedKey == "agent:main:main" && work.selectedKey == "agent:research:main"
+    }
+    /// Sessions that appeared since `before`; when none are expected it just gives `sessions.changed` time to arrive.
+    func created(on store: GatewayStore, since before: Set<String>, expected: Bool = true) async -> [String] {
+        if expected {
+            _ = await waitFor("sessions.changed", timeout: 3) { Set(store.sessions.keys).count > before.count }
+        } else {
+            try? await Task.sleep(for: .seconds(1))
+        }
+        return Array(Set(store.sessions.keys).subtracting(before))
+    }
+
+    // The list: both Gateways, no helper runs or automations.
+    let items = QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: app.selectedGatewayId, recent: [])
+    let keys = items.compactMap { item -> String? in if case let .openChat(target) = item.action { target.sessionKey } else { nil } }
+    check(!keys.isEmpty && !keys.contains { $0.contains(":cron:") || $0.contains(":subagent:") } && items.allSatisfy(\.isEnabled),
+          "live target list leaves out automations and helper runs")
+    check(items.filter { $0.section == .newChat }.count == home.agents.count + work.agents.count
+          && items.contains { $0.subtitle?.contains("Mock work") == true }, "live target list covers both Gateways")
+
+    // 9. An existing chat: one chat.send, no sessions.create, nothing selected.
+    let trip = "agent:main:dashboard:trip"
+    var workKeys = Set(work.sessions.keys)
+    let opens = app.openRequests
+    model.prepare()
+    model.target = QuickCaptureTarget(gatewayId: work.id, target: .chat(trip))
+    model.text = "qc existing \(nonce)"
+    model.attachments = [note]
+    let sentExisting = await model.send()
+    check(sentExisting && model.text.isEmpty && model.attachments.isEmpty && model.error == nil && model.target == nil,
+          "existing chat: send succeeds and clears the draft")
+    let createdByExisting = await created(on: work, since: workKeys, expected: false)
+    let existingCount = await delivered(work, trip, "qc existing \(nonce)")
+    check(existingCount == 1 && createdByExisting.isEmpty, "existing chat: exactly one message and no new session (\(existingCount), \(createdByExisting))")
+    check(selectionUnchanged() && app.openRequests == opens, "existing chat: the main window's selection is unchanged")
+    check(model.settings.lastTarget == QuickCaptureTarget(gatewayId: work.id, target: .chat(trip))
+          && defaults.string(forKey: QuickCaptureSettings.lastTargetKey) == "\(work.id.uuidString)|\(ShareTarget.chat(trip).storageValue)",
+          "14. the last target is saved as <gateway>|<target>")
+    let fresh = QuickCaptureModel(app: app, defaults: defaults)
+    fresh.prepare()
+    check(fresh.target == QuickCaptureTarget(gatewayId: work.id, target: .chat(trip)), "14. a new model starts at the last target")
+
+    // 10. A new chat: sessions.create, then chat.send to the new key; nothing selected.
+    workKeys = Set(work.sessions.keys)
+    model.target = QuickCaptureTarget(gatewayId: work.id, target: .newChat(agentId: "research"))
+    model.text = "qc new \(nonce)"
+    let sentNew = await model.send()
+    let newKeys = await created(on: work, since: workKeys)
+    check(sentNew && newKeys.count == 1 && newKeys.first?.hasPrefix("agent:research:") == true,
+          "new chat: exactly one session created (\(newKeys))")
+    if let newKey = newKeys.first {
+        let newCount = await delivered(work, newKey, "qc new \(nonce)")
+        check(newCount == 1, "new chat: the message went to the created chat (\(newCount))")
+    }
+    check(selectionUnchanged() && app.openRequests == opens, "new chat: selectedKey and selectedGatewayId unchanged")
+    check(model.settings.lastTarget == newKeys.first.map { QuickCaptureTarget(gatewayId: work.id, target: .chat($0)) },
+          "new chat: the last target is the created chat (\(model.settings.lastTarget?.storageValue ?? "nil"))")
+
+    // 11. Reveal: the created chat on the other Gateway is opened.
+    workKeys = Set(work.sessions.keys)
+    model.target = QuickCaptureTarget(gatewayId: work.id, target: .newChat(agentId: "main"))
+    model.text = "qc reveal \(nonce)"
+    let revealed = await model.send(reveal: true)
+    let revealedKeys = await created(on: work, since: workKeys)
+    check(revealed && revealedKeys.count == 1 && app.selectedGatewayId == work.id && work.selectedKey == revealedKeys.first
+          && app.openRequests == opens + 1 && app.history.current?.sessionKey == revealedKeys.first,
+          "reveal: the new chat's Gateway and chat are selected")
+    app.selectedGatewayId = home.id
+    work.selectedKey = "agent:research:main"
+
+    // 12. A refused send keeps everything.
+    let lastBefore = model.settings.lastTarget
+    model.target = QuickCaptureTarget(gatewayId: home.id, target: .chat(trip))
+    model.text = "qc refused [mock:fail-send] \(nonce)"
+    model.attachments = [note]
+    let refused = await model.send()
+    check(!refused && model.text == "qc refused [mock:fail-send] \(nonce)" && model.attachments == [note]
+          && model.target == QuickCaptureTarget(gatewayId: home.id, target: .chat(trip)) && !model.isSending,
+          "refused send: returns false and keeps the text, attachments and target")
+    check(model.error?.hasPrefix("Couldn’t send:") == true, "refused send: an error is shown (\(model.error ?? "none"))")
+    check(model.settings.lastTarget == lastBefore, "refused send: the last target isn't updated")
+    check(!home.chat(for: trip).items.contains { $0.plainText.contains("qc refused") }, "refused send: no stray message in the chat")
+    model.text = "qc retried \(nonce)"
+    let retried = await model.send()
+    check(retried && model.error == nil && model.settings.lastTarget == QuickCaptureTarget(gatewayId: home.id, target: .chat(trip)),
+          "refused send: a retry goes through and clears the error")
+
+    // 13. sessions.create succeeds but chat.send fails: the retry goes to the created chat.
+    var homeKeys = Set(home.sessions.keys)
+    let lastBeforeCreate = model.settings.lastTarget
+    model.target = QuickCaptureTarget(gatewayId: home.id, target: .newChat(agentId: "research"))
+    model.text = "qc half [mock:fail-send] \(nonce)"
+    let half = await model.send()
+    let halfKeys = await created(on: home, since: homeKeys)
+    check(!half && halfKeys.count == 1 && model.target == halfKeys.first.map { QuickCaptureTarget(gatewayId: home.id, target: .chat($0)) }
+          && model.text.contains("qc half") && model.error != nil && model.settings.lastTarget == lastBeforeCreate,
+          "create ok, send failed: the target becomes the created chat (\(halfKeys))")
+    check(selectionUnchanged(), "create ok, send failed: nothing selected")
+    homeKeys = Set(home.sessions.keys)
+    model.text = "qc half retried \(nonce)"
+    let halfRetried = await model.send()
+    let extraKeys = await created(on: home, since: homeKeys, expected: false)
+    if let halfKey = halfKeys.first {
+        let halfCount = await delivered(home, halfKey, "qc half retried \(nonce)")
+        check(halfRetried && extraKeys.isEmpty && halfCount == 1
+              && model.settings.lastTarget == QuickCaptureTarget(gatewayId: home.id, target: .chat(halfKey)),
+              "create ok, send failed: the retry doesn't create a second chat")
+
+        // A chat archived elsewhere drops out of the list and isn't the default any more.
+        await home.patch(halfKey, ["archived": true])
+        let archived = await waitFor("archive") { home.sessions[halfKey]?.isArchived == true }
+        let listed = QuickCapture.targetItems(gateways: app.gateways, selectedGatewayId: home.id, recent: [])
+        check(archived && !listed.contains { $0.id == "chat:\(home.id.uuidString):\(halfKey)" }, "archived chats leave the list")
+        let reopened = QuickCaptureModel(app: app, defaults: defaults)
+        reopened.prepare()
+        check(reopened.target == QuickCaptureTarget(gatewayId: home.id, target: .chat("agent:main:main")),
+              "an archived last target falls back to the current chat (\(reopened.target?.storageValue ?? "nil"))")
+    }
+
+    // 12. The connection drops mid-send: the draft stays, rows go disabled, and Send comes back on reconnect.
+    model.target = QuickCaptureTarget(gatewayId: work.id, target: .chat(trip))
+    model.text = "qc dropped [mock:drop] \(nonce)"
+    model.attachments = [note]
+    let dropped = await model.send()
+    check(!dropped && model.text.contains("qc dropped") && model.attachments == [note] && model.error != nil,
+          "dropped connection: the draft is kept and an error shown (\(model.error ?? "none"))")
+    let lost = await waitFor("connection lost", timeout: 5) { !work.state.isConnected }
+    let offlineItems = model.items
+    let workRows = offlineItems.filter { if case let .openChat(target) = $0.action { target.gatewayId == work.id } else { false } }
+    check(lost && !model.canSend && model.connectionStatus != nil, "dropped connection: Send is disabled (\(model.connectionStatus ?? "-"))")
+    check(!workRows.isEmpty && workRows.allSatisfy { !$0.isEnabled && $0.subtitle?.contains("Mock work") == true }
+          && !offlineItems.contains { if case let .newChat(id, _) = $0.action { id == work.id } else { false } }
+          && offlineItems.contains { $0.isEnabled },
+          "dropped connection: that Gateway's chats are disabled and its New Chat items gone")
+    check(workRows.first.map { !model.pick($0) } ?? false, "a disabled row can't be picked")
+    model.openPicker()
+    for _ in 0..<offlineItems.count { model.moveHighlight(by: 1) }
+    check(model.highlighted(in: model.items)?.isEnabled == true, "↑/↓ skip disabled rows")
+    model.closePicker()
+    let back = await waitFor("reconnect", timeout: 20) { work.state.isConnected }
+    check(back && model.canSend && model.target?.gatewayId == work.id, "Send is enabled again once the Gateway reconnects")
+    model.text = "qc after drop \(nonce)"
+    let afterDrop = await model.send()
+    let afterDropCount = await delivered(work, trip, "qc after drop \(nonce)")
+    check(afterDrop && afterDropCount == 1, "a send after reconnecting goes through (\(afterDropCount))")
+    check(selectionUnchanged(), "no send changed the main window's selection")
 }
 
 /// Needs a mock started with MOCK_PAIRING=auto MOCK_LEGACY_PAIRING=1, so the first pairing
@@ -1336,6 +3667,7 @@ func runLive(url: String, token: String) async {
     await trip.loadOlder()
     check(!trip.hasMoreHistory && trip.items.count == 302, "reaches the start (\(trip.items.count))")
     check(trip.items.first?.plainText == "Idea for day 1?", "oldest message first")
+    await checkLiveMessageSearch(gateway)
 
     let research = gateway.chat(for: "agent:research:main")
     await research.load()
@@ -1433,6 +3765,8 @@ func runLive(url: String, token: String) async {
     }
 
     _ = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
+    await checkApprovalOutcomes(gateway, chat: chat, label: "live")
+    await checkLiveApprovals(profile: profile, gateway: gateway, chat: chat)
     await chat.send("ask me something")
     let asked = await waitFor("question.requested") { !gateway.pendingQuestions(for: key).isEmpty }
     check(asked, "ask_user question surfaced over the wire")
@@ -1589,6 +3923,48 @@ func runLive(url: String, token: String) async {
     }
     other.stop()
 
+    // Approval History against the mock's 60 seeded decisions (30 exec, 18 plugin, 12 system-agent),
+    // plus any approvals resolved earlier in this run.
+    let history = gateway.approvalHistory
+    check(gateway.hello?.methods.contains("approval.history") == true, "hello advertises approval.history")
+    await history.load()
+    check(history.supported && history.loadState == .idle && history.items.count == 50 && history.hasMore, "approval.history page 1 (\(history.items.count))")
+    await history.loadMore()
+    let seededIds = history.items.map(\.id).filter { $0.contains("_hist_") }
+    let resolvedHere = history.items.filter { !$0.id.contains("_hist_") }
+    check(seededIds.count == 60 && history.items.count == 60 + resolvedHere.count && Set(history.items.map(\.id)).count == history.items.count
+          && !history.hasMore, "two pages = 60 seeded + \(resolvedHere.count) resolved, no duplicates")
+    check(!resolvedHere.isEmpty && history.items.first?.id == resolvedHere.first?.id && resolvedHere.first?.status == .denied
+          && resolvedHere.first.map(history.decidedBy) == "This device", "approval denied earlier is first, decided by this device")
+    check(history.items.allSatisfy { $0.status != .pending } && Set(history.items.map(\.status)) == [.allowed, .denied, .expired, .cancelled],
+          "terminal statuses only")
+    for (filter, seeded) in [(ApprovalHistoryModel.KindFilter.exec, 30), (.plugin, 18), (.systemAgent, 12)] {
+        await history.setKindFilter(filter)
+        while history.hasMore { await history.loadMore() }
+        let expected = seeded + (filter == .exec ? resolvedHere.count : 0)
+        check(history.items.count == expected && history.items.allSatisfy { $0.kind.rawValue == filter.rawValue },
+              "\(filter.label) filter (\(history.items.count)/\(expected))")
+    }
+    await history.setKindFilter(.all)
+    await history.loadDetail("plugin_hist_001")
+    check(history.details["plugin_hist_001"]?.kind == .plugin && history.details["plugin_hist_001"]?.title != nil
+          && history.detailState["plugin_hist_001"] == .idle, "approval.get plugin_hist_001")
+    await history.loadDetail("sys_hist_001")
+    check(history.details["sys_hist_001"]?.kind == .systemAgent, "approval.get sys_hist_001")
+    await history.loadDetail("nope_missing")
+    check(history.detailState["nope_missing"]?.error == "This approval is no longer on the Gateway.", "approval.get not found")
+
+    await checkUsageLive(gateway)
+    // Pairing Requests: Pincer doesn't ask for operator.pairing, so standard access can't list.
+    let standardPairing = gateway.pairingInbox
+    check(gateway.hello?.methods.contains("channels.pairing.list") == true && standardPairing.supported, "hello advertises channels.pairing.list")
+    check(!GatewayConnection.scopes.contains(PairingInboxModel.pairingScope) && !profile.requestedScopes.contains(PairingInboxModel.pairingScope),
+          "operator.pairing is never requested")
+    await standardPairing.seed()
+    await standardPairing.load()
+    check(!standardPairing.canManage && standardPairing.needsAccess && standardPairing.requests.isEmpty
+          && standardPairing.loadState == .idle && standardPairing.pendingCount() == 0, "standard access → Full Management needed, no list")
+
     // Automations: read-only without admin, then run, pause, edit, create and delete.
     let automations = gateway.automations
     await automations.load()
@@ -1647,6 +4023,7 @@ func runLive(url: String, token: String) async {
     coder.clearCompaction()
     check(coder.compaction == nil, "result cleared when the popover closes")
     await checkPushLive(gateway)
+    await runLiveIntents(profile: profile, gateway: gateway)
     gateway.stop()
 
     let adminProfile = GatewayProfile(id: profile.id, name: "Mock", url: url, authMode: .token, access: .admin)
@@ -1790,6 +4167,31 @@ func runLive(url: String, token: String) async {
     let missing = await adminSettings.install(from: .npm, spec: "missing-package")
     check(!missing && adminSettings.operation(for: GatewaySettingsModel.installKey).error?.contains("not found") == true,
           "install errors surface")
+    // Pairing Requests with Full Management against the mock's three seeded senders.
+    let pairing = admin.pairingInbox
+    await pairing.seed()
+    check(pairing.canManage && !pairing.needsAccess && pairing.loadState == .idle && pairing.accounts.count == 2
+          && pairing.requests.map(\.requestId) == ["pr_maya", "pr_discord", "pr_soon"], "channels.pairing.list (\(pairing.requests.map(\.requestId)))")
+    check(pairing.pendingCount() == 3 && pairing.limits?.ttl == 3600 && pairing.limits?.pendingPerAccount == 3 && !pairing.canBootstrapCommandOwner,
+          "badge count and limits")
+    if let maya = pairing.requests.first(where: { $0.requestId == "pr_maya" }),
+       let discord = pairing.requests.first(where: { $0.requestId == "pr_discord" })
+    {
+        check(maya.title == "Maya Chen" && maya.senderLine == "Telegram user id: 5550142" && maya.accountLine == "Telegram · Home bot"
+              && maya.details.map(\.label) == ["Language code"] && maya.showsLastSeen, "mock request presentation")
+        check(discord.title == "418820017734812160" && !discord.notifySupported, "sender with only an id")
+        let approved = await pairing.approve(maya, notify: true)
+        check(approved && pairing.notice == nil && pairing.operation(for: maya) == .idle, "channels.pairing.approve")
+        let dismissed = await pairing.dismiss(discord)
+        check(dismissed && pairing.requests.map(\.requestId) == ["pr_soon"] && pairing.pendingCount() == 1, "channels.pairing.dismiss")
+        await pairing.dismiss(discord)
+        check(pairing.notice?.text == PairingInboxModel.staleMessage && pairing.requests.map(\.requestId) == ["pr_soon"],
+              "stale request → already handled notice and refresh")
+        await pairing.refresh()
+        check(pairing.requests.map(\.requestId) == ["pr_soon"] && pairing.loadState == .idle, "refresh after actions")
+    } else {
+        check(false, "mock seeded Maya and a Discord sender")
+    }
     check(admin.canCompactDirectly, "admin compacts through sessions.compact")
     let papers = admin.chat(for: "agent:research:dashboard:papers")
     await papers.load()
@@ -1805,6 +4207,31 @@ func runLive(url: String, token: String) async {
     } else {
         check(false, "nothing left to compact (\(String(describing: papers.compaction)))")
     }
+    await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
+
+    // Health and a safe restart. Last, since a restart drops every client.
+    let health = admin.health
+    await health.load()
+    check(health.hasLoaded && health.level == .healthy && health.health?.channels.first?.id == "discord", "health loads (\(health.issues.map(\.title)))")
+    check(health.heartbeat?.status == .okToken && health.presence.contains(where: health.isThisDevice), "heartbeat and this device's presence")
+    check((health.uptime() ?? 0) > 3600, "uptime from the hello snapshot")
+    check(!gateway.health.canRestart && admin.health.canRestart, "restart needs admin")
+    let uptimeBefore = health.uptime() ?? 0
+    await gateway.health.restart()
+    try? await Task.sleep(for: .milliseconds(400))
+    check(gateway.health.restartState == .failed(ConfigWriteError.adminRequired.message) && gateway.state.isConnected
+          && admin.state.isConnected && (health.uptime() ?? 0) >= uptimeBefore,
+          "non-admin restart sends nothing and the Gateway stays up (\(gateway.health.restartState))")
+    gateway.health.dismissRestartStatus()
+    await health.restart()
+    check(health.restartState == .scheduled(coalesced: false), "restart scheduled (\(health.restartState))")
+    let restarted = await waitFor("gateway restart", timeout: 30) {
+        if case .restarted = health.restartState { return admin.state.isConnected }
+        return false
+    }
+    check(restarted && (health.uptime() ?? .infinity) < 60, "reconnected after restart with a fresh uptime (\(health.restartState))")
+    let othersBack = await waitFor("clients back after restart", timeout: 30) { gateway.state.isConnected && other.state.isConnected }
+    check(othersBack, "other clients reconnect after the restart")
     admin.stop()
 
     for store in [gateway, other] {
@@ -2095,6 +4522,127 @@ final class PushSink: @unchecked Sendable {
     func stop() { self.listener.cancel() }
 }
 
+/// Stale and duplicate answers, shared by the demo and the mock (AC test cases 7, 10–12).
+@MainActor
+func checkApprovalOutcomes(_ gateway: GatewayStore, chat: ChatStore, label: String) async {
+    print("Approval outcomes (\(label))")
+    func raise(_ text: String) async -> ExecApproval? {
+        let known = Set(gateway.approvals.map(\.id))
+        await chat.send(text)
+        _ = await waitFor("\(text) approval") { gateway.approvals.contains { !known.contains($0.id) } }
+        return gateway.approvals.first { !known.contains($0.id) }
+    }
+
+    guard let full = await raise("please approve this") else { return check(false, "\(label): approval surfaced") }
+    check(full.allowedDecisions == ["allow-once", "allow-always", "deny"] && Notifier.category(for: full) == "approval",
+          "\(label): allowedDecisions parsed, all three actions")
+    async let first = gateway.resolveApproval(id: full.id, decision: "allow-once")
+    async let second = gateway.resolveApproval(id: full.id, decision: "allow-once")
+    let pair = await [first, second]
+    check(pair.contains(.resolved) && pair.contains(.alreadyHandled), "\(label): concurrent resolves send once (\(pair))")
+    check(!gateway.approvals.contains { $0.id == full.id }, "\(label): resolved approval removed")
+    let again = await gateway.resolveApproval(id: full.id, decision: "deny")
+    check(again == .alreadyHandled,
+          "\(label): acting again after success is a quiet no-op")
+    _ = await waitFor("\(label) run", timeout: 20) { !chat.isRunning }
+
+    guard let once = await raise("approve once-only") else { return check(false, "\(label): once-only approval surfaced") }
+    check(once.allowedDecisions == ["allow-once", "deny"] && !once.allowsAlways && Notifier.category(for: once) == "approval-once",
+          "\(label): approve once-only leaves out Always allow")
+    let always = await gateway.resolveApproval(once, decision: "allow-always")
+    check(always == .allowAlwaysUnavailable, "\(label): allow-always → unavailable (\(always))")
+    check(gateway.approvals.contains { $0.id == once.id }, "\(label): approval stays pending")
+    check(gateway.lastError == "Always allow isn't available for this command.", "\(label): banner error in lastError")
+    let allowed = await gateway.resolveApproval(once, decision: "allow-once")
+    check(allowed == .resolved && !gateway.approvals.contains { $0.id == once.id }, "\(label): then Allow once succeeds (\(allowed))")
+    _ = await waitFor("\(label) run", timeout: 20) { !chat.isRunning }
+
+    let missingId = "approval_missing_\(UUID().uuidString.prefix(6))"
+    let missing = await gateway.resolveApproval(id: missingId, decision: "deny")
+    check(missing == .expired, "\(label): unknown id → expired (\(missing))")
+    let missingAgain = await gateway.resolveApproval(id: missingId, decision: "allow-once")
+    check(missingAgain == .alreadyHandled, "\(label): acting again on an expired approval is a quiet no-op (\(missingAgain))")
+
+    // A resolve that's out of time or cancelled never reaches the Gateway, and the approval stays pending.
+    guard let late = await raise("please approve this") else { return check(false, "\(label): approval surfaced") }
+    let pastDeadline = await gateway.resolveApproval(id: late.id, decision: "allow-once", connectWithin: 0)
+    check(pastDeadline == .unreachable, "\(label): deadline already passed → unreachable (\(pastDeadline))")
+    let cancelled = Task { await gateway.resolveApproval(id: late.id, decision: "allow-once") }
+    cancelled.cancel()
+    let cancelledOutcome = await cancelled.value
+    check(cancelledOutcome == .unreachable, "\(label): cancelled resolve → unreachable (\(cancelledOutcome))")
+    try? await Task.sleep(for: .milliseconds(500))
+    check(gateway.approvals.contains { $0.id == late.id }, "\(label): neither sent an RPC, approval still pending")
+    _ = await waitFor("\(label) reconnect") { gateway.state.isConnected }
+    let answered = await gateway.resolveApproval(id: late.id, decision: "deny")
+    check(answered == .resolved && !gateway.approvals.contains { $0.id == late.id }, "\(label): a later action still resolves it (\(answered))")
+    _ = await waitFor("\(label) run", timeout: 20) { !chat.isRunning }
+}
+
+/// Mock-only approval paths (AC test cases 9–11, 13, 14).
+@MainActor
+func checkLiveApprovals(profile: GatewayProfile, gateway: GatewayStore, chat: ChatStore) async {
+    print("Approval resolution (live)")
+    func raise(_ text: String) async -> ExecApproval? {
+        let known = Set(gateway.approvals.map(\.id))
+        await chat.send(text)
+        _ = await waitFor("\(text) approval") { gateway.approvals.contains { !known.contains($0.id) } }
+        return gateway.approvals.first { !known.contains($0.id) }
+    }
+
+    // A store that just started, like a background launch: resolves once connected.
+    guard let pending = await raise("please approve this") else { return check(false, "approval surfaced") }
+    let cold = GatewayStore(profile: profile)
+    cold.start()
+    let started = Date()
+    let outcome = await cold.resolveApproval(id: pending.id, decision: "deny")
+    check(outcome == .resolved && Date().timeIntervalSince(started) < 25, "cold store resolves by id within the budget (\(outcome))")
+    let cleared = await waitFor("exec.approval.resolved from another client") { !gateway.approvals.contains { $0.id == pending.id } }
+    check(cleared, "resolved by another client → removed from this store")
+    check(cold.approvals.isEmpty, "cold store keeps no approval")
+    // Another device retrying: the same decision is idempotent, a different one was answered elsewhere.
+    let other = GatewayStore(profile: profile)
+    other.start()
+    let identical = await other.resolveApproval(id: pending.id, decision: "deny")
+    check(identical == .resolved, "identical retry from another client → success")
+    let conflict = await other.resolveApproval(id: pending.id, decision: "allow-once")
+    check(conflict == .alreadyHandled, "different decision after answering here → quiet no-op (\(conflict))")
+    let fresh = GatewayStore(profile: profile)
+    fresh.start()
+    let conflictFresh = await fresh.resolveApproval(id: pending.id, decision: "allow-once")
+    check(conflictFresh == .answeredElsewhere(decision: nil), "different decision from a fresh client → answered elsewhere (\(conflictFresh))")
+    check(fresh.approvals.isEmpty, "answered elsewhere leaves nothing pending")
+    let freshAgain = await fresh.resolveApproval(id: pending.id, decision: "allow-once")
+    check(freshAgain == .alreadyHandled, "acting again after answered elsewhere → quiet no-op (\(freshAgain))")
+    for store in [cold, other, fresh] { store.stop() }
+    _ = await waitFor("approval run", timeout: 20) { !chat.isRunning }
+
+    // Gateway B's approval id sent to A never reaches B; A reads it as not found.
+    guard let mine = await raise("please approve this") else { return check(false, "approval surfaced") }
+    let foreign = await gateway.resolveApproval(id: "approval_on_gateway_b", decision: "allow-once")
+    check(foreign == .expired && gateway.approvals.contains { $0.id == mine.id }, "another gateway's id → not found, own approval untouched")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval",
+                             userInfo: ["gateway": UUID().uuidString, "approval": mine.id])
+          != .resolve(gatewayId: gateway.id, approvalId: mine.id, decision: "allow-once"), "action routes only to the notification's gateway")
+    await gateway.resolveApproval(mine, decision: "deny")
+    _ = await waitFor("approval run", timeout: 20) { !chat.isRunning }
+
+    // The mock's short-lived approval expires after 3 s.
+    guard let short = await raise("approve short-lived") else { return check(false, "short-lived approval surfaced") }
+    try? await Task.sleep(for: .seconds(max(0, (short.expiresAt ?? Date()).timeIntervalSinceNow) + 0.3))
+    check(short.isExpired(), "short-lived approval past expiresAt")
+    let expired = await gateway.resolveApproval(short, decision: "allow-once")
+    check(expired == .expired && !gateway.approvals.contains { $0.id == short.id }, "resolve after expiry → expired, removed (\(expired))")
+    let viaRPC = GatewayStore(profile: profile)
+    viaRPC.start()
+    let expiredRPC = await viaRPC.resolveApproval(id: short.id, decision: "allow-once")
+    check(expiredRPC == .expired, "Gateway reports the expired id as not found")
+    let expiredAgain = await viaRPC.resolveApproval(id: short.id, decision: "deny")
+    check(expiredAgain == .alreadyHandled, "acting again after expired → quiet no-op (\(expiredAgain))")
+    viaRPC.stop()
+    _ = await waitFor("approval run", timeout: 20) { !chat.isRunning }
+}
+
 @MainActor
 func checkPushLive(_ gateway: GatewayStore) async {
     print("Push (live)")
@@ -2134,12 +4682,22 @@ func checkPushLive(_ gateway: GatewayStore) async {
     let before = sink.deliveries.count
     await chat.send("please approve this")
     let approvalSeen = await waitFor("approval push", timeout: 20) {
-        sink.deliveries.dropFirst(before).contains { PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString, "p": $0.body.base64URL]])?.categoryIdentifier == "approval-push" }
+        sink.deliveries.dropFirst(before).contains { PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString, "p": $0.body.base64URL]])?.categoryIdentifier == "approval" }
     }
     check(approvalSeen, "approval push carries approve/deny actions")
-    if let id = gateway.approvals.first?.id {
-        await gateway.resolveApproval(id: id, decision: "deny")
-        check(gateway.approvals.isEmpty, "approval resolved by id from a push action")
+    let approvalMessage = sink.deliveries.dropFirst(before).lazy
+        .compactMap { PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString.lowercased(), "p": $0.body.base64URL]]) }
+        .first { $0.categoryIdentifier == "approval" }
+    if let approvalMessage, case let .approval(id, _) = approvalMessage.kind {
+        let action = Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: approvalMessage.categoryIdentifier,
+                                        userInfo: approvalMessage.userInfo)
+        check(action == .resolve(gatewayId: gateway.id, approvalId: id, decision: "deny"), "Deny on the decrypted push targets its gateway")
+        if case let .resolve(gatewayId, approvalId, decision) = action, gatewayId == gateway.id {
+            let outcome = await gateway.resolveApproval(id: approvalId, decision: decision)
+            check(outcome == .resolved && gateway.approvals.isEmpty, "approval resolved by id from a push action (\(outcome))")
+        }
+    } else {
+        check(false, "approval push decrypted")
     }
     _ = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
 
@@ -2155,4 +4713,375 @@ func checkPushLive(_ gateway: GatewayStore) async {
     await registrar.sync(gateway)
     await registrar.forget(gateway)
     check(registrar.status[gateway.id] == nil && PushKeyStore.keys(for: gateway.id) == nil, "forget drops subscription and keys")
+}
+
+/// `PairingInboxModel` against a scripted Gateway: parsing, titles, scopes, unsupported
+/// gateways, approve/dismiss params, stale requests, expiry and in-flight rows during polls.
+@MainActor
+func checkPairingInboxModel() async {
+    let iso = ISO8601DateFormatter()
+    let now = Date()
+    func stamp(_ offset: TimeInterval) -> String { iso.string(from: now.addingTimeInterval(offset)) }
+    func requestJSON(_ id: String, channel: String = "telegram", account: String = "home", sender: String = "4411",
+                     metadata: String? = nil, created: TimeInterval = -300, expires: TimeInterval = 3300,
+                     lastSeen: TimeInterval? = nil, notify: Bool = true, extra: String = "") -> JSONValue
+    {
+        let meta = metadata.map { #","metadata":\#($0)"# } ?? ""
+        return json(#"{"requestId":"\#(id)","channel":"\#(channel)","channelLabel":"\#(channel.capitalized)","accountId":"\#(account)","senderId":"\#(sender)","senderLabel":"\#(channel.capitalized) user id","createdAt":"\#(stamp(created))","lastSeenAt":"\#(stamp(lastSeen ?? created))","expiresAt":"\#(stamp(expires))","notifySupported":\#(notify)\#(meta)\#(extra)}"#)
+    }
+    let accounts: JSONValue = [
+        json(#"{"channel":"telegram","channelLabel":"Telegram","accountId":"home","accountLabel":"Home bot","notifySupported":true}"#),
+        json(#"{"channel":"discord","channelLabel":"Discord","accountId":"family","notifySupported":false}"#),
+    ]
+    func listResult(_ requests: [JSONValue], owner: Bool = true, accounts: JSONValue = accounts) -> JSONValue {
+        ["accounts": accounts, "requests": .array(requests), "commandOwnerConfigured": .bool(owner),
+         "limits": ["pendingPerAccount": 3, "ttlMs": 3_600_000]]
+    }
+
+    // Parsing and presentation.
+    let bare = PairingRequest(json(#"{"requestId":"r1","channel":"signal","accountId":"main","senderId":"+15550100"}"#))
+    check(bare?.title == "+15550100" && bare?.accountLine == "Signal · main" && bare?.senderLine == "Sender ID: +15550100"
+          && bare?.details.isEmpty == true && bare?.metadata.isEmpty == true && bare?.expiresAt == nil && bare?.isExpired() == false,
+          "request without accountLabel, labels or metadata")
+    check(PairingRequest(json(#"{"requestId":"r1","channel":"signal","accountId":"main"}"#)) == nil
+          && PairingRequest(json(#"{"channel":"signal","accountId":"main","senderId":"x"}"#)) == nil, "senderId and requestId required")
+    let named = PairingRequest(requestJSON("r2", metadata: #"{"Name":"Maya Chen","username":"mayac","languageCode":"en","first_name":"Maya"}"#))
+    check(named?.title == "Maya Chen", "title uses metadata name (case-insensitive key)")
+    check(named?.details.map(\.label) == ["First name", "Language code"] && named?.details.last?.value == "en",
+          "other metadata humanized, name and username left out")
+    check(PairingRequest(requestJSON("r3", metadata: #"{"name":"  ","username":"mayac"}"#))?.title == "@mayac", "blank name → @username")
+    check(PairingRequest(requestJSON("r4", metadata: #"{"USERNAME":"@mayac"}"#))?.title == "@mayac", "username keeps a single @")
+    check(PairingRequest(requestJSON("r5", metadata: #"{"username":""}"#))?.title == "4411", "empty metadata → senderId")
+    let timed = PairingRequest(requestJSON("r6", created: -300, expires: 3300))
+    check(timed?.accountLine == "Telegram · home" && timed?.senderLine == "Telegram user id: 4411", "sender and account lines")
+    let timing = timed?.timing(at: now) ?? ""
+    check(timing.hasPrefix("Requested ") && timing.contains(" ago · Expires in ") && !timing.contains("Last seen"),
+          "timing line (\(timing))")
+    let seenAgain = PairingRequest(requestJSON("r7", created: -600, lastSeen: -60))
+    check(seenAgain?.showsLastSeen == true && seenAgain?.timing(at: now).contains("Last seen") == true
+          && PairingRequest(requestJSON("r8", created: -600, lastSeen: -570))?.showsLastSeen == false, "last seen only when > 1 min later")
+    let expired = PairingRequest(requestJSON("r9", created: -3700, expires: -100))
+    check(expired?.isExpired(at: now) == true && expired?.timing(at: now).hasSuffix("Expired") == true, "expired request")
+    let fractional = PairingRequest(json(#"{"requestId":"f","channel":"c","accountId":"a","senderId":"s","createdAt":"2026-07-01T10:00:00.123Z"}"#))
+    check(fractional?.createdAt != nil, "ISO dates with fractional seconds")
+
+    // Loading, sorting, filtering and the badge count.
+    var calls: [(String, JSONValue)] = []
+    let result = Scripted(listResult([
+        requestJSON("old", created: -1200), requestJSON("new", created: -60),
+        requestJSON("disc", channel: "discord", account: "family", created: -600, notify: false),
+        requestJSON("gone", created: -3700, expires: -100),
+    ]))
+    let model = PairingInboxModel { method, params in
+        calls.append((method, params))
+        return result.value
+    }
+    await model.load()
+    check(calls.first?.0 == "channels.pairing.list" && calls.first?.1 == [:], "list is called with {}")
+    check(model.hasLoaded && model.supported && !model.needsAccess && model.loadState == .idle, "loaded")
+    check(model.requests.map(\.requestId) == ["new", "disc", "old", "gone"], "newest first")
+    check(model.pendingCount(at: now) == 3, "expired requests left out of the count")
+    check(model.accounts.map(\.displayName) == ["Home bot", "family"] && model.limits?.pendingPerAccount == 3
+          && model.limits?.ttl == 3600 && model.commandOwnerConfigured, "accounts and limits")
+    check(model.showsChannelFilter && model.channels.map(\.label) == ["Telegram", "Discord"], "channel filter with two channels")
+    model.channelFilter = "discord"
+    check(model.visibleRequests.map(\.requestId) == ["disc"], "channel filter is local")
+    result.value = listResult([requestJSON("new", created: -60)],
+                        accounts: [json(#"{"channel":"telegram","channelLabel":"Telegram","accountId":"home","notifySupported":true}"#)])
+    await model.refresh()
+    check(calls.count == 2 && calls.last?.1 == [:] && model.channelFilter == nil && !model.showsChannelFilter
+          && model.visibleRequests.count == 1, "filter cleared when its channel is gone")
+
+    // Approve params.
+    let notifying = PairingRequest(requestJSON("n1", notify: true))!
+    let silent = PairingRequest(requestJSON("s1", notify: false))!
+    let withNotify = PairingInboxModel.approveParams(notifying, notify: false, makeCommandOwner: false, canBootstrapCommandOwner: false)
+    check(withNotify == ["channel": "telegram", "accountId": "home", "requestId": "n1", "notify": false], "notify sent when supported")
+    check(PairingInboxModel.approveParams(silent, notify: true, makeCommandOwner: false, canBootstrapCommandOwner: true)
+          == ["channel": "telegram", "accountId": "home", "requestId": "s1"], "notify omitted when unsupported")
+    check(PairingInboxModel.approveParams(silent, notify: true, makeCommandOwner: true, canBootstrapCommandOwner: false)["bootstrapCommandOwner"] == nil
+          && PairingInboxModel.approveParams(silent, notify: true, makeCommandOwner: false, canBootstrapCommandOwner: true)["bootstrapCommandOwner"] == nil
+          && PairingInboxModel.approveParams(silent, notify: true, makeCommandOwner: true, canBootstrapCommandOwner: true)["bootstrapCommandOwner"] == true,
+          "bootstrapCommandOwner only when chosen and allowed")
+    check(PairingInboxModel.dismissParams(notifying) == ["channel": "telegram", "accountId": "home", "requestId": "n1"], "dismiss params")
+
+    // Approve and dismiss against the scripted Gateway.
+    calls = []
+    let approveReply = Scripted<JSONValue>(["requestId": "a", "senderId": "4411", "notification": "sent", "commandOwnerBootstrap": "not-requested"])
+    let failure = Scripted<GatewayError?>(nil)
+    result.value = listResult([requestJSON("a", created: -60), requestJSON("b", created: -120), requestJSON("c", created: -180)], owner: false)
+    let actions = PairingInboxModel(scopes: { ["operator.read", "operator.admin"] }) { method, params in
+        calls.append((method, params))
+        if method != "channels.pairing.list", let error = failure.value { throw error }
+        return method == "channels.pairing.approve" ? approveReply.value : method == "channels.pairing.list" ? result.value : ["requestId": "b", "senderId": "4411"]
+    }
+    await actions.load()
+    check(actions.canManage && actions.canBootstrapCommandOwner, "admin can manage and bootstrap the command owner")
+    let a = actions.requests.first { $0.requestId == "a" }!
+    let approved = await actions.approve(a, notify: true, makeCommandOwner: false)
+    check(approved && calls.last?.0 == "channels.pairing.approve" && calls.last?.1["notify"] == true
+          && calls.last?.1["bootstrapCommandOwner"] == nil && !actions.requests.contains { $0.requestId == "a" }
+          && actions.notice == nil, "approve removes the row, silent when notified")
+    approveReply.value = ["requestId": "c", "senderId": "4411", "notification": "failed", "commandOwnerBootstrap": "configured"]
+    let c = actions.requests.first { $0.requestId == "c" }!
+    await actions.approve(c, notify: true, makeCommandOwner: true)
+    check(calls.last?.1["bootstrapCommandOwner"] == true && actions.notice?.text == "Approved, but the sender couldn't be notified."
+          && !actions.canBootstrapCommandOwner, "notification failure notice; command owner now configured")
+    approveReply.value = ["requestId": "x", "senderId": "4411", "notification": "unsupported", "commandOwnerBootstrap": "unavailable"]
+    actions.clearNotice()
+    result.value = listResult([requestJSON("x", created: -60), requestJSON("b", created: -120)])
+    await actions.load()
+    await actions.approve(actions.requests.first { $0.requestId == "x" }!)
+    check(actions.notice?.text == "Approved, but they couldn't be made the command owner.", "command owner unavailable notice")
+    let b = actions.requests.first { $0.requestId == "b" }!
+    let dismissed = await actions.dismiss(b)
+    check(dismissed && calls.last?.0 == "channels.pairing.dismiss" && calls.last?.1 == PairingInboxModel.dismissParams(b)
+          && actions.requests.isEmpty && actions.pendingCount() == 0, "dismiss removes the row")
+
+    // Stale, not-pairing and other errors.
+    actions.clearNotice()
+    result.value = listResult([requestJSON("stale", created: -60), requestJSON("keep", created: -120)])
+    await actions.load()
+    result.value = listResult([requestJSON("keep", created: -120)])
+    failure.value = .rpc(code: "INVALID_REQUEST", message: "pending DM access request no longer exists", details: nil)
+    let listsBefore = calls.filter { $0.0 == "channels.pairing.list" }.count
+    let staleGone = await actions.approve(actions.requests.first { $0.requestId == "stale" }!)
+    check(staleGone && !actions.requests.contains { $0.requestId == "stale" } && actions.notice?.text == PairingInboxModel.staleMessage
+          && calls.filter { $0.0 == "channels.pairing.list" }.count == listsBefore + 1, "stale request removed with a notice, then refreshed")
+    failure.value = .rpc(code: "INVALID_REQUEST", message: "channel account does not use DM pairing: telegram:home", details: nil)
+    await actions.dismiss(actions.requests.first!)
+    check(actions.notice?.text == "channel account does not use DM pairing: telegram:home"
+          && calls.last?.0 == "channels.pairing.list", "not-pairing error refreshes and shows the gateway's message")
+    failure.value = .rpc(code: "UNAVAILABLE", message: "pairing store unavailable", details: nil)
+    let keep = actions.requests.first { $0.requestId == "keep" }!
+    let failed = await actions.approve(keep)
+    check(!failed && actions.requests.contains { $0.id == keep.id } && actions.operation(for: keep).error == "pairing store unavailable",
+          "other errors keep the row with the error")
+    failure.value = .rpc(code: "FORBIDDEN", message: "missing scope: operator.admin",
+                   details: ["code": "MISSING_SCOPE", "missingScope": "operator.admin", "requiredScopes": ["operator.admin"]])
+    await actions.approve(keep, makeCommandOwner: true)
+    check(actions.operation(for: keep).error == PairingInboxModel.commandOwnerScopeMessage && !actions.needsAccess,
+          "admin scope refusal on approve stays on the row")
+    failure.value = nil
+    let retried = await actions.approve(keep)
+    check(retried && actions.requests.isEmpty && actions.operation(for: keep) == .idle, "retry after an error")
+
+    // A poll never replaces a row whose action is in flight.
+    var releaseApprove: CheckedContinuation<Void, Never>?
+    result.value = listResult([requestJSON("busy", sender: "1", created: -60), requestJSON("idle", created: -120)])
+    let slow = PairingInboxModel { method, _ in
+        if method == "channels.pairing.approve" {
+            await withCheckedContinuation { releaseApprove = $0 }
+            return ["requestId": "busy", "senderId": "1", "notification": "not-requested", "commandOwnerBootstrap": "not-requested"]
+        }
+        return result.value
+    }
+    await slow.load()
+    let busy = slow.requests.first { $0.requestId == "busy" }!
+    let approving = Task { await slow.approve(busy) }
+    _ = await waitFor("approve in flight", timeout: 2) { releaseApprove != nil }
+    let duplicate = await slow.approve(busy)
+    check(!duplicate && slow.operation(for: busy).isRunning, "no duplicate send while in flight")
+    result.value = listResult([requestJSON("idle", created: -120, extra: #","accountLabel":"Renamed""#)])
+    await slow.poll()
+    check(slow.requests.contains { $0.id == busy.id } && slow.requests.first { $0.requestId == "idle" }?.accountLabel == "Renamed",
+          "poll keeps the in-flight row, updates the rest")
+    releaseApprove?.resume()
+    _ = await approving.value
+    check(!slow.requests.contains { $0.id == busy.id } && slow.requests.count == 1, "approved row leaves once the action finishes")
+
+    // A list that was already on its way when an approve finished doesn't bring the row back.
+    var releaseList: CheckedContinuation<Void, Never>?
+    let holdList = Scripted(false)
+    result.value = listResult([requestJSON("race", created: -60), requestJSON("other", created: -120)])
+    let racing = PairingInboxModel { method, _ in
+        if method == "channels.pairing.list", holdList.value {
+            let snapshot = result.value
+            await withCheckedContinuation { releaseList = $0 }
+            return snapshot
+        }
+        if method == "channels.pairing.list" { return result.value }
+        return ["requestId": "race", "senderId": "4411", "notification": "not-requested", "commandOwnerBootstrap": "not-requested"]
+    }
+    await racing.load()
+    let race = racing.requests.first { $0.requestId == "race" }!
+    holdList.value = true
+    let polling = Task { await racing.poll() }
+    _ = await waitFor("poll in flight", timeout: 2) { releaseList != nil }
+    let raced = await racing.approve(race)
+    check(raced && !racing.requests.contains { $0.id == race.id }, "approve during a poll removes the row")
+    releaseList?.resume()
+    await polling.value
+    check(!racing.requests.contains { $0.id == race.id } && racing.requests.map(\.requestId) == ["other"] && racing.pendingCount() == 1,
+          "a poll started before the approve finished doesn't resurrect the row (\(racing.requests.map(\.requestId)))")
+    holdList.value = false
+    await racing.refresh()
+    check(racing.requests.map(\.requestId) == ["race", "other"], "a later list shows the row again if the Gateway still has it")
+
+    // Expired rows: approve sends nothing, dismiss still works, the badge leaves them out.
+    calls = []
+    result.value = listResult([requestJSON("late", created: -3700, expires: -5), requestJSON("fresh", created: -60)])
+    let expiring = PairingInboxModel { method, params in
+        calls.append((method, params))
+        return method == "channels.pairing.list" ? result.value : ["requestId": "late", "senderId": "4411"]
+    }
+    await expiring.load()
+    let late = expiring.requests.first { $0.requestId == "late" }!
+    check(expiring.pendingCount(at: now) == 1 && expiring.requests.count == 2, "expired row listed but not counted")
+    let lateApproved = await expiring.approve(late)
+    check(!lateApproved && !calls.contains { $0.0 == "channels.pairing.approve" } && expiring.operation(for: late) == .idle
+          && expiring.notice?.text == PairingInboxModel.expiredMessage,
+          "approving an expired request sends nothing and says it expired")
+    let lateDismissed = await expiring.dismiss(late)
+    check(lateDismissed && calls.last?.0 == "channels.pairing.dismiss" && expiring.requests.map(\.requestId) == ["fresh"],
+          "an expired request can still be dismissed")
+    let soon = PairingRequest(requestJSON("soon", created: -3500, expires: 100))!
+    check(!soon.isExpired(at: now) && soon.isExpired(at: now.addingTimeInterval(101)), "rows expire as time passes")
+
+    // Stale on dismiss too, and the gateway's own not-pairing message kept verbatim.
+    calls = []
+    result.value = listResult([requestJSON("s2", created: -60)])
+    let staleDismiss = PairingInboxModel { method, params in
+        calls.append((method, params))
+        if method == "channels.pairing.dismiss" {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "Pending DM access request no longer exists", details: nil)
+        }
+        return method == "channels.pairing.list" ? result.value : [:]
+    }
+    await staleDismiss.load()
+    result.value = listResult([])
+    let staleDismissed = await staleDismiss.dismiss(staleDismiss.requests[0])
+    check(staleDismissed && staleDismiss.requests.isEmpty && staleDismiss.notice?.text == PairingInboxModel.staleMessage
+          && calls.map(\.0) == ["channels.pairing.list", "channels.pairing.dismiss", "channels.pairing.list"],
+          "stale dismiss (any case) removes the row, shows a notice and refreshes")
+    let otherInvalid = PairingInboxModel { method, _ in
+        if method == "channels.pairing.approve" { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid channels.pairing.approve params", details: nil) }
+        return listResult([requestJSON("v", created: -60)])
+    }
+    await otherInvalid.load()
+    let v = otherInvalid.requests[0]
+    await otherInvalid.approve(v)
+    check(otherInvalid.requests.count == 1 && otherInvalid.operation(for: v).error == "invalid channels.pairing.approve params"
+          && otherInvalid.notice == nil, "other INVALID_REQUEST errors stay on the row")
+
+    // Scopes, access and unsupported gateways.
+    var requested = false
+    let noScope = PairingInboxModel(scopes: { ["operator.read", "operator.write", "operator.approvals", "operator.questions"] }) { _, _ in
+        requested = true
+        return listResult([])
+    }
+    await noScope.load()
+    await noScope.seed()
+    check(!noScope.canManage && noScope.needsAccess && !requested && noScope.pendingCount() == 0, "no pairing scope → access needed, no request")
+    check(PairingInboxModel(scopes: { ["operator.pairing"] }) { _, _ in [:] }.canManage
+          && PairingInboxModel(scopes: { ["operator.admin"] }) { _, _ in [:] }.canManage, "operator.pairing or operator.admin can manage")
+    check(!PairingInboxModel(scopes: { ["operator.pairing"] }) { _, _ in [:] }.canBootstrapCommandOwner, "command owner needs admin")
+    let denied = PairingInboxModel { _, _ in
+        throw GatewayError.rpc(code: "FORBIDDEN", message: "missing scope: operator.pairing",
+                               details: ["code": "MISSING_SCOPE", "missingScope": "operator.pairing", "requiredScopes": ["operator.pairing"]])
+    }
+    await denied.load()
+    check(denied.needsAccess && denied.loadState.error == PairingInboxModel.missingScopeMessage
+          && PairingInboxModel.missingScopeMessage.contains("Full Management") && !PairingInboxModel.missingScopeMessage.contains("operator.approvals"),
+          "MISSING_SCOPE reply → Full Management message")
+    requested = false
+    let legacyHello = PairingInboxModel(methods: { ["chat.send", "approval.history"] }) { _, _ in
+        requested = true
+        return listResult([])
+    }
+    await legacyHello.load()
+    check(!legacyHello.supported && !requested && legacyHello.pendingCount() == 0, "hello without channels.pairing.list → unsupported, no request")
+    let unknown = PairingInboxModel(methods: { [] }) { method, _ in
+        throw GatewayError.rpc(code: "INVALID_REQUEST", message: "unknown method: \(method)", details: nil)
+    }
+    await unknown.load()
+    check(!unknown.supported && unknown.hasLoaded && unknown.loadState == .idle, "unknown-method error → unsupported, no error")
+    check(PairingInboxModel(methods: { ["channels.pairing.list"] }) { _, _ in [:] }.supported, "advertised list is supported")
+    var seeds = 0
+    let seeded = PairingInboxModel(methods: { ["channels.pairing.list"] }) { _, _ in
+        seeds += 1
+        return listResult([requestJSON("s", created: -60)])
+    }
+    await seeded.seed()
+    await seeded.seed()
+    check(seeds == 1 && seeded.pendingCount() == 1, "seed lists once for the badge")
+    let broken = PairingInboxModel { _, _ in throw GatewayError.rpc(code: "UNAVAILABLE", message: "pairing store unavailable", details: nil) }
+    await broken.load()
+    check(broken.loadState.error == "pairing store unavailable" && broken.supported && !broken.needsAccess, "load failure shows the message")
+    let flaky = Scripted(false)
+    let keeps = PairingInboxModel { _, _ in
+        if flaky.value { throw GatewayError.rpc(code: "UNAVAILABLE", message: "down", details: nil) }
+        return listResult([requestJSON("k", created: -60)])
+    }
+    await keeps.load()
+    flaky.value = true
+    await keeps.refresh()
+    check(keeps.requests.count == 1 && keeps.loadState.error == "down", "failed refresh keeps the last list")
+
+    // More scope and unsupported shapes.
+    let bareForbidden = PairingInboxModel { _, _ in throw GatewayError.rpc(code: "FORBIDDEN", message: "forbidden", details: nil) }
+    await bareForbidden.load()
+    check(bareForbidden.needsAccess && bareForbidden.loadState.error == PairingInboxModel.missingScopeMessage, "plain FORBIDDEN → access needed")
+    let revoked = Scripted(false)
+    let revokedModel = PairingInboxModel { _, _ in
+        if revoked.value {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "missing scope: operator.pairing",
+                                   details: ["code": "MISSING_SCOPE", "missingScope": "operator.pairing"])
+        }
+        return listResult([requestJSON("r", created: -60)])
+    }
+    await revokedModel.load()
+    check(revokedModel.pendingCount() == 1, "badge before the scope went away")
+    revoked.value = true
+    await revokedModel.refresh()
+    check(revokedModel.needsAccess && revokedModel.pendingCount() == 0, "details.code MISSING_SCOPE → access needed, badge hidden")
+    revoked.value = false
+    await revokedModel.refresh()
+    check(!revokedModel.needsAccess && revokedModel.pendingCount() == 1, "access comes back after a successful list")
+    let vanished = Scripted(false)
+    let vanishedModel = PairingInboxModel(methods: { [] }) { method, _ in
+        if vanished.value { throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "unknown method: \(method)", details: nil) }
+        return listResult([requestJSON("u", created: -60)])
+    }
+    await vanishedModel.load()
+    vanished.value = true
+    await vanishedModel.refresh()
+    check(!vanishedModel.supported && vanishedModel.requests.isEmpty && vanishedModel.accounts.isEmpty && vanishedModel.pendingCount() == 0
+          && vanishedModel.loadState == .idle, "UNKNOWN_METHOD (mock shape) → unsupported, list and badge cleared")
+    var sentWhenUnsupported = 0
+    let unsupportedSeed = PairingInboxModel(methods: { ["chat.send"] }, scopes: { ["operator.admin"] }) { _, _ in
+        sentWhenUnsupported += 1
+        return listResult([])
+    }
+    await unsupportedSeed.seed()
+    await unsupportedSeed.poll()
+    check(sentWhenUnsupported == 0 && unsupportedSeed.pendingCount() == 0, "seed and poll send nothing when unsupported")
+    let pairingOnly = PairingInboxModel(scopes: { ["operator.pairing"] }) { _, _ in listResult([], owner: false) }
+    await pairingOnly.load()
+    check(!pairingOnly.commandOwnerConfigured && !pairingOnly.canBootstrapCommandOwner, "no command owner, but operator.pairing can't bootstrap")
+    let adminOwner = PairingInboxModel(scopes: { ["operator.admin"] }) { _, _ in listResult([], owner: true) }
+    await adminOwner.load()
+    check(!adminOwner.canBootstrapCommandOwner, "admin isn't offered bootstrap when a command owner exists")
+    let accountsOnly = PairingInboxModel { _, _ in listResult([]) }
+    await accountsOnly.load()
+    check(accountsOnly.accounts.count == 2 && accountsOnly.requests.isEmpty && accountsOnly.pendingCount() == 0
+          && PairingInboxModel(scopes: { ["operator.pairing"] }) { _, _ in [:] }.pendingCount() == 0, "accounts without requests")
+    let empty = PairingInboxModel { _, _ in ["accounts": [], "requests": [], "commandOwnerConfigured": true] }
+    await empty.load()
+    check(empty.hasLoaded && empty.accounts.isEmpty && empty.limits == nil && empty.loadState == .idle, "no pairing accounts, no limits")
+    let lenient = PairingInboxModel { _, _ in
+        ["accounts": [["channel": "x"], ["channel": "telegram", "accountId": "home"]],
+         "requests": [["requestId": "only"], requestJSON("ok", created: -60), requestJSON("ok", created: -60)]]
+    }
+    await lenient.load()
+    check(lenient.accounts.map(\.id) == ["telegram:home"] && lenient.requests.map(\.requestId) == ["ok"]
+          && lenient.accounts.first?.notifySupported == false && lenient.limits == nil, "lenient parsing skips bad rows and duplicates")
+}
+
+/// Mutable script state for fake Gateways, shared with their request closures.
+@MainActor
+final class Scripted<Value> {
+    var value: Value
+
+    init(_ value: Value) { self.value = value }
 }

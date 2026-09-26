@@ -76,6 +76,12 @@ public struct GatewayEvent: Sendable {
     public let name: String
     public let payload: JSONValue
     public let seq: Int?
+
+    public init(name: String, payload: JSONValue, seq: Int?) {
+        self.name = name
+        self.payload = payload
+        self.seq = seq
+    }
 }
 
 /// One operator WebSocket to one Gateway: handshake, device pairing, request/response
@@ -200,6 +206,9 @@ public actor GatewayConnection {
         self.loopTask = Task { await self.runLoop() }
     }
 
+    /// Handshake done and a socket to send on, so `request` won't throw `notConnected`.
+    var isReady: Bool { self.hello != nil && (self.demo != nil || self.task != nil) }
+
     public func request(_ method: String, _ params: JSONValue = [:], timeout: TimeInterval = 20) async throws -> JSONValue {
         if let demo = self.demo {
             guard self.hello != nil else { throw GatewayError.notConnected }
@@ -312,9 +321,9 @@ public actor GatewayConnection {
         scope == "operator.read" && approved.contains("operator.write")
     }
 
-    private enum FailureClass { case pairing(String?), staleDeviceToken, fatal(String), retry(String) }
+    enum FailureClass: Equatable { case pairing(String?), staleDeviceToken, fatal(String), retry(String) }
 
-    private static func classify(_ error: GatewayError) -> FailureClass {
+    static func classify(_ error: GatewayError) -> FailureClass {
         switch error {
         case .invalidURL, .insecureURL:
             return .fatal(error.localizedDescription)
@@ -343,14 +352,23 @@ public actor GatewayConnection {
     }
 
     private func backoffSeconds() -> Int {
-        min(30, 1 << min(self.attempt, 5))
+        Self.backoffSeconds(attempt: self.attempt)
+    }
+
+    /// 1, 2, 4, 8, 16, then 30 seconds.
+    static func backoffSeconds(attempt: Int) -> Int {
+        min(30, 1 << min(attempt, 5))
     }
 
     private func connectOnce() async throws {
         if let demo = self.demo {
             self.teardown(reason: "new attempt")
             let handler = self.eventHandler
-            let response = await demo.attach { handler?($0) }
+            let response = await demo.attach { [weak self] event in
+                handler?(event)
+                // The demo "restarts" like a Gateway: `shutdown`, then the connection drops.
+                if event.name == "shutdown", let self { Task { await self.demoShutdown() } }
+            }
             self.hello = GatewayHello(payload: response)
             self.lastFrameAt = Date()
             return
@@ -370,63 +388,16 @@ public actor GatewayConnection {
 
         let (nonce, signedAt) = try await self.waitForChallenge(timeout: 20)
 
-        // Prefer the paired device token; fall back to the configured shared secret.
         let deviceToken = self.profile.deviceToken
-        let secret = self.profile.secret
-        var auth: [String: JSONValue] = [:]
-        var signatureToken: String?
-        if let deviceToken {
-            auth["token"] = .string(deviceToken)
-            signatureToken = deviceToken
-        } else if self.profile.authMode == .token, let secret {
-            auth["token"] = .string(secret)
-            signatureToken = secret
-        }
-        if self.profile.authMode == .password, let secret {
-            auth["password"] = .string(secret)
-        }
-
-        let clientId = Self.clientId
-        let clientMode = "ui"
-        let payload = DeviceAuthPayload.v2(
-            deviceId: self.identity.deviceId,
-            clientId: clientId,
-            clientMode: clientMode,
-            role: Self.role,
+        let params = try Self.connectParams(
+            identity: self.identity,
+            authMode: self.profile.authMode,
+            deviceToken: deviceToken,
+            secret: self.profile.secret,
             scopes: self.requestedScopes,
-            signedAtMs: signedAt,
-            token: signatureToken,
-            nonce: nonce)
-        let signature = try self.identity.sign(payload)
-
-        var params: [String: JSONValue] = [
-            "minProtocol": .number(Double(Self.protocolVersion)),
-            "maxProtocol": .number(Double(Self.protocolVersion)),
-            "client": [
-                "id": .string(clientId),
-                "displayName": .string(Self.displayName),
-                "version": .string(Self.appVersion),
-                "platform": .string(Self.platform),
-                "mode": .string(clientMode),
-                "deviceFamily": .string(Self.deviceFamily),
-                "instanceId": .string(Self.instanceId),
-            ],
-            "role": .string(Self.role),
-            "scopes": JSONValue(self.requestedScopes),
-            "caps": JSONValue(Self.caps),
-            "commands": [],
-            "permissions": [:],
-            "locale": .string(Locale.preferredLanguages.first ?? "en-US"),
-            "userAgent": .string("pincer/\(Self.appVersion) (\(Self.platform))"),
-            "device": [
-                "id": .string(self.identity.deviceId),
-                "publicKey": .string(self.identity.publicKeyBase64Url),
-                "signature": .string(signature),
-                "signedAt": .number(Double(signedAt)),
-                "nonce": .string(nonce),
-            ],
-        ]
-        if !auth.isEmpty { params["auth"] = .object(auth) }
+            nonce: nonce,
+            signedAt: signedAt,
+            instanceId: Self.instanceId)
 
         let response = try await self.send(method: "connect", params: .object(params), on: task, timeout: 20)
         guard generation == self.generation else { throw GatewayError.closed("superseded") }
@@ -439,6 +410,80 @@ public actor GatewayConnection {
         self.hello = hello
         self.lastFrameAt = Date()
         self.startWatchdog(tickIntervalMs: hello.tickIntervalMs, generation: generation)
+    }
+
+    /// The signed `connect` request. The paired device token wins over the configured shared secret;
+    /// a password is sent as `auth.password` and never signed.
+    static func connectParams(
+        identity: DeviceIdentity,
+        authMode: GatewayProfile.AuthMode,
+        deviceToken: String?,
+        secret: String?,
+        scopes: [String],
+        nonce: String,
+        signedAt: Int64,
+        instanceId: String) throws -> [String: JSONValue]
+    {
+        var auth: [String: JSONValue] = [:]
+        var signatureToken: String?
+        if let deviceToken {
+            auth["token"] = .string(deviceToken)
+            signatureToken = deviceToken
+        } else if authMode == .token, let secret {
+            auth["token"] = .string(secret)
+            signatureToken = secret
+        }
+        if authMode == .password, let secret {
+            auth["password"] = .string(secret)
+        }
+
+        let clientId = Self.clientId
+        let clientMode = "ui"
+        let payload = DeviceAuthPayload.v2(
+            deviceId: identity.deviceId,
+            clientId: clientId,
+            clientMode: clientMode,
+            role: Self.role,
+            scopes: scopes,
+            signedAtMs: signedAt,
+            token: signatureToken,
+            nonce: nonce)
+        let signature = try identity.sign(payload)
+
+        var params: [String: JSONValue] = [
+            "minProtocol": .number(Double(Self.protocolVersion)),
+            "maxProtocol": .number(Double(Self.protocolVersion)),
+            "client": [
+                "id": .string(clientId),
+                "displayName": .string(Self.displayName),
+                "version": .string(Self.appVersion),
+                "platform": .string(Self.platform),
+                "mode": .string(clientMode),
+                "deviceFamily": .string(Self.deviceFamily),
+                "instanceId": .string(instanceId),
+            ],
+            "role": .string(Self.role),
+            "scopes": JSONValue(scopes),
+            "caps": JSONValue(Self.caps),
+            "commands": [],
+            "permissions": [:],
+            "locale": .string(Locale.preferredLanguages.first ?? "en-US"),
+            "userAgent": .string("pincer/\(Self.appVersion) (\(Self.platform))"),
+            "device": [
+                "id": .string(identity.deviceId),
+                "publicKey": .string(identity.publicKeyBase64Url),
+                "signature": .string(signature),
+                "signedAt": .number(Double(signedAt)),
+                "nonce": .string(nonce),
+            ],
+        ]
+        if !auth.isEmpty { params["auth"] = .object(auth) }
+        return params
+    }
+
+    private func demoShutdown() {
+        guard self.demo != nil, self.hello != nil else { return }
+        self.teardown(reason: "Gateway restarting")
     }
 
     private func waitUntilDisconnected() async {
@@ -570,41 +615,71 @@ public actor GatewayConnection {
         case let .data(bytes): data = bytes
         @unknown default: return
         }
-        guard let frame = try? JSONValue.decode(data), let type = frame["type"]?.string else { return }
+        guard let frame = Self.inboundFrame(data) else { return }
+        switch frame {
+        case let .response(id, result):
+            guard let continuation = self.pending.removeValue(forKey: id) else { return }
+            continuation.resume(with: result)
+        case let .challenge(nonce, ts):
+            if let waiter = self.challengeWaiter {
+                self.challengeWaiter = nil
+                waiter.resume(returning: (nonce, ts))
+            } else {
+                self.bufferedChallenge = (nonce, ts)
+            }
+        case .tick:
+            return
+        case let .shutdown(event):
+            // Let the store see the restart before the socket goes.
+            self.eventHandler?(event)
+            let restarting = GatewayHealthModel.restartExpectedMs(shutdown: event.payload) != nil
+            self.teardown(reason: restarting ? "Gateway restarting" : "Gateway shut down")
+        case let .event(event):
+            self.eventHandler?(event)
+        }
+    }
+
+    enum InboundFrame {
+        case response(id: String, result: Result<JSONValue, GatewayError>)
+        case challenge(nonce: String, ts: Int64)
+        case tick
+        case shutdown(GatewayEvent)
+        case event(GatewayEvent)
+    }
+
+    /// Decodes one WebSocket frame; nil for frames Pincer ignores (unknown types, malformed challenges…).
+    static func inboundFrame(_ data: Data) -> InboundFrame? {
+        guard let frame = try? JSONValue.decode(data), let type = frame["type"]?.string else { return nil }
         switch type {
         case "res":
-            guard let id = frame["id"]?.string, let continuation = self.pending.removeValue(forKey: id) else { return }
+            guard let id = frame["id"]?.string else { return nil }
             if frame["ok"]?.bool == true {
-                continuation.resume(returning: frame["payload"] ?? .null)
-            } else {
-                let error = frame["error"]
-                continuation.resume(throwing: GatewayError.rpc(
-                    code: error?["code"]?.string ?? "ERROR",
-                    message: error?["message"]?.string ?? "Request failed",
-                    details: error?["details"]))
+                return .response(id: id, result: .success(frame["payload"] ?? .null))
             }
+            let error = frame["error"]
+            return .response(id: id, result: .failure(GatewayError.rpc(
+                code: error?["code"]?.string ?? "ERROR",
+                message: error?["message"]?.string ?? "Request failed",
+                details: error?["details"])))
         case "event":
-            guard let name = frame["event"]?.string else { return }
+            guard let name = frame["event"]?.string else { return nil }
             let payload = frame["payload"] ?? .null
             if name == "connect.challenge" {
-                guard let nonce = payload["nonce"]?.text, let ts = payload["ts"]?.int64, ts >= 0 else { return }
-                if let waiter = self.challengeWaiter {
-                    self.challengeWaiter = nil
-                    waiter.resume(returning: (nonce, ts))
-                } else {
-                    self.bufferedChallenge = (nonce, ts)
-                }
-                return
+                guard let (nonce, ts) = Self.challenge(from: payload) else { return nil }
+                return .challenge(nonce: nonce, ts: ts)
             }
-            if name == "tick" { return }
-            if name == "shutdown" {
-                self.teardown(reason: "Gateway restarting")
-                return
-            }
-            self.eventHandler?(GatewayEvent(name: name, payload: payload, seq: frame["seq"]?.int))
+            if name == "tick" { return .tick }
+            if name == "shutdown" { return .shutdown(GatewayEvent(name: name, payload: payload, seq: frame["seq"]?.int)) }
+            return .event(GatewayEvent(name: name, payload: payload, seq: frame["seq"]?.int))
         default:
-            return
+            return nil
         }
+    }
+
+    /// Nonce and timestamp from a `connect.challenge` payload; nil when either is missing or invalid.
+    static func challenge(from payload: JSONValue) -> (nonce: String, ts: Int64)? {
+        guard let nonce = payload["nonce"]?.text, let ts = payload["ts"]?.int64, ts >= 0 else { return nil }
+        return (nonce, ts)
     }
 
     private func emit(_ state: ConnectionState) {
@@ -643,11 +718,21 @@ final class PinningDelegate: NSObject, URLSessionDelegate, Sendable {
     let fingerprint: String?
 
     init(fingerprint: String?) {
-        self.fingerprint = fingerprint?
+        self.fingerprint = Self.normalized(fingerprint)
+    }
+
+    /// Lowercase hex without colons or spaces; nil when empty.
+    static func normalized(_ fingerprint: String?) -> String? {
+        fingerprint?
             .replacingOccurrences(of: ":", with: "")
             .replacingOccurrences(of: " ", with: "")
             .lowercased()
             .nilIfEmpty
+    }
+
+    /// Whether the leaf certificate's SHA-256 equals the (normalized) pin.
+    static func matches(leafDER: Data, pin: String) -> Bool {
+        SHA256.hash(data: leafDER).map { String(format: "%02x", $0) }.joined() == pin
     }
 
     func urlSession(
@@ -662,8 +747,7 @@ final class PinningDelegate: NSObject, URLSessionDelegate, Sendable {
             return (.cancelAuthenticationChallenge, nil)
         }
         let der = SecCertificateCopyData(leaf) as Data
-        let actual = SHA256.hash(data: der).map { String(format: "%02x", $0) }.joined()
-        return actual == fingerprint ? (.useCredential, URLCredential(trust: trust)) : (.cancelAuthenticationChallenge, nil)
+        return Self.matches(leafDER: der, pin: fingerprint) ? (.useCredential, URLCredential(trust: trust)) : (.cancelAuthenticationChallenge, nil)
     }
 }
 

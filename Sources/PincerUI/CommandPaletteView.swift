@@ -1,12 +1,12 @@
 import PincerKit
 import SwiftUI
 
-/// ⌘K: jump to a chat, start a chat with an agent, or run a command, all from the keyboard.
-/// Type to filter, ↑/↓ to move, Return to run, Esc to go back or close.
+/// ⌘K: jump to a chat, start a chat with an agent, run a command, or search messages (⇧⌘F),
+/// all from the keyboard. Type to filter, ↑/↓ to move, Return to run, Esc to go back or close.
 struct CommandPaletteView: View {
     @Binding var isPresented: Bool
     /// iOS: Settings is a sheet owned by the presenter.
-    var openAppSettings: () -> Void = {}
+    var openAppSettings: () -> Void
     @Environment(AppModel.self) private var app
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.openAutomations) private var openAutomations
@@ -14,8 +14,12 @@ struct CommandPaletteView: View {
     @Environment(\.openSettings) private var openSettings
     #endif
     @AppStorage(ThinkingDisplay.storageKey) private var thinkingDisplay = ThinkingDisplay.defaultValue
-    @State private var query = ""
-    @State private var page = Page.root
+    @State private var query: String
+    @State private var page: Page
+    /// The page was reached from the root page, so Esc goes back there instead of closing.
+    @State private var cameFromRoot = false
+    @State private var messages: MessageResults?
+    @State private var searchingMessages = false
     @State private var selection: String?
     @FocusState private var focused: Bool
     #if os(macOS)
@@ -25,10 +29,34 @@ struct CommandPaletteView: View {
     @State private var keyboardMoveMouseLocation: CGPoint?
     #endif
 
-    enum Page { case root, models }
+    enum Page { case root, models, messages }
+
+    /// The latest message search, which Gateway it was on, and its rows, built once per search
+    /// rather than on every render (hover, arrow keys, typing).
+    private struct MessageResults {
+        let gatewayId: UUID
+        let results: MessageSearch.Results
+        let items: [PaletteItem]
+        /// Highlighted snippet text by item id.
+        let snippets: [String: AttributedString]
+    }
+
+    /// Everything a message search depends on; a change runs it again.
+    private struct MessageSearchKey: Equatable {
+        let query: String
+        let gatewayId: UUID?
+        let building: Bool
+    }
+
+    init(isPresented: Binding<Bool>, page: Page = .root, query: String = "", openAppSettings: @escaping () -> Void = {}) {
+        self._isPresented = isPresented
+        self._page = State(initialValue: page)
+        self._query = State(initialValue: query)
+        self.openAppSettings = openAppSettings
+    }
 
     private enum Command: String {
-        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations
+        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, usage, sessionUsage
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -38,9 +66,9 @@ struct CommandPaletteView: View {
         let results = self.results
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: self.page == .models ? "cpu" : "magnifyingglass")
+                Image(systemName: self.fieldSymbol)
                     .foregroundStyle(.secondary)
-                TextField(self.page == .models ? "Choose a model…" : "Jump to a chat or run a command…", text: self.$query)
+                TextField(self.placeholder, text: self.$query)
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .focused(self.$focused)
@@ -49,7 +77,7 @@ struct CommandPaletteView: View {
                     .onKeyPress(.downArrow) { self.move(1, in: results); return .handled }
                     .onKeyPress(.escape) { self.escape(); return .handled }
                     .onKeyPress(.delete) {
-                        guard self.page == .models, self.query.isEmpty else { return .ignored }
+                        guard self.page != .root, self.query.isEmpty else { return .ignored }
                         self.show(.root)
                         return .handled
                     }
@@ -62,7 +90,9 @@ struct CommandPaletteView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             Divider()
-            if results.isEmpty {
+            if self.page == .messages {
+                self.messagesPage(results)
+            } else if results.isEmpty {
                 Text(self.page == .models && self.gateway?.loadingModelCatalogs.isEmpty == false ? "Loading models…" : "No matches")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
@@ -71,7 +101,7 @@ struct CommandPaletteView: View {
                 self.list(results)
             }
         }
-        .frame(width: 560)
+        .frame(maxWidth: 560)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.separator))
         .shadow(color: .black.opacity(0.25), radius: 24, y: 10)
@@ -98,24 +128,138 @@ struct CommandPaletteView: View {
             guard self.page == .models, let gateway = self.gateway, let row = self.row else { return }
             await gateway.loadModels(agentId: row.agentId)
         }
+        .task(id: self.page == .messages ? self.messageSearchKey : nil) {
+            await self.searchMessages()
+        }
+    }
+
+    private var fieldSymbol: String {
+        switch self.page {
+        case .root: "magnifyingglass"
+        case .models: "cpu"
+        case .messages: "text.magnifyingglass"
+        }
+    }
+
+    private var placeholder: String {
+        switch self.page {
+        case .root: "Jump to a chat or run a command…"
+        case .models: "Choose a model…"
+        case .messages: "Search messages in \(self.gateway?.profile.name ?? "this Gateway")…"
+        }
+    }
+
+    // MARK: Messages
+
+    private var messageSearchKey: MessageSearchKey {
+        var building = false
+        if case .building = self.gateway?.messageIndexProgress { building = true }
+        return MessageSearchKey(query: TranscriptSearch.normalized(self.query), gatewayId: self.gateway?.id, building: building)
+    }
+
+    /// Searches after a short pause; typing again (or switching Gateways) cancels it.
+    private func searchMessages() async {
+        guard self.page == .messages else {
+            self.searchingMessages = false
+            return
+        }
+        let key = self.messageSearchKey
+        guard let gateway, MessageSearch.ftsQuery(key.query) != nil else {
+            self.messages = nil
+            self.searchingMessages = false
+            return
+        }
+        if self.messages?.gatewayId != gateway.id { self.messages = nil }
+        self.searchingMessages = true
+        try? await Task.sleep(for: .milliseconds(120))
+        // Cancelled: a newer search (or leaving the page) took over, and owns `searchingMessages`.
+        guard !Task.isCancelled else { return }
+        var results: MessageSearch.Results?
+        for attempt in 0 ..< 2 {
+            do {
+                results = try await gateway.searchMessages(key.query)
+                break
+            } catch {
+                // Not cancelled itself: another window's search interrupted this one. Try once more.
+                guard !Task.isCancelled else { return }
+                if attempt == 0 { continue }
+            }
+        }
+        guard !Task.isCancelled else { return }
+        self.searchingMessages = false
+        guard let results else { return }
+        let items = CommandPalette.messageItems(results, gateway: gateway)
+        var snippets: [String: AttributedString] = [:]
+        for item in items {
+            if let snippet = item.snippet { snippets[item.id] = self.snippetText(snippet) }
+        }
+        self.messages = MessageResults(gatewayId: gateway.id, results: results, items: items, snippets: snippets)
+    }
+
+    /// The messages page's notice for the current state, when it has one instead of results.
+    private func messageNotice(hasResults: Bool) -> (text: String, hint: String?)? {
+        guard let gateway else { return ("Select a Gateway to search its messages.", nil) }
+        let query = TranscriptSearch.normalized(self.query)
+        let name = gateway.profile.name
+        if gateway.messageIndexProgress == .unavailable {
+            return ("Message search needs the transcript cache, which is turned off.", nil)
+        }
+        if query.isEmpty {
+            return ("Search messages in every chat on \(name).", "Matches words from their start; case and accents are ignored.")
+        }
+        if query.count < MessageSearch.minimumQueryLength { return ("Type at least 2 characters.", nil) }
+        if !gateway.state.isConnected, gateway.sessions.isEmpty { return ("Connect to \(name) to search messages.", nil) }
+        if self.messages?.results.failed == true { return ("Message search is unavailable right now.", nil) }
+        if hasResults { return nil }
+        if self.searchingMessages { return ("Searching…", nil) }
+        return ("No messages match “\(query)”.", nil)
+    }
+
+    @ViewBuilder
+    private func messagesPage(_ results: [PaletteItem]) -> some View {
+        let notice = self.messageNotice(hasResults: !results.isEmpty)
+        if case let .building(done, total) = self.gateway?.messageIndexProgress,
+           TranscriptSearch.normalized(self.query).count >= MessageSearch.minimumQueryLength
+        {
+            Label("Indexing chats… \(done) of \(total) — results may be incomplete", systemImage: "hourglass")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+        }
+        if let notice {
+            VStack(spacing: 4) {
+                Text(notice.text)
+                if let hint = notice.hint { Text(hint).font(.caption) }
+            }
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
+            .padding(.horizontal, 16)
+        } else {
+            self.list(results)
+        }
     }
 
     private func list(_ results: [PaletteItem]) -> some View {
         let showsSections = self.query.trimmingCharacters(in: .whitespaces).isEmpty && self.page == .root
+        let current = self.currentSelection(in: results)
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(results.enumerated()), id: \.element.id) { index, item in
                         if showsSections, index == 0 || results[index - 1].section != item.section {
-                            Text(item.section.title)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 10)
-                                .padding(.top, index == 0 ? 2 : 10)
-                                .padding(.bottom, 2)
+                            self.header(item.section.title, first: index == 0)
                         }
-                        self.row(item, selected: item.id == self.currentSelection(in: results))
-                            .id(item.id)
+                        if item.isHeader {
+                            self.header(item.title, first: index == 0)
+                                .id(item.id)
+                        } else {
+                            self.row(item, selected: item.id == current)
+                                .id(item.id)
+                        }
                     }
                 }
                 .padding(6)
@@ -127,6 +271,30 @@ struct CommandPaletteView: View {
         }
     }
 
+    private func header(_ title: String, first: Bool) -> some View {
+        Text(title)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 10)
+            .padding(.top, first ? 2 : 10)
+            .padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /// A message result's text with the matches highlighted the way Find in Chat does.
+    private func snippetText(_ snippet: MessageSearch.Snippet) -> AttributedString {
+        let marked = NSMutableAttributedString(string: snippet.text)
+        for range in snippet.highlights where NSMaxRange(range) <= marked.length {
+            marked.addAttribute(.backgroundColor, value: TranscriptColors.findMatch, range: range)
+        }
+        #if os(macOS)
+        return (try? AttributedString(marked, including: \.appKit)) ?? AttributedString(snippet.text)
+        #else
+        return (try? AttributedString(marked, including: \.uiKit)) ?? AttributedString(snippet.text)
+        #endif
+    }
+
     private func row(_ item: PaletteItem, selected: Bool) -> some View {
         Button {
             self.run(item)
@@ -135,15 +303,32 @@ struct CommandPaletteView: View {
                 Image(systemName: item.symbol)
                     .frame(width: 20)
                     .foregroundStyle(selected ? .primary : .secondary)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(item.title).lineLimit(1)
-                    if let subtitle = item.subtitle {
-                        Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                if let snippet = item.snippet {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text(item.title).font(.callout.weight(.medium)).lineLimit(1)
+                            Spacer(minLength: 8)
+                            if let shortcut = item.shortcut {
+                                Text(shortcut).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                        }
+                        Text(self.messages?.snippets[item.id] ?? self.snippetText(snippet))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
                     }
-                }
-                Spacer(minLength: 8)
-                if let shortcut = item.shortcut {
-                    Text(shortcut).font(.caption.monospaced()).foregroundStyle(.secondary)
+                } else {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.title).lineLimit(1)
+                        if let subtitle = item.subtitle {
+                            Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    if let shortcut = item.shortcut {
+                        Text(shortcut).font(.caption.monospaced()).foregroundStyle(.secondary)
+                    }
                 }
             }
             .padding(.horizontal, 10)
@@ -183,8 +368,13 @@ struct CommandPaletteView: View {
         case .models:
             guard let gateway, let row else { return [] }
             items = CommandPalette.modelItems(gateway: gateway, row: row)
+        case .messages:
+            guard let gateway, let messages, messages.gatewayId == gateway.id else { return [] }
+            return messages.items
         }
-        return Array(PaletteMatcher.rank(items, query: self.query).prefix(80))
+        let ranked = Array(PaletteMatcher.rank(items, query: self.query).prefix(80))
+        guard self.page == .root else { return ranked }
+        return CommandPalette.addingSearchMessages(to: ranked, query: self.query, gatewaySelected: self.gateway != nil)
     }
 
     private var commandItems: [PaletteItem] {
@@ -217,7 +407,16 @@ struct CommandPaletteView: View {
             items += [
                 item(.gatewaySettings, "Gateway Settings…", "server.rack", keywords: ["config"], shortcut: "⇧⌘,"),
                 item(.automations, "Automations…", "clock", keywords: ["cron", "jobs", "schedule"]),
+                item(.approvalHistory, "Approval History…", "checkmark.shield",
+                     keywords: ["approvals", "audit", "log", "exec", "plugin", "decisions"]),
+                item(.execPolicy, "Command Policy…", "lock.shield",
+                     keywords: ["exec", "allowlist", "always allow", "approval policy", "ask", "security", "commands"]),
+                item(.usage, "Usage & Cost…", "chart.bar.xaxis",
+                     keywords: ["usage", "cost", "tokens", "spend", "billing", "quota", "rate limit", "budget"]),
             ]
+            if row != nil {
+                items.append(item(.sessionUsage, "Session Usage…", "chart.bar", keywords: ["usage", "cost", "tokens", "session"]))
+            }
         }
         return items
     }
@@ -225,11 +424,12 @@ struct CommandPaletteView: View {
     // MARK: Keyboard
 
     private func currentSelection(in results: [PaletteItem]) -> String? {
-        if let selection, results.contains(where: { $0.id == selection }) { return selection }
-        return results.first(where: \.isEnabled)?.id
+        if let selection, results.contains(where: { $0.id == selection && !$0.isHeader }) { return selection }
+        return results.first(where: \.isSelectable)?.id
     }
 
     private func move(_ offset: Int, in results: [PaletteItem]) {
+        let results = results.filter { !$0.isHeader }
         guard !results.isEmpty else { return }
         let current = self.currentSelection(in: results).flatMap { id in results.firstIndex { $0.id == id } } ?? 0
         self.selection = results[(current + offset + results.count) % results.count].id
@@ -267,12 +467,17 @@ struct CommandPaletteView: View {
     }
 
     private func escape() {
-        if self.page == .models { self.show(.root) } else { self.close() }
+        switch self.page {
+        case .root: self.close()
+        case .models: self.show(.root)
+        case .messages: if self.cameFromRoot { self.show(.root) } else { self.close() }
+        }
     }
 
-    private func show(_ page: Page) {
+    private func show(_ page: Page, query: String = "") {
+        self.cameFromRoot = self.page == .root && page != .root || self.cameFromRoot && page != .root
         self.page = page
-        self.query = ""
+        self.query = query
         self.selection = nil
     }
 
@@ -306,6 +511,14 @@ struct CommandPaletteView: View {
         case let .command(raw):
             guard let command = Command(rawValue: raw) else { return }
             self.run(command)
+        case let .searchMessages(query):
+            self.show(.messages, query: query)
+        case let .openMessage(target, query, match):
+            self.close()
+            self.app.open(target, find: query, match: match)
+        case let .findInChat(target, query):
+            self.close()
+            self.app.open(target, find: query, match: nil)
         }
     }
 
@@ -339,6 +552,14 @@ struct CommandPaletteView: View {
             if let gateway { self.openGatewaySettings(gateway) }
         case .automations:
             if let gateway { self.openAutomations(gateway) }
+        case .approvalHistory:
+            if let gateway { self.openGatewaySettings(gateway, at: .approvals) }
+        case .execPolicy:
+            if let gateway { self.openGatewaySettings(gateway, at: .execPolicy) }
+        case .usage:
+            if let gateway { self.openGatewaySettings(gateway, at: .usage) }
+        case .sessionUsage:
+            if let gateway, let row { self.openGatewaySettings.sessionUsage(gateway, key: row.key, agentId: row.agentId) }
         }
     }
 }
@@ -371,19 +592,40 @@ private struct HostWindowReader: NSViewRepresentable {
 }
 #endif
 
+/// The palette on screen, and the page and query it opened with.
+struct PaletteRequest: Equatable {
+    let id = UUID()
+    var page = CommandPaletteView.Page.root
+    var query = ""
+}
+
+/// Opens the palette's messages page searching for a query (⇧⌘F, the sidebar's "Search messages").
+struct SearchMessagesAction {
+    var open: @MainActor (String) -> Void = { _ in }
+
+    @MainActor
+    func callAsFunction(_ query: String = "") { self.open(query) }
+}
+
+extension EnvironmentValues {
+    @Entry var searchMessages = SearchMessagesAction()
+}
+
 /// Dims the window behind the palette; clicking outside closes it.
 struct CommandPaletteOverlay: View {
-    @Binding var isPresented: Bool
+    @Binding var request: PaletteRequest?
     var openAppSettings: () -> Void = {}
 
     var body: some View {
-        if self.isPresented {
+        if let request {
             ZStack(alignment: .top) {
                 Color.black.opacity(0.12)
                     .ignoresSafeArea()
-                    .onTapGesture { self.isPresented = false }
+                    .onTapGesture { self.request = nil }
                     .accessibilityHidden(true)
-                CommandPaletteView(isPresented: self.$isPresented, openAppSettings: self.openAppSettings)
+                CommandPaletteView(isPresented: Binding(get: { self.request != nil }, set: { if !$0 { self.request = nil } }),
+                                   page: request.page, query: request.query, openAppSettings: self.openAppSettings)
+                    .id(request.id)
                     .padding(.top, 72)
                     .padding(.horizontal, 16)
             }
@@ -395,18 +637,37 @@ struct CommandPaletteOverlay: View {
 extension FocusedValues {
     /// The key window's command palette, so ⌘K only opens it there.
     @Entry var commandPalette: Binding<Bool>?
+    /// Opens the key window's palette on message search (⇧⌘F); nil without a Gateway.
+    @Entry var searchMessages: SearchMessagesAction?
 }
 
 /// Go menu: palette, back/forward, and ⌘1–⌘9 for the selected Gateway's pinned chats.
 struct GoCommands: Commands {
     let app: AppModel
     @FocusedValue(\.commandPalette) private var palette
+    @FocusedValue(\.searchMessages) private var searchMessages
+    #if os(macOS)
+    /// Commands live in the app's scenes, so this can open a main window even when none has
+    /// existed since launch; Quick Capture uses it for Send & Open and Open in Pincer.
+    @Environment(\.openWindow) private var openWindow
+    #endif
 
     var body: some Commands {
+        #if os(macOS)
+        let _ = (QuickCaptureController.shared.openWindow = self.openWindow)
+        #endif
         CommandMenu("Go") {
             Button("Command Palette…") { self.palette?.wrappedValue.toggle() }
                 .keyboardShortcut("k", modifiers: .command)
                 .disabled(self.palette == nil)
+            Button("Search Messages…") { self.searchMessages?() }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .disabled(self.palette == nil || self.searchMessages == nil || self.app.selectedGateway == nil)
+            #if os(macOS)
+            Button(QuickCaptureController.shared.displayShortcut.map { "Quick Capture…  \($0)" } ?? "Quick Capture…") {
+                QuickCaptureController.shared.show()
+            }
+            #endif
             Divider()
             Button("Back") { self.app.goBack() }
                 .keyboardShortcut("[", modifiers: .command)
