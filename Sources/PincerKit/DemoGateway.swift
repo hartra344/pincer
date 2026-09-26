@@ -1144,9 +1144,20 @@ actor DemoGateway {
         return ["card": self.progressCards[key] ?? .null]
     }
 
+    /// Multiplier for simulated run delays. `PINCER_DEMO_DELAY_SCALE=0` lets headless checks skip the pacing.
+    private static let delayScale: Double = {
+        guard let raw = ProcessInfo.processInfo.environment["PINCER_DEMO_DELAY_SCALE"], let scale = Double(raw) else { return 1 }
+        return max(0, scale)
+    }()
+
     /// Sleeps, then reports whether the run should keep going.
     private func pause(_ runId: String, milliseconds: Int) async -> Bool {
-        try? await Task.sleep(for: .milliseconds(milliseconds))
+        let scaled = Int((Double(milliseconds) * Self.delayScale).rounded())
+        if scaled > 0 {
+            try? await Task.sleep(for: .milliseconds(scaled))
+        } else {
+            await Task.yield()
+        }
         return !Task.isCancelled && self.runs[runId] != nil
     }
 
