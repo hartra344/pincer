@@ -33,13 +33,14 @@ While you're there, try:
 
 ### Search the demo's messages
 
-Press **⇧⌘F**, or type in the sidebar's **Find a chat** field and choose **Search messages for …**, then try:
+Press **⇧⌘F** (on a Mac, or an iPad with a keyboard), or type in the sidebar's **Find a chat** field and choose **Search messages for …**, then try:
 
 | Search for | What you'll find |
 | --- | --- |
-| `backup` | Matches in three chats: a Time Machine backup in *Main*, a backup script in Forge's *Main* and a failed NAS backup in *home-lab*. |
+| `backup` | Matches in three chats: a Time Machine backup in Claw's *Main*, a backup script in Forge's *Main* and a failed NAS backup in *home-lab*. |
 | `onsen` | Two days in the *Japan trip*'s older history, well above what's loaded when you open the chat. |
-| `cafe` | *Café Lumière* in *Main* and a few cafés in the *Japan trip*. Accents and case don't matter. |
+| `cafe` | *Café Lumière* in Claw's *Main* and cafés all through the *Japan trip*. Accents and case don't matter. |
+| `todai` | Tōdai-ji in the *Japan trip*. The macron over the ō doesn't matter. |
 | `ramen` | Lots of matches in the *Japan trip*. Choose **More matches in Japan trip…** to open Find in Chat on all of them. |
 
 Picking a result opens the chat with that message highlighted. See [Search messages](../../guides/search/) for the matching rules.
