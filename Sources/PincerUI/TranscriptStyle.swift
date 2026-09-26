@@ -139,6 +139,10 @@ enum TranscriptColors {
     static var highlight: PColor { .systemFill }
     #endif
     static var red: PColor { .systemRed }
+    /// Find in chat: every match, and the selected one (drawn with dark text so it reads in dark mode).
+    static var findMatch: PColor { PColor.systemYellow.withAlphaComponent(0.35) }
+    static var findCurrent: PColor { .systemYellow }
+    static var findCurrentText: PColor { .black }
     static var ownerAvatar: PColor { AppTheme.current.platformColor(.ownerAvatar) ?? .systemBlue }
     static var agentAvatar: PColor { AppTheme.current.platformColor(.agentAvatar) ?? AppTheme.systemPlatformDefault(.agentAvatar) }
 }

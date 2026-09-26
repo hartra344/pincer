@@ -16,6 +16,20 @@ public enum SVGRasterizer {
     /// bitmap per SVG. Full-size previews re-render the vector at their own size instead.
     nonisolated static let thumbnailPixelSize: CGFloat = 1200
 
+    /// The SVG in a fenced code block the transcript draws as an image instead (```svg, or any fence
+    /// holding a whole `<svg>…</svg>`), or nil. Unfinished ones, mid-stream, stay code until their
+    /// closing tag arrives.
+    public nonisolated static func inlineSource(language: String, code: String) -> String? {
+        let lang = language.lowercased()
+        guard lang == "svg" || lang == "xml" || lang == "html" || lang == "code" else { return nil }
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.range(of: "</svg>", options: [.caseInsensitive, .backwards]) != nil,
+              self.isSVG(Data(trimmed.utf8)),
+              lang == "svg" || trimmed.lowercased().hasPrefix("<svg") || trimmed.hasPrefix("<?xml")
+        else { return nil }
+        return trimmed
+    }
+
     public nonisolated static func isSVG(_ data: Data) -> Bool {
         let head = String(decoding: data.prefix(2048), as: UTF8.self).lowercased()
         guard let tag = head.range(of: "<svg") else { return false }

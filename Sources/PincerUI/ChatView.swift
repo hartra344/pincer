@@ -9,6 +9,7 @@ struct ChatView: View {
     @State private var disclosure = TranscriptDisclosure()
     @State private var previewing: ImageRef?
     @State private var exporting: ExportedFile?
+    @State private var find = TranscriptFind()
 
     private var row: SessionRow? { self.gateway.sessions[self.chat.sessionKey] }
     private var agent: AgentSummary { self.gateway.agent(self.row?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main") }
@@ -25,9 +26,16 @@ struct ChatView: View {
             // home-indicator heights the transcript runs under. (Inside it, macOS reports zero.)
             .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { self.safeArea = $0 }
             .overlay(alignment: .top) {
-                ApprovalsBanner(sessionKey: self.chat.sessionKey)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.topChrome = $0 }
+                VStack(spacing: 0) {
+                    ApprovalsBanner(sessionKey: self.chat.sessionKey)
+                    if self.find.isPresented {
+                        TranscriptFindBar(find: self.find, reasoningOff: self.reasoningOff)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.topChrome = $0 }
             }
+            .animation(.snappy, value: self.find.isPresented)
             .overlay(alignment: .bottom) {
                 VStack(spacing: 0) {
                     self.errorBar
@@ -61,7 +69,28 @@ struct ChatView: View {
         .task(id: self.chat.sessionKey) {
             await self.chat.load()
         }
+        .focusedSceneValue(\.transcriptFind, self.find)
+        .onAppear { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
+        .onChange(of: self.chat.entries) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
+        .onChange(of: self.reasoningOff) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
+        #if os(iOS)
+        // Menu commands are macOS-only; on iOS a hardware keyboard reaches these instead.
+        .background {
+            Group {
+                Button("Find in Chat") { self.find.present() }.keyboardShortcut("f", modifiers: .command)
+                if !self.find.isPresented {
+                    Button("Find Next") { self.find.next() }.keyboardShortcut("g", modifiers: .command)
+                    Button("Find Previous") { self.find.previous() }.keyboardShortcut("g", modifiers: [.command, .shift])
+                }
+            }
+            .opacity(0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        #endif
     }
+
+    private var reasoningOff: Bool { self.row?.reasoningLevel == "off" }
 
     @ViewBuilder private var errorBar: some View {
         if let error = self.chat.errorMessage {
@@ -124,7 +153,8 @@ struct ChatView: View {
                     previewImage: { self.previewing = $0 },
                     saveFile: { file, data in self.exporting = ExportedFile(name: file.name, data: data) }),
                 bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
-                topInset: self.topChrome + self.transcriptSafeArea.top)
+                topInset: self.topChrome + self.transcriptSafeArea.top,
+                highlight: self.find.highlight)
                 .ignoresSafeArea(.container, edges: [.top, .bottom])
         }
     }
@@ -182,6 +212,8 @@ struct ChatView: View {
             if let row {
                 ModelPicker(row: row)
                 Menu {
+                    Button("Find in Chat", systemImage: "magnifyingglass") { self.find.present() }
+                    Divider()
                     Button(row.isPinned ? "Unpin" : "Pin", systemImage: row.isPinned ? "pin.slash" : "pin") {
                         Task { await self.gateway.patch(row.key, ["pinned": .bool(!row.isPinned)]) }
                     }
