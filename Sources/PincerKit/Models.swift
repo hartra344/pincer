@@ -947,9 +947,16 @@ public struct ProgressCard: Sendable, Hashable {
     public init(revision: Int, updatedAt: Date? = nil, markdown: String? = nil, steps: [Step]) {
         self.revision = revision
         self.updatedAt = updatedAt
-        let trimmed = markdown?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = markdown.map(Self.strippingHTMLTags)?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.markdown = trimmed?.isEmpty == false ? trimmed : nil
         self.steps = steps
+    }
+
+    /// The Gateway embeds raw HTML (e.g. an a11y `<progress>` element) that SwiftUI's Markdown
+    /// can't render; the header already shows progress, so drop the tags.
+    static func strippingHTMLTags(_ markdown: String) -> String {
+        markdown.replacingOccurrences(
+            of: #"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>"#, with: "", options: .regularExpression)
     }
 
     /// A `card` object from `progressCard.get`. Nil for `null` or a card with nothing to show.
