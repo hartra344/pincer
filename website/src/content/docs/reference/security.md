@@ -72,7 +72,24 @@ Transcripts are cached so chats open instantly:
 - **Protection:** files use complete file protection.
 - **Cleanup:** removing a gateway deletes its cache.
 
-To turn the cache off, set `PINCER_CACHE_DIR=off`. To use another folder, set it to a path.
+### Search index
+
+[Message search](../../guides/search/) uses an index built from the cached transcripts, so it holds a copy of your messages' text:
+
+- **Location:** `search-index.sqlite` in the same folder as the gateway's transcripts, `~/Library/Caches/Pincer/Transcripts/<gateway>/`, plus SQLite's `-wal` and `-shm` files next to it.
+- **Contents:** the text of your messages and the agent's replies, with the chat, sender and date. The text is compressed to save space, not encrypted. Thinking and tool output aren't indexed.
+- **Protection:** on iOS the index is opened with complete file protection, like the transcripts, so it can't be read while the device is locked.
+- **Cleanup:** removing a gateway deletes its index along with its transcripts. It's derived data: if it's deleted, damaged or from an older version, Pincer rebuilds it from the transcript cache.
+
+To turn the cache off, set `PINCER_CACHE_DIR=off`. This turns off the search index too, and nothing is written. To use another folder, set it to a path; the index moves with the transcripts.
+
+## Shortcuts and Siri
+
+[Shortcuts & Siri](../../guides/shortcuts-and-siri/) actions connect with the same device identity and access level as the app. They don't pair a new device or ask for more scopes.
+
+- Every action except **Open Chat** requires an **unlocked device**, because they return reply content or send messages that can make an agent act.
+- Prompts and replies are handed to Shortcuts or Siri and are **never logged or saved** by the actions.
+- So saved shortcuts can show names while a gateway is offline, the agent and chat names Pincer last listed are kept in its **App Group**: agent names and emoji, chat titles and agent names, up to 1,000 entries. No messages are stored there.
 
 ## Drafts
 

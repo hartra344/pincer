@@ -15,6 +15,8 @@ To move the item, hold <kbd>⌘</kbd> and drag it along the menu bar. Dragging i
 
 Pincer's Dock icon stays either way.
 
+To have the menu bar item ready after you log in, turn on **Open at Login** in **Settings → General → Launch**. See [Start Pincer at login](../quick-capture/#start-pincer-at-login).
+
 ## The icon
 
 The icon follows the menu bar's light or dark look. Next to it is the number of unread chats plus the approvals and questions waiting for you, shown as **99+** above 99. There's no number when there's nothing to show.

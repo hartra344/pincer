@@ -76,6 +76,12 @@ public struct GatewayEvent: Sendable {
     public let name: String
     public let payload: JSONValue
     public let seq: Int?
+
+    public init(name: String, payload: JSONValue, seq: Int?) {
+        self.name = name
+        self.payload = payload
+        self.seq = seq
+    }
 }
 
 /// One operator WebSocket to one Gateway: handshake, device pairing, request/response

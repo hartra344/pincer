@@ -15,6 +15,38 @@ description: Keyboard shortcuts for Pincer on macOS (and iPad with a keyboard).
 | Reload Pincer | <kbd>⌘</kbd> <kbd>R</kbd> |
 | Quick Capture, from any app (macOS) | <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd> |
 
+## Go
+
+| Action | Shortcut |
+| --- | --- |
+| Command palette | <kbd>⌘</kbd> <kbd>K</kbd> |
+| [Search messages](../../guides/search/) | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd> |
+| Back | <kbd>⌘</kbd> <kbd>[</kbd> |
+| Forward | <kbd>⌘</kbd> <kbd>]</kbd> |
+| Open pinned chat 1–9 (selected gateway, sidebar order) | <kbd>⌘</kbd> <kbd>1</kbd> … <kbd>⌘</kbd> <kbd>9</kbd> |
+
+See [Command palette & navigation](../../guides/command-palette-and-navigation/).
+
+## Command palette and message search
+
+| Action | Shortcut |
+| --- | --- |
+| Move through items or results | <kbd>↑</kbd> <kbd>↓</kbd> |
+| Run the selected item or open the result | <kbd>Return</kbd> |
+| Go back to the first page, or close | <kbd>Esc</kbd> |
+| Go back to the first page from an empty field | <kbd>⌫</kbd> |
+
+On the message search page, <kbd>Esc</kbd> goes back to the palette only when you opened it from there. Opened with <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd> or from the sidebar, it closes.
+
+## Find in Chat
+
+| Action | Shortcut |
+| --- | --- |
+| Find in Chat | <kbd>⌘</kbd> <kbd>F</kbd> |
+| Next match | <kbd>⌘</kbd> <kbd>G</kbd> or <kbd>Return</kbd> |
+| Previous match | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>G</kbd> |
+| Close the find bar | <kbd>Esc</kbd> |
+
 ## Composer
 
 | Action | Shortcut |
@@ -47,35 +79,6 @@ The shortcut is also shown next to **Quick Capture…** in the [menu bar item](.
 | Move through suggestions | <kbd>↑</kbd> <kbd>↓</kbd> |
 | Complete | <kbd>Tab</kbd> or <kbd>Return</kbd> |
 | Hide | <kbd>Esc</kbd> |
-
-## Go
-
-| Action | Shortcut |
-| --- | --- |
-| Command palette | <kbd>⌘</kbd> <kbd>K</kbd> |
-| Back | <kbd>⌘</kbd> <kbd>[</kbd> |
-| Forward | <kbd>⌘</kbd> <kbd>]</kbd> |
-| Open pinned chat 1–9 (selected gateway, sidebar order) | <kbd>⌘</kbd> <kbd>1</kbd> … <kbd>⌘</kbd> <kbd>9</kbd> |
-
-See [Command palette & navigation](../../guides/command-palette-and-navigation/).
-
-## Command palette
-
-| Action | Shortcut |
-| --- | --- |
-| Move through results | <kbd>↑</kbd> <kbd>↓</kbd> |
-| Run | <kbd>Return</kbd> |
-| Back to commands, or close | <kbd>Esc</kbd> |
-| Back to commands (models page) | <kbd>Delete</kbd> in an empty field |
-
-## Find in Chat
-
-| Action | Shortcut |
-| --- | --- |
-| Find in Chat | <kbd>⌘</kbd> <kbd>F</kbd> |
-| Next match | <kbd>⌘</kbd> <kbd>G</kbd> or <kbd>Return</kbd> |
-| Previous match | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>G</kbd> |
-| Close | <kbd>Esc</kbd> |
 
 ## Agent questions
 

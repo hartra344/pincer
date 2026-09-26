@@ -17,7 +17,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - `wss://` is required for anything other than loopback, private LAN or Tailscale addresses.
   - You can pin a TLS certificate by its SHA-256 fingerprint.
   - Images are fetched only from the gateway itself: inline, through `artifacts.download`, or from the gateway's own host.
-- **Local cache:** transcripts are cached in `~/Library/Caches/Pincer/Transcripts/<gateway>/`, one file per chat, up to 20,000 messages each. Files use complete file protection, and removing a gateway deletes its cache. Set `PINCER_CACHE_DIR=off` to turn the cache off, or set it to a path to use another folder.
+- **Local cache:** transcripts are cached in `~/Library/Caches/Pincer/Transcripts/<gateway>/`, one file per chat, up to 20,000 messages each. Files use complete file protection, and removing a gateway deletes its cache. The message search index (`search-index.sqlite`) lives in the same folder and is deleted with it. Set `PINCER_CACHE_DIR=off` to turn the cache (and message search, except in the demo, which then keeps its index in memory) off, or set it to a path to use another folder.
 - **Drafts:** each chat keeps its unsent text and pending attachments when you switch chats or relaunch. They're saved in `~/Library/Application Support/Pincer/Drafts/<gateway>/`, one folder per chat, using complete file protection. A draft is deleted when you send it, when its chat is deleted, or when you remove its gateway. Set `PINCER_DRAFTS_DIR=off` to turn draft saving off, or set it to a path to use another folder.
 - **Sandbox:** the Xcode-built macOS app is sandboxed, with outgoing network access and read-only access to files you pick. The quick `scripts/bundle-mac.sh` dev bundle is only ad-hoc signed.
 
@@ -34,6 +34,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - "Next Unread Chat" (⌥⇧↓).
 - **Command palette and quick switching** (**Go** menu):
   - ⌘K opens a palette to jump to any chat on any gateway (recently visited first), start a new chat with an agent, change the chat's model, pin or unpin it, show or hide thinking steps, switch gateways, or open Settings, Gateway Settings, Automations, Approval History or Command Policy. Type to filter (fuzzy, so `jptr` finds "Japan trip"), use ↑/↓ to move, Return to run and Esc to go back or close;
+  - **Search Messages** (⇧⌘F, "Search Messages for …" in ⌘K, or the "Search messages for …" row that appears above the sidebar's chat list while you type in "Find a chat") searches the text of every cached chat on the selected gateway, including older history you haven't scrolled to. Results are grouped by chat (newest first, up to 3 per chat) with the sender, date and a highlighted snippet; picking one opens the chat with Find in Chat on that message. Matching ignores case and accents, each word must match from its start (`tok` finds "Tokyo", `kyo` doesn't), and multi-word queries must appear as a phrase. Only user and assistant message text is searched, not thinking or tool output. The index lives on disk next to the transcript cache and is built in the background;
   - Back (⌘[) and Forward (⌘]) move through the chats you've visited, like a browser;
   - ⌘1–⌘9 open the selected gateway's pinned chats, in sidebar order.
 - **Quick Capture** (macOS): press ⌃⇧Space from any app to open a small floating composer, even when the main window is closed. It remembers the chat you last sent to.
@@ -41,6 +42,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - Return sends (`chat.send`, after `sessions.create` for a new chat) without leaving what you're doing. ⌘Return sends and opens the chat in Pincer, ⌘O opens it without sending, and Esc closes and keeps your text.
   - Paste or drag in images and files, as in the main composer.
   - Change or turn off the shortcut in Settings → General → Quick Capture. It uses a standard system hotkey, so no Accessibility permission is needed. It's also in the **Go** menu.
+  - Turn on **Open at Login** in Settings → General → Launch so Pincer, and the shortcut, is ready after you log in. It's off by default. If macOS asks you to approve it, use **Open Login Items Settings…**.
 - **Menu bar** (macOS, optional): Quick Capture, unread chats, active runs, pending approvals and each gateway's status from the menu bar. Turn it on in Settings → General → Menu Bar.
 - **Transcript:**
   - live streaming, with a collapsible **thinking** section and **tool cards** showing arguments and results. Choose whether to show thinking steps never, only live, or for every turn;
@@ -76,6 +78,21 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
 - **Automations** (**Organize → Automations…** in the sidebar, or **Manage Automations…** on the Automations section's header): a window on macOS and a sheet on iOS listing the gateway's cron jobs with their schedule, last and next run, and status (failing jobs show the error). Each job's run history (`cron.runs`) links every run to its chat. **Run Now**, **Pause**/**Resume**, **Edit**, **New** and **Delete** use `cron.run`/`cron.update`/`cron.add`/`cron.remove`, and the list updates live from the gateway's `cron` events. Changing jobs needs **Access → Full Management**; edits made elsewhere in the meantime are refused instead of overwritten. Gateways without `cron.*` show that automations aren't available.
 - **Per-session actions:** pin, rename, group, color, reasoning level and archive. **Color → Custom…** picks any color; since `sessions.patch` only takes OpenClaw's named colors, custom colors sync through `users.prefs` (key `pincer.chatColors`) and win over the named one. Drag a chat onto a group (or **Ungrouped**) to move it, or between chats to put it at that spot; in **By server**, dropping a grouped chat on its own server or agent takes it out of the group.
 - **Groups:** create empty groups and keep them until you delete them (**Delete Group…** on the header leaves its chats ungrouped). Drag a group header, or use **Move Up**/**Move Down**, to reorder groups. **Change Icon…** on a group's header picks its SF Symbol; group icons sync through `users.prefs` (key `pincer.groupIcons`). Groups, their order and renames live in the gateway's group catalog (`sessions.groups.*`); on gateways without it, they sync through `users.prefs` (key `pincer.groups`). The order of chats within a group syncs through `users.prefs` (key `pincer.chatOrder`) and wins over pinning and activity.
+
+## Shortcuts & Siri
+
+Pincer's actions show up in the Shortcuts app, Siri, Spotlight and, on iPhone, the Action Button (Settings → Action Button → Shortcut → Pincer). They work without opening the app: Pincer reuses its connection if it's running, otherwise it connects once as the app's already approved device, the way the Share extension does.
+
+| Action | What it does |
+| --- | --- |
+| **Ask Agent** | Sends a prompt to an agent's main chat (or a new chat if it has none) and returns the reply as text; Siri reads the first ~500 characters. Optional agent, gateway, **Wait for Reply** (on) and timeout (60 s, 5–300). If the reply takes longer, the message was still delivered. |
+| **Send to Chat** | Sends a message to a chat without waiting. |
+| **Start Chat with Agent** | Creates a chat, optionally sends a first message, and opens it in Pincer. |
+| **Get Unread Chats** | Returns the chats counted in the unread badge, on one gateway or all of them. |
+| **Get Pending Approvals** | Returns how many exec approvals are waiting, and the first command. Read-only: answer them in the app or from their notifications. |
+| **Open Chat** | Opens a chat in Pincer. |
+
+Say "Ask Pincer", "Ask *agent* in Pincer", "What's unread in Pincer" or "Pending approvals in Pincer". With one gateway it's used silently; with several, the one selected in the app, unless you pick another. Every action except Open Chat requires an unlocked device, since they return reply content or send messages that can make an agent act. Main chats appear under their agent's name unless renamed, and spoken errors leave out gateway error codes. Pincer never logs prompts or replies. So saved shortcuts can show names offline, it keeps the agent and chat names it last listed (no messages) in the App Group; Siri learns those names once the app has loaded an agent list, so open Pincer once after installing it. The website's Shortcuts & Siri guide covers every parameter and error.
 
 ## Connecting to your home gateway over Tailscale
 
@@ -148,6 +165,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 | `Sources/PincerUI` | Shared UI for macOS and iOS. The app shell is SwiftUI. The chat transcript and sidebar are native for performance: `NSTableView`/`NSOutlineView` on macOS and `UICollectionView` on iOS. Markdown is laid out once with TextKit (`TranscriptSupport`, `TranscriptRowView`), and the same part views are shared by both platforms. |
 | `Apps/macOS`, `Apps/iOS` | `@main` app shells used by the Xcode project. |
 | `Apps/Shared` | Resources shared by both apps, including the app icon (`AppIcon.icon`) and the Info.plist keys that name the App Group and Keychain group. |
+| `Apps/Intents` | App Intents (Shortcuts, Siri, Action Button) compiled into both apps; the logic (`IntentService`) lives in PincerKit. |
 | `Apps/ShareExtension` | Share extensions for iOS and macOS: a view controller per platform plus the shared SwiftUI sheet. The logic (`ShareModel`, `SharedContent`) lives in PincerKit. |
 | `Design/AppIcon` | Flattened reference artwork for the app icon (`Pincer.svg`). The shipped icon is `Apps/Shared/AppIcon.icon`, a layered Icon Composer file (gradient background + glass speech-bubble layer) with Default, Dark, Clear and Tinted appearances; edit it in Icon Composer (Xcode ▸ Open Developer Tool). Xcode renders flat fallbacks for iOS 18 / macOS 15. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |
@@ -160,7 +178,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 
 ## Testing without a real gateway
 
-The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, chats, streamed replies, a chart, an exec approval, a sample approval history, an editable command policy, three pairing requests, 90 days of sample usage and cost data and gateway health (Telegram is disconnected, so it shows Degraded; **Restart Gateway** simulates a restart), and nothing leaves the device. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too.
+The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, grouped and pinned chats, a long searchable transcript, streamed replies, a chart, exec approvals (including one that arrives later, to answer from a notification), `ask_user` question cards, a context meter with compaction, sample approval history, an editable command policy, three pairing requests, 90 days of sample usage and cost data, and gateway health (Telegram is disconnected, so it shows Degraded; **Restart Gateway** simulates a restart). Nothing leaves the device. It doesn't use push notifications, and the Share extension runs its own separate demo, so shared messages don't show up in the app's demo. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too. Its chats have weeks of seeded history for message search (⇧⌘F): try `backup` (four chats), `ghibli` (older Japan trip history) or `cafe` (matches "Café").
 
 For the full protocol, including Gateway Settings, run the Node mock:
 
@@ -195,6 +213,7 @@ To run the self-checks:
 PINCER_KEYCHAIN=memory swift run PincerChecks
 PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
 PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo
+PINCER_KEYCHAIN=memory swift run -c release PincerChecks --perf   # message search at 20 chats × 20,000 messages
 PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock started with MOCK_NO_USAGE=1 PORT=18790
 ```
 
