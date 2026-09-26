@@ -9,7 +9,7 @@ public final class AppModel {
     public var selectedGatewayId: UUID? {
         didSet {
             // Shared so the Share extension starts on the same gateway.
-            SharedContainer.defaults.set(self.selectedGatewayId?.uuidString, forKey: Self.selectedGatewayKey)
+            self.sharedDefaults.set(self.selectedGatewayId?.uuidString, forKey: Self.selectedGatewayKey)
             self.updateVisible()
         }
     }
@@ -36,12 +36,28 @@ public final class AppModel {
     /// background for a notification action, by `Notifier` before any scene exists.
     public static let shared = AppModel()
 
-    public init() {
-        let profiles = GatewayProfileStore.load()
-        SharedContainer.shareKeychainItems(for: profiles)
-        self.gateways = profiles.map(GatewayStore.init(profile:))
-        let saved = (SharedContainer.defaults.string(forKey: Self.selectedGatewayKey)
-            ?? UserDefaults.standard.string(forKey: Self.selectedGatewayKey)).flatMap(UUID.init(uuidString:))
+    /// Saved gateways and the selected one (shared with the Share extension).
+    @ObservationIgnored private let sharedDefaults: UserDefaults
+    /// Per-gateway preferences, and where lists saved before the App Group existed are read from.
+    @ObservationIgnored private let localDefaults: UserDefaults
+
+    public convenience init() {
+        self.init(sharedDefaults: SharedContainer.defaults, localDefaults: .standard)
+    }
+
+    /// Keeps every preference in `defaults`, e.g. a scratch suite for checks.
+    public convenience init(defaults: UserDefaults) {
+        self.init(sharedDefaults: defaults, localDefaults: defaults)
+    }
+
+    private init(sharedDefaults: UserDefaults, localDefaults: UserDefaults) {
+        self.sharedDefaults = sharedDefaults
+        self.localDefaults = localDefaults
+        let profiles = GatewayProfileStore.load(from: sharedDefaults, legacy: localDefaults)
+        SharedContainer.shareKeychainItems(for: profiles, defaults: sharedDefaults)
+        self.gateways = profiles.map { GatewayStore(profile: $0, defaults: localDefaults, identity: .loadOrCreate()) }
+        let saved = (sharedDefaults.string(forKey: Self.selectedGatewayKey)
+            ?? localDefaults.string(forKey: Self.selectedGatewayKey)).flatMap(UUID.init(uuidString:))
         self.selectedGatewayId = self.gateways.first { $0.id == saved }?.id ?? self.gateways.first?.id
         self.notifier.onOpen = { [weak self] target in self?.open(target) }
         self.notifier.approvalResolver = { [weak self] gatewayId, approvalId, decision in
@@ -146,7 +162,7 @@ public final class AppModel {
     @discardableResult
     public func add(_ profile: GatewayProfile, secret: String?) -> GatewayStore {
         profile.secret = secret
-        let store = GatewayStore(profile: profile)
+        let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: .loadOrCreate())
         store.notifier = self.notifier
         self.gateways.append(store)
         self.persist()
@@ -172,7 +188,7 @@ public final class AppModel {
             profile.secret = secret
             profile.forgetDeviceToken()
         }
-        let store = GatewayStore(profile: profile)
+        let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: .loadOrCreate())
         store.notifier = self.notifier
         self.gateways[index] = store
         self.persist()
@@ -204,6 +220,6 @@ public final class AppModel {
     }
 
     private func persist() {
-        GatewayProfileStore.save(self.gateways.map(\.profile))
+        GatewayProfileStore.save(self.gateways.map(\.profile), to: self.sharedDefaults)
     }
 }

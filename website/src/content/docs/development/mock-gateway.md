@@ -35,6 +35,8 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `image` | Streams a tool call and attaches an image. |
 | `approve` | Raises an exec approval. |
 | `plan` | Walks a three-step progress card. |
+| `[mock:fail-send]` | Refuses the `chat.send` with `UNAVAILABLE`, for testing failed sends. |
+| `[mock:drop]` | Closes the connection. The client reconnects after its backoff. |
 
 ## Config and plugins
 
@@ -43,5 +45,18 @@ The mock serves a small config and plugin catalog for Gateway Settings. It suppo
 ## Channel pairing
 
 The mock serves `channels.pairing.list`, `channels.pairing.approve` and `channels.pairing.dismiss` with two pairing accounts (Telegram "Home bot" and Discord "Family server") and three requests, one of which expires about 2 minutes after the mock starts. Every method needs `operator.pairing` or `operator.admin`, so set **Access** to **Full Management** to see them in Pincer. Approving or dismissing a request that's already gone fails with "pending DM access request no longer exists". `MOCK_PAIRING` is about device pairing, not these.
+
+## Selftest and live checks
+
+The mock has its own selftest, and it is the target for Pincer's live end-to-end checks. CI runs both.
+
+```sh
+cd mock-gateway && npm ci && npm run selftest
+
+# in another terminal, with the mock running:
+PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+```
+
+The unit tests (`swift test`) don't need the mock: they never open a socket. See [Building from source](../building/#unit-tests).
 
 See [`mock-gateway/README.md`](https://github.com/hartra344/pincer/blob/main/mock-gateway/README.md) for everything else.

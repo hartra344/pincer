@@ -10,8 +10,12 @@ Pincer can show and edit your gateway's configuration, so you don't have to hand
 - **macOS:** choose **Pincer → Gateway Settings…** (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>,</kbd>), or use the gateway's menu in the sidebar. It opens in its own window.
 - **iOS:** use the gateway's menu in the sidebar. It opens as a sheet.
 
+You can also open it from the Organize menu at the top of the sidebar, or from the [command palette](../command-palette-and-navigation/).
+
 :::caution[Editing needs Full Management]
 Settings are read-only unless this device's **Access** is set to **Full Management** on the **Connection** page, and the gateway host has approved that change. See [Access levels](../../getting-started/connect-a-gateway/#access-levels).
+
+[Approval History](#approval-history) is the exception. It works with the default **Chat & Approvals** access.
 :::
 
 ## Pages
@@ -20,7 +24,7 @@ Settings are read-only unless this device's **Access** is set to **Full Manageme
 | --- | --- |
 | **Connection** | This device's URL, token, access level and TLS pin. **Apply** reconnects. |
 | **Overview** | The gateway's version, config file and health. |
-| **Approval History** | Past decisions on commands, plugins and system changes. |
+| **Approval History** | Past approval decisions from the last 30 days. |
 | **Pairing Requests** | People waiting to message your agents on a channel that uses DM pairing. See [below](#pairing-requests). |
 | **Gateway** | Core gateway settings. |
 | **Agents & Models** | Agents, their models and defaults. |
@@ -64,6 +68,38 @@ On the **Plugins** page you can:
 ## Raw Config
 
 For anything the forms don't cover, **Raw Config** lets you edit the whole configuration as JSON5 and apply it in one go.
+
+## Approval History
+
+**Approval History** lists the gateway's decisions on commands, plugins and system changes from the last 30 days, newest first. Besides the Gateway Settings sidebar, you can open it with **Approval History…** in the Organize menu or the command palette.
+
+It needs the `operator.approvals` scope, which both access levels include, so you don't need **Full Management**. It's read-only: answer pending approvals in the chat or from the notification. See [Exec approvals](../approvals-and-notifications/#exec-approvals).
+
+- Filter by kind with **All**, **Commands**, **Plugins** or **System**.
+- **Load More** at the bottom shows older decisions.
+- **Refresh** in the toolbar reloads the list. On iOS you can also pull to refresh.
+- New decisions appear at the top shortly after they're made.
+
+Each entry shows its outcome:
+
+| Outcome | Meaning |
+| --- | --- |
+| **Allowed once** | Allowed this time only. |
+| **Always allowed** | Allowed, and allowed from now on. |
+| **Denied** | Denied. When it wasn't a person, the reason follows, such as **Denied · Timed out**. |
+| **Expired** | No one answered before it expired. |
+| **Cancelled** | The request was cancelled. |
+| **Pending** | Still waiting for an answer. |
+
+Select an entry for the details:
+
+- **Decision:** the outcome, the decision, the reason, and who decided it under **Decided by**, such as **This device**, another device, a channel, or **OpenClaw (automatic)**;
+- **Times:** when it was requested, decided and set to expire;
+- **ID**, with **Copy ID**;
+- **Request:** the kind, the command with **Copy Command**, and the host, node, plugin, tool and severity when they apply;
+- **Requested by:** the agent and chat, with **Open Chat** to jump to it.
+
+If the gateway doesn't keep a history, the page says "Approval History Isn't Available". Update OpenClaw to see past decisions.
 
 ## Pairing Requests
 
