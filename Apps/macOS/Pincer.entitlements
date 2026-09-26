@@ -9,5 +9,14 @@
 	<true/>
 	<key>com.apple.security.files.user-selected.read-only</key>
 	<true/>
+	<!-- Shared with the Share extension: saved gateways (App Group) and the paired device key, secrets and device tokens (Keychain). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>$(PINCER_APP_GROUP)</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)chat.pincer.shared</string>
+	</array>
 </dict>
 </plist>

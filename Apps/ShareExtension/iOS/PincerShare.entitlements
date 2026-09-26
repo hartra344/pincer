@@ -2,11 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Push relay notifications (see push-relay/). -->
-	<key>aps-environment</key>
-	<string>$(PINCER_APS_ENVIRONMENT)</string>
-	<!-- Shared with the Share extension: saved gateways (App Group) and the paired device key, secrets and device tokens (Keychain).
-	     The Notification Service Extension also uses the Keychain group for the per-gateway Web Push keys. -->
+	<!-- Shared with the Share extension: saved gateways (App Group) and the paired device key, secrets and device tokens (Keychain). -->
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>$(PINCER_APP_GROUP)</string>

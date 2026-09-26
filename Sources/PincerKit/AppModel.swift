@@ -8,7 +8,8 @@ public final class AppModel {
     public private(set) var gateways: [GatewayStore] = []
     public var selectedGatewayId: UUID? {
         didSet {
-            UserDefaults.standard.set(self.selectedGatewayId?.uuidString, forKey: "pincer.selectedGateway")
+            // Shared so the Share extension starts on the same gateway.
+            SharedContainer.defaults.set(self.selectedGatewayId?.uuidString, forKey: Self.selectedGatewayKey)
             self.updateVisible()
         }
     }
@@ -29,9 +30,14 @@ public final class AppModel {
         }
     }
 
+    public static let selectedGatewayKey = "pincer.selectedGateway"
+
     public init() {
-        self.gateways = GatewayProfileStore.load().map(GatewayStore.init(profile:))
-        let saved = UserDefaults.standard.string(forKey: "pincer.selectedGateway").flatMap(UUID.init(uuidString:))
+        let profiles = GatewayProfileStore.load()
+        SharedContainer.shareKeychainItems(for: profiles)
+        self.gateways = profiles.map(GatewayStore.init(profile:))
+        let saved = (SharedContainer.defaults.string(forKey: Self.selectedGatewayKey)
+            ?? UserDefaults.standard.string(forKey: Self.selectedGatewayKey)).flatMap(UUID.init(uuidString:))
         self.selectedGatewayId = self.gateways.first { $0.id == saved }?.id ?? self.gateways.first?.id
         self.notifier.onOpen = { [weak self] target in self?.open(target) }
         self.notifier.onApprovalAction = { [weak self] gatewayId, approvalId, decision in

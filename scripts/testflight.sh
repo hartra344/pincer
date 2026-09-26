@@ -3,7 +3,7 @@
 # Usage: scripts/testflight.sh ios|macos
 #
 # Expects the Apple Distribution (and, for macOS, Mac Installer Distribution) identities in a
-# keychain on the search list and the *_AppStore_CI profiles installed. CI sets these up from
+# keychain on the search list and the *_AppStore_CI profiles (app and Share extension) installed. CI sets these up from
 # repository secrets; see .github/workflows/testflight.yml.
 #
 # Environment:
@@ -16,9 +16,9 @@ cd "$(dirname "$0")/.."
 PLATFORM="${1:?usage: $0 ios|macos}"
 TEAM_ID="E4Y97NXBXG"
 case "$PLATFORM" in
-  ios)   SCHEME=Pincer-iOS;   DESTINATION="generic/platform=iOS";   BUNDLE_ID=chat.pincer.ios; PROFILE=Pincer_iOS_AppStore_CI
+  ios)   SCHEME=Pincer-iOS;   DESTINATION="generic/platform=iOS";   BUNDLE_ID=chat.pincer.ios; PROFILE=Pincer_iOS_AppStore_CI; SHARE_PROFILE=Pincer_iOS_Share_AppStore_CI
          EXTRA_PROFILES="<key>chat.pincer.ios.notifications</key><string>Pincer_iOS_Notifications_AppStore_CI</string>" ;;
-  macos) SCHEME=Pincer-macOS; DESTINATION="generic/platform=macOS"; BUNDLE_ID=chat.pincer.mac; PROFILE=Pincer_macOS_AppStore_CI ;;
+  macos) SCHEME=Pincer-macOS; DESTINATION="generic/platform=macOS"; BUNDLE_ID=chat.pincer.mac; PROFILE=Pincer_macOS_AppStore_CI; SHARE_PROFILE=Pincer_macOS_Share_AppStore_CI ;;
   *) echo "unknown platform: $PLATFORM" >&2; exit 64 ;;
 esac
 
@@ -60,7 +60,10 @@ cat > "$OUT/ExportOptions.plist" <<PLIST
   <key>signingStyle</key><string>manual</string>
   <key>signingCertificate</key><string>Apple Distribution</string>
 $INSTALLER_KEY  <key>provisioningProfiles</key>
-  <dict><key>$BUNDLE_ID</key><string>$PROFILE</string>$EXTRA_PROFILES</dict>
+  <dict>
+    <key>$BUNDLE_ID</key><string>$PROFILE</string>
+    <key>$BUNDLE_ID.share</key><string>$SHARE_PROFILE</string>$EXTRA_PROFILES
+  </dict>
   <key>uploadSymbols</key><true/>
   <key>manageAppVersionAndBuildNumber</key><false/>
   <key>testFlightInternalTestingOnly</key><false/>

@@ -18,6 +18,53 @@ public struct OutgoingAttachment: Identifiable, Hashable, Sendable {
     public var isImage: Bool { self.mimeType.hasPrefix("image/") }
 }
 
+/// Largest attachment the Gateway takes. Base64 inflates ~4/3 and the whole frame must fit
+/// `maxPayload`, so both limits stay under 70% of it.
+public struct UploadLimits: Sendable, Equatable {
+    public let imageBytes: Int
+    public let fileBytes: Int
+
+    public init(maxPayload: Int?, maxImageBytes: Int?, maxAttachmentBytes: Int?) {
+        let payloadBudget = Int(Double(maxPayload ?? 25_000_000) * 0.7)
+        self.imageBytes = min(maxImageBytes ?? 5_000_000, payloadBudget)
+        self.fileBytes = min(maxAttachmentBytes ?? 10_000_000, payloadBudget)
+    }
+
+    public init(hello: GatewayHello?) {
+        self.init(maxPayload: hello?.maxPayload, maxImageBytes: hello?.maxImageBytes, maxAttachmentBytes: hello?.maxAttachmentBytes)
+    }
+}
+
+/// `chat.send` parameters, shared by the composer and the Share extension.
+public enum ChatSendRequest {
+    public static func params(
+        sessionKey: String,
+        agentId: String?,
+        message: String,
+        idempotencyKey: String,
+        attachments: [OutgoingAttachment]) -> [String: JSONValue]
+    {
+        var params: [String: JSONValue] = ["sessionKey": .string(sessionKey)]
+        if let agentId, SessionKey.agentId(from: sessionKey) == nil {
+            params["agentId"] = .string(agentId)
+        }
+        params["message"] = .string(message)
+        params["idempotencyKey"] = .string(idempotencyKey)
+        if !attachments.isEmpty {
+            params["attachments"] = .array(attachments.map { attachment in
+                [
+                    "type": .string(attachment.isImage ? "image" : "file"),
+                    "mimeType": .string(attachment.mimeType),
+                    "fileName": .string(attachment.fileName),
+                    "content": .string(attachment.data.base64EncodedString()),
+                    "sizeBytes": .number(Double(attachment.data.count)),
+                ]
+            })
+        }
+        return params
+    }
+}
+
 /// Live state of the current run, rendered as a streaming assistant turn.
 public struct LiveRun: Sendable, Hashable {
     public var runId: String
@@ -443,20 +490,9 @@ public final class ChatStore: Identifiable {
         self.isSending = true
         defer { self.isSending = false }
 
-        var params = self.params(keyName: "sessionKey")
-        params["message"] = .string(trimmed)
-        params["idempotencyKey"] = .string(idempotencyKey)
-        if !attachments.isEmpty {
-            params["attachments"] = .array(attachments.map { attachment in
-                [
-                    "type": .string(attachment.isImage ? "image" : "file"),
-                    "mimeType": .string(attachment.mimeType),
-                    "fileName": .string(attachment.fileName),
-                    "content": .string(attachment.data.base64EncodedString()),
-                    "sizeBytes": .number(Double(attachment.data.count)),
-                ]
-            })
-        }
+        let params = ChatSendRequest.params(
+            sessionKey: self.sessionKey, agentId: self.agentId, message: trimmed,
+            idempotencyKey: idempotencyKey, attachments: attachments)
         do {
             let result = try await gateway.connection.request("chat.send", .object(params), timeout: 60)
             let runId = result["runId"]?.text

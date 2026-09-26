@@ -2,7 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Read by PushKeyStore; must match the entitlements. The rest of Info.plist is generated. -->
+	<!-- Read by SharedContainer and PushKeyStore; must match the entitlements. The rest of Info.plist is generated. -->
+	<key>PincerAppGroup</key>
+	<string>$(PINCER_APP_GROUP)</string>
 	<key>PincerKeychainGroup</key>
 	<string>$(AppIdentifierPrefix)chat.pincer.shared</string>
 </dict>

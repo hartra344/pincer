@@ -20,3 +20,15 @@ targets:
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: Apple Distribution
         PROVISIONING_PROFILE_SPECIFIER: Pincer_iOS_Notifications_AppStore_CI
+  PincerShare-macOS:
+    settings:
+      base:
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: Apple Distribution
+        PROVISIONING_PROFILE_SPECIFIER: Pincer_macOS_Share_AppStore_CI
+  PincerShare-iOS:
+    settings:
+      base:
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: Apple Distribution
+        PROVISIONING_PROFILE_SPECIFIER: Pincer_iOS_Share_AppStore_CI

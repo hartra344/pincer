@@ -264,17 +264,9 @@ struct Composer: View {
 
     // MARK: Attachments
 
-    private var maxImageBytes: Int {
-        let hello = self.gateway.hello
-        // Base64 inflates ~4/3 and the whole frame must fit maxPayload.
-        let payloadBudget = Int(Double(hello?.maxPayload ?? 25_000_000) * 0.7)
-        return min(hello?.maxImageBytes ?? 5_000_000, payloadBudget)
-    }
+    private var maxImageBytes: Int { UploadLimits(hello: self.gateway.hello).imageBytes }
 
-    private var maxFileBytes: Int {
-        let hello = self.gateway.hello
-        return min(hello?.maxAttachmentBytes ?? 10_000_000, Int(Double(hello?.maxPayload ?? 25_000_000) * 0.7))
-    }
+    private var maxFileBytes: Int { UploadLimits(hello: self.gateway.hello).fileBytes }
 
     private func ingest(_ items: [PastedMedia]) {
         for item in items {

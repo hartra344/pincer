@@ -28,7 +28,16 @@ public enum Keychain {
         var query = self.baseQuery(account)
         query[kSecValueData as String] = data
         query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        // Written into the group shared with the Share extension; reads search every group.
+        if let group = SharedContainer.keychainAccessGroup {
+            query[kSecAttrAccessGroup as String] = group
+        }
         var status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecMissingEntitlement, query[kSecAttrAccessGroup as String] != nil {
+            // Builds signed without the keychain-access-groups entitlement.
+            query.removeValue(forKey: kSecAttrAccessGroup as String)
+            status = SecItemAdd(query as CFDictionary, nil)
+        }
         #if os(macOS)
         if status == errSecMissingEntitlement {
             // Unsigned development builds cannot use the data-protection keychain.
@@ -62,6 +71,14 @@ public enum Keychain {
             deleteQuery.removeValue(forKey: kSecReturnData as String)
             deleteQuery.removeValue(forKey: kSecMatchLimit as String)
             SecItemDelete(deleteQuery as CFDictionary)
+        }
+    }
+
+    /// Rewrites existing items so they land in the shared access group (see `set`).
+    static func moveToSharedGroup(_ accounts: [String]) {
+        guard self.memory == nil, SharedContainer.keychainAccessGroup != nil else { return }
+        for account in accounts {
+            if let value = self.get(account) { self.set(value, for: account) }
         }
     }
 
@@ -111,16 +128,22 @@ public struct DeviceIdentity: Sendable {
         return Self.base64Url(signature)
     }
 
+    static let keychainAccount = "device.ed25519"
+
     public static func loadOrCreate() -> DeviceIdentity {
-        let account = "device.ed25519"
-        if let stored = Keychain.get(account),
-           let raw = Data(base64Encoded: stored),
-           let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: raw)
-        {
-            return DeviceIdentity(privateKey: key)
-        }
+        if let existing = self.loadExisting() { return existing }
         let key = Curve25519.Signing.PrivateKey()
-        Keychain.set(key.rawRepresentation.base64EncodedString(), for: account)
+        Keychain.set(key.rawRepresentation.base64EncodedString(), for: self.keychainAccount)
+        return DeviceIdentity(privateKey: key)
+    }
+
+    /// The paired identity, without creating one. The Share extension uses this so it never
+    /// shows up on the Gateway as a second, unapproved device.
+    public static func loadExisting() -> DeviceIdentity? {
+        guard let stored = Keychain.get(self.keychainAccount),
+              let raw = Data(base64Encoded: stored),
+              let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: raw)
+        else { return nil }
         return DeviceIdentity(privateKey: key)
     }
 
