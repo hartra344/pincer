@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Foreground layer: the speech bubble with the pincer cut out. Flat white, unmasked, no effects;
+       colour, glass, shadow and per-appearance tints are set in icon.json. -->
+  <defs>
+    <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <g transform="rotate(-45 660 400)" fill="#000">
+        <ellipse cx="640" cy="400" rx="150" ry="112"/>
+        <rect x="640" y="378" width="400" height="44" rx="22"/>
+      </g>
+    </mask>
+  </defs>
+  <g mask="url(#cut)" fill="#fff">
+    <circle cx="500" cy="530" r="300"/>
+    <path d="M 330 770 C 310 820 270 860 215 885 C 300 885 380 860 430 820 Z"/>
+  </g>
+</svg>

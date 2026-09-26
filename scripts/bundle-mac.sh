@@ -14,11 +14,11 @@ cp "$BIN" "$APP/Contents/MacOS/Pincer"
 # pre-26 compatibility look (no Liquid Glass). Stamp the SDK it was actually built with.
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
 vtool -set-build-version macos 15.0 "$SDK_VERSION" -replace -output "$APP/Contents/MacOS/Pincer" "$APP/Contents/MacOS/Pincer"
-# App icon: reuse the macOS PNGs from the asset catalog (regenerate with scripts/make-icons.swift).
-ICONSET="build/Pincer.iconset"
-rm -rf "$ICONSET" && mkdir -p "$ICONSET"
-cp Apps/Shared/Assets.xcassets/AppIcon.appiconset/icon_*.png "$ICONSET/"
-iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Pincer.icns"
+# App icon: compile the layered Icon Composer file. Assets.car carries the Liquid Glass icon with its
+# dark/clear/tinted appearances (macOS 26+); AppIcon.icns is the flat fallback for macOS 15.
+xcrun actool Apps/Shared/AppIcon.icon --compile "$APP/Contents/Resources" --platform macosx \
+  --minimum-deployment-target 15.0 --app-icon AppIcon \
+  --output-partial-info-plist build/icon-partial.plist --output-format human-readable-text >/dev/null
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -28,7 +28,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>Pincer</string>
   <key>CFBundleDisplayName</key><string>Pincer</string>
   <key>CFBundleExecutable</key><string>Pincer</string>
-  <key>CFBundleIconFile</key><string>Pincer</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleIconName</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>0.1.0</string>
   <key>CFBundleVersion</key><string>1</string>

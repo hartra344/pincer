@@ -116,8 +116,8 @@ The certificates and profiles expire on 2027-09-25. Renew them before then and u
 | `Sources/PincerKit` | Protocol client (handshake, signing, reconnect, TLS pinning), models, and the observable stores. No UI. |
 | `Sources/PincerUI` | Shared UI for macOS and iOS. The app shell is SwiftUI. The chat transcript and sidebar are native for performance: `NSTableView`/`NSOutlineView` on macOS and `UICollectionView` on iOS. Markdown is laid out once with TextKit (`TranscriptSupport`, `TranscriptRowView`), and the same part views are shared by both platforms. |
 | `Apps/macOS`, `Apps/iOS` | `@main` app shells used by the Xcode project. |
-| `Apps/Shared` | Asset catalog shared by both apps, including the generated app icon. |
-| `Design/AppIcon` | Source artwork for the app icon (`Pincer.svg`). After editing it, run `swift scripts/make-icons.swift` to regenerate the icons. |
+| `Apps/Shared` | Resources shared by both apps, including the app icon (`AppIcon.icon`). |
+| `Design/AppIcon` | Flattened reference artwork for the app icon (`Pincer.svg`). The shipped icon is `Apps/Shared/AppIcon.icon`, a layered Icon Composer file (gradient background + glass speech-bubble layer) with Default, Dark, Clear and Tinted appearances; edit it in Icon Composer (Xcode ▸ Open Developer Tool). Xcode renders flat fallbacks for iOS 18 / macOS 15. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |
 | `Sources/PincerChecks` | Self-checks, with an optional live end-to-end run. |
 | `mock-gateway/` | Node mock of the Gateway protocol for offline development. |
