@@ -24,10 +24,12 @@ targets:
     type: application
     scheme: {}
     platform: macOS
-    sources: [Apps/macOS, Apps/Shared]
+    sources: [Apps/macOS, Apps/Shared, Apps/Intents]
     dependencies:
       - package: Pincer
         product: PincerUI
+      - package: Pincer
+        product: PincerKit
       - target: PincerShare-macOS
     settings:
       base:
@@ -46,7 +48,7 @@ targets:
     type: application
     scheme: {}
     platform: iOS
-    sources: [Apps/iOS, Apps/Shared]
+    sources: [Apps/iOS, Apps/Shared, Apps/Intents]
     dependencies:
       - package: Pincer
         product: PincerUI

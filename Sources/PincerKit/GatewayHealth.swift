@@ -434,12 +434,49 @@ public struct GatewayHealthIssue: Identifiable, Hashable, Sendable {
     public let kind: Kind
     public let title: String
     public let detail: String?
+    /// What a "Dismiss until it changes" remembers (see `GatewayHealthRules.isDismissed`).
+    public let fingerprint: String
 
-    public init(id: String, kind: Kind, title: String, detail: String? = nil) {
+    public init(id: String, kind: Kind, title: String, detail: String? = nil, fingerprint: String = "") {
         self.id = id
         self.kind = kind
         self.title = title
         self.detail = detail
+        self.fingerprint = fingerprint
+    }
+
+    /// Channel accounts and plugins can be ignored for good; lost deliveries, engines and heartbeats can't.
+    public var canAlwaysIgnore: Bool { Self.canAlwaysIgnore(kind: self.kind) }
+
+    static func canAlwaysIgnore(kind: Kind) -> Bool { kind == .channel || kind == .plugin }
+
+    /// Channel, plugin and context engine problems are often fixed by a restart.
+    public var offersRestart: Bool { self.kind == .channel || self.kind == .plugin || self.kind == .contextEngine }
+
+    /// The kind an issue id stands for, from its prefix.
+    public static func kind(ofId id: String) -> Kind? {
+        if id.hasPrefix("channel:") { return .channel }
+        if id.hasPrefix("plugin:") || id.hasPrefix("plugin-unavailable:") { return .plugin }
+        if id.hasPrefix("queue:") { return .delivery }
+        if id.hasPrefix("engine:") { return .contextEngine }
+        if id.hasPrefix("heartbeat:") { return .heartbeat }
+        return nil
+    }
+
+    /// A stand-in row for an ignored issue the Gateway isn't reporting right now, titled from its id.
+    public static func placeholder(id: String) -> GatewayHealthIssue {
+        let kind = Self.kind(ofId: id) ?? .channel
+        let parts = id.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
+        let title: String
+        switch parts.first {
+        case "channel" where parts.count == 3:
+            title = "\(ApprovalRecord.humanized(parts[1])) (\(parts[2]))"
+        case "plugin", "plugin-unavailable":
+            title = "Plugin \(id.drop { $0 != ":" }.dropFirst())"
+        default:
+            title = id
+        }
+        return GatewayHealthIssue(id: id, kind: kind, title: title)
     }
 
     public var symbol: String {
@@ -453,9 +490,81 @@ public struct GatewayHealthIssue: Identifiable, Hashable, Sendable {
     }
 }
 
+/// A stored dismissal (`pincer.healthDismissals`): hidden until the issue changes, or for good.
+public enum GatewayHealthDismissal: Hashable, Sendable {
+    case untilChanged(String)
+    case always
+
+    public init?(stored: String) {
+        if stored == "always" {
+            self = .always
+        } else if stored.hasPrefix("until:") {
+            self = .untilChanged(String(stored.dropFirst("until:".count)))
+        } else {
+            return nil
+        }
+    }
+
+    public var stored: String {
+        switch self {
+        case .always: "always"
+        case let .untilChanged(fingerprint): "until:\(fingerprint)"
+        }
+    }
+}
+
 // MARK: Level
 
 public enum GatewayHealthRules {
+    /// Where an issue comes from, so a fresh result only prunes dismissals it could have reported.
+    public enum Source: Hashable, Sendable {
+        case health
+        case heartbeat
+
+        public init?(issueId id: String) {
+            guard let kind = GatewayHealthIssue.kind(ofId: id) else { return nil }
+            self = kind == .heartbeat ? .heartbeat : .health
+        }
+    }
+
+    /// Whether a stored dismissal hides the issue. Failed deliveries stay hidden until the count goes
+    /// up; everything else until its fingerprint differs. `always` only counts for channels and plugins.
+    public static func isDismissed(_ issue: GatewayHealthIssue, by dismissal: GatewayHealthDismissal?) -> Bool {
+        switch dismissal {
+        case nil: return false
+        case .always: return issue.canAlwaysIgnore
+        case let .untilChanged(fingerprint):
+            if issue.kind == .delivery {
+                guard let dismissed = Self.count(fingerprint), let current = Self.count(issue.fingerprint) else {
+                    return fingerprint == issue.fingerprint
+                }
+                return current <= dismissed
+            }
+            return fingerprint == issue.fingerprint
+        }
+    }
+
+    private static func count(_ fingerprint: String) -> Int? {
+        guard fingerprint.hasPrefix("count=") else { return nil }
+        return Int(fingerprint.dropFirst("count=".count))
+    }
+
+    /// Whether a stored value is an `always` that counts, which pruning keeps.
+    static func isAlways(id: String, stored: String) -> Bool {
+        guard GatewayHealthDismissal(stored: stored) == .always, let kind = GatewayHealthIssue.kind(ofId: id) else { return false }
+        return GatewayHealthIssue.canAlwaysIgnore(kind: kind)
+    }
+
+    /// Drops dismissals for issues of `source` that a fresh result no longer reports. Other sources,
+    /// unknown ids and `always` entries are kept.
+    public static func pruned(_ dismissals: [String: String], current: [GatewayHealthIssue], source: Source) -> [String: String] {
+        let reported = Set(current.map(\.id))
+        return dismissals.filter { id, stored in
+            guard Source(issueId: id) == source else { return true }
+            return reported.contains(id) || Self.isAlways(id: id, stored: stored)
+        }
+    }
+
     /// Every reason the Gateway counts as degraded, in display order.
     public static func issues(health: GatewayHealthSummary?, heartbeat: GatewayHeartbeat?, now: Date) -> [GatewayHealthIssue] {
         var issues: [GatewayHealthIssue] = []
@@ -466,36 +575,39 @@ public enum GatewayHealthRules {
                         ? channel.label : "\(channel.label) (\(account.name ?? account.accountId))"
                     let title = account.running == false ? "\(who) isn't running"
                         : account.connected == false ? "\(who) isn't connected" : "\(who) reported an error"
+                    let state = account.running == false ? "not-running" : account.connected == false ? "not-connected" : "error"
                     issues.append(.init(id: "channel:\(channel.id):\(account.accountId)", kind: .channel, title: title,
-                                        detail: account.lastError))
+                                        detail: account.lastError, fingerprint: "state=\(state)"))
                 }
             }
             for plugin in health.pluginErrors {
                 issues.append(.init(id: "plugin:\(plugin.id)", kind: .plugin, title: "Plugin \(plugin.id) failed to load",
-                                    detail: plugin.error))
+                                    detail: plugin.error, fingerprint: "error=\(plugin.error)"))
             }
             for id in health.unavailablePlugins {
                 issues.append(.init(id: "plugin-unavailable:\(id)", kind: .plugin, title: "Plugin \(id) is unavailable",
-                                    detail: "It's configured but couldn't be verified."))
+                                    detail: "It's configured but couldn't be verified.", fingerprint: "unavailable"))
             }
             for queue in health.failedQueues {
                 issues.append(.init(id: "queue:\(queue.queueName)", kind: .delivery,
                                     title: "\(queue.count) failed deliver\(queue.count == 1 ? "y" : "ies")",
-                                    detail: "Queue: \(queue.queueName)"))
+                                    detail: "Queue: \(queue.queueName)", fingerprint: "count=\(queue.count)"))
             }
             for engine in health.quarantinedEngines {
-                issues.append(.init(id: "engine:\(engine)", kind: .contextEngine, title: "Context engine \(engine) is quarantined"))
+                issues.append(.init(id: "engine:\(engine)", kind: .contextEngine, title: "Context engine \(engine) is quarantined",
+                                fingerprint: "quarantined"))
             }
         }
         if let heartbeat, heartbeat.isFailure {
             issues.append(.init(id: "heartbeat:failed", kind: .heartbeat, title: "The last heartbeat failed",
-                                detail: heartbeat.reason))
+                                detail: heartbeat.reason, fingerprint: "reason=\(heartbeat.reason ?? "")"))
         }
         if GatewayHeartbeat.isStale(heartbeat, heartbeatSeconds: health?.heartbeatSeconds,
                                     enabled: health?.heartbeatEnabled ?? false, now: now)
         {
             issues.append(.init(id: "heartbeat:late", kind: .heartbeat, title: "Heartbeat is late",
-                                detail: health?.heartbeatSeconds.map { "Expected every \(Self.duration(seconds: $0))." }))
+                                detail: health?.heartbeatSeconds.map { "Expected every \(Self.duration(seconds: $0))." },
+                                fingerprint: "every=\(health?.heartbeatSeconds.map(String.init) ?? "")"))
         }
         return issues
     }
@@ -631,6 +743,11 @@ public final class GatewayHealthModel {
     /// The demo: Restart is simulated on the device, so it's offered without Full Management.
     public private(set) var simulatedRestart = false
     public let localInstanceId: String?
+    /// Dismissed issues by id (`pincer.healthDismissals`, see `GatewayHealthDismissal`). The store keeps
+    /// it in sync with the gateway's user prefs.
+    public internal(set) var dismissals: [String: String] = [:]
+    /// Dismissals this model changed (nil removes one), for the store to save and sync.
+    @ObservationIgnored public var onDismissalsChanged: (@MainActor ([String: String?]) -> Void)?
 
     public typealias Request = @MainActor (_ method: String, _ params: JSONValue) async throws -> JSONValue
 
@@ -656,9 +773,11 @@ public final class GatewayHealthModel {
     public init(methods: @escaping @MainActor () -> Set<String>? = { nil },
                 scopes: @escaping @MainActor () -> [String] = { [] },
                 localDeviceId: String? = nil, localInstanceId: String? = nil,
+                dismissals: [String: String] = [:],
                 request: @escaping Request)
     {
         self.request = request
+        self.dismissals = dismissals
         self.hello = { nil }
         self.methodsOverride = methods
         self.scopesOverride = scopes
@@ -679,11 +798,75 @@ public final class GatewayHealthModel {
         return GatewayHealthRules.issues(health: self.health, heartbeat: self.heartbeat, now: now)
     }
 
+    /// Reported issues that aren't dismissed. These are what make the Gateway Degraded.
+    public var activeIssues: [GatewayHealthIssue] { self.activeIssues(now: Date()) }
+
+    public func activeIssues(now: Date) -> [GatewayHealthIssue] {
+        self.issues(now: now).filter { !self.isDismissed($0) }
+    }
+
+    /// Reported issues that are dismissed or always ignored.
+    public var dismissedIssues: [GatewayHealthIssue] { self.dismissedIssues(now: Date()) }
+
+    public func dismissedIssues(now: Date) -> [GatewayHealthIssue] {
+        self.issues(now: now).filter { self.isDismissed($0) }
+    }
+
+    /// Always-ignored issues the connected Gateway isn't reporting right now, as placeholder rows.
+    public var ignoredButAbsent: [GatewayHealthIssue] { self.ignoredButAbsent(now: Date()) }
+
+    public func ignoredButAbsent(now: Date) -> [GatewayHealthIssue] {
+        guard self.connection == .connected else { return [] }
+        let reported = Set(self.issues(now: now).map(\.id))
+        return self.dismissals
+            .filter { GatewayHealthRules.isAlways(id: $0.key, stored: $0.value) && !reported.contains($0.key) }
+            .keys.sorted().map(GatewayHealthIssue.placeholder)
+    }
+
+    public func dismissal(for id: String) -> GatewayHealthDismissal? {
+        self.dismissals[id].flatMap(GatewayHealthDismissal.init(stored:))
+    }
+
+    public func isDismissed(_ issue: GatewayHealthIssue) -> Bool {
+        GatewayHealthRules.isDismissed(issue, by: self.dismissal(for: issue.id))
+    }
+
+    /// Hides an issue until it changes, or for good (`always`, channels and plugins only).
+    public func dismiss(_ issue: GatewayHealthIssue, always: Bool = false) {
+        let value: GatewayHealthDismissal = always && issue.canAlwaysIgnore ? .always : .untilChanged(issue.fingerprint)
+        self.setDismissals([issue.id: value.stored])
+    }
+
+    /// Shows a dismissed issue again.
+    public func restore(id: String) {
+        guard self.dismissals[id] != nil else { return }
+        self.setDismissals([id: nil])
+    }
+
+    private func setDismissals(_ changes: [String: String?]) {
+        guard !changes.isEmpty else { return }
+        for (id, value) in changes { self.dismissals[id] = value }
+        self.onDismissalsChanged?(changes)
+    }
+
+    /// A fresh result for `source` came in: forget until-changed dismissals it no longer reports.
+    private func prune(_ source: GatewayHealthRules.Source) {
+        guard self.connection == .connected, !self.dismissals.isEmpty else { return }
+        let current = GatewayHealthRules.issues(health: self.health, heartbeat: self.heartbeat, now: Date())
+        var kept = GatewayHealthRules.pruned(self.dismissals, current: current, source: source)
+        // "Late" needs the heartbeat interval from `health`; a heartbeat that lands first can't judge it.
+        if source == .heartbeat, self.health == nil, let late = self.dismissals["heartbeat:late"] {
+            kept["heartbeat:late"] = late
+        }
+        let removed = self.dismissals.keys.filter { kept[$0] == nil }
+        self.setDismissals(Dictionary(uniqueKeysWithValues: removed.map { ($0, String?.none) }))
+    }
+
     public var level: GatewayHealthLevel { self.level(now: Date()) }
 
     public func level(now: Date) -> GatewayHealthLevel {
         GatewayHealthRules.level(connection: self.connection, restarting: self.restartState.isInProgress,
-                                 healthUnavailable: self.healthFailure != nil, issueCount: self.issues(now: now).count)
+                                 healthUnavailable: self.healthFailure != nil, issueCount: self.activeIssues(now: now).count)
     }
 
     /// When the Gateway process started, from the hello's uptime.
@@ -728,7 +911,7 @@ public final class GatewayHealthModel {
         }
         guard self.connection == .connected else { return nil }
         if self.needsRestart { return .restartNeeded }
-        let count = self.issues.count
+        let count = self.activeIssues.count
         return count > 0 ? .degraded(issues: count) : nil
     }
 
@@ -803,6 +986,7 @@ public final class GatewayHealthModel {
         }
         if let health = snapshot["health"], let object = health.object, !object.isEmpty {
             self.health = GatewayHealthSummary(health)
+            self.prune(.health)
         }
     }
 
@@ -815,11 +999,13 @@ public final class GatewayHealthModel {
             if let summary = GatewayHealthSummary(payload) {
                 self.health = summary
                 self.healthFailure = nil
+                if payload.object?.isEmpty == false { self.prune(.health) }
             }
         case "heartbeat":
             if let beat = GatewayHeartbeat(payload) {
                 self.heartbeat = beat
                 self.heartbeatLoaded = true
+                self.prune(.heartbeat)
             }
         case "presence":
             if payload.array != nil || payload["presence"]?.array != nil {
@@ -920,6 +1106,7 @@ public final class GatewayHealthModel {
         if let summary = GatewayHealthSummary(result) {
             self.health = summary
             self.healthFailure = nil
+            if result.object?.isEmpty == false { self.prune(.health) }
         }
     }
 
@@ -927,6 +1114,7 @@ public final class GatewayHealthModel {
         guard let result = await self.call(.heartbeat, [:], generation) else { return }
         self.heartbeat = GatewayHeartbeat(result)
         self.heartbeatLoaded = true
+        self.prune(.heartbeat)
     }
 
     private func loadPresence(_ generation: Int) async {

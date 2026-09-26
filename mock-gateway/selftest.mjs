@@ -6,7 +6,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import { startServer } from './server.mjs';
 import { SEEDED_HISTORY_COUNTS } from './approvals.mjs';
+import { FAILED_DELIVERY_QUEUE, addFailedDelivery, createHealthState, healthSummary } from './health.mjs';
 import { PAIRING_TTL_MS, PENDING_PER_ACCOUNT, addChannelPairingRequest, createChannelPairingState } from './pairing.mjs';
+import { appendLogLine, readLogSlice } from './logs.mjs';
 import { decryptWebPush, sessionPath } from './webpush.mjs';
 
 function b64url(buf) {
@@ -790,6 +792,131 @@ try {
   } finally {
     delete process.env.MOCK_NO_APPROVAL_HISTORY;
   }
+  // logs.tail: byte-offset polling with the Gateway's cursor, reset and truncation rules.
+  {
+    const tailer = await connectClient(url, device, deviceToken, true);
+    assert.ok(tailer.hello.features.methods.includes('logs.tail'));
+    const first = await tailer.send('logs.tail', {});
+    assert.match(first.file, /^\/tmp\/openclaw\/openclaw-\d{4}-\d{2}-\d{2}\.log$/);
+    assert.ok(first.lines.length > 100 && first.lines.length <= 500, `seeded lines: ${first.lines.length}`);
+    assert.equal(first.cursor, first.size);
+    assert.equal(first.reset, false);
+    assert.equal(first.skippedBytes, undefined);
+    const parsed = first.lines.map((line) => { try { return JSON.parse(line); } catch { return null; } });
+    const levels = new Set(parsed.filter(Boolean).map((obj) => obj._meta.logLevelName));
+    for (const level of ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL']) assert.ok(levels.has(level), `seeded ${level}`);
+    assert.ok(parsed.some((obj) => obj === null), 'seeded plain-text lines');
+    const boot = parsed.find((obj) => obj?.['1'] === 'listening on ws://127.0.0.1:18789');
+    assert.equal(boot?.['0'], undefined);
+    assert.equal(parsed.find((obj) => obj?.['0'] === obj?._meta.name)?.['1'], 'control UI served at /');
+    appendLogLine(server.state.logsState, 'info', 'gateway', 'selftest marker line');
+    const next = await tailer.send('logs.tail', { cursor: first.cursor });
+    assert.equal(next.file, first.file);
+    assert.ok(next.lines.some((line) => line.includes('selftest marker line')));
+    assert.ok(next.cursor > first.cursor);
+    assert.equal(next.reset, false);
+    const idle = await tailer.send('logs.tail', { cursor: server.state.logsState.size });
+    assert.deepEqual(idle.lines, []);
+    for (const params of [{ follow: true }, { limit: 0 }, { limit: 5001 }, { limit: 1.5 }, { maxBytes: 0 }, { maxBytes: 1_000_001 }, { cursor: -1 }, { cursor: '10' }]) {
+      const bad = await tailer.call('logs.tail', params);
+      assert.equal(bad.error.code, 'INVALID_REQUEST', JSON.stringify(params));
+      assert.match(bad.error.message, /^invalid logs\.tail params/);
+    }
+    const limited = await tailer.send('logs.tail', { limit: 3 });
+    assert.equal(limited.lines.length, 3);
+    assert.equal(limited.truncated, true);
+    const midLine = await tailer.send('logs.tail', { cursor: first.cursor - 5, limit: 5000 });
+    assert.ok(midLine.lines.every((line) => !line.startsWith('"')), 'partial first line dropped');
+    const small = await tailer.send('logs.tail', { maxBytes: 1000 });
+    assert.equal(small.truncated, true);
+    assert.ok(small.lines.reduce((n, line) => n + Buffer.byteLength(line, 'utf8') + 1, 0) <= 1000, 'maxBytes counts UTF-8 bytes');
+    const RESULT_KEYS = new Set(['file', 'cursor', 'size', 'lines', 'truncated', 'reset', 'skippedBytes']);
+    for (const res of [first, next, idle, limited, midLine, small]) {
+      for (const key of Object.keys(res)) assert.ok(RESULT_KEYS.has(key), `unexpected result key ${key}`);
+      for (const key of ['file', 'cursor', 'size', 'lines']) assert.ok(key in res, `missing result key ${key}`);
+      assert.ok(Number.isInteger(res.cursor) && res.cursor >= 0 && res.cursor <= res.size);
+    }
+    const ahead = await tailer.send('logs.tail', { cursor: server.state.logsState.size + 1000 });
+    assert.equal(ahead.reset, true);
+    assert.equal(ahead.skippedBytes, undefined);
+    for (const params of [null, [], 'x']) {
+      const bad = await tailer.call('logs.tail', params);
+      assert.equal(bad.error?.code, 'INVALID_REQUEST', `params ${JSON.stringify(params)}`);
+    }
+    // Byte offsets, not characters: a detached in-memory file with multi-byte lines.
+    {
+      const file = { file: '/tmp/openclaw/openclaw-2026-09-26.log', lines: [], starts: [], size: 0, counter: 0 };
+      const wide = 'é🦞 → done';
+      appendLogLine(file, 'info', 'gateway', 'first');
+      const afterFirst = file.size;
+      assert.equal(afterFirst, Buffer.byteLength(file.lines[0], 'utf8') + 1);
+      file.lines.push(wide); file.starts.push(file.size); file.size += Buffer.byteLength(wide, 'utf8') + 1;
+      assert.equal(file.size - afterFirst, 16);
+      assert.notEqual(Buffer.byteLength(wide, 'utf8'), wide.length);
+      const tail = readLogSlice(file, { cursor: afterFirst });
+      assert.deepEqual(tail.lines, [wide]);
+      assert.equal(tail.cursor, file.size);
+      file.lines.push('after'); file.starts.push(file.size); file.size += 6;
+      assert.deepEqual(readLogSlice(file, { cursor: afterFirst + 2 }).lines, ['after'], 'cursor mid multi-byte line skips the partial line');
+      assert.deepEqual(readLogSlice(file, { cursor: file.size }).lines, []);
+      const exact = readLogSlice(file, { cursor: file.size - 10, maxBytes: 10 });
+      assert.equal(exact.reset, false);
+      const behind = readLogSlice(file, { cursor: 0, maxBytes: 10 });
+      assert.equal(behind.reset, true);
+      assert.equal(behind.skippedBytes, file.size - 10);
+      assert.deepEqual(behind.lines, ['after']);
+      const limitedSlice = readLogSlice(file, { cursor: 0, limit: 1 });
+      assert.deepEqual(limitedSlice.lines, ['after']);
+      assert.equal(limitedSlice.truncated, true);
+      assert.equal(limitedSlice.reset, false);
+      const empty = readLogSlice({ ...file, lines: [], starts: [], size: 0 }, {});
+      assert.deepEqual([empty.lines, empty.cursor, empty.size], [[], 0, 0]);
+    }
+
+    const sendTrigger = (text) => tailer.send('chat.send', { sessionKey: 'agent:main:main', message: text, idempotencyKey: `idem_${crypto.randomUUID()}` });
+    await tailer.send('sessions.messages.subscribe', { key: 'agent:main:main' });
+    const beforeRotate = await tailer.send('logs.tail', {});
+    await sendTrigger('rotate please [mock:rotate-logs]');
+    const rotated = await tailer.send('logs.tail', { cursor: beforeRotate.cursor });
+    assert.notEqual(rotated.file, beforeRotate.file);
+    assert.equal(rotated.reset, true);
+    assert.ok(rotated.lines.some((line) => line.includes('log file opened')));
+    await sendTrigger('truncate please [mock:truncate-logs]');
+    const truncated = await tailer.send('logs.tail', { cursor: rotated.cursor });
+    assert.equal(truncated.file, rotated.file);
+    assert.equal(truncated.reset, true);
+    assert.equal(truncated.skippedBytes, undefined);
+    const beforeBurst = await tailer.send('logs.tail', {});
+    await sendTrigger('burst please [mock:log-burst]');
+    const burst = await tailer.send('logs.tail', { cursor: beforeBurst.cursor });
+    assert.equal(burst.reset, true);
+    assert.equal(burst.truncated, true);
+    assert.ok(burst.skippedBytes > 0);
+    assert.ok(burst.lines.length > 0 && burst.lines.length <= 500);
+    await sendTrigger('fail please [mock:logs-unavailable]');
+    for (let i = 0; i < 2; i += 1) {
+      const failed = await tailer.call('logs.tail', { cursor: burst.cursor });
+      assert.equal(failed.error.code, 'UNAVAILABLE');
+      assert.match(failed.error.message, /^log read failed: EACCES/);
+    }
+    assert.equal((await tailer.call('logs.tail', { cursor: burst.cursor })).ok, true);
+    tailer.ws.close();
+    const noRead = await connectClient(url, device, 'dev-token', true, ['operator.approvals']);
+    const noReadScope = await noRead.call('logs.tail', {});
+    assert.equal(noReadScope.error.details.code, 'MISSING_SCOPE');
+    assert.equal(noReadScope.error.details.scope, 'operator.read');
+    noRead.ws.close();
+    process.env.MOCK_NO_LOGS = '1';
+    try {
+      const noLogs = await connectClient(url, device, deviceToken, true);
+      assert.ok(!noLogs.hello.features.methods.includes('logs.tail'));
+      const unknown = await noLogs.call('logs.tail', {});
+      assert.equal(unknown.error.code, 'UNKNOWN_METHOD');
+      noLogs.ws.close();
+    } finally {
+      delete process.env.MOCK_NO_LOGS;
+    }
+  }
 
   // MOCK_NO_EXEC_APPROVALS=1 hides the command policy methods, like an older Gateway.
   process.env.MOCK_NO_EXEC_APPROVALS = '1';
@@ -1059,6 +1186,12 @@ try {
   const healthNow = await watcher.send('health');
   assert.equal(healthNow.channels.discord.connected, true);
   assert.equal(healthNow.heartbeatSeconds, 1800);
+  // One failed delivery that stays failed, so Pincer shows a dismissable issue.
+  assert.equal(healthNow.deliveryQueues.failed.length, 1);
+  assert.equal(healthNow.deliveryQueues.failed[0].queueName, FAILED_DELIVERY_QUEUE);
+  assert.equal(healthNow.deliveryQueues.failed[0].count, 1);
+  assert.ok(healthNow.deliveryQueues.failed[0].oldestFailedAt > 0);
+  assert.deepEqual(helloSnap.health.deliveryQueues.failed, healthNow.deliveryQueues.failed);
   assert.equal((await watcher.send('last-heartbeat')).status, 'ok-token');
   assert.ok((await watcher.send('system-presence')).some((p) => p.mode === 'node'));
   assert.ok((await watcher.send('status')).uptimeMs > 0);
@@ -1111,6 +1244,51 @@ try {
     old.ws.close();
   } finally {
     delete process.env.MOCK_NO_HEALTH;
+  }
+
+  // The failed delivery survived the restarts; MOCK_FAILED_DELIVERY_EVERY adds more, MOCK_FAILED_DELIVERY=off drops it.
+  const afterRestart = await connectClient(url, device, deviceToken, true);
+  assert.equal((await afterRestart.send('health')).deliveryQueues.failed[0].count, 1);
+  afterRestart.ws.close();
+  const fakeState = { agents: new Map(), sessions: new Map(), healthState: createHealthState() };
+  const sent = [];
+  addFailedDelivery(fakeState, (_state, event, payload) => sent.push({ event, payload }));
+  assert.equal(fakeState.healthState.failedDelivery.count, 2);
+  assert.equal(sent[0].event, 'health');
+  assert.equal(sent[0].payload.deliveryQueues.failed[0].count, 2);
+  process.env.MOCK_FAILED_DELIVERY = 'off';
+  try {
+    const quiet = { agents: new Map(), sessions: new Map(), healthState: createHealthState() };
+    assert.deepEqual(healthSummary(quiet).deliveryQueues.failed, []);
+    addFailedDelivery(quiet, () => assert.fail('nothing to add'));
+  } finally {
+    delete process.env.MOCK_FAILED_DELIVERY;
+  }
+  // Through the env vars on a real server: the timer broadcasts `health` with a higher count;
+  // MOCK_FAILED_DELIVERY=off reports no failed queue in `health` or the hello snapshot.
+  process.env.MOCK_FAILED_DELIVERY_EVERY = '0.2';
+  const everyServer = await startServer({ host: '127.0.0.1', port: 0, pairing: 'off', mockToken: 'dev-token' });
+  delete process.env.MOCK_FAILED_DELIVERY_EVERY;
+  try {
+    const client = await connectClient(`ws://127.0.0.1:${everyServer.address().port}`, makeDevice(), 'dev-token');
+    const grown = await client.waitEvent('health', (p) => p.deliveryQueues?.failed?.[0]?.count >= 2, 3000);
+    assert.equal(grown.deliveryQueues.failed[0].queueName, FAILED_DELIVERY_QUEUE);
+    assert.ok((await client.send('health')).deliveryQueues.failed[0].count >= 2);
+    client.ws.close();
+  } finally {
+    await everyServer.close();
+  }
+  process.env.MOCK_FAILED_DELIVERY = 'off';
+  const offServer = await startServer({ host: '127.0.0.1', port: 0, pairing: 'off', mockToken: 'dev-token', failedDeliveryEvery: 0.1 });
+  delete process.env.MOCK_FAILED_DELIVERY;
+  try {
+    const client = await connectClient(`ws://127.0.0.1:${offServer.address().port}`, makeDevice(), 'dev-token');
+    assert.deepEqual(client.hello.snapshot.health.deliveryQueues.failed, []);
+    await delay(300);
+    assert.deepEqual((await client.send('health')).deliveryQueues.failed, []);
+    client.ws.close();
+  } finally {
+    await offServer.close();
   }
   console.log('PASS');
 } finally {

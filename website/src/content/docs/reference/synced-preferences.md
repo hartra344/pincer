@@ -28,10 +28,13 @@ These are Pincer extras that OpenClaw's session data can't hold:
 | `pincer.chatOrder` | The order of chats within a group. This wins over pinning and activity. |
 | `pincer.groups` | Groups, on gateways without the group catalog |
 | `pincer.reactions` | Your [reactions](../../guides/transcript/#reactions), keyed by `<session key>\|<message id>`, with that message's emoji in the order you added them, separated by spaces |
+| `pincer.healthDismissals` | Gateway Health issues you dismissed or always ignore |
 
 :::note
 If the gateway has no durable identity for your connection, these preferences stay on the current device instead of syncing.
 :::
+
+Removing a gateway from Pincer clears this device's copy of `pincer.healthDismissals` only. The gateway keeps it for your other devices, and adding the gateway again brings it back.
 
 ## Kept on each device
 
@@ -39,11 +42,13 @@ If the gateway has no durable identity for your connection, these preferences st
 - Thinking Steps (None, Live Only, All)
 - Your display name
 - Whether to load images the agent links from the web
-- The transcript cache
+- The transcript cache and its message search index
 - Whether to show the last message under each chat, and whether to list subagent runs under their chat
 - Notifications on or off (**Notify about replies and approvals**)
+- Open at Login (macOS). macOS keeps this in Login Items & Extensions, so it's set separately on each Mac.
 - The push relay URL (iOS)
 - Find in Chat options (**Include Thinking** and **Include Tool Output**)
 - Recent reaction emoji, for the quick reactions
 - Unsent [drafts](../../guides/composer/#drafts)
 - The last gateway and chat you [shared to](../../guides/sharing-to-pincer/)
+- Whether to show Pincer in the [menu bar](../../guides/menu-bar/) (macOS)

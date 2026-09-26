@@ -8,6 +8,14 @@ struct ContextMeter: View {
     @Environment(GatewayStore.self) private var gateway
     @State private var showing = false
 
+    /// The ring sits at the bottom of the composer; on iOS the keyboard is below it, so the popover
+    /// must open upwards.
+    #if os(macOS)
+    private static let popoverArrowEdge: Edge = .top
+    #else
+    private static let popoverArrowEdge: Edge = .bottom
+    #endif
+
     var body: some View {
         let usage = self.gateway.contextUsage(for: self.chat.sessionKey)
         if let usage {
@@ -19,7 +27,7 @@ struct ContextMeter: View {
             .help("Context: \(usage.summary) tokens (\(usage.percentLabel))")
             .accessibilityLabel("Context window")
             .accessibilityValue("\(usage.percentLabel) full, \(usage.summary) tokens")
-            .popover(isPresented: self.$showing, arrowEdge: .top) {
+            .popover(isPresented: self.$showing, arrowEdge: Self.popoverArrowEdge) {
                 ContextMeterPopover(chat: self.chat)
                     .presentationCompactAdaptation(.popover)
             }
@@ -95,6 +103,16 @@ struct ContextMeterPopover: View {
     @State private var instructions = ""
 
     var body: some View {
+        #if os(macOS)
+        self.content
+        #else
+        // With the keyboard up there may be less room above the composer than the content needs.
+        ScrollView { self.content }
+            .scrollBounceBehavior(.basedOnSize)
+        #endif
+    }
+
+    @ViewBuilder private var content: some View {
         let row = self.gateway.sessions[self.chat.sessionKey]
         let usage = self.gateway.contextUsage(for: self.chat.sessionKey)
         VStack(alignment: .leading, spacing: 12) {

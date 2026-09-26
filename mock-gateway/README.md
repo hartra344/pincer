@@ -54,6 +54,13 @@ Approval history (`approvals.mjs`):
 - `exec.approval.resolve` records the decision at the top of the history, resolved by the calling device.
 - `MOCK_NO_APPROVAL_HISTORY=1` drops both methods from `hello-ok` and answers them with `UNKNOWN_METHOD`, like an older Gateway.
 
+Gateway logs (`logs.mjs`):
+
+- `logs.tail` (`cursor` ≥ 0, `limit` 1–5000 defaulting to 500, `maxBytes` 1–1,000,000 defaulting to 250,000) reads an in-memory log file by byte offset, like the Gateway's `readLogSlice`, and returns `{ file, cursor, size, lines, truncated, reset, skippedBytes? }`. Unknown params and bad types fail with `INVALID_REQUEST` "invalid logs.tail params: …". It needs `operator.read` (`operator.write` or `operator.admin` also work); otherwise `FORBIDDEN` with `details.code: "MISSING_SCOPE"`.
+- Without a cursor it returns the tail (the last `maxBytes`, `truncated` when older lines were left out). The returned cursor ends on a complete line; a cursor in the middle of a line drops that partial line. A cursor past the end of the file resets to the tail (`reset`); one more than `maxBytes` behind fast-forwards (`reset`, `truncated` and `skippedBytes`). More than `limit` lines keeps the newest (`truncated`).
+- The file is `/tmp/openclaw/openclaw-YYYY-MM-DD.log` (a name only; nothing is written to disk), seeded with about 130 tslog-style JSON lines from the last 90 minutes across every level (including one that repeats the logger name as its first argument, a meta-object argument and a long prompt), plus a plain-text and an ANSI-colored line. A timer appends 1–3 lines a second; `chat.send` and `approve` add lines too.
+- Chat triggers: `[mock:rotate-logs]` switches to the next day's file name with a fresh file; `[mock:truncate-logs]` empties the current file (the next read with a cursor gets `reset`); `[mock:log-burst]` appends 6,000 lines at once (the next read fast-forwards with `skippedBytes`); `[mock:logs-unavailable]` makes the next two reads fail with `UNAVAILABLE` "log read failed: EACCES: permission denied, open '…'".
+- `MOCK_NO_LOGS=1` drops `logs.tail` from `hello-ok` and answers it with `UNKNOWN_METHOD`, like an older Gateway.
 Command policy (`exec-approvals.mjs`):
 
 - `exec.approvals.get` (`{}`) returns `{ path, exists, hash, file, resolvedDefaults }` for `~/.openclaw/exec-approvals.json`; `exec.approvals.set` (`{ file, baseHash }`) replaces the whole file and returns the new snapshot. `resolvedDefaults` is the file's `defaults` with unset or unknown fields filled from the Gateway's built-in values (`security: "full"`, `ask: "off"`, `askFallback: "deny"`, `autoAllowSkills: false`). Both need `operator.admin` (`operator.approvals` alone gets `FORBIDDEN` "missing scope: operator.admin", `details: {code: "MISSING_SCOPE", scope: "operator.admin"}`), like the Gateway.
@@ -82,9 +89,10 @@ Channel pairing (`pairing.mjs`):
 Health and restart (`health.mjs`):
 
 - `hello-ok.snapshot` carries `presence`, `health`, `stateVersion` and `uptimeMs` (the mock starts about 26 hours "up").
-- `health` returns a Gateway-shaped summary: Discord connected (follows `channels.discord.enabled`), Slack not configured, `heartbeatSeconds: 1800` with the main agent's heartbeat on, and empty plugin errors, failed queues and quarantined engines. `status` returns a short summary with the uptime.
+- `health` returns a Gateway-shaped summary: Discord connected (follows `channels.discord.enabled`), Slack not configured, `heartbeatSeconds: 1800` with the main agent's heartbeat on, empty plugin errors and quarantined engines, and one failed delivery (`deliveryQueues.failed: [{queueName: "outbound-prepared-v1", count: 1, oldestFailedAt}]`) that stays failed across restarts, so Gateway Health shows a Degraded issue to dismiss. `status` returns a short summary with the uptime.
 - `last-heartbeat` returns an `ok-token` heartbeat from 4 minutes ago. `system-presence` returns one entry per connected client (with its `deviceId`, `instanceId` and client info) plus a `kitchen-pi` node; connects and disconnects broadcast `presence`.
 - `gateway.restart.request` (`{reason?, skipDeferral?}`, needs `operator.admin`, else `MISSING_SCOPE`) answers `{status, preflight: {safe, counts, blockers, summary}}`: `deferred` while a chat run is active (it restarts once the run finishes), `coalesced` if one is already pending (`skipDeferral: true` makes the pending one go now), otherwise `scheduled`. The restart broadcasts `shutdown` `{reason, restartExpectedMs: 1500}`, aborts active runs, closes every socket with 1012, refuses new ones (close 1013) for 1.5 seconds, then accepts connections with a fresh `uptimeMs`. Sessions and config survive.
+- `MOCK_FAILED_DELIVERY=off` drops the failed delivery (`deliveryQueues.failed` is empty and the mock is Healthy). `MOCK_FAILED_DELIVERY_EVERY=<seconds>` adds one more failed delivery that often and broadcasts `health`, so a dismissed issue comes back once the count goes up.
 - `MOCK_NO_HEALTH=1` drops all five methods from `hello-ok`, sends an empty snapshot and answers them with `UNKNOWN_METHOD`, like an older Gateway.
 
 Replies and reactions:

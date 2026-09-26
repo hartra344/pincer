@@ -16,3 +16,7 @@ npm run preview
 - `src/styles/docs.css` applies Pincer's Lobster palette to Starlight.
 
 The site is deployed on Vercel (project root: `website/`). Pushes to `main` deploy to production, and other branches get preview deployments. Set `SITE_URL` in the Vercel project if you add a custom domain.
+
+## Screenshots
+
+See [SCREENSHOTS.md](SCREENSHOTS.md) for the isolated capture app, synthetic demo/mock scenarios, and the shot list. Documentation images use `src/components/DocScreenshot.astro` with captions and full-resolution links.
