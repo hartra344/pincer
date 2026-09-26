@@ -75,10 +75,10 @@ Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaul
 
 1. **Mock gateway selftest** (Ubuntu): `npm ci && npm run selftest` in `mock-gateway/`.
 2. **Swift build and checks** (macOS, `PINCER_KEYCHAIN=memory`):
-   - Starts the mock gateway in the background and restores the cached `.build` folder
+   - Restores the cached `.build` folder
    - `swift build --build-tests`, then `swift test --skip-build --parallel`
    - `PincerChecks`
-   - `PincerChecks --demo` (with `PINCER_DEMO_DELAY_SCALE=0.2`) and `PincerChecks --live` against the mock, **at the same time**
+   - `PincerChecks --demo` (with `PINCER_DEMO_DELAY_SCALE=0.2`) and `PincerChecks --live` against the mock (started just before), **at the same time**
 
 CI passes `-Xswiftc -enable-incremental-file-hashing` to every `swift` command. Checkout gives every file a new modification time, so without it the restored build would recompile everything.
 

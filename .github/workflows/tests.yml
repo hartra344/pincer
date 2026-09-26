@@ -54,11 +54,9 @@ jobs:
           cache: npm
           cache-dependency-path: mock-gateway/package-lock.json
 
-      # Start the mock gateway now so it's ready once the build finishes.
-      - name: Start the mock gateway
-        run: |
-          (cd mock-gateway && npm ci)
-          node mock-gateway/server.mjs > "$RUNNER_TEMP/mock-gateway.log" 2>&1 &
+      - name: Install mock gateway dependencies
+        working-directory: mock-gateway
+        run: npm ci
 
       # Checkout gives every file a new mtime, so file hashing keeps the restored build incremental.
       - name: Restore the build cache
@@ -85,6 +83,8 @@ jobs:
         env:
           PINCER_DEMO_DELAY_SCALE: "0.2"
         run: |
+          # Start the mock just before the checks: some of its seeded data expires minutes after launch.
+          node mock-gateway/server.mjs > "$RUNNER_TEMP/mock-gateway.log" 2>&1 &
           for _ in $(seq 1 30); do nc -z 127.0.0.1 18789 && break; sleep 1; done
           "$BIN/PincerChecks" --demo > "$RUNNER_TEMP/demo.log" 2>&1 & demo=$!
           "$BIN/PincerChecks" --live ws://127.0.0.1:18789 dev-token > "$RUNNER_TEMP/live.log" 2>&1 & live=$!
