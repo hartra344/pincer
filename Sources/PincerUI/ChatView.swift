@@ -452,9 +452,15 @@ extension ChatStore {
 
 /// Reply to Last Message (⇧⌘R) for the chat that has focus.
 @MainActor
-struct ReplyToLast {
+/// Equatable so a fresh value from each `ChatView` body pass doesn't count as a focus change:
+/// otherwise every update rebuilds the main menu, which updates the view again, forever.
+struct ReplyToLast: Equatable {
     let chat: ChatStore
     let agentName: String
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.chat === rhs.chat && lhs.agentName == rhs.agentName
+    }
 
     var isAvailable: Bool { self.chat.latestReplyableId != nil }
 

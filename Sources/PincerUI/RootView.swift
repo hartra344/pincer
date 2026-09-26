@@ -63,7 +63,9 @@ public struct PincerScene: Scene {
                 .themed()
         }
 
-        PincerMenuBar(app: self.app)
+        // The menu bar item is disabled for now: its MenuBarExtra scene sends the SwiftUI
+        // app graph into an update loop at launch (main thread pinned, app frozen).
+        // PincerMenuBar(app: self.app)
         #endif
     }
 }
@@ -275,7 +277,7 @@ struct SettingsView: View {
         #if os(macOS)
         TabView {
             Tab("General", systemImage: "gearshape") {
-                SettingsForm(sections: [.you, .launch, .quickCapture, .menuBar, .device])
+                SettingsForm(sections: [.you, .launch, .quickCapture, .device])
             }
             Tab("Appearance", systemImage: "paintpalette") {
                 SettingsForm(sections: [.appearance, .colors], scrolls: true)

@@ -3,6 +3,10 @@ title: Menu bar
 description: Quick Capture, unread chats, active runs, pending approvals and each gateway's status from the Mac menu bar.
 ---
 
+:::caution
+The menu bar item is temporarily disabled in this build while a freeze at launch is fixed. The setting is hidden until it's back.
+:::
+
 Pincer can put an item in the Mac menu bar. It gives you Quick Capture and shows what needs you, what's running, what's unread and how each gateway is doing, without opening Pincer's window. It's macOS only.
 
 ## Turn it on

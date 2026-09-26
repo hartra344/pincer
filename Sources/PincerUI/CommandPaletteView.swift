@@ -605,11 +605,15 @@ struct PaletteRequest: Equatable {
 }
 
 /// Opens the palette's messages page searching for a query (⇧⌘F, the sidebar's "Search messages").
-struct SearchMessagesAction {
+/// Every instance does the same thing, so they compare equal: a fresh closure from each body pass
+/// must not count as a focused-value change, or the main menu rebuilds in a loop.
+struct SearchMessagesAction: Equatable {
     var open: @MainActor (String) -> Void = { _ in }
 
     @MainActor
     func callAsFunction(_ query: String = "") { self.open(query) }
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { true }
 }
 
 extension EnvironmentValues {
