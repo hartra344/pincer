@@ -6,6 +6,8 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case overview
     /// Approval History: past decisions on commands, plugins and system changes.
     case approvals
+    /// Pairing Requests: senders waiting to DM the agents on a pairing-policy channel.
+    case pairing
     /// A curated page from `SettingsCatalog`, by id.
     case page(String)
     case plugins

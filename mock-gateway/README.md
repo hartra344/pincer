@@ -53,3 +53,10 @@ Approval history (`approvals.mjs`):
 - Cursors are opaque and bound to their `kind`; an unknown one fails with `INVALID_REQUEST` "invalid approval.history cursor". Unknown ids fail with `INVALID_REQUEST` and `details.reason: "APPROVAL_NOT_FOUND"`.
 - `exec.approval.resolve` records the decision at the top of the history, resolved by the calling device.
 - `MOCK_NO_APPROVAL_HISTORY=1` drops both methods from `hello-ok` and answers them with `UNKNOWN_METHOD`, like an older Gateway.
+
+Channel pairing (`pairing.mjs`):
+
+- `channels.pairing.list` (`{ channel?, accountId? }`) returns `{ accounts, requests, commandOwnerConfigured, limits }` like the Gateway: two pairing-policy accounts (Telegram "Home bot", which can notify, and Discord "Family server", which can't) and three requests (Maya Chen with a username, a Discord sender with only an id, and a Telegram request that expires about 2 minutes after the mock starts). Requests expire after an hour; up to 3 pending per account. An unknown `channel` fails with `INVALID_REQUEST` "unknown pairing channel: …".
+- `channels.pairing.approve` (`{ channel, accountId, requestId, notify?, bootstrapCommandOwner? }`) returns `{ requestId, senderId, notification, commandOwnerBootstrap }`; `channels.pairing.dismiss` (`{ channel, accountId, requestId }`) returns `{ requestId, senderId }`. Both remove the request. A handled or expired request fails with `INVALID_REQUEST` "pending DM access request no longer exists", an account that isn't a pairing account with "channel account does not use DM pairing: channel:account". Params are closed objects.
+- Every method needs `operator.pairing` (`operator.admin` covers it); `bootstrapCommandOwner: true` also needs `operator.admin`. Missing scopes fail with `FORBIDDEN` and `details: { code: "MISSING_SCOPE", missingScope, requiredScopes }`.
+- `MOCK_CHANNEL_PAIRING=off` drops the methods from `hello-ok` and answers them with `UNKNOWN_METHOD`, like an older Gateway. `MOCK_CHANNEL_PAIRING_EVERY=<seconds>` adds a new request that often. There's no pairing event; clients poll.
