@@ -33,6 +33,8 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `image` | Streams a tool call and attaches an image. |
 | `approve` | Raises an exec approval. |
 | `plan` | Walks a three-step progress card. |
+| `[mock:fail-send]` | Refuses the `chat.send` with `UNAVAILABLE`, for testing failed sends. |
+| `[mock:drop]` | Closes the connection. The client reconnects after its backoff. |
 
 ## Config and plugins
 

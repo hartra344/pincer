@@ -203,6 +203,21 @@ try {
   assert.ok(deltaCount > 0, 'expected chat deltas');
   assert.equal(sawTool, true, 'expected tool result event');
 
+  // Test hooks for failed sends: one refused, one that drops the connection.
+  const refused = await client.call('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'nope [mock:fail-send]',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.error.code, 'UNAVAILABLE');
+  const dropped = await connectClient(url, device, deviceToken, true);
+  const closed = new Promise((resolve) => dropped.ws.once('close', resolve));
+  dropped.call('chat.send', { sessionKey: 'agent:main:main', message: 'bye [mock:drop]', idempotencyKey: `idem_${crypto.randomUUID()}` });
+  assert.equal(await closed, 1012);
+  const afterHooks = await client.send('chat.history', { sessionKey: 'agent:main:main' });
+  assert.ok(!afterHooks.messages.some((m) => JSON.stringify(m.content).includes('[mock:')), 'hooked sends leave no messages');
+
   // Web Push: finished replies and approvals are encrypted to the subscription's keys.
   const pushed = [];
   const pushSink = http.createServer((req, res) => {

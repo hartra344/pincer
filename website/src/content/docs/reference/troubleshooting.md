@@ -50,6 +50,21 @@ Subagent (helper) runs are hidden by default. Open one with **Open run** on the 
 
 Pincer uses the server's slug from the gateway's Discord config when it's set. Otherwise, right-click the section header and choose **Rename Server…**.
 
+## The Quick Capture shortcut does nothing
+
+- Pincer has to be running. The shortcut stops working when you quit it.
+- Check that **Quick Capture shortcut** is on in **Settings → General → Quick Capture**.
+- If Settings says the shortcut "is used by another app", another app already registered that combination. Record a different one, or change it in the other app.
+- Quick Capture is macOS only.
+
+See [Quick Capture](../../guides/quick-capture/).
+
+## Quick Capture won't send
+
+- Send is turned off while the chat's gateway is offline or still connecting. The panel shows the gateway's state, and you can keep typing until it reconnects.
+- With no gateway set up, the panel offers **Open Pincer** so you can add one.
+- If a send fails, your text stays in the panel with the error. Press <kbd>Return</kbd> to try again.
+
 ## Images from the web don't load
 
 Check that **Load images the agent links from the web** is on in Settings. Images from the gateway itself always load.

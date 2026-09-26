@@ -479,10 +479,25 @@ public final class ChatStore: Identifiable {
 
     // MARK: Sending
 
+    /// Whether the Gateway accepted a `chat.send`. A run id is optional: accepted sends may not have one.
+    public enum SendOutcome: Equatable, Sendable {
+        case sent(runId: String?)
+        case failed(String)
+    }
+
+    /// Sends and returns the run id, or nil when there's none or the send failed (see `errorMessage`).
     @discardableResult
     public func send(_ text: String, attachments: [OutgoingAttachment] = []) async -> String? {
+        if case let .sent(runId) = await self.sendMessage(text, attachments: attachments) { return runId }
+        return nil
+    }
+
+    /// Sends, telling an accepted send apart from a failed one.
+    @discardableResult
+    public func sendMessage(_ text: String, attachments: [OutgoingAttachment] = []) async -> SendOutcome {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty || !attachments.isEmpty, let gateway else { return nil }
+        guard !trimmed.isEmpty || !attachments.isEmpty else { return .failed("Couldn’t send: the message is empty.") }
+        guard let gateway else { return .failed("Couldn’t send: the Gateway is gone.") }
         let idempotencyKey = UUID().uuidString.lowercased()
         var blocks: [ContentBlock] = trimmed.isEmpty ? [] : [.text(trimmed)]
         for attachment in attachments {
@@ -509,11 +524,12 @@ public final class ChatStore: Identifiable {
                 if self.live?.runId != runId { self.live = LiveRun(runId: runId) }
             }
             self.errorMessage = nil
-            return runId
+            return .sent(runId: runId)
         } catch {
             self.items.removeAll { $0.idempotencyKey == idempotencyKey && $0.isPending }
-            self.errorMessage = "Couldn’t send: \(error.localizedDescription)"
-            return nil
+            let message = "Couldn’t send: \(error.localizedDescription)"
+            self.errorMessage = message
+            return .failed(message)
         }
     }
 
