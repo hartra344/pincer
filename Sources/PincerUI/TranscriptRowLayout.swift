@@ -170,6 +170,8 @@ struct TranscriptRowLayout {
     var runs: [String: TranscriptPart.Tool.Run] = [:]
     var hasSpawns = false
     var accessibilityLabel = ""
+    /// Where Find's selected match is, in row coordinates (the bottom of its line), when this row has it.
+    var matchY: CGFloat?
     /// Distinct for every layout built, so a view can tell it already shows this one.
     var serial = 0
 }
@@ -216,11 +218,15 @@ enum TranscriptImageSizes {
 struct TranscriptLayoutBuilder {
     let context: TranscriptContext
     let settings: TranscriptSettings
+    var highlight = TranscriptHighlight()
+    /// Find matches counted so far in the row being laid out, per section.
+    let marks = TranscriptFindMarks()
 
     private var style: TranscriptStyle { TranscriptStyle.shared }
 
     func layout(_ row: TranscriptRow, width: CGFloat) -> TranscriptRowLayout {
         var layout = TranscriptRowLayout(id: row.id, width: width)
+        self.marks.reset(row: row.id, highlight: self.highlight)
         switch row {
         case .loadingOlder:
             layout.parts = [.init(part: .loading, frame: CGRect(x: 0, y: 0, width: width, height: 36))]
@@ -252,7 +258,7 @@ struct TranscriptLayoutBuilder {
         layout.accessibilityLabel = "\(header.name): \(text)"
         self.scaffold(avatar: .init(text: Owner.initials, emoji: nil, color: TranscriptColors.ownerAvatar),
                       header: header, into: &layout) { stack, layout in
-            if !text.isEmpty { self.markdown(text, tone: .primary, into: &stack, layout: &layout) }
+            if !text.isEmpty { self.markdown(text, tone: .primary, section: .message(0), into: &stack, layout: &layout) }
             let images = item.blocks.compactMap { block -> ImageRef? in
                 if case let .image(ref) = block { return ref }
                 return nil
@@ -279,6 +285,8 @@ struct TranscriptLayoutBuilder {
         let hasReply = !turn.text.isEmpty || !turn.images.isEmpty || !turn.files.isEmpty
         let steps: ThinkingSteps = switch self.settings.thinking {
         case _ where !hasSteps: .hidden
+        // Find's selected match is in the steps, which this setting would hide: show them for now.
+        case _ where !turn.isStreaming && self.highlight.revealsSteps(of: layout.id): .grouped
         case .none: .hidden
         case _ where turn.isStreaming: .live
         case .all: .grouped
@@ -291,7 +299,7 @@ struct TranscriptLayoutBuilder {
             case .hidden:
                 break
             case .live:
-                if !reasoning.isEmpty { self.thinking(reasoning, turn: turn, into: &stack) }
+                if !reasoning.isEmpty { self.thinking(reasoning, turn: turn, into: &stack, layout: &layout) }
                 self.tools(turn.tools, into: &stack, layout: &layout)
             case .grouped:
                 self.thinkingGroup(reasoning, turn: turn, into: &stack, layout: &layout)
@@ -301,7 +309,7 @@ struct TranscriptLayoutBuilder {
             let showFooters = !turn.isStreaming
             for (index, message) in turn.text.enumerated() {
                 if index > 0 { stack.y += TranscriptMetrics.messageSpacing - TranscriptMetrics.blockSpacing }
-                self.markdown(message, tone: turn.isError ? .error : .primary, into: &stack, layout: &layout)
+                self.markdown(message, tone: turn.isError ? .error : .primary, section: .message(index), into: &stack, layout: &layout)
                 if showFooters, index < turn.text.count - 1 { self.messageFooter(turn, message: index, into: &stack) }
             }
             self.images(turn.images, into: &stack, layout: &layout)
@@ -364,17 +372,23 @@ struct TranscriptLayoutBuilder {
 
     // MARK: Content
 
-    private func markdown(_ source: String, tone: TranscriptText.Tone, into stack: inout Stack, layout: inout TranscriptRowLayout) {
+    private func markdown(_ source: String, tone: TranscriptText.Tone, section: TranscriptSearch.Section,
+                          into stack: inout Stack, layout: inout TranscriptRowLayout)
+    {
         let width = stack.width
         for segment in TranscriptText.markdown(source, tone: tone) {
             switch segment {
-            case let .text(text):
+            case let .text(source):
+                let (text, match) = self.marks.mark(source, section)
                 stack.add(.text(text), height: TranscriptText.size(text, width: width).height)
-            case let .quote(text):
+                self.marks.place(match, in: text, width: width, stack: stack, into: &layout)
+            case let .quote(source):
+                let (text, match) = self.marks.mark(source, section)
                 stack.add(.quote(text), height: TranscriptText.size(text, width: max(width - 11, 20)).height)
+                self.marks.place(match, in: text, width: max(width - 11, 20), stack: stack, into: &layout)
             case .rule:
                 stack.add(.rule, height: 1)
-            case let .code(language, code, text):
+            case let .code(language, code, source):
                 if let ref = Self.inlineSVG(language: language, code: code),
                    !self.context.gateway.images.hasFailed(ref)
                 {
@@ -388,12 +402,27 @@ struct TranscriptLayoutBuilder {
                     guard expanded else { continue }
                 }
                 let headerHeight = 6 + max(TranscriptStyle.lineHeight(self.style.caption), TranscriptMetrics.iconBox) + 6
+                // Find skips SVG source, which is usually shown as the image.
+                let isSVG = SVGRasterizer.inlineSource(language: language, code: code) != nil
+                let (text, match) = isSVG ? (source, nil) : self.marks.mark(source, section)
                 let size = TranscriptText.size(text, width: .greatestFiniteMagnitude)
                 let part = TranscriptPart.Code(language: language, code: code, text: text, textSize: size, headerHeight: headerHeight)
                 stack.add(.code(part), height: headerHeight + 1 + 10 + size.height + 10)
-            case let .table(table):
+                self.marks.place(match, in: text, width: .greatestFiniteMagnitude, stack: stack, offset: headerHeight + 11, into: &layout)
+            case let .table(source):
+                var cells = source.cells
+                var found = false
+                for row in cells.indices {
+                    for column in cells[row].indices {
+                        let (cell, match) = self.marks.mark(cells[row][column], section)
+                        cells[row][column] = cell
+                        found = found || match != nil
+                    }
+                }
+                let table = TranscriptText.Table(cells: cells, alignments: source.alignments, plainText: source.plainText)
                 let part = self.table(table, width: width)
                 stack.add(.table(part), height: part.contentSize.height, width: part.contentSize.width)
+                if found, let frame = stack.parts.last?.frame { layout.matchY = frame.minY + min(frame.height, 40) }
             }
         }
     }
@@ -401,13 +430,7 @@ struct TranscriptLayoutBuilder {
     /// A complete fenced SVG (```svg, or any fence holding a whole `<svg>…</svg>`) drawn as an image.
     /// Unfinished ones, mid-stream, stay code until their closing tag arrives.
     static func inlineSVG(language: String, code: String) -> ImageRef? {
-        let lang = language.lowercased()
-        guard lang == "svg" || lang == "xml" || lang == "html" || lang == "code" else { return nil }
-        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.range(of: "</svg>", options: [.caseInsensitive, .backwards]) != nil,
-              SVGRasterizer.isSVG(Data(trimmed.utf8)),
-              lang == "svg" || trimmed.lowercased().hasPrefix("<svg") || trimmed.hasPrefix("<?xml")
-        else { return nil }
+        guard let trimmed = SVGRasterizer.inlineSource(language: language, code: code) else { return nil }
         return ImageRef(artifactId: nil, base64: Data(trimmed.utf8).base64EncodedString(), url: nil,
                         mimeType: "image/svg+xml", alt: "SVG image", width: nil, height: nil)
     }
@@ -442,7 +465,7 @@ struct TranscriptLayoutBuilder {
         return TranscriptPart.Table(cells: table.cells, columnWidths: widths, rowHeights: heights, plainText: table.plainText)
     }
 
-    private func thinking(_ text: String, turn: AssistantTurn, into stack: inout Stack) {
+    private func thinking(_ text: String, turn: AssistantTurn, into stack: inout Stack, layout: inout TranscriptRowLayout) {
         let key = "thinking:\(turn.id)"
         let streaming = turn.isStreaming && turn.text.isEmpty
         // Thinking opened while it streamed stays open until the turn finishes.
@@ -452,7 +475,7 @@ struct TranscriptLayoutBuilder {
         let headerHeight = max(TranscriptStyle.lineHeight(self.style.calloutMedium), TranscriptMetrics.iconBox)
         let title = streaming ? "Thinking…" : "Thinking"
         stack.add(.thinkingHeader(.init(key: key, title: title, isStreaming: streaming, isExpanded: expanded)), height: headerHeight, width: width)
-        if expanded { self.thinkingBody(text, width: width, into: &stack) }
+        if expanded { self.thinkingBody(text, width: width, into: &stack, layout: &layout) }
     }
 
     /// A finished turn's reasoning and tool calls as one collapsible "Thinking" item, closed until opened.
@@ -466,13 +489,14 @@ struct TranscriptLayoutBuilder {
         if count > 0 { title += " · \(count) tool call\(count == 1 ? "" : "s")" }
         stack.add(.thinkingHeader(.init(key: key, title: title, isStreaming: false, isExpanded: expanded)), height: headerHeight, width: width)
         guard expanded else { return }
-        if !text.isEmpty { self.thinkingBody(text, width: width, into: &stack) }
+        if !text.isEmpty { self.thinkingBody(text, width: width, into: &stack, layout: &layout) }
         self.tools(turn.tools, into: &stack, layout: &layout)
     }
 
-    private func thinkingBody(_ text: String, width: CGFloat, into stack: inout Stack) {
-        let body = TranscriptText.plain(text, font: self.style.callout, color: TranscriptColors.secondary)
+    private func thinkingBody(_ text: String, width: CGFloat, into stack: inout Stack, layout: inout TranscriptRowLayout) {
+        let (body, match) = self.marks.mark(TranscriptText.plain(text, font: self.style.callout, color: TranscriptColors.secondary), .thinking)
         stack.add(.thinkingBody(body), height: TranscriptText.size(body, width: max(width - 10, 20)).height, width: width, spacing: 6)
+        self.marks.place(match, in: body, width: max(width - 10, 20), stack: stack, into: &layout)
     }
 
     private func tools(_ tools: [ToolActivity], into stack: inout Stack, layout: inout TranscriptRowLayout) {
@@ -491,6 +515,7 @@ struct TranscriptLayoutBuilder {
         if let run { layout.runs[tool.id] = run }
         var sections: [TranscriptPart.Tool.Section] = []
         var runningY: CGFloat?
+        var toolMatchY: CGFloat?
         var height = headerHeight
         if expanded {
             var y = headerHeight + 1 + 10
@@ -503,11 +528,16 @@ struct TranscriptLayoutBuilder {
                 if index > 0 { y += 8 }
                 let limited = body.count > TranscriptMetrics.toolOutputLimit
                     ? String(body.prefix(TranscriptMetrics.toolOutputLimit)) + "\n…" : body
-                let text = TranscriptText.plain(limited, font: self.style.captionMono, color: TranscriptColors.label)
+                let (text, match) = self.marks.mark(
+                    TranscriptText.plain(limited, font: self.style.captionMono, color: TranscriptColors.label), .tool(tool.id))
                 let contentHeight = TranscriptText.size(text, width: inner).height
                 let visible = min(contentHeight, TranscriptMetrics.toolOutputMaxHeight)
                 let titleY = y
                 y += titleHeight + 4
+                if let match {
+                    // Relative to the card for now; moved into row coordinates once the card is placed.
+                    toolMatchY = y + min(self.marks.lineBottom(of: match, in: text, width: inner), visible)
+                }
                 sections.append(.init(title: title, titleY: titleY, text: text,
                                       frame: CGRect(x: 10, y: y, width: inner, height: visible), contentHeight: contentHeight))
                 y += visible
@@ -522,6 +552,7 @@ struct TranscriptLayoutBuilder {
         let part = TranscriptPart.Tool(tool: tool, key: key, isExpanded: expanded, run: run, headerHeight: headerHeight,
                                        sections: sections, runningY: runningY)
         stack.add(.tool(part), height: height, width: width, spacing: first ? TranscriptMetrics.blockSpacing : TranscriptMetrics.toolSpacing)
+        if let toolMatchY, let frame = stack.parts.last?.frame { layout.matchY = frame.minY + toolMatchY }
     }
 
     /// Subagent run this tool call started, so the run can be opened from where it happened.

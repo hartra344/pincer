@@ -17,6 +17,7 @@ public struct PincerScene: Scene {
         #if os(macOS)
         .defaultSize(width: 1180, height: 780)
         .commands {
+            TranscriptFindCommands()
             CommandGroup(after: .sidebar) {
                 Button("Next Unread Chat") { self.app.selectNextUnread() }
                     .keyboardShortcut(.downArrow, modifiers: [.option, .shift])
