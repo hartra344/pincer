@@ -68,12 +68,17 @@ func runIntentEdgeChecks(labels: UserDefaults, home: GatewayProfile, work: Gatew
     await expectError(.gatewayRemoved(name: "That Gateway"), "removed gateway without a name") {
         _ = try service([home]).resolveGateway(work.id)
     }
-    let previousSelection = UserDefaults.standard.string(forKey: AppModel.selectedGatewayKey)
-    UserDefaults.standard.set(work.id.uuidString, forKey: AppModel.selectedGatewayKey)
-    check(IntentService.live(liveStore: { _ in nil }).selectedGatewayId == work.id, "live service reads selectedGatewayKey")
-    UserDefaults.standard.set("not-a-uuid", forKey: AppModel.selectedGatewayKey)
-    check(IntentService.live(liveStore: { _ in nil }).selectedGatewayId == nil, "a malformed selectedGatewayKey is ignored")
-    UserDefaults.standard.set(previousSelection, forKey: AppModel.selectedGatewayKey)
+    // A private suite: the app-wide key is shared with (and rewritten by) checks running in parallel.
+    let suiteName = "pincer.checks.intents.\(UUID().uuidString)"
+    if let suite = UserDefaults(suiteName: suiteName) {
+        suite.set(work.id.uuidString, forKey: AppModel.selectedGatewayKey)
+        check(IntentService.live(liveStore: { _ in nil }, defaults: suite).selectedGatewayId == work.id,
+              "live service reads selectedGatewayKey")
+        suite.set("not-a-uuid", forKey: AppModel.selectedGatewayKey)
+        check(IntentService.live(liveStore: { _ in nil }, defaults: suite).selectedGatewayId == nil,
+              "a malformed selectedGatewayKey is ignored")
+        suite.removePersistentDomain(forName: suiteName)
+    }
 
     // Default agent from agents.list defaultId
     do {

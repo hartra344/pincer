@@ -437,8 +437,8 @@ public final class IntentService {
 
     /// The service as the app uses it: saved gateways, the paired identity, and `liveStore` for
     /// reusing the app's connection when it has one.
-    public static func live(liveStore: @escaping @MainActor (UUID) -> GatewayStore?) -> IntentService {
-        let defaults = SharedContainer.defaults
+    public static func live(liveStore: @escaping @MainActor (UUID) -> GatewayStore?,
+                            defaults: UserDefaults = SharedContainer.defaults) -> IntentService {
         let identity = DeviceIdentity.loadExisting()
         let selected = (defaults.string(forKey: AppModel.selectedGatewayKey)
             ?? UserDefaults.standard.string(forKey: AppModel.selectedGatewayKey)).flatMap(UUID.init(uuidString:))
