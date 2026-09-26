@@ -42,6 +42,22 @@ Thinking has two parts:
 
 Editing needs **Access → Full Management** on the **Connection** page, and the gateway has to approve the change. See [Access levels](../../getting-started/connect-a-gateway/#access-levels).
 
+## Command Policy says "Needs Full Management"
+
+The gateway shares its command policy only with devices that have `operator.admin`. Choose **Open Connection**, set **Access** to **Full Management**, choose **Apply**, then approve this device on the gateway host with `openclaw devices approve <requestId>`. The page loads once Pincer reconnects.
+
+## "Command Policy Isn't Available"
+
+The gateway doesn't have `exec.approvals.get`. Update OpenClaw to manage the command policy from Pincer. If only saving is missing, the page opens read-only.
+
+## "The command policy changed on the Gateway"
+
+Someone (or an **Always allow** answer) changed the policy file while you were editing, so your save was refused to avoid overwriting it. Pincer loads the latest version and drops your draft. Make your changes again and choose **Save**.
+
+## "The Gateway rejected the change"
+
+The gateway found something invalid in the policy file. Your draft is kept: fix the value named in the message, or choose **Revert**, then save again.
+
 ## Pairing Requests says it isn't available
 
 "This Gateway doesn't support channel pairing requests" means the gateway is older than the channel pairing methods (`channels.pairing.*`). Update OpenClaw.
