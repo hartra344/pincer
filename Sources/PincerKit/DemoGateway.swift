@@ -84,6 +84,11 @@ actor DemoGateway {
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
         self.approvalHistory = Self.seedApprovalHistory()
+        let pending = Self.seedPendingApproval()
+        if let id = pending["id"]?.string {
+            self.approvals[id] = pending
+            self.approvalOrder.append(id)
+        }
         self.pairingRequests = Self.seedPairingRequests()
         self.artifacts["demo-chart"] = ("image/png", Self.chartPNG())
         self.artifacts["demo-script"] = ("text/x-shellscript", Data(Self.diskScript.utf8))
@@ -247,6 +252,7 @@ actor DemoGateway {
             self.approvals[id] = nil
             self.approvalOrder.removeAll { $0 == id }
             self.emit("exec.approval.resolved", ["id": .string(id), "decision": .string(decision)])
+            if id == Self.seededApprovalId { self.finishSeededPush(approved: decision != "deny") }
             return ["ok": true, "id": .string(id), "decision": .string(decision)]
         case "approval.history":
             return try self.approvalHistoryPage(params)
@@ -563,6 +569,34 @@ actor DemoGateway {
             "decision": .string(decision), "reason": "user", "source": .object(source),
             "resolver": ["kind": "device", "id": .string(Self.deviceId)],
             "presentation": Self.execPresentation(request),
+        ]
+    }
+
+    /// The approval waiting when the demo opens.
+    static let seededApprovalId = "approval_demo_push"
+
+    /// Forge's reply once the seeded push is answered, so the demo's story ends.
+    private func finishSeededPush(approved: Bool) {
+        let key = "agent:coder:main"
+        let reply = approved ? "Pushed fix/login-timeout to origin." : "OK, I won't push."
+        self.append(key, Self.message("assistant", [Self.text(reply)]))
+        self.updateRow(key, reason: "approval-resolved") { row in
+            row["lastMessagePreview"] = .string(reply)
+            row["unread"] = true
+        }
+    }
+
+    /// One command already waiting when the demo opens, so approvals (and Shortcuts' Pending
+    /// Approvals) have something to show. It lasts longer than a real one, for a leisurely look.
+    private static func seedPendingApproval() -> JSONValue {
+        let created = (Self.now().double ?? 0) - 45_000
+        return [
+            "id": .string(Self.seededApprovalId),
+            "request": ["command": "git push origin fix/login-timeout", "cwd": "/home/claw/projects/pincer",
+                        "sessionKey": "agent:coder:main", "agentId": "coder", "host": "gateway",
+                        "allowedDecisions": ["allow-once", "allow-always", "deny"]],
+            "createdAtMs": .number(created),
+            "expiresAtMs": .number(created + 30 * 60_000),
         ]
     }
 
@@ -1454,9 +1488,14 @@ actor DemoGateway {
             messages: [
                 Self.message("assistant", [Self.text("The paper mainly improves how retrieval-augmented summaries are evaluated.")]),
             ])
-        add("agent:coder:main", agent: "coder", title: "Main", preview: "No active coding run.", age: 240_000,
-            ["isMain": true], messages: [
+        add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
+            ["isMain": true, "unread": true], messages: [
                 Self.message("assistant", [Self.text("Forge can edit code, run builds, and report back briefly.")]),
+                Self.message("user", [Self.text("Fix the login timeout and push it.")]),
+                Self.message("assistant", [Self.text("""
+                Raised the login timeout to 30 s and the tests pass. I've asked to run \
+                `git push origin fix/login-timeout`; approve it and I'll push.
+                """)]),
             ])
         return (sessions, transcripts)
     }

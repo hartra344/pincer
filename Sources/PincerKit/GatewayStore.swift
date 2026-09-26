@@ -271,6 +271,7 @@ public final class GatewayStore: Identifiable {
         if let agents = await agents {
             self.agents = agents["agents"]?.array?.compactMap(AgentSummary.init) ?? []
             self.defaultAgentId = agents["defaultId"]?.text ?? self.agents.first?.id ?? "main"
+            Self.agentsDidLoad?()
         }
         if let list = await subscribed?["list"] {
             self.applySnapshot(list)
@@ -372,7 +373,25 @@ public final class GatewayStore: Identifiable {
 
     // MARK: Events
 
+    /// Called after any Gateway's agent list loads, e.g. so the app can refresh Siri's App Shortcut phrases.
+    public static var agentsDidLoad: (@MainActor () -> Void)?
+
+    @ObservationIgnored private var eventTaps: [Int: @MainActor (GatewayEvent) -> Void] = [:]
+    @ObservationIgnored private var nextEventTap = 0
+
+    /// Sees every event this store handles, in wire order (for Shortcuts reusing this connection).
+    func addEventTap(_ tap: @escaping @MainActor (GatewayEvent) -> Void) -> Int {
+        self.nextEventTap += 1
+        self.eventTaps[self.nextEventTap] = tap
+        return self.nextEventTap
+    }
+
+    func removeEventTap(_ token: Int) {
+        self.eventTaps.removeValue(forKey: token)
+    }
+
     private func handle(_ event: GatewayEvent) {
+        for tap in self.eventTaps.values { tap(event) }
         let payload = event.payload
         switch event.name {
         case "sessions.changed":
