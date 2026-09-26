@@ -79,6 +79,8 @@ struct ComposerTextView: View {
     let placeholder: String
     @Binding var text: String
     var maxLines = 12
+    /// Off while a send is in flight, so the text can't change under it.
+    var isEditable = true
     /// A suggestion menu is showing: arrow keys, Tab, Escape (and Return on iOS) go to `onKey`/`onSubmit`.
     var menuActive = false
     let onSubmit: () -> Void
@@ -90,7 +92,7 @@ struct ComposerTextView: View {
 
     var body: some View {
         PlatformComposerTextView(
-            text: self.$text, maxLines: self.maxLines, menuActive: self.menuActive, onSubmit: self.onSubmit,
+            text: self.$text, maxLines: self.maxLines, isEditable: self.isEditable, menuActive: self.menuActive, onSubmit: self.onSubmit,
             onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd)
             .overlay(alignment: .topLeading) {
                 if self.text.isEmpty {
@@ -163,6 +165,7 @@ final class ComposerNSTextView: NSTextView {
 private struct PlatformComposerTextView: NSViewRepresentable {
     @Binding var text: String
     let maxLines: Int
+    let isEditable: Bool
     let menuActive: Bool
     let onSubmit: () -> Void
     let onMedia: ([PastedMedia]) -> Void
@@ -208,6 +211,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? ComposerNSTextView else { return }
         textView.onMedia = self.onMedia
+        if textView.isEditable != self.isEditable { textView.isEditable = self.isEditable }
         if textView.string != self.text {
             textView.string = self.text
             textView.setSelectedRange(NSRange(location: (self.text as NSString).length, length: 0))
@@ -321,6 +325,7 @@ final class ComposerUITextView: UITextView {
 private struct PlatformComposerTextView: UIViewRepresentable {
     @Binding var text: String
     let maxLines: Int
+    let isEditable: Bool
     let menuActive: Bool
     let onSubmit: () -> Void
     let onMedia: ([PastedMedia]) -> Void
@@ -351,6 +356,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         textView.onMedia = self.onMedia
         textView.menuActive = self.menuActive
         textView.onKey = self.onKey
+        if textView.isEditable != self.isEditable { textView.isEditable = self.isEditable }
         if textView.text != self.text {
             textView.text = self.text
             textView.selectedRange = NSRange(location: (self.text as NSString).length, length: 0)
