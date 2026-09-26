@@ -28,6 +28,7 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `MOCK_USAGE_FORBIDDEN` | off | Set to `1` to refuse `usage.cost` with `FORBIDDEN`, as for an operator whose role can't see every session. |
 | `MOCK_CHANNEL_PAIRING` | on | Set to `off` to hide the `channels.pairing.*` methods, like an older gateway. |
 | `MOCK_CHANNEL_PAIRING_EVERY` | off | Seconds between new channel pairing requests. |
+| `MOCK_NO_HEALTH` | off | Set to `1` to drop the health and restart methods, like an older gateway. |
 
 ## Message triggers
 
@@ -53,6 +54,12 @@ The data covers the cases the page handles: one model with some unpriced request
 ## Channel pairing
 
 The mock serves `channels.pairing.list`, `channels.pairing.approve` and `channels.pairing.dismiss` with two pairing accounts (Telegram "Home bot" and Discord "Family server") and three requests, one of which expires about 2 minutes after the mock starts. Every method needs `operator.pairing` or `operator.admin`, so set **Access** to **Full Management** to see them in Pincer. Approving or dismissing a request that's already gone fails with "pending DM access request no longer exists". `MOCK_PAIRING` is about device pairing, not these.
+
+## Health and restart
+
+The mock serves `health`, `status`, `last-heartbeat` and `system-presence` for the [Health page](../../guides/gateway-health/), and its hello snapshot includes presence, health and uptime. Every connected client shows up in presence, next to a `kitchen-pi` node.
+
+`gateway.restart.request` needs the `operator.admin` scope. It answers `deferred` while a chat run is active, `coalesced` if a restart is already pending, and `scheduled` otherwise. The simulated restart broadcasts `shutdown` with `restartExpectedMs: 1500`, closes every socket with code 1012, refuses connections for 1.5 seconds, then comes back with a fresh uptime. Sessions and config survive.
 
 ## Selftest and live checks
 

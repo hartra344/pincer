@@ -58,6 +58,7 @@ On iOS, Pincer is suspended in the background, so `approve later` can't reach yo
 - **Thinking Steps** in the chat's ⋯ menu, to choose how much of the agent's work you see.
 - **Settings → Appearance**, to try a different [theme](../../guides/appearance/).
 - **Gateway Settings → Pairing Requests:** review and approve or dismiss the sample people waiting to message your agents on Telegram and Discord.
+- **Gateway Settings → Health:** Telegram is disconnected, so the demo gateway shows **Degraded**. Inspect the channels, heartbeat and connected clients, then try **Restart Gateway…** to simulate a safe restart. Nothing real restarts; chats remain available and Telegram reconnects. Start a reply first to see the restart wait for it, then try **Restart Now Anyway**.
 
 See [Keyboard shortcuts](../../reference/keyboard-shortcuts/) for the rest.
 
