@@ -34,6 +34,7 @@ actor DemoGateway {
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
         "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
+        "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set",
     ] + DemoUsage.methods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
@@ -73,12 +74,23 @@ actor DemoGateway {
     private var messageSubscriptions: Set<String> = []
     private var eventSeq = 0
     private var sink: (@Sendable (GatewayEvent) -> Void)?
+    /// When the simulated Gateway process started; reset by a restart.
+    private var startedAt = Date().addingTimeInterval(-(3 * 86400 + 4 * 3600 + 17 * 60))
+    /// While set, a simulated restart is under way and `attach` waits until then.
+    private var restartingUntil: Date?
+    private var restartTask: Task<Void, Never>?
+    private static let restartExpectedMs = 1500
 
     init() {
         let seeded = Self.seed()
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
         self.approvalHistory = Self.seedApprovalHistory()
+        let pending = Self.seedPendingApproval()
+        if let id = pending["id"]?.string {
+            self.approvals[id] = pending
+            self.approvalOrder.append(id)
+        }
         self.pairingRequests = Self.seedPairingRequests()
         self.artifacts["demo-chart"] = ("image/png", Self.chartPNG())
         self.artifacts["demo-script"] = ("text/x-shellscript", Data(Self.diskScript.utf8))
@@ -124,7 +136,15 @@ actor DemoGateway {
 
     // MARK: Connection
 
-    func attach(_ sink: @escaping @Sendable (GatewayEvent) -> Void) -> JSONValue {
+    func attach(_ sink: @escaping @Sendable (GatewayEvent) -> Void) async -> JSONValue {
+        // Like a Gateway coming back up: nobody gets in until the restart is done.
+        while let until = self.restartingUntil, until > Date() {
+            try? await Task.sleep(for: .milliseconds(max(50, Int(until.timeIntervalSinceNow * 1000))))
+        }
+        if self.restartingUntil != nil {
+            self.restartingUntil = nil
+            self.startedAt = Date()
+        }
         self.sink = sink
         self.sessionsSubscribed = false
         self.messageSubscriptions.removeAll()
@@ -133,7 +153,12 @@ actor DemoGateway {
             "protocol": .number(Double(GatewayConnection.protocolVersion)),
             "server": ["version": "demo", "connId": .string(Self.shortId("conn_"))],
             "features": ["methods": JSONValue(Self.methods), "events": []],
-            "snapshot": [:],
+            "snapshot": [
+                "presence": .array(self.presence()),
+                "health": self.health(),
+                "stateVersion": ["presence": 1, "health": 1],
+                "uptimeMs": .number((Date().timeIntervalSince(self.startedAt) * 1000).rounded()),
+            ],
             // operator.pairing lets the demo show Pairing Requests without making settings editable.
             "auth": ["role": "operator", "scopes": JSONValue(GatewayConnection.scopes + [PairingInboxModel.pairingScope])],
             "policy": [
@@ -230,6 +255,7 @@ actor DemoGateway {
             self.approvalOrder.removeAll { $0 == id }
             self.logs.approvalResolved(id: id, decision: decision)
             self.emit("exec.approval.resolved", ["id": .string(id), "decision": .string(decision)])
+            if id == Self.seededApprovalId { self.finishSeededPush(approved: decision != "deny") }
             return ["ok": true, "id": .string(id), "decision": .string(decision)]
         case "approval.history":
             return try self.approvalHistoryPage(params)
@@ -254,6 +280,17 @@ actor DemoGateway {
                     .filter { $0["status"]?.string == "pending" })]
         case "question.resolve":
             return try self.resolveQuestion(params)
+        case "health":
+            return self.health()
+        case "status":
+            return ["ok": true, "version": "demo", "uptimeMs": .number((Date().timeIntervalSince(self.startedAt) * 1000).rounded()),
+                    "sessions": ["count": JSONValue(self.sessions.count)]]
+        case "last-heartbeat":
+            return self.lastHeartbeat()
+        case "system-presence":
+            return .array(self.presence())
+        case "gateway.restart.request":
+            return self.requestRestart(params)
         default:
             throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "The demo doesn't support \(method).", details: nil)
         }
@@ -341,6 +378,138 @@ actor DemoGateway {
         ]
     }
 
+    // MARK: Health and restart
+
+    /// Discord is fine; Telegram lost its connection until a restart, so the demo starts out degraded.
+    private func health() -> JSONValue {
+        let now = Self.now()
+        let nowMs = now.double ?? 0
+        return [
+            "ok": true, "ts": now, "durationMs": 42,
+            "channels": [
+                "discord": [
+                    "accountId": "default", "name": "Discord", "enabled": true, "configured": true, "running": true,
+                    "connected": true, "restartPending": false, "reconnectAttempts": 0,
+                    "lastConnectedAt": .number(self.startedAt.timeIntervalSince1970 * 1000), "lifecycle": "ready",
+                ],
+                "telegram": self.telegramRecovered ? [
+                    "accountId": "default", "name": "Telegram", "enabled": true, "configured": true, "running": true,
+                    "connected": true, "restartPending": false, "reconnectAttempts": 0,
+                    "lastConnectedAt": .number(self.startedAt.timeIntervalSince1970 * 1000), "lifecycle": "ready",
+                ] : [
+                    "accountId": "default", "name": "Telegram", "enabled": true, "configured": true, "running": true,
+                    "connected": false, "restartPending": false, "reconnectAttempts": 4,
+                    "lastConnectedAt": .number(nowMs - 25 * 60_000), "lifecycle": "recovering",
+                    "lastError": "Telegram API timed out (getUpdates). Retrying.",
+                ],
+            ],
+            "channelOrder": ["discord", "telegram"],
+            "channelLabels": ["discord": "Discord", "telegram": "Telegram"],
+            "heartbeatSeconds": 1800,
+            "agents": .array(self.agents.map { agent in
+                let id = agent["id"] ?? "main"
+                return [
+                    "agentId": id, "name": agent["name"] ?? id, "isDefault": .bool(id == "main"),
+                    "heartbeat": ["enabled": .bool(id == "main"), "every": "30m", "everyMs": .number(1_800_000)],
+                ]
+            }),
+            "sessions": ["count": JSONValue(self.sessions.count), "recent": []],
+            "plugins": ["loaded": ["discord", "telegram", "memory-core"], "errors": [], "unavailable": []],
+            "deliveryQueues": ["failed": []],
+            "contextEngines": ["quarantined": []],
+            "modelPricing": ["state": "ok"],
+            "configReload": ["hotReloadStatus": "active"],
+        ]
+    }
+
+    private func lastHeartbeat() -> JSONValue {
+        [
+            "ts": .number((Self.now().double ?? 0) - 7 * 60_000), "status": "ok-token", "to": "discord:#home",
+            "channel": "discord", "durationMs": 3200, "indicatorType": "ok",
+        ]
+    }
+
+    private static var thisDeviceName: String {
+        #if os(macOS)
+        "Pincer on Mac"
+        #else
+        "Pincer on \(GatewayConnection.deviceFamily)"
+        #endif
+    }
+
+    /// This device plus two others.
+    private func presence() -> [JSONValue] {
+        let nowMs = Self.now().double ?? 0
+        return [
+            [
+                "text": "Pincer", "host": .string(Self.thisDeviceName), "clientId": .string(GatewayConnection.clientId),
+                "platform": .string(GatewayConnection.platform), "deviceFamily": .string(GatewayConnection.deviceFamily),
+                "mode": "ui", "roles": ["operator"], "deviceId": .string(Self.deviceId), "ts": .number(nowMs),
+                "onlineSince": .number(nowMs - 12 * 60_000), "lastActivityAt": .number(nowMs - 20_000),
+            ],
+            [
+                "text": "Control UI", "host": "Studio iMac", "clientId": "openclaw-control-ui", "platform": "web",
+                "deviceFamily": "Browser", "mode": "webchat", "roles": ["operator"], "ts": .number(nowMs - 60_000),
+                "deviceId": "demo0device0000000000000000000000000000000000000000000000000002",
+                "onlineSince": .number(nowMs - 3 * 3_600_000), "lastActivityAt": .number(nowMs - 9 * 60_000),
+            ],
+            [
+                "text": "Node", "host": "kitchen-pi", "clientId": "node-host", "platform": "linux", "deviceFamily": "Raspberry Pi",
+                "mode": "node", "roles": ["node"], "ts": .number(nowMs - 30_000),
+                "deviceId": "demo0device0000000000000000000000000000000000000000000000000003",
+                "onlineSince": .number(nowMs - 2 * 86_400_000), "lastActivityAt": .number(nowMs - 45 * 60_000),
+            ],
+        ]
+    }
+
+    /// Like `gateway.restart.request`: deferred while a reply is streaming (unless `skipDeferral`),
+    /// then `shutdown`, the connection drops, and the next attach sees a fresh uptime.
+    private func requestRestart(_ params: JSONValue) -> JSONValue {
+        let active = self.runs.count
+        let skip = params["skipDeferral"]?.bool == true
+        let counts: JSONValue = [
+            "queueSize": 0, "pendingReplies": 0, "embeddedRuns": JSONValue(active), "cronRuns": 0,
+            "backgroundExecSessions": 0, "rootRequests": 0, "activeTasks": 0, "totalActive": JSONValue(active),
+        ]
+        let blockers: [JSONValue] = active == 0 ? [] : [["message": .string("\(active) active agent run\(active == 1 ? "" : "s")")]]
+        let preflight: JSONValue = [
+            "safe": .bool(active == 0), "counts": counts, "blockers": .array(blockers),
+            "summary": .string(active == 0 ? "restart safe now" : "restart deferred: \(active) active agent run\(active == 1 ? "" : "s")"),
+        ]
+        if self.restartTask != nil {
+            // "Restart Now Anyway" escalates the pending restart.
+            if skip { self.restartSkipsDeferral = true }
+            return ["ok": true, "status": "coalesced", "preflight": preflight, "restart": ["coalesced": true]]
+        }
+        let deferred = active > 0 && !skip
+        self.restartSkipsDeferral = false
+        self.restartTask = Task { [weak self] in
+            if deferred {
+                while await self?.waitingForRuns == true {
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+            await self?.shutdownForRestart(reason: params["reason"]?.text)
+        }
+        return ["ok": true, "status": .string(deferred ? "deferred" : "scheduled"), "preflight": preflight,
+                "restart": ["coalesced": false, "delayMs": 0]]
+    }
+
+    private var restartSkipsDeferral = false
+    private var telegramRecovered = false
+    private var waitingForRuns: Bool { !self.runs.isEmpty && !self.restartSkipsDeferral }
+
+    private func shutdownForRestart(reason: String?) {
+        self.restartTask = nil
+        // A fresh start reconnects Telegram, so the restart visibly fixes the demo's one problem.
+        self.telegramRecovered = true
+        for id in self.runs.keys { self.abort(sessionKey: nil, runId: id) }
+        self.restartingUntil = Date().addingTimeInterval(Double(Self.restartExpectedMs) / 1000)
+        self.emit("shutdown", ["reason": .string(reason ?? "gateway restart"), "restartExpectedMs": JSONValue(Self.restartExpectedMs)])
+        self.sink = nil
+    }
+
     // MARK: Approval history
 
     private func approvalHistoryPage(_ params: JSONValue) throws -> JSONValue {
@@ -405,6 +574,34 @@ actor DemoGateway {
             "decision": .string(decision), "reason": "user", "source": .object(source),
             "resolver": ["kind": "device", "id": .string(Self.deviceId)],
             "presentation": Self.execPresentation(request),
+        ]
+    }
+
+    /// The approval waiting when the demo opens.
+    static let seededApprovalId = "approval_demo_push"
+
+    /// Forge's reply once the seeded push is answered, so the demo's story ends.
+    private func finishSeededPush(approved: Bool) {
+        let key = "agent:coder:main"
+        let reply = approved ? "Pushed fix/login-timeout to origin." : "OK, I won't push."
+        self.append(key, Self.message("assistant", [Self.text(reply)]))
+        self.updateRow(key, reason: "approval-resolved") { row in
+            row["lastMessagePreview"] = .string(reply)
+            row["unread"] = true
+        }
+    }
+
+    /// One command already waiting when the demo opens, so approvals (and Shortcuts' Pending
+    /// Approvals) have something to show. It lasts longer than a real one, for a leisurely look.
+    private static func seedPendingApproval() -> JSONValue {
+        let created = (Self.now().double ?? 0) - 45_000
+        return [
+            "id": .string(Self.seededApprovalId),
+            "request": ["command": "git push origin fix/login-timeout", "cwd": "/home/claw/projects/pincer",
+                        "sessionKey": "agent:coder:main", "agentId": "coder", "host": "gateway",
+                        "allowedDecisions": ["allow-once", "allow-always", "deny"]],
+            "createdAtMs": .number(created),
+            "expiresAtMs": .number(created + 30 * 60_000),
         ]
     }
 
@@ -1299,9 +1496,14 @@ actor DemoGateway {
             messages: [
                 Self.message("assistant", [Self.text("The paper mainly improves how retrieval-augmented summaries are evaluated.")]),
             ])
-        add("agent:coder:main", agent: "coder", title: "Main", preview: "No active coding run.", age: 240_000,
-            ["isMain": true], messages: [
+        add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
+            ["isMain": true, "unread": true], messages: [
                 Self.message("assistant", [Self.text("Forge can edit code, run builds, and report back briefly.")]),
+                Self.message("user", [Self.text("Fix the login timeout and push it.")]),
+                Self.message("assistant", [Self.text("""
+                Raised the login timeout to 30 s and the tests pass. I've asked to run \
+                `git push origin fix/login-timeout`; approve it and I'll push.
+                """)]),
             ])
         return (sessions, transcripts)
     }

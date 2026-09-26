@@ -9,6 +9,7 @@ import { LOGS_METHODS, createLogsState, handleLogsRequest, logsDisabled, noteApp
 import { EXEC_APPROVALS_METHODS, createExecApprovalsState, execApprovalsDisabled, handleExecApprovalsRequest, recordAllowAlways } from './exec-approvals.mjs';
 import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, createChannelPairingState, handleChannelPairingRequest } from './pairing.mjs';
+import { HEALTH_EVENTS, HEALTH_METHODS, broadcastPresence, cancelPendingRestart, createHealthState, handleHealthRequest, healthDisabled, helloSnapshot, isRestarting } from './health.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
@@ -47,6 +48,7 @@ const METHODS = [
   ...CRON_METHODS,
   ...LOGS_METHODS,
   ...CHANNEL_PAIRING_METHODS,
+  ...HEALTH_METHODS,
 ];
 const EVENTS = [
   'connect.challenge',
@@ -63,6 +65,7 @@ const EVENTS = [
   'plugins.changed',
   'progressCard.changed',
   'cron',
+  ...HEALTH_EVENTS,
 ];
 
 function canonicalJson(value) {
@@ -468,6 +471,7 @@ function createSeedState() {
     logsState: createLogsState(base),
     execApprovalsState: createExecApprovalsState(base),
     channelPairingState: createChannelPairingState(base),
+    healthState: createHealthState(base),
   };
 }
 
@@ -606,6 +610,7 @@ function advertisedMethods() {
     ...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []),
     ...(execApprovalsDisabled() ? EXEC_APPROVALS_METHODS : []),
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
+    ...(healthDisabled() ? HEALTH_METHODS : []),
     ...(usageDisabled() ? USAGE_METHODS : []),
     ...(logsDisabled() ? LOGS_METHODS : []),
   ];
@@ -618,7 +623,7 @@ function makeHelloPayload(state, params, connId, deviceId) {
     protocol: 4,
     server: { version: 'mock-2026.1', connId },
     features: { methods: advertisedMethods(), events: EVENTS },
-    snapshot: {},
+    snapshot: healthDisabled() ? {} : helloSnapshot(state),
     auth: { role: 'operator', scopes: params.scopes ?? [], deviceToken: deviceTokenFor(state, deviceId) },
     policy: {
       maxPayload: 26214400,
@@ -1013,6 +1018,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleExecApprovalsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleHealthRequest(state, conn, msg, { sendRes, sendErr, broadcast, abortRun: finishRunAbort })) return;
   switch (method) {
     case 'progressCard.get': {
       const key = params.sessionKey;
@@ -1425,7 +1431,10 @@ function handleConnect(state, conn, msg, options) {
   conn.connId = shortId('conn_');
   conn.deviceId = deviceId;
   conn.scopes = Array.isArray(params.scopes) ? params.scopes : [];
+  conn.client = params.client ?? {};
+  conn.connectedAt = nowMs();
   sendRes(conn, id, makeHelloPayload(state, params, conn.connId, deviceId));
+  broadcastPresence(state, broadcast);
 }
 
 function simulateBackground(state) {
@@ -1465,6 +1474,11 @@ export async function startServer(opts = {}) {
   });
 
   wss.on('connection', (ws) => {
+    // A simulated restart is under way: the Gateway isn't accepting connections yet.
+    if (isRestarting(state)) {
+      ws.close(1013, 'gateway restarting');
+      return;
+    }
     const conn = {
       ws,
       seq: 0,
@@ -1503,6 +1517,7 @@ export async function startServer(opts = {}) {
         return;
       }
       console.log(`${conn.connId ?? 'preauth'} ${msg.method}`);
+      conn.lastActivityAt = nowMs();
       if (!conn.authenticated) {
         if (msg.method !== 'connect') {
           sendErr(conn, msg.id, 'PROTOCOL', 'connect required');
@@ -1518,6 +1533,7 @@ export async function startServer(opts = {}) {
     ws.on('close', () => {
       if (conn.tickTimer) clearInterval(conn.tickTimer);
       state.connections.delete(conn);
+      if (conn.authenticated && !isRestarting(state)) broadcastPresence(state, broadcast);
     });
   });
 
@@ -1538,6 +1554,7 @@ export async function startServer(opts = {}) {
         if (pairingTimer) clearInterval(pairingTimer);
         for (const timer of state.cronState.active.values()) clearTimeout(timer);
         stopLogs(state.logsState);
+        cancelPendingRestart(state);
         for (const conn of state.connections) conn.ws.close(1001, 'server closing');
         wss.close(() => resolve());
       }),

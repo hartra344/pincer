@@ -181,15 +181,33 @@ private struct ConnectionStatusRow: View {
     @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
+        let indicator = self.gateway.health.indicator
         switch self.gateway.state {
         case .connected, .idle:
-            EmptyView()
+            if let indicator {
+                self.padded(GatewayHealthIndicatorRow(indicator: indicator))
+            }
         default:
-            self.status
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+            switch indicator {
+            case .restarting?, .reconnecting?:
+                // A restart this device asked for (or announced by `shutdown`) reads as such.
+                self.padded(GatewayHealthIndicatorRow(indicator: indicator!))
+            case .notBack?:
+                self.padded(VStack(alignment: .leading, spacing: 4) {
+                    GatewayHealthIndicatorRow(indicator: .notBack)
+                    self.status
+                })
+            default:
+                self.padded(self.status)
+            }
         }
+    }
+
+    private func padded(_ content: some View) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
     }
 
     @ViewBuilder private var status: some View {

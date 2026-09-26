@@ -80,6 +80,15 @@ To turn the cache off, set `PINCER_CACHE_DIR=off`. To use another folder, set it
 [Gateway Logs](../../guides/gateway-logs/) keeps the lines it fetches (`logs.tail`) in memory only, up to the last 2,000 lines or 8 MB. They're never cached on disk or written to Pincer's own logs, and `PINCER_REQUEST_LOG` leaves these requests out.
 
 The gateway redacts tokens and other secrets before it sends log lines; Pincer doesn't add redaction of its own. Lines can still contain hostnames, file paths and message content, so **Export…** reminds you to review a file before sharing it.
+
+## Shortcuts and Siri
+
+[Shortcuts & Siri](../../guides/shortcuts-and-siri/) actions connect with the same device identity and access level as the app. They don't pair a new device or ask for more scopes.
+
+- Every action except **Open Chat** requires an **unlocked device**, because they return reply content or send messages that can make an agent act.
+- Prompts and replies are handed to Shortcuts or Siri and are **never logged or saved** by the actions.
+- So saved shortcuts can show names while a gateway is offline, the agent and chat names Pincer last listed are kept in its **App Group**: agent names and emoji, chat titles and agent names, up to 1,000 entries. No messages are stored there.
+
 ## Drafts
 
 Unsent text and attachments are saved per chat, so they survive switching chats and relaunching:

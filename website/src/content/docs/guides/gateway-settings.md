@@ -24,6 +24,7 @@ Settings are read-only unless this device's **Access** is set to **Full Manageme
 | --- | --- |
 | **Connection** | This device's URL, token, access level and TLS pin. **Apply** reconnects. |
 | **Overview** | The gateway's version, config file and health. |
+| **Health** | Health, channels, connected clients and **Restart Gateway…**. See [Gateway health & restart](../gateway-health/). |
 | **Approval History** | Past approval decisions from the last 30 days. |
 | **Gateway Logs** | A live tail of the gateway's log, with level filters, search, copy and export. See [Gateway Logs](../gateway-logs/). |
 | **Command Policy** | Which commands agents can run and when they ask, and what you've always allowed. See [Command Policy](../command-policy/). |
@@ -55,7 +56,7 @@ For the config draft:
 2. Choose **Save** (<kbd>⌘</kbd> <kbd>S</kbd>). **Review Changes** lists every change.
 3. Confirm. Pincer sends them together, and the gateway validates, saves and applies them.
 
-If a value is invalid, the gateway sends back the field and the reason. Changes that need a gateway restart say so.
+If a value is invalid, the gateway sends back the field and the reason. Changes that need a gateway restart say so ("Saved. Restart the Gateway to finish applying it."), and you can restart from the [Health page](../gateway-health/).
 
 If someone else changed the config on the gateway in the meantime, Pincer rebases your draft on top and asks about any setting that conflicts.
 

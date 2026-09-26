@@ -123,8 +123,11 @@ public final class GatewayStore: Identifiable {
     public let images: ArtifactImageLoader
     public let files: FileContentLoader
     /// Gateway config and plugins; loaded when the settings screen opens.
-    @ObservationIgnored public private(set) lazy var settings = GatewaySettingsModel(
-        connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] })
+    @ObservationIgnored public private(set) lazy var settings: GatewaySettingsModel = {
+        let settings = GatewaySettingsModel(connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] })
+        settings.onRestartRequired = { [weak self] reason in self?.health.markRestartRequired(reason) }
+        return settings
+    }()
     /// Cron jobs; loaded when the Automations view opens.
     @ObservationIgnored public private(set) lazy var automations = AutomationsModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
@@ -146,6 +149,18 @@ public final class GatewayStore: Identifiable {
     /// Pending DM pairing requests from channels; loaded when Gateway Settings opens.
     @ObservationIgnored public private(set) lazy var pairingInbox = PairingInboxModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
+    /// Health, uptime, connected clients and restart; seeded from every hello and kept current by events.
+    @ObservationIgnored public private(set) lazy var health: GatewayHealthModel = {
+        let health = GatewayHealthModel(
+            connection: self.connection, hello: { [weak self] in self?.hello },
+            localDeviceId: self.profile.isDemo ? DemoGateway.deviceId : self.deviceId,
+            simulatedRestart: self.profile.isDemo)
+        health.onRestarted = { [weak self] in
+            guard let self, self.settings.hasLoaded else { return }
+            Task { await self.settings.load() }
+        }
+        return health
+    }()
 
     /// Where per-gateway sidebar and selection preferences persist.
     @ObservationIgnored let defaults: UserDefaults
@@ -236,9 +251,13 @@ public final class GatewayStore: Identifiable {
         self.state = state
         if case let .failed(message) = state { self.lastError = message }
         if !state.isConnected { self.pairingInbox.reset() }
-        guard state == .connected, let hello else { return }
+        guard state == .connected, let hello else {
+            self.health.connectionChanged(state, hello: nil)
+            return
+        }
         self.hasConnected = true
         self.hello = hello
+        self.health.connectionChanged(state, hello: hello)
         self.connectionEpoch += 1
         self.lastError = nil
         Task { await self.bootstrap() }
@@ -255,6 +274,7 @@ public final class GatewayStore: Identifiable {
         if let agents = await agents {
             self.agents = agents["agents"]?.array?.compactMap(AgentSummary.init) ?? []
             self.defaultAgentId = agents["defaultId"]?.text ?? self.agents.first?.id ?? "main"
+            Self.agentsDidLoad?()
         }
         if let list = await subscribed?["list"] {
             self.applySnapshot(list)
@@ -356,7 +376,25 @@ public final class GatewayStore: Identifiable {
 
     // MARK: Events
 
+    /// Called after any Gateway's agent list loads, e.g. so the app can refresh Siri's App Shortcut phrases.
+    public static var agentsDidLoad: (@MainActor () -> Void)?
+
+    @ObservationIgnored private var eventTaps: [Int: @MainActor (GatewayEvent) -> Void] = [:]
+    @ObservationIgnored private var nextEventTap = 0
+
+    /// Sees every event this store handles, in wire order (for Shortcuts reusing this connection).
+    func addEventTap(_ tap: @escaping @MainActor (GatewayEvent) -> Void) -> Int {
+        self.nextEventTap += 1
+        self.eventTaps[self.nextEventTap] = tap
+        return self.nextEventTap
+    }
+
+    func removeEventTap(_ token: Int) {
+        self.eventTaps.removeValue(forKey: token)
+    }
+
     private func handle(_ event: GatewayEvent) {
+        for tap in self.eventTaps.values { tap(event) }
         let payload = event.payload
         switch event.name {
         case "sessions.changed":
@@ -406,6 +444,8 @@ public final class GatewayStore: Identifiable {
             self.automations.handleCronEvent(payload)
         case "plugins.changed":
             self.settings.handlePluginsChanged()
+        case "health", "heartbeat", "presence", "shutdown":
+            self.health.handle(event: event.name, payload: payload)
         case "exec.approval.resolved":
             if let id = payload["id"]?.text ?? payload["request"]?["id"]?.text {
                 self.approvals.removeAll { $0.id == id }

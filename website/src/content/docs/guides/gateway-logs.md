@@ -80,3 +80,5 @@ When you first open the page, Pincer loads the most recent part of the log (up t
 :::note
 This is the gateway's log. Pincer's own request log (`PINCER_REQUEST_LOG`) is different; see [Troubleshooting](../../reference/troubleshooting/#seeing-what-the-gateway-says).
 :::
+
+For a summary of channel status, connected clients and restarts, see [Gateway health & restart](../gateway-health/).

@@ -40,7 +40,21 @@ While you're there, try:
 - **Approval History…** in the Organize menu, which has sample decisions, and answering an approval in the demo adds to it;
 - **Gateway Settings → Command Policy** (or ⌘K → "Command Policy…"), to see which commands each agent may run. **Recently allowed** lists allowed commands such as `/usr/bin/git`, `/usr/bin/rg` and `/opt/homebrew/bin/npm`; open an agent to change its settings, or remove an allowed command or tool. Changes are saved to the demo gateway only;
 - **Gateway Settings → Pairing Requests**, to approve or dismiss the sample people waiting to message your agents on Telegram and Discord;
+- **Gateway Settings → Health**: Telegram has lost its connection, so the gateway shows **Degraded**, with its channels, last heartbeat and the three clients connected (this device, a Control UI and a node). **Restart Gateway…** simulates a safe restart: nothing real restarts, your chats are still there afterwards, and Telegram reconnects, so the gateway comes back **Healthy**. Start a reply first to see the restart wait for it, then try **Restart Now Anyway**. It works with the demo's default access, since nothing real restarts;
 - <kbd>⌘</kbd> <kbd>K</kbd>, to open the command palette.
+
+## Try Shortcuts and Siri
+
+Pincer's [Shortcuts & Siri](../../guides/shortcuts-and-siri/) actions work with the demo too, with no gateway or pairing needed. Open the demo once, then try:
+
+- "What's unread in Pincer". The demo starts with three unread chats: home-lab, Forge (Forge's main chat) and Paper digest.
+- "Pending approvals in Pincer". The demo starts with one, from Forge: `git push origin fix/login-timeout`. Answer it in Pincer, and Forge follows up in its main chat with "Pushed fix/login-timeout to origin." or "OK, I won't push."
+- "Ask Pincer", and ask anything. Siri reads the demo agent's reply back to you.
+- the same actions in the Shortcuts app, where the demo's agents and chats show up in the pickers.
+
+If you've also added your own gateway, pick **Demo** as the action's gateway, or select the demo in Pincer first.
+
+Actions always use the app's own demo, and start it if it isn't running yet, even in the background on iOS. So messages you send and chats you start from Shortcuts or Siri show up in Pincer. The sample data resets when Pincer relaunches.
 
 ## Sample usage and cost
 

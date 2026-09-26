@@ -4,6 +4,8 @@ import Foundation
 public enum SettingsDestination: Hashable, Codable, Sendable {
     case connection
     case overview
+    /// Gateway health: status, channels, connected clients and restart.
+    case health
     /// Approval History: past decisions on commands, plugins and system changes.
     case approvals
     /// Gateway Logs: a live tail of the Gateway's log file (`logs.tail`).

@@ -17,6 +17,8 @@ In the banner, **Deny** is a button, and **Allow Once** and **Always Allow** are
 
 An approval you answer somewhere else, such as on another device or in the Control UI, disappears from Pincer on its own, including its banner and notifications.
 
+To check how many approvals are waiting, you can also ask Siri "Pending approvals in Pincer". Siri can't answer them, though. See [Shortcuts & Siri](../shortcuts-and-siri/#get-pending-approvals).
+
 Everything you've chosen **Always allow** for is listed per agent in Gateway Settings → [**Command Policy**](../command-policy/), where you can review it and remove anything you no longer want to allow.
 
 :::note

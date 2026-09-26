@@ -76,6 +76,12 @@ public struct GatewayEvent: Sendable {
     public let name: String
     public let payload: JSONValue
     public let seq: Int?
+
+    public init(name: String, payload: JSONValue, seq: Int?) {
+        self.name = name
+        self.payload = payload
+        self.seq = seq
+    }
 }
 
 /// One operator WebSocket to one Gateway: handshake, device pairing, request/response
@@ -358,7 +364,11 @@ public actor GatewayConnection {
         if let demo = self.demo {
             self.teardown(reason: "new attempt")
             let handler = self.eventHandler
-            let response = await demo.attach { handler?($0) }
+            let response = await demo.attach { [weak self] event in
+                handler?(event)
+                // The demo "restarts" like a Gateway: `shutdown`, then the connection drops.
+                if event.name == "shutdown", let self { Task { await self.demoShutdown() } }
+            }
             self.hello = GatewayHello(payload: response)
             self.lastFrameAt = Date()
             return
@@ -469,6 +479,11 @@ public actor GatewayConnection {
         ]
         if !auth.isEmpty { params["auth"] = .object(auth) }
         return params
+    }
+
+    private func demoShutdown() {
+        guard self.demo != nil, self.hello != nil else { return }
+        self.teardown(reason: "Gateway restarting")
     }
 
     private func waitUntilDisconnected() async {
@@ -614,8 +629,11 @@ public actor GatewayConnection {
             }
         case .tick:
             return
-        case .shutdown:
-            self.teardown(reason: "Gateway restarting")
+        case let .shutdown(event):
+            // Let the store see the restart before the socket goes.
+            self.eventHandler?(event)
+            let restarting = GatewayHealthModel.restartExpectedMs(shutdown: event.payload) != nil
+            self.teardown(reason: restarting ? "Gateway restarting" : "Gateway shut down")
         case let .event(event):
             self.eventHandler?(event)
         }
@@ -625,7 +643,7 @@ public actor GatewayConnection {
         case response(id: String, result: Result<JSONValue, GatewayError>)
         case challenge(nonce: String, ts: Int64)
         case tick
-        case shutdown
+        case shutdown(GatewayEvent)
         case event(GatewayEvent)
     }
 
@@ -651,7 +669,7 @@ public actor GatewayConnection {
                 return .challenge(nonce: nonce, ts: ts)
             }
             if name == "tick" { return .tick }
-            if name == "shutdown" { return .shutdown }
+            if name == "shutdown" { return .shutdown(GatewayEvent(name: name, payload: payload, seq: frame["seq"]?.int)) }
             return .event(GatewayEvent(name: name, payload: payload, seq: frame["seq"]?.int))
         default:
             return nil
