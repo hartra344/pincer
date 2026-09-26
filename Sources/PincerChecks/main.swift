@@ -11,6 +11,7 @@ import UserNotifications
 // Self-checks that run without XCTest (unavailable with Command Line Tools only).
 //   swift run PincerChecks                  → unit checks
 //   swift run PincerChecks --live URL TOKEN → end-to-end against a (mock) Gateway
+//   swift run PincerChecks --live-no-usage URL TOKEN → a Gateway without usage (mock with MOCK_NO_USAGE=1)
 // Run with PINCER_KEYCHAIN=memory so nothing touches the real Keychain.
 
 var failures = 0
@@ -493,9 +494,13 @@ do {
           && ApprovalHistoryModel.KindFilter.all.emptyMessage == nil, "filtered empty messages")
 }
 await checkApprovalHistoryModel()
+await checkExecPolicy()
 print("Pairing requests")
 await checkPairingInboxModel()
 await checkGatewayHealth()
+
+print("Usage & cost")
+await checkUsage()
 
 print("Agent questions")
 do {
@@ -1389,6 +1394,10 @@ if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count
     print("Scope upgrade fallback against \(arguments[index + 1])")
     await runScopeUpgrade(url: arguments[index + 1], token: arguments[index + 2])
 }
+if let index = arguments.firstIndex(of: "--live-no-usage"), arguments.count > index + 2 {
+    print("Gateway without usage at \(arguments[index + 1])")
+    await runLiveNoUsage(url: arguments[index + 1], token: arguments[index + 2])
+}
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
@@ -1913,6 +1922,8 @@ func runDemo() async {
     } else {
         check(false, "demo history has a plugin")
     }
+
+    await checkUsageDemo(gateway)
     await history.loadMore()
     check(history.items.count == 10 && history.hasMore, "demo second page before resolving")
 
@@ -2020,6 +2031,7 @@ func runDemo() async {
               "models page marks the session's model")
     }
     await gateway.patch(tripKey, ["pinned": false])
+    await runDemoExecPolicy(gateway, chat: chat)
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
     let pairing = gateway.pairingInbox
@@ -2895,6 +2907,7 @@ func runLive(url: String, token: String) async {
     await history.loadDetail("nope_missing")
     check(history.detailState["nope_missing"]?.error == "This approval is no longer on the Gateway.", "approval.get not found")
 
+    await checkUsageLive(gateway)
     // Pairing Requests: Pincer doesn't ask for operator.pairing, so standard access can't list.
     let standardPairing = gateway.pairingInbox
     check(gateway.hello?.methods.contains("channels.pairing.list") == true && standardPairing.supported, "hello advertises channels.pairing.list")
@@ -3146,6 +3159,7 @@ func runLive(url: String, token: String) async {
     } else {
         check(false, "nothing left to compact (\(String(describing: papers.compaction)))")
     }
+    await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
 
     // Health and a safe restart. Last, since a restart drops every client.
     let health = admin.health

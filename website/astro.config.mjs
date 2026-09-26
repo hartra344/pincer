@@ -52,6 +52,8 @@ export default defineConfig({
 						{ slug: 'guides/push-notifications' },
 						{ slug: 'guides/gateway-settings' },
 						{ slug: 'guides/gateway-health' },
+						{ slug: 'guides/command-policy' },
+						{ slug: 'guides/usage-and-cost' },
 						{ slug: 'guides/appearance' },
 					],
 				},

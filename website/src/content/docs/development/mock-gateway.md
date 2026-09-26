@@ -24,6 +24,8 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `MOCK_TOKEN` | `dev-token` | Gateway token. Set it empty for no auth. |
 | `MOCK_PAIRING` | `auto` | `auto` approves new devices after about 3 seconds, `off` accepts them right away, `manual` waits for you to type the `requestId`. |
 | `MOCK_BACKGROUND` | off | Set to `1` for simulated Discord traffic. |
+| `MOCK_NO_USAGE` | off | Set to `1` to act like a gateway without usage: the five usage methods are left out of `hello-ok` and answer `UNKNOWN_METHOD`. |
+| `MOCK_USAGE_FORBIDDEN` | off | Set to `1` to refuse `usage.cost` with `FORBIDDEN`, as for an operator whose role can't see every session. |
 | `MOCK_CHANNEL_PAIRING` | on | Set to `off` to hide the `channels.pairing.*` methods, like an older gateway. |
 | `MOCK_CHANNEL_PAIRING_EVERY` | off | Seconds between new channel pairing requests. |
 | `MOCK_NO_HEALTH` | off | Set to `1` to drop the health and restart methods, like an older gateway. |
@@ -42,6 +44,12 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 ## Config and plugins
 
 The mock serves a small config and plugin catalog for Gateway Settings. It supports `config.get`, `config.schema`, `config.patch`, `config.set` and `config.apply`, with redacted secrets, validation issues and restart hints, plus the `plugins.*` methods. Writes need the `operator.admin` scope, so set **Access** to **Full Management**.
+
+## Usage and cost
+
+The mock serves 30 days of deterministic usage for its seeded chats, for the [Usage](../../guides/usage-and-cost/) page. It supports `usage.status`, `usage.cost`, `sessions.usage`, `sessions.usage.timeseries` and `sessions.usage.logs`, with the gateway's validation: `startDate` and `endDate` must come together, `agentScope: "all"` can't be combined with a `key`, and a missing or unknown `key` fails with `INVALID_REQUEST`.
+
+The data covers the cases the page handles: one model with some unpriced requests (partial cost), one session with no pricing at all (unknown cost), a rate limit window above 90% that resets within the hour, a provider with an error, and, for ranges starting more than 31 days ago, a session that's still being counted.
 
 ## Channel pairing
 
@@ -62,6 +70,10 @@ cd mock-gateway && npm ci && npm run selftest
 
 # in another terminal, with the mock running:
 PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+
+# a gateway without usage, on another port:
+MOCK_NO_USAGE=1 PORT=18790 npm start
+PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token
 ```
 
 The unit tests (`swift test`) don't need the mock: they never open a socket. See [Building from source](../building/#unit-tests).

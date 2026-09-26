@@ -5,6 +5,8 @@ import { WebSocketServer } from 'ws';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
+import { EXEC_APPROVALS_METHODS, createExecApprovalsState, execApprovalsDisabled, handleExecApprovalsRequest, recordAllowAlways } from './exec-approvals.mjs';
+import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, createChannelPairingState, handleChannelPairingRequest } from './pairing.mjs';
 import { HEALTH_EVENTS, HEALTH_METHODS, broadcastPresence, cancelPendingRestart, createHealthState, handleHealthRequest, healthDisabled, helloSnapshot, isRestarting } from './health.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
@@ -32,6 +34,8 @@ const METHODS = [
   'exec.approval.list',
   'exec.approval.resolve',
   ...APPROVAL_HISTORY_METHODS,
+  ...EXEC_APPROVALS_METHODS,
+  ...USAGE_METHODS,
   'question.list',
   'question.resolve',
   'users.prefs.get',
@@ -462,6 +466,7 @@ function createSeedState() {
     webPushState: createWebPushState(),
     cronState: createCronState(base),
     approvalHistoryState: createApprovalHistoryState(base),
+    execApprovalsState: createExecApprovalsState(base),
     channelPairingState: createChannelPairingState(base),
     healthState: createHealthState(base),
   };
@@ -600,8 +605,10 @@ function setupManualPairing(state, enabled) {
 function advertisedMethods() {
   const hidden = [
     ...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []),
+    ...(execApprovalsDisabled() ? EXEC_APPROVALS_METHODS : []),
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
     ...(healthDisabled() ? HEALTH_METHODS : []),
+    ...(usageDisabled() ? USAGE_METHODS : []),
   ];
   return METHODS.filter((m) => !hidden.includes(m));
 }
@@ -1002,6 +1009,8 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession })) return;
   if (handleWebPushRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleExecApprovalsRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleHealthRequest(state, conn, msg, { sendRes, sendErr, broadcast, abortRun: finishRunAbort })) return;
   switch (method) {
@@ -1349,6 +1358,7 @@ function handleAuthedRequest(state, conn, msg) {
         return sendErr(conn, id, 'INVALID_REQUEST', 'invalid decision');
       }
       recordExecResolution(state, approval, params.decision, conn.deviceId);
+      if (params.decision === 'allow-always') recordAllowAlways(state, approval);
       state.pendingApprovals.delete(params.id);
       state.resolvedApprovals.set(params.id, params.decision);
       broadcast(state, 'exec.approval.resolved', { id: params.id, decision: params.decision });

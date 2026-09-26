@@ -8,6 +8,10 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case health
     /// Approval History: past decisions on commands, plugins and system changes.
     case approvals
+    /// Command Policy: the exec approvals file (`exec.approvals.get/set`).
+    case execPolicy
+    /// Usage & cost: tokens, spend and provider quotas.
+    case usage
     /// Pairing Requests: senders waiting to DM the agents on a pairing-policy channel.
     case pairing
     /// A curated page from `SettingsCatalog`, by id.
@@ -26,6 +30,20 @@ public enum SettingsRoute: Hashable, Codable, Sendable {
     case plugin(String)
     /// One entry of Approval History, by approval id.
     case approval(String)
+    /// One session's usage drill-down.
+    case sessionUsage(key: String, agentId: String? = nil)
+    /// One agent's command policy and allowlist, by agent id (`*` for all agents).
+    case execAgent(String)
+}
+
+/// A sidebar page found by Gateway Settings search, shown above the matching settings.
+public struct SettingsDestinationMatch: Identifiable, Hashable, Sendable {
+    public let destination: SettingsDestination
+    public let title: String
+    public let symbol: String
+    public let keywords: [String]
+
+    public var id: String { self.title }
 }
 
 /// Where a setting lives in the UI: the sidebar row, the pages pushed on top, and the field.
@@ -126,6 +144,25 @@ public enum SettingsCatalog {
     ]
 
     public static func page(_ id: String) -> SettingsPage? { self.pages.first { $0.id == id } }
+
+    /// Pages outside the config that search can find, with the words that find them.
+    public static let searchableDestinations: [SettingsDestinationMatch] = [
+        SettingsDestinationMatch(destination: .approvals, title: "Approval History", symbol: "checkmark.shield",
+                                 keywords: ["approval history", "approvals", "audit", "log", "decisions"]),
+        SettingsDestinationMatch(destination: .execPolicy, title: "Command Policy", symbol: "lock.shield",
+                                 keywords: ["command policy", "exec", "allowlist", "always allow", "approval policy",
+                                            "ask", "security"]),
+    ]
+
+    /// The pages whose title or keywords contain every word of `query`.
+    public static func destinations(matching query: String) -> [SettingsDestinationMatch] {
+        let terms = query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !terms.isEmpty else { return [] }
+        return self.searchableDestinations.filter { match in
+            let haystack = ([match.title] + match.keywords).joined(separator: " ").lowercased()
+            return terms.allSatisfy { haystack.contains($0) }
+        }
+    }
 
     /// Where a setting (or an issue about it) is shown: on a curated page when one covers it,
     /// then under Plugins, otherwise in All Settings.
