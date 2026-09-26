@@ -30,6 +30,7 @@ While you're there, try:
 - typing `/` in the composer to see slash commands;
 - **Thinking Steps** in the chat's ⋯ menu, to choose how much of the agent's work you see;
 - **Settings → Appearance**, to try a different theme.
+- **Gateway Settings → Pairing Requests**, to approve or dismiss the sample people waiting to message your agents on Telegram and Discord.
 
 :::tip
 The demo is what TestFlight testers and App Review use, so they don't need a Gateway or Tailscale.

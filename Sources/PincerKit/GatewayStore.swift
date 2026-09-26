@@ -132,6 +132,9 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var approvalHistory = ApprovalHistoryModel(
         connection: self.connection, hello: { [weak self] in self?.hello },
         localDeviceId: self.profile.isDemo ? DemoGateway.deviceId : self.deviceId)
+    /// Pending DM pairing requests from channels; loaded when Gateway Settings opens.
+    @ObservationIgnored public private(set) lazy var pairingInbox = PairingInboxModel(
+        connection: self.connection, hello: { [weak self] in self?.hello })
 
     public init(profile: GatewayProfile) {
         self.profile = profile
@@ -211,6 +214,7 @@ public final class GatewayStore: Identifiable {
     private func update(state: ConnectionState, hello: GatewayHello?) {
         self.state = state
         if case let .failed(message) = state { self.lastError = message }
+        if !state.isConnected { self.pairingInbox.reset() }
         guard state == .connected, let hello else { return }
         self.hasConnected = true
         self.hello = hello

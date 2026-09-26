@@ -42,6 +42,16 @@ Thinking has two parts:
 
 Editing needs **Access → Full Management** on the **Connection** page, and the gateway has to approve the change. See [Access levels](../../getting-started/connect-a-gateway/#access-levels).
 
+## Pairing Requests says it isn't available
+
+"This Gateway doesn't support channel pairing requests" means the gateway is older than the channel pairing methods (`channels.pairing.*`). Update OpenClaw.
+
+## Pairing Requests needs Full Management
+
+Reviewing pairing requests needs **Access → Full Management** on the **Connection** page, and the gateway has to approve the change. Pincer doesn't ask for the narrower `operator.pairing` scope; see [Security & privacy](../security/#pairing-requests).
+
+If the page says no channels use DM pairing, set a channel account's `dmPolicy` to `"pairing"` on the gateway.
+
 ## A helper run is missing from the sidebar
 
 Subagent (helper) runs are hidden by default. Open one with **Open run** on the tool call that started it, or turn on listing them under their parent in **Settings → Sidebar**.
