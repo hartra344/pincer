@@ -56,6 +56,19 @@ Press **⇧⌘F** (on a Mac, or an iPad with a keyboard), or type in the sidebar
 
 Picking a result opens the chat with that message highlighted. See [Search messages](../../guides/search/) for the matching rules.
 
+## Try Shortcuts and Siri
+
+Pincer's [Shortcuts & Siri](../../guides/shortcuts-and-siri/) actions work with the demo too, with no gateway or pairing needed. Open the demo once, then try:
+
+- "What's unread in Pincer". The demo starts with three unread chats: home-lab, Forge (Forge's main chat) and Paper digest.
+- "Pending approvals in Pincer". The demo starts with one, from Forge: `git push origin fix/login-timeout`. Answer it in Pincer, and Forge follows up in its main chat with "Pushed fix/login-timeout to origin." or "OK, I won't push."
+- "Ask Pincer", and ask anything. Siri reads the demo agent's reply back to you.
+- the same actions in the Shortcuts app, where the demo's agents and chats show up in the pickers.
+
+If you've also added your own gateway, pick **Demo** as the action's gateway, or select the demo in Pincer first.
+
+Actions always use the app's own demo, and start it if it isn't running yet, even in the background on iOS. So messages you send and chats you start from Shortcuts or Siri show up in Pincer. The sample data resets when Pincer relaunches.
+
 ## Sample usage and cost
 
 The demo comes with 90 days of made-up usage, busiest in the last month, so the [Usage](../../guides/usage-and-cost/) page has something to show. Open it with **Usage & Cost…** in the gateway's menu or the command palette.
