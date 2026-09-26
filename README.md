@@ -36,6 +36,11 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - ⌘K opens a palette to jump to any chat on any gateway (recently visited first), start a new chat with an agent, change the chat's model, pin or unpin it, show or hide thinking steps, switch gateways, or open Settings, Gateway Settings, Automations or Approval History. Type to filter (fuzzy, so `jptr` finds "Japan trip"), use ↑/↓ to move, Return to run and Esc to go back or close;
   - Back (⌘[) and Forward (⌘]) move through the chats you've visited, like a browser;
   - ⌘1–⌘9 open the selected gateway's pinned chats, in sidebar order.
+- **Quick Capture** (macOS): press ⌃⇧Space from any app to open a small floating composer, even when the main window is closed. It remembers the chat you last sent to.
+  - To pick a recent chat or **New Chat with** an agent, click the target or press ⌘J (or Tab). Type to filter, ↑/↓ to move, and ⌘1–⌘9 for pinned chats.
+  - Return sends (`chat.send`, after `sessions.create` for a new chat) without leaving what you're doing. ⌘Return sends and opens the chat in Pincer, ⌘O opens it without sending, and Esc closes and keeps your text.
+  - Paste or drag in images and files, as in the main composer.
+  - Change or turn off the shortcut in Settings → General → Quick Capture. It uses a standard system hotkey, so no Accessibility permission is needed. It's also in the **Go** menu.
 - **Transcript:**
   - live streaming, with a collapsible **thinking** section and **tool cards** showing arguments and results. Choose whether to show thinking steps never, only live, or for every turn;
   - the full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer quietly caches every chat (most recently active first) and skips chats that haven't changed. Opening one shows the cached transcript at once, then fetches only what's new;
@@ -113,7 +118,7 @@ open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pince
 
 ### Tests on CI
 
-`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs `PincerChecks` in offline, `--demo`, `--live` and `--live-no-usage` (against the mock gateway) modes, and runs the mock gateway's selftest.
+`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs the `PincerKitTests` unit tests, runs `PincerChecks` in offline, `--demo`, `--live` and `--live-no-usage` (against the mock gateway) modes, and runs the mock gateway's selftest.
 
 ### TestFlight
 
@@ -143,6 +148,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 | `Design/AppIcon` | Flattened reference artwork for the app icon (`Pincer.svg`). The shipped icon is `Apps/Shared/AppIcon.icon`, a layered Icon Composer file (gradient background + glass speech-bubble layer) with Default, Dark, Clear and Tinted appearances; edit it in Icon Composer (Xcode ▸ Open Developer Tool). Xcode renders flat fallbacks for iOS 18 / macOS 15. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |
 | `Sources/PincerChecks` | Self-checks, with an optional live end-to-end run. |
+| `Tests/PincerKitTests` | Swift Testing unit tests for PincerKit's pure logic (framing, signing, URL/TLS policy, caches, sidebar, slash commands, approvals). |
 | `Sources/PincerPush` | Web Push decryption (RFC 8291), per-gateway push keys and payload parsing, shared by the app and its notification service extension. |
 | `Apps/iOSNotificationService` | iOS notification service extension that decrypts relayed pushes. |
 | `push-relay/` | Zero-dependency Node relay from Gateway Web Push to APNs. |
@@ -170,6 +176,14 @@ Message triggers:
 The mock also serves a small config and plugin catalog for Gateway Settings, and three cron jobs for Automations; see its README.
 
 For the rest of the options, see [`mock-gateway/README.md`](mock-gateway/README.md).
+
+To run the unit tests:
+
+```sh
+swift test --parallel
+```
+
+They use fixed signing keys, their own temp folders and throwaway defaults suites, so they need no gateway, socket or Keychain (no `PINCER_KEYCHAIN` either) and can run alongside the self-checks.
 
 To run the self-checks:
 

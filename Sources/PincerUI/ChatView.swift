@@ -5,7 +5,6 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     let chat: ChatStore
     @Environment(GatewayStore.self) private var gateway
-    @Environment(\.openGatewaySettings) private var openGatewaySettings
     @AppStorage("pincer.reasoningHintDismissed") private var hintDismissed = false
     @State private var disclosure = TranscriptDisclosure()
     @State private var previewing: ImageRef?
@@ -52,13 +51,6 @@ struct ChatView: View {
             .animation(.snappy, value: self.chat.errorMessage)
             .animation(.snappy, value: self.chat.progressCard)
             .animation(.snappy, value: self.gateway.questions.map(\.id))
-        .navigationTitle(self.row?.title ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "Chat")
-        #if os(macOS)
-        .navigationSubtitle(self.subtitle)
-        #else
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar { self.toolbar }
         .sheet(item: self.$previewing) { ref in
             ImagePreview(ref: ref, sessionKey: self.chat.sessionKey)
         }
@@ -114,17 +106,6 @@ struct ChatView: View {
             .padding(.top, 6)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
-    }
-
-    private var subtitle: String {
-        var parts = [self.agent.name]
-        if let server = self.row?.server {
-            parts.append(self.gateway.displayName(for: server))
-        } else if let origin = self.row?.originLabel {
-            parts.append("via \(origin)")
-        }
-        if let model = self.row?.model { parts.append(model) }
-        return parts.joined(separator: " · ")
     }
 
     @ViewBuilder private var transcript: some View {
@@ -209,30 +190,79 @@ struct ChatView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
+}
 
-    @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            if let row {
-                ModelPicker(row: row)
-                Menu {
-                    Button("Find in Chat", systemImage: "magnifyingglass") { self.find.present() }
-                    Divider()
-                    Button(row.isPinned ? "Unpin" : "Pin", systemImage: row.isPinned ? "pin.slash" : "pin") {
-                        Task { await self.gateway.patch(row.key, ["pinned": .bool(!row.isPinned)]) }
-                    }
-                    ThinkingDisplayPicker()
-                    ReasoningMenu(row: row)
-                    Divider()
-                    Button("Reload", systemImage: "arrow.clockwise") {
-                        Task { await self.chat.load(force: true) }
-                    }
-                    Button("Copy Session Key", systemImage: "key") { Clipboard.copy(row.key) }
-                    Button("Session Usage…", systemImage: "chart.bar") {
-                        self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
-                    }
-                } label: {
-                    Label("Session", systemImage: Theme.moreSymbol)
+/// The selected chat's title and toolbar items. Applied outside `ChatView`'s per-chat `.id`:
+/// when they come and go with it, macOS rebuilds the window toolbar on every chat switch and all
+/// of its buttons flash, the sidebar's included.
+struct ChatChrome: ViewModifier {
+    @Environment(GatewayStore.self) private var gateway
+
+    private var key: String? { self.gateway.selectedKey }
+    private var row: SessionRow? { self.key.flatMap { self.gateway.sessions[$0] } }
+
+    func body(content: Content) -> some View {
+        content
+            .navigationTitle(self.row?.title ?? self.key.flatMap(SessionKey.agentId(from:)) ?? "Chat")
+            #if os(macOS)
+            .navigationSubtitle(self.subtitle)
+            #else
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) { ChatModelItem() }
+                ToolbarItem(placement: .primaryAction) { ChatSessionMenu() }
+            }
+    }
+
+    private var subtitle: String {
+        let agentId = self.row?.agentId ?? self.key.flatMap(SessionKey.agentId(from:)) ?? "main"
+        var parts = [self.gateway.agent(agentId).name]
+        if let server = self.row?.server {
+            parts.append(self.gateway.displayName(for: server))
+        } else if let origin = self.row?.originLabel {
+            parts.append("via \(origin)")
+        }
+        if let model = self.row?.model { parts.append(model) }
+        return parts.joined(separator: " · ")
+    }
+}
+
+private struct ChatModelItem: View {
+    @Environment(GatewayStore.self) private var gateway
+
+    var body: some View {
+        if let key = self.gateway.selectedKey, let row = self.gateway.sessions[key] {
+            ModelPicker(row: row)
+        }
+    }
+}
+
+private struct ChatSessionMenu: View {
+    @Environment(GatewayStore.self) private var gateway
+    @Environment(\.openGatewaySettings) private var openGatewaySettings
+    @FocusedValue(\.transcriptFind) private var find
+
+    var body: some View {
+        if let key = self.gateway.selectedKey, let row = self.gateway.sessions[key] {
+            Menu {
+                Button("Find in Chat", systemImage: "magnifyingglass") { self.find?.present() }
+                Divider()
+                Button(row.isPinned ? "Unpin" : "Pin", systemImage: row.isPinned ? "pin.slash" : "pin") {
+                    Task { await self.gateway.patch(row.key, ["pinned": .bool(!row.isPinned)]) }
                 }
+                ThinkingDisplayPicker()
+                ReasoningMenu(row: row)
+                Divider()
+                Button("Reload", systemImage: "arrow.clockwise") {
+                    Task { await self.gateway.chat(for: key).load(force: true) }
+                }
+                Button("Copy Session Key", systemImage: "key") { Clipboard.copy(row.key) }
+                Button("Session Usage…", systemImage: "chart.bar") {
+                    self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
+                }
+            } label: {
+                Label("Session", systemImage: Theme.moreSymbol)
             }
         }
     }
