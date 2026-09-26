@@ -671,7 +671,7 @@ try {
   assert.equal((await pairer.call('channels.pairing.dismiss', { channel: 'slack', accountId: 'work', requestId: 'pr_discord' })).error.message,
     'channel account does not use DM pairing: slack:work');
   assert.deepEqual(await pairer.send('channels.pairing.dismiss', { channel: 'discord', accountId: 'family', requestId: 'pr_discord' }),
-    { requestId: 'pr_discord', senderId: '418820017734' });
+    { requestId: 'pr_discord', senderId: '418820017734812160' });
   assert.equal((await pairer.call('channels.pairing.dismiss', { channel: 'discord', accountId: 'family', requestId: 'pr_discord' })).error.message,
     'pending DM access request no longer exists');
   assert.equal((await pairer.call('channels.pairing.approve', { channel: 'telegram', accountId: 'home', requestId: 'pr_soon', notify: 'yes' })).error.code,

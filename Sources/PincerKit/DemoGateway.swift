@@ -278,7 +278,7 @@ actor DemoGateway {
             request("pr_demo_maya", account: 0, senderId: "5550142", senderLabel: "Telegram user id",
                     metadata: ["name": "Maya Chen", "username": "mayac", "languageCode": "en"],
                     createdAgo: 5 * 60, lastSeenAgo: 2 * 60),
-            request("pr_demo_discord", account: 1, senderId: "418820017734", senderLabel: "Discord user id",
+            request("pr_demo_discord", account: 1, senderId: "418820017734812160", senderLabel: "Discord user id",
                     metadata: nil, createdAgo: 20 * 60, lastSeenAgo: 20 * 60),
             request("pr_demo_soon", account: 0, senderId: "5550199", senderLabel: "Telegram user id",
                     metadata: ["username": "night_owl"], createdAgo: Self.pairingTTL - 2 * 60, lastSeenAgo: Self.pairingTTL - 2 * 60),

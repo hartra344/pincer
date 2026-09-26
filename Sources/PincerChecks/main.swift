@@ -1839,7 +1839,7 @@ func checkDemoPairingShapes() async {
         let discord = requests.first { $0["channel"]?.text == "discord" }
         let dismiss = try await connection.request("channels.pairing.dismiss",
                                                    ["channel": "discord", "accountId": "family", "requestId": discord?["requestId"] ?? .null])
-        check(keys(dismiss) == ["requestId", "senderId"] && dismiss["senderId"]?.text == "418820017734", "demo dismiss result keys")
+        check(keys(dismiss) == ["requestId", "senderId"] && dismiss["senderId"]?.text == "418820017734812160", "demo dismiss result keys")
         do {
             _ = try await connection.request("channels.pairing.dismiss", ["channel": "slack", "accountId": "work", "requestId": "x"])
             check(false, "demo not-pairing account refused")
@@ -2838,7 +2838,7 @@ func runLive(url: String, token: String) async {
     {
         check(maya.title == "Maya Chen" && maya.senderLine == "Telegram user id: 5550142" && maya.accountLine == "Telegram · Home bot"
               && maya.details.map(\.label) == ["Language code"] && maya.showsLastSeen, "mock request presentation")
-        check(discord.title == "418820017734" && !discord.notifySupported, "sender with only an id")
+        check(discord.title == "418820017734812160" && !discord.notifySupported, "sender with only an id")
         let approved = await pairing.approve(maya, notify: true)
         check(approved && pairing.notice == nil && pairing.operation(for: maya) == .idle, "channels.pairing.approve")
         let dismissed = await pairing.dismiss(discord)

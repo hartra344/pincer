@@ -64,7 +64,7 @@ export function createChannelPairingState(base = Date.now()) {
         requestId: 'pr_maya', senderId: '5550142', metadata: { name: 'Maya Chen', username: 'mayac', languageCode: 'en' },
         createdAtMs: base - 5 * 60_000, lastSeenAtMs: base - 2 * 60_000,
       }),
-      makeRequest(discord, { requestId: 'pr_discord', senderId: '418820017734', createdAtMs: base - 20 * 60_000 }),
+      makeRequest(discord, { requestId: 'pr_discord', senderId: '418820017734812160', createdAtMs: base - 20 * 60_000 }),
       makeRequest(telegram, {
         requestId: 'pr_soon', senderId: '5550199', metadata: { username: 'night_owl' },
         createdAtMs: base - PAIRING_TTL_MS + 2 * 60_000,
