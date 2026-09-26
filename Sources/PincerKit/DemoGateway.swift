@@ -84,6 +84,11 @@ actor DemoGateway {
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
         self.approvalHistory = Self.seedApprovalHistory()
+        let pending = Self.seedPendingApproval()
+        if let id = pending["id"]?.string {
+            self.approvals[id] = pending
+            self.approvalOrder.append(id)
+        }
         self.pairingRequests = Self.seedPairingRequests()
         self.artifacts["demo-chart"] = ("image/png", Self.chartPNG())
         self.artifacts["demo-script"] = ("text/x-shellscript", Data(Self.diskScript.utf8))
@@ -247,6 +252,7 @@ actor DemoGateway {
             self.approvals[id] = nil
             self.approvalOrder.removeAll { $0 == id }
             self.emit("exec.approval.resolved", ["id": .string(id), "decision": .string(decision)])
+            if id == Self.seededApprovalId { self.finishSeededPush(approved: decision != "deny") }
             return ["ok": true, "id": .string(id), "decision": .string(decision)]
         case "approval.history":
             return try self.approvalHistoryPage(params)
@@ -563,6 +569,34 @@ actor DemoGateway {
             "decision": .string(decision), "reason": "user", "source": .object(source),
             "resolver": ["kind": "device", "id": .string(Self.deviceId)],
             "presentation": Self.execPresentation(request),
+        ]
+    }
+
+    /// The approval waiting when the demo opens.
+    static let seededApprovalId = "approval_demo_push"
+
+    /// Forge's reply once the seeded push is answered, so the demo's story ends.
+    private func finishSeededPush(approved: Bool) {
+        let key = "agent:coder:main"
+        let reply = approved ? "Pushed fix/login-timeout to origin." : "OK, I won't push."
+        self.append(key, Self.message("assistant", [Self.text(reply)]))
+        self.updateRow(key, reason: "approval-resolved") { row in
+            row["lastMessagePreview"] = .string(reply)
+            row["unread"] = true
+        }
+    }
+
+    /// One command already waiting when the demo opens, so approvals (and Shortcuts' Pending
+    /// Approvals) have something to show. It lasts longer than a real one, for a leisurely look.
+    private static func seedPendingApproval() -> JSONValue {
+        let created = (Self.now().double ?? 0) - 45_000
+        return [
+            "id": .string(Self.seededApprovalId),
+            "request": ["command": "git push origin fix/login-timeout", "cwd": "/home/claw/projects/pincer",
+                        "sessionKey": "agent:coder:main", "agentId": "coder", "host": "gateway",
+                        "allowedDecisions": ["allow-once", "allow-always", "deny"]],
+            "createdAtMs": .number(created),
+            "expiresAtMs": .number(created + 30 * 60_000),
         ]
     }
 
@@ -894,7 +928,8 @@ actor DemoGateway {
                                        instructions: text.dropFirst("/compact".count).trimmingCharacters(in: .whitespaces))
             return
         }
-        if lowered.range(of: #"\bapprove\b"#, options: .regularExpression) != nil {
+        let approvesLater = Self.wantsLaterApproval(lowered)
+        if !approvesLater, lowered.range(of: #"\bapprove\b"#, options: .regularExpression) != nil {
             let id = Self.shortId("approval_")
             // `approve once-only` leaves out Always allow, like a command the Gateway won't grant for good.
             let allowed: JSONValue = lowered.contains("once-only")
@@ -947,7 +982,8 @@ actor DemoGateway {
                                           extra: ["toolCallId": .string(callId), "toolName": "exec", "isError": false]))
         }
 
-        let reply = answered ?? Self.reply(to: text, usedTool: wantsTool)
+        let reply = answered ?? Self.reply(to: text, usedTool: wantsTool,
+                                           note: approvesLater ? Self.laterApprovalNote : nil)
         var out = ""
         for word in Self.words(reply) {
             guard await self.pause(runId, milliseconds: 30) else { return }
@@ -977,6 +1013,50 @@ actor DemoGateway {
                 row["totalTokens"] = JSONValue(min(Self.contextTokens, total + 1_200 + output))
             }
         }
+        if approvesLater { self.scheduleLaterApproval(sessionKey: key) }
+    }
+
+    // MARK: Demo showcase: approve later
+
+    /// How long after an "approve later" reply the approval arrives, long enough to switch apps or lock the
+    /// screen. `PINCER_DEMO_LATER_APPROVAL_MS` overrides it (checks use a short delay).
+    static var laterApprovalDelay: Duration {
+        if let raw = ProcessInfo.processInfo.environment["PINCER_DEMO_LATER_APPROVAL_MS"], let ms = Int(raw), ms >= 0 {
+            return .milliseconds(ms)
+        }
+        return .seconds(8)
+    }
+
+    private static let laterApprovalNote =
+        "I'll ask for approval in a few seconds — switch apps or lock the screen to answer it from the notification."
+
+    private static func wantsLaterApproval(_ lowered: String) -> Bool {
+        lowered.range(of: #"\bapprove\b"#, options: .regularExpression) != nil && lowered.contains("later")
+    }
+
+    /// Raises an approval outside any run, a while after the reply, so it can be answered from a notification.
+    private func scheduleLaterApproval(sessionKey key: String) {
+        let delay = Self.laterApprovalDelay
+        Task {
+            try? await Task.sleep(for: delay)
+            self.raiseLaterApproval(sessionKey: key)
+        }
+    }
+
+    private func raiseLaterApproval(sessionKey key: String) {
+        guard self.sessions[key] != nil else { return }
+        let id = Self.shortId("approval_")
+        let approval: JSONValue = [
+            "id": .string(id),
+            "request": ["command": "brew upgrade --greedy", "cwd": "/home/claw", "sessionKey": .string(key),
+                        "agentId": self.sessions[key]?["agentId"] ?? "main",
+                        "allowedDecisions": ["allow-once", "allow-always", "deny"]],
+            "createdAtMs": Self.now(),
+            "expiresAtMs": .number((Self.now().double ?? 0) + 600_000),
+        ]
+        self.approvals[id] = approval
+        self.approvalOrder.append(id)
+        self.emit("exec.approval.requested", approval)
     }
 
     /// `/compact [instructions]`: summarizes the context, like the Gateway's command.
@@ -1249,23 +1329,38 @@ actor DemoGateway {
 
     // MARK: Content
 
-    private static func reply(to text: String, usedTool: Bool) -> String {
+    private static func reply(to text: String, usedTool: Bool, note: String? = nil) -> String {
         let quoted = text.split(separator: "\n").map { "> \($0)" }.joined(separator: "\n")
         return """
-        \(quoted.isEmpty ? "" : quoted + "\n\n")This is **Pincer's demo mode**, so this reply is canned. \
-        Connect your own OpenClaw Gateway to chat with real agents.
+        \(quoted.isEmpty ? "" : quoted + "\n\n")\(note.map { $0 + "\n\n" } ?? "")This is **Pincer's demo mode**, \
+        so this reply is canned. Connect your own OpenClaw Gateway to chat with real agents.
 
-        ## Things to try
-
-        - Mention **tool** or **disk** to watch a live tool call\(usedTool ? " (like the one above)" : "").
-        - Ask for an **image** to get an inline chart.
-        - Say **approve** to raise a command approval (**approve once-only** for one without Always allow).
-        - Ask it to follow a **plan** to watch the task progress card.
-        - Switch models from the toolbar, or pin, rename and group chats in the sidebar.
+        \(Self.thingsToTry(usedTool: usedTool))
 
         ```text
         streaming: ok · markdown: ok · tools: \(usedTool ? "ran" : "on request")
         ```
+        """
+    }
+
+    // MARK: Demo showcase: tips
+
+    /// Trigger words match anywhere in a message, so each tip names only its own.
+    private static func thingsToTry(usedTool: Bool) -> String {
+        """
+        ## Things to try
+
+        - **tool** or **disk** runs a live tool call\(usedTool ? " (like the one above)" : "").
+        - **image** adds an inline chart.
+        - **approve** raises a command approval; **approve once-only** leaves out Always allow, and \
+        **approve later** sends one a few seconds after the reply.
+        - **ask** brings up a question card.
+        - **plan** walks the task progress card.
+        - Send **/compact**, or use **Compact Now** in the context ring.
+        - **⌘F** searches the chat — try "onsen" in *Japan trip*.
+        - **⌘K** opens the command palette, and **⌘1–⌘3** jump to pinned chats.
+        - On a Mac, **⌃⇧Space** opens Quick Capture.
+        - Switch models, or pin, rename and group chats in the sidebar.
         """
     }
 
@@ -1418,7 +1513,8 @@ actor DemoGateway {
                 """)]),
                 Self.message("assistant", [Self.text("""
                 👋 **Welcome to the Pincer demo.** Everything here is simulated on your device, so no Gateway \
-                is needed. Send a message to see a streamed reply. Try the words *tool*, *image* or *approve*.
+                is needed. Send a message to see a streamed reply. Try the words *tool*, *image*, *approve*, *ask* or *plan*, \
+                or send */compact*.
                 """)]),
             ])
         add("agent:main:discord:channel:123", agent: "main", title: "home-lab", preview: "Discord bridge is online.",
@@ -1428,21 +1524,17 @@ actor DemoGateway {
                              extra: ["provenance": ["sourceChannel": "discord"]]),
                 Self.message("assistant", [Self.text("I'll keep an eye on the home-lab channel and flag anything unusual.")]),
             ])
-        var trip: [JSONValue] = []
-        for day in 1...150 {
-            trip.append(Self.message("user", [Self.text("Idea for day \(day)?")]))
-            trip.append(Self.message("assistant", [Self.text("Day \(day): a slow morning, one museum, and **ramen** nearby.")]))
-        }
-        trip.append(Self.message("user", [Self.text("Plan a gentle first day in Tokyo.")]))
-        trip.append(Self.message("assistant", [Self.text("Start with Meiji Shrine, a low-key lunch, and an early evening in Shinjuku.")]))
         add("agent:main:dashboard:trip", agent: "main", title: "Japan trip", preview: "Kyoto day plan drafted.",
-            age: 60_000, ["label": "Japan trip", "category": "Personal", "color": "pink"], messages: trip)
+            age: 60_000, ["label": "Japan trip", "category": "Personal", "color": "pink", "pinned": true,
+                          "totalTokens": 192_000, "inputTokens": 192_000],
+            messages: Self.seedTripTranscript())
         add("agent:research:main", agent: "research", title: "Main", preview: "Research queue is clear.", age: 90_000,
             ["isMain": true], messages: [
                 Self.message("assistant", [Self.text("Scout is ready to dig into papers, repos, and docs.")]),
             ])
         add("agent:research:dashboard:papers", agent: "research", title: "Paper digest",
-            preview: "Three papers summarized.", age: 120_000, ["label": "Paper digest", "category": "Work", "unread": true],
+            preview: "Three papers summarized.", age: 120_000,
+            ["label": "Paper digest", "category": "Work", "unread": true, "pinned": true],
             messages: [
                 Self.message("user", [Self.text("Summarize the latest diffusion papers.")]),
                 Self.message("assistant", [Self.text("The main themes are consistency models, faster sampling, and video generation.")]),
@@ -1454,12 +1546,176 @@ actor DemoGateway {
             messages: [
                 Self.message("assistant", [Self.text("The paper mainly improves how retrieval-augmented summaries are evaluated.")]),
             ])
-        add("agent:coder:main", agent: "coder", title: "Main", preview: "No active coding run.", age: 240_000,
-            ["isMain": true], messages: [
+        add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
+            ["isMain": true, "unread": true], messages: [
                 Self.message("assistant", [Self.text("Forge can edit code, run builds, and report back briefly.")]),
+                Self.message("user", [Self.text("Fix the login timeout and push it.")]),
+                Self.message("assistant", [Self.text("""
+                Raised the login timeout to 30 s and the tests pass. I've asked to run \
+                `git push origin fix/login-timeout`; approve it and I'll push.
+                """)]),
             ])
         return (sessions, transcripts)
     }
+
+    // MARK: Demo showcase: Japan trip
+
+    /// 151 exchanges: early planning cycles through a few ideas; the latest 60 (one history page) walk the
+    /// actual route, so Find in Chat has real hits for "onsen", "Kyoto" and "ramen".
+    private static func seedTripTranscript() -> [JSONValue] {
+        let ideas: [(ask: String, answer: String)] = [
+            ("Another idea for a slow morning?", "a stroll through Yanaka's old lanes, with coffee at a sentō turned café"),
+            ("Something for a rainy afternoon?", "a depachika food-hall crawl, sampling as you go"),
+            ("Any good neighbourhoods for wandering?", "Kagurazaka's stone alleys, then dinner at a small French-Japanese bistro"),
+            ("What about something outdoorsy?", "the Mount Takao hike, with soba at the top"),
+            ("A cheap dinner idea?", "a late bowl of ramen at a counter near the hotel"),
+            ("Somewhere for a view?", "Shibuya Sky around sunset — book the slot a week out"),
+            ("A museum we shouldn't miss?", "the Ghibli Museum, if we can get tickets on the 10th of the month before"),
+        ]
+        var messages: [JSONValue] = []
+        func pair(_ user: String, _ assistant: String) {
+            messages.append(Self.message("user", [Self.text(user)]))
+            messages.append(Self.message("assistant", [Self.text(assistant)]))
+        }
+        for index in 0..<91 {
+            let idea = ideas[index % ideas.count]
+            pair(idea.ask, "Idea #\(index + 1): \(idea.answer).")
+        }
+        for (user, assistant) in Self.tripRoute { pair(user, assistant) }
+        return messages
+    }
+
+    private static let tripRoute: [(String, String)] = [
+        ("Flights are booked — we land at Haneda at 6:40 am on the 3rd.",
+         "Nice, an early arrival gives you a full first day. Pick up a Suica card at the airport for trains and konbini."),
+        ("How do we get from Haneda to the hotel in Asakusa?",
+         "The Keikyu line runs straight through to Asakusa in about 40 minutes, no transfers. Try to beat the 8 am rush."),
+        ("Can we check in that early?",
+         "Probably not before 3 pm, but the hotel will hold your bags. Drop them and head out light."),
+        ("What should the first morning look like?",
+         "Keep it easy: Sensō-ji before the crowds, melon pan on Nakamise-dōri, then a nap if the jet lag hits."),
+        ("Is Tsukiji still worth it for breakfast?",
+         "Yes — the wholesale market moved to Toyosu, but Tsukiji's outer market is still great in the morning: tamagoyaki, grilled scallops and a small bowl of fresh tuna over rice."),
+        ("What time should we get there?",
+         "Around 7:30. Most stalls open at 7 and the lanes are packed by 10."),
+        ("Any tips for eating at the market?",
+         "Carry cash and coins, eat at the stall where you buy, and don't eat while walking — there are usually standing spots."),
+        ("Afternoon on day two?",
+         "Walk from Tsukiji to Ginza, then take the Hibiya line up to Ueno Park for the museums if you still have energy."),
+        ("We want one really good bowl of ramen in Tokyo.",
+         "Try a shoyu counter in Ebisu, or the tsukemen shops on Tokyo Station's underground Ramen Street. Expect a queue at lunch; evenings are calmer."),
+        ("Do we need reservations for dinner in Shibuya?",
+         "For izakaya, usually not. For sushi counters and anywhere with fewer than ten seats, book a week or two ahead."),
+        ("Is teamLab worth the ticket?",
+         "If you like immersive art, yes. Book an early-evening slot and wear shorts — some rooms have ankle-deep water."),
+        ("A rainy-day backup in Tokyo?",
+         "The Tokyo National Museum, or an afternoon in Jimbōchō's secondhand bookshops."),
+        ("Should we get the JR Pass?",
+         "Probably not since the price went up. For Tokyo → Hakone → Kyoto → Osaka → Tokyo, single tickets come out a little cheaper."),
+        ("How much would single tickets cost?",
+         "Roughly ¥14,000 each for the long Shinkansen leg, plus local trains. I'll make a table once the dates are fixed."),
+        ("Let's add a night in Hakone.",
+         "Good call. It's 85 minutes from Shinjuku on the Romancecar, and one night is enough for the loop and a long soak."),
+        ("Find us a ryokan with a private onsen.",
+         "Look for rooms with an open-air bath of their own. Gōra and Sengokuhara have several in a mid-range budget, and dinner and breakfast are usually included."),
+        ("Any onsen etiquette we should know?",
+         "Wash thoroughly at the shower stools first, keep the small towel out of the water, and tie up long hair. Shared onsen can be strict about tattoos — another reason to book a private one."),
+        ("What's the Hakone loop?",
+         "Romancecar to Hakone-Yumoto, the switchback train to Gōra, cable car and ropeway over Ōwakudani, then a boat across Lake Ashi. It fills most of a day."),
+        ("Will we see Mount Fuji?",
+         "Only on clear days, and mornings are your best bet. Check the live cameras before heading up the ropeway."),
+        ("What's a kaiseki dinner like?",
+         "A long run of small seasonal courses, served in your room or a private dining room. Mention allergies when you book — they plan the menu ahead."),
+        ("Can we send our big bags ahead?",
+         "Yes, with takkyūbin from the hotel front desk. Send them two days early and they'll be waiting at the next hotel."),
+        ("Hakone onward — what's the route west?",
+         "Bus down to Odawara, then the Hikari Shinkansen. About two and a half hours door to door."),
+        ("Which side of the Shinkansen has the Fuji view?",
+         "Heading west, the right side — seat E in ordinary cars. The view only lasts a few minutes around Shin-Fuji."),
+        ("Should we reserve seats?",
+         "Yes, it's autumn. Reserved seats are cheap insurance, and oversized-luggage seats must be booked if you keep a big bag."),
+        ("What should we grab for the train?",
+         "An ekiben from Odawara station — aji sushi is the local speciality. Eating on the Shinkansen is completely normal."),
+        ("Where should we stay in Kyoto?",
+         "Near Shijō or Karasuma Oike: central, walkable to Gion, and on the subway line to the station."),
+        ("Fushimi Inari at dawn — worth the early alarm?",
+         "Absolutely. At 6 am the torii tunnels are nearly empty and the light is soft. Climb at least to Yotsutsuji for the view over the city."),
+        ("How long is the full hike?",
+         "Two to three hours to the summit and back. Most people turn around at Yotsutsuji, about 45 minutes up."),
+        ("Breakfast after the shrine?",
+         "Little is open at 8 am nearby, so bring onigiri from a konbini or ride one stop back toward the station."),
+        ("Arashiyama bamboo grove — morning or afternoon?",
+         "Morning, before 8 if you can; after that it's shoulder to shoulder. Pair it with Tenryū-ji's garden, which opens at 8:30."),
+        ("What else is in Arashiyama?",
+         "The Togetsukyō bridge, a riverside walk, the monkey park on the hill, and Ōkōchi Sansō villa, where matcha and a sweet come with admission."),
+        ("Can we fit in a tea ceremony?",
+         "Yes — small hosted ceremonies in Gion run about an hour. Book a morning slot and bring socks."),
+        ("Where should we eat in Gion?",
+         "Walk Pontochō at dusk and pick somewhere with a menu out front. For something special, book an obanzai counter a few days ahead."),
+        ("Is Kinkaku-ji worth the crowds?",
+         "It's busy but beautiful. Go right at opening, then walk on to Ryōan-ji's rock garden."),
+        ("How do we get around between temples?",
+         "Buses cover everything but get slow and packed. Mix the subway with taxis for short hops — they're reasonable split two ways."),
+        ("Day trip to Nara?",
+         "Easy: the Kintetsu line takes about 45 minutes from Kyoto. Tōdai-ji, the deer park and Kasuga Taisha fit in a relaxed half day."),
+        ("Are the Nara deer friendly?",
+         "Mostly, but they're bold. Buy shika senbei, bow and they'll often bow back, and keep the crackers hidden until you're ready — they nibble maps."),
+        ("What should we eat in Nara?",
+         "Kakinoha-zushi wrapped in persimmon leaves, and a mochi from Nakatanidō, where they pound it at startling speed."),
+        ("Then on to Osaka?",
+         "Yes, Nara to Namba is about 40 minutes. Staying there puts you right by Dōtonbori."),
+        ("Best takoyaki in Osaka?",
+         "Try a few stands along Dōtonbori and compare — crisp outside, molten inside. Give them a minute to cool."),
+        ("And ramen in Osaka?",
+         "Look for a rich tonkotsu or a light shio ramen around Namba. Many shops use ticket machines, so keep ¥1,000 notes handy."),
+        ("What's okonomiyaki?",
+         "A savoury cabbage pancake cooked on a griddle at your table. Osaka style is mixed; Hiroshima style is layered with noodles."),
+        ("Is Osaka Castle worth visiting?",
+         "The park and moat are lovely; the museum inside is modern. It makes a nice morning walk."),
+        ("Should we do Universal Studios?",
+         "Only if Super Nintendo World is a must — it's a full day with timed entry. Otherwise spend it in Shinsekai and Kuromon market."),
+        ("What's good at Kuromon?",
+         "Wagyu skewers, uni, strawberries on sticks and fresh oysters. It's pricier than it looks, so set a budget."),
+        ("How do we get back to Tokyo at the end?",
+         "Nozomi from Shin-Osaka, about two and a half hours. Book early afternoon so the last day isn't rushed."),
+        ("Last night in Tokyo — anything special?",
+         "A slow dinner in Shimokitazawa, then a nightcap in a tiny Golden Gai bar. Many charge a small seat fee."),
+        ("Could we squeeze in one more onsen in Tokyo?",
+         "A neighbourhood sentō or a big spa complex works for a quick soak, but nothing will match the Hakone ryokan."),
+        ("Help me with a packing list.",
+         "Layers for warm days and cool nights, slip-on shoes for temples, a small towel, a coin purse, a power bank and a foldable bag for souvenirs."),
+        ("Do we need much cash?",
+         "Some. Cards work in cities, but shrines, markets and small restaurants often want cash. 7-Eleven ATMs take foreign cards."),
+        ("SIM or pocket Wi-Fi?",
+         "An eSIM is easiest — install it before you fly and switch it on when you land. 20 GB is plenty for two weeks of maps."),
+        ("Any apps we should install?",
+         "A transit app for platforms and transfers, a maps app for walking, and a translator with camera mode for menus."),
+        ("How does tipping work?",
+         "It doesn't — there's no tipping. A sincere thank-you is all that's expected."),
+        ("What should we bring back as gifts?",
+         "Tea from Uji, a kitchen knife from Sennichimae Dōguyasuji, and boxed sweets from any station — they're beautifully wrapped."),
+        ("Recap the route for me?",
+         "Tokyo (4 nights) → Hakone (1) → Kyoto (4) → Osaka (2) → Tokyo (1). Twelve nights and two long Shinkansen legs."),
+        ("Is that too much moving around?",
+         "It's comfortable: three hotel changes plus the ryokan, with bags sent ahead twice. Most transfers are just a day pack."),
+        ("What if it rains on our Hakone day?",
+         "Skip the ropeway and linger in the onsen — rain on an open-air bath is lovely. Do the loop the next morning if it clears."),
+        ("Rough budget per day?",
+         "Around ¥25,000 each, not counting hotels: food, transport, temples and a little shopping. The ryokan night is the splurge."),
+        ("Can you draft our first full day in Kyoto?",
+         "Sure — an early start, the big sights before lunch, and an unhurried afternoon."),
+        ("Go ahead, lay it out.",
+         """
+         ## Kyoto, day one
+
+         - **6:00** Fushimi Inari before the crowds; turn back at Yotsutsuji.
+         - **9:30** Kiyomizu-dera, then down the Sannenzaka and Ninenzaka lanes.
+         - **12:30** Yudōfu lunch near Nanzen-ji.
+         - **14:00** Rest at the hotel.
+         - **16:30** The Philosopher's Path to Ginkaku-ji.
+         - **19:00** Dinner in Pontochō, by the river.
+         """),
+    ]
 
     /// A small bar chart, drawn rather than bundled so the demo needs no assets.
     private static func chartPNG() -> Data {

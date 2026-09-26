@@ -108,6 +108,49 @@ See [Start Pincer at login](../../guides/quick-capture/#start-pincer-at-login).
 - With no gateway set up, the panel offers **Open Pincer** so you can add one.
 - If a send fails, your text stays in the panel with the error. Press <kbd>Return</kbd> to try again.
 
+## Shortcuts say "Add a Gateway in Pincer first."
+
+No gateway is saved yet. Open Pincer and [connect a gateway](../../getting-started/connect-a-gateway/).
+
+If it says "Open Pincer once to finish setup.", this device hasn't created its device identity yet. Open Pincer and connect to a gateway once.
+
+## Shortcuts say the gateway "needs this device approved"
+
+The full message is "*Gateway* needs this device approved. Run openclaw devices approve on the Gateway host." Shortcuts use the app's device identity, so the gateway has to approve this device first. See [Pincer is waiting for pairing](#pincer-is-waiting-for-pairing).
+
+## Shortcuts say the gateway "isn't reachable"
+
+"*Gateway* isn't reachable." means the gateway didn't answer within 10 seconds. "Can't connect to *Gateway*: …" means it answered with an error, which follows the colon, for example "Can't connect to Home: unauthorized." Error codes in brackets, such as `[AUTH_TOKEN_MISMATCH]`, are left out so Siri doesn't read them. The same goes for "Couldn't send: …" and errors from the agent's run.
+
+- Check that the gateway is running and that this device can reach it, for example that Tailscale is connected.
+- Open Pincer and check that it connects. If it doesn't, the fixes above apply.
+
+**Get Unread Chats** and **Get Pending Approvals** with no gateway chosen skip gateways they can't reach, and only fail if none can be reached.
+
+## Ask Agent says "Sent, but … hasn't replied"
+
+"Sent, but *agent* hasn't replied within *N* seconds." means the message **was** delivered, but the reply took longer than the action's **Timeout**. The reply will show up in the chat in Pincer. Don't run the shortcut again, or the agent gets the prompt twice.
+
+For slow agents, raise **Timeout (seconds)** (up to 300), or turn off **Wait for Reply**.
+
+If the action shows the gateway's error, or "The run failed." or "The run was stopped.", the message was delivered but the agent's run ended without a reply. "Couldn't send: …" usually means the message wasn't delivered, with the reason after the colon.
+
+## Shortcuts say an agent or chat "isn't on" the gateway anymore
+
+"*Name* isn't on *Gateway* anymore." means the agent or chat saved in the shortcut was removed or archived. Edit the shortcut and pick it again.
+
+"*Gateway* isn't in Pincer anymore." (or "That Gateway isn't in Pincer anymore." when the name isn't known) means the gateway saved in the shortcut was removed from Pincer. Edit the shortcut and pick another one.
+
+## A shortcut shows old agent or chat names
+
+When a gateway is offline or Pincer isn't connected to it, saved shortcuts show the names Pincer last listed. Open the action's agent or chat list in the Shortcuts app, or open Pincer and connect, to refresh them.
+
+## Siri doesn't recognize an agent or chat name
+
+Siri learns agent and chat names when Pincer loads an agent list. Open Pincer and let it connect once after installing it, and again after adding agents. Until then, say a phrase without a name, such as "Ask Pincer", and pick from the list.
+
+See [Shortcuts & Siri](../../guides/shortcuts-and-siri/).
+
 ## Images from the web don't load
 
 Check that **Load images the agent links from the web** is on in Settings. Images from the gateway itself always load.

@@ -1403,6 +1403,9 @@ do {
 print("Share extension")
 await runShareChecks()
 
+print("Shortcuts & Siri")
+await runIntentChecks()
+
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     let url = arguments[index + 1]
@@ -1423,6 +1426,8 @@ if let index = arguments.firstIndex(of: "--live-no-usage"), arguments.count > in
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
+    print("Shortcuts on the demo")
+    await runDemoIntents()
     print("Chat navigation")
     await runNavigation()
     print("Quick Capture (demo)")
@@ -1854,6 +1859,8 @@ func waitFor(_ label: String, timeout: Double = 15, every interval: Int = 100, _
 
 @MainActor
 func runDemo() async {
+    // Keep "approve later" quick; the demo reads this when it schedules the approval.
+    setenv("PINCER_DEMO_LATER_APPROVAL_MS", "500", 1)
     let profile = GatewayProfile.demo()
     check(profile.isDemo && profile.authMode == .none, "demo profile")
     let gateway = GatewayStore(profile: profile)
@@ -1864,6 +1871,9 @@ func runDemo() async {
     guard connected else { return }
     check(gateway.agents.count >= 3, "agents (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions (\(gateway.sessions.count))")
+    check(gateway.approvals.map(\.id) == ["approval_demo_push"] && gateway.approvals.first?.isExpired() == false
+          && gateway.approvals.first?.command == "git push origin fix/login-timeout", "demo opens with one pending approval")
+    check(gateway.totalUnread >= 3, "demo opens with unread chats (\(gateway.totalUnread))")
 
     let key = "agent:main:main"
     await gateway.loadCommands(sessionKey: key, agentId: "main")
@@ -1878,9 +1888,47 @@ func runDemo() async {
     let trip = gateway.chat(for: "agent:main:dashboard:trip")
     await trip.load()
     check(trip.hasMoreHistory && trip.items.count == 120, "trip latest page (\(trip.items.count))")
+    // Find in Chat only searches what's loaded, so the latest page must have something to find.
+    for word in ["onsen", "Kyoto", "ramen"] {
+        let found = TranscriptSearch.matches(word, in: trip.entries)
+        check(found.count >= 3, "Find in Chat finds \"\(word)\" in the trip's latest page (\(found.count))")
+    }
+    let latestRamen = trip.items.filter { $0.plainText.localizedCaseInsensitiveContains("ramen") }.count
+    check(latestRamen * 2 <= trip.items.count, "trip isn't all ramen on the latest page (\(latestRamen)/\(trip.items.count))")
     await trip.loadOlder()
     await trip.loadOlder()
     check(!trip.hasMoreHistory && trip.items.count == 302, "trip paged to start (\(trip.items.count))")
+    let allRamen = trip.items.filter { $0.plainText.localizedCaseInsensitiveContains("ramen") }.count
+    check(allRamen * 2 <= trip.items.count, "trip transcript is varied (ramen in \(allRamen)/\(trip.items.count))")
+    let tripUsage = gateway.contextUsage(for: "agent:main:dashboard:trip")
+    check(tripUsage?.used == 192_000 && tripUsage?.limit == 200_000 && tripUsage?.level == .critical,
+          "trip context meter is critical (\(tripUsage?.summary ?? "none"))")
+    let mainUsage = gateway.contextUsage(for: "agent:main:main")
+    check(mainUsage?.level == .warning, "Main context meter is a warning (\(mainUsage?.summary ?? "none"))")
+
+    // Canned replies mustn't trip other trigger words by accident.
+    let helloStart = chat.entries.count
+    let approvalsBefore = gateway.approvals.count
+    await chat.send("hello")
+    let helloDone = await waitFor("hello reply", timeout: 20) { !chat.isRunning && chat.entries.count > helloStart + 1 }
+    check(helloDone && gateway.pendingQuestions(for: key).isEmpty && gateway.approvals.count == approvalsBefore && chat.progressCard == nil,
+          "a hello reply raises no question, approval or plan")
+    if case let .assistant(turn)? = chat.entries.last {
+        check(turn.body.contains("onsen") && turn.body.contains("⌘K") && turn.body.contains("/compact"), "hello reply lists things to try")
+        // A tip read back as a message should trigger only what it describes (tool/disk/image match as substrings).
+        func triggers(_ line: String) -> Set<String> {
+            let lowered = line.lowercased()
+            var found = Set<String>()
+            if ["tool", "disk"].contains(where: lowered.contains) { found.insert("tool") }
+            if lowered.contains("image") { found.insert("image") }
+            for word in ["approve", "ask", "plan"] where lowered.range(of: "\\b\(word)\\b", options: .regularExpression) != nil {
+                found.insert(word)
+            }
+            return found
+        }
+        let crossed = turn.body.split(separator: "\n").map(String.init).filter { $0.hasPrefix("- ") && triggers($0).count > 1 }
+        check(crossed.isEmpty, "each tip triggers one thing (\(crossed))")
+    }
 
     let before = chat.entries.count
     await chat.send("show me a tool and an image")
@@ -1949,14 +1997,15 @@ func runDemo() async {
     await history.loadMore()
     check(history.items.count == 10 && history.hasMore, "demo second page before resolving")
 
+    let seededApprovals = Set(gateway.approvals.map(\.id))
     await chat.send("please approve this")
-    let approvalSeen = await waitFor("approval") { !gateway.approvals.isEmpty }
+    let approvalSeen = await waitFor("approval") { gateway.approvals.contains { !seededApprovals.contains($0.id) } }
     check(approvalSeen, "demo approval surfaced")
-    if let approval = gateway.approvals.first {
+    if let approval = gateway.approvals.first(where: { !seededApprovals.contains($0.id) }) {
         await history.loadDetail(approval.id)
         check(history.details[approval.id]?.status == .pending, "demo approval.get returns a pending approval")
         await gateway.resolveApproval(approval, decision: "allow-once")
-        check(gateway.approvals.isEmpty, "demo approval resolved")
+        check(gateway.approvals.map(\.id) == Array(seededApprovals), "demo approval resolved, the seeded one still waits")
         let merged = await waitFor("history refresh after resolve", timeout: 5) { history.items.first?.id == approval.id }
         check(merged && history.items.count == 11, "resolved approval shows first after exec.approval.resolved (\(history.items.count))")
         if let top = history.items.first {
@@ -1971,6 +2020,34 @@ func runDemo() async {
     let settled = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
     check(settled, "demo approval run finished")
     await checkApprovalOutcomes(gateway, chat: chat, label: "demo")
+
+    // "approve later" raises its approval a moment after the run, outside it (to answer from a notification).
+    let knownApprovals = Set(gateway.approvals.map(\.id))
+    await chat.send("approve later")
+    var raisedDuringRun = false
+    let laterRunDone = await waitFor("approve later run", timeout: 20) {
+        if chat.isRunning && gateway.approvals.contains(where: { !knownApprovals.contains($0.id) }) { raisedDuringRun = true }
+        return !chat.isRunning
+    }
+    check(laterRunDone && !raisedDuringRun && gateway.approvals.allSatisfy { knownApprovals.contains($0.id) },
+          "approve later: no approval during the run")
+    if case let .assistant(turn)? = chat.entries.last {
+        check(turn.body.localizedCaseInsensitiveContains("few seconds"), "approve later: the reply says it's coming")
+    }
+    let laterSeen = await waitFor("later approval", timeout: 10) { gateway.approvals.contains { !knownApprovals.contains($0.id) } }
+    check(laterSeen && !chat.isRunning, "approve later: approval arrives after the run finished")
+    if let later = gateway.approvals.first(where: { !knownApprovals.contains($0.id) }) {
+        check(later.allowsAlways && later.allowedDecisions?.count == 3 && later.sessionKey == key && later.agentId == "main"
+              && later.command.contains("brew"), "approve later: full approval for this chat (\(later.command))")
+        check((later.expiresAt?.timeIntervalSinceNow ?? 0) > 9 * 60, "approve later: expires in about 10 minutes")
+        let outcome = await gateway.resolveApproval(later, decision: "allow-once")
+        check(outcome == .resolved && !gateway.approvals.contains { $0.id == later.id }, "approve later: resolved (\(outcome))")
+        await history.refresh()
+        check(history.items.first?.id == later.id && history.items.first?.statusLabel == "Allowed once",
+              "approve later: shows first in Approval History")
+    } else {
+        check(false, "approve later: approval surfaced")
+    }
 
     await chat.send("ask me what to remove")
     let demoAsked = await waitFor("demo question") { !gateway.pendingQuestions(for: key).isEmpty }
@@ -2027,19 +2104,24 @@ func runDemo() async {
     check(newKey != nil && gateway.sessions[newKey ?? ""] != nil, "demo sessions.create")
 
     // Command palette over the demo's chats.
-    check(gateway.pinnedChats.map(\.key) == ["agent:main:discord:channel:123"], "pinned chats (\(gateway.pinnedChats.map(\.key)))")
-    let tripKey = "agent:main:dashboard:trip"
-    await gateway.patch(tripKey, ["pinned": true])
-    let pinnedTrip = await waitFor("pin") { gateway.pinnedChats.count == 2 }
-    let sidebarOrder = gateway.sections().flatMap { $0.channels.map(\.row.key) }.filter { $0 == tripKey || $0.contains("discord") }
-    check(pinnedTrip && gateway.pinnedChats.map(\.key) == sidebarOrder, "⌘1–⌘9 follow the sidebar's order")
+    let seededPins: Set<String> = ["agent:main:discord:channel:123", "agent:main:dashboard:trip", "agent:research:dashboard:papers"]
+    func sidebarPins(_ keys: Set<String>) -> [String] {
+        gateway.sections().flatMap { $0.channels.map(\.row.key) }.filter(keys.contains)
+    }
+    check(Set(gateway.pinnedChats.map(\.key)) == seededPins && gateway.pinnedChats.map(\.key) == sidebarPins(seededPins),
+          "three pinned chats in sidebar order (\(gateway.pinnedChats.map(\.key)))")
+    let coderKey = "agent:coder:main"
+    await gateway.patch(coderKey, ["pinned": true])
+    let pinnedCoder = await waitFor("pin") { gateway.pinnedChats.count == 4 }
+    check(pinnedCoder && gateway.pinnedChats.map(\.key) == sidebarPins(seededPins.union([coderKey])), "⌘1–⌘9 follow the sidebar's order")
     let recentTarget = Notifier.Target(gatewayId: gateway.id, sessionKey: "agent:research:dashboard:papers")
     let chatItems = CommandPalette.chatItems(gateways: [gateway], selectedGatewayId: gateway.id, recent: [recentTarget])
     check(chatItems.first?.action == .openChat(recentTarget), "recent chats listed first")
     check(!chatItems.contains { $0.id.contains(":subagent:") }, "subagent runs left out")
     check(Set(chatItems.map(\.id)).count == chatItems.count, "each chat listed once")
-    check(chatItems.first { $0.id.hasSuffix(gateway.pinnedChats[0].key) }?.shortcut == "⌘1"
-          && chatItems.first { $0.id.hasSuffix(gateway.pinnedChats[1].key) }?.shortcut == "⌘2", "pinned chats show their shortcut")
+    let pinnedShortcuts = gateway.pinnedChats.map { pin in chatItems.first { $0.id.hasSuffix(":" + pin.key) }?.shortcut }
+    check(pinnedShortcuts == ["⌘1", "⌘2", "⌘3", "⌘4"], "pinned chats show their shortcut (\(pinnedShortcuts))")
+    check(chatItems.filter { $0.shortcut != nil }.count == 4, "only pinned chats have shortcuts")
     check(PaletteMatcher.rank(chatItems, query: "scout digest").first?.title == "Paper digest", "chats match on agent name")
     let newChats = CommandPalette.newChatItems(gateway: gateway)
     check(newChats.count == gateway.agents.count && newChats.contains { $0.action == .newChat(gatewayId: gateway.id, agentId: "research") },
@@ -2052,7 +2134,9 @@ func runDemo() async {
         check(models.first { $0.action == .setModel("openai/gpt-5.6-sol") }?.subtitle?.hasSuffix("Current") == true,
               "models page marks the session's model")
     }
-    await gateway.patch(tripKey, ["pinned": false])
+    await gateway.patch(coderKey, ["pinned": false])
+    let unpinned = await waitFor("unpin") { gateway.pinnedChats.count == 3 }
+    check(unpinned && Set(gateway.pinnedChats.map(\.key)) == seededPins, "unpinning restores the seeded pins")
     await runDemoExecPolicy(gateway, chat: chat)
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
@@ -2998,6 +3082,7 @@ func runLive(url: String, token: String) async {
     coder.clearCompaction()
     check(coder.compaction == nil, "result cleared when the popover closes")
     await checkPushLive(gateway)
+    await runLiveIntents(profile: profile, gateway: gateway)
     gateway.stop()
 
     let adminProfile = GatewayProfile(id: profile.id, name: "Mock", url: url, authMode: .token, access: .admin)
