@@ -71,6 +71,8 @@ public final class GatewayStore: Identifiable {
     public private(set) var defaultAgentId = "main"
     public private(set) var sessions: [String: SessionRow] = [:]
     public private(set) var approvals: [ExecApproval] = []
+    /// Pending agent questions (`ask_user`), oldest first.
+    public private(set) var questions: [QuestionPrompt] = []
     public private(set) var lastError: String?
     /// `models.list` per agent id, fetched when a model picker opens.
     public private(set) var modelCatalogs: [String: [ModelChoice]] = [:]
@@ -182,6 +184,15 @@ public final class GatewayStore: Identifiable {
         Task { await connection.stop() }
     }
 
+    /// Whether this connection can see and answer agent questions (`operator.questions`).
+    public var canAnswerQuestions: Bool { self.hello?.canAnswerQuestions ?? false }
+
+    /// Reconnects asking for `operator.questions` again, once its upgrade was approved on the host.
+    public func retryQuestionAccess() {
+        let connection = self.connection
+        Task { await connection.retryWithheldScopes() }
+    }
+
     public func reconnectIfNeeded() {
         let connection = self.connection
         Task { await connection.reconnectNow() }
@@ -220,6 +231,7 @@ public final class GatewayStore: Identifiable {
             let items = pending["approvals"]?.array ?? pending["items"]?.array ?? pending.array ?? []
             self.approvals = items.compactMap(ExecApproval.init)
         }
+        await self.refreshQuestions()
         self.bootstrapped = true
         Task { await PushRegistrar.shared.sync(self) }
         self.dumpSessionShapesIfRequested()
@@ -345,6 +357,16 @@ public final class GatewayStore: Identifiable {
                 self.approvals.removeAll { $0.id == approval.id }
                 self.approvals.append(approval)
                 self.notifier?.notifyApproval(approval, gateway: self)
+            }
+        case "question.requested":
+            if let prompt = QuestionPrompt(payload) {
+                let isNew = !self.questions.contains { $0.id == prompt.id }
+                self.upsertQuestion(prompt)
+                if isNew, prompt.isAnswerable() { self.notifier?.notifyQuestion(prompt, gateway: self) }
+            }
+        case "question.resolved":
+            if let id = payload["id"]?.text {
+                self.questions.removeAll { $0.id == id }
             }
         case "cron":
             self.automations.handleCronEvent(payload)
@@ -594,6 +616,72 @@ public final class GatewayStore: Identifiable {
               let main = self.sessions.values.first(where: { $0.isMain && $0.agentId == parts[1] })
         else { return key }
         return main.key
+    }
+
+    // MARK: Questions
+
+    /// Pending questions for a chat, dropping any that have expired.
+    public func pendingQuestions(for sessionKey: String?, at date: Date = Date()) -> [QuestionPrompt] {
+        self.questions.filter { $0.isAnswerable(at: date) && $0.belongs(to: sessionKey) }
+    }
+
+    func refreshQuestions() async {
+        // Older Gateways and connections without `operator.questions` just have none.
+        guard let result = try? await self.connection.request("question.list", [:]) else { return }
+        let items = result["questions"]?.array ?? result.array ?? []
+        self.questions = items.compactMap(QuestionPrompt.init).filter { $0.isAnswerable() }
+    }
+
+    private func upsertQuestion(_ prompt: QuestionPrompt) {
+        guard prompt.isAnswerable() else {
+            self.questions.removeAll { $0.id == prompt.id }
+            return
+        }
+        if let index = self.questions.firstIndex(where: { $0.id == prompt.id }) {
+            self.questions[index] = prompt
+        } else {
+            self.questions.append(prompt)
+        }
+    }
+
+    /// Sends the answers. Returns an error message to show on the card, or nil once it's answered.
+    public func answerQuestion(_ prompt: QuestionPrompt, answers: [String: [String]]) async -> String? {
+        let params: JSONValue = [
+            "id": .string(prompt.id),
+            "answers": ["answers": .object(answers.mapValues { .array($0.map(JSONValue.string)) })],
+        ]
+        return await self.resolveQuestion(prompt, params)
+    }
+
+    /// Skips the prompt; the agent is told the user declined to answer.
+    public func skipQuestion(_ prompt: QuestionPrompt) async -> String? {
+        await self.resolveQuestion(prompt, ["id": .string(prompt.id), "cancel": true])
+    }
+
+    private func resolveQuestion(_ prompt: QuestionPrompt, _ params: JSONValue) async -> String? {
+        do {
+            _ = try await self.connection.request("question.resolve", params)
+            self.questions.removeAll { $0.id == prompt.id }
+            return nil
+        } catch {
+            if case let GatewayError.rpc(_, message, details) = error {
+                // Already settled elsewhere (another client, a channel button, expiry) or the agent stopped.
+                let reason = details?["reason"]?.string
+                if ["QUESTION_NOT_FOUND", "QUESTION_ALREADY_TERMINAL", "QUESTION_REQUESTER_INACTIVE"].contains(reason)
+                    || message.contains("was not found")
+                {
+                    self.questions.removeAll { $0.id == prompt.id }
+                    return nil
+                }
+                if details?["missingScope"]?.string == GatewayConnection.questionsScope
+                    || message.contains(GatewayConnection.questionsScope)
+                {
+                    return "This device isn't allowed to answer questions yet. Approve its pending request on the Gateway host."
+                }
+                return message
+            }
+            return error.localizedDescription
+        }
     }
 
     public func update(profile: GatewayProfile) {

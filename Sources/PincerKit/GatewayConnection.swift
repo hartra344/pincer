@@ -50,6 +50,15 @@ public struct GatewayHello: Sendable {
     public let tickIntervalMs: Int
     public let methods: Set<String>
     public let snapshot: JSONValue?
+    /// Optional scopes Pincer left out because their upgrade is waiting for approval on the Gateway host.
+    public internal(set) var withheldScopes: Set<String> = []
+    /// The pairing request to approve (`openclaw devices approve <id>`) to get them.
+    public internal(set) var scopeUpgradeRequestId: String?
+
+    /// Whether this connection can see and answer agent questions.
+    public var canAnswerQuestions: Bool {
+        self.scopes.contains(GatewayConnection.questionsScope) || self.scopes.contains(GatewayConnection.adminScope)
+    }
 
     init(payload: JSONValue) {
         self.serverVersion = payload["server"]?["version"]?.string
@@ -77,7 +86,13 @@ public struct GatewayEvent: Sendable {
 public actor GatewayConnection {
     public static let protocolVersion = 4
     public static let role = "operator"
-    public static let scopes = ["operator.read", "operator.write", "operator.approvals"]
+    public static let scopes = ["operator.read", "operator.write", "operator.approvals", questionsScope]
+    /// Lets the user answer `ask_user` questions. Devices paired before Pincer asked for it need the
+    /// Gateway to approve a scope upgrade; until then Pincer connects without it (see `optionalScopes`).
+    public static let questionsScope = "operator.questions"
+    /// Scopes Pincer can live without: when the Gateway parks a scope upgrade for them, Pincer drops
+    /// them and connects with what was already approved, instead of locking the user out.
+    static let optionalScopes: Set<String> = [questionsScope]
     /// Only requested when the profile opts into managing Gateway settings.
     public static let adminScope = "operator.admin"
     public static let caps = ["tool-events"]
@@ -93,6 +108,11 @@ public actor GatewayConnection {
     private var shouldRun = false
     private var attempt = 0
     private var attemptStartedAt: Date?
+    /// Optional scopes left out after the Gateway parked an upgrade for them, and that request's id.
+    /// Cleared on `start()`, so a relaunch picks up an approval made in the meantime.
+    private var withheldScopes: Set<String> = []
+    private var scopeUpgradeRequestId: String?
+    private var requestedScopes: [String] { self.profile.requestedScopes.filter { !self.withheldScopes.contains($0) } }
     private var isWaitingToRetry = false
     private var lastFrameAt = Date()
     private var hello: GatewayHello?
@@ -130,6 +150,8 @@ public actor GatewayConnection {
         guard !self.shouldRun else { return }
         self.shouldRun = true
         self.attempt = 0
+        self.withheldScopes = []
+        self.scopeUpgradeRequestId = nil
         self.loopTask = Task { await self.runLoop() }
     }
 
@@ -163,6 +185,18 @@ public actor GatewayConnection {
         self.isWaitingToRetry = false
         self.loopTask?.cancel()
         self.teardown(reason: "reconnect requested")
+        self.loopTask = Task { await self.runLoop() }
+    }
+
+    /// Reconnects asking for the optional scopes again, after their upgrade was approved on the host.
+    /// If it's still pending, the Gateway refuses once more and Pincer falls back as before.
+    public func retryWithheldScopes() {
+        guard self.shouldRun, !self.withheldScopes.isEmpty else { return }
+        self.withheldScopes = []
+        self.attempt = 0
+        self.isWaitingToRetry = false
+        self.loopTask?.cancel()
+        self.teardown(reason: "retrying optional scopes")
         self.loopTask = Task { await self.runLoop() }
     }
 
@@ -207,6 +241,14 @@ public actor GatewayConnection {
                 // A superseded loop (reconnectNow/stop) must not tear down the attempt replacing it.
                 guard self.shouldRun, !Task.isCancelled else { return }
                 self.teardown(reason: error.localizedDescription)
+                if case let .rpc(_, _, details) = error,
+                   let reduced = Self.scopesAfterUpgradeRefusal(requested: self.requestedScopes, details: details)
+                {
+                    self.withheldScopes.formUnion(Set(self.requestedScopes).subtracting(reduced))
+                    self.scopeUpgradeRequestId = details?["requestId"]?.text
+                    DebugLog.write("scope upgrade pending (\(self.scopeUpgradeRequestId ?? "?")); connecting without \(self.withheldScopes.sorted())")
+                    continue
+                }
                 switch Self.classify(error) {
                 case let .pairing(requestId):
                     self.emit(.awaitingPairing(requestId: requestId, deviceId: self.identity.deviceId))
@@ -245,6 +287,29 @@ public actor GatewayConnection {
         self.isWaitingToRetry = true
         try? await Task.sleep(for: .seconds(seconds))
         self.isWaitingToRetry = false
+    }
+
+    /// When a connect fails only because the Gateway wants to approve optional scopes this device
+    /// never had, returns the scopes to retry with; otherwise nil.
+    public static func scopesAfterUpgradeRefusal(requested: [String], details: JSONValue?) -> [String]? {
+        guard let details, details["reason"]?.string == "scope-upgrade" else { return nil }
+        let approved = details["approvedScopes"]?.array?.compactMap(\.string)
+        let isAdmin = approved?.contains(Self.adminScope) == true
+        let dropped = requested.filter { scope in
+            Self.optionalScopes.contains(scope) && !isAdmin && !(approved?.contains(scope) ?? false)
+        }
+        guard !dropped.isEmpty else { return nil }
+        let reduced = requested.filter { !dropped.contains($0) }
+        // Something required is still missing too, so dropping the optional ones wouldn't help.
+        if let approved, !isAdmin, reduced.contains(where: { !approved.contains($0) && !Self.impliedByApproved($0, approved) }) {
+            return nil
+        }
+        return reduced
+    }
+
+    /// OpenClaw's scope implications that matter for Pincer's own scopes.
+    private static func impliedByApproved(_ scope: String, _ approved: [String]) -> Bool {
+        scope == "operator.read" && approved.contains("operator.write")
     }
 
     private enum FailureClass { case pairing(String?), staleDeviceToken, fatal(String), retry(String) }
@@ -328,7 +393,7 @@ public actor GatewayConnection {
             clientId: clientId,
             clientMode: clientMode,
             role: Self.role,
-            scopes: self.profile.requestedScopes,
+            scopes: self.requestedScopes,
             signedAtMs: signedAt,
             token: signatureToken,
             nonce: nonce)
@@ -347,7 +412,7 @@ public actor GatewayConnection {
                 "instanceId": .string(Self.instanceId),
             ],
             "role": .string(Self.role),
-            "scopes": JSONValue(self.profile.requestedScopes),
+            "scopes": JSONValue(self.requestedScopes),
             "caps": JSONValue(Self.caps),
             "commands": [],
             "permissions": [:],
@@ -365,7 +430,9 @@ public actor GatewayConnection {
 
         let response = try await self.send(method: "connect", params: .object(params), on: task, timeout: 20)
         guard generation == self.generation else { throw GatewayError.closed("superseded") }
-        let hello = GatewayHello(payload: response)
+        var hello = GatewayHello(payload: response)
+        hello.withheldScopes = self.withheldScopes
+        hello.scopeUpgradeRequestId = self.withheldScopes.isEmpty ? nil : self.scopeUpgradeRequestId
         if let issued = response["auth"]?["deviceToken"]?.text, issued != deviceToken {
             self.profile.deviceToken = issued
         }

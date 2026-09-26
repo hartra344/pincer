@@ -28,6 +28,8 @@ const METHODS = [
   'artifacts.download',
   'exec.approval.list',
   'exec.approval.resolve',
+  'question.list',
+  'question.resolve',
   'users.prefs.get',
   'users.prefs.set',
   'commands.list',
@@ -45,6 +47,8 @@ const EVENTS = [
   'agent',
   'exec.approval.requested',
   'exec.approval.resolved',
+  'question.requested',
+  'question.resolved',
   'users.prefs.changed',
   'plugins.changed',
   'progressCard.changed',
@@ -438,6 +442,7 @@ function createSeedState() {
     pairedDevices: new Map(),
     pendingPairing: new Map(),
     pendingApprovals: new Map(),
+    questions: new Map(),
     progressCards: new Map(),
     // Gateway-owned custom group catalog: names in display order, kept even when empty.
     groups: ['Home', 'Personal', 'Work'],
@@ -545,18 +550,26 @@ function verifyConnect(params, challenge, token) {
   return { deviceId: device.id };
 }
 
-function deviceTokenFor(state, deviceId) {
+function deviceTokenFor(state, deviceId, scopes = []) {
   const existing = state.pairedDevices.get(deviceId);
-  if (existing?.deviceToken) return existing.deviceToken;
+  if (existing?.deviceToken) {
+    for (const scope of scopes) existing.scopes.add(scope);
+    return existing.deviceToken;
+  }
   const deviceToken = `dt_${randHex(18)}`;
-  state.pairedDevices.set(deviceId, { deviceToken, pairedAt: nowMs() });
+  state.pairedDevices.set(deviceId, { deviceToken, pairedAt: nowMs(), scopes: new Set(scopes) });
   return deviceToken;
+}
+
+// Like the Gateway: operator.admin covers every operator scope, operator.write covers read.
+function scopeApproved(scope, approved) {
+  return approved.has(scope) || approved.has('operator.admin') || (scope === 'operator.read' && approved.has('operator.write'));
 }
 
 function approvePairing(state, requestId) {
   const pending = state.pendingPairing.get(requestId);
   if (!pending) return false;
-  deviceTokenFor(state, pending.deviceId);
+  deviceTokenFor(state, pending.deviceId, pending.scopes ?? []);
   state.pendingPairing.delete(requestId);
   console.log(`Pairing approved ${requestId}`);
   return true;
@@ -587,6 +600,69 @@ function makeHelloPayload(state, params, connId, deviceId) {
       attachments: { maxBytes: 20000000, maxImageBytes: 5000000 },
     },
   };
+}
+
+const QUESTIONS_SCOPE = 'operator.questions';
+
+function hasQuestionsScope(conn) {
+  return conn.scopes?.includes(QUESTIONS_SCOPE) || conn.scopes?.includes('operator.admin');
+}
+
+function sendMissingQuestionsScope(conn, id) {
+  sendErr(conn, id, 'FORBIDDEN', `missing scope: ${QUESTIONS_SCOPE}`, {
+    code: 'MISSING_SCOPE',
+    missingScope: QUESTIONS_SCOPE,
+    requiredScopes: [QUESTIONS_SCOPE],
+  });
+}
+
+function settleQuestion(state, record, status, answers = undefined) {
+  if (record.status !== 'pending') return;
+  record.status = status;
+  if (answers) record.answers = answers;
+  broadcast(state, 'question.resolved', { id: record.id, status, ...(answers ? { answers } : {}) }, hasQuestionsScope);
+}
+
+// Asks an ask_user question like OpenClaw does (question.requested), then blocks the run until it's settled.
+async function simulateQuestion(state, run, sessionKey, row) {
+  const toolCallId = shortId('call_');
+  const options = [
+    { label: 'Disconnect Discord from OpenClaw', description: 'Remove the Discord channel integration/config; the server itself stays intact' },
+    { label: 'Delete one channel in the Discord server', description: 'e.g. #coworking or #gyms — tell me which' },
+    { label: 'Stop watching Discord channels here', description: 'Only stop this chat from ambiently watching them' },
+  ];
+  const args = { questions: [{ id: 'discord_remove', header: 'Discord', question: 'What do you want removed?', options }] };
+  broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'tool', data: { phase: 'start', name: 'ask_user', toolCallId, args } });
+  const record = {
+    id: shortId('ask_'),
+    questions: [{ questionId: 'discord_remove', header: 'Discord', question: 'What do you want removed?', options, isOther: true }],
+    agentId: row.agentId,
+    sessionKey,
+    runId: run.runId,
+    createdAtMs: nowMs(),
+    expiresAtMs: nowMs() + 900_000,
+    status: 'pending',
+  };
+  state.questions.set(record.id, record);
+  broadcast(state, 'question.requested', clone(record), hasQuestionsScope);
+  while (record.status === 'pending' && !run.aborted) {
+    await runDelay(run, 100);
+    if (nowMs() >= record.expiresAtMs) settleQuestion(state, record, 'expired');
+  }
+  if (run.aborted) {
+    settleQuestion(state, record, 'cancelled');
+    return null;
+  }
+  const picked = record.answers?.answers?.discord_remove ?? [];
+  const output = record.status === 'answered' ? `User answered: ${picked.join(', ')}` : `User ${record.status === 'expired' ? "didn't answer in time" : 'skipped the question'}`;
+  broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'tool', data: { phase: 'result', name: 'ask_user', toolCallId, isError: false, result: output } });
+  const transcript = state.transcripts.get(sessionKey);
+  const toolMsg = makeMessage('assistant', [toolCallBlock(toolCallId, 'ask_user', args)], { openclaw: { runId: run.runId }, model: rowModel(row) });
+  const toolResult = makeMessage('toolResult', [textBlock(output)], { openclaw: { runId: run.runId }, extra: { toolCallId, toolName: 'ask_user', isError: false } });
+  transcript.push(toolMsg, toolResult);
+  broadcastSessionMessage(state, sessionKey, toolMsg, transcript.length - 1);
+  broadcastSessionMessage(state, sessionKey, toolResult, transcript.length);
+  return record.status === 'answered' ? `You picked: ${picked.join(', ')}.` : 'Okay, skipping that.';
 }
 
 function runDelay(run, ms) {
@@ -784,6 +860,12 @@ async function simulateRun(state, run, params) {
       if (run.aborted) return;
     }
 
+    let answered = null;
+    if (/\bask\b/i.test(String(text ?? ''))) {
+      answered = await simulateQuestion(state, run, sessionKey, row);
+      if (run.aborted) return;
+    }
+
     const wantsTool = /tool|disk|image/i.test(String(text ?? ''));
     if (wantsTool) {
       const toolCallId = shortId('call_');
@@ -813,7 +895,7 @@ async function simulateRun(state, run, params) {
       broadcastSessionMessage(state, sessionKey, toolResult, transcript.length);
     }
 
-    const reply = `I heard: "${String(text ?? '')}".\n\n## Mock response\n\n- Streaming deltas are working.\n- Tool events are ${wantsTool ? 'included' : 'available when requested'}.\n- Markdown rendering can be tested here.\n\n\`\`\`text\nrunId=${run.runId}\n\`\`\``;
+    const reply = answered ?? `I heard: "${String(text ?? '')}".\n\n## Mock response\n\n- Streaming deltas are working.\n- Tool events are ${wantsTool ? 'included' : 'available when requested'}.\n- Markdown rendering can be tested here.\n\n\`\`\`text\nrunId=${run.runId}\n\`\`\``;
     const words = reply.split(/(\s+)/).filter((p) => p.length > 0);
     let out = '';
     for (const word of words) {
@@ -1171,6 +1253,34 @@ function handleAuthedRequest(state, conn, msg) {
       broadcast(state, 'users.prefs.changed', { profileId: 'gateway-owner', keys: Object.keys(entries) });
       break;
     }
+    case 'question.list': {
+      if (!hasQuestionsScope(conn)) return sendMissingQuestionsScope(conn, id);
+      sendRes(conn, id, { questions: [...state.questions.values()].filter((q) => q.status === 'pending').map(clone) });
+      break;
+    }
+    case 'question.resolve': {
+      if (!hasQuestionsScope(conn)) return sendMissingQuestionsScope(conn, id);
+      const record = state.questions.get(params.id);
+      if (!record) {
+        return sendErr(conn, id, 'INVALID_REQUEST', `question '${params.id}' was not found`, { reason: 'QUESTION_NOT_FOUND' });
+      }
+      if (record.status !== 'pending') {
+        return sendErr(conn, id, 'INVALID_REQUEST', 'question is already resolved', { reason: 'QUESTION_ALREADY_TERMINAL' });
+      }
+      if (params.cancel === true) {
+        settleQuestion(state, record, 'cancelled');
+        return sendRes(conn, id, { status: 'cancelled' });
+      }
+      const answers = params.answers?.answers;
+      const complete = answers && record.questions.every((q) =>
+        Array.isArray(answers[q.questionId]) && answers[q.questionId].length > 0 && answers[q.questionId].every((v) => typeof v === 'string'));
+      if (!complete) {
+        return sendErr(conn, id, 'INVALID_REQUEST', 'every question needs an answer', { reason: 'QUESTION_INVALID_ANSWER' });
+      }
+      settleQuestion(state, record, 'answered', { answers });
+      sendRes(conn, id, { status: 'answered', answers: { answers } });
+      break;
+    }
     case 'exec.approval.list': {
       sendRes(conn, id, { approvals: [...state.pendingApprovals.values()].map(clone) });
       break;
@@ -1213,20 +1323,31 @@ function handleConnect(state, conn, msg, options) {
     return;
   }
 
-  if (!state.pairedDevices.has(deviceId) && options.pairing !== 'off') {
+  const requestedScopes = Array.isArray(params.scopes) ? params.scopes : [];
+  const paired = state.pairedDevices.get(deviceId);
+  // A paired device asking for scopes it was never approved for needs a scope upgrade.
+  const upgrade = paired && requestedScopes.some((scope) => !scopeApproved(scope, paired.scopes));
+  if ((!paired || upgrade) && options.pairing !== 'off') {
+    const reason = paired ? 'scope-upgrade' : 'not-paired';
     const requestId = shortId('pair_');
-    state.pendingPairing.set(requestId, { deviceId, displayName: params.client?.displayName ?? 'unknown', createdAt: nowMs() });
-    console.log(`Pairing request ${requestId} from ${params.client?.displayName ?? 'unknown'} (${deviceId.slice(0, 8)})`);
+    // MOCK_LEGACY_PAIRING=1 approves first pairings without operator.questions, like a device
+    // paired before Pincer asked for it, so the next connect needs a scope upgrade.
+    const grantScopes = !paired && options.legacyPairing ? requestedScopes.filter((scope) => scope !== 'operator.questions') : requestedScopes;
+    state.pendingPairing.set(requestId, { deviceId, scopes: grantScopes, displayName: params.client?.displayName ?? 'unknown', createdAt: nowMs() });
+    console.log(`Pairing request ${requestId} (${reason}) from ${params.client?.displayName ?? 'unknown'} (${deviceId.slice(0, 8)})`);
     sendErr(conn, id, 'NOT_PAIRED', `pairing required (requestId: ${requestId})`, {
       code: 'PAIRING_REQUIRED',
+      reason,
       requestId,
       deviceId,
+      requestedScopes,
+      ...(paired ? { approvedScopes: [...paired.scopes] } : {}),
     });
     if (options.pairing === 'auto') setTimeout(() => approvePairing(state, requestId), 3000);
     conn.ws.close(1008, 'PAIRING_REQUIRED');
     return;
   }
-  if (options.pairing === 'off') deviceTokenFor(state, deviceId);
+  if (options.pairing === 'off') deviceTokenFor(state, deviceId, requestedScopes);
 
   conn.authenticated = true;
   conn.connId = shortId('conn_');
@@ -1259,6 +1380,7 @@ export async function startServer(opts = {}) {
     mockToken: opts.mockToken ?? process.env.MOCK_TOKEN ?? 'dev-token',
     pairing: opts.pairing ?? process.env.MOCK_PAIRING ?? 'auto',
     background: opts.background ?? process.env.MOCK_BACKGROUND === '1',
+    legacyPairing: opts.legacyPairing ?? process.env.MOCK_LEGACY_PAIRING === '1',
   };
   const state = createSeedState();
   setupManualPairing(state, options.pairing === 'manual');

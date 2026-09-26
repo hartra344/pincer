@@ -663,7 +663,9 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
     private mutating func derive() {
         let object = self.arguments?.data(using: .utf8)
             .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-        if let object {
+        if let object, self.name == "ask_user", let questions = object["questions"] as? [[String: Any]] {
+            self.summary = questions.lazy.compactMap { $0["question"] as? String }.first
+        } else if let object {
             self.summary = ["command", "cmd", "path", "file_path", "url", "query", "pattern", "action"]
                 .lazy.compactMap { object[$0] as? String }.first
         } else {

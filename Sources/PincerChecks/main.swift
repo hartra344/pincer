@@ -246,6 +246,110 @@ print("Exec approvals")
 let approval = ExecApproval(json(#"{"id":"ap1","request":{"command":"rm -rf build","cwd":"/p","sessionKey":"agent:main:main"},"expiresAtMs":1}"#))
 check(approval?.id == "ap1" && approval?.command == "rm -rf build" && approval?.cwd == "/p", "approval payload")
 
+print("Agent questions")
+do {
+    let record = json(#"""
+    {"id":"ask_1","agentId":"main","sessionKey":"agent:main:discord:channel:1","runId":"r1","createdAtMs":1000,
+     "expiresAtMs":4102444800000,"status":"pending","questions":[
+      {"questionId":"discord_remove","header":"Discord","question":"What do you want removed?","isOther":true,"options":[
+        {"label":"Disconnect Discord from OpenClaw","description":"Remove the config"},
+        {"label":"Delete one channel","description":""},
+        {"label":"Stop watching"}]},
+      {"questionId":"tags","header":"Tags","question":"Which tags?","multiSelect":true,"options":[{"label":"a"},{"label":"b"},{"label":"c"}]},
+      {"questionId":"why","header":"Why","question":"Why?","options":[]}]}
+    """#)
+    let prompt = QuestionPrompt(record)
+    check(prompt?.id == "ask_1" && prompt?.questions.count == 3 && prompt?.sessionKey == "agent:main:discord:channel:1",
+          "question.requested record parses")
+    check(QuestionPrompt(json(#"{"question":{"id":"ask_2","expiresAtMs":1,"questions":[{"questionId":"q","header":"","question":"Q?","options":[]}]}}"#))?.id == "ask_2",
+          "question.get wrapper parses")
+    check(QuestionPrompt(json(#"{"id":"ask_3","questions":[]}"#)) == nil, "prompt without questions rejected")
+    check(QuestionPrompt(json(#"{"questions":[{"questionId":"q","question":"Q?"}]}"#)) == nil, "prompt without id rejected")
+    // ask_user tool arguments use `id` rather than `questionId`.
+    check(AgentQuestion(json(#"{"id":"q1","header":"H","question":"Q?","options":[]}"#))?.questionId == "q1", "tool-argument question id")
+    check(AgentQuestion(json(#"{"questionId":"q","question":"Q?","url":"javascript:alert(1)"}"#))?.url == nil
+          && AgentQuestion(json(#"{"questionId":"q","question":"Q?","url":"https://example.com/x"}"#))?.url?.host() == "example.com",
+          "only http(s) question links")
+    if let prompt {
+        let single = prompt.questions[0], multi = prompt.questions[1], open = prompt.questions[2]
+        check(single.options.count == 3 && single.options[0].description == "Remove the config" && single.options[1].description == nil,
+              "options keep descriptions, blank ones dropped")
+        check(single.allowsFreeText && !multi.allowsFreeText && open.allowsFreeText, "free text needs isOther or no options")
+        check(prompt.isAnswerable(at: Date(timeIntervalSince1970: 2000)), "pending prompt answerable")
+        check(prompt.isExpired(at: Date(timeIntervalSince1970: 4_102_444_800)), "prompt expires at expiresAtMs")
+        check(prompt.belongs(to: "agent:main:discord:channel:1") && prompt.belongs(to: "AGENT:main:discord:channel:1")
+              && !prompt.belongs(to: "agent:main:main") && prompt.belongs(to: nil), "prompt matched to its chat")
+        check(QuestionPrompt(json(#"{"id":"x","status":"answered","questions":[{"questionId":"q","question":"Q?"}]}"#))?.isAnswerable() == false,
+              "answered prompt not answerable")
+
+        var draft = QuestionDraft()
+        check(draft.answers(for: prompt) == nil, "no answers until every question has one")
+        draft.toggle("Delete one channel", in: single)
+        draft.toggle("Disconnect Discord from OpenClaw", in: single)
+        check(draft.values(for: single) == ["Disconnect Discord from OpenClaw"], "single choice replaces the pick")
+        draft.toggle("Disconnect Discord from OpenClaw", in: single)
+        check(draft.values(for: single) == nil, "tapping the pick again clears it")
+        draft.toggle("Not an option", in: single)
+        check(draft.values(for: single) == nil, "unknown labels ignored")
+        check(draft.toggle(number: 3, in: single) && draft.values(for: single) == ["Stop watching"], "number key picks an option")
+        check(!draft.toggle(number: 4, in: single) && !draft.toggle(number: 0, in: single), "out-of-range number keys ignored")
+        draft.setText("  Remove just #gyms  ", for: single)
+        check(draft.values(for: single) == ["Remove just #gyms"], "typed answer replaces a single pick, trimmed")
+        draft.toggle("Stop watching", in: single)
+        check(draft.values(for: single) == ["Stop watching"] && draft.text(for: single).isEmpty, "picking an option clears typed text")
+        draft.setText("   ", for: single)
+        check(draft.values(for: single) == ["Stop watching"], "blank text keeps the pick")
+
+        draft.toggle("c", in: multi)
+        draft.toggle("a", in: multi)
+        check(draft.values(for: multi) == ["a", "c"], "multi-select answers in option order")
+        draft.setText("ignored", for: multi)
+        check(draft.values(for: multi) == ["a", "c"], "no free text without isOther")
+        check(draft.answers(for: prompt) == nil, "still missing the open question")
+        draft.setText("Because", for: open)
+        check(draft.answers(for: prompt) == ["discord_remove": ["Stop watching"], "tags": ["a", "c"], "why": ["Because"]],
+              "answers cover every question")
+
+        let multiOther = AgentQuestion(json(#"{"questionId":"m","question":"Q?","multiSelect":true,"isOther":true,"options":[{"label":"x"}]}"#))!
+        var mixed = QuestionDraft()
+        mixed.toggle("x", in: multiOther)
+        mixed.setText("also y", for: multiOther)
+        check(mixed.values(for: multiOther) == ["x", "also y"], "multi-select keeps picks alongside typed text")
+        let secret = AgentQuestion(json(#"{"questionId":"s","question":"Token?","isSecret":true,"options":[]}"#))!
+        var secretDraft = QuestionDraft()
+        secretDraft.setText(" s3cret ", for: secret)
+        check(secretDraft.values(for: secret) == [" s3cret "], "secret answers sent exactly as typed")
+    }
+    let askTool = ToolActivity(id: "c", name: "ask_user", arguments: #"{"questions":[{"id":"q","header":"H","question":"What do you want removed?","options":[]}]}"#,
+                               result: nil, isError: false, isRunning: true)
+    check(askTool.summary == "What do you want removed?", "ask_user card summarized by its question")
+
+    let base = ["operator.read", "operator.write", "operator.approvals", "operator.questions"]
+    let legacy = #"{"code":"PAIRING_REQUIRED","reason":"scope-upgrade","requestId":"pair_1","approvedScopes":["operator.read","operator.write","operator.approvals"]}"#
+    check(GatewayConnection.scopesAfterUpgradeRefusal(requested: base, details: json(legacy))
+            == ["operator.read", "operator.write", "operator.approvals"],
+          "scope upgrade refusal drops operator.questions for a legacy device")
+    check(GatewayConnection.scopesAfterUpgradeRefusal(
+            requested: base,
+            details: json(#"{"reason":"scope-upgrade","approvedScopes":["operator.write","operator.approvals"]}"#))
+            == ["operator.read", "operator.write", "operator.approvals"],
+          "read is implied by an approved write scope")
+    check(GatewayConnection.scopesAfterUpgradeRefusal(
+            requested: base, details: json(#"{"reason":"not-paired","requestId":"pair_1"}"#)) == nil,
+          "first pairing isn't treated as a scope upgrade")
+    check(GatewayConnection.scopesAfterUpgradeRefusal(
+            requested: base, details: json(#"{"reason":"scope-upgrade","approvedScopes":["operator.admin"]}"#)) == nil,
+          "admin approval leaves nothing to drop")
+    check(GatewayConnection.scopesAfterUpgradeRefusal(
+            requested: base, details: json(#"{"reason":"scope-upgrade","approvedScopes":\#(base.description)}"#)) == nil,
+          "already-approved questions scope isn't dropped")
+    check(GatewayConnection.scopesAfterUpgradeRefusal(
+            requested: base + ["operator.admin"], details: json(legacy)) == nil,
+          "no fallback when a required scope is missing too")
+    check(GatewayConnection.scopesAfterUpgradeRefusal(requested: base, details: nil) == nil,
+          "errors without details don't fall back")
+}
+
 print("Gateway config schema")
 let configSchema = ConfigSchema(response: json(#"""
 {"version":"2026.9.1","schema":{"type":"object","definitions":{"port":{"type":"integer","minimum":1,"maximum":65535}},
@@ -889,6 +993,10 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     print("Live against \(url)")
     await runLive(url: url, token: token)
 }
+if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count > index + 2 {
+    print("Scope upgrade fallback against \(arguments[index + 1])")
+    await runScopeUpgrade(url: arguments[index + 1], token: arguments[index + 2])
+}
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
@@ -983,6 +1091,37 @@ func runDemo() async {
 
     let settled = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
     check(settled, "demo approval run finished")
+
+    await chat.send("ask me what to remove")
+    let demoAsked = await waitFor("demo question") { !gateway.pendingQuestions(for: key).isEmpty }
+    check(demoAsked, "demo ask_user question surfaced")
+    if let prompt = gateway.pendingQuestions(for: key).first {
+        check(prompt.questions.first?.options.count == 3 && prompt.questions.first?.allowsFreeText == true, "demo question has options and free text")
+        check(gateway.pendingQuestions(for: "agent:main:elsewhere").isEmpty, "question stays in its own chat")
+        let incomplete = await gateway.answerQuestion(prompt, answers: [:])
+        check(incomplete != nil && !gateway.questions.isEmpty, "incomplete answers rejected and the card stays")
+        var draft = QuestionDraft()
+        draft.toggle(number: 3, in: prompt.questions[0])
+        let error = await gateway.answerQuestion(prompt, answers: draft.answers(for: prompt) ?? [:])
+        check(error == nil && gateway.questions.isEmpty, "demo question answered")
+        let late = await gateway.skipQuestion(prompt)
+        check(late == nil, "settling an already-answered question is quiet")
+    }
+    let demoAnswered = await waitFor("demo answer reply", timeout: 20) {
+        if case let .assistant(turn)? = chat.entries.last { return !chat.isRunning && turn.body.contains("Stop watching Discord channels here") }
+        return false
+    }
+    check(demoAnswered, "demo reply uses the answer")
+    await chat.send("ask me again")
+    let demoAskedAgain = await waitFor("second demo question") { !gateway.pendingQuestions(for: key).isEmpty }
+    if demoAskedAgain, let prompt = gateway.pendingQuestions(for: key).first {
+        let error = await gateway.skipQuestion(prompt)
+        check(error == nil && gateway.questions.isEmpty, "demo question skipped")
+    } else {
+        check(false, "second demo question surfaced")
+    }
+    let demoSkipped = await waitFor("skip reply", timeout: 20) { !chat.isRunning }
+    check(demoSkipped, "demo run finishes after a skip")
     await chat.send("follow a plan")
     let demoPlanned = await waitFor("demo progress card", timeout: 20) {
         chat.progressCard?.isComplete == true && !chat.isRunning
@@ -1097,6 +1236,33 @@ func runNavigation() async {
           "removing a gateway drops its chats from history")
     app.goBack()
     check(app.selectedGatewayId == first.id, "Back still works after removing a gateway")
+}
+
+/// Needs a mock started with MOCK_PAIRING=auto MOCK_LEGACY_PAIRING=1, so the first pairing
+/// leaves out operator.questions and the next connect is refused as a scope upgrade.
+@MainActor
+func runScopeUpgrade(url: String, token: String) async {
+    let profile = GatewayProfile(name: "Legacy", url: url, authMode: .token)
+    profile.secret = token
+    let gateway = GatewayStore(profile: profile)
+    gateway.start()
+    let connected = await waitFor("connection after scope upgrade refusal", timeout: 30) {
+        gateway.state.isConnected && !gateway.sessions.isEmpty
+    }
+    check(connected, "legacy device still connects while its scope upgrade is pending")
+    guard connected else { return }
+    check(gateway.hello?.withheldScopes == [GatewayConnection.questionsScope] && !gateway.canAnswerQuestions,
+          "connected without operator.questions (\(gateway.hello?.withheldScopes ?? []))")
+    check(gateway.hello?.scopeUpgradeRequestId?.hasPrefix("pair_") == true, "upgrade request id kept for the hint")
+    // The mock approves upgrades after 3 seconds; Try Again then picks up the new scope.
+    try? await Task.sleep(for: .seconds(3.5))
+    gateway.retryQuestionAccess()
+    let upgraded = await waitFor("questions scope after approval", timeout: 20) {
+        gateway.state.isConnected && gateway.canAnswerQuestions
+    }
+    check(upgraded, "retry after approval gains operator.questions")
+    check(gateway.hello?.withheldScopes.isEmpty == true, "nothing withheld after the upgrade")
+    gateway.stop()
 }
 
 @MainActor
@@ -1258,6 +1424,23 @@ func runLive(url: String, token: String) async {
         await gateway.resolveApproval(approval, decision: "deny")
         check(gateway.approvals.isEmpty, "approval resolved")
     }
+
+    _ = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
+    await chat.send("ask me something")
+    let asked = await waitFor("question.requested") { !gateway.pendingQuestions(for: key).isEmpty }
+    check(asked, "ask_user question surfaced over the wire")
+    if let prompt = gateway.pendingQuestions(for: key).first {
+        check(prompt.questions.first?.questionId == "discord_remove" && prompt.runId != nil, "question record fields")
+        var draft = QuestionDraft()
+        draft.setText("Only #gyms", for: prompt.questions[0])
+        let error = await gateway.answerQuestion(prompt, answers: draft.answers(for: prompt) ?? [:])
+        check(error == nil && gateway.questions.isEmpty, "question.resolve answered")
+    }
+    let answeredReply = await waitFor("answered reply", timeout: 20) {
+        if case let .assistant(turn)? = chat.entries.last { return !chat.isRunning && turn.body.contains("Only #gyms") }
+        return false
+    }
+    check(answeredReply, "agent continues with the typed answer")
 
     let newKey = await gateway.createSession(agentId: "research", label: "Pincer check", category: "Work")
     check(newKey != nil && gateway.sessions[newKey ?? ""] != nil, "sessions.create")
