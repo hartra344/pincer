@@ -19,7 +19,7 @@ function makeDevice() {
   return { id, publicKey: b64url(rawPublic), privateKey };
 }
 
-const BASE_SCOPES = ['operator.read', 'operator.write', 'operator.approvals'];
+const BASE_SCOPES = ['operator.read', 'operator.write', 'operator.approvals', 'operator.questions'];
 
 function signConnect(device, challenge, token, scopes = BASE_SCOPES) {
   const client = {
@@ -261,6 +261,46 @@ try {
   assert.equal((await client.send('push.web.unsubscribe', { endpoint })).removed, true);
   pushSink.close();
 
+  // ask_user: question.requested blocks the run until question.resolve settles it.
+  const asked = await client.send('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'ask me something',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  const askedPrompt = await client.waitEvent('question.requested', (p) => p.runId === asked.runId);
+  assert.equal(askedPrompt.status, 'pending');
+  assert.equal(askedPrompt.sessionKey, 'agent:main:main');
+  assert.equal(askedPrompt.questions[0].questionId, 'discord_remove');
+  assert.equal(askedPrompt.questions[0].options.length, 3);
+  assert.equal(askedPrompt.questions[0].isOther, true);
+  const listed = await client.send('question.list');
+  assert.ok(listed.questions.some((q) => q.id === askedPrompt.id));
+  const incomplete = await client.call('question.resolve', { id: askedPrompt.id, answers: { answers: {} } });
+  assert.equal(incomplete.error.details.reason, 'QUESTION_INVALID_ANSWER');
+  const resolvedEvent = client.waitEvent('question.resolved', (p) => p.id === askedPrompt.id);
+  const resolution = await client.send('question.resolve', {
+    id: askedPrompt.id,
+    answers: { answers: { discord_remove: ['Stop watching Discord channels here'] } },
+  });
+  assert.equal(resolution.status, 'answered');
+  assert.deepEqual((await resolvedEvent).answers.answers.discord_remove, ['Stop watching Discord channels here']);
+  const askedFinal = await client.waitEvent('chat', (p) => p.runId === asked.runId && p.state === 'final', 10_000);
+  assert.ok(askedFinal.message.content.some((b) => b.type === 'text' && b.text.includes('Stop watching Discord channels here')));
+  const resolvedAgain = await client.call('question.resolve', { id: askedPrompt.id, cancel: true });
+  assert.equal(resolvedAgain.error.details.reason, 'QUESTION_ALREADY_TERMINAL');
+  assert.equal((await client.call('question.resolve', { id: 'ask_missing', cancel: true })).error.details.reason, 'QUESTION_NOT_FOUND');
+
+  // Skipping cancels the prompt and the run carries on.
+  const skippedRun = await client.send('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'ask again',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  const skippedPrompt = await client.waitEvent('question.requested', (p) => p.runId === skippedRun.runId);
+  assert.equal((await client.send('question.resolve', { id: skippedPrompt.id, cancel: true })).status, 'cancelled');
+  const skippedFinal = await client.waitEvent('chat', (p) => p.runId === skippedRun.runId && p.state === 'final', 10_000);
+  assert.ok(skippedFinal.message.content.some((b) => b.type === 'text' && b.text.includes('skipping')));
+
   // Config and plugins: reads need operator.read, writes operator.admin.
   const snapshot = await client.send('config.get');
   assert.equal(snapshot.valid, true, JSON.stringify(snapshot.issues));
@@ -287,7 +327,43 @@ try {
   assert.match(denied.error.message, /operator\.admin/);
   client.ws.close();
 
-  const admin = await connectClient(url, device, deviceToken, true, [...BASE_SCOPES, 'operator.admin']);
+  // A device paired before Pincer asked for operator.questions: the Gateway refuses the new
+  // scope with approvedScopes, so the client can drop it and connect with what it had.
+  const legacyScopes = BASE_SCOPES.filter((s) => s !== 'operator.questions');
+  const legacyDevice = makeDevice();
+  const legacyFirst = await connectClient(url, legacyDevice, 'dev-token', false, legacyScopes);
+  assert.equal(legacyFirst.connectRes.error.details.reason, 'not-paired');
+  legacyFirst.ws.close();
+  await delay(3500);
+  const legacyPaired = await connectClient(url, legacyDevice, 'dev-token', true, legacyScopes);
+  const legacyToken = legacyPaired.hello.auth.deviceToken;
+  legacyPaired.ws.close();
+  const legacyUpgrade = await connectClient(url, legacyDevice, legacyToken, false, BASE_SCOPES);
+  assert.equal(legacyUpgrade.connectRes.error.details.reason, 'scope-upgrade');
+  assert.deepEqual([...legacyUpgrade.connectRes.error.details.approvedScopes].sort(), [...legacyScopes].sort());
+  assert.match(legacyUpgrade.connectRes.error.details.requestId, /^pair_/);
+  legacyUpgrade.ws.close();
+  const legacyFallback = await connectClient(url, legacyDevice, legacyToken, true, legacyScopes);
+  assert.deepEqual(legacyFallback.hello.auth.scopes, legacyScopes);
+  legacyFallback.ws.close();
+
+  const noQuestions = await connectClient(url, device, deviceToken, true, BASE_SCOPES.filter((s) => s !== 'operator.questions'));
+  const unscoped = await noQuestions.call('question.list');
+  assert.equal(unscoped.error.details.code, 'MISSING_SCOPE');
+  assert.equal(unscoped.error.details.missingScope, 'operator.questions');
+  noQuestions.ws.close();
+
+  // Asking for more than was approved at pairing parks a scope upgrade, like the Gateway.
+  const adminScopes = [...BASE_SCOPES, 'operator.admin'];
+  const upgrade = await connectClient(url, device, deviceToken, false, adminScopes);
+  assert.equal(upgrade.connectRes.error.details.code, 'PAIRING_REQUIRED');
+  assert.equal(upgrade.connectRes.error.details.reason, 'scope-upgrade');
+  assert.ok(upgrade.connectRes.error.details.approvedScopes.includes('operator.questions'));
+  assert.ok(!upgrade.connectRes.error.details.approvedScopes.includes('operator.admin'));
+  upgrade.ws.close();
+  await delay(3500);
+
+  const admin = await connectClient(url, device, deviceToken, true, adminScopes);
   const stale = await admin.call('config.patch', { raw: '{"agents":{"defaults":{"timeoutSeconds":5}}}', baseHash: 'nope' });
   assert.match(stale.error.message, /config changed since last load/);
   const invalid = await admin.call('config.patch', { raw: '{"gateway":{"port":70000}}', baseHash: snapshot.hash });

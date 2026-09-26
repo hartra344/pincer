@@ -43,12 +43,14 @@ struct ChatView: View {
                     if let card = self.chat.progressCard {
                         ProgressCardView(chat: self.chat, card: card)
                     }
+                    PendingQuestionCard(chat: self.chat)
                     Composer(chat: self.chat, placeholder: "Message #\(self.row?.title ?? "chat")")
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.bottomChrome = $0 }
             }
             .animation(.snappy, value: self.chat.errorMessage)
             .animation(.snappy, value: self.chat.progressCard)
+            .animation(.snappy, value: self.gateway.questions.map(\.id))
         .navigationTitle(self.row?.title ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "Chat")
         #if os(macOS)
         .navigationSubtitle(self.subtitle)

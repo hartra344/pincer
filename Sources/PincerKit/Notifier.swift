@@ -1,7 +1,7 @@
 import Foundation
 import UserNotifications
 
-/// Local notifications for replies, background activity and exec approvals, posted while the app
+/// Local notifications for replies, background activity, exec approvals and agent questions, posted while the app
 /// is connected. On iOS, `PushRegistrar` covers the time Pincer is suspended or closed: while a
 /// gateway's push is active, local notifications for it stop once the app leaves the foreground,
 /// and pushes that arrive in the foreground are hidden while the gateway is connected.
@@ -110,6 +110,26 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     /// In the background the push for the same event is on its way; posting too would double it.
     public func deferredToPush(_ gatewayId: UUID) -> Bool {
         !self.appIsActive && self.pushDelivers(gatewayId)
+    }
+
+    func notifyQuestion(_ prompt: QuestionPrompt, gateway: GatewayStore) {
+        guard let first = prompt.questions.first else { return }
+        let agent = gateway.agent(prompt.agentId ?? prompt.sessionKey.flatMap(SessionKey.agentId(from:)) ?? gateway.defaultAgentId)
+        let chat = prompt.sessionKey.flatMap { gateway.sessions[$0]?.title }
+        let title = "\(agent.emoji.map { "\($0) " } ?? "")\(agent.name) has a question" + (chat.map { " · \($0)" } ?? "")
+        let target = Target(gatewayId: gateway.id, sessionKey: prompt.sessionKey ?? "")
+        // The open chat already shows the card.
+        if self.appIsActive, prompt.sessionKey != nil, self.visible == target { return }
+        guard self.enabled, let center else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = Self.clip(first.question)
+        content.sound = .default
+        content.categoryIdentifier = "reply"
+        content.interruptionLevel = .timeSensitive
+        if let key = prompt.sessionKey { content.threadIdentifier = "\(gateway.id.uuidString)|\(key)" }
+        content.userInfo = ["gateway": gateway.id.uuidString, "session": prompt.sessionKey ?? ""]
+        center.add(UNNotificationRequest(identifier: "question:\(prompt.id)", content: content, trigger: nil))
     }
 
     private func title(row: SessionRow, gateway: GatewayStore) -> String {

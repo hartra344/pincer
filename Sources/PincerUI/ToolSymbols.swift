@@ -2,6 +2,7 @@
 enum ToolSymbols {
     static func symbol(for name: String) -> String {
         let lower = name.lowercased()
+        if lower == "ask_user" || lower.contains("question") { return "questionmark.bubble" }
         if lower.contains("exec") || lower.contains("bash") || lower.contains("shell") || lower.contains("process") { return "terminal" }
         if lower.contains("read") || lower.contains("view") { return "doc.text" }
         if lower.contains("write") || lower.contains("edit") || lower.contains("patch") { return "pencil" }

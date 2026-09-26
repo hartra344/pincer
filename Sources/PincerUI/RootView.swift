@@ -375,7 +375,7 @@ private struct SettingsForm: View {
                         .font(.caption.monospaced())
                         .textSelection(.enabled)
                 }
-                LabeledContent("Role", value: "operator (read, write, approvals)")
+                LabeledContent("Role", value: "operator (read, write, approvals, questions)")
             }
         }
     }
