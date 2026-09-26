@@ -4,12 +4,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct Composer: View {
-    let chat: ChatStore
+    @Bindable var chat: ChatStore
     let placeholder: String
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.appTheme) private var theme
-    @State private var text = ""
-    @State private var attachments: [OutgoingAttachment] = []
     @State private var importing = false
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var attachmentError: String?
@@ -45,7 +43,7 @@ struct Composer: View {
                 self.attachMenu
                 ComposerTextView(
                     placeholder: self.placeholder,
-                    text: self.$text,
+                    text: self.$chat.draft.text,
                     menuActive: !self.suggestions.isEmpty,
                     onSubmit: self.submit,
                     onMedia: self.ingest,
@@ -171,6 +169,16 @@ struct Composer: View {
         #endif
     }
 
+    private var text: String {
+        get { self.chat.draft.text }
+        nonmutating set { self.chat.draft.text = newValue }
+    }
+
+    private var attachments: [OutgoingAttachment] {
+        get { self.chat.draft.attachments }
+        nonmutating set { self.chat.draft.attachments = newValue }
+    }
+
     private var canSend: Bool {
         self.gateway.state.isConnected
             && (!self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty)
@@ -185,8 +193,7 @@ struct Composer: View {
         guard self.canSend else { return }
         let text = SlashCommand.outgoingText(self.text, commands: self.gateway.slashCommands(for: self.chat.sessionKey))
         let attachments = self.attachments
-        self.text = ""
-        self.attachments = []
+        self.chat.draft = ComposerDraft()
         self.attachmentError = nil
         Task { await self.chat.send(text, attachments: attachments) }
     }

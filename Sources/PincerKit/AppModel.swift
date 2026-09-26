@@ -21,6 +21,10 @@ public final class AppModel {
         didSet {
             self.notifier.appIsActive = self.appIsActive
             if self.appIsActive, !oldValue { self.gateways.forEach { $0.reconnectIfNeeded() } }
+            if !self.appIsActive, oldValue {
+                let gateways = self.gateways
+                Task { for gateway in gateways { await gateway.flushDrafts() } }
+            }
         }
     }
 
@@ -146,6 +150,7 @@ public final class AppModel {
         store.profile.forgetCredentials()
         TranscriptCache.removeAll(gatewayId: id)
         self.history.prune { $0.gatewayId != id }
+        DraftStore.removeAll(gatewayId: id)
         self.persist()
         if self.selectedGatewayId == id { self.selectedGatewayId = self.gateways.first?.id }
     }

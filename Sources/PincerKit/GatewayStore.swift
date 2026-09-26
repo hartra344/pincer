@@ -382,6 +382,7 @@ public final class GatewayStore: Identifiable {
             let removedId = payload["sessionId"]?.text
             if removedId == nil || self.sessions[key]?.sessionId == removedId {
                 self.sessions.removeValue(forKey: key)
+                self.discardDraft(key)
             }
             return
         }
@@ -405,6 +406,22 @@ public final class GatewayStore: Identifiable {
         let store = ChatStore(sessionKey: key, agentId: self.sessions[key]?.agentId, gateway: self)
         self.chats[key] = store
         return store
+    }
+
+    /// Saves every chat's pending draft now, e.g. before the app is suspended.
+    func flushDrafts() async {
+        for chat in self.chats.values {
+            await chat.flushDraft()
+        }
+    }
+
+    private func discardDraft(_ key: String) {
+        if let chat = self.chats[key] {
+            chat.draft = ComposerDraft()
+        } else {
+            let id = self.id
+            Task { await DraftStore.remove(gatewayId: id, sessionKey: key) }
+        }
     }
 
     private func openChat(_ key: String) async {
