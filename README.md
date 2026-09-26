@@ -17,7 +17,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - `wss://` is required for anything other than loopback, private LAN or Tailscale addresses.
   - You can pin a TLS certificate by its SHA-256 fingerprint.
   - Images are fetched only from the gateway itself: inline, through `artifacts.download`, or from the gateway's own host.
-- **Local cache:** transcripts are cached in `~/Library/Caches/Pincer/Transcripts/<gateway>/`, one file per chat, up to 20,000 messages each. Files use complete file protection, and removing a gateway deletes its cache. The message search index (`search-index.sqlite`) lives in the same folder and is deleted with it. Set `PINCER_CACHE_DIR=off` to turn the cache (and message search) off, or set it to a path to use another folder.
+- **Local cache:** transcripts are cached in `~/Library/Caches/Pincer/Transcripts/<gateway>/`, one file per chat, up to 20,000 messages each. Files use complete file protection, and removing a gateway deletes its cache. The message search index (`search-index.sqlite`) lives in the same folder and is deleted with it. Set `PINCER_CACHE_DIR=off` to turn the cache (and message search, except in the demo, which then keeps its index in memory) off, or set it to a path to use another folder.
 - **Drafts:** each chat keeps its unsent text and pending attachments when you switch chats or relaunch. They're saved in `~/Library/Application Support/Pincer/Drafts/<gateway>/`, one folder per chat, using complete file protection. A draft is deleted when you send it, when its chat is deleted, or when you remove its gateway. Set `PINCER_DRAFTS_DIR=off` to turn draft saving off, or set it to a path to use another folder.
 - **Sandbox:** the Xcode-built macOS app is sandboxed, with outgoing network access and read-only access to files you pick. The quick `scripts/bundle-mac.sh` dev bundle is only ad-hoc signed.
 
@@ -156,7 +156,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 
 ## Testing without a real gateway
 
-The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, chats, streamed replies, a chart, an exec approval and a sample approval history, and nothing leaves the device. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too.
+The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, chats, streamed replies, a chart, an exec approval and a sample approval history, and nothing leaves the device. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too. Its chats have weeks of seeded history for message search (⇧⌘F): try `backup` (three chats), `onsen` (older Japan trip history) or `cafe` (matches "Café").
 
 For the full protocol, including Gateway Settings, run the Node mock:
 

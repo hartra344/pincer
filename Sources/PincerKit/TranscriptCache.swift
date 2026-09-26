@@ -71,11 +71,16 @@ public enum TranscriptCache {
 
     /// Writes the transcript, then brings the Gateway's message search index up to date with it.
     /// Nothing is written for a Gateway removed from the app, even by a save already under way.
+    /// With the cache off, an index kept in memory (the demo) is still updated.
     public static func save(_ snapshot: Snapshot, gatewayId: UUID, sessionKey: String) async {
-        guard !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId),
-              let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey),
-              let written = await Writer.shared.write(snapshot, to: url)
-        else { return }
+        guard !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId) else { return }
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey) else {
+            if MessageIndex.location(gatewayId: gatewayId) == .memory {
+                await MessageIndex.shared(gatewayId: gatewayId).index(sessionKey: sessionKey, snapshot: snapshot, fileMtime: Date())
+            }
+            return
+        }
+        guard let written = await Writer.shared.write(snapshot, to: url) else { return }
         guard !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId) else {
             self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
             return

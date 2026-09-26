@@ -1900,6 +1900,85 @@ func checkDemoMessageSearch(_ gateway: GatewayStore, trip: ChatStore) async {
     await checkAsync({ await ((try? gateway.searchMessages("x"))?.isEmpty == true) }, "a 1-character search is empty")
 }
 
+/// Demo: the seeded search terms suggested in the docs hit the chats they're written into.
+@MainActor
+func checkDemoSeededSearchTerms(_ gateway: GatewayStore, trip: ChatStore) async {
+    let tripKey = "agent:main:dashboard:trip", mainKey = "agent:main:main", homeLab = "agent:main:discord:channel:123"
+    let forge = "agent:coder:main", scout = "agent:research:main"
+    // Every chat is prefetched in the background; wait until the last of them is searchable.
+    let backup = await waitForSearch(gateway, "backup", timeout: 20) { $0.chats.count >= 3 }
+    check(backup.map { Set($0.chats.map(\.sessionKey)) } == [mainKey, homeLab, forge]
+          && backup?.chats.map(\.sessionKey) == [mainKey, forge, homeLab],
+          "“backup” is found in three chats, newest first (\(backup?.chats.map(\.title) ?? []))")
+    check(backup?.chats.first { $0.sessionKey == homeLab }?.messages.contains { $0.sender == "via Discord" } == true,
+          "a bridged message names its channel as the sender")
+
+    let onsen = await waitForSearch(gateway, "onsen") { !$0.isEmpty }
+    let onsenIds = onsen?.chats.first?.messages.map(\.hit.entryId) ?? []
+    let firstPage = Set(trip.entries.suffix(120).map(\.id))
+    check(onsen?.chats.map(\.sessionKey) == [tripKey] && onsenIds.count == 2 && onsenIds.allSatisfy { !firstPage.contains($0) },
+          "“onsen” is only in the trip's older history (\(onsenIds))")
+    check(onsen?.chats.first?.messages.first.map { message in
+        message.snippet.highlights.map { (message.snippet.text as NSString).substring(with: $0) } == ["onsen"]
+    } == true, "the onsen snippet highlights the word")
+
+    for query in ["café", "cafe", "CAFE"] {
+        let results = await waitForSearch(gateway, query) { $0.chats.count >= 2 }
+        check(results.map { Set($0.chats.map(\.sessionKey)) } == [mainKey, tripKey],
+              "“\(query)” matches Café in Main and the trip (\(results?.chats.map(\.title) ?? []))")
+    }
+    let lumiere = try? await gateway.searchMessages("cafe lumiere")
+    let lumiereSnippet = lumiere?.chats.first?.messages.first?.snippet
+    check(lumiere?.chats.map(\.sessionKey) == [mainKey] && lumiere?.chats.first?.messages.count == 3
+          && lumiereSnippet.map { snippet in snippet.highlights.map { (snippet.text as NSString).substring(with: $0) } == ["Café Lumière"] } == true,
+          "an accented phrase is found without accents and highlighted as written")
+    let tokyo = try? await gateway.searchMessages("tokyo")
+    check(tokyo.map { Set($0.chats.map(\.sessionKey)).isSuperset(of: [mainKey, tripKey, scout]) } == true,
+          "“tokyo” spans Main, the trip and Scout (\(tokyo?.chats.map(\.title) ?? []))")
+    let todai = try? await gateway.searchMessages("todai")
+    check(todai?.chats.map(\.sessionKey) == [tripKey], "a macron is folded (todai finds Tōdai-ji)")
+    let passport = try? await gateway.searchMessages("passport")
+    check(passport?.chats.map(\.sessionKey) == [mainKey] && passport?.chats.first?.messages.count == 2,
+          "“passport” finds the reminder in Main")
+    let dated = backup?.chats.flatMap(\.messages).compactMap(\.hit.timestamp) ?? []
+    check(!dated.isEmpty && dated.allSatisfy { $0 < Date().addingTimeInterval(-3 * 86400) },
+          "seeded results carry their past dates")
+}
+
+/// Demo with the transcript cache off: the index lives in memory, so search still works.
+@MainActor
+func checkDemoSearchWithoutCache() async {
+    let previous = ProcessInfo.processInfo.environment["PINCER_CACHE_DIR"]
+    setenv("PINCER_CACHE_DIR", "off", 1)
+    defer {
+        if let previous { setenv("PINCER_CACHE_DIR", previous, 1) } else { unsetenv("PINCER_CACHE_DIR") }
+    }
+    let gateway = GatewayStore(profile: .demo())
+    defer {
+        gateway.stop()
+        TranscriptCache.removeAll(gatewayId: gateway.id)
+    }
+    check(gateway.messageIndexProgress == .ready && MessageIndex.location(gatewayId: gateway.id) == .memory,
+          "cache off: the demo keeps its index in memory")
+    gateway.start()
+    gateway.reconnectIfNeeded()
+    let connected = await waitFor("demo connection (cache off)") { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    check(connected, "cache off: demo connected")
+    guard connected else { return }
+    let backup = await waitForSearch(gateway, "backup", timeout: 20) { $0.chats.count >= 3 }
+    check(backup?.chats.count == 3, "cache off: prefetched chats are searchable (\(backup?.chats.map(\.title) ?? []))")
+    let onsen = await waitForSearch(gateway, "onsen") { !$0.isEmpty }
+    check(onsen?.chats.first?.messages.count == 2, "cache off: older history is searchable")
+    let chat = gateway.chat(for: "agent:research:main")
+    await chat.load()
+    await checkDemoSentMessageSearch(gateway, chat)
+    check(gateway.messageIndexProgress == .ready, "cache off: index ready (\(gateway.messageIndexProgress))")
+
+    let other = GatewayStore(profile: GatewayProfile(name: "Plain", url: "ws://127.0.0.1:9", authMode: .none))
+    check(other.messageIndexProgress == .unavailable && MessageIndex.location(gatewayId: other.id) == nil,
+          "cache off: other gateways still have no search")
+}
+
 /// Demo: a message sent now is searchable within 3 s.
 @MainActor
 func checkDemoSentMessageSearch(_ gateway: GatewayStore, _ chat: ChatStore) async {
@@ -2226,6 +2305,8 @@ if arguments.contains("--perf") {
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
+    print("Demo message search with the cache off")
+    await checkDemoSearchWithoutCache()
     print("Chat navigation")
     await runNavigation()
     print("Quick Capture (demo)")
@@ -2443,6 +2524,7 @@ func runDemo() async {
     await trip.loadOlder()
     check(!trip.hasMoreHistory && trip.items.count == 302, "trip paged to start (\(trip.items.count))")
     await checkDemoMessageSearch(gateway, trip: trip)
+    await checkDemoSeededSearchTerms(gateway, trip: trip)
 
     let before = chat.entries.count
     await chat.send("show me a tool and an image")

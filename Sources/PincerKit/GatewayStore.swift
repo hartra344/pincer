@@ -122,8 +122,7 @@ public final class GatewayStore: Identifiable {
     /// Full-text index of this Gateway's cached transcripts, for message search.
     public var messageIndex: MessageIndex { MessageIndex.shared(gatewayId: self.id) }
     /// Whether message search is ready, still indexing cached chats, or off (no transcript cache).
-    public private(set) var messageIndexProgress: MessageIndex.Status =
-        TranscriptCache.root == nil ? .unavailable : .ready
+    public private(set) var messageIndexProgress: MessageIndex.Status = .ready
     @ObservationIgnored weak var notifier: Notifier?
     /// Approvals this session settled (answered, expired or answered elsewhere), so a later duplicate
     /// action is a no-op rather than another RPC and follow-up.
@@ -154,6 +153,9 @@ public final class GatewayStore: Identifiable {
         self.profile = profile
         self.id = profile.id
         self.defaults = defaults
+        // The demo's chats are always at hand, so its search works even with the cache off.
+        if profile.isDemo { MessageIndex.allowInMemory(gatewayId: profile.id) }
+        self.messageIndexProgress = MessageIndex.status(gatewayId: profile.id)
         self.identity = identity
         self.connection = GatewayConnection(profile: profile, identity: identity)
         self.organization = SidebarOrganization(
@@ -291,7 +293,7 @@ public final class GatewayStore: Identifiable {
     /// Indexes cached transcripts the message index hasn't seen yet (caches from before it
     /// existed, or after it was rebuilt), in the background.
     private func reconcileMessageIndex() {
-        guard TranscriptCache.root != nil else {
+        guard MessageIndex.status(gatewayId: self.id) != .unavailable else {
             self.messageIndexProgress = .unavailable
             return
         }

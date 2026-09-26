@@ -16,7 +16,7 @@ public actor MessageIndex {
         case ready
         /// Indexing cached chats; results may be incomplete.
         case building(done: Int, total: Int)
-        /// The transcript cache is off, so there's nothing to search.
+        /// The transcript cache is off (and the index isn't kept in memory), so there's nothing to search.
         case unavailable
     }
 
@@ -34,7 +34,7 @@ public actor MessageIndex {
 
     public nonisolated let gatewayId: UUID
     private var db: OpaquePointer?
-    private var openURL: URL?
+    private var openLocation: Location?
     private nonisolated let removed: Mutex<Bool>
     private nonisolated let interrupter = Interrupter()
 
@@ -42,6 +42,14 @@ public actor MessageIndex {
         var indexes: [UUID: MessageIndex] = [:]
         /// Gateways removed from the app: their indexes are never recreated.
         var removed: Set<UUID> = []
+        /// Gateways whose index is kept in memory while the transcript cache is off (the demo).
+        var inMemory: Set<UUID> = []
+    }
+
+    /// Where an index lives: next to the transcript cache, or in memory.
+    public enum Location: Equatable, Sendable {
+        case file(URL)
+        case memory
     }
 
     private static let registry = Mutex(Registry())
@@ -85,9 +93,26 @@ public actor MessageIndex {
         TranscriptCache.directory(gatewayId: gatewayId)?.appending(path: "search-index.sqlite")
     }
 
-    public var status: Status {
-        Self.url(gatewayId: self.gatewayId) == nil ? .unavailable : .ready
+    /// Keeps the Gateway's index in memory while the transcript cache is off, so search still
+    /// works (the demo, whose chats are always at hand). Saved transcripts are indexed directly.
+    static func allowInMemory(gatewayId: UUID) {
+        self.registry.withLock { _ = $0.inMemory.insert(gatewayId) }
     }
+
+    /// The index file when the transcript cache is on; memory when it's off and allowed; else nil.
+    public static func location(gatewayId: UUID) -> Location? {
+        if let url = self.url(gatewayId: gatewayId) { return .file(url) }
+        return self.registry.withLock { $0.inMemory.contains(gatewayId) } ? .memory : nil
+    }
+
+    /// Ready, or unavailable when there's nowhere to keep the index.
+    public static func status(gatewayId: UUID) -> Status {
+        self.location(gatewayId: gatewayId) == nil ? .unavailable : .ready
+    }
+
+    public var status: Status { Self.status(gatewayId: self.gatewayId) }
+
+    private nonisolated var location: Location? { Self.location(gatewayId: self.gatewayId) }
 
     // MARK: Writing
 
@@ -229,7 +254,7 @@ public actor MessageIndex {
     /// Indexes every cached transcript of `sessionKeys` written since it was last indexed, one
     /// chat at a time, reporting progress. Transcripts are read and decoded off the actor.
     public nonisolated func reconcile(sessionKeys: [String], progress: (@Sendable (Status) async -> Void)? = nil) async {
-        guard Self.url(gatewayId: self.gatewayId) != nil else {
+        guard self.location != nil else {
             await progress?(.unavailable)
             return
         }
@@ -293,7 +318,7 @@ public actor MessageIndex {
 
     private func search(_ query: String, candidateLimit: Int, id: UInt64) throws -> [MessageSearch.Hit] {
         guard let fts = MessageSearch.ftsQuery(query) else { return [] }
-        guard Self.url(gatewayId: self.gatewayId) != nil, !self.isRemoved else { return [] }
+        guard self.location != nil, !self.isRemoved else { return [] }
         guard !Task.isCancelled else { throw CancellationError() }
         let db: OpaquePointer
         do {
@@ -356,7 +381,7 @@ public actor MessageIndex {
         self.interrupter.end()
         if let db { sqlite3_close_v2(db) }
         self.db = nil
-        self.openURL = nil
+        self.openLocation = nil
     }
 
     // MARK: Database
@@ -367,7 +392,7 @@ public actor MessageIndex {
     /// if the index turned out unreadable it's deleted (and rebuilt from the transcripts).
     @discardableResult
     private func withRecovery<T>(_ body: (OpaquePointer) throws -> T) -> T? {
-        guard Self.url(gatewayId: self.gatewayId) != nil, !self.isRemoved else { return nil }
+        guard self.location != nil, !self.isRemoved else { return nil }
         do {
             return try body(try self.open())
         } catch {
@@ -383,37 +408,45 @@ public actor MessageIndex {
     }
 
     private func open() throws -> OpaquePointer {
-        guard !self.isRemoved, let url = Self.url(gatewayId: self.gatewayId) else { throw IndexError.unavailable }
-        if let db, self.openURL == url { return db }
+        guard !self.isRemoved, let location = self.location else { throw IndexError.unavailable }
+        if let db, self.openLocation == location { return db }
         self.close()
         do {
-            return try self.connect(url)
+            return try self.connect(location)
         } catch IndexError.corrupt {
             // Unreadable or from another version: start over.
             self.close()
-            Self.deleteFiles(url)
-            return try self.connect(url)
+            if case let .file(url) = location { Self.deleteFiles(url) }
+            return try self.connect(location)
         } catch {
             self.close()
             throw error
         }
     }
 
-    private func connect(_ url: URL) throws -> OpaquePointer {
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    private func connect(_ location: Location) throws -> OpaquePointer {
         var handle: OpaquePointer?
         var flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX
-        #if os(iOS) || os(visionOS) || os(watchOS) || os(tvOS)
-        flags |= SQLITE_OPEN_FILEPROTECTION_COMPLETE
-        #endif
-        let opened = sqlite3_open_v2(url.path(percentEncoded: false), &handle, flags, nil)
+        let path: String
+        switch location {
+        case let .file(url):
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            #if os(iOS) || os(visionOS) || os(watchOS) || os(tvOS)
+            flags |= SQLITE_OPEN_FILEPROTECTION_COMPLETE
+            #endif
+            path = url.path(percentEncoded: false)
+        case .memory:
+            // One connection per index, so a private in-memory database is all it needs.
+            path = ":memory:"
+        }
+        let opened = sqlite3_open_v2(path, &handle, flags, nil)
         guard opened == SQLITE_OK, let handle else {
             let error = handle.map(self.error) ?? Self.error(code: opened, message: "open failed")
             if let handle { sqlite3_close_v2(handle) }
             throw error
         }
         self.db = handle
-        self.openURL = url
+        self.openLocation = location
         sqlite3_busy_timeout(handle, 2000)
         // Checkpoints shrink the WAL back to this rather than leaving it at its largest.
         try self.exec(handle, "PRAGMA journal_size_limit = 4194304")
@@ -444,7 +477,7 @@ public actor MessageIndex {
     /// Deletes the index; the next use recreates it empty, and `reconcile` refills it.
     private func reset() {
         self.close()
-        if let url = Self.url(gatewayId: self.gatewayId), !self.isRemoved { Self.deleteFiles(url) }
+        if case let .file(url) = self.location, !self.isRemoved { Self.deleteFiles(url) }
     }
 
     private static func deleteFiles(_ url: URL) {

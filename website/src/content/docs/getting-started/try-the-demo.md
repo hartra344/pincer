@@ -31,6 +31,19 @@ While you're there, try:
 - **Thinking Steps** in the chat's ⋯ menu, to choose how much of the agent's work you see;
 - **Settings → Appearance**, to try a different theme.
 
+### Search the demo's messages
+
+Press **⇧⌘F**, or type in the sidebar's **Find a chat** field and choose **Search messages for …**, then try:
+
+| Search for | What you'll find |
+| --- | --- |
+| `backup` | Matches in three chats: a Time Machine backup in *Main*, a backup script in Forge's *Main* and a failed NAS backup in *home-lab*. |
+| `onsen` | Two days in the *Japan trip*'s older history, well above what's loaded when you open the chat. |
+| `cafe` | *Café Lumière* in *Main* and a few cafés in the *Japan trip*. Accents and case don't matter. |
+| `ramen` | Lots of matches in the *Japan trip*. Choose **More matches in Japan trip…** to open Find in Chat on all of them. |
+
+Picking a result opens the chat with that message highlighted. See [Search messages](../../guides/search/) for the matching rules.
+
 :::tip
 The demo is what TestFlight testers and App Review use, so they don't need a Gateway or Tailscale.
 :::
