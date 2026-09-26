@@ -405,9 +405,11 @@ do {
     let retry = await store.resolveApproval(id: "a1", decision: "allow-once", connectWithin: 0.5, timeout: 0.5)
     check(retry == .unreachable, "a dropped decision can be retried, never buffered")
 
-    let model = AppModel()
+    let (modelDefaults, modelSuite) = scratchDefaults()
+    let model = AppModel(defaults: modelDefaults)
     let unknown = await model.respondToApproval(gatewayId: UUID(), approvalId: "a1", decision: "allow-once")
     check(unknown == .unknownGateway, "notification for a removed gateway → no longer in Pincer, nothing sent")
+    UserDefaults.standard.removePersistentDomain(forName: modelSuite)
 }
 
 print("Approval history")
@@ -1574,11 +1576,11 @@ func checkApprovalHistoryModel() async {
 }
 
 @MainActor
-func waitFor(_ label: String, timeout: Double = 15, _ condition: () -> Bool) async -> Bool {
+func waitFor(_ label: String, timeout: Double = 15, every interval: Int = 100, _ condition: () -> Bool) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         if condition() { return true }
-        try? await Task.sleep(for: .milliseconds(100))
+        try? await Task.sleep(for: .milliseconds(interval))
     }
     print("    … timed out waiting for \(label)")
     return condition()
@@ -1618,7 +1620,8 @@ func runDemo() async {
     await chat.send("show me a tool and an image")
     var sawThinking = false
     var sawTool = false
-    let finished = await waitFor("demo reply", timeout: 20) {
+    // Polls quickly so the streaming phases stay visible when CI shortens the demo's pacing.
+    let finished = await waitFor("demo reply", timeout: 20, every: 10) {
         if case let .assistant(turn)? = chat.entries.last, turn.isStreaming {
             if !turn.thinking.isEmpty { sawThinking = true }
             if !turn.tools.isEmpty { sawTool = true }
@@ -1928,16 +1931,12 @@ func runNavigation() async {
 /// Quick Capture's target list and send flow through `AppModel` and the demo Gateway.
 @MainActor
 func runQuickCaptureDemo() async {
-    // A scratch suite, so concurrent runs and the real app's profiles don't leak in.
+    // A scratch suite, so concurrent check runs never see each other's saved gateways.
     let (defaults, suite) = scratchDefaults()
     let app = AppModel(defaults: defaults)
     defer {
         for gateway in app.gateways { app.remove(gateway.id) }
         UserDefaults.standard.removePersistentDomain(forName: suite)
-    }
-    guard app.gateways.isEmpty else {
-        check(false, "Quick Capture checks need an empty profile list (found \(app.gateways.count))")
-        return
     }
     let gateway = app.add(.demo(), secret: nil)
     let ready = await waitFor("demo connection") { gateway.state.isConnected && !gateway.sessions.isEmpty }
@@ -2066,16 +2065,12 @@ func runQuickCaptureDemo() async {
 /// The mock refuses a `chat.send` whose text has `[mock:fail-send]` and drops the connection on `[mock:drop]`.
 @MainActor
 func runQuickCaptureLive(url: String, token: String) async {
-    // A scratch suite, so concurrent runs and the real app's profiles don't leak in.
+    // A scratch suite, so concurrent check runs never see each other's saved gateways.
     let (defaults, suite) = scratchDefaults()
     let app = AppModel(defaults: defaults)
     defer {
         for gateway in app.gateways { app.remove(gateway.id) }
         UserDefaults.standard.removePersistentDomain(forName: suite)
-    }
-    guard app.gateways.isEmpty else {
-        check(false, "Quick Capture live checks need an empty profile list (found \(app.gateways.count))")
-        return
     }
     let home = app.add(GatewayProfile(name: "Mock home", url: url, authMode: .token), secret: token)
     let work = app.add(GatewayProfile(name: "Mock work", url: url, authMode: .token), secret: token)

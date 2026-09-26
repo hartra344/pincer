@@ -77,14 +77,15 @@ Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaul
 
 1. **Mock gateway selftest** (Ubuntu): `npm ci && npm run selftest` in `mock-gateway/`.
 2. **Swift build and checks** (macOS, `PINCER_KEYCHAIN=memory`):
-   - `swift build`
-   - `swift test --parallel`
-   - `swift run PincerChecks`
-   - `swift run PincerChecks --demo`
-   - `swift run PincerChecks --live` against the mock gateway started in the background
-   - `swift run PincerChecks --live-no-usage` against a second mock started with `MOCK_NO_USAGE=1` on port 18790
+   - Restores the cached `.build` folder
+   - `swift build --build-tests`, then `swift test --skip-build --parallel`
+   - `PincerChecks`
+   - `PincerChecks --demo` (with `PINCER_DEMO_DELAY_SCALE=0.2`) and `PincerChecks --live` against the mock (started just before), **at the same time**
+   - `PincerChecks --live-no-usage` against a second mock started with `MOCK_NO_USAGE=1` on port 18790
 
-To reproduce CI locally, run the same commands in that order. For the live step, start the mock first: see [Mock gateway](../mock-gateway/).
+CI passes `-Xswiftc -enable-incremental-file-hashing` to every `swift` command. Checkout gives every file a new modification time, so without it the restored build would recompile everything.
+
+To reproduce CI locally, run the same commands. For the live step, start the mock first: see [Mock gateway](../mock-gateway/). Each check run keeps its drafts, transcript cache and saved gateways in its own scratch folders and defaults suites, so the demo and live runs can safely run at the same time.
 
 ## Environment variables
 
@@ -94,6 +95,7 @@ To reproduce CI locally, run the same commands in that order. For the live step,
 | `PINCER_CACHE_DIR` | `off` disables the transcript cache. A path moves it. |
 | `PINCER_DRAFTS_DIR` | `off` disables saved composer drafts. A path moves them. |
 | `PINCER_REQUEST_LOG` | A file path to log every request and the gateway's reply. |
+| `PINCER_DEMO_DELAY_SCALE` | Multiplies the demo gateway's simulated streaming and tool delays. `0.2` runs the demo five times faster. `0` removes them entirely, but then the demo checks can't see the streaming phases. |
 
 They work for the app too:
 

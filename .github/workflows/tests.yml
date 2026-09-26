@@ -41,10 +41,12 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Select newest Xcode
+        id: xcode
         run: |
           XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
+          echo "version=$(xcodebuild -version | tr '\n' ' ' | tr -cs 'A-Za-z0-9.' '-')" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
         with:
@@ -52,35 +54,63 @@ jobs:
           cache: npm
           cache-dependency-path: mock-gateway/package-lock.json
 
-      - name: Build all targets
-        run: swift build
+      - name: Install mock gateway dependencies
+        working-directory: mock-gateway
+        run: npm ci
+
+      # Checkout gives every file a new mtime, so file hashing keeps the restored build incremental.
+      - name: Restore the build cache
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: swiftpm-${{ runner.os }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('Package.swift', 'Package.resolved', 'Sources/**', 'Tests/**') }}
+          restore-keys: swiftpm-${{ runner.os }}-${{ steps.xcode.outputs.version }}-
+
+      - name: Build all targets and tests
+        run: swift build --build-tests -Xswiftc -enable-incremental-file-hashing
 
       - name: Unit tests
-        run: swift test --parallel
+        run: swift test --skip-build --parallel -Xswiftc -enable-incremental-file-hashing
 
       - name: Self-checks
-        run: swift run PincerChecks
-
-      - name: Demo checks
-        run: swift run PincerChecks --demo
-
-      - name: Live checks against the mock gateway
         run: |
-          (cd mock-gateway && npm ci)
+          BIN="$(swift build --show-bin-path -Xswiftc -enable-incremental-file-hashing)"
+          echo "BIN=$BIN" >> "$GITHUB_ENV"
+          "$BIN/PincerChecks"
+
+      # Demo and live checks only wait on timers and sockets, so they run side by side.
+      - name: Demo and live checks
+        env:
+          PINCER_DEMO_DELAY_SCALE: "0.2"
+        run: |
+          # Start the mock just before the checks: some of its seeded data expires minutes after launch.
           node mock-gateway/server.mjs > "$RUNNER_TEMP/mock-gateway.log" 2>&1 &
           for _ in $(seq 1 30); do nc -z 127.0.0.1 18789 && break; sleep 1; done
-          swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+          "$BIN/PincerChecks" --demo > "$RUNNER_TEMP/demo.log" 2>&1 & demo=$!
+          "$BIN/PincerChecks" --live ws://127.0.0.1:18789 dev-token > "$RUNNER_TEMP/live.log" 2>&1 & live=$!
+          status=0
+          wait $demo || status=1
+          echo "::group::Demo checks"; cat "$RUNNER_TEMP/demo.log"; echo "::endgroup::"
+          wait $live || status=1
+          echo "::group::Live checks"; cat "$RUNNER_TEMP/live.log"; echo "::endgroup::"
+          grep -h "✗\|timed out" "$RUNNER_TEMP/demo.log" "$RUNNER_TEMP/live.log" || true
+          tail -n 1 "$RUNNER_TEMP/demo.log" "$RUNNER_TEMP/live.log"
+          exit $status
 
       - name: Live checks against a gateway without usage
         run: |
           MOCK_NO_USAGE=1 PORT=18790 node mock-gateway/server.mjs > "$RUNNER_TEMP/mock-gateway-no-usage.log" 2>&1 &
           for _ in $(seq 1 30); do nc -z 127.0.0.1 18790 && break; sleep 1; done
-          swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token
+          "$BIN/PincerChecks" --live-no-usage ws://127.0.0.1:18790 dev-token
 
-      - name: Upload mock gateway log
+      - name: Upload check logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: mock-gateway-log
-          path: ${{ runner.temp }}/mock-gateway.log
+          name: check-logs
+          path: |
+            ${{ runner.temp }}/mock-gateway.log
+            ${{ runner.temp }}/demo.log
+            ${{ runner.temp }}/live.log
+            ${{ runner.temp }}/mock-gateway-no-usage.log
           if-no-files-found: ignore
