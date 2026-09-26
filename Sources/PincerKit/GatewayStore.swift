@@ -94,12 +94,12 @@ public final class GatewayStore: Identifiable {
     public var selectedKey: String? {
         didSet {
             guard oldValue != self.selectedKey, let key = self.selectedKey else { return }
-            UserDefaults.standard.set(key, forKey: "pincer.selected.\(self.id.uuidString)")
+            self.defaults.set(key, forKey: "pincer.selected.\(self.id.uuidString)")
             Task { await self.openChat(key) }
         }
     }
     public var organization: SidebarOrganization {
-        didSet { UserDefaults.standard.set(self.organization.rawValue, forKey: "pincer.org.v2.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.organization.rawValue, forKey: "pincer.org.v2.\(self.id.uuidString)") }
     }
     public var showArchived = false {
         didSet {
@@ -133,27 +133,37 @@ public final class GatewayStore: Identifiable {
         connection: self.connection, hello: { [weak self] in self?.hello },
         localDeviceId: self.profile.isDemo ? DemoGateway.deviceId : self.deviceId)
 
-    public init(profile: GatewayProfile) {
+    /// Where per-gateway sidebar and selection preferences persist.
+    @ObservationIgnored let defaults: UserDefaults
+    @ObservationIgnored private let identity: DeviceIdentity
+
+    public convenience init(profile: GatewayProfile) {
+        self.init(profile: profile, defaults: .standard, identity: .loadOrCreate())
+    }
+
+    init(profile: GatewayProfile, defaults: UserDefaults, identity: DeviceIdentity) {
         self.profile = profile
         self.id = profile.id
-        self.connection = GatewayConnection(profile: profile)
+        self.defaults = defaults
+        self.identity = identity
+        self.connection = GatewayConnection(profile: profile, identity: identity)
         self.organization = SidebarOrganization(
-            rawValue: UserDefaults.standard.string(forKey: "pincer.org.v2.\(profile.id.uuidString)") ?? "") ?? .servers
-        self.serverNameOverrides = UserDefaults.standard.dictionary(forKey: "pincer.serverNames.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.chatIcons = UserDefaults.standard.dictionary(forKey: "pincer.chatIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.chatColors = UserDefaults.standard.dictionary(forKey: "pincer.chatColors.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.groupPositions = UserDefaults.standard.dictionary(forKey: "pincer.groups.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.groupIcons = UserDefaults.standard.dictionary(forKey: "pincer.groupIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.chatPositions = UserDefaults.standard.dictionary(forKey: "pincer.chatOrder.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.selectedKey = UserDefaults.standard.string(forKey: "pincer.selected.\(profile.id.uuidString)")
-        self.sectionCollapse = UserDefaults.standard.dictionary(forKey: "pincer.collapsed.\(profile.id.uuidString)") as? [String: Bool] ?? [:]
+            rawValue: defaults.string(forKey: "pincer.org.v2.\(profile.id.uuidString)") ?? "") ?? .servers
+        self.serverNameOverrides = defaults.dictionary(forKey: "pincer.serverNames.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.chatIcons = defaults.dictionary(forKey: "pincer.chatIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.chatColors = defaults.dictionary(forKey: "pincer.chatColors.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.groupPositions = defaults.dictionary(forKey: "pincer.groups.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.groupIcons = defaults.dictionary(forKey: "pincer.groupIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.chatPositions = defaults.dictionary(forKey: "pincer.chatOrder.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.selectedKey = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)")
+        self.sectionCollapse = defaults.dictionary(forKey: "pincer.collapsed.\(profile.id.uuidString)") as? [String: Bool] ?? [:]
         let images = ArtifactImageLoader()
         self.images = images
         self.files = FileContentLoader(images: images)
         images.gateway = self
     }
 
-    public var deviceId: String { DeviceIdentity.loadOrCreate().deviceId }
+    public var deviceId: String { self.identity.deviceId }
 
     private enum Inbound: Sendable {
         case event(GatewayEvent)
@@ -300,7 +310,7 @@ public final class GatewayStore: Identifiable {
         self.applySnapshot(list)
     }
 
-    private func applySnapshot(_ list: JSONValue) {
+    func applySnapshot(_ list: JSONValue) {
         var next: [String: SessionRow] = [:]
         for row in list["sessions"]?.array?.compactMap(SessionRow.init) ?? [] {
             next[row.key] = row
@@ -769,7 +779,7 @@ public final class GatewayStore: Identifiable {
     public var totalUnread: Int { self.sessions.values.filter { $0.isUnread && !$0.isArchived && !$0.isSubagent }.count }
 
     public var serverNameOverrides: [String: String] {
-        didSet { UserDefaults.standard.set(self.serverNameOverrides, forKey: "pincer.serverNames.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.serverNameOverrides, forKey: "pincer.serverNames.\(self.id.uuidString)") }
     }
 
     /// Server names from the gateway's channel config (e.g. Discord `guilds.<id>.slug`).
@@ -880,7 +890,7 @@ public final class GatewayStore: Identifiable {
 
     private func pull(_ map: SyncedMap) async {
         guard let fetched = await self.fetchRemoteMap(map.pref) else { return }
-        let defaults = UserDefaults.standard
+        let defaults = self.defaults
         if !defaults.bool(forKey: map.syncedDefaultsKey) {
             // First sync from this device: keep values already set here, remote wins on conflicts.
             var merged = self[keyPath: map.local]
@@ -902,7 +912,7 @@ public final class GatewayStore: Identifiable {
     }
 
     private func push(_ map: SyncedMap, _ changes: [String: String?]) async {
-        guard !changes.isEmpty, UserDefaults.standard.bool(forKey: map.syncedDefaultsKey) else { return }
+        guard !changes.isEmpty, self.defaults.bool(forKey: map.syncedDefaultsKey) else { return }
         // Optimistic write; on a conflict (another device changed it at the same time) re-read and retry.
         for _ in 0..<3 {
             let cached = self.remotePrefMaps[map.pref]
@@ -939,7 +949,7 @@ public final class GatewayStore: Identifiable {
 
     /// Custom SF Symbol names by session key, synced through `users.prefs` (`pincer.chatIcons`).
     public var chatIcons: [String: String] {
-        didSet { UserDefaults.standard.set(self.chatIcons, forKey: "pincer.chatIcons.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.chatIcons, forKey: "pincer.chatIcons.\(self.id.uuidString)") }
     }
 
     /// The SF Symbol chosen for a chat, if any. Callers still validate it for the running OS.
@@ -957,7 +967,7 @@ public final class GatewayStore: Identifiable {
 
     /// Custom "#RRGGBB" colors by session key, synced through `users.prefs` (`pincer.chatColors`).
     public var chatColors: [String: String] {
-        didSet { UserDefaults.standard.set(self.chatColors, forKey: "pincer.chatColors.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.chatColors, forKey: "pincer.chatColors.\(self.id.uuidString)") }
     }
 
     /// The custom color picked for a chat, if any. It wins over the session's named `color`.
@@ -1153,12 +1163,12 @@ public final class GatewayStore: Identifiable {
 
     /// Fallback for gateways without the catalog: group names to positions, synced through `users.prefs`.
     public var groupPositions: [String: String] {
-        didSet { UserDefaults.standard.set(self.groupPositions, forKey: "pincer.groups.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.groupPositions, forKey: "pincer.groups.\(self.id.uuidString)") }
     }
 
     /// SF Symbol names by group name, synced through `users.prefs` (`pincer.groupIcons`).
     public var groupIcons: [String: String] {
-        didSet { UserDefaults.standard.set(self.groupIcons, forKey: "pincer.groupIcons.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.groupIcons, forKey: "pincer.groupIcons.\(self.id.uuidString)") }
     }
 
     /// The SF Symbol chosen for a group, if any. Callers still validate it for the running OS.
@@ -1167,7 +1177,7 @@ public final class GatewayStore: Identifiable {
     /// Sidebar sections the reader expanded or collapsed, by section id. Sections without an
     /// entry start expanded, except Automations, which starts collapsed.
     public private(set) var sectionCollapse: [String: Bool] {
-        didSet { UserDefaults.standard.set(self.sectionCollapse, forKey: "pincer.collapsed.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.sectionCollapse, forKey: "pincer.collapsed.\(self.id.uuidString)") }
     }
 
     public var collapsedSections: Set<String> {
@@ -1202,7 +1212,7 @@ public final class GatewayStore: Identifiable {
 
     /// Session keys to their position within their group, synced through `users.prefs`.
     public var chatPositions: [String: String] {
-        didSet { UserDefaults.standard.set(self.chatPositions, forKey: "pincer.chatOrder.\(self.id.uuidString)") }
+        didSet { self.defaults.set(self.chatPositions, forKey: "pincer.chatOrder.\(self.id.uuidString)") }
     }
 
     /// Whether groups live in the gateway's catalog. Gateways that don't list their methods get a try.

@@ -19,6 +19,9 @@ var passes = 0
 // Drafts go to a scratch folder so checks never touch the real ones.
 let draftsRoot = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-drafts-\(UUID().uuidString)")
 setenv("PINCER_DRAFTS_DIR", draftsRoot.path(percentEncoded: false), 1)
+// Same for the transcript cache, so concurrent runs (and `swift test`) never share one.
+let cacheRoot = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-cache-\(UUID().uuidString)")
+setenv("PINCER_CACHE_DIR", cacheRoot.path(percentEncoded: false), 1)
 
 @MainActor
 func check(_ condition: @autoclosure () -> Bool, _ label: String, line: UInt = #line) {
@@ -1147,8 +1150,17 @@ func checkDrafts() async {
           "switching chats keeps each chat's draft")
     check(first.chat(for: "agent:main:beta").draft.text == "/model", "drafts are per chat")
 
-    let saved = await waitFor("debounced draft save", timeout: 5) { folders().count == 2 }
+    // Each folder is created before its draft.json, so wait for the manifests, not the folders.
+    func manifests() -> Int {
+        folders().filter { name in
+            FileManager.default.fileExists(atPath: gatewayFolder.appending(path: name).appending(path: "draft.json").path(percentEncoded: false))
+        }.count
+    }
+    let saved = await waitFor("debounced draft save", timeout: 5) { manifests() == 2 }
     check(saved, "drafts are saved without an explicit flush")
+    // Let any save still queued behind the first one land before "relaunching".
+    await alpha.flushDraft()
+    await beta.flushDraft()
 
     // Relaunch: a fresh store for the same Gateway.
     let second = GatewayStore(profile: profile)
@@ -1261,6 +1273,7 @@ if arguments.contains("--demo") {
 
 print("\n\(passes) passed, \(failures) failed")
 try? FileManager.default.removeItem(at: draftsRoot)
+try? FileManager.default.removeItem(at: cacheRoot)
 exit(failures == 0 ? 0 : 1)
 
 /// `ApprovalHistoryModel` against a scripted Gateway: aliases, paging, cursors, errors and unsupported gateways.
@@ -1643,14 +1656,15 @@ func runDemo() async {
 /// Back/forward and ⌘1–⌘9 through `AppModel`, across two demo Gateways.
 @MainActor
 func runNavigation() async {
-    let app = AppModel()
+    let (defaults, defaultsName) = scratchDefaults()
+    let app = AppModel(defaults: defaults)
     guard app.gateways.isEmpty else {
         check(false, "navigation checks need an empty profile list (found \(app.gateways.count))")
         return
     }
     defer {
         for gateway in app.gateways { app.remove(gateway.id) }
-        UserDefaults.standard.removeObject(forKey: "pincer.selectedGateway")
+        UserDefaults.standard.removePersistentDomain(forName: defaultsName)
     }
     let first = app.add(.demo(), secret: nil)
     let ready = await waitFor("demo connection") { first.state.isConnected && !first.sessions.isEmpty }
