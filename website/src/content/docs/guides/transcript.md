@@ -69,6 +69,10 @@ The options menu in the bar has two toggles:
 
 When a match is inside folded thinking or a tool card, it opens when you get to it. The options are remembered on this device.
 
+### Searching every chat
+
+To search every chat at once, use [Search messages](../search/) (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd>). Opening one of its results opens that chat with Find in Chat already showing your query and the message you picked selected. Every search result is also a match in Find, though Find matches inside words too.
+
 ## Images
 
 Pincer shows images inline, with a Quick Look-style preview and sharing. This covers:
@@ -88,12 +92,6 @@ Messages from you appear under **your own name**, even when you sent them throug
 The chat toolbar shows the session's model. Pick another from the list the gateway offers, or go back to the agent's default, and new messages use it.
 
 Each reply's footer shows the model the gateway recorded for it, so earlier replies keep their original model after you switch.
-
-## Find in Chat
-
-**Find in Chat** (<kbd>⌘</kbd> <kbd>F</kbd>) opens a find bar at the top of the chat. It highlights every match and shows where you are, such as "3 of 12". <kbd>⌘</kbd> <kbd>G</kbd> and <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>G</kbd> (or <kbd>Return</kbd>) step through the matches, scrolling to each one. Its options menu can also search thinking and tool input and output, which expand when you land on a match in them.
-
-To search every chat at once, use [Search messages](../search/) (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd>). Opening one of its results opens that chat with Find in Chat already showing your query and the message you picked selected. Every search result is also a match in Find, though Find matches inside words too.
 
 ## History and caching
 

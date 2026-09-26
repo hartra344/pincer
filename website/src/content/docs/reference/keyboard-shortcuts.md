@@ -22,7 +22,9 @@ description: Keyboard shortcuts for Pincer on macOS (and iPad with a keyboard).
 | [Search messages](../../guides/search/) | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd> |
 | Back | <kbd>⌘</kbd> <kbd>[</kbd> |
 | Forward | <kbd>⌘</kbd> <kbd>]</kbd> |
-| Open a pinned chat, in sidebar order | <kbd>⌘</kbd> <kbd>1</kbd> – <kbd>⌘</kbd> <kbd>9</kbd> |
+| Open pinned chat 1–9 (selected gateway, sidebar order) | <kbd>⌘</kbd> <kbd>1</kbd> … <kbd>⌘</kbd> <kbd>9</kbd> |
+
+See [Command palette & navigation](../../guides/command-palette-and-navigation/).
 
 ## Command palette and message search
 
@@ -74,35 +76,6 @@ Change or turn off the shortcut in **Settings → General → Quick Capture**. S
 | Move through suggestions | <kbd>↑</kbd> <kbd>↓</kbd> |
 | Complete | <kbd>Tab</kbd> or <kbd>Return</kbd> |
 | Hide | <kbd>Esc</kbd> |
-
-## Go
-
-| Action | Shortcut |
-| --- | --- |
-| Command palette | <kbd>⌘</kbd> <kbd>K</kbd> |
-| Back | <kbd>⌘</kbd> <kbd>[</kbd> |
-| Forward | <kbd>⌘</kbd> <kbd>]</kbd> |
-| Open pinned chat 1–9 (selected gateway, sidebar order) | <kbd>⌘</kbd> <kbd>1</kbd> … <kbd>⌘</kbd> <kbd>9</kbd> |
-
-See [Command palette & navigation](../../guides/command-palette-and-navigation/).
-
-## Command palette
-
-| Action | Shortcut |
-| --- | --- |
-| Move through results | <kbd>↑</kbd> <kbd>↓</kbd> |
-| Run | <kbd>Return</kbd> |
-| Back to commands, or close | <kbd>Esc</kbd> |
-| Back to commands (models page) | <kbd>Delete</kbd> in an empty field |
-
-## Find in Chat
-
-| Action | Shortcut |
-| --- | --- |
-| Find in Chat | <kbd>⌘</kbd> <kbd>F</kbd> |
-| Next match | <kbd>⌘</kbd> <kbd>G</kbd> or <kbd>Return</kbd> |
-| Previous match | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>G</kbd> |
-| Close | <kbd>Esc</kbd> |
 
 ## Agent questions
 
