@@ -27,6 +27,7 @@ public struct PincerScene: Scene {
             }
         }
         #endif
+        .commands { GoCommands(app: self.app) }
 
         #if os(macOS)
         WindowGroup("Gateway Settings", id: "gateway-settings", for: UUID.self) { $gatewayId in
@@ -76,6 +77,9 @@ struct RootView: View {
     @State private var settingsRequest: GatewaySettingsRequest?
     /// iOS: Automations shown as a sheet.
     @State private var automationsRequest: AutomationsRequest?
+    /// iOS: app Settings opened from the command palette.
+    @State private var showingAppSettings = false
+    @State private var showsCommandPalette = false
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -104,7 +108,20 @@ struct RootView: View {
                     .onAppear { self.compactColumn = .sidebar }
             }
         }
+        .overlay {
+            CommandPaletteOverlay(isPresented: self.$showsCommandPalette, openAppSettings: { self.showingAppSettings = true })
+        }
+        .animation(.snappy(duration: 0.15), value: self.showsCommandPalette)
+        .focusedSceneValue(\.commandPalette, self.$showsCommandPalette)
         .sheet(isPresented: self.$addingGateway) { ConnectionSheet() }
+        #if os(iOS)
+        .sheet(isPresented: self.$showingAppSettings) {
+            NavigationStack {
+                SettingsView()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { self.showingAppSettings = false } } }
+            }
+        }
+        #endif
         .sheet(item: self.$settingsRequest) { request in
             GatewaySettingsWindow(gatewayId: request.id, close: { self.settingsRequest = nil })
         }
