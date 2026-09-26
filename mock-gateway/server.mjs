@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
+import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const METHODS = [
@@ -444,6 +445,7 @@ function createSeedState() {
     activeRuns: new Map(),
     connections: new Set(),
     configState: createConfigState(),
+    webPushState: createWebPushState(),
     cronState: createCronState(base),
   };
 }
@@ -479,6 +481,7 @@ function broadcast(state, event, payload, predicate = () => true) {
   for (const conn of state.connections) {
     if (conn.authenticated && predicate(conn)) sendEvent(conn, event, payload);
   }
+  handleWebPushEvent(state, event, payload);
 }
 
 function updateSessionRow(row, patch = {}) {
@@ -882,6 +885,7 @@ function handleAuthedRequest(state, conn, msg) {
   const { id, method, params = {} } = msg;
   if (handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
   if (handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession })) return;
+  if (handleWebPushRequest(state, conn, msg, { sendRes, sendErr })) return;
   switch (method) {
     case 'progressCard.get': {
       const key = params.sessionKey;

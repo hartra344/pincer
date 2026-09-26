@@ -16,11 +16,13 @@ cd "$(dirname "$0")/.."
 PLATFORM="${1:?usage: $0 ios|macos}"
 TEAM_ID="E4Y97NXBXG"
 case "$PLATFORM" in
-  ios)   SCHEME=Pincer-iOS;   DESTINATION="generic/platform=iOS";   BUNDLE_ID=chat.pincer.ios; PROFILE=Pincer_iOS_AppStore_CI ;;
+  ios)   SCHEME=Pincer-iOS;   DESTINATION="generic/platform=iOS";   BUNDLE_ID=chat.pincer.ios; PROFILE=Pincer_iOS_AppStore_CI
+         EXTRA_PROFILES="<key>chat.pincer.ios.notifications</key><string>Pincer_iOS_Notifications_AppStore_CI</string>" ;;
   macos) SCHEME=Pincer-macOS; DESTINATION="generic/platform=macOS"; BUNDLE_ID=chat.pincer.mac; PROFILE=Pincer_macOS_AppStore_CI ;;
   *) echo "unknown platform: $PLATFORM" >&2; exit 64 ;;
 esac
 
+EXTRA_PROFILES="${EXTRA_PROFILES:-}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(date +%s)}"
 OUT="build/testflight/$PLATFORM"
 ARCHIVE="$OUT/$SCHEME.xcarchive"
@@ -58,7 +60,7 @@ cat > "$OUT/ExportOptions.plist" <<PLIST
   <key>signingStyle</key><string>manual</string>
   <key>signingCertificate</key><string>Apple Distribution</string>
 $INSTALLER_KEY  <key>provisioningProfiles</key>
-  <dict><key>$BUNDLE_ID</key><string>$PROFILE</string></dict>
+  <dict><key>$BUNDLE_ID</key><string>$PROFILE</string>$EXTRA_PROFILES</dict>
   <key>uploadSymbols</key><true/>
   <key>manageAppVersionAndBuildNumber</key><false/>
   <key>testFlightInternalTestingOnly</key><false/>

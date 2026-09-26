@@ -47,10 +47,16 @@ targets:
     dependencies:
       - package: Pincer
         product: PincerUI
+      - package: Pincer
+        product: PincerKit
+      - target: PincerNotifications-iOS
     settings:
       base:
         PRODUCT_NAME: Pincer
         PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios
+        CODE_SIGN_ENTITLEMENTS: Apps/iOS/Pincer.entitlements
+        INFOPLIST_FILE: Apps/Shared/Info.plist
+        PINCER_APS_ENVIRONMENT: development
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Pincer
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -59,4 +65,20 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer connects to your OpenClaw Gateway on your local network or tailnet."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach photos to messages you send to your agents."
+        TARGETED_DEVICE_FAMILY: "1,2"
+  PincerNotifications-iOS:
+    # Decrypts relayed Gateway Web Push messages into chat and approval notifications.
+    type: app-extension
+    platform: iOS
+    sources: [Apps/iOSNotificationService]
+    dependencies:
+      - package: Pincer
+        product: PincerPush
+    settings:
+      base:
+        PRODUCT_NAME: PincerNotifications
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios.notifications
+        CODE_SIGN_ENTITLEMENTS: Apps/iOSNotificationService/PincerNotifications.entitlements
+        INFOPLIST_FILE: Apps/iOSNotificationService/Info.plist
+        GENERATE_INFOPLIST_FILE: YES
         TARGETED_DEVICE_FAMILY: "1,2"

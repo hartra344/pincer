@@ -12,7 +12,8 @@ public final class AppModel {
             self.updateVisible()
         }
     }
-    public let notifier = Notifier()
+    public let notifier = Notifier.shared
+    public let push = PushRegistrar.shared
     /// Counts `open(_:)` calls (from notifications), so the UI can bring the chat on screen.
     public private(set) var openRequests = 0
     /// Chats visited, for Back/Forward and the palette's recent chats.
@@ -34,20 +35,34 @@ public final class AppModel {
         self.selectedGatewayId = self.gateways.first { $0.id == saved }?.id ?? self.gateways.first?.id
         self.notifier.onOpen = { [weak self] target in self?.open(target) }
         self.notifier.onApprovalAction = { [weak self] gatewayId, approvalId, decision in
-            guard let gateway = self?.gateways.first(where: { $0.id == gatewayId }),
-                  let approval = gateway.approvals.first(where: { $0.id == approvalId })
-            else { return }
-            Task { await gateway.resolveApproval(approval, decision: decision) }
+            guard let gateway = self?.gateways.first(where: { $0.id == gatewayId }) else { return }
+            Task { await gateway.resolveApproval(id: approvalId, decision: decision) }
         }
     }
 
     public func start() {
+        guard !self.started else { return }
+        self.started = true
+        self.notifier.pushDelivers = { [weak self] id in self?.push.isActive(id) ?? false }
+        self.notifier.isConnected = { [weak self] id in
+            self?.gateways.first { $0.id == id }?.state.isConnected ?? false
+        }
+        self.push.onTokenChange = { [weak self] in self?.syncPush() }
         self.notifier.activate()
         for gateway in self.gateways {
             gateway.notifier = self.notifier
             gateway.start()
         }
         self.updateVisible()
+    }
+
+    @ObservationIgnored private var started = false
+
+    /// Re-registers push on every connected gateway, e.g. after the token or a setting changed.
+    public func syncPush() {
+        for gateway in self.gateways {
+            Task { await self.push.sync(gateway) }
+        }
     }
 
     public var selectedGateway: GatewayStore? {
@@ -71,7 +86,7 @@ public final class AppModel {
     public func open(_ target: Notifier.Target) {
         guard let gateway = self.gateways.first(where: { $0.id == target.gatewayId }) else { return }
         // Key first, so switching Gateways doesn't briefly record the other Gateway's last chat.
-        gateway.selectedKey = target.sessionKey
+        gateway.selectedKey = gateway.resolveSessionKey(target.sessionKey)
         self.selectedGatewayId = gateway.id
         self.updateVisible()
         self.openRequests += 1
@@ -146,7 +161,11 @@ public final class AppModel {
     public func remove(_ id: UUID) {
         guard let index = self.gateways.firstIndex(where: { $0.id == id }) else { return }
         let store = self.gateways.remove(at: index)
-        store.stop()
+        let push = self.push
+        Task {
+            await push.forget(store)
+            store.stop()
+        }
         store.profile.forgetCredentials()
         TranscriptCache.removeAll(gatewayId: id)
         self.history.prune { $0.gatewayId != id }

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Push relay notifications (see push-relay/). -->
+	<key>aps-environment</key>
+	<string>$(PINCER_APS_ENVIRONMENT)</string>
+	<!-- Shared with the Notification Service Extension, which decrypts pushes with the per-gateway Web Push keys. -->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)chat.pincer.shared</string>
+	</array>
+</dict>
+</plist>

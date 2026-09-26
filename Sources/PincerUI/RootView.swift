@@ -254,6 +254,18 @@ private struct SettingsForm: View {
     @AppStorage(AppTheme.modeKey) private var mode = AppearanceMode.system
     @Environment(\.appTheme) private var theme
     @State private var notifications = true
+    @AppStorage(PushRegistrar.relayKey) private var pushRelay = ""
+
+    private func pushStatus(_ gateway: GatewayStore) -> String {
+        if !self.pushRelay.isEmpty, PushRegistrar.validRelay(self.pushRelay) == nil { return "Relay must be https://" }
+        if self.app.push.deviceToken == nil, !self.pushRelay.isEmpty { return "Waiting for APNs" }
+        switch self.app.push.status[gateway.id] {
+        case .active: return "Push on"
+        case .unsupported: return "Gateway has no Web Push"
+        case let .failed(message): return message
+        case .off, nil: return gateway.state.isConnected ? "Push off" : "Not connected"
+        }
+    }
 
     var body: some View {
         Form {
@@ -333,9 +345,28 @@ private struct SettingsForm: View {
                 }
             }
         case .notifications:
-            SwiftUI.Section("Notifications") {
+            SwiftUI.Section {
                 Toggle("Notify about replies and approvals", isOn: self.$notifications)
-                    .onChange(of: self.notifications) { _, value in self.app.notifier.enabled = value }
+                    .onChange(of: self.notifications) { _, value in
+                        self.app.notifier.enabled = value
+                        self.app.syncPush()
+                    }
+                #if os(iOS)
+                TextField("Push relay", text: self.$pushRelay, prompt: Text("https://relay.example.com"))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .onSubmit { self.app.syncPush() }
+                ForEach(self.app.gateways.filter { !$0.profile.isDemo }) { gateway in
+                    LabeledContent(gateway.profile.name, value: self.pushStatus(gateway))
+                }
+                #endif
+            } header: {
+                Text("Notifications")
+            } footer: {
+                #if os(iOS)
+                Text("To get notified while Pincer is closed, enter a Pincer push relay. Your gateway encrypts each notification to this device, so the relay can't read it. The gateway needs Web Push (push.web.subscribe).")
+                #endif
             }
         case .device:
             SwiftUI.Section("This device") {
