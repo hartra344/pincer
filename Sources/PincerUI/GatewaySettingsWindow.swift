@@ -181,6 +181,10 @@ private struct GatewaySettingsRoot: View {
         .task(id: LoadKey(settings: ObjectIdentifier(settings), connected: self.gateway.state.isConnected)) {
             if self.gateway.state.isConnected { await settings.load() }
         }
+        .task(id: self.gateway.state.isConnected) {
+            // One list, so the sidebar badge shows how many senders are waiting.
+            if self.gateway.state.isConnected { await self.gateway.pairingInbox.seed() }
+        }
     }
 
     private struct LoadKey: Hashable {
@@ -194,6 +198,7 @@ private struct GatewaySettingsRoot: View {
         case .overview: OverviewPage()
         case .approvals: ApprovalHistoryPage()
         case .execPolicy: ExecPolicyPage()
+        case .pairing: PairingRequestsPage()
         case let .page(id):
             if let page = SettingsCatalog.page(id) { CuratedPage(page: page) }
         case .plugins: PluginsPage()
@@ -277,6 +282,8 @@ private struct SettingsSidebar: View {
     @Binding var search: String
     @Environment(GatewayStore.self) private var gateway
     @Environment(SettingsNavigator.self) private var navigator
+    /// Ticks so the pairing badge drops requests as they expire, even while that page is closed.
+    @State private var now = Date.now
 
     var body: some View {
         @Bindable var navigator = self.navigator
@@ -289,6 +296,8 @@ private struct SettingsSidebar: View {
                     self.row("Approval History", symbol: "checkmark.shield", .approvals)
                     self.row("Command Policy", symbol: "lock.shield", .execPolicy,
                              unsaved: self.gateway.execPolicy.hasChanges)
+                    self.row("Pairing Requests", symbol: "person.badge.key", .pairing,
+                             badge: self.gateway.state.isConnected ? self.gateway.pairingInbox.pendingCount(at: self.now) : 0)
                 }
                 if settings.hasLoaded {
                     Section("Settings") {
@@ -319,6 +328,12 @@ private struct SettingsSidebar: View {
         .searchable(text: self.$search, prompt: "Search Settings")
         #endif
         .disabled(!settings.hasLoaded && !self.search.isEmpty && SettingsCatalog.destinations(matching: self.search).isEmpty)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                self.now = .now
+            }
+        }
     }
 
     private func row(_ title: String, symbol: String, _ destination: SettingsDestination, badge: Int = 0,

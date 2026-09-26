@@ -23,6 +23,12 @@ Pincer connects to a Gateway you already run and speaks the Gateway WebSocket pr
 
 `operator.questions` lets Pincer answer [agent questions](../../guides/approvals-and-notifications/#agent-questions). Devices paired before Pincer asked for it raise a one-time scope upgrade on the gateway. Until it's approved, Pincer connects without it, and you can answer questions in the Control UI or the channel instead. `operator.admin` includes it.
 
+### Pairing requests
+
+Approving a [pairing request](../../guides/gateway-settings/#pairing-requests) lets that sender DM your agents on that channel account, so check the channel's sender id before you approve. The name and username come from the sender and aren't verified. **Dismiss** doesn't block anyone; to revoke access later, edit the channel's allowlist on the gateway.
+
+The gateway's pairing methods need `operator.pairing`. Pincer never asks for it, because that scope also lets a device approve new devices and nodes. Reviewing pairing requests uses **Full Management** instead, whose `operator.admin` covers it. Making someone the command owner always needs `operator.admin`.
+
 ## Command policy
 
 The gateway's command policy (which commands agents may run, and their allowlists) can only be read or changed with `operator.admin`, so Pincer shows it only with **Full Management**. See [Command Policy](../../guides/command-policy/).

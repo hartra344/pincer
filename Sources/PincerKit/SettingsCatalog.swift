@@ -8,6 +8,8 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case approvals
     /// Command Policy: the exec approvals file (`exec.approvals.get/set`).
     case execPolicy
+    /// Pairing Requests: senders waiting to DM the agents on a pairing-policy channel.
+    case pairing
     /// A curated page from `SettingsCatalog`, by id.
     case page(String)
     case plugins

@@ -58,6 +58,16 @@ Someone (or an **Always allow** answer) changed the policy file while you were e
 
 The gateway found something invalid in the policy file. Your draft is kept: fix the value named in the message, or choose **Revert**, then save again.
 
+## Pairing Requests says it isn't available
+
+"This Gateway doesn't support channel pairing requests" means the gateway is older than the channel pairing methods (`channels.pairing.*`). Update OpenClaw.
+
+## Pairing Requests needs Full Management
+
+Reviewing pairing requests needs **Access → Full Management** on the **Connection** page, and the gateway has to approve the change. Pincer doesn't ask for the narrower `operator.pairing` scope; see [Security & privacy](../security/#pairing-requests).
+
+If the page says no channels use DM pairing, set a channel account's `dmPolicy` to `"pairing"` on the gateway.
+
 ## A helper run is missing from the sidebar
 
 Subagent (helper) runs are hidden by default. Open one with **Open run** on the tool call that started it, or turn on listing them under their parent in **Settings → Sidebar**.
