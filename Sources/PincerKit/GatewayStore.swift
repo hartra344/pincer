@@ -140,6 +140,9 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var approvalHistory = ApprovalHistoryModel(
         connection: self.connection, hello: { [weak self] in self?.hello },
         localDeviceId: self.profile.isDemo ? DemoGateway.deviceId : self.deviceId)
+    /// Token and cost usage; loaded when the Usage page opens.
+    @ObservationIgnored public private(set) lazy var usage = UsageModel(
+        connection: self.connection, hello: { [weak self] in self?.hello })
     /// Pending DM pairing requests from channels; loaded when Gateway Settings opens.
     @ObservationIgnored public private(set) lazy var pairingInbox = PairingInboxModel(
         connection: self.connection, hello: { [weak self] in self?.hello })

@@ -25,6 +25,7 @@ Settings are read-only unless this device's **Access** is set to **Full Manageme
 | **Connection** | This device's URL, token, access level and TLS pin. **Apply** reconnects. |
 | **Overview** | The gateway's version, config file and health. |
 | **Approval History** | Past approval decisions from the last 30 days. |
+| **Usage** | Tokens, estimated cost and rate limits. See [Usage & cost](../usage-and-cost/). |
 | **Pairing Requests** | People waiting to message your agents on a channel that uses DM pairing. See [below](#pairing-requests). |
 | **Gateway** | Core gateway settings. |
 | **Agents & Models** | Agents, their models and defaults. |
@@ -35,6 +36,8 @@ Settings are read-only unless this device's **Access** is set to **Full Manageme
 | **Plugins** | Installed plugins and their settings. |
 | **All Settings** | Every field, grouped by section. |
 | **Raw Config** | The whole config as JSON5. |
+
+**Connection**, **Overview**, **Approval History** and **Usage** are always there. The rest need the gateway's config.
 
 The curated pages are built from the gateway's own schema, so they match what your gateway supports. Rarely used fields are under **Advanced**, and sections your gateway doesn't have are hidden.
 

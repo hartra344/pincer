@@ -79,6 +79,7 @@ struct ChannelList: View {
                     Divider()
                     Button("Automations…") { self.openAutomations(self.gateway) }
                     Button("Approval History…") { self.openGatewaySettings(self.gateway, at: .approvals) }
+                    Button("Usage & Cost…") { self.openGatewaySettings(self.gateway, at: .usage) }
                     Button("Gateway Settings…") { self.openGatewaySettings(self.gateway) }
                         .keyboardShortcut(",", modifiers: [.command, .shift])
                     Button("Edit Connection…") { self.openGatewaySettings(self.gateway, at: .connection) }

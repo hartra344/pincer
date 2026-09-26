@@ -14,6 +14,7 @@ import UserNotifications
 //   swift run PincerChecks                  → unit checks
 //   swift run PincerChecks --live URL TOKEN → end-to-end against a (mock) Gateway
 //   swift run -c release PincerChecks --perf → message index at 20 chats × 20k messages
+//   swift run PincerChecks --live-no-usage URL TOKEN → a Gateway without usage (mock with MOCK_NO_USAGE=1)
 // Run with PINCER_KEYCHAIN=memory so nothing touches the real Keychain.
 
 var failures = 0
@@ -499,6 +500,9 @@ do {
 await checkApprovalHistoryModel()
 print("Pairing requests")
 await checkPairingInboxModel()
+
+print("Usage & cost")
+await checkUsage()
 
 print("Agent questions")
 do {
@@ -2306,6 +2310,10 @@ if arguments.contains("--perf") {
     print("Message index performance (20 × 20k)")
     await runMessageIndexPerf()
 }
+if let index = arguments.firstIndex(of: "--live-no-usage"), arguments.count > index + 2 {
+    print("Gateway without usage at \(arguments[index + 1])")
+    await runLiveNoUsage(url: arguments[index + 1], token: arguments[index + 2])
+}
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
@@ -2592,6 +2600,8 @@ func runDemo() async {
     } else {
         check(false, "demo history has a plugin")
     }
+
+    await checkUsageDemo(gateway)
     await history.loadMore()
     check(history.items.count == 10 && history.hasMore, "demo second page before resolving")
 
@@ -3548,6 +3558,7 @@ func runLive(url: String, token: String) async {
     await history.loadDetail("nope_missing")
     check(history.detailState["nope_missing"]?.error == "This approval is no longer on the Gateway.", "approval.get not found")
 
+    await checkUsageLive(gateway)
     // Pairing Requests: Pincer doesn't ask for operator.pairing, so standard access can't list.
     let standardPairing = gateway.pairingInbox
     check(gateway.hello?.methods.contains("channels.pairing.list") == true && standardPairing.supported, "hello advertises channels.pairing.list")

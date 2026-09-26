@@ -39,6 +39,8 @@ Helper (subagent) runs and archived chats aren't listed.
 | **Gateway Settings…** | Opens [Gateway Settings](../gateway-settings/) for the selected gateway. |
 | **Automations…** | Opens the selected gateway's automations. |
 | **Approval History…** | Opens [Approval History](../gateway-settings/#approval-history) for the selected gateway. |
+| **Usage & Cost…** | Opens the [Usage](../usage-and-cost/) dashboard for the selected gateway. |
+| **Session Usage…** | Opens the current chat's [usage drill-down](../usage-and-cost/). Shown only when a chat is open. |
 
 ### Searching messages
 
@@ -59,7 +61,7 @@ Search is forgiving:
 - Every word you type has to match, but it can match the title, the subtitle or hidden keywords.
 - Letters can match in order, not only as a whole word. `jptr` finds "Japan trip", and `nwcr` finds "New Chat with Research".
 - Case and accents don't matter.
-- Keywords include agent, gateway, channel and category names. Commands also match common synonyms: "audit" or "log" finds **Approval History…**, "cron" finds **Automations…**, and "preferences" finds **Open Settings…**.
+- Keywords include agent, gateway, channel and category names. Commands also match common synonyms: "audit" or "log" finds **Approval History…**, "cron" finds **Automations…**, "spend" or "tokens" finds **Usage & Cost…**, and "preferences" finds **Open Settings…**.
 
 If nothing matches, the palette shows "No matches".
 

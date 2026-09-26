@@ -169,7 +169,8 @@ struct RootView: View {
     }
 
     private var settingsOpener: GatewaySettingsOpener {
-        GatewaySettingsOpener { gateway, destination in
+        GatewaySettingsOpener { gateway, destination, routes in
+            gateway.settings.requestedRoutes = routes
             gateway.settings.requestedDestination = destination
             #if os(macOS)
             self.openWindow(id: "gateway-settings", value: gateway.id)

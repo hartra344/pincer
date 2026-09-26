@@ -261,6 +261,7 @@ private struct ChatModelItem: View {
 
 private struct ChatSessionMenu: View {
     @Environment(GatewayStore.self) private var gateway
+    @Environment(\.openGatewaySettings) private var openGatewaySettings
     @FocusedValue(\.transcriptFind) private var find
 
     var body: some View {
@@ -278,6 +279,9 @@ private struct ChatSessionMenu: View {
                     Task { await self.gateway.chat(for: key).load(force: true) }
                 }
                 Button("Copy Session Key", systemImage: "key") { Clipboard.copy(row.key) }
+                Button("Session Usage…", systemImage: "chart.bar") {
+                    self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
+                }
             } label: {
                 Label("Session", systemImage: Theme.moreSymbol)
             }

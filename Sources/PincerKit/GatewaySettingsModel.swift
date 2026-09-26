@@ -31,6 +31,8 @@ public final class GatewaySettingsModel {
     public var pendingConfirmation: PluginConfirmation?
     /// Where an open settings window should go next (e.g. "Edit Connection…" from the sidebar).
     public var requestedDestination: SettingsDestination?
+    /// Pages to push on top of `requestedDestination` (e.g. a session's usage from its chat).
+    public var requestedRoutes: [SettingsRoute] = []
 
     public static let installKey = "__install__"
 
