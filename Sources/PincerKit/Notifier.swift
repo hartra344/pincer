@@ -5,7 +5,7 @@ import UserNotifications
 /// Everything is delivered while the app is running; there is no push relay.
 @MainActor
 public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
-    public struct Target: Equatable, Sendable {
+    public struct Target: Hashable, Sendable {
         public let gatewayId: UUID
         public let sessionKey: String
 
