@@ -63,6 +63,8 @@ public final class ChatStore: Identifiable {
     public var errorMessage: String?
     /// Whether the transcript contains any reasoning; used to hint at `/reasoning on`.
     public private(set) var sawThinking = false
+    /// The agent's task checklist for this session, shown above the composer.
+    public private(set) var progressCard: ProgressCard?
 
     @ObservationIgnored private let historyLimit = 120
     @ObservationIgnored private let gatewayId: UUID
@@ -77,6 +79,17 @@ public final class ChatStore: Identifiable {
     /// Whether older pages have been prepended beyond the latest page.
     @ObservationIgnored private var hasPagedOlder = false
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private var progressCardTask: Task<Void, Never>?
+    /// Whether the Gateway serves `progressCard.get`; nil until known. Without it, `plan` stream
+    /// events drive the card instead.
+    @ObservationIgnored private var progressCardStoreAvailable: Bool?
+    @ObservationIgnored private var legacyPlanRevision = 0
+    /// Full copies of capped messages by transcript id, re-applied when history re-sends the cap.
+    @ObservationIgnored private var fullMessages: [String: ChatItem] = [:]
+    /// Capped messages being fetched, or that the Gateway couldn't return in full.
+    @ObservationIgnored private var recoveryAttempted: Set<String> = []
+    /// Largest text field requested per message, matching the Control UI.
+    @ObservationIgnored private let fullMessageMaxChars = 500_000
 
     init(sessionKey: String, agentId: String?, gateway: GatewayStore, headless: Bool = false) {
         self.sessionKey = sessionKey
@@ -117,6 +130,7 @@ public final class ChatStore: Identifiable {
             self.errorMessage = nil
             self.scheduleSave()
             self.startBackfill()
+            self.refreshProgressCard()
         } catch {
             self.errorMessage = error.localizedDescription
         }
@@ -223,6 +237,7 @@ public final class ChatStore: Identifiable {
             self.hasMoreHistory = (page["hasMore"]?.bool ?? (older.count >= self.historyLimit)) && !older.isEmpty
             self.hasPagedOlder = true
             if !fresh.isEmpty { self.items = fresh + self.items }
+            self.recoverCappedMessages()
             return true
         } catch {
             self.errorMessage = error.localizedDescription
@@ -271,6 +286,7 @@ public final class ChatStore: Identifiable {
         }
         let merged = older + parsed + pending
         if merged != self.items { self.items = merged }
+        self.recoverCappedMessages()
 
         if let inFlight = history["inFlightRun"], let runId = inFlight["runId"]?.text {
             var run = self.live?.runId == runId ? self.live! : LiveRun(runId: runId)
@@ -280,6 +296,62 @@ public final class ChatStore: Identifiable {
         } else if history["sessionInfo"]?["hasActiveRun"]?.bool == false {
             self.live = nil
         }
+    }
+
+    // MARK: Capped messages
+
+    /// History caps each text field (8,000 chars by default) and flags the message; like the
+    /// Control UI, fetch the full copy with `chat.message.get` and swap it in.
+    private func recoverCappedMessages() {
+        var items = self.items
+        var substituted = false
+        var missing: [String] = []
+        for index in items.indices where items[index].isCapped {
+            guard let messageId = items[index].transcriptId else { continue }
+            if let full = self.fullMessages[messageId] {
+                items[index] = Self.restoring(full, over: items[index])
+                substituted = true
+            } else if self.recoveryAttempted.insert(messageId).inserted {
+                missing.append(messageId)
+            }
+        }
+        if substituted { self.items = items }
+        for messageId in missing {
+            Task { [weak self] in await self?.fetchFullMessage(messageId) }
+        }
+    }
+
+    private func fetchFullMessage(_ messageId: String) async {
+        guard let gateway, gateway.state.isConnected else {
+            self.recoveryAttempted.remove(messageId)
+            return
+        }
+        var params = self.params(keyName: "sessionKey")
+        params["messageId"] = .string(messageId)
+        params["maxChars"] = .number(Double(self.fullMessageMaxChars))
+        let result: JSONValue
+        do {
+            result = try await gateway.connection.request("chat.message.get", .object(params), timeout: 30)
+        } catch {
+            // Transport failures retry on the next history pass; Gateway refusals below don't.
+            self.recoveryAttempted.remove(messageId)
+            return
+        }
+        guard result["ok"]?.bool == true, let message = result["message"],
+              let full = ChatItem(message, fallbackIndex: 0), !full.isCapped
+        else { return }
+        self.fullMessages[messageId] = full
+        guard let index = self.items.firstIndex(where: { $0.transcriptId == messageId && $0.isCapped }) else { return }
+        self.items[index] = Self.restoring(full, over: self.items[index])
+    }
+
+    /// The full copy with the capped row's identity, so the row keeps its place and scroll anchor.
+    private static func restoring(_ full: ChatItem, over capped: ChatItem) -> ChatItem {
+        var item = full
+        item.id = capped.id
+        item.isPending = capped.isPending
+        item.idempotencyKey = full.idempotencyKey ?? capped.idempotencyKey
+        return item
     }
 
     private func scheduleReload(after delay: Duration = .milliseconds(250)) {
@@ -304,7 +376,7 @@ public final class ChatStore: Identifiable {
                     artifactId: nil, base64: attachment.data.base64EncodedString(), url: nil,
                     mimeType: attachment.mimeType, alt: attachment.fileName, width: nil, height: nil)))
             } else {
-                blocks.append(.file(name: attachment.fileName, mimeType: attachment.mimeType))
+                blocks.append(.file(FileRef(name: attachment.fileName, mimeType: attachment.mimeType)))
             }
         }
         self.items.append(ChatItem(role: .user, blocks: blocks, idempotencyKey: idempotencyKey, isPending: true))
@@ -431,6 +503,11 @@ public final class ChatStore: Identifiable {
         case "lifecycle":
             let phase = data["phase"]?.string
             if phase == "end" || phase == "error" { self.finishRun(runId) }
+        case "plan":
+            // Durable cards are authoritative; this stream only stands in on Gateways without them.
+            guard self.progressCardStoreAvailable == false, data["phase"]?.string == "update" else { return }
+            self.legacyPlanRevision += 1
+            self.progressCard = ProgressCard(legacyPlan: data, revision: self.legacyPlanRevision)
         default:
             break
         }
@@ -456,6 +533,7 @@ public final class ChatStore: Identifiable {
         } else {
             self.items.append(item)
         }
+        self.recoverCappedMessages()
         if item.thinkingText != nil { self.sawThinking = true }
         if var run = self.live, item.role == .assistant || item.role == .toolResult {
             // Committed output supersedes the streamed preview of the same step.
@@ -470,6 +548,71 @@ public final class ChatStore: Identifiable {
             }
             run.tools.removeAll { committedToolIds.contains($0.id) }
             self.live = run
+        }
+    }
+
+    // MARK: Progress card
+
+    /// Whether a `progressCard.changed` key names this session. Cards are keyed by the qualified
+    /// `agent:<id>:<rest>` form even when the chat uses a bare key.
+    func matchesProgressCardKey(_ key: String) -> Bool {
+        let key = key.lowercased()
+        let own = self.sessionKey.lowercased()
+        if key == own { return true }
+        guard SessionKey.agentId(from: own) == nil, let agentId = self.agentId ?? SessionKey.agentId(from: key)
+        else { return false }
+        return key == "agent:\(agentId.lowercased()):\(own)"
+    }
+
+    func handleProgressCardChanged(_ payload: JSONValue) {
+        if let revision = payload["revision"]?.int, let card = self.progressCard, card.revision >= revision,
+           self.progressCardStoreAvailable == true
+        {
+            return
+        }
+        self.refreshProgressCard()
+    }
+
+    /// Reads the durable card. Only the latest read may publish, so a slow reply can't overwrite a newer one.
+    func refreshProgressCard() {
+        guard let gateway, gateway.state.isConnected, !self.headless else { return }
+        if let methods = gateway.hello?.methods, !methods.isEmpty, !methods.contains("progressCard.get") {
+            self.progressCardStoreAvailable = false
+            return
+        }
+        self.progressCardTask?.cancel()
+        self.progressCardTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let result = try await gateway.connection.request(
+                    "progressCard.get", .object(self.params(keyName: "sessionKey")), timeout: 15)
+                guard !Task.isCancelled else { return }
+                self.progressCardStoreAvailable = true
+                let card = result["card"].flatMap(ProgressCard.init)
+                if card != self.progressCard { self.progressCard = card }
+            } catch {
+                guard !Task.isCancelled else { return }
+                // Older Gateways reject the method (or its scope); fall back to the plan stream.
+                if self.progressCardStoreAvailable == nil { self.progressCardStoreAvailable = false }
+            }
+        }
+    }
+
+    /// Clears a finished card. The revision guard keeps a newer update from being dismissed unseen.
+    public func dismissProgressCard() async {
+        guard let gateway, let card = self.progressCard else { return }
+        guard self.progressCardStoreAvailable == true else {
+            self.progressCard = nil
+            return
+        }
+        var params = self.params(keyName: "sessionKey")
+        params["expectedRevision"] = .number(Double(card.revision))
+        do {
+            let result = try await gateway.connection.request("progressCard.put", .object(params), timeout: 15)
+            let next = result["card"].flatMap(ProgressCard.init)
+            if self.progressCard?.revision == card.revision || next == nil { self.progressCard = next }
+        } catch {
+            self.refreshProgressCard()
         }
     }
 

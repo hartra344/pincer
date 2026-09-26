@@ -15,6 +15,10 @@ Pairing modes:
 - `off`: unknown devices are accepted.
 - `manual`: approve by typing the printed `requestId` on stdin.
 
+Chat triggers: messages mentioning `tool`, `disk` or `image` stream a tool call; `approve` raises an exec approval; `plan` walks a three-step `progress_card` (`progressCard.get`/`progressCard.put`, `progressCard.changed`).
+
+Like the Gateway, `chat.history` caps text fields at 8,000 characters, appends `...(truncated)...` and sets `__openclaw.truncated`; `chat.message.get` returns the full message. The research agent's main session opens with one capped report.
+
 Run the full in-process self-test:
 
 ```bash

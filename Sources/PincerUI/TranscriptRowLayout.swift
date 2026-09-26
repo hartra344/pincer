@@ -43,6 +43,7 @@ enum TranscriptPart {
         let title: String
         let isStreaming: Bool
         let isExpanded: Bool
+        var symbol = "brain.head.profile"
     }
 
     struct Tool {
@@ -94,9 +95,22 @@ enum TranscriptPart {
     case thinkingHeader(Thinking)
     case thinkingBody(NSAttributedString)
     case tool(Tool)
+    /// An attachment: a chip that saves it, and for text or code a card that expands to show it.
+    struct File {
+        let ref: FileRef
+        let key: String
+        let canExpand: Bool
+        let isExpanded: Bool
+        let headerHeight: CGFloat
+        let section: Tool.Section?
+        /// Loading, error or truncation note, drawn at `noteY`.
+        let note: String?
+        let noteY: CGFloat
+    }
+
     case image(Image)
     case imageLink(title: String, url: URL)
-    case file(String)
+    case file(File)
     case typing
     case footer(Footer)
     case marker(String)
@@ -150,6 +164,8 @@ struct TranscriptRowLayout {
     var copyItems: [CopyItem] = []
     /// Images this row shows, so it can be laid out again when one loads.
     var images: [ImageRef] = []
+    /// Expanded file previews this row shows, so it can be laid out again when one loads.
+    var files: [FileRef] = []
     /// Subagent runs this row links to, so it can update when the run shows up.
     var runs: [String: TranscriptPart.Tool.Run] = [:]
     var hasSpawns = false
@@ -236,14 +252,14 @@ struct TranscriptLayoutBuilder {
         layout.accessibilityLabel = "\(header.name): \(text)"
         self.scaffold(avatar: .init(text: Owner.initials, emoji: nil, color: TranscriptColors.ownerAvatar),
                       header: header, into: &layout) { stack, layout in
-            if !text.isEmpty { self.markdown(text, tone: .primary, into: &stack) }
+            if !text.isEmpty { self.markdown(text, tone: .primary, into: &stack, layout: &layout) }
             let images = item.blocks.compactMap { block -> ImageRef? in
                 if case let .image(ref) = block { return ref }
                 return nil
             }
             self.images(images, into: &stack, layout: &layout)
             for block in item.blocks {
-                if case let .file(name, _) = block { self.file(name, into: &stack) }
+                if case let .file(file) = block { self.file(file, into: &stack, layout: &layout) }
             }
             if !item.isPending, !text.isEmpty {
                 self.footer(key: "\(item.id):0", copy: text, time: item.timestamp, model: nil, into: &stack)
@@ -285,11 +301,11 @@ struct TranscriptLayoutBuilder {
             let showFooters = !turn.isStreaming
             for (index, message) in turn.text.enumerated() {
                 if index > 0 { stack.y += TranscriptMetrics.messageSpacing - TranscriptMetrics.blockSpacing }
-                self.markdown(message, tone: turn.isError ? .error : .primary, into: &stack)
+                self.markdown(message, tone: turn.isError ? .error : .primary, into: &stack, layout: &layout)
                 if showFooters, index < turn.text.count - 1 { self.messageFooter(turn, message: index, into: &stack) }
             }
             self.images(turn.images, into: &stack, layout: &layout)
-            for file in turn.files { self.file(file, into: &stack) }
+            for file in turn.files { self.file(file, into: &stack, layout: &layout) }
             if showFooters, !turn.text.isEmpty { self.messageFooter(turn, message: turn.text.count - 1, into: &stack) }
             let showsActivity = steps == .live && (!reasoning.isEmpty || turn.tools.contains(where: \.isRunning))
             if turn.isStreaming, turn.text.isEmpty, !showsActivity {
@@ -348,7 +364,7 @@ struct TranscriptLayoutBuilder {
 
     // MARK: Content
 
-    private func markdown(_ source: String, tone: TranscriptText.Tone, into stack: inout Stack) {
+    private func markdown(_ source: String, tone: TranscriptText.Tone, into stack: inout Stack, layout: inout TranscriptRowLayout) {
         let width = stack.width
         for segment in TranscriptText.markdown(source, tone: tone) {
             switch segment {
@@ -359,6 +375,18 @@ struct TranscriptLayoutBuilder {
             case .rule:
                 stack.add(.rule, height: 1)
             case let .code(language, code, text):
+                if let ref = Self.inlineSVG(language: language, code: code),
+                   !self.context.gateway.images.hasFailed(ref)
+                {
+                    self.images([ref], into: &stack, layout: &layout)
+                    let key = "svg-source:\(layout.id):\(ref.cacheKey)"
+                    let expanded = self.context.disclosure.isExpanded(key, default: false)
+                    let headerHeight = max(TranscriptStyle.lineHeight(self.style.calloutMedium), TranscriptMetrics.iconBox)
+                    stack.add(.thinkingHeader(.init(key: key, title: "SVG source", isStreaming: false, isExpanded: expanded,
+                                                     symbol: "chevron.left.forwardslash.chevron.right")),
+                              height: headerHeight, width: min(width, TranscriptMetrics.maxCardWidth), spacing: 6)
+                    guard expanded else { continue }
+                }
                 let headerHeight = 6 + max(TranscriptStyle.lineHeight(self.style.caption), TranscriptMetrics.iconBox) + 6
                 let size = TranscriptText.size(text, width: .greatestFiniteMagnitude)
                 let part = TranscriptPart.Code(language: language, code: code, text: text, textSize: size, headerHeight: headerHeight)
@@ -368,6 +396,20 @@ struct TranscriptLayoutBuilder {
                 stack.add(.table(part), height: part.contentSize.height, width: part.contentSize.width)
             }
         }
+    }
+
+    /// A complete fenced SVG (```svg, or any fence holding a whole `<svg>…</svg>`) drawn as an image.
+    /// Unfinished ones, mid-stream, stay code until their closing tag arrives.
+    static func inlineSVG(language: String, code: String) -> ImageRef? {
+        let lang = language.lowercased()
+        guard lang == "svg" || lang == "xml" || lang == "html" || lang == "code" else { return nil }
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.range(of: "</svg>", options: [.caseInsensitive, .backwards]) != nil,
+              SVGRasterizer.isSVG(Data(trimmed.utf8)),
+              lang == "svg" || trimmed.lowercased().hasPrefix("<svg") || trimmed.hasPrefix("<?xml")
+        else { return nil }
+        return ImageRef(artifactId: nil, base64: Data(trimmed.utf8).base64EncodedString(), url: nil,
+                        mimeType: "image/svg+xml", alt: "SVG image", width: nil, height: nil)
     }
 
     /// Columns share the width when each can keep a readable minimum; otherwise the table keeps
@@ -552,10 +594,54 @@ struct TranscriptLayoutBuilder {
         return url
     }
 
-    private func file(_ name: String, into stack: inout Stack) {
-        let textWidth = TranscriptText.naturalWidth(TranscriptText.plain(name, font: self.style.callout, color: TranscriptColors.label))
-        let height = 6 + TranscriptStyle.lineHeight(self.style.callout) + 6
-        stack.add(.file(name), height: height, width: 10 + TranscriptMetrics.iconBox + 6 + textWidth + 10)
+    private func file(_ ref: FileRef, into stack: inout Stack, layout: inout TranscriptRowLayout) {
+        let key = "file:\(layout.id):\(ref.cacheKey)"
+        let canExpand = ref.isText && ref.isDownloadable
+        let expanded = canExpand && self.context.disclosure.isExpanded(key, default: false)
+        let headerHeight = 6 + TranscriptStyle.lineHeight(self.style.callout) + 6
+        guard expanded else {
+            let width = min(TranscriptFileView.chipWidth(for: ref, canExpand: canExpand), stack.width)
+            let part = TranscriptPart.File(ref: ref, key: key, canExpand: canExpand, isExpanded: false,
+                                           headerHeight: headerHeight, section: nil, note: nil, noteY: 0)
+            stack.add(.file(part), height: headerHeight, width: width)
+            return
+        }
+        layout.files.append(ref)
+        let width = min(stack.width, TranscriptMetrics.maxCardWidth)
+        let inner = max(width - 20, 20)
+        let noteHeight = TranscriptStyle.lineHeight(self.style.caption)
+        var y = headerHeight + 1 + 10
+        var section: TranscriptPart.Tool.Section?
+        var note: String?
+        var noteY = y
+        switch self.context.gateway.files.preview(ref) {
+        case nil:
+            note = "Loading…"
+            y += noteHeight
+        case .failed:
+            note = "Couldn’t load this file."
+            y += noteHeight
+        case .binary:
+            note = "This file isn’t text. Save it to open it."
+            y += noteHeight
+        case let .text(content, truncated):
+            let text = TranscriptText.plain(content.isEmpty ? "(empty file)" : content, font: self.style.captionMono,
+                                            color: content.isEmpty ? TranscriptColors.secondary : TranscriptColors.label)
+            let contentHeight = TranscriptText.size(text, width: inner).height
+            let visible = min(contentHeight, TranscriptMetrics.filePreviewMaxHeight)
+            section = .init(title: ref.name, titleY: 0, text: text,
+                            frame: CGRect(x: 10, y: y, width: inner, height: visible), contentHeight: contentHeight)
+            y += visible
+            if truncated {
+                y += 8
+                noteY = y
+                note = "Showing the start of the file. Save it to see the rest."
+                y += noteHeight
+            }
+        }
+        let part = TranscriptPart.File(ref: ref, key: key, canExpand: true, isExpanded: true, headerHeight: headerHeight,
+                                       section: section, note: note, noteY: noteY)
+        stack.add(.file(part), height: y + 10, width: width)
     }
 }
 

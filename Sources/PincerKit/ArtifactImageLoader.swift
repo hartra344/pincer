@@ -49,7 +49,11 @@ public final class ArtifactImageLoader {
                 try? await self.download(ref, sessionKey: sessionKey)
             }
             // Decoding a large image takes long enough to drop frames, so it stays off the main thread.
-            let image = await Task.detached(priority: .userInitiated) { data.flatMap(ImageCodec.decode) }.value
+            let image: CGImage? = if let data, SVGRasterizer.isSVG(data) {
+                await SVGRasterizer.rasterize(data)
+            } else {
+                await Task.detached(priority: .userInitiated) { data.flatMap(ImageCodec.decode) }.value
+            }
             if let image {
                 self.store(image, key: key)
             } else {
@@ -58,8 +62,17 @@ public final class ArtifactImageLoader {
         }
     }
 
+    /// Raw bytes of a non-image attachment, fetched the same way as images.
+    public func data(for file: FileRef, sessionKey: String) async -> Data? {
+        try? await self.download(artifactId: file.artifactId, url: file.url, sessionKey: sessionKey, accept: "*/*")
+    }
+
     private func download(_ ref: ImageRef, sessionKey: String) async throws -> Data? {
-        if let artifactId = ref.artifactId, let gateway {
+        try await self.download(artifactId: ref.artifactId, url: ref.url, sessionKey: sessionKey, accept: "image/*")
+    }
+
+    private func download(artifactId: String?, url: String?, sessionKey: String, accept: String) async throws -> Data? {
+        if let artifactId, let gateway {
             var params: [String: JSONValue] = ["sessionKey": .string(sessionKey), "artifactId": .string(artifactId)]
             if SessionKey.agentId(from: sessionKey) == nil, let agent = gateway.sessions[sessionKey]?.agentId {
                 params["agentId"] = .string(agent)
@@ -68,10 +81,10 @@ public final class ArtifactImageLoader {
             if let data = result["data"]?.string ?? result["content"]?.string {
                 return Data(base64Encoded: Self.stripDataURL(data))
             }
-            if let url = result["url"]?.text { return try await self.fetchURL(url, sessionKey: sessionKey) }
+            if let url = result["url"]?.text { return try await self.fetchURL(url, sessionKey: sessionKey, accept: accept) }
             return nil
         }
-        if let url = ref.url { return try await self.fetchURL(url, sessionKey: sessionKey) }
+        if let url { return try await self.fetchURL(url, sessionKey: sessionKey, accept: accept) }
         return nil
     }
 
@@ -86,7 +99,7 @@ public final class ArtifactImageLoader {
     /// - local paths on the Gateway host (`/…`, `~/…`, `file:`, `media://inbound/…`) go through
     ///   the Gateway's `assistant-media` route, which applies its own file policy;
     /// - public `https` URLs are fetched directly, without credentials.
-    private func fetchURL(_ string: String, sessionKey: String) async throws -> Data? {
+    private func fetchURL(_ string: String, sessionKey: String, accept: String) async throws -> Data? {
         if string.hasPrefix("data:") {
             return string.split(separator: ",", maxSplits: 1).last.flatMap { Data(base64Encoded: String($0)) }
         }
@@ -107,7 +120,7 @@ public final class ArtifactImageLoader {
             return try await self.fetchFromGateway(url)
         }
         guard Self.loadsWebImages, url.scheme == "https", Self.isPublicHost(host) else { return nil }
-        return try await Self.fetchPublic(url)
+        return try await Self.fetchPublic(url, accept: accept)
     }
 
     /// Mirrors the Control UI's `isLocalAssistantAttachmentSource`.
@@ -134,7 +147,7 @@ public final class ArtifactImageLoader {
         return host.split(separator: ".").allSatisfy { Int($0) != nil } == false
     }
 
-    private static func fetchPublic(_ url: URL) async throws -> Data? {
+    private static func fetchPublic(_ url: URL, accept: String) async throws -> Data? {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieAcceptPolicy = .never
         configuration.httpShouldSetCookies = false
@@ -143,7 +156,7 @@ public final class ArtifactImageLoader {
         defer { session.finishTasksAndInvalidate() }
         var request = URLRequest(url: url)
         request.setValue("Pincer/0.1 (OpenClaw client; +https://github.com/openclaw/openclaw)", forHTTPHeaderField: "User-Agent")
-        request.setValue("image/*", forHTTPHeaderField: "Accept")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200,
               let finalHost = http.url?.host, http.url?.scheme == "https", Self.isPublicHost(finalHost),

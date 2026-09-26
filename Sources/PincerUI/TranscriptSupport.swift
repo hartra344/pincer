@@ -60,6 +60,8 @@ struct TranscriptContext {
     let sessionKey: String
     /// Opens an image full size. Provided by `ChatView`, which owns the sheet.
     let previewImage: (ImageRef) -> Void
+    /// Offers a downloaded attachment to the user to save. Provided by `ChatView`.
+    let saveFile: (FileRef, Data) -> Void
 
     func differs(from other: TranscriptContext) -> Bool {
         self.agent != other.agent || self.sessionKey != other.sessionKey || self.disclosure !== other.disclosure
@@ -74,6 +76,9 @@ protocol TranscriptRowActions: AnyObject {
     func preview(_ ref: ImageRef)
     func open(_ url: URL)
     func loadImage(_ ref: ImageRef)
+    func loadFilePreview(_ file: FileRef)
+    /// Downloads the file and offers to save it; false when it couldn't be downloaded.
+    func saveFile(_ file: FileRef) async -> Bool
 }
 
 /// Lays out rows for the AppKit and UIKit lists and tells them when a row's layout is stale:
@@ -93,6 +98,8 @@ final class TranscriptRenderer: TranscriptRowActions {
     private var cache: [String: Entry] = [:]
     private var imageRows: [String: Set<String>] = [:]
     private var imageStates: [String: ImageState] = [:]
+    private var fileRows: [String: Set<String>] = [:]
+    private var filePreviews: [String: FileContentLoader.Preview?] = [:]
     private var spawnRows: Set<String> = []
     private var observers: [NSObjectProtocol] = []
 
@@ -105,6 +112,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.context = context
         self.settings = .current(for: context)
         self.observeImages()
+        self.observeFiles()
         self.observeSessions()
         let center = NotificationCenter.default
         self.observers.append(center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -148,6 +156,11 @@ final class TranscriptRenderer: TranscriptRowActions {
             self.imageRows[key, default: []].insert(row.id)
             self.imageStates[key] = loader.cached(ref) != nil ? .loaded : loader.hasFailed(ref) ? .failed : .loading
         }
+        let files = self.context.gateway.files
+        for file in layout.files {
+            self.fileRows[file.cacheKey, default: []].insert(row.id)
+            self.filePreviews[file.cacheKey] = .some(files.preview(file))
+        }
         if layout.hasSpawns { self.spawnRows.insert(row.id) } else { self.spawnRows.remove(row.id) }
         return layout
     }
@@ -156,6 +169,8 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.cache.removeAll()
         self.imageRows.removeAll()
         self.imageStates.removeAll()
+        self.fileRows.removeAll()
+        self.filePreviews.removeAll()
         self.spawnRows.removeAll()
     }
 
@@ -195,6 +210,31 @@ final class TranscriptRenderer: TranscriptRowActions {
             if now != old {
                 self.imageStates[key] = now
                 stale.formUnion(rows)
+            }
+        }
+        self.invalidate(stale)
+    }
+
+    private func observeFiles() {
+        let files = self.context.gateway.files
+        withObservationTracking {
+            _ = files.previews
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.filesChanged()
+                self?.observeFiles()
+            }
+        }
+    }
+
+    private func filesChanged() {
+        let files = self.context.gateway.files
+        var stale: Set<String> = []
+        for (key, old) in self.filePreviews {
+            let now = files.previews[key]
+            if now != old {
+                self.filePreviews[key] = .some(now)
+                stale.formUnion(self.fileRows[key] ?? [])
             }
         }
         self.invalidate(stale)
@@ -261,6 +301,17 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     func loadImage(_ ref: ImageRef) {
         self.context.gateway.images.load(ref, sessionKey: self.context.sessionKey)
+    }
+
+    func loadFilePreview(_ file: FileRef) {
+        self.context.gateway.files.loadPreview(file, sessionKey: self.context.sessionKey)
+    }
+
+    func saveFile(_ file: FileRef) async -> Bool {
+        let context = self.context
+        guard let data = await context.gateway.files.data(for: file, sessionKey: context.sessionKey) else { return false }
+        context.saveFile(file, data)
+        return true
     }
 }
 

@@ -160,6 +160,7 @@ enum TranscriptMetrics {
     static let iconBox: CGFloat = 16
     static let toolOutputMaxHeight: CGFloat = 240
     static let toolOutputLimit = 20000
+    static let filePreviewMaxHeight: CGFloat = 360
 
     static var contentX: CGFloat { self.sidePadding + self.avatar + self.avatarGap }
 }

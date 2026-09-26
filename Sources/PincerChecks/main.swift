@@ -96,11 +96,29 @@ check(media.images.first?.url == "https://upload.wikimedia.org/wikipedia/commons
 check(media.text == "Here's a real photograph of two mallard ducks.\nPhoto: Richard Bartz / Wikimedia Commons.", "directive line removed from text (got \(media.text))")
 check(media.images.first?.alt == "Anas_platyrhynchos_male_female_quadrat.jpg", "image named after file")
 let local = MediaDirectives.extract(from: "MEDIA: `/tmp/chart.png`\nMEDIA:~/report.pdf")
-check(local.images.first?.url == "/tmp/chart.png" && local.files == ["report.pdf"], "local image + non-image file")
+check(local.images.first?.url == "/tmp/chart.png" && local.files == [FileRef(name: "report.pdf", url: "~/report.pdf")], "local image + non-image file")
 let fenced = MediaDirectives.extract(from: "```\nMEDIA:https://x.example/a.png\n```")
 check(fenced.images.isEmpty, "directives inside code fences stay text")
 check(MediaDirectives.withoutPartialDirective("Here:\nMEDIA:https://upl") == "Here:\n", "partial streamed directive hidden")
 check(MediaDirectives.withoutPartialDirective("Done") == "Done", "normal streaming text untouched")
+let svgMedia = MediaDirectives.extract(from: "Done.\nMEDIA:output/wolf.svg")
+check(svgMedia.images.count == 1 && svgMedia.files.isEmpty, "SVG directive renders as an image")
+let svgAttachment = ChatItem(json(#"{"role":"assistant","content":[{"type":"attachment","attachment":{"url":"output/wolf.svg","kind":"image","label":"wolf.svg","mimeType":"image/svg+xml"}}],"__openclaw":{"id":"sa1"}}"#), fallbackIndex: 0)
+if case let .image(ref)? = svgAttachment?.blocks.first { check(ref.url == "output/wolf.svg" && ref.alt == "wolf.svg", "attachment block SVG is an image") } else { check(false, "attachment block SVG is an image") }
+let codeFile = ChatItem(json(#"{"role":"assistant","content":[{"type":"attachment","attachment":{"url":"output/app.py","kind":"document","label":"app.py"}}],"__openclaw":{"id":"f1"}}"#), fallbackIndex: 0)
+if case let .file(file)? = codeFile?.blocks.first {
+    check(file.url == "output/app.py" && file.isDownloadable && file.isText && file.language == "py", "code attachment keeps its source and previews")
+} else { check(false, "code attachment keeps its source and previews") }
+check(FileRef(name: "data", mimeType: "application/json").isText && !FileRef(name: "a.pdf", mimeType: "application/pdf").isText
+      && FileRef(name: "Dockerfile").isText && !FileRef(name: "a.zip").isText, "text files recognized")
+let svgData = Data(#"<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><rect width="400" height="200" fill="red"/></svg>"#.utf8)
+check(SVGRasterizer.isSVG(svgData) && !SVGRasterizer.isSVG(Data("<html><svg></svg>".utf8)), "SVG sniffing")
+check(SVGRasterizer.intrinsicSize(svgData) == CGSize(width: 400, height: 200), "SVG size from viewBox")
+check(SVGRasterizer.intrinsicSize(Data(#"<svg width="120px" height='60' viewBox="0 0 10 10">"#.utf8)) == CGSize(width: 120, height: 60), "SVG size from width/height")
+let svgFitted = await SVGRasterizer.rasterize(svgData, fitting: CGSize(width: 3000, height: 900))
+check(svgFitted?.width == 1800 && svgFitted?.height == 900, "SVG rasterizes to fit preview bounds")
+let svgImage = await SVGRasterizer.rasterize(svgData)
+check(svgImage?.width == 1200 && svgImage?.height == 600, "SVG rasterizes")
 let turnEntries = TranscriptBuilder.build([ChatItem(json(#"{"role":"assistant","content":[{"type":"text","text":"Duck:\nMEDIA:https://e.example/d.webp"}]}"#), fallbackIndex: 0)!])
 if case let .assistant(turn) = turnEntries.first {
     check(turn.images.count == 1 && turn.body == "Duck:", "transcript turn renders MEDIA as image")
@@ -157,9 +175,12 @@ var sent = ToolActivity(id: "t2", name: "sessions_send", arguments: #"{"command"
 sent.result = #"{"sessionKey":"agent:main:subagent:1f2e-9a"}"#
 check(sent.summary == "ls" && sent.spawnedSessionKey == "agent:main:subagent:1f2e-9a", "subagent key found in tool result")
 check(ChatItem(json(#"{"role":"user","content":"hi","__openclaw":{"id":"abc"}}"#), fallbackIndex: 7)?.id == "abc", "row id is stable across pages")
+check(ChatItem(json(#"{"role":"assistant","content":"long\n...(truncated)...","__openclaw":{"id":"t1","truncated":true}}"#), fallbackIndex: 0)?.isCapped == true, "capped assistant message flagged")
+check(ChatItem(json(#"{"role":"assistant","content":"literal ...(truncated)...","__openclaw":{"id":"t2"}}"#), fallbackIndex: 0)?.isCapped == false, "sentinel text alone isn't a cap")
+check(ChatItem(json(#"{"role":"toolResult","content":"x","__openclaw":{"id":"t3","truncated":true}}"#), fallbackIndex: 0)?.isCapped == false, "only assistant/pending messages are recoverable")
 let uploaded = ChatItem(json(#"{"role":"user","content":[{"type":"text","text":"look"}],"__openclaw":{"id":"u1","media":[{"path":"media://inbound/abc.png","contentType":"image/png","fileName":"Pasted Image.png","origin":"paste"},{"path":"media://inbound/doc.pdf","contentType":"application/pdf","fileName":"doc.pdf"}]}}"#), fallbackIndex: 0)
-if case let .image(ref)? = uploaded?.blocks.dropFirst().first, case let .file(name, _)? = uploaded?.blocks.last {
-    check(uploaded?.blocks.count == 3 && ref.url == "media://inbound/abc.png" && ref.alt == "Pasted Image.png" && name == "doc.pdf", "uploaded media facts show on user messages")
+if case let .image(ref)? = uploaded?.blocks.dropFirst().first, case let .file(file)? = uploaded?.blocks.last {
+    check(uploaded?.blocks.count == 3 && ref.url == "media://inbound/abc.png" && ref.alt == "Pasted Image.png" && file.name == "doc.pdf" && file.url == "media://inbound/doc.pdf", "uploaded media facts show on user messages")
 } else {
     check(false, "uploaded media facts show on user messages")
 }
@@ -310,6 +331,32 @@ let credential = PluginCredential(json(#"{"path":["plugins","entries","weather",
 check(credential?.path.last == "apiKey" && credential?.isRequired == true && credential?.signupURL == nil, "plugin credential (non-https signup dropped)")
 check(PluginCredential(json(#"{"path":["a","b",0,"c","d"],"label":"x","envVars":[]}"#)) == nil, "array credential paths skipped")
 
+print("Progress card")
+let card = ProgressCard(json("""
+{"sessionKey":"agent:main:main","revision":5,"updatedAt":1700000000000,
+ "markdown":"**Three-step task: wolf SVG**\\n\\nI'll update the card between phases.",
+ "steps":[{"step":"Plan the composition","status":"completed"},
+          {"step":"Create the SVG","status":"in_progress"},
+          {"step":"Validate","status":"pending"},
+          {"step":"  ","status":"pending"},
+          {"step":"Bad","status":"done"}]}
+"""))
+check(card?.revision == 5 && card?.steps.count == 3, "card parses, drops blank/unknown steps")
+check(card?.completedCount == 1 && card?.currentStep?.text == "Create the SVG" && card?.currentPosition == 2,
+      "current step is the in-progress one")
+check(card?.markdownSummary == "Three-step task: wolf SVG", "markdown summary strips emphasis")
+check(card?.isComplete == false, "incomplete card")
+check(ProgressCard(json(#"{"revision":1,"updatedAt":1,"markdown":"  "}"#)) == nil, "empty card is nil")
+check(ProgressCard(.null) == nil, "null card is nil")
+let done = ProgressCard(json(#"{"revision":2,"updatedAt":1,"steps":[{"step":"A","status":"completed"}]}"#))
+check(done?.isComplete == true && done?.currentStep?.text == "A", "complete card keeps last step current")
+let legacy = ProgressCard(legacyPlan: json("""
+{"phase":"update","explanation":"Why","steps":["First",{"step":"Second","status":"in_progress"},
+ {"step":"Third","status":"in_progress"}]}
+"""), revision: 1)
+check(legacy?.steps.map(\.text) == ["First", "Second"] && legacy?.markdown == "Why",
+      "legacy plan: string steps, one in-progress step")
+
 print("Slash commands")
 let catalog = SlashCommand.parse(json(#"""
 {"commands":[
@@ -458,6 +505,14 @@ func runDemo() async {
         check(gateway.approvals.isEmpty, "demo approval resolved")
     }
 
+    let settled = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
+    check(settled, "demo approval run finished")
+    await chat.send("follow a plan")
+    let demoPlanned = await waitFor("demo progress card", timeout: 20) {
+        chat.progressCard?.isComplete == true && !chat.isRunning
+    }
+    check(demoPlanned, "demo progress card walks its plan")
+
     let newKey = await gateway.createSession(agentId: "research", label: "Demo check", category: "Work")
     check(newKey != nil && gateway.sessions[newKey ?? ""] != nil, "demo sessions.create")
     gateway.stop()
@@ -528,6 +583,16 @@ func runLive(url: String, token: String) async {
     check(!trip.hasMoreHistory && trip.items.count == 302, "reaches the start (\(trip.items.count))")
     check(trip.items.first?.plainText == "Idea for day 1?", "oldest message first")
 
+    let research = gateway.chat(for: "agent:research:main")
+    await research.load()
+    let recovered = await waitFor("full message") {
+        research.items.contains { !$0.isCapped && $0.plainText.hasSuffix("END OF REPORT") }
+    }
+    check(recovered && !research.items.contains { $0.plainText.contains("...(truncated)...") },
+          "capped message replaced via chat.message.get")
+    await research.load(force: true)
+    check(research.items.contains { $0.plainText.hasSuffix("END OF REPORT") }, "full copy survives a history reload")
+
     let before = chat.entries.count
     let sendNonce = UUID().uuidString.prefix(8)
     await chat.send("show me a tool and an image please \(sendNonce)")
@@ -553,6 +618,20 @@ func runLive(url: String, token: String) async {
     }
     let userTurns = chat.entries.filter { if case let .user(item) = $0 { item.plainText.contains("please \(sendNonce)") } else { false } }
     check(userTurns.count == 1, "optimistic send merged, not duplicated (\(userTurns.count))")
+
+    await chat.send("follow a plan \(sendNonce)")
+    var sawProgress = false
+    let planned = await waitFor("progress card to complete", timeout: 20) {
+        if chat.progressCard?.currentStep?.status == .inProgress { sawProgress = true }
+        return chat.progressCard?.isComplete == true && !chat.isRunning
+    }
+    check(sawProgress && planned, "progressCard.changed → live progress card")
+    check(chat.progressCard?.steps.count == 3 && chat.progressCard?.markdown != nil, "card has steps and note")
+    await chat.dismissProgressCard()
+    check(chat.progressCard == nil, "progressCard.put dismisses a finished card")
+    await chat.load(force: true)
+    let stayedDismissed = await waitFor("card read after reload", timeout: 2) { chat.progressCard != nil }
+    check(!stayedDismissed, "dismissed card stays gone after reload")
 
     await gateway.patch(key, ["pinned": true])
     let pinned = await waitFor("pin") { gateway.sessions[key]?.isPinned == true }

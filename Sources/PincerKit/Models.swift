@@ -294,7 +294,25 @@ public struct ImageRef: Hashable, Codable, Sendable {
     public let height: Int?
 
     public var cacheKey: String {
-        self.artifactId ?? self.url ?? String(self.base64?.prefix(64) ?? "image")
+        // Inline images often share a long header (SVG's xmlns), so a prefix alone would collide.
+        self.artifactId ?? self.url ?? self.base64.map { "inline:\($0.count):\(Self.stableHash($0))" } ?? "image"
+    }
+
+    public init(artifactId: String?, base64: String?, url: String?, mimeType: String?, alt: String?, width: Int?, height: Int?) {
+        self.artifactId = artifactId
+        self.base64 = base64
+        self.url = url
+        self.mimeType = mimeType
+        self.alt = alt
+        self.width = width
+        self.height = height
+    }
+
+    /// FNV-1a, stable across launches (unlike `hashValue`).
+    private static func stableHash(_ string: String) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in string.utf8 { hash = (hash ^ UInt64(byte)) &* 0x100_0000_01b3 }
+        return String(hash, radix: 36)
     }
 
     public var aspectRatio: Double? {
@@ -303,12 +321,73 @@ public struct ImageRef: Hashable, Codable, Sendable {
     }
 }
 
+/// A non-image attachment, with where to fetch it from when the Gateway said.
+public struct FileRef: Hashable, Codable, Sendable {
+    public let name: String
+    public let url: String?
+    public let artifactId: String?
+    public let mimeType: String?
+
+    public init(name: String, url: String? = nil, artifactId: String? = nil, mimeType: String? = nil) {
+        self.name = name
+        self.url = url
+        self.artifactId = artifactId
+        self.mimeType = mimeType
+    }
+
+    public var cacheKey: String { self.artifactId ?? self.url ?? self.name }
+    public var isDownloadable: Bool { self.artifactId != nil || self.url != nil }
+
+    /// Plain text or source code, which can be shown inline.
+    public var isText: Bool {
+        if let mime = self.mimeType?.split(separator: ";").first?.trimmingCharacters(in: .whitespaces).lowercased(),
+           mime != "application/octet-stream"
+        {
+            if mime.hasPrefix("text/") { return true }
+            if Self.textMimeTypes.contains(mime) || mime.hasSuffix("+json") || mime.hasSuffix("+xml") { return true }
+        }
+        let name = self.name.lowercased()
+        if Self.textFileNames.contains(name) { return true }
+        let ext = (name as NSString).pathExtension
+        return !ext.isEmpty && Self.textExtensions.contains(ext)
+    }
+
+    /// Language hint for the preview header: the extension, or "text".
+    public var language: String {
+        let ext = (self.name as NSString).pathExtension.lowercased()
+        return ext.isEmpty ? "text" : ext
+    }
+
+    static let textMimeTypes: Set<String> = [
+        "application/json", "application/xml", "application/yaml", "application/x-yaml", "application/toml",
+        "application/javascript", "application/x-javascript", "application/typescript", "application/x-sh",
+        "application/x-shellscript", "application/sql", "application/graphql", "application/x-httpd-php",
+        "application/x-python", "application/x-ruby", "application/x-perl", "application/ld+json", "application/ndjson",
+        "application/x-ndjson", "application/csv", "application/x-tex", "application/rtf", "image/svg+xml",
+    ]
+    static let textFileNames: Set<String> = [
+        "dockerfile", "makefile", "gemfile", "rakefile", "podfile", "procfile", "license", "readme", "changelog",
+        ".gitignore", ".gitattributes", ".dockerignore", ".editorconfig", ".env", ".npmrc", ".prettierrc", ".eslintrc",
+    ]
+    static let textExtensions: Set<String> = [
+        "txt", "text", "md", "markdown", "mdx", "rst", "adoc", "org", "log", "csv", "tsv", "json", "jsonl", "ndjson",
+        "json5", "yaml", "yml", "toml", "ini", "cfg", "conf", "config", "env", "properties", "xml", "plist", "html",
+        "htm", "xhtml", "css", "scss", "sass", "less", "js", "mjs", "cjs", "jsx", "ts", "mts", "cts", "tsx", "vue",
+        "svelte", "astro", "py", "pyi", "ipynb", "rb", "erb", "go", "rs", "swift", "kt", "kts", "java", "scala",
+        "groovy", "gradle", "c", "h", "cc", "cpp", "cxx", "hpp", "hh", "m", "mm", "cs", "fs", "fsx", "vb", "php",
+        "pl", "pm", "lua", "r", "jl", "dart", "ex", "exs", "erl", "hrl", "elm", "clj", "cljs", "edn", "hs", "ml",
+        "mli", "nim", "zig", "v", "sv", "vhd", "sol", "sh", "bash", "zsh", "fish", "ps1", "psm1", "bat", "cmd",
+        "sql", "graphql", "gql", "proto", "tf", "tfvars", "hcl", "nix", "cmake", "mk", "dockerfile", "diff", "patch",
+        "tex", "bib", "srt", "vtt", "svg", "lock", "gitignore", "editorconfig", "rtf",
+    ]
+}
+
 public enum ContentBlock: Hashable, Codable, Sendable {
     case text(String)
     case thinking(String)
     case image(ImageRef)
     case toolCall(id: String, name: String, arguments: String?)
-    case file(name: String, mimeType: String?)
+    case file(FileRef)
 
     static func parse(_ json: JSONValue) -> ContentBlock? {
         let type = json["type"]?.string?.lowercased() ?? "text"
@@ -342,6 +421,20 @@ public enum ContentBlock: Hashable, Codable, Sendable {
                 name: json["name"]?.text ?? "tool",
                 arguments: arguments.flatMap(Self.prettyJSON))
         case "file", "attachment", "audio", "video":
+            // Control UI shape: `{type: "attachment", attachment: {url, kind, label, mimeType, artifactId}}`.
+            if let attachment = json["attachment"], attachment["url"]?.text != nil || attachment["artifactId"]?.text != nil {
+                let url = attachment["url"]?.text
+                let mimeType = attachment["mimeType"]?.text
+                let label = attachment["label"]?.text ?? url.flatMap(MediaDirectives.fileName)
+                let isImage = attachment["kind"]?.text == "image" || mimeType?.hasPrefix("image/") == true
+                    || url.map(MediaDirectives.isImage) == true
+                if isImage {
+                    return .image(ImageRef(
+                        artifactId: attachment["artifactId"]?.text, base64: nil, url: url, mimeType: mimeType, alt: label,
+                        width: attachment["width"]?.int, height: attachment["height"]?.int))
+                }
+                return .file(FileRef(name: label ?? "attachment", url: url, artifactId: attachment["artifactId"]?.text, mimeType: mimeType))
+            }
             if json["mimeType"]?.string?.hasPrefix("image/") == true,
                json["artifactId"]?.text != nil || json["content"]?.text != nil || json["url"]?.text != nil {
                 return .image(ImageRef(
@@ -353,7 +446,10 @@ public enum ContentBlock: Hashable, Codable, Sendable {
                     width: json["width"]?.int,
                     height: json["height"]?.int))
             }
-            return .file(name: json["fileName"]?.text ?? json["label"]?.text ?? "attachment", mimeType: json["mimeType"]?.text)
+            let url = json["url"]?.text ?? json["openUrl"]?.text
+            return .file(FileRef(
+                name: json["fileName"]?.text ?? json["label"]?.text ?? url.flatMap(MediaDirectives.fileName) ?? "attachment",
+                url: url, artifactId: json["artifactId"]?.text, mimeType: json["mimeType"]?.text))
         default:
             if let text = json["text"]?.text { return .text(text) }
             return nil
@@ -394,6 +490,9 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     /// Model that generated this message, as recorded by the Gateway (assistant messages only).
     public var model: String?
     public var provider: String?
+    /// The Gateway cut this message's text to its history cap; the full copy comes from
+    /// `chat.message.get`.
+    public var isCapped: Bool = false
 
     /// `provider/model`, or nil when the Gateway didn't record a model.
     public var modelRef: String? { self.model.map { ModelRef.qualified($0, provider: self.provider) } }
@@ -439,6 +538,10 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
             self.model = model
             self.provider = json["provider"]?.text
         }
+        // Only the Gateway marker proves a cap; the sentinel text alone could be literal.
+        let recoverable = self.role == .assistant || self.transcriptId?.hasPrefix(Self.pendingInputPrefix) == true
+        self.isCapped = recoverable && meta?["truncated"]?.bool == true
+            && json["openclawMessageToolMirror"]?.bool != true
 
         if let text = json["content"]?.string {
             self.blocks = text.isEmpty ? [] : [.text(text)]
@@ -458,6 +561,9 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     /// Placeholders the Gateway writes for messages no model produced (injected notices, errors).
     static let syntheticModels: Set<String> = ["gateway-injected"]
 
+    /// Transcript id prefix of queued user inputs the Gateway hasn't committed yet.
+    static let pendingInputPrefix = "pending:"
+
     /// Uploads (composer attachments, channel media) live in `__openclaw.media` facts, not in
     /// `content`: history strips their bytes and points at `media://inbound/<id>` instead.
     static func mediaFactBlocks(_ facts: JSONValue?, existing: [ContentBlock]) -> [ContentBlock] {
@@ -469,7 +575,7 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
             guard let source = fact["path"]?.text ?? fact["url"]?.text, !source.isEmpty, seen.insert(source).inserted else { return nil }
             let mimeType = fact["contentType"]?.text
             let fileName = fact["fileName"]?.text
-            let isImage = mimeType.map { $0.hasPrefix("image/") && !$0.hasPrefix("image/svg") }
+            let isImage = mimeType.map { $0.hasPrefix("image/") }
                 ?? (fact["kind"]?.text == "image"
                     || UTType(filenameExtension: (source as NSString).pathExtension)?.conforms(to: .image) == true)
             if isImage {
@@ -477,7 +583,7 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
                     artifactId: nil, base64: nil, url: source, mimeType: mimeType, alt: fileName,
                     width: fact["width"]?.int, height: fact["height"]?.int))
             }
-            return .file(name: fileName ?? (source as NSString).lastPathComponent, mimeType: mimeType)
+            return .file(FileRef(name: fileName ?? (source as NSString).lastPathComponent, url: source, mimeType: mimeType))
         }
     }
 
@@ -568,7 +674,7 @@ public struct AssistantTurn: Identifiable, Hashable, Sendable {
     /// Short name of the model that wrote each entry of `text`, when the Gateway recorded one.
     public var textModelNames: [String?] = []
     public var images: [ImageRef] = []
-    public var files: [String] = []
+    public var files: [FileRef] = []
     public var timestamp: Date?
     public var isError = false
     public var isStreaming = false
@@ -637,7 +743,7 @@ public enum TranscriptBuilder {
                         turn.files += parsed.files
                     case let .thinking(text): turn.thinking.append(text)
                     case let .image(ref): turn.images.append(ref)
-                    case let .file(name, _): turn.files.append(name)
+                    case let .file(file): turn.files.append(file)
                     case let .toolCall(id, name, arguments):
                         toolIndex[id] = turn.tools.count
                         turn.tools.append(ToolActivity(id: id, name: name, arguments: arguments, result: nil, isError: false, isRunning: false))
@@ -709,10 +815,10 @@ public enum MediaDirectives {
     public struct Result: Equatable, Sendable {
         public var text: String
         public var images: [ImageRef]
-        public var files: [String]
+        public var files: [FileRef]
     }
 
-    static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tif", "tiff", "avif"]
+    static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tif", "tiff", "avif", "svg"]
     static let otherMediaExtensions: Set<String> = [
         "mp3", "m4a", "wav", "ogg", "opus", "flac", "aac", "mp4", "mov", "webm", "mkv", "pdf", "zip", "txt", "csv", "json", "md",
     ]
@@ -723,7 +829,7 @@ public enum MediaDirectives {
         }
         var kept: [Substring] = []
         var images: [ImageRef] = []
-        var files: [String] = []
+        var files: [FileRef] = []
         var inFence = false
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -735,7 +841,7 @@ public enum MediaDirectives {
             if self.isImage(source) {
                 images.append(ImageRef(artifactId: nil, base64: nil, url: source, mimeType: nil, alt: self.fileName(source), width: nil, height: nil))
             } else {
-                files.append(self.fileName(source) ?? source)
+                files.append(FileRef(name: self.fileName(source) ?? source, url: source))
             }
         }
         let joined = kept.joined(separator: "\n")
@@ -808,5 +914,113 @@ extension SessionRow {
             .replacingOccurrences(of: "__", with: "")
             .replacingOccurrences(of: "`", with: "")
             .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+}
+
+// MARK: Progress card
+
+/// The agent's durable task checklist for a session (`progress_card` tool), read with
+/// `progressCard.get` and invalidated by `progressCard.changed`. Older Gateways only stream it as
+/// `agent` events on the `plan` stream.
+public struct ProgressCard: Sendable, Hashable {
+    public enum Status: String, Sendable, Hashable {
+        case pending
+        case inProgress = "in_progress"
+        case completed
+    }
+
+    public struct Step: Sendable, Hashable {
+        public var text: String
+        public var status: Status
+
+        public init(text: String, status: Status) {
+            self.text = text
+            self.status = status
+        }
+    }
+
+    public var revision: Int
+    public var updatedAt: Date?
+    public var markdown: String?
+    public var steps: [Step]
+
+    public init(revision: Int, updatedAt: Date? = nil, markdown: String? = nil, steps: [Step]) {
+        self.revision = revision
+        self.updatedAt = updatedAt
+        let trimmed = markdown?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.markdown = trimmed?.isEmpty == false ? trimmed : nil
+        self.steps = steps
+    }
+
+    /// A `card` object from `progressCard.get`. Nil for `null` or a card with nothing to show.
+    public init?(_ json: JSONValue) {
+        guard json.object != nil else { return nil }
+        let steps = (json["steps"]?.array ?? []).compactMap(Self.step)
+        self.init(
+            revision: json["revision"]?.int ?? 0,
+            updatedAt: json["updatedAt"]?.double.map { Date(timeIntervalSince1970: $0 / 1000) },
+            markdown: json["markdown"]?.string,
+            steps: steps)
+        if self.markdown == nil, self.steps.isEmpty { return nil }
+    }
+
+    /// The `data` of a legacy `plan`-stream agent event (`phase: "update"`). Steps may be plain
+    /// strings; only the first in-progress step is kept.
+    public init?(legacyPlan data: JSONValue, revision: Int) {
+        var sawInProgress = false
+        let steps = (data["steps"]?.array ?? []).compactMap { raw -> Step? in
+            let step: Step? = if let text = raw.string {
+                Self.step(text: text, status: .pending)
+            } else {
+                Self.step(raw)
+            }
+            if step?.status == .inProgress {
+                if sawInProgress { return nil }
+                sawInProgress = true
+            }
+            return step
+        }
+        guard !steps.isEmpty else { return nil }
+        self.init(revision: revision, updatedAt: Date(), markdown: data["explanation"]?.string, steps: steps)
+    }
+
+    private static func step(_ json: JSONValue) -> Step? {
+        guard let text = json["step"]?.string, let status = json["status"]?.string.flatMap(Status.init) else {
+            return nil
+        }
+        return self.step(text: text, status: status)
+    }
+
+    private static func step(text: String, status: Status) -> Step? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : Step(text: trimmed, status: status)
+    }
+
+    public var completedCount: Int { self.steps.count { $0.status == .completed } }
+    public var isComplete: Bool { !self.steps.isEmpty && self.completedCount == self.steps.count }
+
+    /// The step being worked on, else the next pending one, else the last finished one.
+    public var currentStep: Step? {
+        self.steps.first { $0.status == .inProgress }
+            ?? self.steps.first { $0.status == .pending }
+            ?? self.steps.last
+    }
+
+    /// 1-based position of `currentStep`.
+    public var currentPosition: Int {
+        guard let current = self.currentStep, let index = self.steps.firstIndex(of: current) else { return 0 }
+        return index + 1
+    }
+
+    /// First non-empty Markdown line without heading/list/quote markers, for the collapsed header.
+    public var markdownSummary: String? {
+        guard let line = self.markdown?.split(whereSeparator: \.isNewline)
+            .map({ $0.trimmingCharacters(in: .whitespaces) })
+            .first(where: { !$0.isEmpty })
+        else { return nil }
+        let stripped = line.drop { $0.isWhitespace || "#-*>".contains($0) }
+        let summary = stripped.replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "__", with: "")
+            .trimmingCharacters(in: .whitespaces)
+        return summary.isEmpty ? nil : summary
     }
 }

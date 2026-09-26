@@ -20,6 +20,9 @@ public struct PincerScene: Scene {
             CommandGroup(after: .sidebar) {
                 Button("Next Unread Chat") { self.app.selectNextUnread() }
                     .keyboardShortcut(.downArrow, modifiers: [.option, .shift])
+                Divider()
+                Button("Reload Pincer") { AppRelauncher.relaunch() }
+                    .keyboardShortcut("r", modifiers: .command)
             }
         }
         #endif

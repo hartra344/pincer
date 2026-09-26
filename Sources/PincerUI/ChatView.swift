@@ -1,5 +1,6 @@
 import PincerKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ChatView: View {
     let chat: ChatStore
@@ -7,6 +8,7 @@ struct ChatView: View {
     @AppStorage("pincer.reasoningHintDismissed") private var hintDismissed = false
     @State private var disclosure = TranscriptDisclosure()
     @State private var previewing: ImageRef?
+    @State private var exporting: ExportedFile?
 
     private var row: SessionRow? { self.gateway.sessions[self.chat.sessionKey] }
     private var agent: AgentSummary { self.gateway.agent(self.row?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main") }
@@ -30,11 +32,15 @@ struct ChatView: View {
                 VStack(spacing: 0) {
                     self.errorBar
                     self.reasoningHint
+                    if let card = self.chat.progressCard {
+                        ProgressCardView(chat: self.chat, card: card)
+                    }
                     Composer(chat: self.chat, placeholder: "Message #\(self.row?.title ?? "chat")")
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.bottomChrome = $0 }
             }
             .animation(.snappy, value: self.chat.errorMessage)
+            .animation(.snappy, value: self.chat.progressCard)
         .navigationTitle(self.row?.title ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "Chat")
         #if os(macOS)
         .navigationSubtitle(self.subtitle)
@@ -45,6 +51,13 @@ struct ChatView: View {
         .sheet(item: self.$previewing) { ref in
             ImagePreview(ref: ref, sessionKey: self.chat.sessionKey)
         }
+        .fileExporter(
+            isPresented: Binding(get: { self.exporting != nil }, set: { if !$0 { self.exporting = nil } }),
+            document: self.exporting,
+            contentType: self.exporting?.contentType ?? .data,
+            defaultFilename: self.exporting?.name) { _ in
+                self.exporting = nil
+            }
         .task(id: self.chat.sessionKey) {
             await self.chat.load()
         }
@@ -108,7 +121,8 @@ struct ChatView: View {
                     disclosure: self.disclosure,
                     agent: self.agent,
                     sessionKey: self.chat.sessionKey,
-                    previewImage: { self.previewing = $0 }),
+                    previewImage: { self.previewing = $0 },
+                    saveFile: { file, data in self.exporting = ExportedFile(name: file.name, data: data) }),
                 bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
                 topInset: self.topChrome + self.transcriptSafeArea.top)
                 .ignoresSafeArea(.container, edges: [.top, .bottom])
@@ -267,5 +281,31 @@ struct ApprovalsBanner: View {
             .padding(.top, 8)
             .animation(.snappy, value: approvals.map(\.id))
         }
+    }
+}
+
+/// An attachment's bytes, handed to the system save panel.
+struct ExportedFile: FileDocument {
+    static var readableContentTypes: [UTType] { [.data] }
+
+    let name: String
+    let data: Data
+
+    init(name: String, data: Data) {
+        self.name = name
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        self.name = configuration.file.filename ?? "file"
+        self.data = configuration.file.regularFileContents ?? Data()
+    }
+
+    var contentType: UTType {
+        UTType(filenameExtension: (self.name as NSString).pathExtension) ?? .data
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: self.data)
     }
 }

@@ -113,6 +113,7 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
     @ObservationIgnored weak var notifier: Notifier?
     public let images: ArtifactImageLoader
+    public let files: FileContentLoader
     /// Gateway config and plugins; loaded when the settings screen opens.
     @ObservationIgnored public private(set) lazy var settings = GatewaySettingsStore(
         connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] })
@@ -127,8 +128,10 @@ public final class GatewayStore: Identifiable {
         self.chatIcons = UserDefaults.standard.dictionary(forKey: "pincer.chatIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.chatColors = UserDefaults.standard.dictionary(forKey: "pincer.chatColors.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.selectedKey = UserDefaults.standard.string(forKey: "pincer.selected.\(profile.id.uuidString)")
-        self.images = ArtifactImageLoader()
-        self.images.gateway = self
+        let images = ArtifactImageLoader()
+        self.images = images
+        self.files = FileContentLoader(images: images)
+        images.gateway = self
     }
 
     public var deviceId: String { DeviceIdentity.loadOrCreate().deviceId }
@@ -316,6 +319,11 @@ public final class GatewayStore: Identifiable {
             let key = payload["sessionKey"]?.text ?? payload["session"]?["key"]?.text
             if let row = payload["session"].flatMap(SessionRow.init) { self.sessions[row.key] = row }
             if let key { self.chats[key]?.handleSessionMessage(payload) }
+        case "progressCard.changed":
+            guard let key = payload["sessionKey"]?.text else { return }
+            for chat in self.chats.values where chat.matchesProgressCardKey(key) {
+                chat.handleProgressCardChanged(payload)
+            }
         case "exec.approval.requested":
             if let approval = ExecApproval(payload) {
                 self.approvals.removeAll { $0.id == approval.id }

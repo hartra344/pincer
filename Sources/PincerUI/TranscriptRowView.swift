@@ -1209,12 +1209,12 @@ final class TranscriptThinkingHeaderView: TranscriptTapView {
     override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
         guard case let .thinkingHeader(thinking) = part else { return }
         let changed = self.thinking?.isExpanded != thinking.isExpanded || self.thinking?.isStreaming != thinking.isStreaming
-            || self.thinking?.title != thinking.title
+            || self.thinking?.title != thinking.title || self.thinking?.symbol != thinking.symbol
         self.thinking = thinking
         self.spinner.setAnimating(thinking.isStreaming)
         let rowId = row.id
         self.onTap = { [weak actions] in actions?.setExpanded(thinking.key, !thinking.isExpanded, row: rowId) }
-        self.accessibilityText = thinking.isExpanded ? "Hide thinking" : "Show thinking"
+        self.accessibilityText = (thinking.isExpanded ? "Hide " : "Show ") + thinking.title.lowercased()
         self.hitWidth = self.contentWidth
         if changed { self.redraw() }
     }
@@ -1232,7 +1232,7 @@ final class TranscriptThinkingHeaderView: TranscriptTapView {
         let style = TranscriptStyle.shared
         let color = self.isPressed ? TranscriptColors.tertiary : TranscriptColors.secondary
         let height = self.bounds.height
-        TranscriptSymbols.draw("brain.head.profile", in: CGRect(x: 0, y: 0, width: 16, height: height), size: style.callout.pointSize, color: color)
+        TranscriptSymbols.draw(thinking.symbol, in: CGRect(x: 0, y: 0, width: 16, height: height), size: style.callout.pointSize, color: color)
         let title = singleLine(self.title, style.calloutMedium, color)
         title.drawLine(at: CGPoint(x: 22, y: (height - TranscriptStyle.lineHeight(style.calloutMedium)) / 2), width: title.lineWidth, font: style.calloutMedium)
         let chevronX = 22 + title.lineWidth + 6 + (thinking.isStreaming ? 16 : 0)
@@ -1553,32 +1553,173 @@ final class TranscriptImageLinkView: TranscriptTapView {
 }
 
 final class TranscriptFileView: TranscriptBaseView {
-    private var name = ""
+    private var part: TranscriptPart.File?
+    private let header = TranscriptFileHeaderView()
+    private let saveButton = TranscriptLabelButton()
+    private let section = TranscriptToolSectionView()
+    private var identity: String?
+    private var saveToken = 0
+
+    static var saveButtonSize: CGSize {
+        let font = TranscriptStyle.shared.caption
+        return CGSize(width: 14 + 4 + singleLine("Save", font, TranscriptColors.tint).lineWidth,
+                      height: max(TranscriptStyle.lineHeight(font), 16))
+    }
+
+    /// Collapsed chip width; mirrors the header's drawing and `layoutContent` so the name never truncates needlessly.
+    static func chipWidth(for ref: FileRef, canExpand: Bool) -> CGFloat {
+        let name = singleLine(ref.name, TranscriptStyle.shared.callout, TranscriptColors.label).lineWidth.rounded(.up)
+        var width = TranscriptFileHeaderView.textX + name + (canExpand ? TranscriptFileHeaderView.chevronSpace : 0) + 10
+        if ref.isDownloadable { width += 4 + self.saveButtonSize.width.rounded(.up) + 10 }
+        return width
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.addSubview(self.header)
+        self.addSubview(self.saveButton)
+        self.addSubview(self.section)
+        self.saveButton.set(title: "Save", symbol: "arrow.down.circle")
+    }
 
     override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
-        guard case let .file(name) = part else { return }
-        if name != self.name {
-            self.name = name
-            self.redraw()
+        guard case let .file(file) = part else { return }
+        let identity = "\(row.id):\(file.key)"
+        let sameFile = identity == self.identity
+        if !sameFile {
+            self.saveToken += 1
+            self.saveButton.set(title: "Save", symbol: "arrow.down.circle")
+            self.identity = identity
+        }
+        self.part = file
+        let rowId = row.id
+        self.header.configure(file)
+        if file.canExpand {
+            self.header.onTap = { [weak actions] in
+                if !file.isExpanded { actions?.loadFilePreview(file.ref) }
+                actions?.setExpanded(file.key, !file.isExpanded, row: rowId)
+            }
+            self.header.accessibilityText = "Attachment \(file.ref.name)" + (file.isExpanded ? ", expanded" : ", collapsed")
+        } else if file.ref.isDownloadable {
+            self.header.onTap = { [weak self, weak actions] in
+                guard let actions else { return }
+                self?.save(file.ref, actions: actions)
+            }
+            self.header.accessibilityText = "Save \(file.ref.name)"
+        } else {
+            self.header.onTap = nil
+            self.header.accessibilityText = "Attachment \(file.ref.name)"
+        }
+        self.saveButton.isHidden = !file.ref.isDownloadable
+        self.saveButton.onTap = { [weak self, weak actions] in
+            guard let actions else { return }
+            self?.save(file.ref, actions: actions)
         }
         #if os(macOS)
-        self.setAccessibilityElement(true)
-        self.setAccessibilityRole(.staticText)
-        self.setAccessibilityLabel("Attachment \(name)")
-        #else
-        self.isAccessibilityElement = true
-        self.accessibilityLabel = "Attachment \(name)"
+        self.saveButton.toolTip = "Save “\(file.ref.name)”"
         #endif
+        if file.isExpanded, file.section == nil, file.note == "Loading…" { actions.loadFilePreview(file.ref) }
+        if let section = file.section {
+            self.section.isHidden = false
+            self.section.configure(section, row: row, resetScroll: !sameFile)
+        } else {
+            self.section.isHidden = true
+        }
+        self.redraw()
+    }
+
+    /// The button keeps its "Save" title, so the chip keeps its width; the symbol shows progress.
+    private func save(_ file: FileRef, actions: TranscriptRowActions) {
+        self.saveToken += 1
+        let token = self.saveToken
+        self.saveButton.set(title: "Save", symbol: "hourglass")
+        Task { @MainActor [weak self] in
+            let saved = await actions.saveFile(file)
+            guard let self, self.saveToken == token else { return }
+            self.saveButton.set(title: "Save", symbol: saved ? "arrow.down.circle" : "exclamationmark.triangle")
+            #if os(macOS)
+            if !saved { self.saveButton.toolTip = "Couldn’t download “\(file.name)”" }
+            #endif
+            guard !saved else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                guard let self, self.saveToken == token else { return }
+                self.saveButton.set(title: "Save", symbol: "arrow.down.circle")
+            }
+        }
+    }
+
+    override func layoutContent() {
+        guard let part else { return }
+        let bounds = self.bounds
+        var headerWidth = bounds.width
+        if part.ref.isDownloadable {
+            let size = self.saveButton.buttonSize
+            let frame = CGRect(x: bounds.width - 10 - size.width, y: (part.headerHeight - size.height) / 2,
+                               width: size.width, height: size.height)
+            if self.saveButton.frame != frame { self.saveButton.frame = frame }
+            headerWidth = frame.minX - 4
+        }
+        let headerFrame = CGRect(x: 0, y: 0, width: max(headerWidth, 1), height: part.headerHeight)
+        if self.header.frame != headerFrame { self.header.frame = headerFrame }
+        self.header.layoutContent()
+        if let section = part.section {
+            if self.section.frame != section.frame { self.section.frame = section.frame }
+            self.section.layoutContent()
+        }
     }
 
     override func draw(_ rect: CGRect) {
+        guard let part else { return }
+        let bounds = self.bounds
+        let shape = PBezierPath.rounded(bounds.insetBy(dx: 0.5, dy: 0.5), radius: TranscriptMetrics.cardRadius)
+        TranscriptColors.fill.setFill()
+        shape.fill()
+        guard part.isExpanded else { return }
+        TranscriptColors.stroke.setStroke()
+        shape.lineWidth = 1
+        shape.stroke()
+        TranscriptColors.separator.setFill()
+        PBezierPath(rect: CGRect(x: 0, y: part.headerHeight, width: bounds.width, height: 1)).fill()
+        if let note = part.note {
+            let font = TranscriptStyle.shared.caption
+            singleLine(note, font, TranscriptColors.secondary)
+                .drawLine(at: CGPoint(x: 10, y: part.noteY), width: bounds.width - 20, font: font)
+        }
+    }
+}
+
+final class TranscriptFileHeaderView: TranscriptTapView {
+    private var part: TranscriptPart.File?
+    static let textX: CGFloat = 32
+    static let chevronSpace: CGFloat = 18
+
+    func configure(_ part: TranscriptPart.File) {
+        self.part = part
+        self.redraw()
+    }
+
+    override func draw(_ rect: CGRect) {
+        guard let part else { return }
         let style = TranscriptStyle.shared
         let bounds = self.bounds
-        TranscriptColors.fill.setFill()
-        PBezierPath.rounded(bounds, radius: TranscriptMetrics.cardRadius).fill()
-        TranscriptSymbols.draw("paperclip", in: CGRect(x: 10, y: 0, width: 16, height: bounds.height), size: style.callout.pointSize, color: TranscriptColors.label)
-        singleLine(self.name, style.callout, TranscriptColors.label, truncation: .byTruncatingMiddle)
-            .drawLine(at: CGPoint(x: 32, y: (bounds.height - TranscriptStyle.lineHeight(style.callout)) / 2), width: bounds.width - 42, font: style.callout)
+        if self.isPressed {
+            TranscriptColors.highlight.setFill()
+            PBezierPath.rounded(bounds.insetBy(dx: 1, dy: 1), radius: TranscriptMetrics.cardRadius - 1).fill()
+        }
+        let symbol = part.ref.isText ? "doc.text" : "paperclip"
+        TranscriptSymbols.draw(symbol, in: CGRect(x: 10, y: 0, width: 16, height: bounds.height),
+                               size: style.callout.pointSize, color: TranscriptColors.label)
+        var trailing = bounds.width - 10
+        if part.canExpand {
+            trailing -= 10
+            TranscriptSymbols.draw(part.isExpanded ? "chevron.down" : "chevron.right",
+                                   in: CGRect(x: trailing, y: 0, width: 10, height: bounds.height),
+                                   size: style.caption2Medium.pointSize, weight: .bold, color: TranscriptColors.tertiary)
+            trailing -= 8
+        }
+        singleLine(part.ref.name, style.callout, TranscriptColors.label, truncation: .byTruncatingMiddle)
+            .drawLine(at: CGPoint(x: Self.textX, y: (bounds.height - TranscriptStyle.lineHeight(style.callout)) / 2),
+                      width: max(trailing - Self.textX, 1), font: style.callout)
     }
 }
 

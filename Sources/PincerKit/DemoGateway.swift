@@ -30,7 +30,7 @@ actor DemoGateway {
         "agents.list", "sessions.subscribe", "sessions.list", "sessions.groups.list", "sessions.messages.subscribe",
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
-        "users.prefs.set", "commands.list",
+        "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put",
     ]
 
     private let agents: [JSONValue] = [
@@ -44,6 +44,7 @@ actor DemoGateway {
     private var approvals: [String: JSONValue] = [:]
     private var approvalOrder: [String] = []
     private var prefs: [String: JSONValue] = [:]
+    private var progressCards: [String: JSONValue] = [:]
     private var idempotency: [String: String] = [:]
     private var runs: [String: Run] = [:]
     private var sessionsSubscribed = false
@@ -56,6 +57,7 @@ actor DemoGateway {
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
         self.artifacts["demo-chart"] = ("image/png", Self.chartPNG())
+        self.artifacts["demo-script"] = ("text/x-shellscript", Data(Self.diskScript.utf8))
     }
 
     /// A small `commands.list` answer, shaped like the Gateway's `scope: "text"` catalog.
@@ -161,6 +163,10 @@ actor DemoGateway {
             return ["status": "ok", "entries": .object(self.prefs.filter { keys.contains($0.key) })]
         case "users.prefs.set":
             return self.setPrefs(params)
+        case "progressCard.get":
+            return ["card": self.progressCards[try self.knownSession(params["sessionKey"])] ?? .null]
+        case "progressCard.put":
+            return try self.putProgressCard(params)
         case "exec.approval.list":
             return ["approvals": .array(self.approvalOrder.compactMap { self.approvals[$0] })]
         case "exec.approval.resolve":
@@ -357,6 +363,10 @@ actor DemoGateway {
                               "message": Self.message("assistant", [Self.thinking(thinking)], runId: runId, model: model)])
         }
 
+        if lowered.range(of: #"\bplan\b"#, options: .regularExpression) != nil {
+            guard await self.simulatePlan(runId: runId, key: key, model: model) else { return }
+        }
+
         let wantsTool = ["tool", "disk", "image"].contains { lowered.contains($0) }
         if wantsTool {
             let callId = Self.shortId("call_")
@@ -396,6 +406,67 @@ actor DemoGateway {
             row["lastMessagePreview"] = .string(String(reply.prefix(120)))
             row["unread"] = true
         }
+    }
+
+    /// Walks a three-step `progress_card` checklist, as an agent following a plan would.
+    private func simulatePlan(runId: String, key: String, model: (provider: String, model: String)) async -> Bool {
+        let markdown = "**Demo plan**\n\nThe card above the composer tracks each phase."
+        let labels = ["Look over the request", "Draft a reply", "Double-check the result"]
+        for current in 0...labels.count {
+            let steps: [JSONValue] = labels.enumerated().map { index, label in
+                let status = index < current ? "completed" : index == current ? "in_progress" : "pending"
+                return ["step": .string(label), "status": .string(status)]
+            }
+            let callId = Self.shortId("call_")
+            let args: JSONValue = ["markdown": .string(markdown), "plan": .array(steps)]
+            self.agentEvent(runId, stream: "tool",
+                            ["phase": "start", "name": "progress_card", "toolCallId": .string(callId), "args": args])
+            let revision = self.storeProgressCard(key, markdown: .string(markdown), steps: .array(steps))
+            let output = "Progress card updated (rev \(revision), \(min(current, labels.count))/\(labels.count) done)"
+            self.agentEvent(runId, stream: "tool",
+                            ["phase": "result", "name": "progress_card", "toolCallId": .string(callId), "isError": false,
+                             "result": .string(output)])
+            self.append(key, Self.message("assistant", [Self.toolCall(callId, "progress_card", args)],
+                                          runId: runId, model: model))
+            self.append(key, Self.message("toolResult", [Self.text(output)], runId: runId,
+                                          extra: ["toolCallId": .string(callId), "toolName": "progress_card",
+                                                  "isError": false]))
+            if current < labels.count {
+                guard await self.pause(runId, milliseconds: 1500) else { return false }
+            }
+        }
+        return true
+    }
+
+    @discardableResult
+    private func storeProgressCard(_ key: String, markdown: JSONValue?, steps: JSONValue?) -> Int {
+        let revision = (self.progressCards[key]?["revision"]?.int ?? 0) + 1
+        var card: Row = ["sessionKey": .string(key), "revision": JSONValue(revision), "updatedAt": Self.now()]
+        if let markdown { card["markdown"] = markdown }
+        if let steps { card["steps"] = steps }
+        self.progressCards[key] = .object(card)
+        self.emit("progressCard.changed", ["sessionKey": .string(key), "revision": JSONValue(revision)])
+        return revision
+    }
+
+    private func putProgressCard(_ params: JSONValue) throws -> JSONValue {
+        let key = try self.knownSession(params["sessionKey"])
+        let markdown = params["markdown"], plan = params["plan"]
+        if markdown == nil, plan == nil {
+            // Conditional clear: only the revision the client saw is dismissed.
+            if let expected = params["expectedRevision"]?.int, let card = self.progressCards[key],
+               card["revision"]?.int != expected
+            {
+                return ["card": card]
+            }
+            self.progressCards[key] = nil
+            if params["expectedRevision"] == nil {
+                self.emit("progressCard.changed", ["sessionKey": .string(key), "revision": .null])
+            }
+            return ["card": .null]
+        }
+        self.storeProgressCard(key, markdown: markdown, steps: plan)
+        return ["card": self.progressCards[key] ?? .null]
     }
 
     /// Sleeps, then reports whether the run should keep going.
@@ -493,6 +564,7 @@ actor DemoGateway {
         - Mention **tool** or **disk** to watch a live tool call\(usedTool ? " (like the one above)" : "").
         - Ask for an **image** to get an inline chart.
         - Say **approve** to raise a command approval.
+        - Ask it to follow a **plan** to watch the task progress card.
         - Switch models from the toolbar, or pin, rename and group chats in the sidebar.
 
         ```text
@@ -533,6 +605,23 @@ actor DemoGateway {
         ["type": "image", "artifactId": .string(artifactId), "mimeType": "image/png", "alt": .string(alt),
          "width": 320, "height": 200]
     }
+
+    private static func file(_ artifactId: String, name: String, mimeType: String) -> JSONValue {
+        ["type": "file", "artifactId": .string(artifactId), "fileName": .string(name), "mimeType": .string(mimeType)]
+    }
+
+    private static let diskScript = """
+    #!/bin/sh
+    # Prints each mounted volume's usage, flagging any above 80%.
+    set -eu
+
+    df -h | awk 'NR == 1 { print; next }
+    {
+      used = $5 + 0
+      flag = used > 80 ? "  <- getting full" : ""
+      print $0 flag
+    }'
+    """
 
     private static func message(
         _ role: String, _ content: [JSONValue], runId: String? = nil, idempotencyKey: String? = nil,
@@ -603,7 +692,20 @@ actor DemoGateway {
                     Here's a quick chart.
                     """),
                     Self.image("demo-chart", alt: "Disk usage chart"),
+                    Self.file("demo-script", name: "disk-report.sh", mimeType: "text/x-shellscript"),
                 ]),
+                Self.message("user", [Self.text("Can you sketch that as a little gauge?")]),
+                Self.message("assistant", [Self.text("""
+                Here's the root volume as a gauge:
+
+                ```svg
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 140" width="240" height="140">
+                  <path d="M20 120 A100 100 0 0 1 220 120" fill="none" stroke="#d9dde3" stroke-width="18" stroke-linecap="round"/>
+                  <path d="M20 120 A100 100 0 0 1 108 21" fill="none" stroke="#34a37a" stroke-width="18" stroke-linecap="round"/>
+                  <text x="120" y="112" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="30" font-weight="600" fill="#34a37a">46%</text>
+                </svg>
+                ```
+                """)]),
                 Self.message("assistant", [Self.text("""
                 👋 **Welcome to the Pincer demo.** Everything here is simulated on your device, so no Gateway \
                 is needed. Send a message to see a streamed reply. Try the words *tool*, *image* or *approve*.

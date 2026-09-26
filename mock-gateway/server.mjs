@@ -13,6 +13,7 @@ const METHODS = [
   'sessions.messages.subscribe',
   'sessions.messages.unsubscribe',
   'chat.history',
+  'chat.message.get',
   'chat.send',
   'chat.abort',
   'sessions.patch',
@@ -24,6 +25,8 @@ const METHODS = [
   'users.prefs.get',
   'users.prefs.set',
   'commands.list',
+  'progressCard.get',
+  'progressCard.put',
   ...CONFIG_METHODS,
 ];
 const EVENTS = [
@@ -37,6 +40,7 @@ const EVENTS = [
   'exec.approval.resolved',
   'users.prefs.changed',
   'plugins.changed',
+  'progressCard.changed',
 ];
 
 function canonicalJson(value) {
@@ -196,6 +200,24 @@ function clone(value) {
   return structuredClone(value);
 }
 
+// Like the Gateway's history projection: text fields past the cap end in a sentinel and the
+// message is flagged so clients can fetch the full copy with `chat.message.get`.
+const HISTORY_TEXT_MAX_CHARS = 8_000;
+
+function projectForHistory(message, maxChars = HISTORY_TEXT_MAX_CHARS) {
+  const projected = clone(message);
+  if (!Array.isArray(projected.content)) return projected;
+  let truncated = false;
+  for (const block of projected.content) {
+    if (block?.type === 'text' && typeof block.text === 'string' && block.text.length > maxChars) {
+      block.text = `${block.text.slice(0, maxChars)}\n...(truncated)...`;
+      truncated = true;
+    }
+  }
+  if (truncated) projected.__openclaw = { ...projected.__openclaw, truncated: true };
+  return projected;
+}
+
 function createSeedState() {
   const base = nowMs();
   const agents = new Map([
@@ -336,6 +358,8 @@ function createSeedState() {
     makeMessage('assistant', [textBlock('Start with Meiji Shrine, a low-key lunch, and an early evening in Shinjuku.')]),
   );
   transcripts.get('agent:research:main').push(
+    // Past the history cap, so clients have to recover it with `chat.message.get`.
+    makeMessage('assistant', [textBlock(`## Long report\n\n${'Lorem ipsum dolor sit amet. '.repeat(400)}\n\nEND OF REPORT`)]),
     makeMessage('assistant', [textBlock('Scout is ready to investigate papers, repos, and docs.')]),
   );
   transcripts.get('agent:research:dashboard:papers').push(
@@ -357,6 +381,7 @@ function createSeedState() {
     pairedDevices: new Map(),
     pendingPairing: new Map(),
     pendingApprovals: new Map(),
+    progressCards: new Map(),
     idempotency: new Map(),
     activeRuns: new Map(),
     connections: new Set(),
@@ -525,6 +550,52 @@ function abortMatchingRuns(state, sessionKey, runId) {
   return count;
 }
 
+function putProgressCard(state, sessionKey, { markdown, steps }) {
+  const previous = state.progressCards.get(sessionKey);
+  const card = { sessionKey, revision: (previous?.revision ?? 0) + 1, updatedAt: nowMs(), markdown, steps };
+  state.progressCards.set(sessionKey, card);
+  broadcast(state, 'progressCard.changed', { sessionKey, revision: card.revision });
+  return card;
+}
+
+/** Walks a three-step `progress_card` checklist, as an agent following a plan would. */
+async function simulatePlan(state, run, sessionKey, row) {
+  const markdown = '**Three-step task: mock plan**\n\nThe card updates between phases.';
+  const labels = ['Inspect the workspace', 'Draft the change', 'Validate and summarize'];
+  for (let current = 0; current <= labels.length; current += 1) {
+    const steps = labels.map((step, index) => ({
+      step,
+      status: index < current ? 'completed' : index === current ? 'in_progress' : 'pending',
+    }));
+    const toolCallId = shortId('call_');
+    const args = { markdown, plan: steps };
+    broadcast(state, 'agent', {
+      runId: run.runId, sessionKey, seq: ++run.seq, stream: 'tool',
+      data: { phase: 'start', name: 'progress_card', toolCallId, args },
+    });
+    const card = putProgressCard(state, sessionKey, { markdown, steps });
+    const done = steps.filter((step) => step.status === 'completed').length;
+    const result = `Progress card updated (rev ${card.revision}, ${done}/${steps.length} done)`;
+    broadcast(state, 'agent', {
+      runId: run.runId, sessionKey, seq: ++run.seq, stream: 'tool',
+      data: { phase: 'result', name: 'progress_card', toolCallId, isError: false, result },
+    });
+    const toolMsg = makeMessage('assistant', [toolCallBlock(toolCallId, 'progress_card', args)], { openclaw: { runId: run.runId }, model: rowModel(row) });
+    const toolResult = makeMessage('toolResult', [textBlock(result)], {
+      openclaw: { runId: run.runId },
+      extra: { toolCallId, toolName: 'progress_card', isError: false },
+    });
+    const transcript = state.transcripts.get(sessionKey);
+    transcript.push(toolMsg, toolResult);
+    broadcastSessionMessage(state, sessionKey, toolMsg, transcript.length - 1);
+    broadcastSessionMessage(state, sessionKey, toolResult, transcript.length);
+    if (current < labels.length) {
+      await runDelay(run, 1500);
+      if (run.aborted) return;
+    }
+  }
+}
+
 async function simulateRun(state, run, params) {
   const { sessionKey, message: text, attachments = [] } = params;
   const row = state.sessions.get(sessionKey);
@@ -579,6 +650,11 @@ async function simulateRun(state, run, params) {
         deltaText: '',
         message: makeMessage('assistant', [thinkingBlock(thinking)], { openclaw: { runId: run.runId }, model: rowModel(row) }),
       });
+    }
+
+    if (/\bplan\b/i.test(String(text ?? ''))) {
+      await simulatePlan(state, run, sessionKey, row);
+      if (run.aborted) return;
     }
 
     const wantsTool = /tool|disk|image/i.test(String(text ?? ''));
@@ -653,6 +729,30 @@ function handleAuthedRequest(state, conn, msg) {
   const { id, method, params = {} } = msg;
   if (handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
   switch (method) {
+    case 'progressCard.get': {
+      const key = params.sessionKey;
+      if (!key) return sendErr(conn, id, 'INVALID_REQUEST', 'sessionKey is required.');
+      sendRes(conn, id, { card: clone(state.progressCards.get(key) ?? null) });
+      return;
+    }
+    case 'progressCard.put': {
+      const key = params.sessionKey;
+      if (!key) return sendErr(conn, id, 'INVALID_REQUEST', 'sessionKey is required.');
+      const current = state.progressCards.get(key);
+      if (params.markdown === undefined && params.plan === undefined) {
+        // Conditional clear: only the revision the client saw is dismissed.
+        if (current && params.expectedRevision !== undefined && current.revision !== params.expectedRevision) {
+          sendRes(conn, id, { card: clone(current) });
+          return;
+        }
+        state.progressCards.delete(key);
+        if (params.expectedRevision === undefined) broadcast(state, 'progressCard.changed', { sessionKey: key, revision: null });
+        sendRes(conn, id, { card: null });
+        return;
+      }
+      sendRes(conn, id, { card: clone(putProgressCard(state, key, { markdown: params.markdown, steps: params.plan })) });
+      return;
+    }
     case 'agents.list': {
       sendRes(conn, id, {
         defaultId: 'main',
@@ -703,7 +803,7 @@ function handleAuthedRequest(state, conn, msg) {
       sendRes(conn, id, {
         sessionKey: key,
         sessionId: row.sessionId,
-        messages: clone(transcript.slice(start, end)),
+        messages: transcript.slice(start, end).map((message) => projectForHistory(message)),
         totalMessages: transcript.length,
         hasMore: start > 0,
         ...(start > 0 ? { nextOffset: offset + (end - start) } : {}),
@@ -711,6 +811,15 @@ function handleAuthedRequest(state, conn, msg) {
         sessionInfo: { hasActiveRun: row.hasActiveRun, activeRunIds: [...row.activeRunIds] },
         ...(activeRun ? { inFlightRun: { runId: activeRun.runId, text: activeRun.text } } : {}),
       });
+      break;
+    }
+    case 'chat.message.get': {
+      const transcript = state.transcripts.get(params.sessionKey);
+      if (!transcript) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown session');
+      const message = transcript.find((entry) => entry.__openclaw?.id === params.messageId);
+      if (!message) return sendRes(conn, id, { ok: false, unavailableReason: 'not_found' });
+      const maxChars = Number.isFinite(params.maxChars) ? params.maxChars : 1_000_000;
+      sendRes(conn, id, { ok: true, message: projectForHistory(message, maxChars) });
       break;
     }
     case 'chat.send': {
