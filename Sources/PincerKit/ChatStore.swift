@@ -272,12 +272,20 @@ public final class ChatStore: Identifiable {
     }
 
     private func snapshot() -> TranscriptCache.Snapshot {
-        let committed = self.items.filter { !$0.isPending }
-        let kept = committed.suffix(TranscriptCache.maxItems)
+        Self.snapshot(items: self.items, hasMoreHistory: self.hasMoreHistory,
+                      activityMs: self.gateway?.sessions[self.sessionKey]?.activityMs)
+    }
+
+    /// Committed items, newest `maxItems` kept; complete only when nothing older was left out.
+    nonisolated static func snapshot(items: [ChatItem], hasMoreHistory: Bool, activityMs: Double?,
+                                     maxItems: Int = TranscriptCache.maxItems) -> TranscriptCache.Snapshot
+    {
+        let committed = items.filter { !$0.isPending }
+        let kept = committed.suffix(maxItems)
         return TranscriptCache.Snapshot(
             items: Array(kept),
-            complete: !self.hasMoreHistory && kept.count == committed.count,
-            activityMs: self.gateway?.sessions[self.sessionKey]?.activityMs)
+            complete: !hasMoreHistory && kept.count == committed.count,
+            activityMs: activityMs)
     }
 
     private func scheduleSave() {

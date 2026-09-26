@@ -40,4 +40,17 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 
 The mock serves a small config and plugin catalog for Gateway Settings. It supports `config.get`, `config.schema`, `config.patch`, `config.set` and `config.apply`, with redacted secrets, validation issues and restart hints, plus the `plugins.*` methods. Writes need the `operator.admin` scope, so set **Access** to **Full Management**.
 
+## Selftest and live checks
+
+The mock has its own selftest, and it is the target for Pincer's live end-to-end checks. CI runs both.
+
+```sh
+cd mock-gateway && npm ci && npm run selftest
+
+# in another terminal, with the mock running:
+PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+```
+
+The unit tests (`swift test`) don't need the mock: they never open a socket. See [Building from source](../building/#unit-tests).
+
 See [`mock-gateway/README.md`](https://github.com/hartra344/pincer/blob/main/mock-gateway/README.md) for everything else.

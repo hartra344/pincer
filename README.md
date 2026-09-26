@@ -117,7 +117,7 @@ open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pince
 
 ### Tests on CI
 
-`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs `PincerChecks` in offline, `--demo` and `--live` (against the mock gateway) modes, and runs the mock gateway's selftest.
+`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs the `PincerKitTests` unit tests, runs `PincerChecks` in offline, `--demo` and `--live` (against the mock gateway) modes, and runs the mock gateway's selftest.
 
 ### TestFlight
 
@@ -147,6 +147,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 | `Design/AppIcon` | Flattened reference artwork for the app icon (`Pincer.svg`). The shipped icon is `Apps/Shared/AppIcon.icon`, a layered Icon Composer file (gradient background + glass speech-bubble layer) with Default, Dark, Clear and Tinted appearances; edit it in Icon Composer (Xcode ▸ Open Developer Tool). Xcode renders flat fallbacks for iOS 18 / macOS 15. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |
 | `Sources/PincerChecks` | Self-checks, with an optional live end-to-end run. |
+| `Tests/PincerKitTests` | Swift Testing unit tests for PincerKit's pure logic (framing, signing, URL/TLS policy, caches, sidebar, slash commands, approvals). |
 | `Sources/PincerPush` | Web Push decryption (RFC 8291), per-gateway push keys and payload parsing, shared by the app and its notification service extension. |
 | `Apps/iOSNotificationService` | iOS notification service extension that decrypts relayed pushes. |
 | `push-relay/` | Zero-dependency Node relay from Gateway Web Push to APNs. |
@@ -174,6 +175,14 @@ Message triggers:
 The mock also serves a small config and plugin catalog for Gateway Settings, and three cron jobs for Automations; see its README.
 
 For the rest of the options, see [`mock-gateway/README.md`](mock-gateway/README.md).
+
+To run the unit tests:
+
+```sh
+swift test --parallel
+```
+
+They use fixed signing keys, their own temp folders and throwaway defaults suites, so they need no gateway, socket or Keychain (no `PINCER_KEYCHAIN` either) and can run alongside the self-checks.
 
 To run the self-checks:
 
