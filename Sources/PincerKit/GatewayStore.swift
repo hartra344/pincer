@@ -135,6 +135,9 @@ public final class GatewayStore: Identifiable {
     /// Token and cost usage; loaded when the Usage page opens.
     @ObservationIgnored public private(set) lazy var usage = UsageModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
+    /// Pending DM pairing requests from channels; loaded when Gateway Settings opens.
+    @ObservationIgnored public private(set) lazy var pairingInbox = PairingInboxModel(
+        connection: self.connection, hello: { [weak self] in self?.hello })
 
     /// Where per-gateway sidebar and selection preferences persist.
     @ObservationIgnored let defaults: UserDefaults
@@ -224,6 +227,7 @@ public final class GatewayStore: Identifiable {
     private func update(state: ConnectionState, hello: GatewayHello?) {
         self.state = state
         if case let .failed(message) = state { self.lastError = message }
+        if !state.isConnected { self.pairingInbox.reset() }
         guard state == .connected, let hello else { return }
         self.hasConnected = true
         self.hello = hello
