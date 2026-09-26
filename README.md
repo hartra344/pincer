@@ -12,7 +12,7 @@ Pincer is a **pure client**. It connects to a Gateway you already run and speaks
 It **never** bundles, launches or embeds a Gateway, and it never registers as a node, so it exposes no camera, screen, shell or `system.run` capabilities. That makes it suitable for machines where the official OpenClaw app isn't allowed.
 
 - **Identity:** each install creates an Ed25519 device key, stored in the Keychain and marked this-device-only. The gateway must approve the device once.
-- **Secrets:** gateway tokens and passwords are stored in the Keychain and never in UserDefaults.
+- **Secrets:** gateway tokens and passwords are stored in the Keychain and never in UserDefaults. In the Xcode-built apps, the device key, secrets and device tokens sit in a Keychain group (`chat.pincer.shared`) that only Pincer and its Share extension can read, and the list of saved gateways (no secrets) sits in the App Group. The first launch after updating moves existing items there.
 - **Transport:**
   - `wss://` is required for anything other than loopback, private LAN or Tailscale addresses.
   - You can pin a TLS certificate by its SHA-256 fingerprint.
@@ -52,6 +52,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - edits from every page go into one draft. The toolbar shows how many are unsaved, and **Save** (⌘S) opens **Review Changes**, which lists each change and sends them together with `config.patch`, so the gateway validates, persists and hot-applies them. Invalid values come back with the field and reason, and changes that need a gateway restart say so. If the config changed on the gateway meanwhile, Pincer rebases the draft and asks about any conflicting setting;
   - secrets are shown only as "saved" and are never sent back to the gateway unless you change them;
   - editing needs **Access → Full Management** on the Connection page (and the gateway's approval); otherwise settings are read-only.
+- **Share extension** (iOS and macOS share sheets): send text, links, images and files into a chat. Pick the gateway, then an existing chat or **New chat with** an agent (`sessions.list`, `sessions.create`), add a note if you like, and **Send** (`chat.send`). The note comes first, then any shared text, then links, and a link that's already in the text isn't repeated. Images are downscaled to fit the gateway's limits; files that are too big are listed and left out. The extension connects as the app's own, already approved device, so there's nothing new to pair. Open Pincer once after installing so it can share its device key, and add a gateway first. The next share starts on the gateway and chat you used last.
 - **Automations** (**Organize → Automations…** in the sidebar, or **Manage Automations…** on the Automations section's header): a window on macOS and a sheet on iOS listing the gateway's cron jobs with their schedule, last and next run, and status (failing jobs show the error). Each job's run history (`cron.runs`) links every run to its chat. **Run Now**, **Pause**/**Resume**, **Edit**, **New** and **Delete** use `cron.run`/`cron.update`/`cron.add`/`cron.remove`, and the list updates live from the gateway's `cron` events. Changing jobs needs **Access → Full Management**; edits made elsewhere in the meantime are refused instead of overwritten. Gateways without `cron.*` show that automations aren't available.
 - **Per-session actions:** pin, rename, group, color, reasoning level and archive. **Color → Custom…** picks any color; since `sessions.patch` only takes OpenClaw's named colors, custom colors sync through `users.prefs` (key `pincer.chatColors`) and win over the named one. Drag a chat onto a group (or **Ungrouped**) to move it, or between chats to put it at that spot; in **Like Discord**, dropping a grouped chat on its own server or agent takes it out of the group.
 - **Groups:** create empty groups and keep them until you delete them (**Delete Group…** on the header leaves its chats ungrouped). Drag a group header, or use **Move Up**/**Move Down**, to reorder groups. **Change Icon…** on a group's header picks its SF Symbol; group icons sync through `users.prefs` (key `pincer.groupIcons`). Groups, their order and renames live in the gateway's group catalog (`sessions.groups.*`); on gateways without it, they sync through `users.prefs` (key `pincer.groups`). The order of chats within a group syncs through `users.prefs` (key `pincer.chatOrder`) and wins over pinning and activity.
@@ -110,8 +111,9 @@ Signing uses manual App Store profiles through `project.appstore.yml`, which is 
 | `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` | App Store Connect API key (the `.p8` is base64) |
 | `DISTRIBUTION_P12`, `MAC_INSTALLER_P12`, `P12_PASSWORD` | Apple Distribution and Mac Installer Distribution certificates (base64 `.p12`) |
 | `IOS_PROFILE`, `MACOS_PROFILE` | Base64 `Pincer_iOS_AppStore_CI` / `Pincer_macOS_AppStore_CI` provisioning profiles |
+| `IOS_SHARE_PROFILE`, `MACOS_SHARE_PROFILE` | Base64 `Pincer_iOS_Share_AppStore_CI` / `Pincer_macOS_Share_AppStore_CI` profiles for the Share extensions (`chat.pincer.ios.share`, `chat.pincer.mac.share`) |
 
-The certificates and profiles expire on 2027-09-25. Renew them before then and update the secrets.
+All four profiles need the App Groups capability (`group.chat.pincer` on iOS, `E4Y97NXBXG.chat.pincer` on macOS) and Keychain Sharing (`chat.pincer.shared`). The certificates and profiles expire on 2027-09-25. Renew them before then and update the secrets.
 
 ### Layout
 
@@ -120,7 +122,8 @@ The certificates and profiles expire on 2027-09-25. Renew them before then and u
 | `Sources/PincerKit` | Protocol client (handshake, signing, reconnect, TLS pinning), models, and the observable stores. No UI. |
 | `Sources/PincerUI` | Shared UI for macOS and iOS. The app shell is SwiftUI. The chat transcript and sidebar are native for performance: `NSTableView`/`NSOutlineView` on macOS and `UICollectionView` on iOS. Markdown is laid out once with TextKit (`TranscriptSupport`, `TranscriptRowView`), and the same part views are shared by both platforms. |
 | `Apps/macOS`, `Apps/iOS` | `@main` app shells used by the Xcode project. |
-| `Apps/Shared` | Resources shared by both apps, including the app icon (`AppIcon.icon`). |
+| `Apps/Shared` | Resources shared by both apps, including the app icon (`AppIcon.icon`) and the Info.plist keys that name the App Group and Keychain group. |
+| `Apps/ShareExtension` | Share extensions for iOS and macOS: a view controller per platform plus the shared SwiftUI sheet. The logic (`ShareModel`, `SharedContent`) lives in PincerKit. |
 | `Design/AppIcon` | Flattened reference artwork for the app icon (`Pincer.svg`). The shipped icon is `Apps/Shared/AppIcon.icon`, a layered Icon Composer file (gradient background + glass speech-bubble layer) with Default, Dark, Clear and Tinted appearances; edit it in Icon Composer (Xcode ▸ Open Developer Tool). Xcode renders flat fallbacks for iOS 18 / macOS 15. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |
 | `Sources/PincerChecks` | Self-checks, with an optional live end-to-end run. |
@@ -162,6 +165,7 @@ To see what the gateway says about each request, run the app with `open --env PI
 ## Known gaps
 
 - iOS runs in the simulator (connect, sidebar, history), but hasn't been tried on a real device yet.
+- The Share extension is tested against the demo and the mock over a real socket; it hasn't been tried from the share sheet on a real device yet.
 - Automations has been tested against the mock only.
 - Gateway Settings has been tested against the mock only. It doesn't browse the ClawHub catalog, show install progress, or edit lists of objects in forms (use the raw editor).
 

@@ -175,19 +175,28 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+/// Saved gateways live in the App Group's defaults so the Share extension can list them.
+/// Lists saved before the App Group existed are copied over from the app's own defaults once.
 public enum GatewayProfileStore {
-    private static let key = "pincer.gatewayProfiles.v1"
+    static let key = "pincer.gatewayProfiles.v1"
 
-    public static func load() -> [GatewayProfile] {
-        guard let data = UserDefaults.standard.data(forKey: self.key),
+    public static func load(
+        from defaults: UserDefaults = SharedContainer.defaults,
+        legacy: UserDefaults = .standard) -> [GatewayProfile]
+    {
+        if let data = defaults.data(forKey: self.key) {
+            return (try? JSONDecoder().decode([GatewayProfile].self, from: data)) ?? []
+        }
+        guard defaults !== legacy, let data = legacy.data(forKey: self.key),
               let profiles = try? JSONDecoder().decode([GatewayProfile].self, from: data)
         else { return [] }
+        defaults.set(data, forKey: self.key)
         return profiles
     }
 
-    public static func save(_ profiles: [GatewayProfile]) {
+    public static func save(_ profiles: [GatewayProfile], to defaults: UserDefaults = SharedContainer.defaults) {
         if let data = try? JSONEncoder().encode(profiles) {
-            UserDefaults.standard.set(data, forKey: self.key)
+            defaults.set(data, forKey: self.key)
         }
     }
 }

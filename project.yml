@@ -28,11 +28,14 @@ targets:
     dependencies:
       - package: Pincer
         product: PincerUI
+      - target: PincerShare-macOS
     settings:
       base:
         PRODUCT_NAME: Pincer
         PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.mac
         CODE_SIGN_ENTITLEMENTS: Apps/macOS/Pincer.entitlements
+        INFOPLIST_FILE: Apps/Shared/Info.plist
+        PINCER_APP_GROUP: $(TeamIdentifierPrefix)chat.pincer
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Pincer
@@ -47,10 +50,14 @@ targets:
     dependencies:
       - package: Pincer
         product: PincerUI
+      - target: PincerShare-iOS
     settings:
       base:
         PRODUCT_NAME: Pincer
         PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios
+        CODE_SIGN_ENTITLEMENTS: Apps/iOS/Pincer.entitlements
+        INFOPLIST_FILE: Apps/Shared/Info.plist
+        PINCER_APP_GROUP: group.chat.pincer
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Pincer
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -59,4 +66,41 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer connects to your OpenClaw Gateway on your local network or tailnet."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach photos to messages you send to your agents."
+        TARGETED_DEVICE_FAMILY: "1,2"
+  # Share extensions: send text, links and files into a chat. They connect as the app's paired
+  # device, reading gateways from the App Group and credentials from the shared Keychain group.
+  PincerShare-macOS:
+    type: app-extension
+    platform: macOS
+    sources: [Apps/ShareExtension/macOS, Apps/ShareExtension/Shared]
+    dependencies:
+      - package: Pincer
+        product: PincerKit
+    settings:
+      base:
+        PRODUCT_NAME: PincerShare
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.mac.share
+        CODE_SIGN_ENTITLEMENTS: Apps/ShareExtension/macOS/PincerShare.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Apps/ShareExtension/macOS/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: Pincer
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        PINCER_APP_GROUP: $(TeamIdentifierPrefix)chat.pincer
+  PincerShare-iOS:
+    type: app-extension
+    platform: iOS
+    sources: [Apps/ShareExtension/iOS, Apps/ShareExtension/Shared]
+    dependencies:
+      - package: Pincer
+        product: PincerKit
+    settings:
+      base:
+        PRODUCT_NAME: PincerShare
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios.share
+        CODE_SIGN_ENTITLEMENTS: Apps/ShareExtension/iOS/PincerShare.entitlements
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Apps/ShareExtension/iOS/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: Pincer
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer connects to your OpenClaw Gateway on your local network or tailnet."
         TARGETED_DEVICE_FAMILY: "1,2"
