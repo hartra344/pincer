@@ -39,3 +39,9 @@ If the gateway has no durable identity for your connection, these preferences st
 - Your display name
 - Whether to load images the agent links from the web
 - The transcript cache
+- Whether to show the last message under each chat, and whether to list subagent runs under their chat
+- Notifications on or off (**Notify about replies and approvals**)
+- The push relay URL (iOS)
+- Find in Chat options (**Include Thinking** and **Include Tool Output**)
+- Unsent [drafts](../../guides/composer/#drafts)
+- The last gateway and chat you [shared to](../../guides/sharing-to-pincer/)
