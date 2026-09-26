@@ -3,6 +3,10 @@ title: Composer & slash commands
 description: Sending messages, attachments, stopping runs and using slash commands in Pincer.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import commands from '../../../assets/screenshots/slash-commands.png';
+import context from '../../../assets/screenshots/context-meter.png';
+
 ## Sending messages
 
 | Action | Keys |
@@ -42,6 +46,8 @@ Click the ring for details:
 - **Last run:** tokens in and out;
 - **Instructions (optional)** and **Compact Now**.
 
+<DocScreenshot focus={{ x: 1670, y: 1010, width: 670, height: 535 }} src={context} alt="Context Window popover showing 172k of 200k tokens, optional instructions, and Compact Now." caption="Built-in demo, Lobster theme. Open the ring to inspect usage before compacting." />
+
 ### Compact Now
 
 **Compact Now** summarizes older messages to free up room, like OpenClaw does on its own when the context is full. Add instructions to tell it what to keep. When it's done, Pincer shows the result, such as "Compacted 172k → 31k tokens."
@@ -69,6 +75,8 @@ A few notes:
 
 - `/clear` is sent as `/reset`, like the Control UI.
 - Gateways that don't support `commands.list` get a built-in list of common commands.
+
+<DocScreenshot focus={{ x: 580, y: 870, width: 1765, height: 675 }} src={commands} alt="Slash command suggestions above the composer, including help, status, compact, and model." caption="Type / without sending it to browse available commands. This example uses the built-in demo." />
 
 ### Handy commands
 

@@ -93,7 +93,7 @@ Number keys work while the question card is selected, not while you're typing an
 
 | Action | Shortcut |
 | --- | --- |
-| Save (opens Review Changes) | <kbd>⌘</kbd> <kbd>S</kbd> |
+| Save gateway settings | <kbd>⌘</kbd> <kbd>S</kbd> |
 
 ## Usage (macOS)
 

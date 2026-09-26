@@ -3,6 +3,10 @@ title: Connect a gateway
 description: Add your OpenClaw Gateway to Pincer, sign in, and approve this device.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import connection from '../../../assets/screenshots/connect-gateway.png';
+
+
 import { Steps, Aside } from '@astrojs/starlight/components';
 
 Pincer connects to an OpenClaw Gateway you already run. This page walks through adding one and approving your device.
@@ -45,6 +49,8 @@ You'll need:
 <Aside type="tip">
 Every install has its own device key, so each Mac, iPhone and iPad needs to be approved once. After that, it reconnects on its own.
 </Aside>
+
+<DocScreenshot src={connection} alt="Add Gateway form for Local Mock at ws://127.0.0.1:19879 with a masked token and Full Management selected." caption="Local development example, not a production address. Use your own gateway address and access level." narrow />
 
 ## Choosing an address
 
