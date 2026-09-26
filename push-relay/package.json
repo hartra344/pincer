@@ -1,0 +1,12 @@
+{
+  "name": "pincer-push-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Forwards Gateway Web Push to APNs for Pincer on iOS, without reading it.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test"
+  }
+}

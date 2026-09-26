@@ -219,6 +219,7 @@ public final class GatewayStore: Identifiable {
             self.approvals = items.compactMap(ExecApproval.init)
         }
         self.bootstrapped = true
+        Task { await PushRegistrar.shared.sync(self) }
         self.dumpSessionShapesIfRequested()
         Task { await self.loadConfiguredServerNames() }
         Task { await self.pullServerNames() }
@@ -505,14 +506,33 @@ public final class GatewayStore: Identifiable {
     }
 
     public func resolveApproval(_ approval: ExecApproval, decision: String) async {
+        await self.resolveApproval(id: approval.id, decision: decision)
+    }
+
+    /// From a notification action, which may have launched the app: waits for the connection.
+    public func resolveApproval(id: String, decision: String, waitingUpTo seconds: Double = 20) async {
+        let deadline = Date().addingTimeInterval(seconds)
+        while !self.state.isConnected, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(250))
+        }
         do {
             _ = try await self.connection.request(
                 "exec.approval.resolve",
-                ["id": .string(approval.id), "decision": .string(decision)])
-            self.approvals.removeAll { $0.id == approval.id }
+                ["id": .string(id), "decision": .string(decision)])
+            self.approvals.removeAll { $0.id == id }
         } catch {
             self.lastError = error.localizedDescription
         }
+    }
+
+    /// Pushes name an agent's main chat as `agent:<id>:main`; the Gateway's main key may differ.
+    public func resolveSessionKey(_ key: String) -> String {
+        guard self.sessions[key] == nil else { return key }
+        let parts = key.split(separator: ":", maxSplits: 2).map(String.init)
+        guard parts.count == 3, parts[0] == "agent", parts[2] == "main",
+              let main = self.sessions.values.first(where: { $0.isMain && $0.agentId == parts[1] })
+        else { return key }
+        return main.key
     }
 
     public func update(profile: GatewayProfile) {
