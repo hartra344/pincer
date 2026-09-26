@@ -44,6 +44,7 @@ export default defineConfig({
 					items: [
 						{ slug: 'guides/organizing-chats' },
 						{ slug: 'guides/transcript' },
+						{ slug: 'guides/search' },
 						{ slug: 'guides/composer' },
 						{ slug: 'guides/approvals-and-notifications' },
 						{ slug: 'guides/gateway-settings' },

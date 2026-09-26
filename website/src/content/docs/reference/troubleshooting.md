@@ -54,6 +54,16 @@ Pincer uses the server's slug from the gateway's Discord config when it's set. O
 
 Check that **Load images the agent links from the web** is on in Settings. Images from the gateway itself always load.
 
+## Message search misses messages or says it's indexing
+
+- **"Indexing chats…":** after updating Pincer, the search index is built in the background from chats you already had cached, once Pincer connects. Results are shown while it works and fill in when it's done.
+- **Older messages don't show up:** search only covers cached history, up to the latest 20,000 messages of each chat, and only on the selected gateway. Chats cache in the background after connecting.
+- **Archived chats don't show up:** turn on **Show Archived** in the sidebar's Organize menu.
+- **Nothing matches:** each word has to match from its start (`tok` finds "Tokyo", `kyo` doesn't), and several words have to appear together. Thinking and tool output aren't searched; use Find in Chat's options for those.
+- **"Message search needs the transcript cache":** `PINCER_CACHE_DIR=off` is set. Search needs the cache.
+
+A damaged or outdated search index is deleted and rebuilt on its own, so you never need to clear it yourself. See [Search messages](../../guides/search/).
+
 ## Seeing what the gateway says
 
 For a detailed log of every request and the gateway's reply, run the app with a request log:

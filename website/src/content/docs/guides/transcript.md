@@ -59,8 +59,14 @@ The chat toolbar shows the session's model. Pick another from the list the gatew
 
 Each reply's footer shows the model the gateway recorded for it, so earlier replies keep their original model after you switch.
 
+## Find in Chat
+
+**Find in Chat** (<kbd>⌘</kbd> <kbd>F</kbd>) opens a find bar at the top of the chat. It highlights every match and shows where you are, such as "3 of 12". <kbd>⌘</kbd> <kbd>G</kbd> and <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>G</kbd> (or <kbd>Return</kbd>) step through the matches, scrolling to each one. Its options menu can also search thinking and tool input and output, which expand when you land on a match in them.
+
+To search every chat at once, use [Search messages](../search/) (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd>). Opening one of its results opens that chat with Find in Chat already showing your query and the message you picked selected. Every search result is also a match in Find, though Find matches inside words too.
+
 ## History and caching
 
 The full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer caches every chat, most recently active first, and skips chats that haven't changed. Opening a chat shows the cached transcript right away, then fetches only what's new.
 
-The cache location and how to turn it off are described in [Security & privacy](../../reference/security/#local-cache).
+[Search messages](../search/) covers everything in this cache. The cache location and how to turn it off are described in [Security & privacy](../../reference/security/#local-cache).

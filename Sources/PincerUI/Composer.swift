@@ -6,6 +6,8 @@ import UniformTypeIdentifiers
 struct Composer: View {
     @Bindable var chat: ChatStore
     let placeholder: String
+    /// Whether the field may focus itself when it appears.
+    var autoFocus: @MainActor () -> Bool = { true }
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.appTheme) private var theme
     @State private var importing = false
@@ -48,7 +50,8 @@ struct Composer: View {
                     onSubmit: self.submit,
                     onMedia: self.ingest,
                     onKey: self.menuKey,
-                    onCaretAtEnd: { if self.caretAtEnd != $0 { self.caretAtEnd = $0 } })
+                    onCaretAtEnd: { if self.caretAtEnd != $0 { self.caretAtEnd = $0 } },
+                    autoFocus: self.autoFocus)
                     .padding(.vertical, 11)
                     .frame(minHeight: Self.controlHeight)
                 ContextMeter(chat: self.chat)

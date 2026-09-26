@@ -856,7 +856,7 @@ public enum MediaDirectives {
     ]
 
     public static func extract(from text: String) -> Result {
-        guard text.range(of: "MEDIA:", options: .caseInsensitive) != nil else {
+        guard self.mayContainDirective(text), text.range(of: "MEDIA:", options: .caseInsensitive) != nil else {
             return Result(text: text, images: [], files: [])
         }
         var kept: [Substring] = []
@@ -880,6 +880,21 @@ public enum MediaDirectives {
             .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return Result(text: joined, images: images, files: files)
+    }
+
+    /// A byte scan that rules out "MEDIA:" in almost every message, much faster than a
+    /// case-insensitive search. Only true negatives: any non-ASCII text just before a colon
+    /// counts as a maybe.
+    static func mayContainDirective(_ text: String) -> Bool {
+        let media: UInt64 = 0x6D_65_64_69_61 // "media"
+        var last: UInt64 = 0
+        var sinceNonASCII = 0
+        for byte in text.utf8 {
+            if byte == 0x3A, sinceNonASCII < 5 || last & 0xFF_FFFF_FFFF == media { return true }
+            sinceNonASCII = byte >= 0x80 ? 0 : sinceNonASCII + 1
+            last = last << 8 | UInt64(byte >= 0x41 && byte <= 0x5A ? byte | 0x20 : byte)
+        }
+        return false
     }
 
     /// Mid-stream, the last line may be a directive that hasn't finished arriving.

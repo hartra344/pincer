@@ -11,7 +11,11 @@ final class TranscriptFind {
 
     private(set) var isPresented = false
     var query = "" {
-        didSet { if self.query != oldValue { self.scheduleSearch() } }
+        didSet {
+            guard self.query != oldValue else { return }
+            self.preferredMatch = nil
+            self.scheduleSearch()
+        }
     }
     var includeThinking = UserDefaults.standard.bool(forKey: TranscriptFind.thinkingKey) {
         didSet {
@@ -41,6 +45,9 @@ final class TranscriptFind {
     @ObservationIgnored private var search: Task<Void, Never>?
     /// A search that should scroll to its match was replaced before finishing; the next one does it.
     @ObservationIgnored private var pendingReveal = false
+    /// The match to select once it's found (a message search result being opened). Kept
+    /// through transcript updates, since the first search can run before the transcript loads.
+    @ObservationIgnored private var preferredMatch: TranscriptSearch.Match?
 
     var options: TranscriptSearch.Options {
         TranscriptSearch.Options(includeThinking: self.includeThinking && !self.reasoningOff,
@@ -76,7 +83,21 @@ final class TranscriptFind {
         self.scheduleSearch(delay: 0)
     }
 
+    /// Opens Find showing `query`, with `match` selected and scrolled to once it's found (or,
+    /// without one or if it's gone, the newest match).
+    func present(query: String, select match: TranscriptSearch.Match?) {
+        self.query = query
+        self.preferredMatch = match
+        self.current = nil
+        self.matches = []
+        self.pendingReveal = true
+        self.isPresented = true
+        self.focusRequest += 1
+        self.scheduleSearch(delay: 0)
+    }
+
     func dismiss() {
+        self.preferredMatch = nil
         self.isPresented = false
         self.search?.cancel()
         self.pendingReveal = false
@@ -87,6 +108,7 @@ final class TranscriptFind {
     func previous() { self.step(forward: false) }
 
     private func step(forward: Bool) {
+        self.preferredMatch = nil
         if !self.isPresented {
             self.present()
             return
@@ -124,6 +146,7 @@ final class TranscriptFind {
         let options = self.options
         let previous = self.currentMatch
         let previousRow = previous.flatMap { self.rowIndex[$0.entryId] }
+        let preferred = self.preferredMatch
         self.search = Task { [weak self] in
             if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
             guard !Task.isCancelled else { return }
@@ -132,15 +155,19 @@ final class TranscriptFind {
                  Dictionary(entries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first }))
             }.value
             guard !Task.isCancelled, let self else { return }
-            let selected = TranscriptSearch.reselect(previous, in: matches, rowIndex: rowIndex, near: previousRow)
+            let selected = TranscriptSearch.reselect(previous, in: matches, rowIndex: rowIndex, near: previousRow,
+                                                     preferred: preferred)
+            let foundPreferred = preferred != nil && selected.map { matches[$0] } == preferred
+            if foundPreferred { self.preferredMatch = nil }
             self.matches = matches
             self.rowIndex = rowIndex
             self.isSearching = false
             let moved = selected.map { matches[$0] } != previous
             self.current = selected
             // Follow the selection as the query is typed; a message arriving doesn't move the reader.
-            if selected != nil, self.pendingReveal || moved && previous == nil { self.revealRequest += 1 }
-            self.pendingReveal = false
+            if selected != nil, self.pendingReveal || moved && (previous == nil || foundPreferred) { self.revealRequest += 1 }
+            // Still waiting for the transcript to load: reveal once there are matches.
+            self.pendingReveal = selected == nil && self.preferredMatch != nil
         }
     }
 }
@@ -289,7 +316,11 @@ struct TranscriptFindBar: View {
         .glassSurface(in: Capsule())
         .padding(.horizontal, 14)
         .padding(.top, 8)
-        .onAppear { self.focused = true }
+        .onAppear {
+            self.focused = true
+            // Again after the views appearing with it (a chat's composer) have claimed focus.
+            DispatchQueue.main.async { self.focused = true }
+        }
         .onChange(of: self.find.focusRequest) { self.focused = true }
     }
 

@@ -49,7 +49,16 @@ Transcripts are cached so chats open instantly:
 - **Protection:** files use complete file protection.
 - **Cleanup:** removing a gateway deletes its cache.
 
-To turn the cache off, set `PINCER_CACHE_DIR=off`. To use another folder, set it to a path.
+### Search index
+
+[Message search](../../guides/search/) uses an index built from the cached transcripts, so it holds a copy of your messages' text:
+
+- **Location:** `search-index.sqlite` in the same folder as the gateway's transcripts, `~/Library/Caches/Pincer/Transcripts/<gateway>/`, plus SQLite's `-wal` and `-shm` files next to it.
+- **Contents:** the text of your messages and the agent's replies, with the chat, sender and date. The text is compressed to save space, not encrypted. Thinking and tool output aren't indexed.
+- **Protection:** on iOS the index is opened with complete file protection, like the transcripts, so it can't be read while the device is locked.
+- **Cleanup:** removing a gateway deletes its index along with its transcripts. It's derived data: if it's deleted, damaged or from an older version, Pincer rebuilds it from the transcript cache.
+
+To turn the cache off, set `PINCER_CACHE_DIR=off`. This turns off the search index too, and nothing is written. To use another folder, set it to a path; the index moves with the transcripts.
 
 ## Sandbox
 

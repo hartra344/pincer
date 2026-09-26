@@ -5,11 +5,14 @@ import ImageIO
 import Network
 import PincerKit
 import PincerPush
+import SQLite3
+import Synchronization
 import UniformTypeIdentifiers
 
 // Self-checks that run without XCTest (unavailable with Command Line Tools only).
 //   swift run PincerChecks                  → unit checks
 //   swift run PincerChecks --live URL TOKEN → end-to-end against a (mock) Gateway
+//   swift run -c release PincerChecks --perf → message index at 20 chats × 20k messages
 // Run with PINCER_KEYCHAIN=memory so nothing touches the real Keychain.
 
 var failures = 0
@@ -18,6 +21,9 @@ var passes = 0
 // Drafts go to a scratch folder so checks never touch the real ones.
 let draftsRoot = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-drafts-\(UUID().uuidString)")
 setenv("PINCER_DRAFTS_DIR", draftsRoot.path(percentEncoded: false), 1)
+// So do cached transcripts and the message search index (demo and live runs fill them).
+let cacheRoot = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-cache-\(UUID().uuidString)")
+setenv("PINCER_CACHE_DIR", cacheRoot.path(percentEncoded: false), 1)
 
 @MainActor
 func check(_ condition: @autoclosure () -> Bool, _ label: String, line: UInt = #line) {
@@ -874,6 +880,837 @@ do {
 print("Composer drafts")
 await checkDrafts()
 
+print("Message search")
+checkMessageSearchLogic()
+
+print("Message index")
+await checkMessageIndex()
+
+print("Message search in the palette")
+checkPaletteMessages()
+
+func messageItem(_ id: String, _ role: ChatRole, _ text: String, at seconds: Double, via: String? = nil) -> ChatItem {
+    var item = ChatItem(id: id, role: role, blocks: [.text(text)], timestamp: Date(timeIntervalSince1970: seconds))
+    item.transcriptId = id
+    item.via = via
+    return item
+}
+
+func messageHit(_ key: String, _ entry: String, section: Int = 0, at seconds: Double?, text: String = "hit") -> MessageSearch.Hit {
+    MessageSearch.Hit(sessionKey: key, entryId: entry, section: section, role: .assistant,
+                      timestamp: seconds.map { Date(timeIntervalSince1970: $0) }, text: text)
+}
+
+/// Pure message search logic: what's indexed, query building, verification, snippets, grouping, dates.
+@MainActor
+func checkMessageSearchLogic() {
+    check(MessageSearch.ftsQuery("  Café  Tokyo ") == #""cafe"* "tokyo"*"#, "query words become folded, quoted prefixes")
+    check(MessageSearch.ftsQuery("a") == nil && MessageSearch.ftsQuery("??") == nil && MessageSearch.ftsQuery("") == nil
+          && MessageSearch.ftsQuery("   ") == nil, "too short or no words: nothing to search")
+    check(MessageSearch.ftsQuery("a tokyo") == #""tokyo"*"#, "one-letter words are dropped")
+    let hostile = MessageSearch.ftsQuery(#"foo AND "bar" NEAR( -x*"#)
+    check(hostile == #""foo"* "and"* "bar"* "near"*"#, "FTS syntax typed is quoted as words (\(hostile ?? "nil"))")
+
+    let items = [
+        messageItem("u1", .user, "Hello from the lab", at: 1000, via: "Discord"),
+        ChatItem(json(#"{"role":"assistant","content":[{"type":"thinking","thinking":"secret thinking"},{"type":"text","text":"First reply"},{"type":"toolCall","id":"t1","name":"exec","arguments":{"command":"grep toolword"}}],"timestamp":2000,"__openclaw":{"id":"a1"}}"#), fallbackIndex: 1)!,
+        ChatItem(json(#"{"role":"toolResult","toolCallId":"t1","toolName":"exec","content":[{"type":"text","text":"toolword output"}],"timestamp":2500,"__openclaw":{"id":"t1r"}}"#), fallbackIndex: 2)!,
+        ChatItem(json(#"{"role":"assistant","content":[{"type":"text","text":"Second reply"}],"timestamp":3000,"__openclaw":{"id":"a2"}}"#), fallbackIndex: 3)!,
+        ChatItem(json(#"{"role":"marker","kind":"compaction","__openclaw":{"id":"m1","kind":"compaction"}}"#), fallbackIndex: 4)!,
+        ChatItem(id: "p1", role: .user, blocks: [.text("pending words")], isPending: true),
+    ]
+    let documents = MessageSearch.documents(sessionKey: "k", items: items)
+    let entries = TranscriptBuilder.build(items.filter { !$0.isPending })
+    check(documents.count == 3, "documents: a user message and an assistant turn's two texts (got \(documents.count))")
+    if documents.count == 3 {
+        let user = documents[0]
+        check(user.entryId == entries[0].id && user.section == 0 && user.role == .user && user.via == "Discord"
+              && user.timestamp == Date(timeIntervalSince1970: 1000) && user.text == "Hello from the lab", "user message document keeps via")
+        check(documents[1].entryId == entries[1].id && documents[2].entryId == entries[1].id
+              && documents.dropFirst().map(\.section) == [0, 1] && documents.dropFirst().allSatisfy { $0.role == .assistant },
+              "assistant texts are sections of the turn's entry")
+        check(documents[1].timestamp == Date(timeIntervalSince1970: 2000) && documents[2].timestamp == Date(timeIntervalSince1970: 3000),
+              "each assistant text has its own timestamp")
+        check(documents.allSatisfy { $0.sessionKey == "k" } && documents[1].match
+              == TranscriptSearch.Match(entryId: entries[1].id, section: .message(0), occurrence: 0), "document match is Find's")
+    }
+    check(!documents.contains { $0.text.contains("secret") || $0.text.contains("toolword") || $0.text.contains("pending") },
+          "thinking, tools, markers and pending messages aren't indexed")
+
+    check(!MessageSearch.verify(query: "zebra", markdown: "See [the docs](https://zebra.example) now"), "link target alone doesn't verify")
+    check(MessageSearch.verify(query: "hello world", markdown: "**hello** world"), "phrase verifies across styling")
+    check(!MessageSearch.verify(query: "japan trip", markdown: "Japan, trip"), "punctuation breaks a phrase")
+    check(MessageSearch.verify(query: "CAFÉ", markdown: "the cafe"), "verification ignores case and accents")
+
+    // Every verified document is a match Find reports, and every message match Find reports is verified.
+    let fixture = json(#"""
+    [
+     {"role":"user","content":"Where is the Café receipt? The **hello** world receipt.","__openclaw":{"id":"f1"}},
+     {"role":"assistant","content":[{"type":"text","text":"See [docs](https://x.example/receipt) and the receipt."}],"__openclaw":{"id":"f2"}},
+     {"role":"assistant","content":[{"type":"text","text":"Day 7? Hello, world. `receipt` in code."}],"__openclaw":{"id":"f3"}},
+     {"role":"user","content":"Japan, trip. trip to Japan","__openclaw":{"id":"f4"}},
+     {"role":"assistant","content":[{"type":"thinking","thinking":"receipt thinking"},{"type":"text","text":"| a | b |\n|---|---|\n| cafe | day 7? |"}],"__openclaw":{"id":"f5"}}
+    ]
+    """#).array!.enumerated().compactMap { ChatItem($1, fallbackIndex: $0) }
+    let fixtureEntries = TranscriptBuilder.build(fixture)
+    let fixtureDocuments = MessageSearch.documents(sessionKey: "k", items: fixture)
+    var agrees = true
+    for query in ["receipt", "hello world", "café", "the", "day 7?", "japan trip", "trip to", "world.", "x.example"] {
+        let verified = Set(fixtureDocuments.filter { MessageSearch.verify(query: query, markdown: $0.text) }.map(\.match))
+        let found = TranscriptSearch.matches(query, in: fixtureEntries)
+        let firsts = Set(found.filter { $0.occurrence == 0 })
+        if verified != firsts {
+            agrees = false
+            print("    \(query): verified \(verified.map(\.entryId).sorted()) vs Find \(firsts.map(\.entryId).sorted())")
+        }
+    }
+    check(agrees, "verified hits are exactly the messages Find in Chat matches")
+
+    let lobster = MessageSearch.snippet(query: "lobster", markdown: "🦞 **lobster** time and lobster again")
+    check(lobster.text == "🦞 lobster time and lobster again"
+          && lobster.highlights == [NSRange(location: 3, length: 7), NSRange(location: 20, length: 7)],
+          "snippet highlights are UTF-16 ranges (\(lobster.highlights))")
+    let far = MessageSearch.snippet(query: "target", markdown: String(repeating: "filler ", count: 60) + "the target word " + String(repeating: "tail ", count: 40))
+    let farText = far.text as NSString
+    check(far.text.hasPrefix("…") && far.text.hasSuffix("…") && far.highlights.count == 1
+          && far.highlights.first.map { farText.substring(with: $0) } == "target", "far match: leading … and the match in view")
+    check(farText.length <= 140, "snippet respects the length cap (\(farText.length))")
+    let lines = MessageSearch.snippet(query: "two", markdown: "line one\nline two\n\n- item   three\n\n```\ncode  block\n```")
+    check(!lines.text.contains("\n") && !lines.text.contains("\u{2028}") && !lines.text.contains("  ")
+          && lines.text.contains("line one line two"), "snippet collapses newlines and spaces (\(lines.text.debugDescription))")
+    let capped = MessageSearch.snippet(query: "start", markdown: "start " + String(repeating: "word ", count: 200), maxLength: 60)
+    check((capped.text as NSString).length <= 60 && capped.text.hasPrefix("start") && capped.text.hasSuffix("…"),
+          "custom cap, match at the start keeps no leading …")
+    let emoji = MessageSearch.snippet(query: "end", markdown: String(repeating: "🦞", count: 100) + " end", maxLength: 50)
+    check((emoji.text as NSString).length <= 50 && emoji.highlights.count == 1 && !emoji.text.unicodeScalars.contains { $0.value == 0xFFFD },
+          "cuts never split a surrogate pair")
+
+    let groups = MessageSearch.group([
+        messageHit("A", "a1", at: 10), messageHit("B", "b1", at: 20), messageHit("A", "a2", at: 5),
+        messageHit("A", "a3", at: 4), messageHit("A", "a4", at: 3), messageHit("C", "c1", at: 30),
+        messageHit("B", "b0", at: nil),
+    ], allowed: ["A", "B"])
+    check(groups.map(\.sessionKey) == ["B", "A"], "chats ordered by newest hit; keys not allowed dropped")
+    check(groups.last?.hits.map(\.entryId) == ["a1", "a2", "a3"] && groups.last?.hasMore == true, "3 per chat, the 4th sets hasMore")
+    check(groups.first?.hits.map(\.entryId) == ["b1", "b0"] && groups.first?.hasMore == false, "undated hits sort last")
+    let three = MessageSearch.group((1...3).map { messageHit("A", "a\($0)", at: Double($0)) }, allowed: ["A"])
+    check(three.first?.hits.count == 3 && three.first?.hasMore == false, "exactly 3 hits: no More")
+    let many = MessageSearch.group((0..<5).map { messageHit("K\($0)", "e", at: Double($0)) }, allowed: Set((0..<5).map { "K\($0)" }), maxChats: 2)
+    check(many.map(\.sessionKey) == ["K4", "K3"], "maxChats caps the chats")
+    let collected = MessageSearch.collect([
+        messageHit("A", "x1", at: 9, text: "the Japan trip"), messageHit("A", "x2", at: 8, text: "Japan, trip"),
+        messageHit("A", "x3", at: 7, text: "japan trip"), messageHit("A", "x4", at: 6, text: "JAPAN TRIP"),
+        messageHit("A", "x5", at: 5, text: "japan trip"), messageHit("Z", "z1", at: 99, text: "japan trip"),
+    ], query: "japan trip", allowed: ["A"])
+    check(collected.count == 1 && collected[0].hits.map(\.entryId) == ["x1", "x3", "x4"] && collected[0].hasMore,
+          "collect verifies, caps and drops other chats")
+
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    let locale = Locale(identifier: "en_US")
+    let now = Date(timeIntervalSince1970: 1_790_434_800) // Sat Sep 26 2026 15:00 UTC
+    func label(_ seconds: Double) -> String {
+        MessageSearch.dateLabel(Date(timeIntervalSince1970: seconds), now: now, calendar: calendar, locale: locale)
+            .replacingOccurrences(of: "\u{202F}", with: " ")
+    }
+    check(label(1_790_413_500) == "9:05 AM", "today: the time (\(label(1_790_413_500)))")
+    check(label(1_790_434_800 - 2 * 86400) == "Thursday", "this week: the weekday (\(label(1_790_434_800 - 2 * 86400)))")
+    check(label(1_790_434_800 - 7 * 86400) == "Sep 19", "a week ago: the date (\(label(1_790_434_800 - 7 * 86400)))")
+    check(label(1_772_632_800) == "Mar 4", "this year: month and day (\(label(1_772_632_800)))")
+    check(label(1_741_096_800) == "Mar 4, 2025", "older: with the year (\(label(1_741_096_800)))")
+
+    let matches = [
+        TranscriptSearch.Match(entryId: "u-1", section: .message(0), occurrence: 0),
+        TranscriptSearch.Match(entryId: "a-2", section: .message(1), occurrence: 0),
+        TranscriptSearch.Match(entryId: "a-3", section: .message(0), occurrence: 0),
+    ]
+    let rows = ["u-1": 0, "a-2": 1, "a-3": 2]
+    check(TranscriptSearch.reselect(nil, in: matches, rowIndex: rows, near: nil, preferred: matches[0]) == 0,
+          "the preferred match wins over the latest")
+    check(TranscriptSearch.reselect(matches[2], in: matches, rowIndex: rows, near: 2, preferred: matches[1]) == 1,
+          "the preferred match wins over the previous selection")
+    let missing = TranscriptSearch.Match(entryId: "gone", section: .message(0), occurrence: 0)
+    check(TranscriptSearch.reselect(nil, in: matches, rowIndex: rows, near: nil, preferred: missing) == 2
+          && TranscriptSearch.reselect(matches[0], in: matches, rowIndex: rows, near: 0, preferred: missing) == 0,
+          "a missing preferred match falls back to the usual rules")
+    check(TranscriptSearch.messageMatchCount("receipt", markdown: "receipt, [receipt](https://receipt.example) **receipt**") == 3
+          && TranscriptSearch.messageMatchCount("  ", markdown: "x") == 0, "messageMatchCount counts rendered occurrences")
+}
+
+func allTrue(_ values: Bool...) -> Bool { values.allSatisfy { $0 } }
+
+@MainActor
+func checkAsync(_ condition: () async -> Bool, _ label: String, line: UInt = #line) async {
+    let passed = await condition()
+    check(passed, label, line: line)
+}
+
+/// Runs `body` with the transcript cache and message index in a fresh scratch folder.
+@MainActor
+func withScratchCache(_ body: (URL) async -> Void) async {
+    let previous = ProcessInfo.processInfo.environment["PINCER_CACHE_DIR"]
+    let root = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-index-\(UUID().uuidString)")
+    setenv("PINCER_CACHE_DIR", root.path(percentEncoded: false), 1)
+    await body(root)
+    if let previous { setenv("PINCER_CACHE_DIR", previous, 1) } else { unsetenv("PINCER_CACHE_DIR") }
+    try? FileManager.default.removeItem(at: root)
+}
+
+func indexHits(_ gatewayId: UUID, _ query: String) async -> [MessageSearch.Hit] {
+    (try? await MessageIndex.shared(gatewayId: gatewayId).search(query)) ?? []
+}
+
+func indexResults(_ gatewayId: UUID, _ query: String, keys: Set<String>) async -> [MessageSearch.ChatGroup] {
+    MessageSearch.collect(await indexHits(gatewayId, query), query: query, allowed: keys)
+}
+
+/// Integers from one query against an index file, opened separately from `MessageIndex`.
+func sqliteInts(_ url: URL?, _ sql: String) -> [Int64] {
+    guard let url else { return [] }
+    var db: OpaquePointer?
+    guard sqlite3_open_v2(url.path(percentEncoded: false), &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db else { return [] }
+    defer { sqlite3_close_v2(db) }
+    var statement: OpaquePointer?
+    guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK, let statement else { return [] }
+    defer { sqlite3_finalize(statement) }
+    var values: [Int64] = []
+    while sqlite3_step(statement) == SQLITE_ROW {
+        for column in 0..<sqlite3_column_count(statement) { values.append(sqlite3_column_int64(statement, column)) }
+    }
+    return values
+}
+
+func sqliteExec(_ url: URL, _ sql: String) -> Bool {
+    var db: OpaquePointer?
+    guard sqlite3_open_v2(url.path(percentEncoded: false), &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil) == SQLITE_OK, let db
+    else { return false }
+    defer { sqlite3_close_v2(db) }
+    return sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK
+}
+
+func fileExists(_ url: URL?) -> Bool {
+    url.map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
+}
+
+/// Writes a transcript cache file without going through `TranscriptCache.save` (so it isn't indexed).
+func writeCacheFile(_ snapshot: TranscriptCache.Snapshot, gatewayId: UUID, sessionKey: String) -> Bool {
+    guard let url = TranscriptCache.file(gatewayId: gatewayId, sessionKey: sessionKey),
+          (try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)) != nil,
+          let data = try? JSONEncoder().encode(snapshot)
+    else { return false }
+    return (try? data.write(to: url)) != nil
+}
+
+actor StatusLog {
+    private(set) var statuses: [MessageIndex.Status] = []
+    private(set) var times: [ContinuousClock.Instant] = []
+    func add(_ status: MessageIndex.Status) {
+        self.statuses.append(status)
+        self.times.append(.now)
+    }
+}
+
+/// The SQLite message index, each part in its own scratch cache.
+@MainActor
+func checkMessageIndex() async {
+    await checkMessageSearchSmoke()
+
+    await withScratchCache { _ in
+        let gatewayId = UUID()
+        let index = MessageIndex.shared(gatewayId: gatewayId)
+        await checkAsync({ await (index.status == .ready) }, "status is ready with a cache")
+        var items = [
+            messageItem("u1", .user, "Planning a café visit in Tokyo", at: 1000),
+            messageItem("a1", .assistant, "The Café is open. We go on a trip to Japan.", at: 2000),
+        ]
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "k")
+        let keys: Set<String> = ["k"]
+        await checkAsync({ await (indexResults(gatewayId, "tokyo", keys: keys).first?.hits.map(\.entryId) == ["u-u1"]) }, "saved text is found")
+        await checkAsync({ await (indexResults(gatewayId, "CAFE", keys: keys).first?.hits.map(\.entryId) == ["a-a1", "u-u1"]) },
+              "CAFE finds café and Café, newest first")
+        await checkAsync({ await (indexResults(gatewayId, "cafe", keys: keys).first?.hits.contains { $0.entryId == "a-a1" } == true) }, "cafe finds Café")
+        await checkAsync({ await (indexResults(gatewayId, "tok", keys: keys).first?.hits.map(\.entryId) == ["u-u1"]) }, "a word's start matches")
+        await checkAsync({ await (indexHits(gatewayId, "kyo").isEmpty) }, "a word's middle doesn't")
+        await checkAsync({ await (indexResults(gatewayId, "japan trip", keys: keys).isEmpty) }, "words out of order don't match a phrase")
+        await checkAsync({ await (indexResults(gatewayId, "trip to japan", keys: keys).first?.hits.map(\.entryId) == ["a-a1"]) }, "the phrase does")
+        await checkAsync({ await (indexHits(gatewayId, "a").isEmpty) }, "one letter searches nothing")
+        do {
+            let hostile = try await index.search(#"foo AND "bar" NEAR( -x* café)"#)
+            check(hostile.isEmpty, "FTS syntax in a query is harmless")
+        } catch {
+            check(false, "FTS syntax in a query throws \(error)")
+        }
+        await checkAsync({ await allTrue(indexHits(gatewayId, "tokyo").count == 1, fileExists(MessageIndex.url(gatewayId: gatewayId))) },
+              "index intact after a hostile query")
+
+        items.append(messageItem("u2", .user, "Appending a walrus note", at: 3000))
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "k")
+        await checkAsync({ await (indexHits(gatewayId, "walrus").map(\.entryId) == ["u-u2"]) }, "an appended message is found")
+        items[1] = messageItem("a1", .assistant, "Changed plans: Kyoto instead.", at: 2000)
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "k")
+        await checkAsync({ await allTrue(indexHits(gatewayId, "japan").isEmpty, indexHits(gatewayId, "kyoto").map(\.entryId) == ["a-a1"]) },
+              "a replaced message stops matching its old text")
+        let url = MessageIndex.url(gatewayId: gatewayId)
+        let rowsBefore = sqliteInts(url, "SELECT count(*), max(id), sum(id) FROM docs")
+        let infoBefore = await index.chatInfo(sessionKey: "k")
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "k")
+        let infoAfter = await index.chatInfo(sessionKey: "k")
+        check(rowsBefore.count == 3 && rowsBefore[0] == 3 && sqliteInts(url, "SELECT count(*), max(id), sum(id) FROM docs") == rowsBefore
+              && infoBefore?.digest == infoAfter?.digest && infoBefore?.itemCount == 3 && infoAfter?.lastItemId == "u2",
+              "saving an unchanged transcript rewrites no rows (\(rowsBefore))")
+        await checkAsync({ await allTrue(index.isIndexed(sessionKey: "k"), !(index.isIndexed(sessionKey: "other"))) }, "isIndexed")
+        let stale = TranscriptCache.Snapshot(items: [messageItem("s1", .user, "stale snapshot porcupine", at: 1)], complete: true)
+        await index.index(sessionKey: "k", snapshot: stale, fileMtime: .distantPast)
+        await checkAsync({ await allTrue(indexHits(gatewayId, "porcupine").isEmpty, indexHits(gatewayId, "walrus").count == 1) },
+              "an older snapshot than the one indexed is ignored")
+        check(sqliteInts(url, "SELECT count(*) FROM messages WHERE messages MATCH 'japan'") == [0]
+              && sqliteInts(url, "SELECT count(*) FROM messages WHERE messages MATCH 'kyoto'") == [1],
+              "the FTS table has no leftover terms for replaced text")
+        let integrity = sqliteExec(url!, "INSERT INTO messages(messages) VALUES('integrity-check')")
+        check(integrity, "FTS integrity-check passes after updates")
+
+        let other = UUID()
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("n1", .user, "Only narwhal here", at: 5)], complete: true),
+                                   gatewayId: other, sessionKey: "k")
+        await checkAsync({ await allTrue(indexHits(gatewayId, "narwhal").isEmpty, indexHits(other, "narwhal").count == 1, indexHits(other, "walrus").isEmpty) }, "gateways have separate indexes")
+        check(MessageIndex.url(gatewayId: gatewayId) != MessageIndex.url(gatewayId: other), "one index file per gateway")
+
+        TranscriptCache.removeAll(gatewayId: other)
+        await checkAsync({ await allTrue(!fileExists(MessageIndex.url(gatewayId: other)), indexHits(other, "narwhal").isEmpty) },
+              "removeAll deletes the index; searching after is empty")
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("n2", .user, "Narwhal returns", at: 6)], complete: true),
+                                   gatewayId: other, sessionKey: "k")
+        await checkAsync({ await allTrue(indexHits(other, "narwhal").map(\.entryId) == ["u-n2"], fileExists(MessageIndex.url(gatewayId: other))) },
+              "saving after removeAll rebuilds the index")
+        TranscriptCache.removeAll(gatewayId: other)
+
+        // Garbage and old-version files are replaced.
+        let garbage = UUID()
+        if let garbageURL = MessageIndex.url(gatewayId: garbage) {
+            try? FileManager.default.createDirectory(at: garbageURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? Data(repeating: 0x42, count: 8192).write(to: garbageURL)
+        }
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("g1", .user, "Garbage replaced by gazelle", at: 7)], complete: true),
+                                   gatewayId: garbage, sessionKey: "k")
+        await checkAsync({ await (indexHits(garbage, "gazelle").count == 1) }, "a garbage index file is rebuilt")
+        let oldVersion = UUID()
+        if let oldURL = MessageIndex.url(gatewayId: oldVersion) {
+            try? FileManager.default.createDirectory(at: oldURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            _ = sqliteExec(oldURL, "CREATE TABLE docs (x); PRAGMA user_version = 1;")
+        }
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("o1", .user, "Old version ocelot", at: 8)], complete: true),
+                                   gatewayId: oldVersion, sessionKey: "k")
+        let version = sqliteInts(MessageIndex.url(gatewayId: oldVersion), "PRAGMA user_version").first ?? 0
+        await checkAsync({ await allTrue(indexHits(oldVersion, "ocelot").count == 1, version > 1) }, "an index with a lower user_version is rebuilt (\(version))")
+        // Corrupted while open: the failing search reports an error once, the index recovers from the transcripts.
+        let corrupt = UUID()
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("c1", .user, "Corrupt cheetah", at: 9)], complete: true),
+                                   gatewayId: corrupt, sessionKey: "k")
+        if let corruptURL = MessageIndex.url(gatewayId: corrupt) {
+            await MessageIndex.shared(gatewayId: corrupt).close()
+            try? Data(repeating: 0x42, count: 8192).write(to: corruptURL)
+            for suffix in ["-wal", "-shm"] { try? FileManager.default.removeItem(at: URL(filePath: corruptURL.path(percentEncoded: false) + suffix)) }
+        }
+        _ = try? await MessageIndex.shared(gatewayId: corrupt).search("cheetah")
+        await MessageIndex.shared(gatewayId: corrupt).reconcile(sessionKeys: ["k"])
+        await checkAsync({ await (indexHits(corrupt, "cheetah").count == 1) }, "a corrupted index is refilled by reconcile")
+
+        // Reconcile picks up transcripts cached while there was no index.
+        let fresh = UUID()
+        let written = writeCacheFile(TranscriptCache.Snapshot(items: [messageItem("r1", .user, "Reconciled raccoon", at: 10)], complete: true),
+                                     gatewayId: fresh, sessionKey: "r1")
+            && writeCacheFile(TranscriptCache.Snapshot(items: [messageItem("r2", .assistant, "Another raccoon", at: 11)], complete: true),
+                              gatewayId: fresh, sessionKey: "r2")
+        await checkAsync({ await allTrue(written, indexHits(fresh, "raccoon").isEmpty) }, "cache files written without indexing")
+        let log = StatusLog()
+        await MessageIndex.shared(gatewayId: fresh).reconcile(sessionKeys: ["r1", "r2", "missing", "r1"]) { await log.add($0) }
+        let statuses = await log.statuses
+        await checkAsync({ await (indexHits(fresh, "raccoon").map(\.entryId) == ["a-r2", "u-r1"]) }, "reconcile indexes cached transcripts")
+        check(statuses.first == .building(done: 0, total: 2) && statuses.last == .ready, "reconcile reports progress (\(statuses))")
+        let quiet = StatusLog()
+        let freshRows = sqliteInts(MessageIndex.url(gatewayId: fresh), "SELECT count(*), max(id) FROM docs")
+        await MessageIndex.shared(gatewayId: fresh).reconcile(sessionKeys: ["r1", "r2"]) { await quiet.add($0) }
+        await checkAsync({ await allTrue(quiet.statuses == [.ready], sqliteInts(MessageIndex.url(gatewayId: fresh), "SELECT count(*), max(id) FROM docs") == freshRows) },
+              "reconcile skips chats already indexed")
+
+        await checkMessageIndexCancellation(gatewayId: gatewayId)
+        await checkMessageIndexPerfSmoke()
+    }
+
+    await withScratchCache { root in
+        setenv("PINCER_CACHE_DIR", "off", 1)
+        let gatewayId = UUID()
+        let index = MessageIndex.shared(gatewayId: gatewayId)
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("x", .user, "Nowhere to go", at: 1)], complete: true),
+                                   gatewayId: gatewayId, sessionKey: "k")
+        let hits = try? await index.search("nowhere")
+        await index.reconcile(sessionKeys: ["k"])
+        await checkAsync({ await allTrue(index.status == .unavailable, hits == [], MessageIndex.url(gatewayId: gatewayId) == nil) },
+              "cache off: index unavailable, search empty")
+        let store = GatewayStore(profile: GatewayProfile(name: "Off", url: "ws://127.0.0.1:1", authMode: .none))
+        check(store.messageIndexProgress == .unavailable, "cache off: the gateway reports search unavailable")
+        let empty = (try? await store.searchMessages("nowhere")) ?? MessageSearch.Results(query: "x", failed: true)
+        check(empty.isEmpty && !empty.failed, "cache off: searchMessages is empty, not failed")
+        check(!FileManager.default.fileExists(atPath: root.path(percentEncoded: false)) && !fileExists(URL(filePath: "off")),
+              "cache off: no files written")
+    }
+}
+
+/// A newer search stops the one still running; its result is the one that counts.
+@MainActor
+func checkMessageIndexCancellation(gatewayId: UUID) async {
+    let index = MessageIndex.shared(gatewayId: gatewayId)
+    let many = (0..<3000).map { messageItem("c\($0)", $0.isMultiple(of: 2) ? .user : .assistant, "common words number \($0) and more common", at: Double(10_000 + $0)) }
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: many + [messageItem("uniq", .user, "the unique quokka", at: 99_999)], complete: true),
+                               gatewayId: gatewayId, sessionKey: "busy")
+    for round in 0..<5 {
+        let older = Task { @MainActor in
+            try await withTaskCancellationHandler {
+                try await index.search("common", candidateLimit: 1_000_000)
+            } onCancel: {
+                index.interrupt()
+            }
+        }
+        if round > 0 { try? await Task.sleep(for: .milliseconds(round)) }
+        older.cancel()
+        let latest = (try? await index.search("quokka")) ?? []
+        let outcome = await older.result
+        var olderOK = false
+        switch outcome {
+        case .success(let hits): olderOK = hits.count == 3000
+        case .failure(let error): olderOK = error is CancellationError
+        }
+        check(latest.map(\.entryId) == ["u-uniq"] && olderOK, "back-to-back searches: the latest wins (round \(round))")
+    }
+    // Cancelling one search mustn't stop another that wasn't cancelled (e.g. a second window's).
+    var bystanderOK = 0
+    for _ in 0..<5 {
+        let bystander = Task { @MainActor in try await index.search("common", candidateLimit: 1_000_000) }
+        try? await Task.sleep(for: .milliseconds(1))
+        let cancelled = Task { @MainActor in
+            try await withTaskCancellationHandler { try await index.search("quokka") } onCancel: { index.interrupt() }
+        }
+        cancelled.cancel()
+        _ = await cancelled.result
+        if case let .success(hits) = await bystander.result, hits.count == 3000 { bystanderOK += 1 }
+    }
+    check(bystanderOK == 5, "cancelling one search doesn't interrupt another (\(bystanderOK)/5 survived)")
+    await checkAsync({ await allTrue(indexHits(gatewayId, "quokka").count == 1, indexHits(gatewayId, "common").count == 2000, fileExists(MessageIndex.url(gatewayId: gatewayId))) }, "interrupting a search leaves the index intact")
+}
+
+// MARK: Synthetic transcripts (perf)
+
+enum Synthetic {
+    static let syllables = ["ka", "lo", "mi", "ren", "to", "sha", "vel", "dor", "qui", "nex", "bra", "fu", "zel", "po", "tri", "gan"]
+    static let words: [String] = (0..<4096).map { n in
+        syllables[n & 15] + syllables[(n >> 4) & 15] + syllables[(n >> 8) & 15]
+    }
+
+    /// About 400 characters per message. Every message has "the" and "and"; every 100th has "lantern glow",
+    /// every 150th "harbor light"; message 1000 + chat has "zephyr<chat>".
+    static func items(chat: Int, count: Int) -> [ChatItem] {
+        var state = UInt64(chat + 1) &* 0x9E37_79B9_7F4A_7C15
+        let start = 1_700_000_000.0 + Double(chat) * 7
+        return (0..<count).map { i in
+            var text = "the"
+            var n = 0
+            while text.utf8.count < 390 {
+                state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+                text += " " + words[Int(state >> 52)]
+                n += 1
+                if n == 20 { text += " and" }
+            }
+            if i % 100 == 7 { text += " lantern glow" }
+            if i % 150 == 11 { text += " harbor light" }
+            if i == 1000 + chat { text += " zephyr\(chat)" }
+            text += "."
+            var item = ChatItem(id: "c\(chat)-\(i)", role: i.isMultiple(of: 2) ? .user : .assistant, blocks: [.text(text)],
+                                timestamp: Date(timeIntervalSince1970: start + Double(i) * 60))
+            item.transcriptId = item.id
+            return item
+        }
+    }
+}
+
+/// Resident size and physical footprint, bytes.
+func memoryUsage() -> (resident: UInt64, footprint: UInt64) {
+    var info = rusage_info_v4()
+    let result = withUnsafeMutablePointer(to: &info) { pointer in
+        pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(getpid(), RUSAGE_INFO_V4, $0) }
+    }
+    return result == 0 ? (info.ri_resident_size, info.ri_phys_footprint) : (0, 0)
+}
+
+/// Samples memory on a background thread until stopped; keeps the peak.
+final class MemorySampler: Sendable {
+    private let state = Mutex<(peakResident: UInt64, peakFootprint: UInt64, running: Bool)>((0, 0, true))
+
+    init() {
+        let thread = Thread { [self] in
+            while self.state.withLock({ $0.running }) {
+                let usage = memoryUsage()
+                self.state.withLock { $0.peakResident = max($0.peakResident, usage.resident); $0.peakFootprint = max($0.peakFootprint, usage.footprint) }
+                usleep(10000)
+            }
+        }
+        thread.start()
+    }
+
+    func stop() -> (resident: UInt64, footprint: UInt64) {
+        let usage = memoryUsage()
+        return self.state.withLock {
+            $0.running = false
+            return (max($0.peakResident, usage.resident), max($0.peakFootprint, usage.footprint))
+        }
+    }
+}
+
+func mb(_ bytes: Int64) -> String { String(format: "%.1f MB", Double(bytes) / 1_048_576) }
+
+func directorySize(_ url: URL, _ include: (String) -> Bool) -> Int64 {
+    let names = (try? FileManager.default.contentsOfDirectory(atPath: url.path(percentEncoded: false))) ?? []
+    return names.filter(include).reduce(0) { total, name in
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.appending(path: name).path(percentEncoded: false))
+        return total + ((attributes?[.size] as? NSNumber)?.int64Value ?? 0)
+    }
+}
+
+/// Always on: 2 chats × 5k messages build in ≤ 3 s; a selective query ≤ 100 ms.
+@MainActor
+func checkMessageIndexPerfSmoke() async {
+    let gatewayId = UUID()
+    let chats = (0..<2).map { Synthetic.items(chat: $0, count: 5000) }
+    let clock = ContinuousClock()
+    let build = await clock.measure {
+        for (chat, items) in chats.enumerated() {
+            await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "perf\(chat)")
+        }
+    }
+    check(build <= .seconds(3), "perf smoke: 2 × 5k messages saved and indexed in \(build.formatted(.units(allowed: [.milliseconds])))")
+    let keys: Set<String> = ["perf0", "perf1"]
+    var worst = Duration.zero
+    var groups: [MessageSearch.ChatGroup] = []
+    for _ in 0..<5 {
+        let elapsed = await clock.measure { groups = await indexResults(gatewayId, "lantern glow", keys: keys) }
+        worst = max(worst, elapsed)
+    }
+    check(groups.count == 2 && groups.allSatisfy { $0.hits.count == 3 && $0.hasMore } && groups.first?.sessionKey == "perf1",
+          "perf smoke: selective query results")
+    check(worst <= .milliseconds(100), "perf smoke: selective query, slowest of 5: \(worst.formatted(.units(allowed: [.milliseconds])))")
+    // Cancelling one search mustn't stop another that wasn't cancelled (e.g. a second window's).
+    let index = MessageIndex.shared(gatewayId: gatewayId)
+    var bystanderOK = 0
+    for delay in [0, 250, 500, 1000, 2000] {
+        let bystander = Task { @MainActor in try await index.search("the", candidateLimit: 1_000_000) }
+        if delay == 0 { await Task.yield() } else { try? await Task.sleep(for: .microseconds(delay)) }
+        let cancelled = Task { @MainActor in
+            try await withTaskCancellationHandler { try await index.search("lantern") } onCancel: { index.interrupt() }
+        }
+        cancelled.cancel()
+        _ = await cancelled.result
+        if case let .success(hits) = await bystander.result, hits.count == 10_000 { bystanderOK += 1 }
+    }
+    check(bystanderOK == 5, "cancelling one search doesn't interrupt another, larger index (\(bystanderOK)/5 survived)")
+    var appended = chats[0]
+    appended.append(messageItem("new", .user, "freshly appended pelican", at: 1_800_000_000))
+    let incremental = await clock.measure {
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: appended, complete: true), gatewayId: gatewayId, sessionKey: "perf0")
+    }
+    await checkAsync({ await allTrue(indexHits(gatewayId, "pelican").count == 1, incremental <= .milliseconds(1000)) },
+          "perf smoke: append to a 5k chat saved and indexed in \(incremental.formatted(.units(allowed: [.milliseconds])))")
+    TranscriptCache.removeAll(gatewayId: gatewayId)
+}
+
+/// `--perf`: 20 chats × 20k messages against the §4 targets.
+@MainActor
+func runMessageIndexPerf() async {
+    await withScratchCache { _ in
+        let gatewayId = UUID()
+        let chatCount = 20
+        let perChat = 20_000
+        let keys = (0..<chatCount).map { "perf:\($0)" }
+        let clock = ContinuousClock()
+        let generation = clock.measure {
+            for chat in 0..<chatCount {
+                _ = writeCacheFile(TranscriptCache.Snapshot(items: Synthetic.items(chat: chat, count: perChat), complete: true),
+                                   gatewayId: gatewayId, sessionKey: keys[chat])
+            }
+        }
+        print("  · wrote \(chatCount) × \(perChat) synthetic transcripts in \(generation.formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 1))))")
+        let directory = TranscriptCache.directory(gatewayId: gatewayId)!
+        let jsonSize = directorySize(directory) { $0.hasSuffix(".json") }
+
+        let index = MessageIndex.shared(gatewayId: gatewayId)
+        let baseline = memoryUsage()
+        let sampler = MemorySampler()
+        let log = StatusLog()
+        let start = clock.now
+        await index.reconcile(sessionKeys: keys) { await log.add($0) }
+        let total = clock.now - start
+        let peak = sampler.stop()
+        let stamps = await log.times
+        let perChatTimes = zip(stamps.dropFirst(), stamps).map { $0 - $1 }
+        let slowest = perChatTimes.max() ?? .zero
+        await checkAsync({ await allTrue(log.statuses.count == chatCount + 1, (log.statuses).last == .ready) }, "perf: reconcile built every chat")
+        let buildGrowth = Int64(peak.footprint) - Int64(baseline.footprint)
+        print("  · build: \(total.formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 2)))) total, slowest chat \(slowest.formatted(.units(allowed: [.milliseconds])))")
+        print("  · build memory: footprint +\(mb(buildGrowth)) peak, resident +\(mb(Int64(peak.resident) - Int64(baseline.resident))) peak")
+        check(total <= .seconds(20), "perf: full build ≤ 20 s")
+        check(slowest <= .milliseconds(1500), "perf: ≤ 1.5 s per chat")
+        check(buildGrowth <= 100 * 1_048_576, "perf: build peak ≤ 100 MB above baseline (footprint)")
+
+        let indexSize = directorySize(directory) { $0.hasPrefix("search-index.sqlite") }
+        let walSize = directorySize(directory) { $0 == "search-index.sqlite-wal" }
+        let pages = sqliteInts(MessageIndex.url(gatewayId: gatewayId), "PRAGMA page_count")
+        let freePages = sqliteInts(MessageIndex.url(gatewayId: gatewayId), "PRAGMA freelist_count")
+        print("  · index files: main \(mb(indexSize - walSize)), WAL \(mb(walSize)); pages \(pages.first ?? 0), free \(freePages.first ?? 0)")
+        print("  · index \(mb(indexSize)) vs transcript JSON \(mb(jsonSize)) (\(String(format: "%.0f", Double(indexSize) / Double(jsonSize) * 100))%)")
+        check(indexSize <= jsonSize, "perf: index size ≤ transcript JSON size")
+
+        var appended = Synthetic.items(chat: 0, count: perChat)
+        appended.append(messageItem("perf-new", .user, "incremental ibex arrives", at: 1_900_000_000))
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: appended, complete: true), gatewayId: gatewayId, sessionKey: keys[0])
+        appended.append(messageItem("perf-new2", .user, "second ibex", at: 1_900_000_100))
+        let snapshot = TranscriptCache.Snapshot(items: appended, complete: true)
+        let incremental = await clock.measure { await index.index(sessionKey: keys[0], snapshot: snapshot, fileMtime: Date()) }
+        let unchanged = await clock.measure { await index.index(sessionKey: keys[0], snapshot: snapshot, fileMtime: Date()) }
+        print("  · incremental update of a 20k chat: \(incremental.formatted(.units(allowed: [.milliseconds]))), unchanged: \(unchanged.formatted(.units(allowed: [.milliseconds])))")
+        await checkAsync({ await allTrue(indexHits(gatewayId, "ibex").count == 2, incremental <= .milliseconds(300)) }, "perf: incremental update ≤ 300 ms")
+
+        let allowed = Set(keys)
+        let queries: [(kind: String, text: String)] =
+            (0..<8).map { ("rare", "zephyr\($0 * 2)") }
+            + [("selective", "lantern"), ("selective", "lantern glow"), ("selective", "harbor light"), ("selective", "harbor")]
+            + [("common", "the"), ("common", "and"), ("common", "The"), ("common", "AND")]
+            + [("prefix", "ka"), ("prefix", "lo"), ("prefix", "mi"), ("prefix", "to")]
+        let searchBaseline = memoryUsage()
+        let searchSampler = MemorySampler()
+        var byKind: [String: [Duration]] = [:]
+        var all: [Duration] = []
+        var ok = true
+        for query in queries {
+            var groups: [MessageSearch.ChatGroup] = []
+            let elapsed = await clock.measure {
+                groups = MessageSearch.collect((try? await index.search(query.text)) ?? [], query: query.text, allowed: allowed)
+            }
+            byKind[query.kind, default: []].append(elapsed)
+            all.append(elapsed)
+            if query.kind == "rare", groups.count != 1 || groups[0].hits.count != 1 { ok = false; print("    \(query.text): \(groups.count) chats") }
+            if query.kind == "selective", groups.count != 20 { ok = false; print("    \(query.text): \(groups.count) chats") }
+        }
+        let searchPeak = searchSampler.stop()
+        func p95(_ values: [Duration]) -> Duration {
+            let sorted = values.sorted()
+            return sorted[max(0, Int((Double(sorted.count) * 0.95).rounded(.up)) - 1)]
+        }
+        func ms(_ duration: Duration) -> String { duration.formatted(.units(allowed: [.milliseconds])) }
+        for kind in ["rare", "selective", "common", "prefix"] {
+            let values = byKind[kind] ?? []
+            print("  · \(kind): p95 \(ms(p95(values))), max \(ms(values.max() ?? .zero)) over \(values.count)")
+        }
+        print("  · all 20 queries: p95 \(ms(p95(all)))")
+        let searchGrowth = Int64(searchPeak.footprint) - Int64(searchBaseline.footprint)
+        print("  · search memory: footprint +\(mb(searchGrowth)) peak")
+        check(ok, "perf: queries find what was planted")
+        check(p95((byKind["rare"] ?? []) + (byKind["selective"] ?? [])) <= .milliseconds(100), "perf: selective query p95 ≤ 100 ms")
+        check((byKind["common"] ?? []).max()! <= .milliseconds(500) && (byKind["prefix"] ?? []).max()! <= .milliseconds(500),
+              "perf: common and 2-letter queries ≤ 500 ms")
+        check(searchGrowth <= 30 * 1_048_576, "perf: searching grows memory ≤ 30 MB")
+
+        // A huge search is cancellable.
+        let uncancelled = await clock.measure { _ = try? await index.search("the", candidateLimit: 10_000_000) }
+        let big = Task { @MainActor in
+            try await withTaskCancellationHandler {
+                try await index.search("the", candidateLimit: 10_000_000)
+            } onCancel: { index.interrupt() }
+        }
+        let cancelStart = clock.now
+        try? await Task.sleep(for: .milliseconds(20))
+        big.cancel()
+        let bigOutcome = await big.result
+        let cancelled = clock.now - cancelStart
+        var wasCancelled = false
+        if case let .failure(error) = bigOutcome { wasCancelled = error is CancellationError }
+        print("  · unlimited \"the\": \(ms(uncancelled)); cancelled after 20 ms: stopped at \(ms(cancelled)) (cancelled: \(wasCancelled))")
+        check(cancelled <= .milliseconds(200) || !wasCancelled, "perf: a huge search stops soon after cancelling")
+        TranscriptCache.removeAll(gatewayId: gatewayId)
+    }
+}
+
+/// Message results as palette rows.
+@MainActor
+func checkPaletteMessages() {
+    let gateway = GatewayStore(profile: GatewayProfile(name: "Palette", url: "ws://127.0.0.1:1", authMode: .none))
+    let prefix = gateway.id.uuidString
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    let now = Date(timeIntervalSince1970: 1_790_434_800)
+    let userHit = MessageSearch.Hit(sessionKey: "trip", entryId: "u-1", section: 0, role: .user, via: "Discord",
+                                    timestamp: Date(timeIntervalSince1970: 1_790_413_500), text: "ramen tonight")
+    let agentHit = MessageSearch.Hit(sessionKey: "trip", entryId: "a-2", section: 1, role: .assistant,
+                                     timestamp: Date(timeIntervalSince1970: 1_741_096_800), text: "more ramen")
+    let oldHit = MessageSearch.Hit(sessionKey: "old", entryId: "u-9", section: 0, role: .user, timestamp: nil, text: "ramen")
+    let snippet = MessageSearch.Snippet(text: "ramen tonight", highlights: [NSRange(location: 0, length: 5)])
+    let results = MessageSearch.Results(query: "ramen", chats: [
+        MessageSearch.Chat(sessionKey: "trip", title: "Japan trip", messages: [
+            MessageSearch.Message(hit: userHit, sender: "via Discord", snippet: snippet),
+            MessageSearch.Message(hit: agentHit, sender: "Main", snippet: snippet),
+        ], hasMore: true),
+        MessageSearch.Chat(sessionKey: "old", title: "Old", isArchived: true,
+                           messages: [MessageSearch.Message(hit: oldHit, sender: "You", snippet: snippet)]),
+    ])
+    let items = CommandPalette.messageItems(results, gateway: gateway, now: now, calendar: calendar)
+    let trip = Notifier.Target(gatewayId: gateway.id, sessionKey: "trip")
+    check(items.map(\.id) == [
+        "messages:chat:\(prefix):trip", "message:\(prefix):trip:u-1:0", "message:\(prefix):trip:a-2:1", "messages:more:\(prefix):trip",
+        "messages:chat:\(prefix):old", "message:\(prefix):old:u-9:0",
+    ] && Set(items.map(\.id)).count == items.count, "rows: header, messages, More; unique ids")
+    check(items.allSatisfy { $0.section == .messages }, "all in the Messages section")
+    check(items[0].isHeader && !items[0].isSelectable && items[0].title == "Japan trip" && items[4].title == "Old · Archived"
+          && items.filter(\.isHeader).count == 2, "headers: chat title, archived marked, not selectable")
+    check(items[1].title == "via Discord" && items[2].title == "Main" && items[1].snippet == snippet && items[1].isSelectable
+          && items[1].date == userHit.timestamp && items[5].date == nil && items[5].shortcut == nil, "rows: sender, snippet, date")
+    let today = items[1].shortcut?.replacingOccurrences(of: "\u{202F}", with: " ")
+    check(today == MessageSearch.dateLabel(userHit.timestamp!, now: now, calendar: calendar).replacingOccurrences(of: "\u{202F}", with: " ")
+          && items[2].shortcut == MessageSearch.dateLabel(agentHit.timestamp!, now: now, calendar: calendar), "rows: date label (\(today ?? "nil"))")
+    check(items[1].action == .openMessage(trip, query: "ramen", match: TranscriptSearch.Match(entryId: "u-1", section: .message(0), occurrence: 0))
+          && items[2].action == .openMessage(trip, query: "ramen", match: TranscriptSearch.Match(entryId: "a-2", section: .message(1), occurrence: 0)),
+          "a row opens its chat at its match")
+    check(items[3].action == .findInChat(trip, query: "ramen") && items[3].title.contains("Japan trip") && items[3].isSelectable,
+          "More opens Find in the chat")
+    check(CommandPalette.messageItems(MessageSearch.Results(query: "x"), gateway: gateway).isEmpty, "no results, no rows")
+
+    check(CommandPalette.searchMessagesItem(query: "a") == nil && CommandPalette.searchMessagesItem(query: " a  ") == nil
+          && CommandPalette.searchMessagesItem(query: "") == nil, "Search Messages needs 2 characters")
+    let search = CommandPalette.searchMessagesItem(query: "  ab ")
+    check(search?.action == .searchMessages("ab") && search?.title.contains("“ab”") == true, "Search Messages for “q”")
+    func row(_ id: String, _ section: PaletteItem.Section) -> PaletteItem {
+        PaletteItem(id: id, title: id, symbol: "x", section: section, action: .command(id))
+    }
+    let ranked = [row("chat1", .chats), row("chat2", .chats), row("new", .newChat), row("cmd", .commands)]
+    check(CommandPalette.addingSearchMessages(to: ranked, query: "ab", gatewaySelected: true).map(\.id)
+          == ["chat1", "chat2", "command:searchMessages", "new", "cmd"], "Search Messages right after the chats")
+    check(CommandPalette.addingSearchMessages(to: [row("cmd", .commands)], query: "ab", gatewaySelected: true).map(\.id)
+          == ["command:searchMessages", "cmd"], "first when no chat matches")
+    check(CommandPalette.addingSearchMessages(to: [], query: "ab", gatewaySelected: true).map(\.id) == ["command:searchMessages"],
+          "alone when nothing matches")
+    check(CommandPalette.addingSearchMessages(to: ranked, query: "ab", gatewaySelected: false) == ranked
+          && CommandPalette.addingSearchMessages(to: ranked, query: "a", gatewaySelected: true) == ranked,
+          "not without a gateway or with a 1-character query")
+}
+
+/// Polls message search until `condition` holds.
+@MainActor
+func waitForSearch(_ gateway: GatewayStore, _ query: String, timeout: Double = 5,
+                   _ condition: (MessageSearch.Results) -> Bool) async -> MessageSearch.Results?
+{
+    let deadline = Date().addingTimeInterval(timeout)
+    repeat {
+        if let results = try? await gateway.searchMessages(query), condition(results) { return results }
+        try? await Task.sleep(for: .milliseconds(100))
+    } while Date() < deadline
+    print("    … timed out waiting for message search “\(query)”")
+    return nil
+}
+
+/// Demo: older history found in its chat, only listed chats, back-to-back searches, and new messages.
+@MainActor
+func checkDemoMessageSearch(_ gateway: GatewayStore, trip: ChatStore) async {
+    let tripKey = "agent:main:dashboard:trip"
+    let dayEntry = trip.entries.first { if case let .user(item) = $0 { item.plainText == "Idea for day 7?" } else { false } }
+    let olderIndex = trip.entries.firstIndex { $0.id == dayEntry?.id } ?? .max
+    check(dayEntry != nil && olderIndex < trip.entries.count - 120, "day 7 is in older history (row \(olderIndex) of \(trip.entries.count))")
+    let dayResults = await waitForSearch(gateway, "day 7?") { $0.chats.contains { $0.sessionKey == tripKey } }
+    let dayChat = dayResults?.chats.first { $0.sessionKey == tripKey }
+    let dayMessage = dayChat?.messages.first
+    check(dayChat?.title == "Japan trip" && dayChat?.messages.count == 1 && dayMessage?.hit.entryId == dayEntry?.id
+          && dayMessage?.sender == "You", "older history is found in its chat (\(dayChat?.messages.map(\.hit.entryId) ?? []))")
+    check(dayMessage.map { TranscriptSearch.matches("day 7?", in: trip.entries).contains($0.match) } == true,
+          "the result is a match Find in Chat selects")
+    check(dayMessage?.snippet.highlights.first.map { (dayMessage!.snippet.text as NSString).substring(with: $0) } == "day 7?",
+          "the snippet highlights the match")
+    let ramen = await waitForSearch(gateway, "ramen") { $0.chats.first?.sessionKey == tripKey }
+    check(ramen?.chats.first?.messages.count == 3 && ramen?.chats.first?.hasMore == true
+          && ramen?.chats.first?.messages.allSatisfy({ $0.sender != "You" }) == true, "common word: newest 3 and More")
+
+    let papers = await waitForSearch(gateway, "consistency models", timeout: 15) {
+        $0.chats.contains { $0.sessionKey == "agent:research:dashboard:papers" }
+    }
+    check(papers != nil, "a chat never opened is found once prefetched")
+    let subagent = (try? await gateway.searchMessages("retrieval-augmented")) ?? MessageSearch.Results(query: "")
+    check(!subagent.chats.contains { $0.sessionKey.contains(":subagent:") }, "subagent runs never appear")
+
+    let stale = Task { @MainActor in try await gateway.searchMessages("ramen") }
+    stale.cancel()
+    let latest = try? await gateway.searchMessages("consistency models")
+    var staleCancelled = false
+    if case let .failure(error) = await stale.result { staleCancelled = error is CancellationError }
+    check(staleCancelled && latest?.chats.map(\.sessionKey) == ["agent:research:dashboard:papers"],
+          "back-to-back searches: the replaced one is cancelled, the latest answers")
+    await checkAsync({ await ((try? gateway.searchMessages("x"))?.isEmpty == true) }, "a 1-character search is empty")
+}
+
+/// Demo: a message sent now is searchable within 3 s.
+@MainActor
+func checkDemoSentMessageSearch(_ gateway: GatewayStore, _ chat: ChatStore) async {
+    let token = "qz" + String(UUID().uuidString.lowercased().filter(\.isLetter).prefix(8))
+    await chat.send("remember \(token) please")
+    let sent = Date()
+    let found = await waitForSearch(gateway, token, timeout: 3) { !$0.isEmpty }
+    let elapsed = Date().timeIntervalSince(sent)
+    check(found?.chats.first?.sessionKey == chat.sessionKey && found?.chats.first?.messages.first?.sender == "You",
+          "a sent message is searchable in \(String(format: "%.1f", elapsed)) s")
+    _ = await waitFor("reply after search check", timeout: 20) { !chat.isRunning }
+}
+
+/// Live: a filled chat's older history, and a chat only the background prefetch cached, are searchable.
+@MainActor
+func checkLiveMessageSearch(_ gateway: GatewayStore) async {
+    let tripKey = "agent:main:dashboard:trip"
+    let day = await waitForSearch(gateway, "day 7?", timeout: 10) { $0.chats.contains { $0.sessionKey == tripKey } }
+    let message = day?.chats.first { $0.sessionKey == tripKey }?.messages.first
+    check(message?.snippet.text == "Idea for day 7?" && message?.sender == "You", "live: older history of a filled chat is searchable")
+    let prefetched = await waitForSearch(gateway, "diffusion papers", timeout: 20) { !$0.isEmpty }
+    check(prefetched?.chats.allSatisfy { !$0.sessionKey.contains(":subagent:") } == true,
+          "live: a chat cached by the background prefetch is searchable (\(prefetched?.chats.map(\.sessionKey) ?? []))")
+    check(gateway.messageIndexProgress == .ready, "live: index ready after reconcile (\(gateway.messageIndexProgress))")
+}
+
+/// A quick end-to-end pass over the message index: save a transcript, search it, jump data.
+@MainActor
+func checkMessageSearchSmoke() async {
+    let previous = ProcessInfo.processInfo.environment["PINCER_CACHE_DIR"]
+    let root = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-index-\(UUID().uuidString)")
+    setenv("PINCER_CACHE_DIR", root.path(percentEncoded: false), 1)
+    defer {
+        if let previous { setenv("PINCER_CACHE_DIR", previous, 1) } else { unsetenv("PINCER_CACHE_DIR") }
+        try? FileManager.default.removeItem(at: root)
+    }
+    let gatewayId = UUID()
+    let items = [
+        ChatItem(json(#"{"role":"user","content":"Planning the **Japan** trip to Tōkyō","__openclaw":{"id":"u1"}}"#), fallbackIndex: 0)!,
+        ChatItem(json(#"{"role":"assistant","content":[{"type":"thinking","thinking":"secret zebra"},{"type":"text","text":"Try the café in [Kyoto](https://zebra.example)"}],"__openclaw":{"id":"a1"}}"#), fallbackIndex: 1)!,
+    ]
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "chat-1")
+    let index = MessageIndex.shared(gatewayId: gatewayId)
+    let hits = (try? await index.search("tokyo")) ?? []
+    check(hits.count == 1 && hits.first?.entryId == "u-u1", "saved transcript is searchable (accents folded)")
+    let cafe = (try? await index.search("CAFE")) ?? []
+    check(cafe.count == 1 && cafe.first?.entryId == "a-a1", "case and accents are ignored")
+    let zebra = MessageSearch.collect((try? await index.search("zebra")) ?? [], query: "zebra", allowed: ["chat-1"])
+    check(zebra.isEmpty, "thinking and link targets don't match")
+    let groups = MessageSearch.collect((try? await index.search("kyoto")) ?? [], query: "kyoto", allowed: ["chat-1"])
+    check(groups.first?.hits.first?.match == TranscriptSearch.Match(entryId: "a-a1", section: .message(0), occurrence: 0),
+          "a verified hit is the match Find reports")
+    check(MessageIndex.url(gatewayId: gatewayId).map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } == true,
+          "index file sits next to the transcripts")
+    TranscriptCache.removeAll(gatewayId: gatewayId)
+    check(MessageIndex.url(gatewayId: gatewayId).map { !FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } == true,
+          "removing the gateway deletes its index")
+    let removed = (try? await MessageIndex.shared(gatewayId: gatewayId).search("tokyo")) ?? []
+    check(removed.isEmpty, "search after removal is empty")
+}
+
 @MainActor
 func checkDrafts() async {
     let profile = GatewayProfile(name: "Drafts", url: "ws://127.0.0.1:1", authMode: .none)
@@ -898,7 +1735,12 @@ func checkDrafts() async {
           "switching chats keeps each chat's draft")
     check(first.chat(for: "agent:main:beta").draft.text == "/model", "drafts are per chat")
 
-    let saved = await waitFor("debounced draft save", timeout: 5) { folders().count == 2 }
+    // A folder appears before its attachments and draft.json are written; wait for both manifests.
+    let saved = await waitFor("debounced draft save", timeout: 5) {
+        folders().count == 2 && folders().allSatisfy { name in
+            FileManager.default.fileExists(atPath: gatewayFolder.appending(path: "\(name)/draft.json").path(percentEncoded: false))
+        }
+    }
     check(saved, "drafts are saved without an explicit flush")
 
     // Relaunch: a fresh store for the same Gateway.
@@ -1003,6 +1845,10 @@ if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count
     print("Scope upgrade fallback against \(arguments[index + 1])")
     await runScopeUpgrade(url: arguments[index + 1], token: arguments[index + 2])
 }
+if arguments.contains("--perf") {
+    print("Message index performance (20 × 20k)")
+    await runMessageIndexPerf()
+}
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
@@ -1012,6 +1858,7 @@ if arguments.contains("--demo") {
 
 print("\n\(passes) passed, \(failures) failed")
 try? FileManager.default.removeItem(at: draftsRoot)
+try? FileManager.default.removeItem(at: cacheRoot)
 exit(failures == 0 ? 0 : 1)
 
 @MainActor
@@ -1054,6 +1901,7 @@ func runDemo() async {
     await trip.loadOlder()
     await trip.loadOlder()
     check(!trip.hasMoreHistory && trip.items.count == 302, "trip paged to start (\(trip.items.count))")
+    await checkDemoMessageSearch(gateway, trip: trip)
 
     let before = chat.entries.count
     await chat.send("show me a tool and an image")
@@ -1179,6 +2027,7 @@ func runDemo() async {
               "models page marks the session's model")
     }
     await gateway.patch(tripKey, ["pinned": false])
+    await checkDemoSentMessageSearch(gateway, chat)
     gateway.stop()
 }
 
@@ -1225,6 +2074,20 @@ func runNavigation() async {
     app.openPinned(9)
     app.openPinned(0)
     check(app.history.current == beforeMissing, "⌘ with no pinned chat at that number does nothing")
+
+    let requests = app.openRequests
+    let match = TranscriptSearch.Match(entryId: "u-x", section: .message(0), occurrence: 0)
+    app.open(trip, find: "ramen", match: match)
+    check(first.selectedKey == trip.sessionKey && app.history.current == trip && app.openRequests == requests + 1,
+          "opening a message result opens its chat and records history")
+    check(app.takeFindRequest(for: main) == nil, "a find request is only for its chat")
+    let request = app.takeFindRequest(for: trip)
+    check(request?.query == "ramen" && request?.match == match && request?.target == trip, "the chat takes its find request")
+    check(app.takeFindRequest(for: trip) == nil, "a find request is taken once")
+    app.open(papers, find: "diffusion", match: nil)
+    app.open(main, find: "welcome", match: nil)
+    check(app.takeFindRequest(for: papers) == nil && app.takeFindRequest(for: main)?.query == "welcome",
+          "a newer find request replaces an untaken one")
 
     let second = app.add(.demo(), secret: nil)
     let secondReady = await waitFor("second demo") { second.state.isConnected && !second.sessions.isEmpty }
@@ -1336,6 +2199,7 @@ func runLive(url: String, token: String) async {
     await trip.loadOlder()
     check(!trip.hasMoreHistory && trip.items.count == 302, "reaches the start (\(trip.items.count))")
     check(trip.items.first?.plainText == "Idea for day 1?", "oldest message first")
+    await checkLiveMessageSearch(gateway)
 
     let research = gateway.chat(for: "agent:research:main")
     await research.load()

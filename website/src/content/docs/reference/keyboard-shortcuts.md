@@ -13,6 +13,36 @@ description: Keyboard shortcuts for Pincer on macOS (and iPad with a keyboard).
 | Settings | <kbd>⌘</kbd> <kbd>,</kbd> |
 | Reload Pincer | <kbd>⌘</kbd> <kbd>R</kbd> |
 
+## Go
+
+| Action | Shortcut |
+| --- | --- |
+| Command palette | <kbd>⌘</kbd> <kbd>K</kbd> |
+| [Search messages](../../guides/search/) | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd> |
+| Back | <kbd>⌘</kbd> <kbd>[</kbd> |
+| Forward | <kbd>⌘</kbd> <kbd>]</kbd> |
+| Open a pinned chat, in sidebar order | <kbd>⌘</kbd> <kbd>1</kbd> – <kbd>⌘</kbd> <kbd>9</kbd> |
+
+## Command palette and message search
+
+| Action | Shortcut |
+| --- | --- |
+| Move through items or results | <kbd>↑</kbd> <kbd>↓</kbd> |
+| Run the selected item or open the result | <kbd>Return</kbd> |
+| Go back to the first page, or close | <kbd>Esc</kbd> |
+| Go back to the first page from an empty field | <kbd>⌫</kbd> |
+
+On the message search page, <kbd>Esc</kbd> goes back to the palette only when you opened it from there. Opened with <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd> or from the sidebar, it closes.
+
+## Find in Chat
+
+| Action | Shortcut |
+| --- | --- |
+| Find in Chat | <kbd>⌘</kbd> <kbd>F</kbd> |
+| Next match | <kbd>⌘</kbd> <kbd>G</kbd> or <kbd>Return</kbd> |
+| Previous match | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>G</kbd> |
+| Close the find bar | <kbd>Esc</kbd> |
+
 ## Composer
 
 | Action | Shortcut |

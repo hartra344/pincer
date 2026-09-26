@@ -68,6 +68,6 @@ When a chat's context is compacted, it stays the same chat. You'll see a "Compac
 
 ## Finding your way
 
-- **Search** at the top of the sidebar filters chats by name.
+- **Search** at the top of the sidebar filters chats by name. While you type, a **Search messages for “…”** row above the chat list searches the text of every cached chat instead. See [Search messages](../search/).
 - **Unread dots** and the **Dock badge** show what's new.
 - **Next Unread Chat** (<kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>↓</kbd>) jumps to the next chat with unread messages.

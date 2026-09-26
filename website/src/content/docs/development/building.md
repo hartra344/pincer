@@ -35,16 +35,17 @@ Set your team, then run **Pincer-macOS** or **Pincer-iOS**. The Xcode-built macO
 PINCER_KEYCHAIN=memory swift run PincerChecks
 PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
 PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo
+PINCER_KEYCHAIN=memory swift run -c release PincerChecks --perf   # message search at scale
 ```
 
-`--live` runs an end-to-end check against a gateway, such as the [mock gateway](../mock-gateway/).
+`--live` runs an end-to-end check against a gateway, such as the [mock gateway](../mock-gateway/). `--perf` builds a message search index over 20 synthetic chats of 20,000 messages each and checks build time, query time, memory and index size. Build it in release (`-c release`), since its time targets assume an optimized build.
 
 ## Environment variables
 
 | Variable | Effect |
 | --- | --- |
 | `PINCER_KEYCHAIN=memory` | Keep identities and secrets in memory, so checks and dev runs never touch your real Keychain. |
-| `PINCER_CACHE_DIR` | `off` disables the transcript cache. A path moves it. |
+| `PINCER_CACHE_DIR` | `off` disables the transcript cache and message search. A path moves both. |
 | `PINCER_REQUEST_LOG` | A file path to log every request and the gateway's reply. |
 
 They work for the app too:

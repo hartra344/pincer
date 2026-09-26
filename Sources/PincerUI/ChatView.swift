@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     let chat: ChatStore
     @Environment(GatewayStore.self) private var gateway
+    @Environment(AppModel.self) private var app
     @AppStorage("pincer.reasoningHintDismissed") private var hintDismissed = false
     @State private var disclosure = TranscriptDisclosure()
     @State private var previewing: ImageRef?
@@ -44,7 +45,11 @@ struct ChatView: View {
                         ProgressCardView(chat: self.chat, card: card)
                     }
                     PendingQuestionCard(chat: self.chat)
-                    Composer(chat: self.chat, placeholder: "Message #\(self.row?.title ?? "chat")")
+                    Composer(chat: self.chat, placeholder: "Message #\(self.row?.title ?? "chat")",
+                             autoFocus: { [find = self.find, app = self.app, gateway = self.gateway, chat = self.chat] in
+                                 // Opening on a message search result: the Find field keeps focus.
+                                 !find.isPresented && !Self.hasFindRequest(app: app, gateway: gateway, chat: chat)
+                             })
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.bottomChrome = $0 }
             }
@@ -75,6 +80,7 @@ struct ChatView: View {
         .onAppear { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
         .onChange(of: self.chat.entries) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
         .onChange(of: self.reasoningOff) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
+        .onChange(of: self.app.findRequest, initial: true) { self.takeFindRequest() }
         #if os(iOS)
         // Menu commands are macOS-only; on iOS a hardware keyboard reaches these instead.
         .background {
@@ -93,6 +99,21 @@ struct ChatView: View {
     }
 
     private var reasoningOff: Bool { self.row?.reasoningLevel == "off" }
+
+    /// A message search result is waiting to open Find in this chat.
+    private static func hasFindRequest(app: AppModel, gateway: GatewayStore, chat: ChatStore) -> Bool {
+        guard let request = app.findRequest else { return false }
+        return request.target.gatewayId == gateway.id && gateway.resolveSessionKey(request.target.sessionKey) == chat.sessionKey
+    }
+
+    /// Opens Find on a message search result meant for this chat.
+    private func takeFindRequest() {
+        guard let request = self.app.findRequest,
+              Self.hasFindRequest(app: self.app, gateway: self.gateway, chat: self.chat),
+              self.app.takeFindRequest(for: request.target) != nil
+        else { return }
+        self.find.present(query: request.query, select: request.match)
+    }
 
     @ViewBuilder private var errorBar: some View {
         if let error = self.chat.errorMessage {

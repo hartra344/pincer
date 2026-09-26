@@ -38,4 +38,4 @@ If the gateway has no durable identity for your connection, these preferences st
 - Thinking Steps (None, Live Only, All)
 - Your display name
 - Whether to load images the agent links from the web
-- The transcript cache
+- The transcript cache and its message search index

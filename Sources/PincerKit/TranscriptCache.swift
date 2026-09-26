@@ -3,16 +3,22 @@ import Foundation
 
 /// On-disk copy of each chat's committed transcript. Reopening a chat is instant (even offline) and
 /// older history — which doesn't change — never has to be refetched; only the newest page is.
-enum TranscriptCache {
-    struct Snapshot: Codable, Sendable {
-        var version = Self.currentVersion
-        var items: [ChatItem]
+public enum TranscriptCache {
+    public struct Snapshot: Codable, Sendable {
+        public var version = Self.currentVersion
+        public var items: [ChatItem]
         /// The transcript reaches back to the first message (no older history on the Gateway).
-        var complete: Bool
+        public var complete: Bool
         /// Session activity when saved; an unchanged session needs no background refresh.
-        var activityMs: Double?
+        public var activityMs: Double?
 
-        static let currentVersion = 4
+        public static let currentVersion = 4
+
+        public init(items: [ChatItem], complete: Bool, activityMs: Double? = nil) {
+            self.items = items
+            self.complete = complete
+            self.activityMs = activityMs
+        }
     }
 
     /// Written next to each transcript so freshness checks don't decode the whole thing.
@@ -25,7 +31,7 @@ enum TranscriptCache {
     static let maxItems = 20000
 
     /// `PINCER_CACHE_DIR` redirects the cache (checks); `PINCER_CACHE_DIR=off` disables it.
-    static var root: URL? {
+    public static var root: URL? {
         if let override = ProcessInfo.processInfo.environment["PINCER_CACHE_DIR"] {
             return override == "off" ? nil : URL(filePath: override, directoryHint: .isDirectory)
         }
@@ -33,11 +39,11 @@ enum TranscriptCache {
             .appending(path: "Pincer/Transcripts", directoryHint: .isDirectory)
     }
 
-    static func directory(gatewayId: UUID) -> URL? {
+    public static func directory(gatewayId: UUID) -> URL? {
         self.root?.appending(path: gatewayId.uuidString, directoryHint: .isDirectory)
     }
 
-    static func file(gatewayId: UUID, sessionKey: String) -> URL? {
+    public static func file(gatewayId: UUID, sessionKey: String) -> URL? {
         let digest = SHA256.hash(data: Data(sessionKey.utf8)).map { String(format: "%02x", $0) }.joined()
         return self.directory(gatewayId: gatewayId)?.appending(path: "\(digest).json")
     }
@@ -51,7 +57,7 @@ enum TranscriptCache {
         }.value
     }
 
-    static func load(gatewayId: UUID, sessionKey: String) async -> Snapshot? {
+    public static func load(gatewayId: UUID, sessionKey: String) async -> Snapshot? {
         guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey) else { return nil }
         return await Task.detached(priority: .userInitiated) {
             guard let data = try? Data(contentsOf: url),
@@ -62,12 +68,28 @@ enum TranscriptCache {
         }.value
     }
 
-    static func save(_ snapshot: Snapshot, gatewayId: UUID, sessionKey: String) async {
-        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey) else { return }
-        await Writer.shared.write(snapshot, to: url)
+    /// Writes the transcript, then brings the Gateway's message search index up to date with it.
+    /// Nothing is written for a Gateway removed from the app, even by a save already under way.
+    public static func save(_ snapshot: Snapshot, gatewayId: UUID, sessionKey: String) async {
+        guard !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId),
+              let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey),
+              let written = await Writer.shared.write(snapshot, to: url)
+        else { return }
+        guard !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId) else {
+            self.deleteDirectory(gatewayId: gatewayId)
+            return
+        }
+        await MessageIndex.shared(gatewayId: gatewayId).index(sessionKey: sessionKey, snapshot: snapshot, fileMtime: written)
     }
 
-    static func removeAll(gatewayId: UUID) {
+    /// Deletes the Gateway's transcripts and message search index. `permanently`: the Gateway
+    /// was removed from the app, so saves still under way don't write them again.
+    public static func removeAll(gatewayId: UUID, permanently: Bool = false) {
+        MessageIndex.discard(gatewayId: gatewayId, permanently: permanently)
+        self.deleteDirectory(gatewayId: gatewayId)
+    }
+
+    private static func deleteDirectory(gatewayId: UUID) {
         guard let directory = self.directory(gatewayId: gatewayId) else { return }
         try? FileManager.default.removeItem(at: directory)
     }
@@ -76,7 +98,8 @@ enum TranscriptCache {
     private actor Writer {
         static let shared = Writer()
 
-        func write(_ snapshot: Snapshot, to url: URL) {
+        /// The file's modification date once written, or nil when it couldn't be.
+        func write(_ snapshot: Snapshot, to url: URL) -> Date? {
             do {
                 try FileManager.default.createDirectory(
                     at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -84,8 +107,10 @@ enum TranscriptCache {
                 try data.write(to: url, options: [.atomic, .completeFileProtection])
                 let meta = try JSONEncoder().encode(Meta(complete: snapshot.complete, activityMs: snapshot.activityMs))
                 try meta.write(to: url.appendingPathExtension("meta"), options: [.atomic, .completeFileProtection])
+                return (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
             } catch {
                 // A missing cache only costs a refetch.
+                return nil
             }
         }
     }
