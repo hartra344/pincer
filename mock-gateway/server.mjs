@@ -599,6 +599,7 @@ function advertisedMethods() {
   const hidden = [
     ...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []),
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
+    ...(usageDisabled() ? USAGE_METHODS : []),
   ];
   return METHODS.filter((m) => !hidden.includes(m));
 }
@@ -991,11 +992,6 @@ function postToSession(state, key, { agentId, label, userText, replyText }) {
   updateSessionRow(row, { lastActivityAt: nowMs() });
   broadcastSessionChanged(state, key, 'cron', row);
   return row;
-}
-
-function advertisedMethods() {
-  const disabled = new Set([...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []), ...(usageDisabled() ? USAGE_METHODS : [])]);
-  return METHODS.filter((m) => !disabled.has(m));
 }
 
 function handleAuthedRequest(state, conn, msg) {
