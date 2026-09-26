@@ -2,7 +2,9 @@
 
 A native macOS and iOS client for [OpenClaw](https://github.com/openclaw/openclaw). It keeps the parts of the Discord connection that work well, organized chats and notifications, and adds what Discord can't show: thinking, tool calls, inline images, and messages attributed to you as the owner.
 
-<img width="2804" height="2004" alt="CleanShot 2026-09-25 at 3 20 07 PM@2x" src="https://github.com/user-attachments/assets/03bc0ca0-8cee-49bf-8985-a684b6e691b5" />
+![Pincer on macOS with synthetic demo chats, a tool call, a disk summary, and an inline chart.](website/src/assets/screenshots/transcript.png)
+
+*Captured from the built-in demo with fictional user Alex. No live conversations or gateway credentials are shown.*
 
 
 ## What it is (and isn't)
@@ -17,7 +19,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - `wss://` is required for anything other than loopback, private LAN or Tailscale addresses.
   - You can pin a TLS certificate by its SHA-256 fingerprint.
   - Images are fetched only from the gateway itself: inline, through `artifacts.download`, or from the gateway's own host.
-- **Local cache:** transcripts are cached in `~/Library/Caches/Pincer/Transcripts/<gateway>/`, one file per chat, up to 20,000 messages each. Files use complete file protection, and removing a gateway deletes its cache. Set `PINCER_CACHE_DIR=off` to turn the cache off, or set it to a path to use another folder.
+- **Local cache:** transcripts are cached in `~/Library/Caches/Pincer/Transcripts/<gateway>/`, one file per chat, up to 20,000 messages each. Files use complete file protection, and removing a gateway deletes its cache. The message search index (`search-index.sqlite`) lives in the same folder and is deleted with it. Set `PINCER_CACHE_DIR=off` to turn the cache (and message search, except in the demo, which then keeps its index in memory) off, or set it to a path to use another folder.
 - **Drafts:** each chat keeps its unsent text and pending attachments when you switch chats or relaunch. They're saved in `~/Library/Application Support/Pincer/Drafts/<gateway>/`, one folder per chat, using complete file protection. A draft is deleted when you send it, when its chat is deleted, or when you remove its gateway. Set `PINCER_DRAFTS_DIR=off` to turn draft saving off, or set it to a path to use another folder.
 - **Sandbox:** the Xcode-built macOS app is sandboxed, with outgoing network access and read-only access to files you pick. The quick `scripts/bundle-mac.sh` dev bundle is only ad-hoc signed.
 
@@ -34,6 +36,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - "Next Unread Chat" (⌥⇧↓).
 - **Command palette and quick switching** (**Go** menu):
   - ⌘K opens a palette to jump to any chat on any gateway (recently visited first), start a new chat with an agent, change the chat's model, pin or unpin it, show or hide thinking steps, switch gateways, or open Settings, Gateway Settings, Automations, Approval History, Command Policy or Gateway Logs. Type to filter (fuzzy, so `jptr` finds "Japan trip"), use ↑/↓ to move, Return to run and Esc to go back or close;
+  - **Search Messages** (⇧⌘F, "Search Messages for …" in ⌘K, or the "Search messages for …" row that appears above the sidebar's chat list while you type in "Find a chat") searches the text of every cached chat on the selected gateway, including older history you haven't scrolled to. Results are grouped by chat (newest first, up to 3 per chat) with the sender, date and a highlighted snippet; picking one opens the chat with Find in Chat on that message. Matching ignores case and accents, each word must match from its start (`tok` finds "Tokyo", `kyo` doesn't), and multi-word queries must appear as a phrase. Only user and assistant message text is searched, not thinking or tool output. The index lives on disk next to the transcript cache and is built in the background;
   - Back (⌘[) and Forward (⌘]) move through the chats you've visited, like a browser;
   - ⌘1–⌘9 open the selected gateway's pinned chats, in sidebar order.
 - **Quick Capture** (macOS): press ⌃⇧Space from any app to open a small floating composer, even when the main window is closed. It remembers the chat you last sent to.
@@ -41,6 +44,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - Return sends (`chat.send`, after `sessions.create` for a new chat) without leaving what you're doing. ⌘Return sends and opens the chat in Pincer, ⌘O opens it without sending, and Esc closes and keeps your text.
   - Paste or drag in images and files, as in the main composer.
   - Change or turn off the shortcut in Settings → General → Quick Capture. It uses a standard system hotkey, so no Accessibility permission is needed. It's also in the **Go** menu.
+  - Turn on **Open at Login** in Settings → General → Launch so Pincer, and the shortcut, is ready after you log in. It's off by default. If macOS asks you to approve it, use **Open Login Items Settings…**.
 - **Transcript:**
   - live streaming, with a collapsible **thinking** section and **tool cards** showing arguments and results. Choose whether to show thinking steps never, only live, or for every turn;
   - the full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer quietly caches every chat (most recently active first) and skips chats that haven't changed. Opening one shows the cached transcript at once, then fetches only what's new;
@@ -67,7 +71,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - curated pages (Gateway, Agents & Models, Channels, Sessions & Messages, Tools & Skills, Automation) built from the gateway's own schema (`config.get` / `config.schema`), with rarely used fields under **Advanced**. Sections the gateway's schema doesn't have are hidden;
   - **Plugins**: list, add (ClawHub, npm or git), remove, enable and disable plugins, and fill in their settings and credentials (`plugins.*`);
   - **All Settings** (every field, grouped by section) and **Raw Config** (JSON5, `config.apply`) for anything else. Search in the sidebar finds any setting and jumps to it;
-  - edits from every page go into one draft. The toolbar shows how many are unsaved, and **Save** (⌘S) opens **Review Changes**, which lists each change and sends them together with `config.patch`, so the gateway validates, persists and hot-applies them. Invalid values come back with the field and reason, and changes that need a gateway restart say so. If the config changed on the gateway meanwhile, Pincer rebases the draft and asks about any conflicting setting;
+  - edits from every page go into one draft. The toolbar shows how many are unsaved, and the **Unsaved** count opens a review of each change. **Save** (⌘S) sends the draft with `config.patch`, so the gateway validates, persists and hot-applies them. Invalid values come back with the field and reason, and changes that need a gateway restart say so. If the config changed on the gateway meanwhile, Pincer rebases the draft and asks about any conflicting setting;
   - secrets are shown only as "saved" and are never sent back to the gateway unless you change them;
   - editing needs **Access → Full Management** on the Connection page (and the gateway's approval); otherwise settings are read-only.
   - **Pairing Requests**: people who messaged one of your channel accounts that uses `dmPolicy: "pairing"` and are waiting to be let in (`channels.pairing.list`). Each request shows the sender's name or username if they set one, the channel's sender id (the part you can trust, always shown), the channel and account, and when it was asked and expires. **Approve** asks first, and can tell the sender they were approved when the channel supports it (`channels.pairing.approve`); on a gateway without a command owner, Full Management can also make them the command owner. **Dismiss** removes a request without blocking the sender, who can ask again (`channels.pairing.dismiss`). The sidebar badge counts pending requests. Reviewing requests needs **Access → Full Management**: the pairing methods need `operator.pairing`, which Pincer doesn't ask for because it would also let this device approve new devices and nodes, and `operator.admin` covers it. There's no event for new requests, so the list refreshes when the page opens and every 30 seconds while it's showing, not with a notification. The pairing code the sender got isn't part of the protocol, so Pincer doesn't show one. Already approved senders aren't listed and can't be removed here; edit the channel's allowlist on the gateway. Gateways without channel pairing say so.
@@ -176,7 +180,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 
 ## Testing without a real gateway
 
-The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, grouped and pinned chats, a long searchable transcript, streamed replies, a chart, exec approvals (including one that arrives later, to answer from a notification), `ask_user` question cards, a context meter with compaction, sample approval history, an editable command policy, three pairing requests, 90 days of sample usage and cost data, a simulated live gateway log that grows while you watch and logs your demo chats and approvals, and gateway health (Telegram is disconnected, so it shows Degraded; **Restart Gateway** simulates a restart). Nothing leaves the device. It doesn't use push notifications, and the Share extension runs its own separate demo, so shared messages don't show up in the app's demo. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too.
+The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, grouped and pinned chats, a long searchable transcript, streamed replies, a chart, exec approvals (including one that arrives later, to answer from a notification), `ask_user` question cards, a context meter with compaction, sample approval history, an editable command policy, three pairing requests, 90 days of sample usage and cost data, a simulated live gateway log that grows while you watch and logs your demo chats and approvals, and gateway health (Telegram is disconnected, so it shows Degraded; **Restart Gateway** simulates a restart). Nothing leaves the device. It doesn't use push notifications, and the Share extension runs its own separate demo, so shared messages don't show up in the app's demo. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too. Its chats have weeks of seeded history for message search (⇧⌘F): try `backup` (four chats), `ghibli` (older Japan trip history) or `cafe` (matches "Café").
 
 For the full protocol, including Gateway Settings, run the Node mock:
 
@@ -211,6 +215,7 @@ To run the self-checks:
 PINCER_KEYCHAIN=memory swift run PincerChecks
 PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
 PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo
+PINCER_KEYCHAIN=memory swift run -c release PincerChecks --perf   # message search at 20 chats × 20,000 messages
 PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock started with MOCK_NO_USAGE=1 PORT=18790
 ```
 

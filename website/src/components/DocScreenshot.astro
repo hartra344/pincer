@@ -1,0 +1,29 @@
+---
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+interface Props {
+  src: ImageMetadata;
+  alt: string;
+  caption: string;
+  narrow?: boolean;
+  focus?: { x: number; y: number; width: number; height: number };
+}
+const { src, alt, caption, narrow = false, focus } = Astro.props;
+---
+<figure class:list={['doc-screenshot', { narrow }]}>
+  <a class:list={{ focused: !!focus }} style={focus ? `aspect-ratio:${focus.width}/${focus.height};--shot-width:${src.width / focus.width * 100}%;--shot-left:${-focus.x / focus.width * 100}%;--shot-top:${-focus.y / focus.height * 100}%;` : undefined} href={src.src} aria-label={`Open full-size screenshot: ${alt}`}>
+    <Image src={src} alt={alt} widths={[640, 960, src.width]} sizes={narrow ? '(max-width: 600px) 100vw, 520px' : '(max-width: 900px) 100vw, 800px'} loading="lazy" />
+  </a>
+  <figcaption>{caption} <span>Click to view full size.</span></figcaption>
+</figure>
+<style>
+  .doc-screenshot { margin-block: 1.5rem 2rem; }
+  .doc-screenshot.narrow { max-width: 32.5rem; margin-inline: auto; }
+  .doc-screenshot a { display: block; border: 1px solid var(--sl-color-gray-5); border-radius: 0.75rem; overflow: hidden; }
+  .doc-screenshot a.focused { position: relative; }
+  .doc-screenshot a.focused img { position: absolute; width: var(--shot-width); max-width: none; left: var(--shot-left); top: var(--shot-top); }
+  .doc-screenshot a:focus-visible { outline: 3px solid var(--sl-color-accent); outline-offset: 4px; }
+  .doc-screenshot img { display: block; width: 100%; height: auto; margin: 0; }
+  .doc-screenshot figcaption { margin-top: 0.65rem; color: var(--sl-color-gray-2); font-size: var(--sl-text-sm); line-height: 1.6; }
+  .doc-screenshot figcaption span { white-space: nowrap; }
+</style>

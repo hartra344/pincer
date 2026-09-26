@@ -3,6 +3,10 @@ title: Approvals, questions & notifications
 description: Answering exec approvals and agent questions, from the app, a notification or the lock screen, and managing notifications in Pincer.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import approval from '../../../assets/screenshots/exec-approval.png';
+import question from '../../../assets/screenshots/agent-question.png';
+
 ## Exec approvals
 
 When an agent wants to run something that needs your OK, Pincer shows the request as a **banner** in the app and as an **actionable notification**. Choose:
@@ -24,6 +28,8 @@ Everything you've chosen **Always allow** for is listed per agent in Gateway Set
 :::note
 Answering approvals uses the `operator.approvals` scope, which Pincer requests with both access levels.
 :::
+
+<DocScreenshot focus={{ x: 580, y: 105, width: 1765, height: 225 }} src={approval} alt="Orange command approval banner with Deny and the Allow Once and Always Allow menu." caption="Built-in demo: a simulated rm -rf ./build approval. No command is executed on your Mac." />
 
 ### Answering from a notification
 
@@ -74,6 +80,13 @@ If an agent asks a question in a chat you aren't looking at, you get a notificat
 :::note
 Answering questions uses the `operator.questions` scope. Devices paired before Pincer asked for it raise a one-time request on the gateway host. Until you approve it, the chat shows "The agent is waiting for your answer" with the command to run and a **Try Again** button. See [Troubleshooting](../../reference/troubleshooting/#the-agent-is-waiting-for-my-answer-but-theres-no-card).
 :::
+
+### Try it in the demo
+
+To try this safely, open **Scout → Main** in the demo and send **Please ask me before choosing what to clean up.** Select **Stop watching Discord channels here** to see the selected state below. The reply explicitly confirms that nothing was actually removed.
+
+<DocScreenshot focus={{ x: 580, y: 685, width: 1765, height: 765 }} src={question} alt="Agent question with three choices, a custom-answer field, Skip, and Submit; the third option is selected." caption="Built-in demo. Selecting an answer enables Submit; selection alone does not send it." />
+
 
 ## Notifications
 

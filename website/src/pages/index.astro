@@ -1,7 +1,7 @@
 ---
 import { Image } from 'astro:assets';
 import Icon from '../components/Icon.astro';
-import screenshot from '../assets/screenshot-mac.png';
+import screenshot from '../assets/screenshots/transcript.png';
 import logo from '../assets/logo.svg';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -60,7 +60,7 @@ const features = [
 	{
 		icon: 'sliders',
 		title: 'Gateway Settings',
-		body: 'Curated pages built from your gateway’s schema, plugin management, and a single Review Changes step before anything is saved.',
+		body: 'Curated pages built from your gateway’s schema, plugin management, and a shared draft with an unsaved-changes review.',
 		link: 'guides/gateway-settings/',
 	},
 	{
@@ -140,7 +140,7 @@ const themes = [
 				<figure class="shot">
 					<Image
 						src={screenshot}
-						alt="Pincer on macOS showing a sidebar of agents and channels, and a chat with a tool result, a code block and an inline chart."
+						alt="Pincer on macOS showing a sidebar of agents and channels, and a chat with a tool call, a code block and an inline chart."
 						widths={[800, 1400, 2000]}
 						sizes="(max-width: 1200px) 100vw, 1200px"
 						loading="eager"

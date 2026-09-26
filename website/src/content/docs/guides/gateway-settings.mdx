@@ -3,11 +3,17 @@ title: Gateway Settings
 description: View and edit your OpenClaw Gateway's configuration and plugins from Pincer.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import settings from '../../../assets/screenshots/gateway-settings.png';
+import review from '../../../assets/screenshots/review-changes.png';
+import plugins from '../../../assets/screenshots/plugins.png';
+
+
 Pincer can show and edit your gateway's configuration, so you don't have to hand-edit its config file.
 
 ## Opening Gateway Settings
 
-- **macOS:** choose **Pincer → Gateway Settings…** (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>,</kbd>), or use the gateway's menu in the sidebar. It opens in its own window.
+- **macOS:** choose **Organize → Gateway Settings…** (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>,</kbd>), or use the gateway's menu in the sidebar. It opens in its own window.
 - **iOS:** use the gateway's menu in the sidebar. It opens as a sheet.
 
 You can also open it from the Organize menu at the top of the sidebar, or from the [command palette](../command-palette-and-navigation/).
@@ -46,6 +52,8 @@ The curated pages are built from the gateway's own schema, so they match what yo
 
 **Search** in the sidebar finds any setting and jumps to it.
 
+<DocScreenshot src={settings} alt="Gateway Settings showing the Agents and Models page and editable default model, thinking level, and timeout." caption="Local mock gateway with Full Management. Pages depend on the schema your gateway provides." />
+
 ## Making changes
 
 Edits from every page except **Command Policy** go into a single draft. Command Policy has its own draft and **Save** button, because it's a separate file on the gateway.
@@ -53,12 +61,14 @@ Edits from every page except **Command Policy** go into a single draft. Command 
 For the config draft:
 
 1. Change whatever you need, across as many pages as you like. The toolbar shows how many changes aren't saved yet.
-2. Choose **Save** (<kbd>⌘</kbd> <kbd>S</kbd>). **Review Changes** lists every change.
-3. Confirm. Pincer sends them together, and the gateway validates, saves and applies them.
+2. Choose the **Unsaved** count in the toolbar to review the old and new values. Use **Show** to return to a field or **Revert** to undo that edit.
+3. Choose **Save** to send the draft. The gateway validates, saves and applies it. The toolbar’s **Save** button (<kbd>⌘</kbd> <kbd>S</kbd>) also saves directly.
 
 If a value is invalid, the gateway sends back the field and the reason. Changes that need a gateway restart say so ("Saved. Restart the Gateway to finish applying it."), and you can restart from the [Health page](../gateway-health/).
 
 If someone else changed the config on the gateway in the meantime, Pincer rebases your draft on top and asks about any setting that conflicts.
+
+<DocScreenshot src={review} alt="Unsaved Changes sheet showing Timeout seconds changing from 900 to 600, with Revert, Discard All, Close, and Save." caption="Local mock example: review the timeout change before saving the draft." narrow />
 
 ### Secrets
 
@@ -72,6 +82,8 @@ On the **Plugins** page you can:
 - **add** one from ClawHub, npm or git;
 - **remove**, **enable** and **disable** plugins;
 - fill in each plugin's settings and credentials.
+
+<DocScreenshot src={plugins} alt="Plugins page showing Browser and LanceDB Memory off, and Weather needing setup." caption="Local mock plugin states. Installing, removing, enabling, and disabling plugins takes effect immediately." />
 
 ## Raw Config
 

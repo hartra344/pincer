@@ -87,11 +87,20 @@ Pincer uses the server's slug from the gateway's Discord config when it's set. O
 ## The Quick Capture shortcut does nothing
 
 - Pincer has to be running. The shortcut stops working when you quit it.
+- Pincer isn't running after you log in: turn on **Open at Login** in **Settings → General → Launch**.
 - Check that **Quick Capture shortcut** is on in **Settings → General → Quick Capture**.
 - If Settings says the shortcut "is used by another app", another app already registered that combination. Record a different one, or change it in the other app.
 - Quick Capture is macOS only.
 
 See [Quick Capture](../../guides/quick-capture/).
+
+## Open at Login doesn't stick or says it needs approval
+
+- If Settings says to allow Pincer, click **Open Login Items Settings…** and turn Pincer on under **System Settings → General → Login Items & Extensions**. The toggle updates when you come back to Pincer.
+- If Settings says it couldn't turn Open at Login on or off, try again, or add or remove Pincer yourself in **System Settings → General → Login Items & Extensions**.
+- Open at Login is macOS only.
+
+See [Start Pincer at login](../../guides/quick-capture/#start-pincer-at-login).
 
 ## Quick Capture won't send
 
@@ -145,6 +154,16 @@ See [Shortcuts & Siri](../../guides/shortcuts-and-siri/).
 ## Images from the web don't load
 
 Check that **Load images the agent links from the web** is on in Settings. Images from the gateway itself always load.
+
+## Message search misses messages or says it's indexing
+
+- **"Indexing chats…":** after updating Pincer, the search index is built in the background from chats you already had cached, once Pincer connects. Results are shown while it works and fill in when it's done.
+- **Older messages don't show up:** search only covers cached history, up to the latest 20,000 messages of each chat, and only on the selected gateway. Chats cache in the background after connecting.
+- **Archived chats don't show up:** turn on **Show Archived** in the sidebar's Organize menu.
+- **Nothing matches:** each word has to match from its start (`tok` finds "Tokyo", `kyo` doesn't), and several words have to appear together. Thinking and tool output aren't searched; use Find in Chat's options for those.
+- **"Message search needs the transcript cache":** `PINCER_CACHE_DIR=off` is set. Search needs the cache.
+
+A damaged or outdated search index is deleted and rebuilt on its own, so you never need to clear it yourself. See [Search messages](../../guides/search/).
 
 ## "Always allow" is missing
 
