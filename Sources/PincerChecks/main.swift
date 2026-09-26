@@ -548,6 +548,54 @@ do {
           "main-chat job has no delivery")
 }
 
+print("Command palette")
+do {
+    var history = ChatHistory<String>(limit: 3)
+    check(!history.canGoBack && !history.canGoForward && history.current == nil, "history starts empty")
+    history.visit("a")
+    history.visit("a")
+    check(!history.canGoBack && history.current == "a", "revisiting the current chat isn't recorded")
+    history.visit("b")
+    history.visit("c")
+    check(history.backStack == ["a", "b"] && history.recent == ["b", "a"], "visits build the back stack; recent is newest first")
+    check(history.goBack() == "b" && history.current == "b" && history.forwardStack == ["c"], "back moves to the previous chat")
+    check(history.goBack() == "a" && !history.canGoBack && history.goBack() == nil, "back stops at the first chat")
+    check(history.goForward() == "b" && history.goForward() == "c" && !history.canGoForward, "forward retraces")
+    _ = history.goBack()
+    history.visit("d")
+    check(!history.canGoForward && history.backStack == ["a", "b"], "a new visit clears forward")
+    history.visit("e")
+    history.visit("f")
+    check(history.backStack == ["b", "d", "e"], "back stack is capped at the limit")
+    check(history.goBack(where: { $0 != "e" && $0 != "d" }) == "b" && history.current == "b" && history.forwardStack == ["f"],
+          "back skips chats that no longer exist")
+    history.visit("x")
+    history.visit("b")
+    check(history.recent == ["x"], "recent drops the current chat and duplicates (\(history.recent))")
+    history.prune { $0 != "b" }
+    check(history.current == nil && history.backStack == ["x"], "prune drops removed chats")
+
+    func item(_ title: String, keywords: [String] = []) -> PaletteItem {
+        PaletteItem(id: title, title: title, symbol: "x", keywords: keywords, section: .chats, action: .command(title))
+    }
+    check(PaletteMatcher.score("", in: "Anything") == 0, "empty query matches")
+    check(PaletteMatcher.score("xyz", in: "Japan trip") == nil, "non-matching query rejected")
+    check(PaletteMatcher.score("JAPAN", in: "Japan trip") != nil, "case-insensitive")
+    check(PaletteMatcher.score("cafe", in: "Café plans") != nil, "diacritic-insensitive")
+    check(PaletteMatcher.score("jptr", in: "Japan trip") != nil && PaletteMatcher.score("rtj", in: "Japan trip") == nil,
+          "in-order subsequence only")
+    check(PaletteMatcher.score("trip", in: "Japan trip")! > PaletteMatcher.score("jptr", in: "Japan trip")!, "substring beats subsequence")
+    check(PaletteMatcher.score("jap", in: "Japan trip")! > PaletteMatcher.score("rip", in: "Japan trip")!, "prefix beats mid-word")
+    let items = [item("Paper digest"), item("Japan trip"), item("home-lab", keywords: ["Discord"]), item("New Chat with Scout")]
+    check(PaletteMatcher.rank(items, query: "").map(\.title) == items.map(\.title), "empty query keeps order")
+    check(PaletteMatcher.rank(items, query: "trip").map(\.title) == ["Japan trip"], "filters by title")
+    check(PaletteMatcher.rank(items, query: "discord").map(\.title) == ["home-lab"], "matches keywords")
+    check(PaletteMatcher.rank(items, query: "new scout").map(\.title) == ["New Chat with Scout"], "every word must match")
+    check(PaletteMatcher.rank(items, query: "p").first?.title == "Paper digest", "best match first")
+    check(PaletteMatcher.rank([item("Scratch pad"), item("Pad")], query: "pad").map(\.title) == ["Pad", "Scratch pad"],
+          "exact title outranks a later match")
+}
+
 print("Composer drafts")
 await checkDrafts()
 
@@ -642,6 +690,8 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
+    print("Chat navigation")
+    await runNavigation()
 }
 
 print("\n\(passes) passed, \(failures) failed")
@@ -739,7 +789,97 @@ func runDemo() async {
 
     let newKey = await gateway.createSession(agentId: "research", label: "Demo check", category: "Work")
     check(newKey != nil && gateway.sessions[newKey ?? ""] != nil, "demo sessions.create")
+
+    // Command palette over the demo's chats.
+    check(gateway.pinnedChats.map(\.key) == ["agent:main:discord:channel:123"], "pinned chats (\(gateway.pinnedChats.map(\.key)))")
+    let tripKey = "agent:main:dashboard:trip"
+    await gateway.patch(tripKey, ["pinned": true])
+    let pinnedTrip = await waitFor("pin") { gateway.pinnedChats.count == 2 }
+    let sidebarOrder = gateway.sections().flatMap { $0.channels.map(\.row.key) }.filter { $0 == tripKey || $0.contains("discord") }
+    check(pinnedTrip && gateway.pinnedChats.map(\.key) == sidebarOrder, "⌘1–⌘9 follow the sidebar's order")
+    let recentTarget = Notifier.Target(gatewayId: gateway.id, sessionKey: "agent:research:dashboard:papers")
+    let chatItems = CommandPalette.chatItems(gateways: [gateway], selectedGatewayId: gateway.id, recent: [recentTarget])
+    check(chatItems.first?.action == .openChat(recentTarget), "recent chats listed first")
+    check(!chatItems.contains { $0.id.contains(":subagent:") }, "subagent runs left out")
+    check(Set(chatItems.map(\.id)).count == chatItems.count, "each chat listed once")
+    check(chatItems.first { $0.id.hasSuffix(gateway.pinnedChats[0].key) }?.shortcut == "⌘1"
+          && chatItems.first { $0.id.hasSuffix(gateway.pinnedChats[1].key) }?.shortcut == "⌘2", "pinned chats show their shortcut")
+    check(PaletteMatcher.rank(chatItems, query: "scout digest").first?.title == "Paper digest", "chats match on agent name")
+    let newChats = CommandPalette.newChatItems(gateway: gateway)
+    check(newChats.count == gateway.agents.count && newChats.contains { $0.action == .newChat(gatewayId: gateway.id, agentId: "research") },
+          "a New Chat item per agent")
+    check(CommandPalette.gatewayItems(gateways: [gateway], selectedGatewayId: gateway.id).isEmpty, "no gateway switching with one gateway")
+    if let mainRow = gateway.sessions[key] {
+        let models = CommandPalette.modelItems(gateway: gateway, row: mainRow)
+        check(models.first?.action == .setModel(nil) && models.count == (gateway.modelCatalogs["main"]?.count ?? 0) + 1,
+              "models page lists default plus the catalog")
+        check(models.first { $0.action == .setModel("openai/gpt-5.6-sol") }?.subtitle?.hasSuffix("Current") == true,
+              "models page marks the session's model")
+    }
+    await gateway.patch(tripKey, ["pinned": false])
     gateway.stop()
+}
+
+/// Back/forward and ⌘1–⌘9 through `AppModel`, across two demo Gateways.
+@MainActor
+func runNavigation() async {
+    let app = AppModel()
+    guard app.gateways.isEmpty else {
+        check(false, "navigation checks need an empty profile list (found \(app.gateways.count))")
+        return
+    }
+    defer {
+        for gateway in app.gateways { app.remove(gateway.id) }
+        UserDefaults.standard.removeObject(forKey: "pincer.selectedGateway")
+    }
+    let first = app.add(.demo(), secret: nil)
+    let ready = await waitFor("demo connection") { first.state.isConnected && !first.sessions.isEmpty }
+    check(ready, "navigation demo connected")
+    guard ready else { return }
+    func target(_ gateway: GatewayStore, _ key: String) -> Notifier.Target { Notifier.Target(gatewayId: gateway.id, sessionKey: key) }
+    let main = target(first, "agent:main:main")
+    let trip = target(first, "agent:main:dashboard:trip")
+    let papers = target(first, "agent:research:dashboard:papers")
+
+    app.open(main)
+    app.open(trip)
+    app.open(papers)
+    check(app.history.current == papers && app.canGoBack && !app.canGoForward, "opening chats records history")
+    app.goBack()
+    check(first.selectedKey == trip.sessionKey && app.history.current == trip && app.canGoForward, "Back opens the previous chat")
+    // What RootView does after the selection changes; it must not disturb the history.
+    app.updateVisible()
+    app.goBack()
+    check(first.selectedKey == main.sessionKey && !app.canGoBack, "Back again reaches the first chat")
+    app.goForward()
+    check(first.selectedKey == trip.sessionKey && app.history.forwardStack == [papers], "Forward retraces")
+    first.selectedKey = main.sessionKey
+    app.updateVisible()
+    check(!app.canGoForward && app.history.current == main, "picking a chat in the sidebar clears Forward")
+
+    app.openPinned(1)
+    check(first.selectedKey == first.pinnedChats.first?.key, "⌘1 opens the first pinned chat")
+    let beforeMissing = app.history.current
+    app.openPinned(9)
+    app.openPinned(0)
+    check(app.history.current == beforeMissing, "⌘ with no pinned chat at that number does nothing")
+
+    let second = app.add(.demo(), secret: nil)
+    let secondReady = await waitFor("second demo") { second.state.isConnected && !second.sessions.isEmpty }
+    check(secondReady && app.selectedGatewayId == second.id, "second gateway added and selected")
+    let secondTrip = target(second, "agent:main:dashboard:trip")
+    app.open(secondTrip)
+    let beforeSwitch = app.history.current
+    app.open(papers)
+    check(app.selectedGatewayId == first.id && app.history.backStack.last == beforeSwitch,
+          "switching gateways records only the opened chat")
+    app.goBack()
+    check(app.selectedGatewayId == second.id && second.selectedKey == secondTrip.sessionKey, "Back crosses gateways")
+    app.remove(second.id)
+    check(!app.history.backStack.contains { $0.gatewayId == second.id } && app.history.current?.gatewayId != second.id,
+          "removing a gateway drops its chats from history")
+    app.goBack()
+    check(app.selectedGatewayId == first.id, "Back still works after removing a gateway")
 }
 
 @MainActor

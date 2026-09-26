@@ -32,6 +32,10 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - compaction doesn't start a new chat. It shows up inline as a "Compacting context…" line while it runs, then as a divider in the same thread;
   - search, unread dots and dock badge;
   - "Next Unread Chat" (⌥⇧↓).
+- **Command palette and quick switching** (**Go** menu):
+  - ⌘K opens a palette to jump to any chat on any gateway (recently visited first), start a new chat with an agent, change the chat's model, pin or unpin it, show or hide thinking steps, switch gateways, or open Settings, Gateway Settings or Automations. Type to filter (fuzzy, so `jptr` finds "Japan trip"), use ↑/↓ to move, Return to run and Esc to go back or close;
+  - Back (⌘[) and Forward (⌘]) move through the chats you've visited, like a browser;
+  - ⌘1–⌘9 open the selected gateway's pinned chats, in sidebar order.
 - **Transcript:**
   - live streaming, with a collapsible **thinking** section and **tool cards** showing arguments and results. Choose whether to show thinking steps never, only live, or for every turn;
   - the full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer quietly caches every chat (most recently active first) and skips chats that haven't changed. Opening one shows the cached transcript at once, then fetches only what's new;
