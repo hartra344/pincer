@@ -678,6 +678,40 @@ func checkDrafts() async {
     check(folders().isEmpty, "all drafts cleared")
 }
 
+print("Context usage")
+do {
+    let fresh = SessionRow(json(#"{"key":"k","totalTokens":172000,"totalTokensFresh":true,"inputTokens":1200,"outputTokens":340,"contextTokens":200000}"#))!
+    let usage = ContextUsage(row: fresh)
+    check(usage == ContextUsage(used: 172_000, limit: 200_000) && usage?.level == .warning && usage?.percent == 86,
+          "usage from row (\(String(describing: usage)))")
+    check(usage?.summary == "172k / 200k" && usage?.percentLabel == "86%" && usage?.remaining == 28_000, "usage labels")
+    check(fresh.inputTokens == 1200 && fresh.outputTokens == 340, "last run in/out tokens")
+    let stale = SessionRow(json(#"{"key":"k","totalTokens":198000,"totalTokensFresh":false,"contextTokens":200000}"#))!
+    check(ContextUsage(row: stale)?.level == .normal && ContextUsage(row: stale)?.summary == "~198k / 200k",
+          "stale totals are approximate and never warn")
+    let budget = SessionRow(json(#"{"key":"k","totalTokens":150000,"contextTokens":200000,"contextBudgetStatus":{"promptBudgetBeforeReserve":160000}}"#))!
+    let budgetUsage = ContextUsage(row: budget)
+    check(budgetUsage?.limit == 160_000 && budgetUsage?.isPromptBudget == true && budgetUsage?.level == .warning,
+          "prompt budget preferred over the window")
+    let noLimit = SessionRow(json(#"{"key":"k","totalTokens":12000,"contextTokens":0}"#))!
+    check(ContextUsage(row: noLimit) == nil && ContextUsage(row: noLimit, fallbackLimit: 128_000)?.limit == 128_000,
+          "fallback limit when the row has none")
+    check(ContextUsage(row: SessionRow(json(#"{"key":"k","contextTokens":200000}"#))!) == nil && ContextUsage(row: nil) == nil,
+          "no snapshot, no meter")
+    check(ContextUsage(used: 169_999, limit: 200_000).level == .normal && ContextUsage(used: 170_000, limit: 200_000).level == .warning
+          && ContextUsage(used: 190_000, limit: 200_000).level == .critical, "warning at 85%, critical at 95%")
+    check(ContextUsage(used: 260_000, limit: 200_000).percent == 100 && ContextUsage(used: 260_000, limit: 200_000).remaining == 0,
+          "overflow clamps")
+    check([950, 12_300, 40_000, 99_960, 172_400, 999_700, 1_260_000].map(TokenCount.format)
+          == ["950", "12.3k", "40k", "100k", "172k", "1M", "1.3M"], "token formatting")
+    check(ModelChoice(json(#"{"id":"a","provider":"p","contextWindow":1000000,"contextTokens":200000}"#))?.contextTokens == 200_000
+          && ModelChoice(json(#"{"id":"a","provider":"p","contextWindow":1000000}"#))?.contextTokens == 1_000_000
+          && ModelChoice(json(#"{"id":"a","provider":"p"}"#))?.contextTokens == nil, "model context cap prefers contextTokens")
+    check(CompactionState.finished(before: 172_000, after: 31_000).message == "Compacted 172k → 31k tokens."
+          && CompactionState.finished(before: nil, after: 31_000).message == "Compacted to 31k tokens."
+          && CompactionState.running(before: 1).isRunning && !CompactionState.skipped("x").isRunning, "compaction messages")
+}
+
 // MARK: Live
 
 let arguments = CommandLine.arguments
@@ -786,6 +820,21 @@ func runDemo() async {
         chat.progressCard?.isComplete == true && !chat.isRunning
     }
     check(demoPlanned, "demo progress card walks its plan")
+
+    let demoUsage = gateway.contextUsage(for: key)
+    check(demoUsage != nil && demoUsage!.used >= 172_000 && demoUsage!.limit == 200_000, "demo context meter (\(demoUsage?.summary ?? "none"))")
+    check(!gateway.canCompactDirectly, "demo compacts through /compact")
+    await chat.compact()
+    let demoCompacted = await waitFor("demo compaction", timeout: 20) {
+        if case .finished = chat.compaction { return !chat.isRunning }
+        return false
+    }
+    if case let .finished(before?, after?) = chat.compaction {
+        check(demoCompacted && after < before && gateway.contextUsage(for: key)?.used == after,
+              "demo compaction \(chat.compaction?.message ?? "")")
+    } else {
+        check(false, "demo compaction finished (\(String(describing: chat.compaction)))")
+    }
 
     let newKey = await gateway.createSession(agentId: "research", label: "Demo check", category: "Work")
     check(newKey != nil && gateway.sessions[newKey ?? ""] != nil, "demo sessions.create")
@@ -1208,6 +1257,37 @@ func runLive(url: String, token: String) async {
     let readOnly = await settings.save()
     check(!readOnly && settings.saveState.error?.contains("Full Management") == true && settings.hasChanges, "writes need admin access, draft kept")
     settings.discardChanges()
+
+    // Context meter: row snapshot vs limits, and "Compact now" through `/compact` without admin.
+    let papersUsage = gateway.contextUsage(for: "agent:research:dashboard:papers")
+    check(papersUsage == ContextUsage(used: 96_000, limit: 200_000) && papersUsage?.level == .normal,
+          "context usage from the session row (\(papersUsage?.summary ?? "none"))")
+    check(gateway.contextUsage(for: "agent:coder:main")?.level == .critical, "nearly full session is critical")
+    let researchKey = "agent:research:main"
+    check(gateway.defaultContextTokens == 128_000 && gateway.contextUsage(for: researchKey)?.limit == 128_000,
+          "sessions.list defaults.contextTokens before the catalog loads")
+    check(gateway.needsModelCatalogForContext(researchKey) || gateway.modelCatalogs["research"] != nil, "catalog needed for the limit")
+    await gateway.loadModels(agentId: "research")
+    check(!gateway.needsModelCatalogForContext(researchKey) && gateway.contextUsage(for: researchKey)?.limit == 200_000,
+          "models.list includeDetails contextTokens used as the limit (\(gateway.contextUsage(for: researchKey)?.summary ?? "none"))")
+    check(!gateway.canCompactDirectly, "sessions.compact needs admin")
+    let coder = gateway.chat(for: "agent:coder:main")
+    await coder.load()
+    await coder.compact(instructions: "keep the build notes")
+    check(coder.compaction?.isRunning == true || coder.compaction != nil, "compaction started")
+    let coderCompacted = await waitFor("/compact", timeout: 20) {
+        if case .finished = coder.compaction { return !coder.isRunning }
+        return false
+    }
+    check(coderCompacted && coder.compaction == .finished(before: 190_000, after: 34_200),
+          "/compact with instructions reports before → after (\(String(describing: coder.compaction)))")
+    check(gateway.contextUsage(for: "agent:coder:main")?.used == 34_200, "meter drops after compaction")
+    let sawMarker = await waitFor("compaction marker") {
+        coder.items.contains { $0.markerKind == "compaction" }
+    }
+    check(sawMarker, "compaction marker in the transcript")
+    coder.clearCompaction()
+    check(coder.compaction == nil, "result cleared when the popover closes")
     gateway.stop()
 
     let adminProfile = GatewayProfile(id: profile.id, name: "Mock", url: url, authMode: .token, access: .admin)
@@ -1351,6 +1431,21 @@ func runLive(url: String, token: String) async {
     let missing = await adminSettings.install(from: .npm, spec: "missing-package")
     check(!missing && adminSettings.operation(for: GatewaySettingsModel.installKey).error?.contains("not found") == true,
           "install errors surface")
+    check(admin.canCompactDirectly, "admin compacts through sessions.compact")
+    let papers = admin.chat(for: "agent:research:dashboard:papers")
+    await papers.load()
+    await papers.compact()
+    check(papers.compaction == .finished(before: 96_000, after: 17_280),
+          "sessions.compact reports tokensBefore → tokensAfter (\(String(describing: papers.compaction)))")
+    let papersDropped = await waitFor("papers row") { admin.contextUsage(for: "agent:research:dashboard:papers")?.used == 17_280 }
+    check(papersDropped, "session row updated after sessions.compact")
+    await papers.compact()
+    await papers.compact()
+    if case let .skipped(reason) = papers.compaction {
+        check(reason.contains("Nothing to compact"), "nothing left to compact is reported, not an error")
+    } else {
+        check(false, "nothing left to compact (\(String(describing: papers.compaction)))")
+    }
     admin.stop()
 
     for store in [gateway, other] {

@@ -84,6 +84,24 @@ public struct SessionRow: Identifiable, Hashable, Sendable {
     public var reasoningLevel: String? { self.raw["reasoningLevel"]?.text }
     public var thinkingLevel: String? { self.raw["thinkingLevel"]?.text }
 
+    // Token accounting. `totalTokens` is the context snapshot; input/output are the latest run's.
+    public var totalTokens: Int? { Self.tokens(self.raw["totalTokens"]) }
+    /// `false` when `totalTokens` predates the latest run.
+    public var totalTokensFresh: Bool { self.raw["totalTokensFresh"]?.bool ?? true }
+    public var inputTokens: Int? { Self.tokens(self.raw["inputTokens"]) }
+    public var outputTokens: Int? { Self.tokens(self.raw["outputTokens"]) }
+    /// The session's effective context window.
+    public var contextTokens: Int? { Self.tokens(self.raw["contextTokens"]).flatMap { $0 > 0 ? $0 : nil } }
+    /// Prompt budget before the reply reserve, measured before the last prompt (`contextBudgetStatus`).
+    public var promptBudgetTokens: Int? {
+        Self.tokens(self.raw["contextBudgetStatus"]?["promptBudgetBeforeReserve"]).flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    private static func tokens(_ value: JSONValue?) -> Int? {
+        guard let count = value?.int, count >= 0 else { return nil }
+        return count
+    }
+
     /// Agent-spawned helper runs (as opposed to chats a person branched off another chat).
     public var isSubagent: Bool { self.key.contains(":subagent:") }
     public var isAutomation: Bool { self.key.contains(":cron:") && !self.isSubagent }
@@ -236,6 +254,8 @@ public struct ModelChoice: Identifiable, Hashable, Sendable {
     /// `false` when the provider is missing auth or cooling down.
     public let isAvailable: Bool
     public let manualSelectionAllowed: Bool
+    /// Effective context cap (`contextTokens`, sent with `includeDetails`), else the model's window.
+    public let contextTokens: Int?
 
     public init?(_ json: JSONValue) {
         guard let id = json["id"]?.text, let provider = json["provider"]?.text else { return nil }
@@ -245,6 +265,7 @@ public struct ModelChoice: Identifiable, Hashable, Sendable {
         self.alias = json["alias"]?.text
         self.isAvailable = json["available"]?.bool ?? true
         self.manualSelectionAllowed = json["manualSelectionAllowed"]?.bool ?? true
+        self.contextTokens = [json["contextTokens"]?.int, json["contextWindow"]?.int].lazy.compactMap { $0 }.first { $0 > 0 }
     }
 
     /// `provider/id`, the value `sessions.patch { model }` takes.
