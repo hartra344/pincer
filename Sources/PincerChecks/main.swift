@@ -1851,16 +1851,16 @@ func runNavigation() async {
 /// Quick Capture's target list and send flow through `AppModel` and the demo Gateway.
 @MainActor
 func runQuickCaptureDemo() async {
-    let app = AppModel()
+    // A scratch suite, so concurrent runs and the real app's profiles don't leak in.
+    let (defaults, suite) = scratchDefaults()
+    let app = AppModel(defaults: defaults)
+    defer {
+        for gateway in app.gateways { app.remove(gateway.id) }
+        UserDefaults.standard.removePersistentDomain(forName: suite)
+    }
     guard app.gateways.isEmpty else {
         check(false, "Quick Capture checks need an empty profile list (found \(app.gateways.count))")
         return
-    }
-    let (defaults, suite) = scratchDefaults()
-    defer {
-        for gateway in app.gateways { app.remove(gateway.id) }
-        UserDefaults.standard.removeObject(forKey: "pincer.selectedGateway")
-        UserDefaults.standard.removePersistentDomain(forName: suite)
     }
     let gateway = app.add(.demo(), secret: nil)
     let ready = await waitFor("demo connection") { gateway.state.isConnected && !gateway.sessions.isEmpty }
@@ -1989,16 +1989,16 @@ func runQuickCaptureDemo() async {
 /// The mock refuses a `chat.send` whose text has `[mock:fail-send]` and drops the connection on `[mock:drop]`.
 @MainActor
 func runQuickCaptureLive(url: String, token: String) async {
-    let app = AppModel()
+    // A scratch suite, so concurrent runs and the real app's profiles don't leak in.
+    let (defaults, suite) = scratchDefaults()
+    let app = AppModel(defaults: defaults)
+    defer {
+        for gateway in app.gateways { app.remove(gateway.id) }
+        UserDefaults.standard.removePersistentDomain(forName: suite)
+    }
     guard app.gateways.isEmpty else {
         check(false, "Quick Capture live checks need an empty profile list (found \(app.gateways.count))")
         return
-    }
-    let (defaults, suite) = scratchDefaults()
-    defer {
-        for gateway in app.gateways { app.remove(gateway.id) }
-        UserDefaults.standard.removeObject(forKey: AppModel.selectedGatewayKey)
-        UserDefaults.standard.removePersistentDomain(forName: suite)
     }
     let home = app.add(GatewayProfile(name: "Mock home", url: url, authMode: .token), secret: token)
     let work = app.add(GatewayProfile(name: "Mock work", url: url, authMode: .token), secret: token)
