@@ -53,6 +53,7 @@ On iOS, Pincer is suspended in the background, so `approve later` can't reach yo
 - Typing `/` in the composer to see [slash commands](../../guides/composer/#slash-commands).
 - **Thinking Steps** in the chat's ⋯ menu, to choose how much of the agent's work you see.
 - **Settings → Appearance**, to try a different [theme](../../guides/appearance/).
+- **Gateway Settings → Pairing Requests:** review and approve or dismiss the sample people waiting to message your agents on Telegram and Discord.
 
 See [Keyboard shortcuts](../../reference/keyboard-shortcuts/) for the rest.
 

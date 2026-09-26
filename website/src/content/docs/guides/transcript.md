@@ -39,6 +39,36 @@ How much of the agent's thinking steps (reasoning and tool calls) you see is a s
 
 Each tool call is shown as a card with its arguments and result. When a tool call starts a helper (subagent) run, the card has an **Open run** button that takes you to it.
 
+## Find in Chat
+
+To search the chat you're reading, press <kbd>⌘</kbd> <kbd>F</kbd>, or choose **Find in Chat** from the chat's ⋯ menu. On macOS it's also in the **Edit** menu as **Find in Chat…**.
+
+A find bar appears at the top of the chat. As you type, Pincer highlights every match, draws the current one in solid yellow, and scrolls to it. The bar shows where you are, such as "3 of 12", or "No results".
+
+| Action | Keys |
+| --- | --- |
+| Find in Chat | <kbd>⌘</kbd> <kbd>F</kbd> |
+| Next match | <kbd>⌘</kbd> <kbd>G</kbd> or <kbd>Return</kbd> |
+| Previous match | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>G</kbd> |
+| Close | <kbd>Esc</kbd> or **Done** |
+
+The **Previous** and **Next** buttons in the bar do the same. Moving past the last match wraps to the first. <kbd>⌘</kbd> <kbd>G</kbd> opens the bar if it's closed. On iOS, the keys work with a hardware keyboard.
+
+A few things to know:
+
+- Case and accents don't matter.
+- Pincer searches the text as you see it, not the Markdown behind it. Link addresses aren't searched, and a phrase that runs across bold or italic text still matches.
+- New messages arriving don't move you off the match you're on.
+
+### Search options
+
+The options menu in the bar has two toggles:
+
+- **Include Thinking** also searches the agent's reasoning. It's greyed out when the chat's **Gateway Reasoning** is **Off**.
+- **Include Tool Output** also searches tool cards' arguments and results, up to the first 20,000 characters of each, the same as the card shows.
+
+When a match is inside folded thinking or a tool card, it opens when you get to it. The options are remembered on this device.
+
 ## Images
 
 Pincer shows images inline, with a Quick Look-style preview and sharing. This covers:
