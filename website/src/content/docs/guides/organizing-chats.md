@@ -16,6 +16,18 @@ Pick a layout from the menu at the top of the sidebar:
 | **By group** | One section per group you've made. |
 | **Recent** | One list, most recently active first. |
 
+### The Organize menu
+
+This menu, called **Organize**, also has:
+
+- **Show Archived**, to list archived chats;
+- **New Group…**, in *By group* and *By server*;
+- **Automations…**;
+- **Approval History…**, to see [past approval decisions](../gateway-settings/#approval-history);
+- **Gateway Settings…** (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>,</kbd>);
+- **Edit Connection…**, which opens the **Connection** page of Gateway Settings;
+- **Reconnect**.
+
 ### Discord server names
 
 Server names come from your gateway's Discord config (`channels.discord.guilds.<id>.slug`) when it's set. Otherwise the section is just called **Discord**.
@@ -66,8 +78,15 @@ If you'd rather see them, **Settings → Sidebar** can list them under their par
 
 When a chat's context is compacted, it stays the same chat. You'll see a "Compacting context…" line while it runs, then a divider in the same thread.
 
+To see how full the context is, or to compact it yourself, use the [context meter](../composer/#context-meter) next to **Send**.
+
 ## Finding your way
 
 - **Search** at the top of the sidebar filters chats by name. While you type, a **Search messages for “…”** row above the chat list searches the text of every cached chat instead. See [Search messages](../search/).
 - **Unread dots** and the **Dock badge** show what's new.
 - **Next Unread Chat** (<kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>↓</kbd>) jumps to the next chat with unread messages.
+- The **command palette** (<kbd>⌘</kbd> <kbd>K</kbd>) finds any chat on any gateway by typing a few letters.
+- **Back** (<kbd>⌘</kbd> <kbd>[</kbd>) and **Forward** (<kbd>⌘</kbd> <kbd>]</kbd>) retrace the chats you've visited.
+- <kbd>⌘</kbd> <kbd>1</kbd> to <kbd>⌘</kbd> <kbd>9</kbd> open your first nine pinned chats.
+
+See [Command palette & navigation](../command-palette-and-navigation/).

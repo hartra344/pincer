@@ -1,0 +1,141 @@
+---
+title: Push notifications (iOS)
+description: Get notified on iPhone and iPad while Pincer is closed, through a self-hosted push relay.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+On iOS, Pincer can only post notifications while it's running and connected. To get notified about finished replies and approvals while it's closed, you need a **push relay**.
+
+On macOS you don't need any of this. Mac notifications arrive while Pincer is running and connected, and the **Push relay** setting only exists on iOS.
+
+## Why a relay
+
+iOS gives a suspended app no network, so Pincer can't keep its connection to the gateway open. Only Apple's push service (APNs) can wake it, and only a server holding the APNs key of the team that signed the app can send those pushes.
+
+Your gateway sends notifications as standard Web Push instead. The relay is a small server that turns one into the other:
+
+```text
+Gateway ──Web Push (encrypted)──▶ relay ──APNs──▶ iPhone ──▶ Pincer decrypts it
+```
+
+The gateway pushes when a reply finishes, an exec approval is waiting, an agent asks a question, or a task fails.
+
+<Aside type="caution" title="There's no public relay">
+Pincer doesn't come with a relay, and there's no shared one. Pushes have to be signed with the APNs key of the Apple Developer team that signed **your** copy of Pincer.
+
+- **If you build Pincer yourself,** use your own team's key, and set `APNS_TOPICS` to your app's bundle id (the default is `chat.pincer.ios`).
+- **If you use a TestFlight build,** the key belongs to the maintainer's team, so you can't create it yourself. [Ask on GitHub](https://github.com/hartra344/pincer/issues) how to get a relay for TestFlight builds.
+</Aside>
+
+## What the relay and Apple can see
+
+- **Not the content.** Each notification is end-to-end encrypted (RFC 8291) to a key that exists only on your device. A notification service extension decrypts it on the phone, so neither the relay nor Apple can read it.
+- **Not much, even decrypted.** The gateway sends only a generic title, such as "OpenClaw agent finished", and which chat or approval it's about. It never sends message content. Pincer loads the content when you open the notification.
+- **Not your device token.** The relay seals the APNs token into an opaque id, so the gateway never sees it.
+- **Nothing stored.** The relay keeps no database.
+
+The encryption keys are separate for each gateway and stored in the Keychain as *this device only*. Removing a gateway from Pincer unsubscribes it and deletes its keys.
+
+## Set up the relay
+
+The relay is a Node server with no dependencies. The easiest place to run it is the gateway machine. You'll need:
+
+- Node.js 20 or newer;
+- Tailscale on that machine, for HTTPS;
+- access to the Apple Developer account that signs your copy of Pincer.
+
+<Steps>
+1. **Create an APNs key.** At [developer.apple.com → Keys](https://developer.apple.com/account/resources/authkeys/list), click **+**:
+
+   - Key Name: `Pincer Push Relay`;
+   - enable **Apple Push Notifications service (APNs)**, then **Configure**;
+   - Environment: **Sandbox & Production**;
+   - Key restriction: **Team Scoped (All Topics)**, or Topic Specific with `chat.pincer.ios`.
+
+   Download `AuthKey_XXXXXXXXXX.p8`. You can only download it once, so keep a copy. Note the **Key ID** and your **Team ID**.
+
+2. **Install the relay.** On the gateway machine, from a checkout of the Pincer repo:
+
+   ```sh
+   cd push-relay
+   cp ~/Downloads/AuthKey_XXXXXXXXXX.p8 AuthKey.p8
+   ./install-service.sh
+   ```
+
+   The first run creates `.env` with a random `RELAY_SECRET`. Set `APNS_KEY_ID` and `APNS_TEAM_ID` in it, then run `./install-service.sh` again. It installs a launchd service on macOS, or a systemd `--user` service on Linux, and checks that the relay answers on `http://127.0.0.1:8787`.
+
+3. **Publish it over HTTPS:**
+
+   ```sh
+   ./install-service.sh --serve
+   # or by hand:
+   tailscale serve --bg --https=8443 http://127.0.0.1:8787
+   ```
+
+   The URL looks like `https://gateway-host.your-tailnet.ts.net:8443`. If `tailscale serve` complains about HTTPS, turn on **MagicDNS** and **HTTPS Certificates** in the Tailscale admin console. The relay has to be reachable from both your iPhone and the gateway.
+
+4. **Turn it on in Pincer.** See the next section.
+</Steps>
+
+Other HTTPS front ends, such as Caddy or a Cloudflare Tunnel, work too. The [push relay README](https://github.com/hartra344/pincer/blob/main/push-relay/README.md) has every option.
+
+## Turn it on in Pincer
+
+On your iPhone or iPad:
+
+1. Go to **Settings → Notifications**.
+2. Keep **Notify about replies and approvals** on, and allow notifications when iOS asks.
+3. Enter the relay's URL under **Push relay**, then tap return.
+
+Each gateway gets a row with its push status. It should show **Push on** within a few seconds.
+
+To test it, send a message, then close Pincer from the app switcher before the reply finishes. You should get an "OpenClaw agent finished" notification that opens the chat.
+
+The relay URL has to start with `https://`. Plain `http://` only works for `localhost`, `127.0.0.1` and `::1`. Turning off **Notify about replies and approvals** also turns push off.
+
+## Status
+
+| Status | What it means |
+| --- | --- |
+| **Push on** | Subscribed. The gateway pushes through the relay. |
+| **Waiting for APNs** | iOS hasn't given Pincer a device token yet. Check that notifications are allowed for Pincer in iOS Settings. |
+| **Relay must be https://** | The URL isn't `https://`. |
+| **Gateway has no Web Push** | The gateway doesn't support `push.web.subscribe`. Update OpenClaw. |
+| **Push off** | Notifications are off, or there's no relay URL yet. |
+| **Not connected** | Pincer subscribes each time it connects. Open the gateway. |
+| Anything else | An error, such as "Push relay refused registration (…)". Usually the phone can't reach the relay. |
+
+To check the relay from your phone, open `https://…:8443/healthz` in Safari. It should show `{"ok":true}`.
+
+## Approving from a push
+
+Approval pushes have the same actions as Pincer's own notifications: **Allow once**, **Always allow** and **Deny**. A push doesn't know whether **Always allow** is permitted, so it always offers it. If it isn't, you get a follow-up saying "Always allow isn't available for this command." with **Allow once** and **Deny**. See [Answering from a notification](../approvals-and-notifications/#answering-from-a-notification).
+
+If a push can't be decrypted, for example because you removed the gateway, iOS shows a generic "New notification" alert instead.
+
+## No double alerts
+
+Once push is working for a gateway, you won't get the same notification twice:
+
+- while Pincer is in the background, it stops posting its own notifications for that gateway and leaves it to push;
+- while Pincer is open and connected to that gateway, pushes from it are hidden.
+
+## Managing the relay
+
+```sh
+./install-service.sh --print        # show the service definition
+./install-service.sh                # reinstall after editing .env or upgrading Node
+./install-service.sh --uninstall
+```
+
+On Linux, run `sudo loginctl enable-linger $USER` so the relay keeps running while you're logged out.
+
+Logs are in `~/Library/Logs/pincer-push-relay.log` on macOS, or `journalctl --user -u pincer-push-relay` on Linux. The relay logs one line per push:
+
+- `InvalidProviderToken` or `403`: the Key ID, Team ID or `.p8` don't match, or the key doesn't allow this environment or bundle id.
+- `BadDeviceToken`: the token is stale. Reopen Pincer.
+- `DeviceTokenNotForTopic`: the key is Topic Specific for a different bundle id.
+- No `push` lines at all: the gateway can't reach the relay.
+
+More fixes are in [Troubleshooting](../../reference/troubleshooting/#no-notifications-while-pincer-is-closed-on-ios).
