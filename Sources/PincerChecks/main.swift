@@ -6,6 +6,7 @@ import Network
 import PincerKit
 import PincerPush
 import UniformTypeIdentifiers
+import UserNotifications
 
 // Self-checks that run without XCTest (unavailable with Command Line Tools only).
 //   swift run PincerChecks                  → unit checks
@@ -248,6 +249,162 @@ check(roundTrip?.modelRef == "anthropic/claude-opus-4-8", "model survives the tr
 print("Exec approvals")
 let approval = ExecApproval(json(#"{"id":"ap1","request":{"command":"rm -rf build","cwd":"/p","sessionKey":"agent:main:main"},"expiresAtMs":1}"#))
 check(approval?.id == "ap1" && approval?.command == "rm -rf build" && approval?.cwd == "/p", "approval payload")
+check(approval?.allowedDecisions == nil && approval?.allowsAlways == true && approval.map(Notifier.category(for:)) == "approval",
+      "no allowedDecisions (older gateway) → all three actions")
+check(approval?.isExpired() == true && approval?.isExpired(at: Date(timeIntervalSince1970: 0)) == false, "expiresAtMs past → expired")
+let onceOnlyApproval = ExecApproval(json(#"{"id":"ap2","request":{"command":"x","allowedDecisions":["allow-once","deny"]},"expiresAtMs":4102444800000}"#))
+check(onceOnlyApproval?.allowedDecisions == ["allow-once", "deny"] && onceOnlyApproval?.allowsAlways == false
+      && onceOnlyApproval.map(Notifier.category(for:)) == "approval-once" && onceOnlyApproval?.isExpired() == false,
+      "allowedDecisions without allow-always → approval-once")
+let alwaysApproval = ExecApproval(json(#"{"id":"ap3","request":{"command":"x","allowedDecisions":["allow-once","allow-always","deny"]}}"#))
+check(alwaysApproval?.allowsAlways == true && alwaysApproval.map(Notifier.category(for:)) == "approval"
+      && alwaysApproval?.isExpired() == false, "allowedDecisions with allow-always → approval, no expiry")
+
+print("Approval notification actions")
+do {
+    let categories = Dictionary(uniqueKeysWithValues: Notifier.categories().map { ($0.identifier, $0) })
+    check(Set(categories.keys) == ["reply", "approval", "approval-once", "approval-push"], "registered categories")
+    check(categories["approval"]?.actions.map(\.identifier) == ["approve-once", "approve-always", "deny"]
+          && categories["approval"]?.actions.map(\.title) == ["Allow once", "Always allow", "Deny"],
+          "approval: Allow once, Always allow, Deny in order")
+    check(categories["approval-push"]?.actions.map(\.identifier) == ["approve-once", "approve-always", "deny"],
+          "legacy approval-push keeps the same actions")
+    check(categories["approval-once"]?.actions.map(\.identifier) == ["approve-once", "deny"], "approval-once has no Always allow")
+    check(categories["reply"]?.actions.isEmpty == true, "reply has no actions")
+    let approvalActions = Notifier.approvalCategories.flatMap { categories[$0]?.actions ?? [] }
+    check(approvalActions.count == 8 && approvalActions.allSatisfy { !$0.options.contains(.foreground) }, "no approval action opens the app")
+    check(approvalActions.filter { $0.identifier != "deny" }.allSatisfy { $0.options.contains(.authenticationRequired) }, "Allow actions need unlocking")
+    check(approvalActions.filter { $0.identifier == "deny" }.allSatisfy { !$0.options.contains(.authenticationRequired) && $0.options.contains(.destructive) },
+          "Deny is destructive and works locked")
+    check(Notifier.approvalCategories == ["approval", "approval-once", "approval-push"], "approval categories")
+
+    check(Notifier.approvalDecision(for: "approve-once") == "allow-once" && Notifier.approvalDecision(for: "approve-always") == "allow-always"
+          && Notifier.approvalDecision(for: "deny") == "deny", "action → decision")
+    check([UNNotificationDefaultActionIdentifier, UNNotificationDismissActionIdentifier, "allow-once", "open", ""]
+          .allSatisfy { Notifier.approvalDecision(for: $0) == nil }, "tap, dismiss and unknown actions decide nothing")
+
+    let gw = UUID()
+    let info: [AnyHashable: Any] = ["gateway": gw.uuidString, "approval": "a1", "session": "agent:main:main"]
+    for (action, decision) in [("approve-once", "allow-once"), ("approve-always", "allow-always"), ("deny", "deny")] {
+        check(Notifier.interpret(actionIdentifier: action, categoryIdentifier: "approval", userInfo: info)
+              == .resolve(gatewayId: gw, approvalId: "a1", decision: decision), "\(action) resolves on its own gateway")
+    }
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval-push", userInfo: info)
+          == .resolve(gatewayId: gw, approvalId: "a1", decision: "deny")
+          && Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval-once", userInfo: info)
+          == .resolve(gatewayId: gw, approvalId: "a1", decision: "allow-once"), "legacy and once-only categories resolve")
+    check(Notifier.interpret(actionIdentifier: UNNotificationDefaultActionIdentifier, categoryIdentifier: "approval", userInfo: info)
+          == .open(Notifier.Target(gatewayId: gw, sessionKey: "agent:main:main")), "plain tap opens the chat")
+    check(Notifier.interpret(actionIdentifier: UNNotificationDismissActionIdentifier, categoryIdentifier: "approval", userInfo: info) == .none,
+          "dismiss sends nothing")
+    check(Notifier.interpret(actionIdentifier: "bogus", categoryIdentifier: "approval", userInfo: info) == .none, "unknown action does nothing")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "reply", userInfo: info) == .none,
+          "approval action on a reply notification is dropped")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval", userInfo: ["approval": "a1"]) == .none,
+          "missing gateway → nothing sent")
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval", userInfo: ["gateway": "not-a-uuid", "approval": "a1"]) == .none,
+          "invalid gateway → nothing sent")
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval", userInfo: ["gateway": gw.uuidString]) == .none
+          && Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval", userInfo: ["gateway": gw.uuidString, "approval": ""]) == .none,
+          "missing approval id → nothing sent")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval",
+                             userInfo: ["pincer": ["g": gw.uuidString, "p": "sealed"]]) == .open(Notifier.Target(gatewayId: gw, sessionKey: "")),
+          "undecrypted push (only pincer.g) never resolves, opens its gateway")
+    check(Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: "approval",
+                             userInfo: ["gateway": gw.uuidString.lowercased(), "approval": "a1"])
+          == .resolve(gatewayId: gw, approvalId: "a1", decision: "deny"), "lowercase gateway UUID → same gateway")
+}
+
+print("Approval outcomes")
+do {
+    func rpc(_ code: String, _ message: String, _ details: JSONValue? = nil) -> Error {
+        GatewayError.rpc(code: code, message: message, details: details)
+    }
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval expired or not found", ["reason": "APPROVAL_NOT_FOUND"])) == .expired,
+          "APPROVAL_NOT_FOUND → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "something", ["reason": "APPROVAL_NOT_FOUND"])) == .expired, "reason alone → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "unknown or expired approval id")) == .expired, "legacy message → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval expired or not found")) == .expired, "message without details → expired")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval already resolved", ["reason": "APPROVAL_ALREADY_RESOLVED"]))
+          == .answeredElsewhere(decision: nil), "APPROVAL_ALREADY_RESOLVED → answered elsewhere")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval already resolved")) == .answeredElsewhere(decision: nil),
+          "already-resolved message → answered elsewhere")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "approval already resolved", ["reason": "APPROVAL_ALREADY_RESOLVED", "decision": "deny"]))
+          == .answeredElsewhere(decision: "deny"), "decision carried when the Gateway sends it")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "allow-always is unavailable for this command", ["reason": "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE"]))
+          == .allowAlwaysUnavailable, "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE → still pending")
+    check([GatewayError.timeout("exec.approval.resolve"), .notConnected, .closed("gone")].allSatisfy { ApprovalOutcome.classify($0) == .unreachable }
+          && ApprovalOutcome.classify(rpc("UNAVAILABLE", "gateway restarting")) == .unreachable,
+          "timeout, not connected, closed, UNAVAILABLE → unreachable")
+    check(ApprovalOutcome.classify(rpc("FORBIDDEN", "nope")) == .notPermitted
+          && ApprovalOutcome.classify(rpc("INVALID_REQUEST", "missing scope: operator.approvals")) == .notPermitted,
+          "FORBIDDEN or missing scope → not permitted")
+    check(ApprovalOutcome.classify(rpc("INVALID_REQUEST", "invalid decision")) == .failed("invalid decision"), "other error keeps its message")
+
+    let removing: [ApprovalOutcome] = [.resolved, .expired, .answeredElsewhere(decision: nil)]
+    let keeping: [ApprovalOutcome] = [.alreadyHandled, .allowAlwaysUnavailable, .unreachable, .notPermitted, .unknownGateway, .failed("x")]
+    check(removing.allSatisfy(\.removesApproval) && !keeping.contains(where: \.removesApproval), "which outcomes remove the approval")
+
+    let name = "Home Lab"
+    check(ApprovalOutcome.resolved.followUpBody(gatewayName: name) == nil && ApprovalOutcome.alreadyHandled.followUpBody(gatewayName: name) == nil,
+          "no follow-up on success or a duplicate")
+    check(ApprovalOutcome.expired.followUpBody(gatewayName: name) == "That approval expired. Nothing was run.", "expired copy")
+    check(ApprovalOutcome.answeredElsewhere(decision: nil).followUpBody(gatewayName: name) == "Already answered elsewhere."
+          && ApprovalOutcome.answeredElsewhere(decision: "deny").followUpBody(gatewayName: name) == "Already denied elsewhere.",
+          "answered elsewhere copy")
+    check(ApprovalOutcome.allowAlwaysUnavailable.followUpBody(gatewayName: name) == "Always allow isn't available for this command.",
+          "allow-always unavailable copy")
+    check(ApprovalOutcome.unreachable.followUpBody(gatewayName: name) == "Couldn't reach Home Lab — the command is still waiting.",
+          "unreachable copy names the gateway")
+    check(ApprovalOutcome.notPermitted.followUpBody(gatewayName: name) == "This device can't approve commands on Home Lab. Open Pincer for details.",
+          "not permitted copy names the gateway")
+    check(ApprovalOutcome.unknownGateway.followUpBody(gatewayName: nil) == "This gateway is no longer in Pincer.", "unknown gateway copy")
+    check(ApprovalOutcome.failed("boom").followUpBody(gatewayName: name) == "boom"
+          && (ApprovalOutcome.failed(String(repeating: "x", count: 500)).followUpBody(gatewayName: name)?.count ?? 0) <= 220,
+          "other errors show the clipped message")
+
+    check(ApprovalOutcome.allowAlwaysUnavailable.followUpCategory(original: "approval") == "approval-once", "still pending: Allow once and Deny")
+    check(ApprovalOutcome.unreachable.followUpCategory(original: "approval") == "approval"
+          && ApprovalOutcome.unreachable.followUpCategory(original: "approval-push") == "approval"
+          && ApprovalOutcome.unreachable.followUpCategory(original: "approval-once") == "approval-once", "unreachable keeps the actions")
+    check([ApprovalOutcome.expired, .answeredElsewhere(decision: nil), .notPermitted, .unknownGateway, .failed("x")]
+          .allSatisfy { $0.followUpCategory(original: "approval") == "reply" }, "final outcomes have no actions")
+    check(ApprovalOutcome.resolved.inAppMessage(gatewayName: name) == nil && ApprovalOutcome.expired.inAppMessage(gatewayName: name) == nil
+          && ApprovalOutcome.unreachable.inAppMessage(gatewayName: name)?.contains("Home Lab") == true, "in-app messages")
+
+    let gw = UUID()
+    let command = "rm -rf ./build"
+    let all: [ApprovalOutcome] = [.expired, .answeredElsewhere(decision: "allow-once"), .allowAlwaysUnavailable, .unreachable, .notPermitted, .unknownGateway, .failed("bad")]
+    let contents = all.map {
+        Notifier.followUpContent(for: $0, gatewayId: gw, gatewayName: name, context: "Build chat", approvalId: "a1",
+                                 sessionKey: "agent:main:main", threadIdentifier: "\(gw.uuidString)|agent:main:main", originalCategory: "approval")
+    }
+    check(contents.allSatisfy { $0 != nil }, "a follow-up for every stale or failed outcome")
+    check(contents.compactMap(\.self).allSatisfy { !$0.body.contains(command) && !$0.title.contains(command) && $0.title.contains(name) },
+          "follow-ups name the gateway and never the command")
+    check(contents.compactMap(\.self).allSatisfy {
+        $0.interruptionLevel != .timeSensitive && $0.threadIdentifier == "\(gw.uuidString)|agent:main:main"
+            && $0.userInfo["gateway"] as? String == gw.uuidString && $0.userInfo["approval"] as? String == "a1"
+    }, "follow-ups keep the thread and ids, not time-sensitive")
+    check(contents.first??.title.contains("Build chat") == true, "follow-up names the chat")
+    check(Notifier.followUpContent(for: .resolved, gatewayId: gw, gatewayName: name, context: nil, approvalId: "a1",
+                                   sessionKey: nil, threadIdentifier: nil, originalCategory: "approval") == nil, "no follow-up on success")
+
+    // In-flight guard: a second resolve of the same id while the first waits sends nothing.
+    let offline = GatewayProfile(name: "Offline", url: "ws://127.0.0.1:9", authMode: .none)
+    let store = GatewayStore(profile: offline)
+    async let first = store.resolveApproval(id: "a1", decision: "allow-once", connectWithin: 1, timeout: 1)
+    async let second = store.resolveApproval(id: "a1", decision: "allow-once", connectWithin: 1, timeout: 1)
+    let pair = await [first, second]
+    check(pair.contains(.unreachable) && pair.contains(.alreadyHandled), "concurrent resolves: one attempt, one no-op (\(pair))")
+    check(store.lastError?.contains("Offline") == true, "unreachable shows in lastError")
+    let retry = await store.resolveApproval(id: "a1", decision: "allow-once", connectWithin: 0.5, timeout: 0.5)
+    check(retry == .unreachable, "a dropped decision can be retried, never buffered")
+
+    let model = AppModel()
+    let unknown = await model.respondToApproval(gatewayId: UUID(), approvalId: "a1", decision: "allow-once")
+    check(unknown == .unknownGateway, "notification for a removed gateway → no longer in Pincer, nothing sent")
+}
 
 print("Agent questions")
 do {
@@ -713,8 +870,15 @@ do {
           "chat push threads with its chat")
     check(chatMessage?.userInfo == ["gateway": gatewayId.uuidString, "push": "1", "session": "agent:main:main"], "chat push userInfo")
     let pending = PushMessage(json: Data(#"{"title":"OpenClaw approval requested","body":"exec","url":"approve/a1"}"#.utf8), gatewayId: gatewayId)
-    check(pending?.kind == .approval(id: "a1", pending: true) && pending?.categoryIdentifier == "approval-push"
+    check(pending?.kind == .approval(id: "a1", pending: true) && pending?.categoryIdentifier == "approval"
           && pending?.userInfo["approval"] == "a1", "pending approval push has actions")
+    if let pending {
+        check(pending.userInfo["gateway"] == gatewayId.uuidString
+              && Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: pending.categoryIdentifier, userInfo: pending.userInfo)
+              == .resolve(gatewayId: gatewayId, approvalId: "a1", decision: "deny"), "pending approval push actions resolve on its gateway")
+        check(Notifier.categories().first { $0.identifier == pending.categoryIdentifier }?.actions.count == 3,
+              "pending approval push offers all three actions")
+    }
     let updated = PushMessage(json: Data(#"{"title":"OpenClaw approval updated","body":"denied","url":"approve/a1"}"#.utf8), gatewayId: gatewayId)
     check(updated?.kind == .approval(id: "a1", pending: false) && updated?.categoryIdentifier == "reply", "resolved approval push has none")
     check(PushMessage(json: Data(#"{"url":"chat/main"}"#.utf8), gatewayId: gatewayId) == nil, "push without text ignored")
@@ -726,6 +890,8 @@ do {
     let apns: [AnyHashable: Any] = ["aps": ["mutable-content": 1], "pincer": ["g": gatewayId.uuidString, "p": body.base64URL]]
     check(PushMessage(apnsPayload: apns) == chatMessage, "relay payload decrypted with the stored keys")
     check(PushMessage(apnsPayload: ["pincer": ["g": UUID().uuidString, "p": body.base64URL]]) == nil, "unknown gateway ignored")
+    check(PushMessage(apnsPayload: ["pincer": ["g": gatewayId.uuidString.lowercased(), "p": body.base64URL]]) == chatMessage,
+          "lowercase pincer.g → same gateway")
     check(PushMessage(apnsPayload: ["aps": ["alert": "x"]]) == nil, "non-Pincer payload ignored")
     PushKeyStore.delete(for: gatewayId)
     check(PushKeyStore.keys(for: gatewayId) == nil, "push keys deleted")
@@ -1097,6 +1263,7 @@ func runDemo() async {
 
     let settled = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
     check(settled, "demo approval run finished")
+    await checkApprovalOutcomes(gateway, chat: chat, label: "demo")
 
     await chat.send("ask me what to remove")
     let demoAsked = await waitFor("demo question") { !gateway.pendingQuestions(for: key).isEmpty }
@@ -1433,6 +1600,8 @@ func runLive(url: String, token: String) async {
     }
 
     _ = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
+    await checkApprovalOutcomes(gateway, chat: chat, label: "live")
+    await checkLiveApprovals(profile: profile, gateway: gateway, chat: chat)
     await chat.send("ask me something")
     let asked = await waitFor("question.requested") { !gateway.pendingQuestions(for: key).isEmpty }
     check(asked, "ask_user question surfaced over the wire")
@@ -2095,6 +2264,127 @@ final class PushSink: @unchecked Sendable {
     func stop() { self.listener.cancel() }
 }
 
+/// Stale and duplicate answers, shared by the demo and the mock (AC test cases 7, 10–12).
+@MainActor
+func checkApprovalOutcomes(_ gateway: GatewayStore, chat: ChatStore, label: String) async {
+    print("Approval outcomes (\(label))")
+    func raise(_ text: String) async -> ExecApproval? {
+        let known = Set(gateway.approvals.map(\.id))
+        await chat.send(text)
+        _ = await waitFor("\(text) approval") { gateway.approvals.contains { !known.contains($0.id) } }
+        return gateway.approvals.first { !known.contains($0.id) }
+    }
+
+    guard let full = await raise("please approve this") else { return check(false, "\(label): approval surfaced") }
+    check(full.allowedDecisions == ["allow-once", "allow-always", "deny"] && Notifier.category(for: full) == "approval",
+          "\(label): allowedDecisions parsed, all three actions")
+    async let first = gateway.resolveApproval(id: full.id, decision: "allow-once")
+    async let second = gateway.resolveApproval(id: full.id, decision: "allow-once")
+    let pair = await [first, second]
+    check(pair.contains(.resolved) && pair.contains(.alreadyHandled), "\(label): concurrent resolves send once (\(pair))")
+    check(!gateway.approvals.contains { $0.id == full.id }, "\(label): resolved approval removed")
+    let again = await gateway.resolveApproval(id: full.id, decision: "deny")
+    check(again == .alreadyHandled,
+          "\(label): acting again after success is a quiet no-op")
+    _ = await waitFor("\(label) run", timeout: 20) { !chat.isRunning }
+
+    guard let once = await raise("approve once-only") else { return check(false, "\(label): once-only approval surfaced") }
+    check(once.allowedDecisions == ["allow-once", "deny"] && !once.allowsAlways && Notifier.category(for: once) == "approval-once",
+          "\(label): approve once-only leaves out Always allow")
+    let always = await gateway.resolveApproval(once, decision: "allow-always")
+    check(always == .allowAlwaysUnavailable, "\(label): allow-always → unavailable (\(always))")
+    check(gateway.approvals.contains { $0.id == once.id }, "\(label): approval stays pending")
+    check(gateway.lastError == "Always allow isn't available for this command.", "\(label): banner error in lastError")
+    let allowed = await gateway.resolveApproval(once, decision: "allow-once")
+    check(allowed == .resolved && !gateway.approvals.contains { $0.id == once.id }, "\(label): then Allow once succeeds (\(allowed))")
+    _ = await waitFor("\(label) run", timeout: 20) { !chat.isRunning }
+
+    let missingId = "approval_missing_\(UUID().uuidString.prefix(6))"
+    let missing = await gateway.resolveApproval(id: missingId, decision: "deny")
+    check(missing == .expired, "\(label): unknown id → expired (\(missing))")
+    let missingAgain = await gateway.resolveApproval(id: missingId, decision: "allow-once")
+    check(missingAgain == .alreadyHandled, "\(label): acting again on an expired approval is a quiet no-op (\(missingAgain))")
+
+    // A resolve that's out of time or cancelled never reaches the Gateway, and the approval stays pending.
+    guard let late = await raise("please approve this") else { return check(false, "\(label): approval surfaced") }
+    let pastDeadline = await gateway.resolveApproval(id: late.id, decision: "allow-once", connectWithin: 0)
+    check(pastDeadline == .unreachable, "\(label): deadline already passed → unreachable (\(pastDeadline))")
+    let cancelled = Task { await gateway.resolveApproval(id: late.id, decision: "allow-once") }
+    cancelled.cancel()
+    let cancelledOutcome = await cancelled.value
+    check(cancelledOutcome == .unreachable, "\(label): cancelled resolve → unreachable (\(cancelledOutcome))")
+    try? await Task.sleep(for: .milliseconds(500))
+    check(gateway.approvals.contains { $0.id == late.id }, "\(label): neither sent an RPC, approval still pending")
+    _ = await waitFor("\(label) reconnect") { gateway.state.isConnected }
+    let answered = await gateway.resolveApproval(id: late.id, decision: "deny")
+    check(answered == .resolved && !gateway.approvals.contains { $0.id == late.id }, "\(label): a later action still resolves it (\(answered))")
+    _ = await waitFor("\(label) run", timeout: 20) { !chat.isRunning }
+}
+
+/// Mock-only approval paths (AC test cases 9–11, 13, 14).
+@MainActor
+func checkLiveApprovals(profile: GatewayProfile, gateway: GatewayStore, chat: ChatStore) async {
+    print("Approval resolution (live)")
+    func raise(_ text: String) async -> ExecApproval? {
+        let known = Set(gateway.approvals.map(\.id))
+        await chat.send(text)
+        _ = await waitFor("\(text) approval") { gateway.approvals.contains { !known.contains($0.id) } }
+        return gateway.approvals.first { !known.contains($0.id) }
+    }
+
+    // A store that just started, like a background launch: resolves once connected.
+    guard let pending = await raise("please approve this") else { return check(false, "approval surfaced") }
+    let cold = GatewayStore(profile: profile)
+    cold.start()
+    let started = Date()
+    let outcome = await cold.resolveApproval(id: pending.id, decision: "deny")
+    check(outcome == .resolved && Date().timeIntervalSince(started) < 25, "cold store resolves by id within the budget (\(outcome))")
+    let cleared = await waitFor("exec.approval.resolved from another client") { !gateway.approvals.contains { $0.id == pending.id } }
+    check(cleared, "resolved by another client → removed from this store")
+    check(cold.approvals.isEmpty, "cold store keeps no approval")
+    // Another device retrying: the same decision is idempotent, a different one was answered elsewhere.
+    let other = GatewayStore(profile: profile)
+    other.start()
+    let identical = await other.resolveApproval(id: pending.id, decision: "deny")
+    check(identical == .resolved, "identical retry from another client → success")
+    let conflict = await other.resolveApproval(id: pending.id, decision: "allow-once")
+    check(conflict == .alreadyHandled, "different decision after answering here → quiet no-op (\(conflict))")
+    let fresh = GatewayStore(profile: profile)
+    fresh.start()
+    let conflictFresh = await fresh.resolveApproval(id: pending.id, decision: "allow-once")
+    check(conflictFresh == .answeredElsewhere(decision: nil), "different decision from a fresh client → answered elsewhere (\(conflictFresh))")
+    check(fresh.approvals.isEmpty, "answered elsewhere leaves nothing pending")
+    let freshAgain = await fresh.resolveApproval(id: pending.id, decision: "allow-once")
+    check(freshAgain == .alreadyHandled, "acting again after answered elsewhere → quiet no-op (\(freshAgain))")
+    for store in [cold, other, fresh] { store.stop() }
+    _ = await waitFor("approval run", timeout: 20) { !chat.isRunning }
+
+    // Gateway B's approval id sent to A never reaches B; A reads it as not found.
+    guard let mine = await raise("please approve this") else { return check(false, "approval surfaced") }
+    let foreign = await gateway.resolveApproval(id: "approval_on_gateway_b", decision: "allow-once")
+    check(foreign == .expired && gateway.approvals.contains { $0.id == mine.id }, "another gateway's id → not found, own approval untouched")
+    check(Notifier.interpret(actionIdentifier: "approve-once", categoryIdentifier: "approval",
+                             userInfo: ["gateway": UUID().uuidString, "approval": mine.id])
+          != .resolve(gatewayId: gateway.id, approvalId: mine.id, decision: "allow-once"), "action routes only to the notification's gateway")
+    await gateway.resolveApproval(mine, decision: "deny")
+    _ = await waitFor("approval run", timeout: 20) { !chat.isRunning }
+
+    // The mock's short-lived approval expires after 3 s.
+    guard let short = await raise("approve short-lived") else { return check(false, "short-lived approval surfaced") }
+    try? await Task.sleep(for: .seconds(max(0, (short.expiresAt ?? Date()).timeIntervalSinceNow) + 0.3))
+    check(short.isExpired(), "short-lived approval past expiresAt")
+    let expired = await gateway.resolveApproval(short, decision: "allow-once")
+    check(expired == .expired && !gateway.approvals.contains { $0.id == short.id }, "resolve after expiry → expired, removed (\(expired))")
+    let viaRPC = GatewayStore(profile: profile)
+    viaRPC.start()
+    let expiredRPC = await viaRPC.resolveApproval(id: short.id, decision: "allow-once")
+    check(expiredRPC == .expired, "Gateway reports the expired id as not found")
+    let expiredAgain = await viaRPC.resolveApproval(id: short.id, decision: "deny")
+    check(expiredAgain == .alreadyHandled, "acting again after expired → quiet no-op (\(expiredAgain))")
+    viaRPC.stop()
+    _ = await waitFor("approval run", timeout: 20) { !chat.isRunning }
+}
+
 @MainActor
 func checkPushLive(_ gateway: GatewayStore) async {
     print("Push (live)")
@@ -2134,12 +2424,22 @@ func checkPushLive(_ gateway: GatewayStore) async {
     let before = sink.deliveries.count
     await chat.send("please approve this")
     let approvalSeen = await waitFor("approval push", timeout: 20) {
-        sink.deliveries.dropFirst(before).contains { PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString, "p": $0.body.base64URL]])?.categoryIdentifier == "approval-push" }
+        sink.deliveries.dropFirst(before).contains { PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString, "p": $0.body.base64URL]])?.categoryIdentifier == "approval" }
     }
     check(approvalSeen, "approval push carries approve/deny actions")
-    if let id = gateway.approvals.first?.id {
-        await gateway.resolveApproval(id: id, decision: "deny")
-        check(gateway.approvals.isEmpty, "approval resolved by id from a push action")
+    let approvalMessage = sink.deliveries.dropFirst(before).lazy
+        .compactMap { PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString.lowercased(), "p": $0.body.base64URL]]) }
+        .first { $0.categoryIdentifier == "approval" }
+    if let approvalMessage, case let .approval(id, _) = approvalMessage.kind {
+        let action = Notifier.interpret(actionIdentifier: "deny", categoryIdentifier: approvalMessage.categoryIdentifier,
+                                        userInfo: approvalMessage.userInfo)
+        check(action == .resolve(gatewayId: gateway.id, approvalId: id, decision: "deny"), "Deny on the decrypted push targets its gateway")
+        if case let .resolve(gatewayId, approvalId, decision) = action, gatewayId == gateway.id {
+            let outcome = await gateway.resolveApproval(id: approvalId, decision: decision)
+            check(outcome == .resolved && gateway.approvals.isEmpty, "approval resolved by id from a push action (\(outcome))")
+        }
+    } else {
+        check(false, "approval push decrypted")
     }
     _ = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
 

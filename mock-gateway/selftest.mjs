@@ -258,10 +258,60 @@ try {
   assert.equal(approvalPush.title, 'OpenClaw approval requested');
   assert.equal(pushed.find((p) => p.headers.urgency === 'high')?.headers.ttl, '120');
   await client.send('exec.approval.resolve', { id: requested.id, decision: 'deny' });
+  assert.deepEqual(requested.request.allowedDecisions, ['allow-once', 'allow-always', 'deny']);
+  // Identical retry is idempotent; a conflicting one is already resolved (openclaw approval-shared.ts).
+  assert.equal((await client.send('exec.approval.resolve', { id: requested.id, decision: 'deny' })).ok, true);
+  const conflicting = await client.call('exec.approval.resolve', { id: requested.id, decision: 'allow-once' });
+  assert.equal(conflicting.ok, false);
+  assert.equal(conflicting.error.code, 'INVALID_REQUEST');
+  assert.equal(conflicting.error.message, 'approval already resolved');
+  assert.equal(conflicting.error.details.reason, 'APPROVAL_ALREADY_RESOLVED');
+  assert.ok(!(await client.send('exec.approval.list')).approvals.some((a) => a.id === requested.id));
+  const unknown = await client.call('exec.approval.resolve', { id: 'approval_missing', decision: 'allow-once' });
+  assert.equal(unknown.ok, false);
+  assert.equal(unknown.error.code, 'INVALID_REQUEST');
+  assert.equal(unknown.error.message, 'approval expired or not found');
+  assert.equal(unknown.error.details.reason, 'APPROVAL_NOT_FOUND');
+  assert.equal((await client.call('exec.approval.resolve', { id: 'approval_missing', decision: 'maybe' })).error.message, 'invalid decision');
   assert.equal((await client.send('push.web.unsubscribe', { endpoint })).removed, true);
   pushSink.close();
 
-  // ask_user: question.requested blocks the run until question.resolve settles it.
+  // `approve once-only` leaves allow-always out; asking for it anyway keeps the approval pending.
+  const onceOnlyP = client.waitEvent('exec.approval.requested');
+  const onceOnlyRun = await client.send('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'approve once-only',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  const onceOnly = await onceOnlyP;
+  assert.deepEqual(onceOnly.request.allowedDecisions, ['allow-once', 'deny']);
+  const always = await client.call('exec.approval.resolve', { id: onceOnly.id, decision: 'allow-always' });
+  assert.equal(always.ok, false);
+  assert.equal(always.error.code, 'INVALID_REQUEST');
+  assert.equal(always.error.message, 'allow-always is unavailable for this command');
+  assert.equal(always.error.details.reason, 'APPROVAL_ALLOW_ALWAYS_UNAVAILABLE');
+  assert.ok((await client.send('exec.approval.list')).approvals.some((a) => a.id === onceOnly.id), 'still pending');
+  const onceResolvedEvent = client.waitEvent('exec.approval.resolved', (p) => p.id === onceOnly.id);
+  assert.equal((await client.send('exec.approval.resolve', { id: onceOnly.id, decision: 'allow-once' })).ok, true);
+  assert.equal((await onceResolvedEvent).decision, 'allow-once');
+  await client.waitEvent('chat', (p) => p.runId === onceOnlyRun.runId && p.state === 'final', 10_000);
+
+  // `approve short-lived` expires after 3 s and then reads as not found.
+  const shortP = client.waitEvent('exec.approval.requested');
+  const shortRun = await client.send('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'approve short-lived',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  const shortLived = await shortP;
+  assert.ok(shortLived.expiresAtMs - shortLived.createdAtMs <= 3_000);
+  await client.waitEvent('chat', (p) => p.runId === shortRun.runId && p.state === 'final', 10_000);
+  await delay(Math.max(0, shortLived.expiresAtMs - Date.now()) + 50);
+  assert.ok(!(await client.send('exec.approval.list')).approvals.some((a) => a.id === shortLived.id), 'expired approval is not listed');
+  const expired = await client.call('exec.approval.resolve', { id: shortLived.id, decision: 'deny' });
+  assert.equal(expired.error.details.reason, 'APPROVAL_NOT_FOUND');
+  assert.equal(expired.error.message, 'approval expired or not found');
+
   const asked = await client.send('chat.send', {
     sessionKey: 'agent:main:main',
     message: 'ask me something',

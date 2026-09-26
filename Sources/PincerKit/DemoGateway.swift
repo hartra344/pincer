@@ -45,6 +45,8 @@ actor DemoGateway {
     private var artifacts: [String: (mimeType: String, data: Data)] = [:]
     private var approvals: [String: JSONValue] = [:]
     private var approvalOrder: [String] = []
+    /// Answered approvals and their decision, so retries behave like the Gateway's.
+    private var resolvedApprovals: [String: String] = [:]
     /// `ask_user` prompts by id, in the order they were asked.
     private var questions: [String: JSONValue] = [:]
     private var questionOrder: [String] = []
@@ -186,6 +188,26 @@ actor DemoGateway {
             guard let id = params["id"]?.string, let decision = params["decision"]?.string,
                   ["allow-once", "allow-always", "deny"].contains(decision)
             else { throw GatewayError.rpc(code: "INVALID_REQUEST", message: "invalid decision", details: nil) }
+            if let previous = self.resolvedApprovals[id] {
+                guard previous == decision else {
+                    throw GatewayError.rpc(code: "INVALID_REQUEST", message: "approval already resolved",
+                                           details: ["reason": "APPROVAL_ALREADY_RESOLVED"])
+                }
+                return ["ok": true, "id": .string(id), "decision": .string(decision)]
+            }
+            guard let approval = self.approvals[id],
+                  (approval["expiresAtMs"]?.double ?? .infinity) > (Self.now().double ?? 0)
+            else {
+                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "approval expired or not found",
+                                       details: ["reason": "APPROVAL_NOT_FOUND"])
+            }
+            if decision == "allow-always",
+               approval["request"]?["allowedDecisions"]?.array?.contains(.string("allow-always")) == false
+            {
+                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "allow-always is unavailable for this command",
+                                       details: ["reason": "APPROVAL_ALLOW_ALWAYS_UNAVAILABLE"])
+            }
+            self.resolvedApprovals[id] = decision
             self.approvals[id] = nil
             self.approvalOrder.removeAll { $0 == id }
             self.emit("exec.approval.resolved", ["id": .string(id), "decision": .string(decision)])
@@ -442,10 +464,14 @@ actor DemoGateway {
         }
         if lowered.range(of: #"\bapprove\b"#, options: .regularExpression) != nil {
             let id = Self.shortId("approval_")
+            // `approve once-only` leaves out Always allow, like a command the Gateway won't grant for good.
+            let allowed: JSONValue = lowered.contains("once-only")
+                ? ["allow-once", "deny"] : ["allow-once", "allow-always", "deny"]
             let approval: JSONValue = [
                 "id": .string(id),
                 "request": ["command": "rm -rf ./build", "cwd": "/home/claw/project", "sessionKey": .string(key),
-                            "agentId": self.sessions[key]?["agentId"] ?? "main"],
+                            "agentId": self.sessions[key]?["agentId"] ?? "main",
+                            "allowedDecisions": allowed],
                 "createdAtMs": Self.now(),
                 "expiresAtMs": .number((Self.now().double ?? 0) + 120_000),
             ]
@@ -790,7 +816,7 @@ actor DemoGateway {
 
         - Mention **tool** or **disk** to watch a live tool call\(usedTool ? " (like the one above)" : "").
         - Ask for an **image** to get an inline chart.
-        - Say **approve** to raise a command approval.
+        - Say **approve** to raise a command approval (**approve once-only** for one without Always allow).
         - Ask it to follow a **plan** to watch the task progress card.
         - Switch models from the toolbar, or pin, rename and group chats in the sidebar.
 

@@ -32,6 +32,10 @@ public final class AppModel {
 
     public static let selectedGatewayKey = "pincer.selectedGateway"
 
+    /// The app's model. Created on first use, by the scene or, when iOS launches Pincer in the
+    /// background for a notification action, by `Notifier` before any scene exists.
+    public static let shared = AppModel()
+
     public init() {
         let profiles = GatewayProfileStore.load()
         SharedContainer.shareKeychainItems(for: profiles)
@@ -40,19 +44,30 @@ public final class AppModel {
             ?? UserDefaults.standard.string(forKey: Self.selectedGatewayKey)).flatMap(UUID.init(uuidString:))
         self.selectedGatewayId = self.gateways.first { $0.id == saved }?.id ?? self.gateways.first?.id
         self.notifier.onOpen = { [weak self] target in self?.open(target) }
-        self.notifier.onApprovalAction = { [weak self] gatewayId, approvalId, decision in
-            guard let gateway = self?.gateways.first(where: { $0.id == gatewayId }) else { return }
-            Task { await gateway.resolveApproval(id: approvalId, decision: decision) }
+        self.notifier.approvalResolver = { [weak self] gatewayId, approvalId, decision in
+            await self?.respondToApproval(gatewayId: gatewayId, approvalId: approvalId, decision: decision) ?? .unknownGateway
         }
+        self.notifier.gatewayLookup = { [weak self] id in self?.gateways.first { $0.id == id } }
+        self.notifier.pushDelivers = { [weak self] id in self?.push.isActive(id) ?? false }
+        self.notifier.isConnected = { [weak self] id in
+            self?.gateways.first { $0.id == id }?.state.isConnected ?? false
+        }
+    }
+
+    /// Answers an approval on exactly the gateway the notification came from. Works before
+    /// `start()` (a background launch has no scene): only that gateway is connected then.
+    public func respondToApproval(gatewayId: UUID, approvalId: String, decision: String) async -> ApprovalOutcome {
+        guard let gateway = self.gateways.first(where: { $0.id == gatewayId }) else { return .unknownGateway }
+        if !self.started {
+            gateway.notifier = self.notifier
+            gateway.start()
+        }
+        return await gateway.resolveApproval(id: approvalId, decision: decision)
     }
 
     public func start() {
         guard !self.started else { return }
         self.started = true
-        self.notifier.pushDelivers = { [weak self] id in self?.push.isActive(id) ?? false }
-        self.notifier.isConnected = { [weak self] id in
-            self?.gateways.first { $0.id == id }?.state.isConnected ?? false
-        }
         self.push.onTokenChange = { [weak self] in self?.syncPush() }
         self.notifier.activate()
         for gateway in self.gateways {
@@ -92,7 +107,7 @@ public final class AppModel {
     public func open(_ target: Notifier.Target) {
         guard let gateway = self.gateways.first(where: { $0.id == target.gatewayId }) else { return }
         // Key first, so switching Gateways doesn't briefly record the other Gateway's last chat.
-        gateway.selectedKey = gateway.resolveSessionKey(target.sessionKey)
+        if !target.sessionKey.isEmpty { gateway.selectedKey = gateway.resolveSessionKey(target.sessionKey) }
         self.selectedGatewayId = gateway.id
         self.updateVisible()
         self.openRequests += 1

@@ -53,8 +53,10 @@ public struct PushMessage: Equatable, Sendable {
         "\(self.gatewayId.uuidString)|\(self.sessionKey ?? "gateway")"
     }
 
+    /// `approval` (Allow once, Always allow, Deny) for a pending approval, as registered by `Notifier`.
+    /// Pushes don't say which decisions are allowed, so all three are offered.
     public var categoryIdentifier: String {
-        if case .approval(_, true) = self.kind { return "approval-push" }
+        if case .approval(_, true) = self.kind { return "approval" }
         return "reply"
     }
 
