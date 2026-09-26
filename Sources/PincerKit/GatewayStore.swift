@@ -117,6 +117,9 @@ public final class GatewayStore: Identifiable {
     /// Gateway config and plugins; loaded when the settings screen opens.
     @ObservationIgnored public private(set) lazy var settings = GatewaySettingsModel(
         connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] })
+    /// Cron jobs; loaded when the Automations view opens.
+    @ObservationIgnored public private(set) lazy var automations = AutomationsModel(
+        connection: self.connection, hello: { [weak self] in self?.hello })
 
     public init(profile: GatewayProfile) {
         self.profile = profile
@@ -337,6 +340,8 @@ public final class GatewayStore: Identifiable {
                 self.approvals.append(approval)
                 self.notifier?.notifyApproval(approval, gateway: self)
             }
+        case "cron":
+            self.automations.handleCronEvent(payload)
         case "plugins.changed":
             self.settings.handlePluginsChanged()
         case "exec.approval.resolved":
