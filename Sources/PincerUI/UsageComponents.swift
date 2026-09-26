@@ -70,6 +70,50 @@ enum UsageMetric: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: Chart selection
+
+extension View {
+    /// Selects the date under the pointer while hovering on macOS, or under the finger while
+    /// dragging on iOS.
+    func usageChartSelection(_ selection: Binding<Date?>) -> some View {
+        self.modifier(UsageChartSelection(selection: selection))
+    }
+}
+
+private struct UsageChartSelection: ViewModifier {
+    @Binding var selection: Date?
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        // chartXSelection only follows a click-and-drag on macOS; hovering should be enough.
+        content.chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(.clear)
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case let .active(location):
+                            guard let plot = proxy.plotFrame else { return }
+                            let frame = geometry[plot]
+                            guard location.x >= frame.minX, location.x <= frame.maxX else {
+                                self.selection = nil
+                                return
+                            }
+                            self.selection = proxy.value(atX: location.x - frame.minX, as: Date.self)
+                        case .ended:
+                            self.selection = nil
+                        }
+                    }
+                    .accessibilityHidden(true)
+            }
+        }
+        #else
+        content.chartXSelection(value: self.$selection)
+        #endif
+    }
+}
+
 // MARK: Section states
 
 /// What a section shows around its content: loading, unsupported, forbidden or failed.
@@ -264,11 +308,23 @@ struct UsageCostText: View {
 
 @MainActor
 enum UsageNames {
-    /// The row's label, else its chat's title, else the key.
+    /// The row's label, else its chat's title, else the key. Every agent has a "Main" chat,
+    /// so those get the agent's name too: "Main · Scout".
     static func session(key: String, label: String?, gateway: GatewayStore) -> String {
-        if let label, !label.isEmpty { return label }
-        if let title = gateway.sessions[key]?.title, !title.isEmpty { return title }
-        return UsageFormat.middleTruncated(key)
+        let chat = gateway.sessions[key]
+        let title: String
+        if let label, !label.isEmpty {
+            title = label
+        } else if let chatTitle = chat?.title, !chatTitle.isEmpty {
+            title = chatTitle
+        } else {
+            return UsageFormat.middleTruncated(key)
+        }
+        guard title.caseInsensitiveCompare("Main") == .orderedSame,
+              let agentId = chat?.agentId ?? SessionKey.agentId(from: key), !agentId.isEmpty else { return title }
+        let agent = gateway.agent(agentId).name
+        guard !agent.isEmpty, agent.caseInsensitiveCompare(title) != .orderedSame else { return title }
+        return "\(title) · \(agent)"
     }
 
     static func agent(_ id: String?, gateway: GatewayStore) -> String {
@@ -342,26 +398,32 @@ struct UsageRangeBar: View {
     private var customDates: some View {
         let today = Calendar.current.startOfDay(for: Date())
         let range = self.selection.range()
-        return HStack {
-            DatePicker("From", selection: Binding(
-                get: { range.start },
-                set: { start in
-                    var selection = self.selection
-                    selection.customStart = min(start, today)
-                    if selection.customEnd < selection.customStart { selection.customEnd = selection.customStart }
-                    self.apply(selection)
-                }
-            ), in: ...today, displayedComponents: .date)
-            DatePicker("To", selection: Binding(
-                get: { range.end },
-                set: { end in
-                    var selection = self.selection
-                    selection.customEnd = min(max(end, range.start), today)
-                    self.apply(selection)
-                }
-            ), in: range.start ... max(range.start, today), displayedComponents: .date)
+        // Side by side when they fit; stacked on narrow screens and large text sizes.
+        return ViewThatFits(in: .horizontal) {
+            HStack { self.datePickers(range: range, today: today) }
+                .fixedSize()
+            VStack(alignment: .leading) { self.datePickers(range: range, today: today) }
         }
-        .fixedSize()
+    }
+
+    @ViewBuilder private func datePickers(range: UsageDateRange, today: Date) -> some View {
+        DatePicker("From", selection: Binding(
+            get: { range.start },
+            set: { start in
+                var selection = self.selection
+                selection.customStart = min(start, today)
+                if selection.customEnd < selection.customStart { selection.customEnd = selection.customStart }
+                self.apply(selection)
+            }
+        ), in: ...today, displayedComponents: .date)
+        DatePicker("To", selection: Binding(
+            get: { range.end },
+            set: { end in
+                var selection = self.selection
+                selection.customEnd = min(max(end, range.start), today)
+                self.apply(selection)
+            }
+        ), in: range.start ... max(range.start, today), displayedComponents: .date)
     }
 }
 

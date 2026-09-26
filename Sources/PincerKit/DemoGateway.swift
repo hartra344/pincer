@@ -1084,6 +1084,18 @@ actor DemoGateway {
             row.merge(["totalTokens": 24_000, "totalTokensFresh": true, "inputTokens": 24_000, "outputTokens": 900,
                        "contextTokens": JSONValue(Self.contextTokens)]) { _, new in new }
             row.merge(extra) { _, new in new }
+            var messages = messages
+            // Each chat runs on the model its sample usage is billed to.
+            if let model = DemoUsage.model(for: key) {
+                row["model"] = .string(model.model)
+                row["modelProvider"] = .string(model.provider)
+                messages = messages.map { message in
+                    guard case var .object(fields) = message, fields["role"]?.string == "assistant" else { return message }
+                    fields["provider"] = .string(model.provider)
+                    fields["model"] = .string(model.model)
+                    return .object(fields)
+                }
+            }
             sessions[key] = row
             transcripts[key] = messages
         }

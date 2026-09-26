@@ -15,8 +15,14 @@ struct UsagePage: View {
         let connected = self.gateway.state.isConnected
         Group {
             if model.isUnavailable {
-                ContentUnavailableView("Usage Isn't Available", systemImage: "chart.bar.xaxis",
-                                       description: Text("This gateway doesn't report usage or cost. Update OpenClaw to see tokens, spend and rate limits."))
+                ContentUnavailableView {
+                    Label("Usage Isn't Available", systemImage: "chart.bar.xaxis")
+                } description: {
+                    Text("This gateway doesn't report usage or cost. Update OpenClaw to see tokens, spend and rate limits.")
+                } actions: {
+                    Button("Check Again") { Task { await model.refresh() } }
+                        .disabled(!connected || model.isLoading)
+                }
             } else if !connected, !model.hasData, !model.isLoading {
                 ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
                                        description: Text("Connect to the gateway to see its usage and cost."))
@@ -26,27 +32,27 @@ struct UsagePage: View {
         }
         .navigationTitle("Usage")
         .toolbar {
-            if !model.isUnavailable {
-                ToolbarItem {
-                    if model.isLoading, model.hasData {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Button { Task { await model.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
-                            .disabled(!connected || model.isLoading)
-                            .help("Refresh")
-                    }
+            // Stays available when usage is unsupported, so an updated gateway can be picked up.
+            ToolbarItem {
+                if model.isLoading, model.hasData {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button { Task { await model.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                        .disabled(!connected || model.isLoading)
+                        .help("Refresh")
                 }
             }
         }
         .task(id: connected) {
-            // Coming back from a session keeps what's loaded; connecting (again) reloads.
+            // Coming back from a session keeps what's loaded; connecting (again) reloads
+            // everything, rate limits included.
             guard connected else {
                 self.loadedConnection = false
                 return
             }
             guard !self.loadedConnection else { return }
             self.loadedConnection = true
-            await model.load()
+            await model.load(includeStatus: true)
         }
     }
 
@@ -185,7 +191,7 @@ struct UsageDailyChart: View {
         }
         .chartForegroundStyleScale(UsageCategory.scale)
         .chartLegend(stacked ? .visible : .hidden)
-        .chartXSelection(value: self.$selectedDay)
+        .usageChartSelection(self.$selectedDay)
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 6)) { _ in
                 AxisGridLine()
@@ -442,8 +448,15 @@ private struct UsageSessionsSection: View {
                 #endif
             }
         } footer: {
-            if let result, result.sessionCount > result.sessions.count {
-                Text("Showing top \(result.sessions.count) of \(result.sessionCount) sessions.")
+            VStack(alignment: .leading, spacing: 2) {
+                if let result, result.sessionCount > result.sessions.count {
+                    Text("Showing top \(result.sessions.count) of \(result.sessionCount) sessions.")
+                }
+                #if os(macOS)
+                if !rows.isEmpty {
+                    Text("Double-click a session for details.")
+                }
+                #endif
             }
         }
     }

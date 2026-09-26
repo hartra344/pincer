@@ -293,9 +293,24 @@ func checkUsageDemo(_ gateway: GatewayStore) async {
     let providers = usage.status.value?.providers ?? []
     check(providers.count >= 2 && providers.contains { $0.windows.contains { $0.usedPercent >= 90 && ($0.resetAt?.timeIntervalSinceNow ?? 9999) < 3600 } }
           && providers.contains { $0.error != nil }, "demo quotas: a red window resetting within the hour, a provider error")
+    let budget = providers.flatMap(\.billing).first { $0.kind == .budget }
+    check(budget != nil && (budget?.used ?? 0) > 0 && budget?.limit == 50 && budget?.unit == "USD", "demo usage.status has a budget (\(String(describing: budget?.used)))")
+    await usage.setPreset(.month)
+    let openAIMonth = usage.sessions.value?.aggregates.byProvider.first { $0.provider == "openai" }?.totals.totalCost ?? 0
+    check(openAIMonth > 0 && abs((budget?.used ?? 0) - openAIMonth) < 0.01, "demo OpenAI budget matches 30 days of OpenAI spend (\(openAIMonth))")
     await usage.setPreset(.quarter)
     check(usage.sessions.value?.sessions.contains { $0.computing } == true && usage.cacheStatus?.isIncomplete == true, "demo long range still counting")
     await usage.setPreset(.week)
+
+    let subagent = "agent:research:subagent:abc"
+    await usage.loadSession(subagent)
+    let unpriced = usage.detail(subagent)
+    let unpricedTotals = unpriced?.row?.usage?.totals
+    check(unpriced?.totals.loadState == .idle && (unpricedTotals?.totalTokens ?? 0) > 0
+          && unpricedTotals?.costStatus == .unknown(missing: unpricedTotals?.missingCostEntries ?? 0) && (unpricedTotals?.missingCostEntries ?? 0) > 0
+          && UsageFormat.cost(unpricedTotals ?? .zero).text == "—", "demo subagent drill-down: cost unknown")
+    check(unpriced?.timeseries.value?.points.isEmpty == false && unpriced?.timeseries.loadState == .idle
+          && unpriced?.logs.value?.isEmpty == false, "demo subagent drill-down: timeseries and logs")
 
     let key = "agent:main:main"
     usage.prepareSession(key, agentId: "main")

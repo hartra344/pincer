@@ -811,9 +811,9 @@ public enum UsageFormat {
         if seconds <= 0 { return "resets soon" }
         if seconds < 86400 {
             let hours = Int(seconds) / 3600
-            let minutes = (Int(seconds) % 3600) / 60
+            let minutes = max(1, (Int(seconds) % 3600) / 60)
             if hours > 0 { return "resets in \(hours) hour\(hours == 1 ? "" : "s")" }
-            return "resets in \(max(1, minutes)) minute\(minutes == 1 ? "" : "s")"
+            return "resets in \(minutes) minute\(minutes == 1 ? "" : "s")"
         }
         return "resets \(date.formatted(Date.FormatStyle(date: .long, time: .shortened, locale: locale, timeZone: timeZone)))"
     }
@@ -1083,10 +1083,11 @@ public final class UsageModel {
     // MARK: Dashboard
 
     /// Loads every dashboard method. `usage.status` isn't range-bound, so it's only fetched
-    /// the first time or when `includeStatus` asks (Refresh). A forbidden `usage.cost` waits
-    /// for an explicit refresh.
+    /// the first time, when it was unsupported (the Gateway may have been updated) or when
+    /// `includeStatus` asks (Refresh, reconnect). A forbidden `usage.cost` waits for an
+    /// explicit refresh.
     public func load(includeStatus: Bool = false, force: Bool = false) async {
-        let reloadStatus = includeStatus || !self.status.hasLoaded
+        let reloadStatus = includeStatus || !self.status.hasLoaded || !self.status.supported
         let reloadCost = force || !self.cost.isForbidden
         async let status: Void = self.loadStatus(if: reloadStatus)
         async let cost: Void = self.loadCost(if: reloadCost)

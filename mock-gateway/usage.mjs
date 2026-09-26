@@ -155,22 +155,38 @@ function records(now, timeZone) {
   return out;
 }
 
-// Mirrors usage-date-range.ts: explicit dates together (inclusive), else the last `days` (30).
-function resolveRange(params, now) {
-  if (params.timeZone !== undefined && (typeof params.timeZone !== 'string' || !validTimeZone(params.timeZone))) {
+// Mirrors resolveDateInterpretation: timeZone/utcOffset only count with mode "specific"; without it
+// days are UTC. A bad zone falls back to a valid offset (whole hours only here; otherwise UTC).
+function resolveZone(params) {
+  if (params.mode !== 'specific') return { timeZone: 'UTC' };
+  const offset = typeof params.utcOffset === 'string' ? /^UTC([+-])(\d{1,2})(?::([0-5]\d))?$/.exec(params.utcOffset.trim()) : null;
+  const minutes = offset ? (offset[1] === '+' ? 1 : -1) * (Number(offset[2]) * 60 + Number(offset[3] ?? 0)) : undefined;
+  const validOffset = minutes !== undefined && minutes >= -720 && minutes <= 840;
+  const offsetZone = validOffset ? (minutes % 60 === 0 ? (minutes === 0 ? 'UTC' : `Etc/GMT${minutes > 0 ? '-' : '+'}${Math.abs(minutes / 60)}`) : 'UTC') : undefined;
+  if (params.timeZone !== undefined && params.timeZone !== null) {
+    if (typeof params.timeZone === 'string' && params.timeZone.trim() && validTimeZone(params.timeZone.trim())) return { timeZone: params.timeZone.trim() };
+    if (offsetZone) return { timeZone: offsetZone };
     return { error: 'invalid timeZone: expected a valid IANA time zone' };
   }
-  if (params.utcOffset !== undefined && !/^UTC[+-]\d{1,2}(:\d{2})?$/.test(params.utcOffset)) {
+  if (offsetZone) return { timeZone: offsetZone };
+  if (params.utcOffset != null && (typeof params.utcOffset !== 'string' || params.utcOffset.trim() !== '')) {
     return { error: 'invalid utcOffset: expected UTC-12:00 through UTC+14:00' };
   }
-  const timeZone = params.timeZone ?? 'UTC';
-  const hasStart = params.startDate !== undefined;
-  const hasEnd = params.endDate !== undefined;
-  if (hasStart !== hasEnd) return { error: 'startDate and endDate must be provided together' };
+  return { timeZone: 'UTC' };
+}
+
+// Mirrors usage-date-range.ts: explicit dates together (inclusive), else the last `days` (30).
+function resolveRange(params, now) {
+  const zone = resolveZone(params);
+  if (zone.error) return zone;
+  const { timeZone } = zone;
+  const given = (value) => value !== undefined && value !== null && !(typeof value === 'string' && value.trim() === '');
+  for (const field of ['startDate', 'endDate']) {
+    if (given(params[field]) && !validKey(params[field])) return { error: `invalid ${field}: expected a valid YYYY-MM-DD calendar date` };
+  }
+  const hasStart = given(params.startDate);
+  if (hasStart !== given(params.endDate)) return { error: 'startDate and endDate must be provided together' };
   if (hasStart) {
-    for (const field of ['startDate', 'endDate']) {
-      if (!validKey(params[field])) return { error: `invalid ${field}: expected a valid YYYY-MM-DD calendar date` };
-    }
     if (params.startDate > params.endDate) return { error: 'startDate must not be after endDate' };
     return { start: params.startDate, end: params.endDate, timeZone };
   }

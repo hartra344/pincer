@@ -636,6 +636,12 @@ try {
   assert.ok(cost.totals.totalTokens > 0 && cost.totals.totalCost > 0);
   const mainOnly = await usage.send('usage.cost', last7);
   assert.ok(mainOnly.totals.totalTokens < cost.totals.totalTokens, 'without agentScope only main is counted');
+  // Like the Gateway, timeZone only counts with mode "specific"; +14 and -11 are always on different days.
+  const today = async (params) => (await usage.send('usage.cost', { days: 1, agentScope: 'all', ...params })).daily.map((d) => d.date);
+  const utcToday = new Date().toISOString().slice(0, 10);
+  assert.deepEqual(await today({ timeZone: 'Pacific/Kiritimati' }), [utcToday], 'timeZone without mode is UTC');
+  assert.notDeepEqual(await today({ mode: 'specific', timeZone: 'Pacific/Kiritimati' }), await today({ mode: 'specific', timeZone: 'Pacific/Pago_Pago' }));
+  assert.deepEqual(await today({ mode: 'specific', timeZone: 'Nope/Zone', utcOffset: 'UTC+0' }), [utcToday], 'bad zone falls back to utcOffset');
   const empty = await usage.send('usage.cost', { ...week, agentScope: 'all' });
   assert.deepEqual(empty.daily, []);
   assert.equal(empty.totals.totalTokens, 0);
@@ -670,6 +676,9 @@ try {
   await expectInvalid('sessions.usage', { endDate: '2026-01-01' }, /provided together/);
   await expectInvalid('usage.cost', { startDate: '2026-02-30', endDate: '2026-03-01' }, /invalid startDate/);
   await expectInvalid('usage.cost', { startDate: '2026-03-02', endDate: '2026-03-01' }, /must not be after/);
+  await expectInvalid('usage.cost', { startDate: '2026-02-30' }, /invalid startDate/);
+  await expectInvalid('usage.cost', { mode: 'specific', timeZone: 'Nope/Zone' }, /invalid timeZone/);
+  await expectInvalid('usage.cost', { mode: 'specific', utcOffset: 'UTC+15' }, /invalid utcOffset/);
   await expectInvalid('usage.cost', { agentScope: 'all', agentId: 'main' }, /agentScope=all cannot be combined with agentId/);
   await expectInvalid('sessions.usage', { agentScope: 'all', key: 'agent:main:main' }, /agentScope=all cannot be combined with key or agentId/);
   await expectInvalid('sessions.usage', { key: 'agent:main:nope' }, /Invalid session key: agent:main:nope/);

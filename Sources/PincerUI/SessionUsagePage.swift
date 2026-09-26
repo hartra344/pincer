@@ -204,7 +204,7 @@ private struct SessionTimeseriesSection: View {
         let key = self.detail.key
         let status = UsageSectionStatus(self.detail.timeseries) { [model] in await model.loadTimeseries(key) }
         let points = self.detail.timeseries.value?.points ?? []
-        let unpriced = !points.isEmpty && points.allSatisfy { $0.cumulativeCost == 0 } && points.contains { $0.cumulativeTokens > 0 }
+        let unpriced = self.detail.isUnpriced
         let metric = self.metric ?? (unpriced ? .tokens : UsageMetric.preferred(self.detail.row?.usage?.totals))
         Section {
             UsageSectionBody(status: status, unsupported: "This gateway doesn't report usage over time.",
@@ -214,7 +214,7 @@ private struct SessionTimeseriesSection: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                SessionTimeseriesChart(points: points, metric: metric)
+                SessionTimeseriesChart(points: points, metric: metric, unpriced: unpriced)
             }
         } header: {
             Text("Usage Over Time")
@@ -227,6 +227,8 @@ private struct SessionTimeseriesSection: View {
 private struct SessionTimeseriesChart: View {
     let points: [UsagePoint]
     let metric: UsageMetric
+    /// Nothing in the session was priced, so a zero cost means unknown, not free.
+    let unpriced: Bool
     @State private var selected: Date?
 
     var body: some View {
@@ -248,7 +250,7 @@ private struct SessionTimeseriesChart: View {
                     .annotation(position: .top, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(point.timestamp.formatted(date: .abbreviated, time: .shortened)).font(.caption.weight(.semibold))
-                            Text(UsageFormat.currency(point.cumulativeCost)).font(.caption.monospacedDigit())
+                            Text(self.unpriced ? "Cost unknown" : UsageFormat.currency(point.cumulativeCost)).font(.caption.monospacedDigit())
                             Text("\(UsageFormat.tokens(point.cumulativeTokens)) tokens").font(.caption.monospacedDigit())
                         }
                         .padding(6)
@@ -257,7 +259,7 @@ private struct SessionTimeseriesChart: View {
                     .accessibilityHidden(true)
             }
         }
-        .chartXSelection(value: self.$selected)
+        .usageChartSelection(self.$selected)
         .chartYAxis {
             AxisMarks { value in
                 AxisGridLine()
@@ -277,7 +279,8 @@ private struct SessionTimeseriesChart: View {
     }
 
     private func spoken(_ point: UsagePoint) -> String {
-        "\(UsageFormat.currency(point.cumulativeCost)), \(UsageFormat.tokens(point.cumulativeTokens)) tokens so far"
+        let cost = self.unpriced ? "Cost unknown" : UsageFormat.currency(point.cumulativeCost)
+        return "\(cost), \(UsageFormat.tokensSpoken(point.cumulativeTokens)) so far"
     }
 
     private var selectedPoint: UsagePoint? {
@@ -300,7 +303,7 @@ private struct SessionLogsSection: View {
             UsageSectionBody(status: status, unsupported: "This gateway doesn't report session logs.",
                              isEmpty: logs.isEmpty, empty: "No log entries for this session yet.", emptySymbol: "text.alignleft",
                              height: 120) {
-                ForEach(logs) { SessionLogRow(entry: $0) }
+                ForEach(logs) { SessionLogRow(entry: $0, unpriced: self.detail.isUnpriced) }
             }
         } header: {
             Text("Log")
@@ -314,6 +317,7 @@ private struct SessionLogsSection: View {
 
 private struct SessionLogRow: View {
     let entry: UsageLogEntry
+    let unpriced: Bool
     @State private var expanded = false
 
     var body: some View {
@@ -346,7 +350,13 @@ private struct SessionLogRow: View {
                         if let tokens = entry.tokens {
                             Text("\(UsageFormat.tokens(tokens)) tokens").font(.caption.monospacedDigit())
                         }
-                        if let cost = entry.cost {
+                        if self.unpriced, entry.tokens != nil, (entry.cost ?? 0) == 0 {
+                            Text("—")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .help(UsageFormat.unknownCostHelp)
+                                .accessibilityLabel("Cost unknown")
+                        } else if let cost = entry.cost {
                             Text(UsageFormat.currency(cost)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         }
                     }
@@ -373,5 +383,18 @@ private struct SessionLogRow: View {
         case .toolResult: "arrow.turn.down.left"
         case .other: "questionmark.circle"
         }
+    }
+}
+
+extension SessionUsageDetail {
+    /// Nothing in the session was priced: its totals' cost is unknown, or every timeseries
+    /// point has tokens but no cost.
+    var isUnpriced: Bool {
+        if let totals = self.row?.usage?.totals, !totals.isEmpty {
+            if case .unknown = totals.costStatus { return true }
+            return false
+        }
+        let points = self.timeseries.value?.points ?? []
+        return !points.isEmpty && points.allSatisfy { $0.cumulativeCost == 0 } && points.contains { $0.cumulativeTokens > 0 }
     }
 }
