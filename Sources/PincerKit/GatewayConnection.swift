@@ -200,6 +200,9 @@ public actor GatewayConnection {
         self.loopTask = Task { await self.runLoop() }
     }
 
+    /// Handshake done and a socket to send on, so `request` won't throw `notConnected`.
+    var isReady: Bool { self.hello != nil && (self.demo != nil || self.task != nil) }
+
     public func request(_ method: String, _ params: JSONValue = [:], timeout: TimeInterval = 20) async throws -> JSONValue {
         if let demo = self.demo {
             guard self.hello != nil else { throw GatewayError.notConnected }

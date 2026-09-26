@@ -5,12 +5,11 @@ import SwiftUI
 public struct PincerScene: Scene {
     /// One for the app's lifetime, so launch work (connecting, the Quick Capture hotkey) doesn't
     /// wait for a main window, which may never be created.
-    private static let sharedApp = AppModel()
-    @State private var app = PincerScene.sharedApp
+    @State private var app = AppModel.shared
 
     public init() {
         #if os(macOS)
-        QuickCaptureController.shared.install(app: Self.sharedApp)
+        QuickCaptureController.shared.install(app: AppModel.shared)
         #endif
     }
 
