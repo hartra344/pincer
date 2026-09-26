@@ -268,17 +268,29 @@ struct TranscriptFindBar: View {
             .fixedSize()
             .help("Search options")
             .accessibilityLabel("Search Options")
+            #if os(iOS)
+            // iOS draws a ControlGroup here as a segmented control whose buttons stay disabled
+            // when the bar opens before matches arrive, so taps never reach them.
+            HStack(spacing: -8) {
+                self.previousButton
+                self.nextButton
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
+            .tint(.primary)
+            .disabled(self.find.matches.isEmpty)
+            // 44pt tap targets that overlap their neighbors, so the bar keeps its size.
+            .padding(.horizontal, -4)
+            .padding(.vertical, -6)
+            #else
             ControlGroup {
-                Button("Previous", systemImage: "chevron.up") { self.find.previous() }
-                    .keyboardShortcut("g", modifiers: [.command, .shift])
-                    .help("Previous match (⇧⌘G)")
-                Button("Next", systemImage: "chevron.down") { self.find.next() }
-                    .keyboardShortcut("g", modifiers: .command)
-                    .help("Next match (⌘G)")
+                self.previousButton
+                self.nextButton
             }
             .labelStyle(.iconOnly)
             .disabled(self.find.matches.isEmpty)
             .fixedSize()
+            #endif
             Button("Done") { self.find.dismiss() }
                 .glassButton()
                 .controlSize(.small)
@@ -295,6 +307,28 @@ struct TranscriptFindBar: View {
 
     private var filtered: Bool {
         (self.find.includeThinking && !self.reasoningOff) || self.find.includeTools
+    }
+
+    private var previousButton: some View {
+        Button { self.find.previous() } label: { self.stepLabel("Previous", systemImage: "chevron.up") }
+            .keyboardShortcut("g", modifiers: [.command, .shift])
+            .help("Previous match (⇧⌘G)")
+            .accessibilityIdentifier("find-previous")
+    }
+
+    private var nextButton: some View {
+        Button { self.find.next() } label: { self.stepLabel("Next", systemImage: "chevron.down") }
+            .keyboardShortcut("g", modifiers: .command)
+            .help("Next match (⌘G)")
+            .accessibilityIdentifier("find-next")
+    }
+
+    private func stepLabel(_ title: String, systemImage: String) -> some View {
+        Label(title, systemImage: systemImage)
+            #if os(iOS)
+            .frame(width: 44, height: 44)
+            .contentShape(.rect)
+            #endif
     }
 }
 
