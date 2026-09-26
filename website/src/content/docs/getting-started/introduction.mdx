@@ -1,0 +1,52 @@
+---
+title: What is Pincer?
+description: Pincer is a native macOS and iOS client for OpenClaw that shows thinking, tool calls and inline images.
+sidebar:
+  label: Introduction
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { Image } from 'astro:assets';
+import shot from '../../../assets/screenshot-mac.png';
+
+Pincer is a native macOS and iOS app for talking to your [OpenClaw](https://github.com/openclaw/openclaw) agents.
+
+If you already chat with OpenClaw through a messaging app, Pincer will feel familiar. It keeps what works there, like servers, `#channels` and notifications, and adds what a plain chat window can't show: the agent's **thinking**, its **tool calls**, **inline images**, and your own messages shown under **your name**.
+
+<Image src={shot} alt="Pincer on macOS with a sidebar of agents and channels, and a chat showing a tool result and a chart." />
+
+## What you get
+
+<CardGrid>
+	<Card title="Organized by channel" icon="list-format">
+		Each server gets a section with its channels. Automations and agents get their own.
+	</Card>
+	<Card title="The agent's work, visible" icon="seti:pipeline">
+		Streaming thinking and tool cards with arguments and results.
+	</Card>
+	<Card title="Native and fast" icon="rocket">
+		Native lists and a background cache. Scrolling up never waits for the network.
+	</Card>
+	<Card title="Approvals anywhere" icon="approve-check">
+		Allow or deny exec requests from a banner or a notification.
+	</Card>
+</CardGrid>
+
+## What Pincer is (and isn't)
+
+Pincer is a **pure client**. It connects to a Gateway you already run and uses the Gateway WebSocket protocol (v4) in the `operator` role.
+
+- It **never** bundles, launches or embeds a Gateway.
+- It **never** registers as a node, so it doesn't expose camera, screen, shell or `system.run` capabilities.
+
+That's why you can use it on machines where the official OpenClaw app isn't allowed. [The security model](../../reference/security/) covers the details.
+
+:::note[You need a Gateway]
+Pincer doesn't run agents itself. It talks to an OpenClaw Gateway on this machine, on your network, or reachable over Tailscale. No gateway yet? You can still [try the demo](../try-the-demo/).
+:::
+
+## Next steps
+
+<LinkCard title="Install Pincer" description="Get the app for macOS or iOS." href="../install/" />
+<LinkCard title="Try the demo" description="Look around with sample agents. Nothing leaves your device." href="../try-the-demo/" />
+<LinkCard title="Connect a gateway" description="Add your gateway and approve this device." href="../connect-a-gateway/" />

@@ -1,0 +1,812 @@
+---
+import { Image } from 'astro:assets';
+import Icon from '../components/Icon.astro';
+import screenshot from '../assets/screenshot-mac.png';
+import logo from '../assets/logo.svg';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const href = (path: string) => `${base}/${path.replace(/^\//, '')}`;
+const repo = 'https://github.com/hartra344/pincer';
+const openclaw = 'https://github.com/openclaw/openclaw';
+
+const beyondChat = [
+	{
+		icon: 'brain',
+		title: 'Live thinking',
+		body: 'Watch reasoning stream in a collapsible section while the agent works. Show it never, live only, or for every turn.',
+	},
+	{
+		icon: 'wrench',
+		title: 'Tool calls',
+		body: 'Every tool call is a card with its arguments and result, and subagent runs open straight from the call that started them.',
+	},
+	{
+		icon: 'image',
+		title: 'Inline images',
+		body: 'Attachments and MEDIA: lines render inline, with a Quick Look-style preview and sharing.',
+	},
+	{
+		icon: 'user',
+		title: 'Messages that are yours',
+		body: 'What you send shows up under your name, even when you sent it from another app. A small tag says where it came from.',
+	},
+] as const;
+
+const features = [
+	{
+		icon: 'hash',
+		title: 'Organized by channel',
+		body: 'Servers, #channels, automations and agents, each in their own section. Or group by agent, by group, or by recency.',
+		link: 'guides/organizing-chats/',
+	},
+	{
+		icon: 'bolt',
+		title: 'Fast, native transcript',
+		body: 'Native table views, not a web view. Every chat is cached in the background, so scrolling up never waits on the network.',
+		link: 'guides/transcript/',
+	},
+	{
+		icon: 'slash',
+		title: 'Slash commands',
+		body: 'Type / to see the commands your gateway offers, including skills, plugins, models and thinking levels, with argument completion.',
+		link: 'guides/composer/',
+	},
+	{
+		icon: 'bell',
+		title: 'Approvals & notifications',
+		body: 'Allow once, always allow or deny an exec request from a banner or right from the notification. Reply without opening the app.',
+		link: 'guides/approvals-and-notifications/',
+	},
+	{
+		icon: 'sliders',
+		title: 'Gateway Settings',
+		body: 'Curated pages built from your gateway’s schema, plugin management, and a single Review Changes step before anything is saved.',
+		link: 'guides/gateway-settings/',
+	},
+	{
+		icon: 'palette',
+		title: 'Themes',
+		body: 'Eight built-in themes with light and dark shades. Override any color, and give chats and groups their own icons and colors.',
+		link: 'guides/appearance/',
+	},
+] as const;
+
+const themes = [
+	{ name: 'Lobster', colors: ['#E8543D', '#2F7FD8', '#1E1614'] },
+	{ name: 'Ocean', colors: ['#0A84C6', '#13A5A5', '#0F1A22'] },
+	{ name: 'Forest', colors: ['#2E8B57', '#8A6D3B', '#121A14'] },
+	{ name: 'Grape', colors: ['#8E44AD', '#C0399B', '#19131E'] },
+	{ name: 'Sunset', colors: ['#E67E22', '#E74C3C', '#1F1712'] },
+	{ name: 'Graphite', colors: ['#5E6670', '#4B5563', '#161718'] },
+	{ name: 'Midnight', colors: ['#4F6BED', '#7C4DFF', '#0B0E1A'] },
+];
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Pincer: a native macOS and iOS client for OpenClaw</title>
+		<meta
+			name="description"
+			content="Pincer is a native macOS and iOS client for OpenClaw. Channel-style chat organization with live thinking, tool calls, inline images and exec approvals."
+		/>
+		<meta name="theme-color" content="#1b1311" />
+		<link rel="icon" href={href('favicon.svg')} type="image/svg+xml" />
+		<meta property="og:title" content="Pincer for OpenClaw" />
+		<meta
+			property="og:description"
+			content="Your OpenClaw agents in a native Mac and iPhone app, with thinking, tool calls and inline images."
+		/>
+		<meta property="og:type" content="website" />
+	</head>
+	<body>
+		<header class="nav">
+			<a class="brand" href={href('/')}>
+				<img src={logo.src} alt="" width="30" height="30" />
+				<span>Pincer</span>
+			</a>
+			<nav>
+				<a href="#features">Features</a>
+				<a href="#security">Security</a>
+				<a href={href('getting-started/introduction/')}>Docs</a>
+				<a class="gh" href={repo} aria-label="GitHub"><Icon name="github" size={20} /></a>
+			</nav>
+		</header>
+
+		<main>
+			<section class="hero">
+				<div class="glow" aria-hidden="true"></div>
+				<p class="eyebrow">
+					<span class="dot"></span> For <a href={openclaw}>OpenClaw</a> · macOS &amp; iOS · Open source
+				</p>
+				<h1>Your agents, in a<br /><span class="grad">native chat app.</span></h1>
+				<p class="lede">
+					Pincer keeps what works about chatting with your agents in a messaging app, like organized channels
+					and notifications, and adds what a plain chat window can’t show: thinking, tool calls, inline
+					images, and messages that are clearly yours.
+				</p>
+				<div class="ctas">
+					<a class="btn primary" href={href('getting-started/introduction/')}>
+						Get started <Icon name="arrow" size={18} />
+					</a>
+					<a class="btn ghost" href={href('getting-started/try-the-demo/')}>
+						<Icon name="play" size={18} /> Try the demo
+					</a>
+				</div>
+				<p class="fine">No gateway? The built-in demo runs entirely on your device.</p>
+
+				<figure class="shot">
+					<Image
+						src={screenshot}
+						alt="Pincer on macOS showing a sidebar of agents and channels, and a chat with a tool result, a code block and an inline chart."
+						widths={[800, 1400, 2000]}
+						sizes="(max-width: 1200px) 100vw, 1200px"
+						loading="eager"
+					/>
+				</figure>
+			</section>
+
+			<section class="section" id="features">
+				<p class="kicker">Beyond plain chat</p>
+				<h2>See the work, not just the answer.</h2>
+				<div class="grid four">
+					{
+						beyondChat.map((f) => (
+							<article class="card">
+								<div class="icon">
+									<Icon name={f.icon} />
+								</div>
+								<h3>{f.title}</h3>
+								<p>{f.body}</p>
+							</article>
+						))
+					}
+				</div>
+			</section>
+
+			<section class="section">
+				<p class="kicker">Everything else</p>
+				<h2>Built for living in all day.</h2>
+				<div class="grid three">
+					{
+						features.map((f) => (
+							<a class="card link" href={href(f.link)}>
+								<div class="icon">
+									<Icon name={f.icon} />
+								</div>
+								<h3>{f.title}</h3>
+								<p>{f.body}</p>
+								<span class="more">
+									Learn more <Icon name="arrow" size={14} />
+								</span>
+							</a>
+						))
+					}
+				</div>
+			</section>
+
+			<section class="section steps-wrap">
+				<p class="kicker">Getting started</p>
+				<h2>Connected in three steps.</h2>
+				<ol class="steps">
+					<li>
+						<span class="num">1</span>
+						<h3>Run a Gateway</h3>
+						<p>
+							Pincer connects to an <a href={openclaw}>OpenClaw</a> Gateway you already run: on this Mac, on your
+							LAN, or at home over Tailscale.
+						</p>
+					</li>
+					<li>
+						<span class="num">2</span>
+						<h3>Add it in Pincer</h3>
+						<p>
+							Click <strong>+</strong> in the rail, enter the address, and pick token or password auth. Secrets go
+							straight to the Keychain.
+						</p>
+					</li>
+					<li>
+						<span class="num">3</span>
+						<h3>Approve this device</h3>
+						<p>On the gateway host, approve the pairing request. Pincer reconnects on its own.</p>
+						<pre><code><span class="p">$</span> openclaw devices list
+<span class="p">$</span> openclaw devices approve &lt;requestId&gt;</code></pre>
+					</li>
+				</ol>
+				<div class="ctas center">
+					<a class="btn primary" href={href('getting-started/connect-a-gateway/')}>
+						Connect your gateway <Icon name="arrow" size={18} />
+					</a>
+					<a class="btn ghost" href={href('getting-started/tailscale/')}>Using Tailscale</a>
+				</div>
+			</section>
+
+			<section class="section security" id="security">
+				<div class="sec-copy">
+					<p class="kicker">Security</p>
+					<h2>A pure client. Nothing more.</h2>
+					<p>
+						Pincer never bundles, launches or embeds a Gateway, and it never registers as a node. It exposes no
+						camera, screen, shell or <code>system.run</code> capabilities, so you can use it on machines where the
+						official OpenClaw app isn’t allowed.
+					</p>
+					<a class="textlink" href={href('reference/security/')}>
+						Read the security model <Icon name="arrow" size={14} />
+					</a>
+				</div>
+				<ul class="sec-list">
+					<li>
+						<Icon name="key" />
+						<div>
+							<strong>Per-device identity</strong>
+							<span>An Ed25519 key in the Keychain, this device only. The gateway approves it once.</span>
+						</div>
+					</li>
+					<li>
+						<Icon name="lock" />
+						<div>
+							<strong>Encrypted transport</strong>
+							<span><code>wss://</code> required off your LAN or tailnet, with optional TLS certificate pinning.</span>
+						</div>
+					</li>
+					<li>
+						<Icon name="eyeOff" />
+						<div>
+							<strong>Scoped access</strong>
+							<span>Read, write and approvals by default. Admin only when you ask for it.</span>
+						</div>
+					</li>
+					<li>
+						<Icon name="laptop" />
+						<div>
+							<strong>Sandboxed</strong>
+							<span>The macOS app is sandboxed and caches transcripts with complete file protection.</span>
+						</div>
+					</li>
+				</ul>
+			</section>
+
+			<section class="section themes">
+				<p class="kicker">Make it yours</p>
+				<h2>Eight themes, light and dark.</h2>
+				<div class="theme-row">
+					<div class="theme">
+						<div class="chips"><span style="background:conic-gradient(#0a84ff,#34c759,#ff9f0a,#ff375f,#0a84ff)"></span></div>
+						<span>Default</span>
+					</div>
+					{
+						themes.map((t) => (
+							<div class="theme">
+								<div class="chips">
+									{t.colors.map((c) => (
+										<span style={`background:${c}`} />
+									))}
+								</div>
+								<span>{t.name}</span>
+							</div>
+						))
+					}
+				</div>
+			</section>
+
+			<section class="final">
+				<img src={logo.src} alt="" width="84" height="84" />
+				<h2>Bring your agents home.</h2>
+				<p>Free and open source under the MIT license.</p>
+				<div class="ctas center">
+					<a class="btn primary" href={href('getting-started/install/')}>
+						Install Pincer <Icon name="arrow" size={18} />
+					</a>
+					<a class="btn ghost" href={repo}><Icon name="github" size={18} /> Star on GitHub</a>
+				</div>
+			</section>
+		</main>
+
+		<footer class="footer">
+			<div>
+				<img src={logo.src} alt="" width="22" height="22" />
+				<span>Pincer · MIT License</span>
+			</div>
+			<nav>
+				<a href={href('getting-started/introduction/')}>Docs</a>
+				<a href={href('reference/troubleshooting/')}>Troubleshooting</a>
+				<a href={href('development/building/')}>Build from source</a>
+				<a href={repo}>GitHub</a>
+				<a href={openclaw}>OpenClaw</a>
+			</nav>
+			<p class="disclaimer">Pincer is an independent client and isn’t affiliated with the OpenClaw project.</p>
+		</footer>
+	</body>
+</html>
+
+<style is:global>
+	:root {
+		--bg: #140e0c;
+		--bg-2: #1e1614;
+		--card: #221916;
+		--line: rgba(255, 220, 205, 0.09);
+		--text: #f7ece8;
+		--muted: #b9a49d;
+		--accent: #f0654e;
+		--accent-2: #ff8a5b;
+		--deep: #d9283b;
+		color-scheme: dark;
+	}
+	* {
+		box-sizing: border-box;
+	}
+	html {
+		scroll-behavior: smooth;
+	}
+	body {
+		margin: 0;
+		background: var(--bg);
+		color: var(--text);
+		font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
+		line-height: 1.55;
+		-webkit-font-smoothing: antialiased;
+		overflow-x: clip;
+	}
+	a {
+		color: inherit;
+	}
+	code,
+	pre {
+		font-family: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+	}
+	code {
+		font-size: 0.9em;
+		background: rgba(255, 255, 255, 0.07);
+		padding: 0.1em 0.35em;
+		border-radius: 0.3em;
+	}
+</style>
+
+<style>
+	.nav {
+		position: sticky;
+		top: 0;
+		z-index: 10;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0.85rem clamp(1rem, 4vw, 3rem);
+		background: rgba(20, 14, 12, 0.72);
+		backdrop-filter: saturate(160%) blur(14px);
+		-webkit-backdrop-filter: saturate(160%) blur(14px);
+		border-bottom: 1px solid var(--line);
+	}
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		font-weight: 700;
+		font-size: 1.1rem;
+		text-decoration: none;
+	}
+	.brand img {
+		border-radius: 22%;
+	}
+	.nav nav {
+		display: flex;
+		align-items: center;
+		gap: clamp(0.9rem, 2.5vw, 1.8rem);
+	}
+	.nav nav a {
+		text-decoration: none;
+		color: var(--muted);
+		font-size: 0.95rem;
+		transition: color 0.15s;
+	}
+	.nav nav a:hover {
+		color: var(--text);
+	}
+	.gh {
+		display: flex;
+	}
+
+	.hero {
+		position: relative;
+		text-align: center;
+		padding: clamp(4rem, 10vw, 7.5rem) clamp(1rem, 4vw, 3rem) 0;
+		overflow: hidden;
+	}
+	.glow {
+		position: absolute;
+		inset: -20% -10% auto;
+		height: 900px;
+		background:
+			radial-gradient(40% 45% at 50% 30%, rgba(240, 101, 78, 0.35), transparent 70%),
+			radial-gradient(30% 35% at 25% 20%, rgba(255, 138, 91, 0.18), transparent 70%),
+			radial-gradient(30% 35% at 78% 25%, rgba(217, 40, 59, 0.2), transparent 70%);
+		filter: blur(10px);
+		pointer-events: none;
+	}
+	.hero > *:not(.glow) {
+		position: relative;
+	}
+	.eyebrow {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.55rem;
+		margin: 0 0 1.6rem;
+		padding: 0.35rem 0.9rem;
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.04);
+		color: var(--muted);
+		font-size: 0.85rem;
+	}
+	.eyebrow a {
+		color: var(--text);
+		text-decoration: none;
+		font-weight: 600;
+	}
+	.dot {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--accent);
+		box-shadow: 0 0 10px var(--accent);
+	}
+	h1 {
+		margin: 0 auto;
+		max-width: 16ch;
+		font-size: clamp(2.6rem, 7vw, 5rem);
+		line-height: 1.02;
+		letter-spacing: -0.035em;
+		font-weight: 800;
+	}
+	.grad {
+		background: linear-gradient(100deg, #ffb08f, var(--accent) 45%, var(--deep));
+		-webkit-background-clip: text;
+		background-clip: text;
+		color: transparent;
+	}
+	.lede {
+		max-width: 40rem;
+		margin: 1.6rem auto 0;
+		color: var(--muted);
+		font-size: clamp(1.05rem, 2vw, 1.25rem);
+	}
+	.ctas {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.8rem;
+		justify-content: center;
+		margin-top: 2.2rem;
+	}
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.8rem 1.35rem;
+		border-radius: 999px;
+		font-weight: 600;
+		text-decoration: none;
+		transition:
+			transform 0.15s,
+			box-shadow 0.15s,
+			background 0.15s;
+	}
+	.btn:hover {
+		transform: translateY(-1px);
+	}
+	.btn.primary {
+		background: linear-gradient(180deg, var(--accent-2), var(--deep));
+		color: #fff;
+		box-shadow:
+			0 8px 30px -8px rgba(240, 101, 78, 0.7),
+			inset 0 1px 0 rgba(255, 255, 255, 0.25);
+	}
+	.btn.primary:hover {
+		box-shadow:
+			0 12px 36px -8px rgba(240, 101, 78, 0.85),
+			inset 0 1px 0 rgba(255, 255, 255, 0.25);
+	}
+	.btn.ghost {
+		border: 1px solid var(--line);
+		background: rgba(255, 255, 255, 0.04);
+	}
+	.btn.ghost:hover {
+		background: rgba(255, 255, 255, 0.08);
+	}
+	.fine {
+		margin: 1rem 0 0;
+		color: var(--muted);
+		font-size: 0.85rem;
+	}
+	.shot {
+		max-width: 1200px;
+		margin: clamp(3rem, 7vw, 5rem) auto 0;
+		padding: 0;
+		border-radius: 18px 18px 0 0;
+		overflow: hidden;
+		border: 1px solid var(--line);
+		border-bottom: none;
+		box-shadow:
+			0 -20px 80px -20px rgba(240, 101, 78, 0.35),
+			0 40px 120px rgba(0, 0, 0, 0.6);
+		-webkit-mask-image: linear-gradient(to bottom, #000 75%, transparent);
+		mask-image: linear-gradient(to bottom, #000 75%, transparent);
+	}
+	.shot img {
+		display: block;
+		width: 100%;
+		height: auto;
+	}
+
+	.section {
+		max-width: 1160px;
+		margin: 0 auto;
+		padding: clamp(4rem, 9vw, 7rem) clamp(1rem, 4vw, 2rem) 0;
+	}
+	.kicker {
+		margin: 0 0 0.6rem;
+		color: var(--accent);
+		font-weight: 600;
+		font-size: 0.85rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+	h2 {
+		margin: 0 0 2.5rem;
+		font-size: clamp(1.9rem, 4.2vw, 3rem);
+		line-height: 1.1;
+		letter-spacing: -0.03em;
+		font-weight: 750;
+	}
+	.grid {
+		display: grid;
+		gap: 1rem;
+	}
+	.grid.four {
+		grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+	}
+	.grid.three {
+		grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+	}
+	.card {
+		position: relative;
+		display: block;
+		padding: 1.6rem;
+		border: 1px solid var(--line);
+		border-radius: 18px;
+		background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01));
+		text-decoration: none;
+		transition:
+			border-color 0.2s,
+			transform 0.2s,
+			background 0.2s;
+	}
+	.card.link:hover {
+		border-color: rgba(240, 101, 78, 0.45);
+		transform: translateY(-2px);
+		background: linear-gradient(180deg, rgba(240, 101, 78, 0.07), rgba(255, 255, 255, 0.01));
+	}
+	.icon {
+		display: grid;
+		place-items: center;
+		width: 44px;
+		height: 44px;
+		margin-bottom: 1.1rem;
+		border-radius: 12px;
+		color: #fff;
+		background: linear-gradient(160deg, var(--accent-2), var(--deep));
+		box-shadow: 0 6px 20px -6px rgba(240, 101, 78, 0.6);
+	}
+	.card h3 {
+		margin: 0 0 0.4rem;
+		font-size: 1.1rem;
+		letter-spacing: -0.01em;
+	}
+	.card p {
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.97rem;
+	}
+	.more {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		margin-top: 1rem;
+		color: var(--accent);
+		font-size: 0.9rem;
+		font-weight: 600;
+	}
+
+	.steps {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+		gap: 1rem;
+		counter-reset: step;
+	}
+	.steps li {
+		padding: 1.6rem;
+		border: 1px solid var(--line);
+		border-radius: 18px;
+		background: var(--bg-2);
+	}
+	.num {
+		display: inline-grid;
+		place-items: center;
+		width: 32px;
+		height: 32px;
+		margin-bottom: 0.9rem;
+		border-radius: 50%;
+		border: 1px solid rgba(240, 101, 78, 0.5);
+		color: var(--accent);
+		font-weight: 700;
+	}
+	.steps h3 {
+		margin: 0 0 0.4rem;
+	}
+	.steps p {
+		margin: 0;
+		color: var(--muted);
+	}
+	.steps a {
+		color: var(--text);
+	}
+	.steps pre {
+		margin: 1rem 0 0;
+		padding: 0.9rem 1rem;
+		border-radius: 12px;
+		background: #0e0908;
+		border: 1px solid var(--line);
+		overflow-x: auto;
+		font-size: 0.85rem;
+	}
+	.steps pre code {
+		background: none;
+		padding: 0;
+	}
+	.p {
+		color: var(--accent);
+		user-select: none;
+	}
+	.center {
+		justify-content: center;
+	}
+
+	.security {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+		gap: clamp(2rem, 5vw, 4rem);
+		align-items: center;
+	}
+	.security h2 {
+		margin-bottom: 1.2rem;
+	}
+	.sec-copy p {
+		color: var(--muted);
+		font-size: 1.08rem;
+		margin: 0 0 1.4rem;
+	}
+	.textlink {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		color: var(--accent);
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.sec-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.75rem;
+	}
+	.sec-list li {
+		display: flex;
+		gap: 1rem;
+		align-items: flex-start;
+		padding: 1.1rem 1.2rem;
+		border: 1px solid var(--line);
+		border-radius: 14px;
+		background: var(--bg-2);
+	}
+	.sec-list li > :global(svg) {
+		flex: none;
+		color: var(--accent);
+		margin-top: 2px;
+	}
+	.sec-list strong {
+		display: block;
+	}
+	.sec-list span {
+		color: var(--muted);
+		font-size: 0.95rem;
+	}
+
+	.theme-row {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+		gap: 0.8rem;
+	}
+	.theme {
+		border: 1px solid var(--line);
+		border-radius: 14px;
+		overflow: hidden;
+		background: var(--bg-2);
+	}
+	.theme .chips {
+		display: flex;
+		height: 56px;
+	}
+	.theme .chips span {
+		flex: 1;
+	}
+	.theme > span {
+		display: block;
+		padding: 0.5rem 0.8rem;
+		font-weight: 600;
+		font-size: 0.9rem;
+	}
+
+	.final {
+		text-align: center;
+		padding: clamp(5rem, 10vw, 8rem) 1rem;
+		background: radial-gradient(40% 60% at 50% 60%, rgba(240, 101, 78, 0.18), transparent 70%);
+	}
+	.final img {
+		border-radius: 22%;
+		box-shadow: 0 20px 60px -15px rgba(240, 101, 78, 0.7);
+	}
+	.final h2 {
+		margin: 1.5rem 0 0.6rem;
+	}
+	.final p {
+		margin: 0;
+		color: var(--muted);
+	}
+
+	.footer {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1rem 2rem;
+		align-items: center;
+		justify-content: space-between;
+		padding: 2rem clamp(1rem, 4vw, 3rem);
+		border-top: 1px solid var(--line);
+		color: var(--muted);
+		font-size: 0.9rem;
+	}
+	.footer > div {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+	.footer img {
+		border-radius: 22%;
+	}
+	.footer nav {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1.3rem;
+	}
+	.footer nav a {
+		text-decoration: none;
+	}
+	.footer nav a:hover {
+		color: var(--text);
+	}
+	.disclaimer {
+		flex-basis: 100%;
+		margin: 0;
+		font-size: 0.8rem;
+		opacity: 0.7;
+	}
+
+	@media (max-width: 640px) {
+		.nav nav a:not(.gh):not([href*='getting-started']) {
+			display: none;
+		}
+	}
+</style>

@@ -1,0 +1,86 @@
+---
+title: Connect a gateway
+description: Add your OpenClaw Gateway to Pincer, sign in, and approve this device.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+Pincer connects to an OpenClaw Gateway you already run. This page walks through adding one and approving your device.
+
+## Before you start
+
+You'll need:
+
+- the **address** of your gateway, such as `ws://127.0.0.1:18789` on the same Mac or `wss://my-mac.tail1234.ts.net` over Tailscale;
+- the gateway's **token** or **password**, unless it uses Tailscale identity;
+- access to a terminal on the **gateway host**, to approve this device the first time.
+
+## Add the gateway
+
+<Steps>
+1. Click **+** in the rail (or choose **Add Gateway…** on the welcome screen).
+
+2. Fill in the connection:
+
+   | Field | What to enter |
+   | --- | --- |
+   | **Name** | Anything you like, such as *Home*. |
+   | **Gateway URL** | The WebSocket address of your gateway. See [Choosing an address](#choosing-an-address). |
+   | **Authentication** | *Gateway token*, *Gateway password*, or *Tailscale identity / none*, matching how your gateway is set up. |
+   | **Access** | *Chat & Approvals* for everyday use, or *Full Management* to also edit gateway settings. |
+   | **TLS certificate SHA-256** | Optional. Pin the gateway's certificate by its fingerprint. |
+
+3. Save. Pincer connects, and the first time it shows a **pairing request**.
+
+4. On the gateway host, list pending devices and approve Pincer's request:
+
+   ```sh
+   openclaw devices list
+   openclaw devices approve <requestId>
+   ```
+
+5. Pincer reconnects on its own as soon as you approve it. Your agents and chats appear in the sidebar, and the full history of each chat starts caching in the background.
+</Steps>
+
+<Aside type="tip">
+Every install has its own device key, so each Mac, iPhone and iPad needs to be approved once. After that, it reconnects on its own.
+</Aside>
+
+## Choosing an address
+
+| Where the gateway runs | Example address |
+| --- | --- |
+| On this Mac | `ws://127.0.0.1:18789` |
+| On your local network | `ws://192.168.1.20:18789` |
+| Over Tailscale Serve | `wss://my-mac.tail1234.ts.net` |
+| Over Tailscale, by IP | `ws://100.x.y.z:18789` |
+| Anywhere else | `wss://gateway.example.com` |
+
+Plain `ws://` is only allowed for loopback, private LAN and Tailscale addresses. Anything else has to use `wss://`. For the Tailscale setup, see [Connect over Tailscale](../tailscale/).
+
+## Access levels
+
+| Level | Scopes | What you can do |
+| --- | --- | --- |
+| **Chat & Approvals** (default) | `operator.read`, `operator.write`, `operator.approvals` | Chat, read history and answer approvals. Gateway settings are read-only. |
+| **Full Management** | Also `operator.admin` | Also change the gateway's settings and plugins. |
+
+Switching to **Full Management** asks the gateway for more access, so the gateway host needs to approve the device again. You can change this later under **Gateway Settings → Connection**.
+
+## Where your secrets go
+
+Tokens and passwords are stored in the **Keychain**, never in preferences. The device identity is an Ed25519 key, also in the Keychain and marked *this device only*, so it doesn't sync to other devices. More in [Security & privacy](../../reference/security/).
+
+## Turn on thinking
+
+OpenClaw only stores the agent's reasoning when the session's reasoning level is on. To see it in Pincer, use the hint above the composer, choose **Gateway Reasoning → Save & Stream** from the chat's ⋯ menu, or send:
+
+```text
+/reasoning on
+```
+
+See [Transcript, thinking & tools](../../guides/transcript/) for how much of it to show.
+
+## Having trouble?
+
+See [Troubleshooting](../../reference/troubleshooting/) for pairing, TLS and connection problems.

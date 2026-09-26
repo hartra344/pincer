@@ -1,0 +1,38 @@
+---
+title: Connect over Tailscale
+description: Reach your home OpenClaw Gateway from anywhere with Tailscale.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+[Tailscale](https://tailscale.com) is the easiest way to reach a gateway running at home from your laptop or phone, without opening ports to the internet.
+
+<Steps>
+1. **Expose the gateway on your tailnet.** On the gateway host, set up Tailscale Serve for the gateway, following the OpenClaw remote-access docs.
+
+2. **Make sure your device is on the same tailnet.** Install Tailscale on your Mac or iPhone and sign in to the same account.
+
+3. **Add the gateway in Pincer.** Click **+** in the rail and enter one of these addresses:
+
+   - **With Tailscale Serve:** `wss://<host>.<tailnet>.ts.net`, for example `wss://my-mac.tail1234.ts.net`. Serve uses HTTPS on port 443, so use `wss://` and leave off the port.
+   - **Directly by tailnet IP:** `ws://100.x.y.z:18789`, using the gateway's port.
+
+4. **Pick the auth mode** your gateway uses (token, password, or Tailscale identity) and enter the secret.
+
+5. **Approve the device.** The first time, Pincer shows a pairing request. On the gateway host, run:
+
+   ```sh
+   openclaw devices list
+   openclaw devices approve <requestId>
+   ```
+
+   Pincer reconnects on its own after you approve it.
+</Steps>
+
+<Aside type="caution" title="ws:// with a .ts.net name">
+If you enter `ws://` with a `.ts.net` name, Pincer warns you. Tailscale Serve uses HTTPS, so a Serve name almost always needs `wss://`. Use `ws://` only with the tailnet IP and the gateway's port.
+</Aside>
+
+## On the go
+
+Because the device identity and secret stay in the Keychain, Pincer reconnects whenever Tailscale is up, whether you're on home Wi-Fi or on cellular. Notifications for chats you aren't looking at arrive as they happen while Pincer is connected.

@@ -1,0 +1,82 @@
+---
+title: Install Pincer
+description: Get Pincer on your Mac or iPhone, through TestFlight or by building it from source.
+---
+
+import { Tabs, TabItem, Steps, Aside } from '@astrojs/starlight/components';
+
+Pincer runs on **macOS 15** and **iOS 18** or later.
+
+## Requirements
+
+- A Mac on macOS 15 (Sequoia) or later, or an iPhone or iPad on iOS 18 or later.
+- An [OpenClaw](https://github.com/openclaw/openclaw) Gateway you can reach, unless you only want to [try the demo](../try-the-demo/).
+
+## Get the app
+
+<Tabs>
+	<TabItem label="TestFlight">
+		Pincer beta builds for macOS and iOS are shipped through Apple's **TestFlight**.
+
+		<Steps>
+		1. Install [TestFlight](https://apps.apple.com/app/testflight/id899247664) from the App Store on your Mac or iPhone.
+		2. Open the Pincer TestFlight invite link you were given, and choose **Accept**.
+		3. Choose **Install**. Pincer shows up with your other apps.
+		</Steps>
+
+		<Aside>
+		Don't have an invite? Ask in the [GitHub repository](https://github.com/hartra344/pincer), or build it yourself from the next tab.
+		</Aside>
+	</TabItem>
+	<TabItem label="Build from source (macOS)">
+		You need a current **Xcode** (Swift 6, with the macOS 15 SDK or later) with its license accepted. The Command Line Tools alone won't build the UI, because the SwiftUI macros only ship inside Xcode.app.
+
+		<Steps>
+		1. Clone the repository:
+
+		   ```sh
+		   git clone https://github.com/hartra344/pincer.git
+		   cd pincer
+		   ```
+
+		2. Accept the Xcode license if you haven't already:
+
+		   ```sh
+		   sudo xcodebuild -license accept
+		   ```
+
+		3. Build and open the app:
+
+		   ```sh
+		   scripts/bundle-mac.sh release    # -> build/Pincer.app
+		   open build/Pincer.app
+		   ```
+		</Steps>
+
+		<Aside type="caution">
+		This quick bundle is only ad-hoc signed and isn't sandboxed. For a signed, sandboxed app, or for iOS, use Xcode as described in [Building from source](../../development/building/).
+		</Aside>
+	</TabItem>
+	<TabItem label="Build from source (iOS)">
+		<Steps>
+		1. Install [XcodeGen](https://github.com/yonaskolb/XcodeGen), for example with `brew install xcodegen`.
+		2. Generate and open the Xcode project:
+
+		   ```sh
+		   xcodegen generate
+		   open Pincer.xcodeproj
+		   ```
+
+		3. Select the **Pincer-iOS** scheme, set your signing team, choose your device or a simulator, and run.
+		</Steps>
+	</TabItem>
+</Tabs>
+
+## First launch
+
+The first time you open Pincer, the welcome screen offers two choices:
+
+- **Add Gateway…** connects to your own gateway. See [Connect a gateway](../connect-a-gateway/).
+- **Try the Demo** opens a simulated gateway with sample chats. See [Try the demo](../try-the-demo/).
+
+Each install creates its own device identity, so every Mac and iPhone needs to be approved by the gateway once.

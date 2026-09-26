@@ -1,0 +1,52 @@
+---
+title: Appearance
+description: Light and dark mode, themes and custom colors in Pincer.
+---
+
+Open **Settings → Appearance** to choose how Pincer looks.
+
+## Light, Dark or System
+
+Pick **Light**, **Dark**, or **System** to follow your device.
+
+## Themes
+
+Themes color the accent, links, both avatars, and the chat, sidebar and code backgrounds, with separate shades for light and dark mode.
+
+export const themes = [
+	['Lobster', ['#E8543D', '#2F7FD8', '#FFF8F5', '#1E1614']],
+	['Ocean', ['#0A84C6', '#13A5A5', '#F4F9FC', '#0F1A22']],
+	['Forest', ['#2E8B57', '#8A6D3B', '#F6FAF5', '#121A14']],
+	['Grape', ['#8E44AD', '#C0399B', '#FAF6FC', '#19131E']],
+	['Sunset', ['#E67E22', '#E74C3C', '#FFF9F2', '#1F1712']],
+	['Graphite', ['#5E6670', '#4B5563', '#F7F7F8', '#161718']],
+	['Midnight', ['#4F6BED', '#7C4DFF', '#F3F4FA', '#0B0E1A']],
+];
+
+<div class="swatches not-content">
+	<figure class="swatch">
+		<div class="chips"><span style="background:conic-gradient(#0a84ff,#34c759,#ff9f0a,#ff375f,#0a84ff)"></span></div>
+		<div class="name">Default</div>
+	</figure>
+	{themes.map(([name, colors]) => (
+		<figure class="swatch">
+			<div class="chips">{colors.map((c) => <span style={`background:${c}`} />)}</div>
+			<div class="name">{name}</div>
+		</figure>
+	))}
+</div>
+
+**Default** keeps Pincer's original look: your system accent color and the standard backgrounds.
+
+## Custom colors
+
+Any of a theme's colors can be overridden with your own pick, and reset back to the theme's.
+
+## Chat and group icons and colors
+
+You can also style individual chats and groups from the sidebar:
+
+- **Color → Custom…** on a chat picks any color.
+- **Change Icon…** on a chat or group header picks an SF Symbol.
+
+These sync to your other devices through the gateway. See [Organizing chats](../organizing-chats/).

@@ -1,0 +1,92 @@
+/* Pincer "Lobster" palette applied to Starlight. */
+:root {
+	--sl-color-accent-low: #3a1712;
+	--sl-color-accent: #f0654e;
+	--sl-color-accent-high: #ffd3c8;
+	--sl-color-white: #ffffff;
+	--sl-color-gray-1: #f4ebe8;
+	--sl-color-gray-2: #d9ccc7;
+	--sl-color-gray-3: #a8938c;
+	--sl-color-gray-4: #6e5a54;
+	--sl-color-gray-5: #3d2f2b;
+	--sl-color-gray-6: #2a1f1c;
+	--sl-color-black: #1b1311;
+	--sl-font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
+	--sl-font-mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #ffe1d9;
+	--sl-color-accent: #c9412b;
+	--sl-color-accent-high: #5c1a0f;
+	--sl-color-white: #1b1311;
+	--sl-color-gray-1: #2a1f1c;
+	--sl-color-gray-2: #3d2f2b;
+	--sl-color-gray-3: #6e5a54;
+	--sl-color-gray-4: #a8938c;
+	--sl-color-gray-5: #e6d9d4;
+	--sl-color-gray-6: #fbefea;
+	--sl-color-gray-7: #fff8f5;
+	--sl-color-black: #ffffff;
+}
+
+.site-title img {
+	border-radius: 22%;
+}
+
+kbd {
+	font-family: var(--sl-font);
+	font-size: 0.85em;
+	padding: 0.1em 0.45em;
+	border: 1px solid var(--sl-color-gray-5);
+	border-bottom-width: 2px;
+	border-radius: 0.35em;
+	background: var(--sl-color-gray-6);
+	white-space: nowrap;
+}
+
+.swatches {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+	gap: 0.75rem;
+	margin-block: 1.25rem;
+}
+.swatch {
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.75rem;
+	overflow: hidden;
+	margin: 0 !important;
+}
+.swatch .chips {
+	display: flex;
+	height: 3rem;
+}
+.swatch .chips span {
+	flex: 1;
+}
+.swatch .name {
+	padding: 0.4rem 0.7rem;
+	font-weight: 600;
+	font-size: var(--sl-text-sm);
+}
+
+/* Keep short table labels whole on narrow screens; wide tables scroll instead. */
+.sl-markdown-content :is(th, td) {
+	overflow-wrap: normal;
+	word-break: normal;
+}
+.sl-markdown-content td:first-child {
+	min-width: 7rem;
+}
+
+/* Tint "tip" asides with the theme instead of Starlight's default purple. */
+:root {
+	--sl-color-purple: #ff8a5b;
+	--sl-color-purple-low: #3a1d12;
+	--sl-color-purple-high: #ffd9c7;
+}
+:root[data-theme='light'] {
+	--sl-color-purple: #c9412b;
+	--sl-color-purple-low: #ffe7dc;
+	--sl-color-purple-high: #5c1a0f;
+}

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#FF8A5B"/>
+      <stop offset="1" stop-color="#D9283B"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.2" r="0.8">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#FFE9DD"/>
+    </linearGradient>
+    <mask id="cut">
+      <rect width="1024" height="1024" fill="#fff"/>
+      <g transform="rotate(-45 660 400)" fill="#000">
+        <ellipse cx="640" cy="400" rx="150" ry="112"/>
+        <rect x="640" y="378" width="400" height="44" rx="22"/>
+      </g>
+    </mask>
+    <g id="glyph">
+      <circle cx="500" cy="530" r="300"/>
+      <path d="M 330 770 C 310 820 270 860 215 885 C 300 885 380 860 430 820 Z"/>
+    </g>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <rect width="1024" height="1024" fill="url(#glow)"/>
+  <g mask="url(#cut)">
+    <use href="#glyph" fill="#8A0F22" stroke="#8A0F22" stroke-linejoin="round" stroke-width="0" opacity="0.06" transform="translate(0 18)"/>
+    <use href="#glyph" fill="#8A0F22" stroke="#8A0F22" stroke-linejoin="round" stroke-width="10" opacity="0.06" transform="translate(0 18)"/>
+    <use href="#glyph" fill="#8A0F22" stroke="#8A0F22" stroke-linejoin="round" stroke-width="20" opacity="0.06" transform="translate(0 18)"/>
+    <use href="#glyph" fill="#8A0F22" stroke="#8A0F22" stroke-linejoin="round" stroke-width="30" opacity="0.06" transform="translate(0 18)"/>
+    <use href="#glyph" fill="#8A0F22" stroke="#8A0F22" stroke-linejoin="round" stroke-width="40" opacity="0.06" transform="translate(0 18)"/>
+    <use href="#glyph" fill="#8A0F22" stroke="#8A0F22" stroke-linejoin="round" stroke-width="52" opacity="0.06" transform="translate(0 18)"/>
+    <use href="#glyph" fill="url(#fg)"/>
+  </g>
+</svg>
