@@ -25,6 +25,7 @@ Settings are read-only unless this device's **Access** is set to **Full Manageme
 | **Connection** | This device's URL, token, access level and TLS pin. **Apply** reconnects. |
 | **Overview** | The gateway's version, config file and health. |
 | **Approval History** | Past approval decisions from the last 30 days. |
+| **Pairing Requests** | People waiting to message your agents on a channel that uses DM pairing. See [below](#pairing-requests). |
 | **Gateway** | Core gateway settings. |
 | **Agents & Models** | Agents, their models and defaults. |
 | **Channels** | Messaging channels, such as Discord. |
@@ -100,8 +101,36 @@ Select an entry for the details:
 
 If the gateway doesn't keep a history, the page says "Approval History Isn't Available". Update OpenClaw to see past decisions.
 
+## Pairing Requests
+
+When a channel account uses `dmPolicy: "pairing"`, someone new who messages it has to be let in before they can talk to your agents. **Pairing Requests** lists who's waiting, newest first, and the sidebar badge shows how many.
+
+Each request shows:
+
+- the sender's name or `@username`, if they set one. These come from the sender and aren't verified;
+- the channel's sender id, such as "Telegram user id: 5550142". This is the part you can trust, and it's always shown;
+- the channel and account the message came to;
+- when they asked, when the request expires and, if they asked again, when they were last seen. On macOS, hover for the exact times.
+
+What you can do:
+
+- **Approve** asks you to confirm first. The sender can then DM the agent on that account. If the channel supports it, **Tell them they were approved** sends them a note. On a gateway that doesn't have a command owner yet, Full Management can also **Make them the command owner**.
+- **Dismiss** removes the request without blocking the sender. They can ask again.
+- Right-click (or long-press) a request to copy the sender id or the request id.
+
+Expired requests can't be approved; dismiss them or wait for the next refresh.
+
+:::note[Needs Full Management]
+Reviewing pairing requests needs **Access → Full Management**. The gateway's pairing methods need `operator.pairing`, which Pincer doesn't ask for (see [Security & privacy](../../reference/security/#pairing-requests)); `operator.admin` covers it.
+:::
+
+There's no notification for new requests: the list refreshes when you open the page, when Pincer reconnects, and every 30 seconds while it's showing. On iOS you can also pull to refresh.
+
+The pairing code the sender was given isn't part of the gateway's protocol, so Pincer doesn't show one. Senders you already approved aren't listed and can't be removed here. To revoke access, edit the channel's allowlist on the gateway.
+
 ## Current limits
 
 - Gateway Settings has so far been tested against the [mock gateway](../../development/mock-gateway/) only.
 - It doesn't browse the ClawHub catalog or show install progress yet.
 - Lists of objects can't be edited in forms yet. Use **Raw Config** for those.
+- **Pairing Requests** has no list of approved senders, can't remove them, and doesn't notify you about new requests.
