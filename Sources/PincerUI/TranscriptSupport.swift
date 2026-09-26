@@ -94,6 +94,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     private enum ImageState: Equatable { case loading, loaded, failed }
 
     private(set) var context: TranscriptContext
+    private(set) var highlight = TranscriptHighlight()
     private var settings: TranscriptSettings
     private var cache: [String: Entry] = [:]
     private var imageRows: [String: Set<String>] = [:]
@@ -143,10 +144,54 @@ final class TranscriptRenderer: TranscriptRowActions {
         }
     }
 
+    /// Applies what Find highlights, relaying out only the rows it changes. Returns the row to
+    /// scroll to when the selected match should be brought into view.
+    func update(highlight: TranscriptHighlight) -> String? {
+        let old = self.highlight
+        guard highlight != old else { return nil }
+        self.highlight = highlight
+        var stale: Set<String> = []
+        if highlight.query != old.query || highlight.options != old.options {
+            stale = old.rows.union(highlight.rows)
+        } else if highlight.rows != old.rows {
+            // Matches arrived for the query, or a message gained or lost one.
+            stale = old.rows.symmetricDifference(highlight.rows)
+        }
+        if highlight.current != old.current {
+            if let id = old.current?.entryId { stale.insert(id) }
+            if let id = highlight.current?.entryId { stale.insert(id) }
+        }
+        let reveal = highlight.reveal != old.reveal ? highlight.current : nil
+        if let reveal {
+            // Relaid out even when it's the same match, in case its card was collapsed since.
+            self.expand(for: reveal)
+            stale.insert(reveal.entryId)
+        }
+        for id in stale { self.cache[id] = nil }
+        self.onInvalidate?(stale, nil)
+        return reveal?.entryId
+    }
+
+    /// Opens the thinking group and tool card a match is in, so it's visible once scrolled to.
+    private func expand(for match: TranscriptSearch.Match) {
+        guard match.entryId.hasPrefix("a-") else { return }
+        let turn = String(match.entryId.dropFirst(2))
+        switch match.section {
+        case .thinking:
+            self.context.disclosure.set("steps:\(turn)", expanded: true)
+            self.context.disclosure.set("thinking:\(turn)", expanded: true)
+        case let .tool(id):
+            self.context.disclosure.set("steps:\(turn)", expanded: true)
+            self.context.disclosure.set("tool:\(id)", expanded: true)
+        case .message:
+            break
+        }
+    }
+
     /// The row laid out at `width`, from cache when neither has changed.
     func layout(for row: TranscriptRow, width: CGFloat) -> TranscriptRowLayout {
         if let entry = self.cache[row.id], entry.layout.width == width, entry.row == row { return entry.layout }
-        var layout = TranscriptLayoutBuilder(context: self.context, settings: self.settings).layout(row, width: width)
+        var layout = TranscriptLayoutBuilder(context: self.context, settings: self.settings, highlight: self.highlight).layout(row, width: width)
         self.serial += 1
         layout.serial = self.serial
         self.cache[row.id] = Entry(row: row, layout: layout)

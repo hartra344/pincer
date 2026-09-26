@@ -19,6 +19,7 @@ actor DemoGateway {
     }
 
     private static let defaultModel = (provider: "anthropic", model: "claude-opus-4-8")
+    private static let contextTokens = 200_000
     private static let modelCatalog: [JSONValue] = [
         ["id": "claude-opus-4-8", "name": "Claude Opus 4.8", "provider": "anthropic", "available": true],
         ["id": "claude-sonnet-5", "name": "Claude Sonnet 5", "provider": "anthropic", "available": true],
@@ -213,7 +214,7 @@ actor DemoGateway {
         return [
             "sessions": .array(rows),
             "defaults": ["model": .string(Self.defaultModel.model), "modelProvider": .string(Self.defaultModel.provider),
-                         "contextTokens": nil],
+                         "contextTokens": JSONValue(Self.contextTokens)],
             "nextOffset": nil,
             "hasMore": false,
         ]
@@ -426,6 +427,11 @@ actor DemoGateway {
         }
 
         let lowered = text.lowercased()
+        if lowered == "/compact" || lowered.hasPrefix("/compact ") {
+            await self.simulateCompact(runId: runId, key: key, model: model,
+                                       instructions: text.dropFirst("/compact".count).trimmingCharacters(in: .whitespaces))
+            return
+        }
         if lowered.range(of: #"\bapprove\b"#, options: .regularExpression) != nil {
             let id = Self.shortId("approval_")
             let approval: JSONValue = [
@@ -491,6 +497,41 @@ actor DemoGateway {
             row["status"] = "idle"
             row["lastMessagePreview"] = .string(String(reply.prefix(120)))
             row["unread"] = true
+            // Each turn grows the context snapshot, up to the window.
+            if let total = row["totalTokens"]?.int {
+                let output = reply.count / 4
+                row["inputTokens"] = JSONValue(total)
+                row["outputTokens"] = JSONValue(output)
+                row["totalTokens"] = JSONValue(min(Self.contextTokens, total + 1_200 + output))
+            }
+        }
+    }
+
+    /// `/compact [instructions]`: summarizes the context, like the Gateway's command.
+    private func simulateCompact(runId: String, key: String, model: (provider: String, model: String),
+                                 instructions: String) async
+    {
+        self.agentEvent(runId, stream: "compaction", ["phase": "start"])
+        guard await self.pause(runId, milliseconds: 900) else { return }
+        let before = self.sessions[key]?["totalTokens"]?.int ?? 0
+        let after = before * 18 / 100
+        self.append(key, Self.message("system", [], extra: ["__openclaw": ["id": .string(Self.shortId()), "kind": "compaction"]]))
+        self.agentEvent(runId, stream: "compaction", ["phase": "end", "completed": true])
+        var text = "⚙️ Compacted (\(TokenCount.format(before)) → \(TokenCount.format(after)) tokens)"
+        if !instructions.isEmpty { text += ", keeping: \(instructions)" }
+        let reply = Self.message("assistant", [Self.text(text + ".")], runId: runId, model: model)
+        self.append(key, reply)
+        self.chat(runId, ["state": "final", "message": reply])
+        self.agentEvent(runId, stream: "lifecycle", ["phase": "end"])
+        self.runs[runId] = nil
+        self.updateRow(key, reason: "compact") { row in
+            row["hasActiveRun"] = false
+            row["activeRunIds"] = []
+            row["status"] = "idle"
+            row["lastMessagePreview"] = .string(text + ".")
+            row["totalTokens"] = JSONValue(after)
+            row["inputTokens"] = JSONValue(after)
+            row["totalTokensFresh"] = true
         }
     }
 
@@ -746,6 +787,8 @@ actor DemoGateway {
                  messages: [JSONValue])
         {
             var row = Self.row(key: key, agentId: agent, title: title, preview: preview, ageMs: age)
+            row.merge(["totalTokens": 24_000, "totalTokensFresh": true, "inputTokens": 24_000, "outputTokens": 900,
+                       "contextTokens": JSONValue(Self.contextTokens)]) { _, new in new }
             row.merge(extra) { _, new in new }
             sessions[key] = row
             transcripts[key] = messages
@@ -753,7 +796,7 @@ actor DemoGateway {
 
         let dfCall = "call_seed_df"
         add("agent:main:main", agent: "main", title: "Main", preview: "Disk looks healthy.", age: 10_000,
-            ["isMain": true], messages: [
+            ["isMain": true, "totalTokens": 172_000, "inputTokens": 172_000], messages: [
                 Self.message("user", [Self.text("Can you check disk usage and show me a quick status?")]),
                 Self.message("assistant", [
                     Self.thinking("I should look at disk usage and summarize the main volumes."),

@@ -1,7 +1,10 @@
 import CoreGraphics
 import Foundation
+import CryptoKit
 import ImageIO
+import Network
 import PincerKit
+import PincerPush
 import UniformTypeIdentifiers
 
 // Self-checks that run without XCTest (unavailable with Command Line Tools only).
@@ -11,6 +14,10 @@ import UniformTypeIdentifiers
 
 var failures = 0
 var passes = 0
+
+// Drafts go to a scratch folder so checks never touch the real ones.
+let draftsRoot = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-drafts-\(UUID().uuidString)")
+setenv("PINCER_DRAFTS_DIR", draftsRoot.path(percentEncoded: false), 1)
 
 @MainActor
 func check(_ condition: @autoclosure () -> Bool, _ label: String, line: UInt = #line) {
@@ -547,6 +554,335 @@ do {
           "main-chat job has no delivery")
 }
 
+print("Web Push")
+do {
+    func b(_ text: String) -> Data { Data(base64URL: text)! }
+    // RFC 8291 Appendix A.
+    let ua = try! P256.KeyAgreement.PrivateKey(rawRepresentation: b("q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94"))
+    let vectorKeys = WebPushKeys(privateKey: ua, authSecret: b("BTBZMqHH6r4Tts7J_aSIgg"))
+    check(vectorKeys.p256dh == "BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4",
+          "p256dh is the uncompressed public point")
+    let header = "DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8"
+    let ciphertext = "8pfeW0KbunFT06SuDKoJH9Ql87S1QUrdirN6GcG7sFz1y1sqLgVi1VhjVkHsUoEsbI_0LpXMuGvnzQ"
+    let vector = b(header) + b(ciphertext)
+    let plaintext = b("V2hlbiBJIGdyb3cgdXAsIEkgd2FudCB0byBiZSBhIHdhdGVybWVsb24")
+    check((try? WebPush.decrypt(vector, keys: vectorKeys)) == plaintext, "decrypts the RFC 8291 test vector")
+    let asPrivate = try! P256.KeyAgreement.PrivateKey(rawRepresentation: b("yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw"))
+    let reencrypted = try? WebPush.encrypt(plaintext, p256dh: ua.publicKey.x963Representation, auth: vectorKeys.authSecret,
+                                           senderPrivate: asPrivate, salt: b("DGv6ra1nlYgDCS1FRnbzlw"))
+    check(reencrypted == vector, "encrypts to the RFC 8291 test vector")
+
+    var tampered = vector
+    tampered[tampered.count - 1] ^= 1
+    check((try? WebPush.decrypt(tampered, keys: vectorKeys)) == nil, "tampered ciphertext is rejected")
+    check((try? WebPush.decrypt(vector, keys: .generate())) == nil, "other keys can't decrypt")
+    check((try? WebPush.decrypt(vector.prefix(40), keys: vectorKeys)) == nil, "truncated body is rejected")
+
+    let keys = WebPushKeys.generate()
+    check(keys.authSecret.count == 16 && Data(base64URL: keys.p256dh)?.count == 65, "generated keys have Web Push sizes")
+    let restored = WebPushKeys(stored: keys.stored)
+    check(restored?.p256dh == keys.p256dh && restored?.auth == keys.auth, "keys round-trip through storage")
+    check(WebPushKeys(stored: "nope") == nil, "malformed stored keys are ignored")
+    let text = Data(#"{"title":"OpenClaw agent finished","body":"Done","tag":"t","url":"chat/main"}"#.utf8)
+    let sealed = try! WebPush.encrypt(text, p256dh: Data(base64URL: keys.p256dh)!, auth: keys.authSecret)
+    check((try? WebPush.decrypt(sealed, keys: restored!)) == text, "encrypt/decrypt round trip")
+
+    let gatewayId = UUID()
+    check(PushKeyStore.loadOrCreate(for: gatewayId).stored == PushKeyStore.loadOrCreate(for: gatewayId).stored,
+          "push keys persist per gateway")
+    check(PushKeyStore.keys(for: UUID()) == nil, "no keys for an unknown gateway")
+
+    print("Push messages")
+    func route(_ url: String) -> String { let r = PushMessage.route(url); return "\(r.sessionKey ?? "-")|\(r.approvalId ?? "-")" }
+    check(route("chat/main") == "agent:main:main|-", "agent main chat")
+    check(route("chat/Main/discord/channel/123") == "agent:main:discord:channel:123|-", "multi-segment session")
+    check(route("chat/research/~key/dashboard%3Atrip") == "agent:research:dashboard:trip|-", "~key session, percent-decoded")
+    check(route("chat/main#gatewayUrl=wss%3A%2F%2Fgw.example") == "agent:main:main|-", "gatewayUrl fragment ignored")
+    check(route("https://gw.example/ui/chat/main?x=1") == "agent:main:main|-", "absolute URL with a base path")
+    check(route("approve/abc-123#gatewayUrl=x") == "-|abc-123", "approval path")
+    check(route("sessions") == "-|-" && route("chat/") == "-|-" && route("chat/main/~key") == "-|-", "other paths")
+
+    let chatMessage = PushMessage(json: text, gatewayId: gatewayId)
+    check(chatMessage?.kind == .chat && chatMessage?.sessionKey == "agent:main:main" && chatMessage?.body == "Done",
+          "chat push parsed")
+    check(chatMessage?.threadIdentifier == "\(gatewayId.uuidString)|agent:main:main" && chatMessage?.categoryIdentifier == "reply",
+          "chat push threads with its chat")
+    check(chatMessage?.userInfo == ["gateway": gatewayId.uuidString, "push": "1", "session": "agent:main:main"], "chat push userInfo")
+    let pending = PushMessage(json: Data(#"{"title":"OpenClaw approval requested","body":"exec","url":"approve/a1"}"#.utf8), gatewayId: gatewayId)
+    check(pending?.kind == .approval(id: "a1", pending: true) && pending?.categoryIdentifier == "approval-push"
+          && pending?.userInfo["approval"] == "a1", "pending approval push has actions")
+    let updated = PushMessage(json: Data(#"{"title":"OpenClaw approval updated","body":"denied","url":"approve/a1"}"#.utf8), gatewayId: gatewayId)
+    check(updated?.kind == .approval(id: "a1", pending: false) && updated?.categoryIdentifier == "reply", "resolved approval push has none")
+    check(PushMessage(json: Data(#"{"url":"chat/main"}"#.utf8), gatewayId: gatewayId) == nil, "push without text ignored")
+    check(PushMessage(json: Data("not json".utf8), gatewayId: gatewayId) == nil, "malformed push ignored")
+
+    let storedKeys = PushKeyStore.loadOrCreate(for: gatewayId)
+    let body = try! WebPush.encrypt(text, p256dh: Data(base64URL: storedKeys.p256dh)!, auth: storedKeys.authSecret)
+    // The shape the relay sends (push-relay/relay.mjs apnsPayload).
+    let apns: [AnyHashable: Any] = ["aps": ["mutable-content": 1], "pincer": ["g": gatewayId.uuidString, "p": body.base64URL]]
+    check(PushMessage(apnsPayload: apns) == chatMessage, "relay payload decrypted with the stored keys")
+    check(PushMessage(apnsPayload: ["pincer": ["g": UUID().uuidString, "p": body.base64URL]]) == nil, "unknown gateway ignored")
+    check(PushMessage(apnsPayload: ["aps": ["alert": "x"]]) == nil, "non-Pincer payload ignored")
+    PushKeyStore.delete(for: gatewayId)
+    check(PushKeyStore.keys(for: gatewayId) == nil, "push keys deleted")
+
+    print("Push registration")
+    check(PushRegistrar.validRelay(" https://push.example.com/relay ")?.absoluteString == "https://push.example.com/relay", "https relay")
+    check(PushRegistrar.validRelay("http://127.0.0.1:8787") != nil && PushRegistrar.validRelay("http://localhost:1") != nil,
+          "loopback http relay")
+    check(PushRegistrar.validRelay("http://push.example.com") == nil && PushRegistrar.validRelay("") == nil
+          && PushRegistrar.validRelay("ftp://x") == nil && PushRegistrar.validRelay("https://") == nil, "other relays rejected")
+
+    let notifier = Notifier()
+    notifier.pushDelivers = { $0 == gatewayId }
+    notifier.appIsActive = false
+    check(notifier.deferredToPush(gatewayId), "background: local notification deferred to push")
+    check(!notifier.deferredToPush(UUID()), "background without push: local notification posted")
+    notifier.appIsActive = true
+    check(!notifier.deferredToPush(gatewayId), "foreground: local notification posted")
+}
+
+print("Find in chat")
+do {
+    let findHistory = json("""
+    [
+     {"role":"user","content":"Where is the Café receipt?","__openclaw":{"id":"f1"}},
+     {"role":"assistant","content":[{"type":"thinking","thinking":"Look for the cafe receipt in mail. Receipt, receipt."},
+       {"type":"toolCall","id":"t1","name":"exec","arguments":{"command":"grep receipt ~/mail"}}],"__openclaw":{"id":"f2"}},
+     {"role":"toolResult","toolCallId":"t1","toolName":"exec","content":[{"type":"text","text":"receipt.pdf\\nRECEIPT-old.pdf"}],"__openclaw":{"id":"f3"}},
+     {"role":"assistant","content":[{"type":"text","text":"Found the **receipt**."}],"__openclaw":{"id":"f4"}},
+     {"role":"assistant","content":[{"type":"text","text":"Also an older receipt."}],"__openclaw":{"id":"f5"}},
+     {"role":"marker","kind":"compaction","__openclaw":{"id":"f6","kind":"compaction"}},
+     {"role":"user","content":"thanks","__openclaw":{"id":"f7"}}
+    ]
+    """)
+    let findEntries = TranscriptBuilder.build(findHistory.array!.enumerated().compactMap { ChatItem($1, fallbackIndex: $0) })
+    let replies = TranscriptSearch.matches("receipt", in: findEntries)
+    check(replies.map(\.entryId) == ["u-f1", "a-f2", "a-f2"], "replies only by default, in transcript order (got \(replies.map(\.entryId)))")
+    check(replies.map(\.section) == [.message(0), .message(0), .message(1)], "back-to-back messages are separate sections")
+    check(TranscriptSearch.matches("CAFE", in: findEntries).map(\.entryId) == ["u-f1"], "case and diacritics ignored")
+    check(TranscriptSearch.matches("  ", in: findEntries).isEmpty && TranscriptSearch.matches("zebra", in: findEntries).isEmpty,
+          "blank and missing queries find nothing")
+    let everything = TranscriptSearch.matches("receipt", in: findEntries, options: .init(includeThinking: true, includeTools: true))
+    check(everything.count == 9, "thinking and tool text searched when included (got \(everything.count))")
+    check(everything.filter { $0.section == .thinking }.map(\.occurrence) == [0, 1, 2], "thinking occurrences numbered")
+    check(everything.filter { $0.section == .tool("t1") }.map(\.occurrence) == [0, 1, 2],
+          "tool input then output counted as one section")
+    let order = everything.filter { $0.entryId == "a-f2" }.map(\.section)
+    check(order.firstIndex(of: .thinking)! < order.firstIndex(of: .tool("t1"))!
+          && order.firstIndex(of: .tool("t1"))! < order.firstIndex(of: .message(0))!,
+          "within a turn: thinking, tools, then messages, as drawn")
+    check(TranscriptSearch.matches("receipt", in: findEntries, options: .init(includeTools: true, toolTextLimit: 11))
+        .filter { $0.section == .tool("t1") }.count == 1, "tool text past the display limit isn't searched")
+    check(TranscriptSearch.ranges(of: "aa", in: "aaaa") == [NSRange(location: 0, length: 2), NSRange(location: 2, length: 2)],
+          "occurrences don't overlap")
+    check(TranscriptSearch.ranges(of: "b", in: "🦞b") == [NSRange(location: 2, length: 1)], "ranges are UTF-16, for attributed text")
+    check(TranscriptSearch.step(from: nil, count: 3, forward: true) == 0 && TranscriptSearch.step(from: nil, count: 3, forward: false) == 2,
+          "first step starts at an end")
+    check(TranscriptSearch.step(from: 2, count: 3, forward: true) == 0 && TranscriptSearch.step(from: 0, count: 3, forward: false) == 2,
+          "next and previous wrap around")
+    check(TranscriptSearch.step(from: 1, count: 0, forward: true) == nil, "no step without matches")
+    let rowIndex = Dictionary(findEntries.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
+    check(TranscriptSearch.reselect(nil, in: replies, rowIndex: rowIndex, near: nil) == 2, "a new search selects the latest match")
+    check(TranscriptSearch.reselect(replies[1], in: replies, rowIndex: rowIndex, near: 1) == 1, "the selected match survives new messages")
+    let refined = TranscriptSearch.matches("older receipt", in: findEntries)
+    check(TranscriptSearch.reselect(replies[0], in: refined, rowIndex: rowIndex, near: 0) == 0,
+          "a vanished selection falls back near where the reader was")
+    check(TranscriptSearch.reselect(nil, in: [], rowIndex: rowIndex, near: nil) == nil, "nothing selected without matches")
+
+    let markdownHistory = json(#"""
+    [
+     {"role":"assistant","content":[{"type":"text","text":"See [the docs](https://x.example/receipt) for the **hello** world receipt."}],"__openclaw":{"id":"m1"}},
+     {"role":"user","content":"and the chart?","__openclaw":{"id":"m1u"}},
+     {"role":"assistant","content":[{"type":"text","text":"Here:\n```svg\n<svg xmlns=\"http://www.w3.org/2000/svg\"><text>receipt</text></svg>\n```\n```swift\nlet receipt = 1\n```\n| Item | Note |\n|---|---|\n| receipt | `a|b` |"}],"__openclaw":{"id":"m2"}}
+    ]
+    """#)
+    let markdownEntries = TranscriptBuilder.build(markdownHistory.array!.enumerated().compactMap { ChatItem($1, fallbackIndex: $0) })
+    check(TranscriptSearch.renderedTexts(markdown: "See [the docs](https://x.example/receipt) for **hello** world.")
+        == ["See the docs for hello world."], "searched text is the rendered text, without Markdown syntax")
+    check(TranscriptSearch.matches("receipt", in: [markdownEntries[0]]).count == 1, "link targets aren't counted")
+    check(TranscriptSearch.matches("hello world", in: markdownEntries).count == 1, "phrases match across styled words")
+    check(TranscriptSearch.renderedTexts(markdown: "1. one\n2. two\n\n> quoted\n\n---\n\nafter")
+        == ["1.\tone\n2.\ttwo", "quoted", "after"], "one text per view, with list markers, split at quotes and rules")
+    check(TranscriptSearch.renderedTexts(markdown: "| A | B |\n|---|---|\n| 1 |\n") == ["A", "B", "1", ""],
+          "tables are searched cell by cell, padded to the header")
+    check(TranscriptSearch.renderedTexts(markdown: "line one\nline two") == ["line one\u{2028}line two"],
+          "soft line breaks are drawn as line separators")
+    let svgMatches = TranscriptSearch.matches("receipt", in: [markdownEntries[2]])
+    check(svgMatches.count == 2 && svgMatches.map(\.occurrence) == [0, 1],
+          "SVG source (shown as an image) is skipped; code and table cells are counted (got \(svgMatches.count))")
+    check(TranscriptSearch.matches("svg", in: [markdownEntries[2]]).isEmpty, "code fence languages aren't searched")
+    let renumbered = TranscriptBuilder.build([ChatItem(json(#"{"role":"user","content":"3. first\n4. second","__openclaw":{"id":"n1"}}"#), fallbackIndex: 0)!])
+    check(TranscriptSearch.matches("1.", in: renumbered).count == 1 && TranscriptSearch.matches("3.", in: renumbered).isEmpty,
+          "list numbers are searched as drawn")
+    check(TranscriptSearch.matches("first 2", in: renumbered).isEmpty && TranscriptSearch.matches("rst", in: renumbered).count == 1,
+          "quick source check doesn't drop partial words")
+}
+
+print("Command palette")
+do {
+    var history = ChatHistory<String>(limit: 3)
+    check(!history.canGoBack && !history.canGoForward && history.current == nil, "history starts empty")
+    history.visit("a")
+    history.visit("a")
+    check(!history.canGoBack && history.current == "a", "revisiting the current chat isn't recorded")
+    history.visit("b")
+    history.visit("c")
+    check(history.backStack == ["a", "b"] && history.recent == ["b", "a"], "visits build the back stack; recent is newest first")
+    check(history.goBack() == "b" && history.current == "b" && history.forwardStack == ["c"], "back moves to the previous chat")
+    check(history.goBack() == "a" && !history.canGoBack && history.goBack() == nil, "back stops at the first chat")
+    check(history.goForward() == "b" && history.goForward() == "c" && !history.canGoForward, "forward retraces")
+    _ = history.goBack()
+    history.visit("d")
+    check(!history.canGoForward && history.backStack == ["a", "b"], "a new visit clears forward")
+    history.visit("e")
+    history.visit("f")
+    check(history.backStack == ["b", "d", "e"], "back stack is capped at the limit")
+    check(history.goBack(where: { $0 != "e" && $0 != "d" }) == "b" && history.current == "b" && history.forwardStack == ["f"],
+          "back skips chats that no longer exist")
+    history.visit("x")
+    history.visit("b")
+    check(history.recent == ["x"], "recent drops the current chat and duplicates (\(history.recent))")
+    history.prune { $0 != "b" }
+    check(history.current == nil && history.backStack == ["x"], "prune drops removed chats")
+
+    func item(_ title: String, keywords: [String] = []) -> PaletteItem {
+        PaletteItem(id: title, title: title, symbol: "x", keywords: keywords, section: .chats, action: .command(title))
+    }
+    check(PaletteMatcher.score("", in: "Anything") == 0, "empty query matches")
+    check(PaletteMatcher.score("xyz", in: "Japan trip") == nil, "non-matching query rejected")
+    check(PaletteMatcher.score("JAPAN", in: "Japan trip") != nil, "case-insensitive")
+    check(PaletteMatcher.score("cafe", in: "Café plans") != nil, "diacritic-insensitive")
+    check(PaletteMatcher.score("jptr", in: "Japan trip") != nil && PaletteMatcher.score("rtj", in: "Japan trip") == nil,
+          "in-order subsequence only")
+    check(PaletteMatcher.score("trip", in: "Japan trip")! > PaletteMatcher.score("jptr", in: "Japan trip")!, "substring beats subsequence")
+    check(PaletteMatcher.score("jap", in: "Japan trip")! > PaletteMatcher.score("rip", in: "Japan trip")!, "prefix beats mid-word")
+    let items = [item("Paper digest"), item("Japan trip"), item("home-lab", keywords: ["Discord"]), item("New Chat with Scout")]
+    check(PaletteMatcher.rank(items, query: "").map(\.title) == items.map(\.title), "empty query keeps order")
+    check(PaletteMatcher.rank(items, query: "trip").map(\.title) == ["Japan trip"], "filters by title")
+    check(PaletteMatcher.rank(items, query: "discord").map(\.title) == ["home-lab"], "matches keywords")
+    check(PaletteMatcher.rank(items, query: "new scout").map(\.title) == ["New Chat with Scout"], "every word must match")
+    check(PaletteMatcher.rank(items, query: "p").first?.title == "Paper digest", "best match first")
+    check(PaletteMatcher.rank([item("Scratch pad"), item("Pad")], query: "pad").map(\.title) == ["Pad", "Scratch pad"],
+          "exact title outranks a later match")
+}
+
+print("Composer drafts")
+await checkDrafts()
+
+@MainActor
+func checkDrafts() async {
+    let profile = GatewayProfile(name: "Drafts", url: "ws://127.0.0.1:1", authMode: .none)
+    let gatewayFolder = draftsRoot.appending(path: profile.id.uuidString)
+    func folders() -> [String] {
+        (try? FileManager.default.contentsOfDirectory(atPath: gatewayFolder.path(percentEncoded: false))) ?? []
+    }
+    let photo = OutgoingAttachment(fileName: "photo.png", mimeType: "image/png", data: Data([0x89, 0x50, 0x4E, 0x47]))
+    let notes = OutgoingAttachment(fileName: "notes.txt", mimeType: "text/plain", data: Data("hello".utf8))
+
+    let first = GatewayStore(profile: profile)
+    let alpha = first.chat(for: "agent:main:alpha")
+    let beta = first.chat(for: "agent:main:beta")
+    await alpha.load()
+    await beta.load()
+    check(alpha.draft.isEmpty && beta.draft.isEmpty, "new chats start with an empty draft")
+    alpha.draft.text = "half-written thought"
+    alpha.draft.attachments = [photo, notes]
+    beta.draft.text = "/model"
+    check(first.chat(for: "agent:main:alpha").draft.text == "half-written thought"
+          && first.chat(for: "agent:main:alpha").draft.attachments.map(\.id) == [photo.id, notes.id],
+          "switching chats keeps each chat's draft")
+    check(first.chat(for: "agent:main:beta").draft.text == "/model", "drafts are per chat")
+
+    let saved = await waitFor("debounced draft save", timeout: 5) { folders().count == 2 }
+    check(saved, "drafts are saved without an explicit flush")
+
+    // Relaunch: a fresh store for the same Gateway.
+    let second = GatewayStore(profile: profile)
+    let alphaAgain = second.chat(for: "agent:main:alpha")
+    await alphaAgain.load()
+    check(alphaAgain.draft.text == "half-written thought", "draft text survives relaunch")
+    check(alphaAgain.draft.attachments == [photo, notes], "pending attachments survive relaunch (bytes, names, ids)")
+    let betaAgain = second.chat(for: "agent:main:beta")
+    await betaAgain.load()
+    check(betaAgain.draft.text == "/model" && betaAgain.draft.attachments.isEmpty, "other chat's draft restored separately")
+
+    alphaAgain.draft.attachments.removeAll { $0.id == photo.id }
+    await alphaAgain.flushDraft()
+    let alphaFolder = gatewayFolder.appending(path: folders().first { name in
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: gatewayFolder.appending(path: name).path(percentEncoded: false))) ?? []
+        return files.contains("\(notes.id.uuidString).bin")
+    } ?? "missing")
+    let alphaFiles = Set((try? FileManager.default.contentsOfDirectory(atPath: alphaFolder.path(percentEncoded: false))) ?? [])
+    check(alphaFiles == ["draft.json", "\(notes.id.uuidString).bin"], "removed attachment's file is deleted (\(alphaFiles.sorted()))")
+
+    // Sending clears the composer.
+    alphaAgain.draft = ComposerDraft()
+    await alphaAgain.flushDraft()
+    check(folders().count == 1, "an empty draft removes its folder")
+    let third = GatewayStore(profile: profile)
+    let alphaThird = third.chat(for: "agent:main:alpha")
+    await alphaThird.load()
+    check(alphaThird.draft.isEmpty, "a sent draft doesn't come back after relaunch")
+
+    // Typing before the saved draft is read wins over the saved one.
+    let fourth = GatewayStore(profile: profile)
+    let betaFourth = fourth.chat(for: "agent:main:beta")
+    betaFourth.draft.text = "typed first"
+    await betaFourth.load()
+    check(betaFourth.draft.text == "typed first", "a draft started before restore isn't overwritten")
+    await betaFourth.flushDraft()
+    let fifth = GatewayStore(profile: profile)
+    let betaFifth = fifth.chat(for: "agent:main:beta")
+    await betaFifth.load()
+    check(betaFifth.draft.text == "typed first", "latest draft is the one on disk")
+
+    // Rapid edits flushed at once still land in order.
+    for index in 1...20 { betaFifth.draft.text = "edit \(index)" }
+    await betaFifth.flushDraft()
+    let sixth = GatewayStore(profile: profile)
+    let betaSixth = sixth.chat(for: "agent:main:beta")
+    await betaSixth.load()
+    check(betaSixth.draft.text == "edit 20", "last of many quick edits is saved (got \(betaSixth.draft.text))")
+    betaSixth.draft = ComposerDraft()
+    await betaSixth.flushDraft()
+    check(folders().isEmpty, "all drafts cleared")
+}
+
+print("Context usage")
+do {
+    let fresh = SessionRow(json(#"{"key":"k","totalTokens":172000,"totalTokensFresh":true,"inputTokens":1200,"outputTokens":340,"contextTokens":200000}"#))!
+    let usage = ContextUsage(row: fresh)
+    check(usage == ContextUsage(used: 172_000, limit: 200_000) && usage?.level == .warning && usage?.percent == 86,
+          "usage from row (\(String(describing: usage)))")
+    check(usage?.summary == "172k / 200k" && usage?.percentLabel == "86%" && usage?.remaining == 28_000, "usage labels")
+    check(fresh.inputTokens == 1200 && fresh.outputTokens == 340, "last run in/out tokens")
+    let stale = SessionRow(json(#"{"key":"k","totalTokens":198000,"totalTokensFresh":false,"contextTokens":200000}"#))!
+    check(ContextUsage(row: stale)?.level == .normal && ContextUsage(row: stale)?.summary == "~198k / 200k",
+          "stale totals are approximate and never warn")
+    let budget = SessionRow(json(#"{"key":"k","totalTokens":150000,"contextTokens":200000,"contextBudgetStatus":{"promptBudgetBeforeReserve":160000}}"#))!
+    let budgetUsage = ContextUsage(row: budget)
+    check(budgetUsage?.limit == 160_000 && budgetUsage?.isPromptBudget == true && budgetUsage?.level == .warning,
+          "prompt budget preferred over the window")
+    let noLimit = SessionRow(json(#"{"key":"k","totalTokens":12000,"contextTokens":0}"#))!
+    check(ContextUsage(row: noLimit) == nil && ContextUsage(row: noLimit, fallbackLimit: 128_000)?.limit == 128_000,
+          "fallback limit when the row has none")
+    check(ContextUsage(row: SessionRow(json(#"{"key":"k","contextTokens":200000}"#))!) == nil && ContextUsage(row: nil) == nil,
+          "no snapshot, no meter")
+    check(ContextUsage(used: 169_999, limit: 200_000).level == .normal && ContextUsage(used: 170_000, limit: 200_000).level == .warning
+          && ContextUsage(used: 190_000, limit: 200_000).level == .critical, "warning at 85%, critical at 95%")
+    check(ContextUsage(used: 260_000, limit: 200_000).percent == 100 && ContextUsage(used: 260_000, limit: 200_000).remaining == 0,
+          "overflow clamps")
+    check([950, 12_300, 40_000, 99_960, 172_400, 999_700, 1_260_000].map(TokenCount.format)
+          == ["950", "12.3k", "40k", "100k", "172k", "1M", "1.3M"], "token formatting")
+    check(ModelChoice(json(#"{"id":"a","provider":"p","contextWindow":1000000,"contextTokens":200000}"#))?.contextTokens == 200_000
+          && ModelChoice(json(#"{"id":"a","provider":"p","contextWindow":1000000}"#))?.contextTokens == 1_000_000
+          && ModelChoice(json(#"{"id":"a","provider":"p"}"#))?.contextTokens == nil, "model context cap prefers contextTokens")
+    check(CompactionState.finished(before: 172_000, after: 31_000).message == "Compacted 172k → 31k tokens."
+          && CompactionState.finished(before: nil, after: 31_000).message == "Compacted to 31k tokens."
+          && CompactionState.running(before: 1).isRunning && !CompactionState.skipped("x").isRunning, "compaction messages")
+}
+
 // MARK: Live
 
 print("Share extension")
@@ -562,9 +898,12 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
 if arguments.contains("--demo") {
     print("Built-in demo")
     await runDemo()
+    print("Chat navigation")
+    await runNavigation()
 }
 
 print("\n\(passes) passed, \(failures) failed")
+try? FileManager.default.removeItem(at: draftsRoot)
 exit(failures == 0 ? 0 : 1)
 
 @MainActor
@@ -656,9 +995,114 @@ func runDemo() async {
     }
     check(demoPlanned, "demo progress card walks its plan")
 
+    let demoUsage = gateway.contextUsage(for: key)
+    check(demoUsage != nil && demoUsage!.used >= 172_000 && demoUsage!.limit == 200_000, "demo context meter (\(demoUsage?.summary ?? "none"))")
+    check(!gateway.canCompactDirectly, "demo compacts through /compact")
+    await chat.compact()
+    let demoCompacted = await waitFor("demo compaction", timeout: 20) {
+        if case .finished = chat.compaction { return !chat.isRunning }
+        return false
+    }
+    if case let .finished(before?, after?) = chat.compaction {
+        check(demoCompacted && after < before && gateway.contextUsage(for: key)?.used == after,
+              "demo compaction \(chat.compaction?.message ?? "")")
+    } else {
+        check(false, "demo compaction finished (\(String(describing: chat.compaction)))")
+    }
+
     let newKey = await gateway.createSession(agentId: "research", label: "Demo check", category: "Work")
     check(newKey != nil && gateway.sessions[newKey ?? ""] != nil, "demo sessions.create")
+
+    // Command palette over the demo's chats.
+    check(gateway.pinnedChats.map(\.key) == ["agent:main:discord:channel:123"], "pinned chats (\(gateway.pinnedChats.map(\.key)))")
+    let tripKey = "agent:main:dashboard:trip"
+    await gateway.patch(tripKey, ["pinned": true])
+    let pinnedTrip = await waitFor("pin") { gateway.pinnedChats.count == 2 }
+    let sidebarOrder = gateway.sections().flatMap { $0.channels.map(\.row.key) }.filter { $0 == tripKey || $0.contains("discord") }
+    check(pinnedTrip && gateway.pinnedChats.map(\.key) == sidebarOrder, "⌘1–⌘9 follow the sidebar's order")
+    let recentTarget = Notifier.Target(gatewayId: gateway.id, sessionKey: "agent:research:dashboard:papers")
+    let chatItems = CommandPalette.chatItems(gateways: [gateway], selectedGatewayId: gateway.id, recent: [recentTarget])
+    check(chatItems.first?.action == .openChat(recentTarget), "recent chats listed first")
+    check(!chatItems.contains { $0.id.contains(":subagent:") }, "subagent runs left out")
+    check(Set(chatItems.map(\.id)).count == chatItems.count, "each chat listed once")
+    check(chatItems.first { $0.id.hasSuffix(gateway.pinnedChats[0].key) }?.shortcut == "⌘1"
+          && chatItems.first { $0.id.hasSuffix(gateway.pinnedChats[1].key) }?.shortcut == "⌘2", "pinned chats show their shortcut")
+    check(PaletteMatcher.rank(chatItems, query: "scout digest").first?.title == "Paper digest", "chats match on agent name")
+    let newChats = CommandPalette.newChatItems(gateway: gateway)
+    check(newChats.count == gateway.agents.count && newChats.contains { $0.action == .newChat(gatewayId: gateway.id, agentId: "research") },
+          "a New Chat item per agent")
+    check(CommandPalette.gatewayItems(gateways: [gateway], selectedGatewayId: gateway.id).isEmpty, "no gateway switching with one gateway")
+    if let mainRow = gateway.sessions[key] {
+        let models = CommandPalette.modelItems(gateway: gateway, row: mainRow)
+        check(models.first?.action == .setModel(nil) && models.count == (gateway.modelCatalogs["main"]?.count ?? 0) + 1,
+              "models page lists default plus the catalog")
+        check(models.first { $0.action == .setModel("openai/gpt-5.6-sol") }?.subtitle?.hasSuffix("Current") == true,
+              "models page marks the session's model")
+    }
+    await gateway.patch(tripKey, ["pinned": false])
     gateway.stop()
+}
+
+/// Back/forward and ⌘1–⌘9 through `AppModel`, across two demo Gateways.
+@MainActor
+func runNavigation() async {
+    let app = AppModel()
+    guard app.gateways.isEmpty else {
+        check(false, "navigation checks need an empty profile list (found \(app.gateways.count))")
+        return
+    }
+    defer {
+        for gateway in app.gateways { app.remove(gateway.id) }
+        UserDefaults.standard.removeObject(forKey: "pincer.selectedGateway")
+    }
+    let first = app.add(.demo(), secret: nil)
+    let ready = await waitFor("demo connection") { first.state.isConnected && !first.sessions.isEmpty }
+    check(ready, "navigation demo connected")
+    guard ready else { return }
+    func target(_ gateway: GatewayStore, _ key: String) -> Notifier.Target { Notifier.Target(gatewayId: gateway.id, sessionKey: key) }
+    let main = target(first, "agent:main:main")
+    let trip = target(first, "agent:main:dashboard:trip")
+    let papers = target(first, "agent:research:dashboard:papers")
+
+    app.open(main)
+    app.open(trip)
+    app.open(papers)
+    check(app.history.current == papers && app.canGoBack && !app.canGoForward, "opening chats records history")
+    app.goBack()
+    check(first.selectedKey == trip.sessionKey && app.history.current == trip && app.canGoForward, "Back opens the previous chat")
+    // What RootView does after the selection changes; it must not disturb the history.
+    app.updateVisible()
+    app.goBack()
+    check(first.selectedKey == main.sessionKey && !app.canGoBack, "Back again reaches the first chat")
+    app.goForward()
+    check(first.selectedKey == trip.sessionKey && app.history.forwardStack == [papers], "Forward retraces")
+    first.selectedKey = main.sessionKey
+    app.updateVisible()
+    check(!app.canGoForward && app.history.current == main, "picking a chat in the sidebar clears Forward")
+
+    app.openPinned(1)
+    check(first.selectedKey == first.pinnedChats.first?.key, "⌘1 opens the first pinned chat")
+    let beforeMissing = app.history.current
+    app.openPinned(9)
+    app.openPinned(0)
+    check(app.history.current == beforeMissing, "⌘ with no pinned chat at that number does nothing")
+
+    let second = app.add(.demo(), secret: nil)
+    let secondReady = await waitFor("second demo") { second.state.isConnected && !second.sessions.isEmpty }
+    check(secondReady && app.selectedGatewayId == second.id, "second gateway added and selected")
+    let secondTrip = target(second, "agent:main:dashboard:trip")
+    app.open(secondTrip)
+    let beforeSwitch = app.history.current
+    app.open(papers)
+    check(app.selectedGatewayId == first.id && app.history.backStack.last == beforeSwitch,
+          "switching gateways records only the opened chat")
+    app.goBack()
+    check(app.selectedGatewayId == second.id && second.selectedKey == secondTrip.sessionKey, "Back crosses gateways")
+    app.remove(second.id)
+    check(!app.history.backStack.contains { $0.gatewayId == second.id } && app.history.current?.gatewayId != second.id,
+          "removing a gateway drops its chats from history")
+    app.goBack()
+    check(app.selectedGatewayId == first.id, "Back still works after removing a gateway")
 }
 
 @MainActor
@@ -988,6 +1432,38 @@ func runLive(url: String, token: String) async {
     let readOnly = await settings.save()
     check(!readOnly && settings.saveState.error?.contains("Full Management") == true && settings.hasChanges, "writes need admin access, draft kept")
     settings.discardChanges()
+
+    // Context meter: row snapshot vs limits, and "Compact now" through `/compact` without admin.
+    let papersUsage = gateway.contextUsage(for: "agent:research:dashboard:papers")
+    check(papersUsage == ContextUsage(used: 96_000, limit: 200_000) && papersUsage?.level == .normal,
+          "context usage from the session row (\(papersUsage?.summary ?? "none"))")
+    check(gateway.contextUsage(for: "agent:coder:main")?.level == .critical, "nearly full session is critical")
+    let researchKey = "agent:research:main"
+    check(gateway.defaultContextTokens == 128_000 && gateway.contextUsage(for: researchKey)?.limit == 128_000,
+          "sessions.list defaults.contextTokens before the catalog loads")
+    check(gateway.needsModelCatalogForContext(researchKey) || gateway.modelCatalogs["research"] != nil, "catalog needed for the limit")
+    await gateway.loadModels(agentId: "research")
+    check(!gateway.needsModelCatalogForContext(researchKey) && gateway.contextUsage(for: researchKey)?.limit == 200_000,
+          "models.list includeDetails contextTokens used as the limit (\(gateway.contextUsage(for: researchKey)?.summary ?? "none"))")
+    check(!gateway.canCompactDirectly, "sessions.compact needs admin")
+    let coder = gateway.chat(for: "agent:coder:main")
+    await coder.load()
+    await coder.compact(instructions: "keep the build notes")
+    check(coder.compaction?.isRunning == true || coder.compaction != nil, "compaction started")
+    let coderCompacted = await waitFor("/compact", timeout: 20) {
+        if case .finished = coder.compaction { return !coder.isRunning }
+        return false
+    }
+    check(coderCompacted && coder.compaction == .finished(before: 190_000, after: 34_200),
+          "/compact with instructions reports before → after (\(String(describing: coder.compaction)))")
+    check(gateway.contextUsage(for: "agent:coder:main")?.used == 34_200, "meter drops after compaction")
+    let sawMarker = await waitFor("compaction marker") {
+        coder.items.contains { $0.markerKind == "compaction" }
+    }
+    check(sawMarker, "compaction marker in the transcript")
+    coder.clearCompaction()
+    check(coder.compaction == nil, "result cleared when the popover closes")
+    await checkPushLive(gateway)
     gateway.stop()
 
     let adminProfile = GatewayProfile(id: profile.id, name: "Mock", url: url, authMode: .token, access: .admin)
@@ -1131,6 +1607,21 @@ func runLive(url: String, token: String) async {
     let missing = await adminSettings.install(from: .npm, spec: "missing-package")
     check(!missing && adminSettings.operation(for: GatewaySettingsModel.installKey).error?.contains("not found") == true,
           "install errors surface")
+    check(admin.canCompactDirectly, "admin compacts through sessions.compact")
+    let papers = admin.chat(for: "agent:research:dashboard:papers")
+    await papers.load()
+    await papers.compact()
+    check(papers.compaction == .finished(before: 96_000, after: 17_280),
+          "sessions.compact reports tokensBefore → tokensAfter (\(String(describing: papers.compaction)))")
+    let papersDropped = await waitFor("papers row") { admin.contextUsage(for: "agent:research:dashboard:papers")?.used == 17_280 }
+    check(papersDropped, "session row updated after sessions.compact")
+    await papers.compact()
+    await papers.compact()
+    if case let .skipped(reason) = papers.compaction {
+        check(reason.contains("Nothing to compact"), "nothing left to compact is reported, not an error")
+    } else {
+        check(false, "nothing left to compact (\(String(describing: papers.compaction)))")
+    }
     admin.stop()
 
     for store in [gateway, other] {
@@ -1369,4 +1860,116 @@ func runLiveShare(profile: GatewayProfile, gateway: GatewayStore) async {
     let user = chat.items.first { $0.role == .user }
     check(user?.plainText.contains("https://example.com/paper.pdf") == true, "link included in the message")
     check(user?.blocks.contains { if case .image = $0 { return true } else { return false } } == true, "image attachment delivered")
+}
+
+/// Stands in for the push relay: captures what the Gateway POSTs to the subscription endpoint.
+final class PushSink: @unchecked Sendable {
+    struct Delivery { let path: String; let headers: [String: String]; let body: Data }
+    private let listener: NWListener
+    private let lock = NSLock()
+    private var captured: [Delivery] = []
+    var deliveries: [Delivery] { self.lock.withLock { self.captured } }
+    var port: UInt16 { self.listener.port?.rawValue ?? 0 }
+
+    init?() {
+        guard let listener = try? NWListener(using: .tcp, on: .any) else { return nil }
+        self.listener = listener
+        listener.newConnectionHandler = { [weak self] connection in
+            connection.start(queue: .global())
+            self?.read(connection, buffer: Data())
+        }
+        let ready = DispatchSemaphore(value: 0)
+        listener.stateUpdateHandler = { if case .ready = $0 { ready.signal() } }
+        listener.start(queue: .global())
+        guard ready.wait(timeout: .now() + 5) == .success else { return nil }
+    }
+
+    private func read(_ connection: NWConnection, buffer: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, done, _ in
+            guard let self else { return }
+            let buffer = buffer + (data ?? Data())
+            if let end = buffer.range(of: Data("\r\n\r\n".utf8)) {
+                let lines = String(decoding: buffer[..<end.lowerBound], as: UTF8.self).components(separatedBy: "\r\n")
+                var headers: [String: String] = [:]
+                for line in lines.dropFirst() {
+                    let parts = line.split(separator: ":", maxSplits: 1)
+                    if parts.count == 2 { headers[parts[0].lowercased()] = parts[1].trimmingCharacters(in: .whitespaces) }
+                }
+                let length = Int(headers["content-length"] ?? "0") ?? 0
+                let body = buffer[end.upperBound...]
+                if body.count >= length {
+                    let path = lines.first?.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+                    self.lock.withLock { self.captured.append(Delivery(path: path, headers: headers, body: Data(body.prefix(length)))) }
+                    let reply = "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    connection.send(content: Data(reply.utf8), completion: .contentProcessed { _ in connection.cancel() })
+                    return
+                }
+            }
+            if done { connection.cancel() } else { self.read(connection, buffer: buffer) }
+        }
+    }
+
+    func stop() { self.listener.cancel() }
+}
+
+@MainActor
+func checkPushLive(_ gateway: GatewayStore) async {
+    print("Push (live)")
+    guard let sink = PushSink() else { return check(false, "push sink listening") }
+    defer { sink.stop() }
+    let registrar = PushRegistrar.shared
+    let relayKey = PushRegistrar.relayKey
+    UserDefaults.standard.set("http://127.0.0.1:\(sink.port)", forKey: relayKey)
+    defer { UserDefaults.standard.removeObject(forKey: relayKey) }
+    var registrations = 0
+    registrar.registerWithRelay = { _, token, _ in registrations += 1; return "relay-\(token.prefix(6))" }
+    var enabled = true
+    registrar.notificationsEnabled = { enabled }
+
+    await registrar.sync(gateway)
+    check(registrar.status[gateway.id] == .off, "no push without an APNs token")
+    registrar.setDeviceToken(Data([0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67]))
+    await registrar.sync(gateway)
+    check(registrar.isActive(gateway.id) && registrations == 1, "subscribed through push.web.subscribe")
+    await registrar.sync(gateway)
+    check(registrar.isActive(gateway.id) && registrations == 1, "relay id cached across reconnects")
+
+    let chat = gateway.chat(for: "agent:main:main")
+    await chat.send("hello from push")
+    let delivered = await waitFor("push delivery", timeout: 20) { !sink.deliveries.isEmpty }
+    check(delivered, "Gateway POSTed the finished reply to the relay endpoint")
+    if let delivery = sink.deliveries.first {
+        check(delivery.path == "/v1/push/relay-abcdef/\(gateway.id.uuidString)", "endpoint names the relay id and gateway")
+        check(delivery.headers["content-encoding"] == "aes128gcm" && delivery.headers["ttl"] != nil, "Web Push headers")
+        let payload: [AnyHashable: Any] = ["pincer": ["g": gateway.id.uuidString, "p": delivery.body.base64URL]]
+        let message = PushMessage(apnsPayload: payload)
+        check(message?.kind == .chat && message?.sessionKey == "agent:main:main", "decrypted on device: opens the chat")
+        check(message?.title == "OpenClaw agent finished", "generic title from the Gateway")
+        if let key = message?.sessionKey { check(gateway.resolveSessionKey(key) == "agent:main:main", "push route resolves to a row") }
+    }
+
+    let before = sink.deliveries.count
+    await chat.send("please approve this")
+    let approvalSeen = await waitFor("approval push", timeout: 20) {
+        sink.deliveries.dropFirst(before).contains { PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString, "p": $0.body.base64URL]])?.categoryIdentifier == "approval-push" }
+    }
+    check(approvalSeen, "approval push carries approve/deny actions")
+    if let id = gateway.approvals.first?.id {
+        await gateway.resolveApproval(id: id, decision: "deny")
+        check(gateway.approvals.isEmpty, "approval resolved by id from a push action")
+    }
+    _ = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
+
+    enabled = false
+    await registrar.sync(gateway)
+    check(registrar.status[gateway.id] == .off, "notifications off: unsubscribed")
+    let after = sink.deliveries.count
+    await chat.send("no push now")
+    _ = await waitFor("reply", timeout: 20) { !chat.isRunning }
+    try? await Task.sleep(for: .milliseconds(500))
+    check(sink.deliveries.count == after, "no pushes after unsubscribing")
+    enabled = true
+    await registrar.sync(gateway)
+    await registrar.forget(gateway)
+    check(registrar.status[gateway.id] == nil && PushKeyStore.keys(for: gateway.id) == nil, "forget drops subscription and keys")
 }

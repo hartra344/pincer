@@ -14,6 +14,8 @@ struct TranscriptList: NSViewRepresentable {
     var bottomInset: CGFloat = 0
     /// Extra space above the first row, for a toolbar the transcript scrolls under.
     var topInset: CGFloat = 0
+    /// Find in chat's matches to highlight, and the selected one to scroll to.
+    var highlight = TranscriptHighlight()
 
     func makeCoordinator() -> Coordinator { Coordinator(context: self.context) }
 
@@ -23,6 +25,7 @@ struct TranscriptList: NSViewRepresentable {
 
     func updateNSView(_ view: NSScrollView, context: Context) {
         context.coordinator.update(rows: self.rows, context: self.context, insets: (self.topInset, self.bottomInset))
+        context.coordinator.apply(self.highlight)
     }
 
     @MainActor
@@ -224,6 +227,31 @@ struct TranscriptList: NSViewRepresentable {
                 guard let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? TranscriptCell else { continue }
                 cell.apply(self.renderer.layout(for: self.rows[row], width: width), actions: self.renderer)
             }
+        }
+
+        /// Highlights Find's matches and scrolls the selected one into view when asked to.
+        func apply(_ highlight: TranscriptHighlight) {
+            guard let id = self.renderer.update(highlight: highlight) else { return }
+            self.reveal(id)
+        }
+
+        /// Scrolls so the selected match (or the top of its row) sits a little above the middle
+        /// of the visible area, clear of the chrome floating over the transcript.
+        private func reveal(_ id: String) {
+            guard let table, let scroll = self.scrollView, let row = self.index[id] else { return }
+            let width = self.width
+            guard width > 40 else { return }
+            let layout = self.renderer.layout(for: self.rows[row], width: width)
+            let old = self.heights[id]?.value
+            self.heights[id] = Height(value: max(1, layout.height), width: width, measured: true)
+            if old.map({ abs($0 - layout.height) > 0.5 }) ?? true {
+                self.withoutAnimation { table.noteHeightOfRows(withIndexesChanged: [row]) }
+            }
+            let insets = scroll.contentInsets
+            let visible = max(scroll.contentView.bounds.height - insets.top - insets.bottom, 1)
+            let y = min(layout.matchY ?? 0, layout.height)
+            self.anchor = .row(id, insets.top + visible * 0.4 - y)
+            self.settle(changed: IndexSet())
         }
 
         // MARK: Heights

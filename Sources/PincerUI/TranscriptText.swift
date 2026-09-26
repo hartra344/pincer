@@ -147,8 +147,7 @@ enum TranscriptText {
         let parsed = MarkdownCache.inline(text)
         let result = NSMutableAttributedString()
         for run in parsed.runs {
-            // Soft line breaks stay inside the paragraph, so paragraph spacing applies only between blocks.
-            let string = String(parsed[run.range].characters).replacingOccurrences(of: "\n", with: "\u{2028}")
+            let string = MarkdownBlock.softBreaks(String(parsed[run.range].characters))
             var runFont = font
             var attributes: [NSAttributedString.Key: Any] = [.foregroundColor: color]
             if let intent = run.inlinePresentationIntent {

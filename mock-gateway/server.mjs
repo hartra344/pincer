@@ -2,8 +2,9 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
-import { CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
+import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
+import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const METHODS = [
@@ -21,6 +22,7 @@ const METHODS = [
   'chat.send',
   'chat.abort',
   'sessions.patch',
+  'sessions.compact',
   'models.list',
   'sessions.create',
   'artifacts.download',
@@ -94,6 +96,7 @@ function imageBlock(artifactId, alt = 'Mock chart') {
 }
 
 const DEFAULT_MODEL = { provider: 'anthropic', model: 'claude-opus-4-8' };
+const DEFAULT_CONTEXT_TOKENS = 128_000;
 const commandEntry = (name, description, { aliases = [], category, source = 'native', args, acceptsArgs } = {}) => ({
   name,
   textAliases: [name, ...aliases].map((alias) => `/${alias}`),
@@ -120,12 +123,17 @@ const COMMAND_CATALOG = [
   commandEntry('weather', 'Look up the weather.', { source: 'plugin', acceptsArgs: true }),
 ];
 
+// `contextTokens` (the effective cap) is only sent with `includeDetails`, like the Gateway.
 const MODEL_CATALOG = [
-  { id: 'claude-opus-4-8', name: 'Claude Opus 4.8', provider: 'anthropic', available: true },
-  { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', provider: 'anthropic', available: true },
-  { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol', provider: 'openai', available: true },
-  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', provider: 'google', available: false, unavailableReason: 'missing-auth' },
+  { id: 'claude-opus-4-8', name: 'Claude Opus 4.8', provider: 'anthropic', available: true, contextWindow: 1_000_000, contextTokens: 200_000 },
+  { id: 'claude-sonnet-5', name: 'Claude Sonnet 5', provider: 'anthropic', available: true, contextWindow: 1_000_000, contextTokens: 200_000 },
+  { id: 'gpt-5.6-sol', name: 'GPT-5.6 Sol', provider: 'openai', available: true, contextWindow: 400_000 },
+  { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', provider: 'google', available: false, unavailableReason: 'missing-auth', contextWindow: 1_000_000 },
 ];
+
+function modelCatalog(includeDetails) {
+  return MODEL_CATALOG.map(({ contextTokens, ...model }) => (includeDetails && contextTokens ? { ...model, contextTokens } : { ...model }));
+}
 
 function makeMessage(role, content, extras = {}) {
   // Like the Gateway, assistant messages record the model that wrote them.
@@ -145,7 +153,7 @@ function rowModel(row) {
 }
 
 function sessionDefaults() {
-  return { model: DEFAULT_MODEL.model, modelProvider: DEFAULT_MODEL.provider, contextTokens: null };
+  return { model: DEFAULT_MODEL.model, modelProvider: DEFAULT_MODEL.provider, contextTokens: DEFAULT_CONTEXT_TOKENS };
 }
 
 const CRC_TABLE = (() => {
@@ -251,6 +259,11 @@ function makeSessionRow(key, props, base = nowMs()) {
     model: DEFAULT_MODEL.model,
     modelProvider: DEFAULT_MODEL.provider,
     modelOverrideSource: null,
+    // Context snapshot and the latest run's usage, as the Gateway's session rows carry them.
+    ...(props.totalTokens !== undefined
+      ? { totalTokens: props.totalTokens, totalTokensFresh: true, inputTokens: props.totalTokens, outputTokens: 800 }
+      : {}),
+    ...(props.contextTokens !== undefined ? { contextTokens: props.contextTokens } : {}),
   };
 }
 
@@ -281,6 +294,8 @@ function createSeedState() {
     channel: 'webchat',
     age: 10_000,
     lastMessagePreview: 'Disk looks healthy.',
+    totalTokens: 172_000,
+    contextTokens: 200_000,
   });
   row('agent:main:discord:channel:123', {
     agentId: 'main',
@@ -301,6 +316,8 @@ function createSeedState() {
     color: 'pink',
     age: 60_000,
     lastMessagePreview: 'Kyoto day plan drafted.',
+    totalTokens: 48_000,
+    contextTokens: 200_000,
   });
   row('agent:research:main', {
     agentId: 'research',
@@ -308,6 +325,8 @@ function createSeedState() {
     derivedTitle: 'Main',
     age: 90_000,
     lastMessagePreview: 'Research queue is clear.',
+    // No contextTokens: clients fall back to models.list, then sessions.list defaults.
+    totalTokens: 12_000,
   });
   row('agent:research:dashboard:papers', {
     agentId: 'research',
@@ -317,6 +336,8 @@ function createSeedState() {
     unread: true,
     age: 120_000,
     lastMessagePreview: 'Three papers summarized.',
+    totalTokens: 96_000,
+    contextTokens: 200_000,
   });
   row('agent:research:subagent:abc', {
     agentId: 'research',
@@ -333,6 +354,8 @@ function createSeedState() {
     derivedTitle: 'Main',
     age: 240_000,
     lastMessagePreview: 'No active coding run.',
+    totalTokens: 190_000,
+    contextTokens: 200_000,
   });
 
   // Chats of the seeded automations (see cron.mjs); their runs append here.
@@ -422,6 +445,7 @@ function createSeedState() {
     activeRuns: new Map(),
     connections: new Set(),
     configState: createConfigState(),
+    webPushState: createWebPushState(),
     cronState: createCronState(base),
   };
 }
@@ -457,6 +481,7 @@ function broadcast(state, event, payload, predicate = () => true) {
   for (const conn of state.connections) {
     if (conn.authenticated && predicate(conn)) sendEvent(conn, event, payload);
   }
+  handleWebPushEvent(state, event, payload);
 }
 
 function updateSessionRow(row, patch = {}) {
@@ -654,6 +679,47 @@ async function simulatePlan(state, run, sessionKey, row) {
   }
 }
 
+// Summarizes a session's context: appends the compaction marker and shrinks `totalTokens`.
+// Returns `{ tokensBefore, tokensAfter }`, or null when there's too little to compact.
+function compactSession(state, sessionKey) {
+  const row = state.sessions.get(sessionKey);
+  const transcript = state.transcripts.get(sessionKey);
+  const tokensBefore = row?.totalTokens ?? 0;
+  if (!row || !transcript || tokensBefore < 4_000) return null;
+  const tokensAfter = Math.round(tokensBefore * 0.18);
+  const marker = makeMessage('system', [], { openclaw: { kind: 'compaction' } });
+  transcript.push(marker);
+  broadcastSessionMessage(state, sessionKey, marker, transcript.length);
+  updateSessionRow(row, { totalTokens: tokensAfter, totalTokensFresh: true });
+  return { tokensBefore, tokensAfter };
+}
+
+// `/compact [instructions]` sent as a chat message: compaction events, the marker, and a short reply.
+async function simulateCompactCommand(state, run, sessionKey, row, instructions) {
+  broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'compaction', data: { phase: 'start' } });
+  await runDelay(run, 600);
+  if (run.aborted) return;
+  const result = compactSession(state, sessionKey);
+  broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'compaction', data: { phase: 'end', completed: Boolean(result) } });
+  const transcript = state.transcripts.get(sessionKey);
+  const text = result
+    ? `⚙️ Compacted (${result.tokensBefore} → ${result.tokensAfter} tokens)${instructions ? `, keeping: ${instructions}` : ''}.`
+    : '⚙️ Nothing to compact yet.';
+  const reply = makeMessage('assistant', [textBlock(text)], { openclaw: { runId: run.runId }, model: rowModel(row) });
+  transcript.push(reply);
+  broadcastSessionMessage(state, sessionKey, reply, transcript.length);
+  broadcast(state, 'chat', { runId: run.runId, sessionKey, seq: ++run.seq, state: 'final', message: clone(reply) });
+  broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'lifecycle', data: { phase: 'end' } });
+  row.hasActiveRun = false;
+  row.activeRunIds = row.activeRunIds.filter((id) => id !== run.runId);
+  row.status = 'idle';
+  row.lastMessagePreview = text;
+  updateSessionRow(row, { lastActivityAt: nowMs() });
+  broadcastSessionChanged(state, sessionKey, 'compact', row);
+  run.finished = true;
+  state.activeRuns.delete(run.runId);
+}
+
 async function simulateRun(state, run, params) {
   const { sessionKey, message: text, attachments = [] } = params;
   const row = state.sessions.get(sessionKey);
@@ -681,6 +747,9 @@ async function simulateRun(state, run, params) {
     updateSessionRow(row, { lastActivityAt: nowMs() });
     broadcastSessionMessage(state, sessionKey, userMsg, transcript.length);
     broadcastSessionChanged(state, sessionKey, 'send', row);
+
+    const compact = /^\/compact(?:\s+([\s\S]*))?$/i.exec(String(text ?? '').trim());
+    if (compact) return await simulateCompactCommand(state, run, sessionKey, row, compact[1]?.trim() ?? '');
 
     if (/\bapprove\b/i.test(String(text ?? ''))) {
       const approval = {
@@ -773,6 +842,14 @@ async function simulateRun(state, run, params) {
     row.status = 'idle';
     row.lastMessagePreview = reply.slice(0, 120);
     row.unread = true;
+    // Each turn grows the context; the snapshot never passes the window.
+    if (row.totalTokens !== undefined) {
+      const limit = row.contextTokens ?? DEFAULT_CONTEXT_TOKENS;
+      row.inputTokens = row.totalTokens;
+      row.outputTokens = Math.ceil(reply.length / 4);
+      row.totalTokens = Math.min(limit, row.totalTokens + 1_200 + row.outputTokens);
+      row.totalTokensFresh = true;
+    }
     updateSessionRow(row, { lastActivityAt: nowMs() });
     broadcastSessionChanged(state, sessionKey, 'run-finished', row);
     run.finished = true;
@@ -808,6 +885,7 @@ function handleAuthedRequest(state, conn, msg) {
   const { id, method, params = {} } = msg;
   if (handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
   if (handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession })) return;
+  if (handleWebPushRequest(state, conn, msg, { sendRes, sendErr })) return;
   switch (method) {
     case 'progressCard.get': {
       const key = params.sessionKey;
@@ -993,9 +1071,22 @@ function handleAuthedRequest(state, conn, msg) {
       broadcastSessionChanged(state, params.key, 'patch', row);
       break;
     }
+    case 'sessions.compact': {
+      if (!(conn.scopes ?? []).includes(ADMIN_SCOPE)) {
+        return sendErr(conn, id, 'FORBIDDEN', `missing scope: ${ADMIN_SCOPE}`, { code: 'MISSING_SCOPE', scope: ADMIN_SCOPE });
+      }
+      const row = state.sessions.get(params.key);
+      if (!row) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown session');
+      if (row.hasActiveRun) return sendErr(conn, id, 'UNAVAILABLE', 'session has an active run');
+      const result = compactSession(state, params.key);
+      if (!result) return sendRes(conn, id, { ok: true, key: params.key, compacted: false, reason: 'Nothing to compact yet.' });
+      sendRes(conn, id, { ok: true, key: params.key, compacted: true, result });
+      broadcastSessionChanged(state, params.key, 'compact', row);
+      break;
+    }
     case 'models.list': {
       if (params.agentId && !state.agents.has(params.agentId)) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown agent');
-      sendRes(conn, id, { models: clone(MODEL_CATALOG) });
+      sendRes(conn, id, { models: modelCatalog(params.includeDetails === true) });
       break;
     }
     case 'commands.list': {

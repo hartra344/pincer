@@ -17,6 +17,7 @@ public struct PincerScene: Scene {
         #if os(macOS)
         .defaultSize(width: 1180, height: 780)
         .commands {
+            TranscriptFindCommands()
             CommandGroup(after: .sidebar) {
                 Button("Next Unread Chat") { self.app.selectNextUnread() }
                     .keyboardShortcut(.downArrow, modifiers: [.option, .shift])
@@ -26,6 +27,7 @@ public struct PincerScene: Scene {
             }
         }
         #endif
+        .commands { GoCommands(app: self.app) }
 
         #if os(macOS)
         WindowGroup("Gateway Settings", id: "gateway-settings", for: UUID.self) { $gatewayId in
@@ -75,6 +77,9 @@ struct RootView: View {
     @State private var settingsRequest: GatewaySettingsRequest?
     /// iOS: Automations shown as a sheet.
     @State private var automationsRequest: AutomationsRequest?
+    /// iOS: app Settings opened from the command palette.
+    @State private var showingAppSettings = false
+    @State private var showsCommandPalette = false
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -103,7 +108,20 @@ struct RootView: View {
                     .onAppear { self.compactColumn = .sidebar }
             }
         }
+        .overlay {
+            CommandPaletteOverlay(isPresented: self.$showsCommandPalette, openAppSettings: { self.showingAppSettings = true })
+        }
+        .animation(.snappy(duration: 0.15), value: self.showsCommandPalette)
+        .focusedSceneValue(\.commandPalette, self.$showsCommandPalette)
         .sheet(isPresented: self.$addingGateway) { ConnectionSheet() }
+        #if os(iOS)
+        .sheet(isPresented: self.$showingAppSettings) {
+            NavigationStack {
+                SettingsView()
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { self.showingAppSettings = false } } }
+            }
+        }
+        #endif
         .sheet(item: self.$settingsRequest) { request in
             GatewaySettingsWindow(gatewayId: request.id, close: { self.settingsRequest = nil })
         }
@@ -236,6 +254,18 @@ private struct SettingsForm: View {
     @AppStorage(AppTheme.modeKey) private var mode = AppearanceMode.system
     @Environment(\.appTheme) private var theme
     @State private var notifications = true
+    @AppStorage(PushRegistrar.relayKey) private var pushRelay = ""
+
+    private func pushStatus(_ gateway: GatewayStore) -> String {
+        if !self.pushRelay.isEmpty, PushRegistrar.validRelay(self.pushRelay) == nil { return "Relay must be https://" }
+        if self.app.push.deviceToken == nil, !self.pushRelay.isEmpty { return "Waiting for APNs" }
+        switch self.app.push.status[gateway.id] {
+        case .active: return "Push on"
+        case .unsupported: return "Gateway has no Web Push"
+        case let .failed(message): return message
+        case .off, nil: return gateway.state.isConnected ? "Push off" : "Not connected"
+        }
+    }
 
     var body: some View {
         Form {
@@ -315,9 +345,28 @@ private struct SettingsForm: View {
                 }
             }
         case .notifications:
-            SwiftUI.Section("Notifications") {
+            SwiftUI.Section {
                 Toggle("Notify about replies and approvals", isOn: self.$notifications)
-                    .onChange(of: self.notifications) { _, value in self.app.notifier.enabled = value }
+                    .onChange(of: self.notifications) { _, value in
+                        self.app.notifier.enabled = value
+                        self.app.syncPush()
+                    }
+                #if os(iOS)
+                TextField("Push relay", text: self.$pushRelay, prompt: Text("https://relay.example.com"))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .onSubmit { self.app.syncPush() }
+                ForEach(self.app.gateways.filter { !$0.profile.isDemo }) { gateway in
+                    LabeledContent(gateway.profile.name, value: self.pushStatus(gateway))
+                }
+                #endif
+            } header: {
+                Text("Notifications")
+            } footer: {
+                #if os(iOS)
+                Text("To get notified while Pincer is closed, enter a Pincer push relay. Your gateway encrypts each notification to this device, so the relay can't read it. The gateway needs Web Push (push.web.subscribe).")
+                #endif
             }
         case .device:
             SwiftUI.Section("This device") {

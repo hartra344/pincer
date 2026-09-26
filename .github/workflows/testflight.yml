@@ -60,6 +60,7 @@ jobs:
           MACOS_PROFILE: ${{ secrets.MACOS_PROFILE }}
           IOS_SHARE_PROFILE: ${{ secrets.IOS_SHARE_PROFILE }}
           MACOS_SHARE_PROFILE: ${{ secrets.MACOS_SHARE_PROFILE }}
+          IOS_NOTIFICATIONS_PROFILE: ${{ secrets.IOS_NOTIFICATIONS_PROFILE }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
         run: |
@@ -82,15 +83,21 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
           security find-identity -v "$KEYCHAIN"
 
-          # The app's profile and the Share extension's.
-          if [ "${{ matrix.platform }}" = macos ]; then PROFILES=("$MACOS_PROFILE" "$MACOS_SHARE_PROFILE"); EXT=provisionprofile; else PROFILES=("$IOS_PROFILE" "$IOS_SHARE_PROFILE"); EXT=mobileprovision; fi
-          for PROFILE in "${PROFILES[@]}"; do
-            echo "$PROFILE" | base64 --decode > "$RUNNER_TEMP/profile"
+          install_profile() {
+            echo "$1" | base64 --decode > "$RUNNER_TEMP/profile"
             UUID="$(security cms -D -i "$RUNNER_TEMP/profile" | plutil -extract UUID raw -)"
             for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
-              mkdir -p "$dir" && cp "$RUNNER_TEMP/profile" "$dir/$UUID.$EXT"
+              mkdir -p "$dir" && cp "$RUNNER_TEMP/profile" "$dir/$UUID.$2"
             done
-          done
+          }
+          if [ "${{ matrix.platform }}" = macos ]; then
+            install_profile "$MACOS_PROFILE" provisionprofile
+            install_profile "$MACOS_SHARE_PROFILE" provisionprofile
+          else
+            install_profile "$IOS_PROFILE" mobileprovision
+            install_profile "$IOS_SHARE_PROFILE" mobileprovision
+            install_profile "$IOS_NOTIFICATIONS_PROFILE" mobileprovision
+          fi
 
           echo "$ASC_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
           rm -f "$RUNNER_TEMP"/*.p12 "$RUNNER_TEMP/profile"

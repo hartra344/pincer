@@ -2,10 +2,15 @@ import Foundation
 
 /// Block-level Markdown (headings, lists, quotes, fenced code, rules), with inline styling left
 /// to Foundation's parser. Enough for agent output without a third-party dependency.
-enum MarkdownBlock: Equatable {
-    struct Item: Equatable {
-        var text: String
-        var indent: Int
+public enum MarkdownBlock: Equatable, Sendable {
+    public struct Item: Equatable, Sendable {
+        public var text: String
+        public var indent: Int
+
+        public init(text: String, indent: Int) {
+            self.text = text
+            self.indent = indent
+        }
     }
 
     case paragraph(String)
@@ -16,9 +21,22 @@ enum MarkdownBlock: Equatable {
     case rule
     case table(header: [String], alignments: [Alignment], rows: [[String]])
 
-    enum Alignment: Equatable { case leading, center, trailing }
+    public enum Alignment: Equatable, Sendable { case leading, center, trailing }
 
-    static func parse(_ source: String) -> [MarkdownBlock] {
+    /// Inline Markdown (bold, italic, code, links, strikethrough), parsed the way the transcript draws it.
+    public static func inline(_ text: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace,
+            failurePolicy: .returnPartiallyParsedIfPossible)
+        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
+    }
+
+    /// Soft line breaks stay inside the paragraph, as line separators, so paragraph spacing applies only between blocks.
+    public static func softBreaks(_ text: String) -> String {
+        text.replacingOccurrences(of: "\n", with: "\u{2028}")
+    }
+
+    public static func parse(_ source: String) -> [MarkdownBlock] {
         var blocks: [MarkdownBlock] = []
         var paragraph: [String] = []
         var listItems: [Item] = []
@@ -197,30 +215,3 @@ enum MarkdownBlock: Equatable {
         return String(rest.dropFirst(2))
     }
 }
-
-/// Parsing markdown on every render made long transcripts stutter while scrolling.
-@MainActor
-enum MarkdownCache {
-    private static var blockCache: [String: [MarkdownBlock]] = [:]
-    private static var inlineCache: [String: AttributedString] = [:]
-
-    static func blocks(_ source: String) -> [MarkdownBlock] {
-        if let cached = self.blockCache[source] { return cached }
-        let blocks = MarkdownBlock.parse(source)
-        if self.blockCache.count > 1500 { self.blockCache.removeAll(keepingCapacity: true) }
-        self.blockCache[source] = blocks
-        return blocks
-    }
-
-    static func inline(_ text: String) -> AttributedString {
-        if let cached = self.inlineCache[text] { return cached }
-        let options = AttributedString.MarkdownParsingOptions(
-            interpretedSyntax: .inlineOnlyPreservingWhitespace,
-            failurePolicy: .returnPartiallyParsedIfPossible)
-        let parsed = (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
-        if self.inlineCache.count > 6000 { self.inlineCache.removeAll(keepingCapacity: true) }
-        self.inlineCache[text] = parsed
-        return parsed
-    }
-}
-

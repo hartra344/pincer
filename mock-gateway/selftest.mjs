@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import http from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import { startServer } from './server.mjs';
+import { decryptWebPush, sessionPath } from './webpush.mjs';
 
 function b64url(buf) {
   return Buffer.from(buf).toString('base64url');
@@ -200,6 +202,65 @@ try {
   assert.ok(deltaCount > 0, 'expected chat deltas');
   assert.equal(sawTool, true, 'expected tool result event');
 
+  // Web Push: finished replies and approvals are encrypted to the subscription's keys.
+  const pushed = [];
+  const pushSink = http.createServer((req, res) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      pushed.push({ path: req.url, headers: req.headers, body: Buffer.concat(chunks) });
+      res.writeHead(201).end();
+    });
+  });
+  await new Promise((resolve) => pushSink.listen(0, '127.0.0.1', resolve));
+  const receiver = crypto.createECDH('prime256v1');
+  receiver.generateKeys();
+  const pushKeys = { p256dh: b64url(receiver.getPublicKey()), auth: b64url(crypto.randomBytes(16)) };
+  const endpoint = `http://127.0.0.1:${pushSink.address().port}/v1/push/abc/gw`;
+  assert.equal((await client.call('push.web.subscribe', { endpoint: 'http://example.com/x', keys: pushKeys })).ok, false);
+  assert.equal((await client.call('push.web.subscribe', { endpoint, keys: { p256dh: 'short', auth: 'x' } })).ok, false);
+  const subscribed = await client.send('push.web.subscribe', { endpoint, keys: pushKeys });
+  assert.ok(subscribed.subscriptionId);
+  assert.equal((await client.send('push.web.subscribe', { endpoint, keys: pushKeys })).subscriptionId, subscribed.subscriptionId,
+    'subscribe upserts by endpoint');
+  const pushedRun = await client.send('chat.send', {
+    sessionKey: 'agent:main:discord:channel:123',
+    message: 'hello push',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  await client.waitEvent('chat', (p) => p.runId === pushedRun.runId && p.state === 'final', 10_000);
+  await waitUntil(() => pushed.length >= 1, 3000, 'web push delivery');
+  const [delivery] = pushed;
+  assert.equal(delivery.path, '/v1/push/abc/gw');
+  assert.equal(delivery.headers['content-encoding'], 'aes128gcm');
+  assert.equal(delivery.headers.ttl, '300');
+  assert.match(delivery.headers.topic, /^[\w-]{32}$/);
+  assert.match(delivery.headers.authorization, /^vapid t=/);
+  const message = JSON.parse(decryptWebPush(delivery.body, { privateKey: receiver.getPrivateKey(), auth: pushKeys.auth }).toString('utf8'));
+  assert.equal(message.title, 'OpenClaw agent finished');
+  assert.equal(message.url, 'chat/main/discord/channel/123');
+  assert.equal(message.tag, `openclaw-agent-finished-${pushedRun.runId}`);
+  assert.ok(!JSON.stringify(message).includes('hello push'), 'push carries no message content');
+  assert.equal(sessionPath('agent:main:main'), 'chat/main');
+  assert.equal(sessionPath('agent:research:dashboard'), 'chat/research/~key/dashboard');
+  const requestedP = client.waitEvent('exec.approval.requested');
+  const approvalRun = await client.send('chat.send', {
+    sessionKey: 'agent:main:main',
+    message: 'please approve this',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  const requested = await requestedP;
+  await client.waitEvent('chat', (p) => p.runId === approvalRun.runId && p.state === 'final', 10_000);
+  await waitUntil(() => pushed.length >= 3, 3000, 'approval web push');
+  const approvalPushes = pushed.slice(1).map((p) => JSON.parse(decryptWebPush(p.body, { privateKey: receiver.getPrivateKey(), auth: pushKeys.auth })));
+  const approvalPush = approvalPushes.find((p) => p.tag === `openclaw-approval-${requested.id}`);
+  assert.equal(approvalPush.url, `approve/${requested.id}`);
+  assert.equal(approvalPush.title, 'OpenClaw approval requested');
+  assert.equal(pushed.find((p) => p.headers.urgency === 'high')?.headers.ttl, '120');
+  await client.send('exec.approval.resolve', { id: requested.id, decision: 'deny' });
+  assert.equal((await client.send('push.web.unsubscribe', { endpoint })).removed, true);
+  pushSink.close();
+
   // Config and plugins: reads need operator.read, writes operator.admin.
   const snapshot = await client.send('config.get');
   assert.equal(snapshot.valid, true, JSON.stringify(snapshot.issues));
@@ -284,6 +345,45 @@ try {
   assert.equal(removed.pluginId, 'todo');
   const bundled = await admin.call('plugins.uninstall', { pluginId: 'browser' });
   assert.equal(bundled.ok, false);
+
+  // Context usage and compaction.
+  const reader = await connectClient(url, device, deviceToken, true);
+  const rows = (await reader.send('sessions.list', { limit: 50 })).sessions;
+  const papersRow = rows.find((s) => s.key === 'agent:research:dashboard:papers');
+  assert.equal(papersRow.totalTokens, 96_000);
+  assert.equal(papersRow.contextTokens, 200_000);
+  assert.equal((await reader.send('sessions.list', {})).defaults.contextTokens, 128_000);
+  const plainModels = await reader.send('models.list', { agentId: 'main' });
+  assert.equal(plainModels.models[0].contextTokens, undefined, 'contextTokens only with includeDetails');
+  assert.equal(plainModels.models[0].contextWindow, 1_000_000);
+  const detailed = await reader.send('models.list', { agentId: 'main', includeDetails: true });
+  assert.equal(detailed.models[0].contextTokens, 200_000);
+  const compactDenied = await reader.call('sessions.compact', { key: 'agent:research:dashboard:papers' });
+  assert.equal(compactDenied.error.details.code, 'MISSING_SCOPE');
+  const compacted = await admin.send('sessions.compact', { key: 'agent:research:dashboard:papers' });
+  assert.equal(compacted.compacted, true);
+  assert.deepEqual(compacted.result, { tokensBefore: 96_000, tokensAfter: 17_280 });
+  const papersHistory = await reader.send('chat.history', { sessionKey: 'agent:research:dashboard:papers' });
+  assert.equal(papersHistory.messages.at(-1).__openclaw.kind, 'compaction');
+  const again = await admin.send('sessions.compact', { key: 'agent:research:dashboard:papers' });
+  assert.equal(again.compacted, true, 'still above the minimum');
+  const nothing = await admin.send('sessions.compact', { key: 'agent:research:dashboard:papers' });
+  assert.equal(nothing.compacted, false);
+  assert.match(nothing.reason, /Nothing to compact/);
+
+  await reader.send('sessions.messages.subscribe', { key: 'agent:coder:main' });
+  const compactRun = await reader.send('chat.send', {
+    sessionKey: 'agent:coder:main',
+    message: '/compact keep the build notes',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  const compactEnd = reader.waitEvent('agent', (p) => p.runId === compactRun.runId && p.stream === 'compaction' && p.data.phase === 'end');
+  const compactFinal = await reader.waitEvent('chat', (p) => p.runId === compactRun.runId && p.state === 'final', 10_000);
+  await compactEnd;
+  assert.match(compactFinal.message.content[0].text, /190000 → 34200 tokens\), keeping: keep the build notes/);
+  const coderRow = (await reader.send('sessions.list', {})).sessions.find((s) => s.key === 'agent:coder:main');
+  assert.equal(coderRow.totalTokens, 34_200);
+  reader.ws.close();
   admin.ws.close();
   console.log('PASS');
 } finally {
