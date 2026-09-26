@@ -3,12 +3,13 @@ import Observation
 
 /// Pending attachment in the composer. `data` is already sized for the Gateway's limits.
 public struct OutgoingAttachment: Identifiable, Hashable, Sendable {
-    public let id = UUID()
+    public let id: UUID
     public let fileName: String
     public let mimeType: String
     public let data: Data
 
-    public init(fileName: String, mimeType: String, data: Data) {
+    public init(id: UUID = UUID(), fileName: String, mimeType: String, data: Data) {
+        self.id = id
         self.fileName = fileName
         self.mimeType = mimeType
         self.data = data
@@ -65,6 +66,14 @@ public final class ChatStore: Identifiable {
     public private(set) var sawThinking = false
     /// The agent's task checklist for this session, shown above the composer.
     public private(set) var progressCard: ProgressCard?
+    /// Unsent composer text and attachments, kept across chat switches and saved to disk.
+    public var draft = ComposerDraft() {
+        didSet {
+            guard !self.headless, !self.restoringDraft, self.draft != oldValue else { return }
+            self.draftEdited = true
+            self.scheduleDraftSave()
+        }
+    }
 
     @ObservationIgnored private let historyLimit = 120
     @ObservationIgnored private let gatewayId: UUID
@@ -90,6 +99,11 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored private var recoveryAttempted: Set<String> = []
     /// Largest text field requested per message, matching the Control UI.
     @ObservationIgnored private let fullMessageMaxChars = 500_000
+    @ObservationIgnored private var draftChecked = false
+    /// The draft changed here, so a saved one arriving late must not replace it.
+    @ObservationIgnored private var draftEdited = false
+    @ObservationIgnored private var draftSaveTask: Task<Void, Never>?
+    @ObservationIgnored private var restoringDraft = false
 
     init(sessionKey: String, agentId: String?, gateway: GatewayStore, headless: Bool = false) {
         self.sessionKey = sessionKey
@@ -108,6 +122,7 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored private var loadInFlight = false
 
     public func load(force: Bool = false) async {
+        await self.restoreDraft()
         await self.restoreFromCache()
         guard let gateway, gateway.state.isConnected else { return }
         if self.hasLoaded, !force { return }
@@ -149,6 +164,40 @@ public final class ChatStore: Identifiable {
         self.hasMoreHistory = !snapshot.complete
         self.hasPagedOlder = true
         self.items = snapshot.items
+    }
+
+    /// Brings back the draft saved on disk, unless one was started here in the meantime.
+    private func restoreDraft() async {
+        guard !self.draftChecked, !self.headless else { return }
+        self.draftChecked = true
+        guard let saved = await DraftStore.load(gatewayId: self.gatewayId, sessionKey: self.sessionKey),
+              !self.draftEdited
+        else { return }
+        self.restoringDraft = true
+        self.draft = saved
+        self.restoringDraft = false
+    }
+
+    private func scheduleDraftSave(after delay: Duration = .milliseconds(400)) {
+        let previous = self.draftSaveTask
+        previous?.cancel()
+        let draft = self.draft
+        self.draftSaveTask = Task { [gatewayId, sessionKey] in
+            if delay > .zero {
+                try? await Task.sleep(for: delay)
+                if Task.isCancelled { return }
+            }
+            // Saves land in order, so an older draft never overwrites a newer one.
+            await previous?.value
+            await DraftStore.save(draft, gatewayId: gatewayId, sessionKey: sessionKey)
+        }
+    }
+
+    /// Writes a pending draft now, e.g. before the app is suspended.
+    public func flushDraft() async {
+        guard self.draftSaveTask != nil else { return }
+        self.scheduleDraftSave(after: .zero)
+        await self.draftSaveTask?.value
     }
 
     /// Brings the on-disk cache up to date with the full history, without touching the UI.
