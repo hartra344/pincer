@@ -99,7 +99,7 @@ struct RootView: View {
                         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
                         #endif
                 } detail: {
-                    self.detail(gateway)
+                    GatewayDetail(gateway: gateway)
                         .background { self.theme.background(.chatBackground)?.ignoresSafeArea() }
                 }
             } else {
@@ -133,14 +133,8 @@ struct RootView: View {
         .onChange(of: self.scenePhase, initial: true) { _, phase in
             self.app.appIsActive = phase == .active
         }
-        .onChange(of: self.app.selectedGateway?.selectedKey) { self.app.updateVisible() }
         .onChange(of: self.app.openRequests) { self.compactColumn = .detail }
-        .onChange(of: self.app.totalUnread, initial: true) { _, count in
-            self.app.notifier.setBadge(count)
-            #if os(macOS)
-            NSApplication.shared.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
-            #endif
-        }
+        .background { UnreadBadgeSync() }
         .onAppear {
             if self.app.gateways.isEmpty { self.addingGateway = true }
         }
@@ -166,18 +160,51 @@ struct RootView: View {
             #endif
         }
     }
+}
 
-    private func detail(_ gateway: GatewayStore) -> some View {
+/// Keeps the app badge in sync with unread chats. Its own view because the count reads every
+/// session: watching it from `RootView` rebuilt the sidebar whenever a chat was read.
+private struct UnreadBadgeSync: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        Color.clear
+            .onChange(of: self.app.totalUnread, initial: true) { _, count in
+                self.app.notifier.setBadge(count)
+                #if os(macOS)
+                NSApplication.shared.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
+                #endif
+            }
+    }
+}
+
+/// The split view's detail column. Its own view so only it, not `RootView` and the sidebar it
+/// builds, re-renders when the selected chat changes.
+private struct GatewayDetail: View {
+    let gateway: GatewayStore
+    @Environment(AppModel.self) private var app
+    @Environment(\.openGatewaySettings) private var openGatewaySettings
+
+    var body: some View {
+        let gateway = self.gateway
         Group {
             switch gateway.state {
             case let .awaitingPairing(requestId, deviceId):
                 PairingView(requestId: requestId, deviceId: deviceId)
             case let .failed(message) where gateway.sessions.isEmpty:
-                FailedView(message: message) { self.settingsOpener(gateway, at: .connection) }
+                FailedView(message: message) { self.openGatewaySettings(gateway, at: .connection) }
             default:
                 if let key = gateway.selectedKey {
-                    ChatView(chat: gateway.chat(for: key))
-                        .id("\(gateway.id)|\(key)")
+                    let chat = gateway.chat(for: key)
+                    // The per-chat `.id` stays inside a stable, full-size container, with the title and
+                    // toolbar outside it. Replacing the view under the toolbar, or the toolbar with
+                    // it, makes macOS redraw every toolbar button on each switch.
+                    ZStack {
+                        ChatView(chat: chat)
+                            .id("\(gateway.id)|\(key)")
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .modifier(ChatChrome())
                 } else if gateway.state.isConnected {
                     ContentUnavailableView("Pick a chat", systemImage: "bubble.left.and.bubble.right",
                                            description: Text("Choose a session from the sidebar or start a new one."))
@@ -187,6 +214,7 @@ struct RootView: View {
             }
         }
         .environment(gateway)
+        .onChange(of: gateway.selectedKey) { self.app.updateVisible() }
     }
 }
 
