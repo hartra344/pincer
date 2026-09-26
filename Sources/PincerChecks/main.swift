@@ -478,6 +478,72 @@ check(byModelName.count == 2, "model id after the provider matches as a prefix")
 let thinkRow = SessionRow(json(#"{"key":"k","thinkingLevels":[{"id":"low","label":"Low"},{"id":"high","label":"High"}]}"#))!
 check(thinkRow.thinkingLevelChoices?.map(\.value) == ["low", "high"], "session thinking levels")
 
+print("Automations")
+do {
+    let job = CronJob(json(#"""
+    {"id":"j1","agentId":"main","name":"Sync calendar","enabled":true,"configRevision":"rev1",
+     "schedule":{"kind":"cron","expr":"0 */6 * * *","tz":"America/New_York"},"sessionTarget":"isolated","wakeMode":"now",
+     "payload":{"kind":"agentTurn","message":"Sync it.","model":"gpt-5"},
+     "delivery":{"mode":"announce","channel":"telegram","to":"@ops"},
+     "state":{"nextRunAtMs":1790000000000,"lastRunAtMs":1789990000000,"lastRunStatus":"error","lastError":"invalid_grant","consecutiveErrors":2}}
+    """#))!
+    check(job.health == .failing && job.consecutiveErrors == 2 && job.lastError == "invalid_grant", "job state from `state`")
+    check(job.nextRunAt == Date(timeIntervalSince1970: 1_790_000_000), "next run date")
+    check(job.schedule.summary == "0 */6 * * * (America/New_York)" && job.deliveryTarget == "telegram @ops", "schedule and delivery")
+    check(job.chatKey(defaultAgentId: "x") == "agent:main:cron:j1", "automation chat key")
+    check(CronSchedule(json(#"{"kind":"every","everyMs":900000}"#)).summary == "Every 15 minutes"
+          && CronSchedule(json(#"{"kind":"every","everyMs":3600000}"#)).summary == "Every hour", "interval summaries")
+    check(!CronSchedule(json(#"{"kind":"on-exit","command":"make"}"#)).isEditable, "event schedules aren't editable")
+    let legacy = CronJob(json(#"{"id":"j2","name":"Old","enabled":false,"schedule":{"kind":"every","everyMs":60000},"lastStatus":"ok","nextRunAtMs":1}"#))!
+    check(legacy.health == .paused && legacy.lastStatus == .ok && legacy.nextRunAt != nil, "top-level state fields (older gateways)")
+    let running = CronJob(json(#"{"id":"j3","name":"R","enabled":true,"schedule":{"kind":"every","everyMs":60000},"state":{"runningAtMs":5}}"#))!
+    check(running.health == .running, "running job")
+
+    let run = CronRun(json(#"{"ts":2000,"runAtMs":1000,"jobId":"j1","action":"finished","status":"ok","summary":"Done","sessionKey":"agent:main:cron:j1:run:abc","durationMs":900}"#))!
+    check(run.id == "j1@2000" && run.startedAt == Date(timeIntervalSince1970: 1) && run.sessionKey == "agent:main:cron:j1:run:abc",
+          "run log entry links to its chat")
+    check(CronRun(json(#"{"jobId":"j1"}"#)) == nil, "run entries need a timestamp")
+
+    var draft = CronJobDraft(job: job, defaultAgentId: "main")
+    check(draft.scheduleKind == .cron && draft.announce && !draft.hasChanges && draft.patch.isEmpty, "draft from job, unchanged")
+    draft.name = "Sync team calendar"
+    check(draft.patch.keys.sorted() == ["name"], "patch sends only what changed (keeps delivery target, model)")
+    draft.message = "Sync the team calendar."
+    check(draft.patch["payload"] == ["kind": "agentTurn", "message": "Sync the team calendar."], "payload patch")
+    draft.announce = false
+    check(draft.patch["delivery"] == ["mode": "none"], "delivery patch when toggled")
+    draft.target = .main
+    check(draft.patch["sessionTarget"] == "main" && draft.patch["payload"]?["kind"] == "systemEvent", "main chat → systemEvent")
+    draft.cronExpr = "0 7 * *"
+    check(draft.problem?.contains("five fields") == true, "cron expression validated")
+
+    var every = CronJobDraft(job: CronJob(json(#"{"id":"e","name":"E","enabled":true,"schedule":{"kind":"every","everyMs":7200000,"anchorMs":5},"payload":{"kind":"agentTurn","message":"m"}}"#))!, defaultAgentId: "main")
+    check(every.everyAmount == 2 && every.everyUnit == .hours && every.patch.isEmpty, "interval shown in the largest unit; anchor kept")
+    every.everyAmount = 3
+    check(every.patch["schedule"] == ["kind": "every", "everyMs": 10_800_000], "schedule patch")
+
+    let script = CronJob(json(#"{"id":"s","name":"S","enabled":true,"schedule":{"kind":"stream","command":["tail"]},"payload":{"kind":"script","script":"x"}}"#))!
+    var scriptDraft = CronJobDraft(job: script, defaultAgentId: "main")
+    scriptDraft.enabled = false
+    check(!scriptDraft.isTaskEditable && !scriptDraft.isScheduleEditable && scriptDraft.problem == nil
+          && scriptDraft.patch.keys.sorted() == ["enabled"], "script jobs: only name, agent and enabled are edited")
+
+    var new = CronJobDraft(agentId: "main")
+    check(new.problem != nil, "new draft needs a name and task")
+    new.name = " Nightly check "
+    new.message = "Check backups"
+    new.everyAmount = 1
+    new.everyUnit = .days
+    new.announce = true
+    check(new.problem == nil && new.addParams["name"] == "Nightly check" && new.addParams["sessionTarget"] == "isolated"
+          && new.addParams["schedule"] == ["kind": "every", "everyMs": 86_400_000]
+          && new.addParams["delivery"] == ["mode": "announce", "channel": "last"]
+          && new.addParams["payload"] == ["kind": "agentTurn", "message": "Check backups"], "cron.add params")
+    new.target = .main
+    check(new.addParams["payload"] == ["kind": "systemEvent", "text": "Check backups"] && new.addParams["delivery"] == nil,
+          "main-chat job has no delivery")
+}
+
 // MARK: Live
 
 let arguments = CommandLine.arguments
@@ -563,6 +629,10 @@ func runDemo() async {
     await gateway.setModel(key, to: "openai/gpt-5.6-sol")
     let switched = await waitFor("model switch") { gateway.sessions[key]?.modelRef == "openai/gpt-5.6-sol" }
     check(switched, "demo model switch")
+
+    await gateway.automations.load()
+    check(gateway.automations.hasLoaded && !gateway.automations.supported && gateway.automations.jobs.isEmpty,
+          "gateway without cron.* shows automations unavailable")
 
     await chat.send("please approve this")
     let approvalSeen = await waitFor("approval") { !gateway.approvals.isEmpty }
@@ -885,6 +955,20 @@ func runLive(url: String, token: String) async {
     }
     other.stop()
 
+    // Automations: read-only without admin, then run, pause, edit, create and delete.
+    let automations = gateway.automations
+    await automations.load()
+    check(automations.supported && automations.jobs.count == 3 && automations.scheduler?.enabled == true,
+          "cron.list + cron.status (\(automations.jobs.map(\.id)))")
+    check(automations.jobs.last?.id == "paper-digest" && automations.jobs.last?.health == .paused, "paused jobs listed last")
+    await automations.loadRuns(for: "disk-check")
+    check(automations.runs["disk-check"]?.first?.status == .error
+          && automations.runs["disk-check"]?.first?.sessionKey == "agent:main:cron:disk-check", "cron.runs history with chat link")
+    check(!automations.canEdit, "automation writes need admin")
+    if let disk = automations.job("disk-check") {
+        let denied = await automations.runNow(disk)
+        check(!denied && automations.operation(for: "disk-check").error?.contains("Full Management") == true, "run denied without admin")
+    }
     // Gateway settings: read-only without admin, then edits through config.patch and plugins.*.
     let settings = gateway.settings
     await settings.load()
@@ -912,6 +996,37 @@ func runLive(url: String, token: String) async {
     admin.start()
     let adminConnected = await waitFor("admin connection") { admin.state.isConnected && admin.hello != nil }
     check(adminConnected && admin.settings.canEdit, "admin scope granted")
+    let adminAutomations = admin.automations
+    await adminAutomations.load()
+    check(adminAutomations.canEdit, "admin can edit automations")
+    var newJob = CronJobDraft(agentId: "main")
+    newJob.name = "Live check"
+    newJob.message = "Say hello"
+    let createdId = await adminAutomations.save(newJob)
+    check(createdId != nil && adminAutomations.job(createdId)?.nextRunAt != nil, "cron.add")
+    if let createdId, let created = adminAutomations.job(createdId) {
+        await adminAutomations.setEnabled(created, false)
+        check(adminAutomations.job(createdId)?.health == .paused, "pause")
+        var edit = CronJobDraft(job: adminAutomations.job(createdId)!, defaultAgentId: "main")
+        edit.name = "Live check (edited)"
+        edit.enabled = true
+        let edited = await adminAutomations.save(edit)
+        check(edited == createdId && adminAutomations.job(createdId)?.name == "Live check (edited)"
+              && adminAutomations.job(createdId)?.enabled == true, "cron.update")
+        // A stale revision is refused, then the latest job is loaded.
+        let stale = await adminAutomations.save({ var d = edit; d.name = "Stale"; return d }())
+        check(stale == nil && adminAutomations.operation(for: createdId).error?.contains("changed on the Gateway") == true,
+              "stale edit refused")
+        await adminAutomations.runNow(adminAutomations.job(createdId)!)
+        let finished = await waitFor("cron run") {
+            adminAutomations.runs[createdId]?.first?.status == .ok && adminAutomations.job(createdId)?.health == .ok
+        }
+        check(finished, "run now → cron event → history (\(adminAutomations.runs[createdId]?.count ?? 0) runs)")
+        let runKey = adminAutomations.runs[createdId]?.first?.sessionKey
+        check(runKey == "agent:main:cron:\(createdId)", "run links to its chat")
+        await adminAutomations.remove(adminAutomations.job(createdId)!)
+        check(adminAutomations.job(createdId) == nil, "cron.remove")
+    }
     let adminSettings = admin.settings
     await adminSettings.load()
     let hashBefore = adminSettings.snapshot?.hash

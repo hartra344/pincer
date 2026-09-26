@@ -52,6 +52,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - edits from every page go into one draft. The toolbar shows how many are unsaved, and **Save** (⌘S) opens **Review Changes**, which lists each change and sends them together with `config.patch`, so the gateway validates, persists and hot-applies them. Invalid values come back with the field and reason, and changes that need a gateway restart say so. If the config changed on the gateway meanwhile, Pincer rebases the draft and asks about any conflicting setting;
   - secrets are shown only as "saved" and are never sent back to the gateway unless you change them;
   - editing needs **Access → Full Management** on the Connection page (and the gateway's approval); otherwise settings are read-only.
+- **Automations** (**Organize → Automations…** in the sidebar, or **Manage Automations…** on the Automations section's header): a window on macOS and a sheet on iOS listing the gateway's cron jobs with their schedule, last and next run, and status (failing jobs show the error). Each job's run history (`cron.runs`) links every run to its chat. **Run Now**, **Pause**/**Resume**, **Edit**, **New** and **Delete** use `cron.run`/`cron.update`/`cron.add`/`cron.remove`, and the list updates live from the gateway's `cron` events. Changing jobs needs **Access → Full Management**; edits made elsewhere in the meantime are refused instead of overwritten. Gateways without `cron.*` show that automations aren't available.
 - **Per-session actions:** pin, rename, group, color, reasoning level and archive. **Color → Custom…** picks any color; since `sessions.patch` only takes OpenClaw's named colors, custom colors sync through `users.prefs` (key `pincer.chatColors`) and win over the named one. Drag a chat onto a group (or **Ungrouped**) to move it, or between chats to put it at that spot; in **Like Discord**, dropping a grouped chat on its own server or agent takes it out of the group.
 - **Groups:** create empty groups and keep them until you delete them (**Delete Group…** on the header leaves its chats ungrouped). Drag a group header, or use **Move Up**/**Move Down**, to reorder groups. **Change Icon…** on a group's header picks its SF Symbol; group icons sync through `users.prefs` (key `pincer.groupIcons`). Groups, their order and renames live in the gateway's group catalog (`sessions.groups.*`); on gateways without it, they sync through `users.prefs` (key `pincer.groups`). The order of chats within a group syncs through `users.prefs` (key `pincer.chatOrder`) and wins over pinning and activity.
 
@@ -142,7 +143,7 @@ Message triggers:
 - `image` also attaches an image;
 - `approve` raises an exec approval.
 
-The mock also serves a small config and plugin catalog for Gateway Settings; see its README.
+The mock also serves a small config and plugin catalog for Gateway Settings, and three cron jobs for Automations; see its README.
 
 For the rest of the options, see [`mock-gateway/README.md`](mock-gateway/README.md).
 
@@ -161,6 +162,7 @@ To see what the gateway says about each request, run the app with `open --env PI
 ## Known gaps
 
 - iOS runs in the simulator (connect, sidebar, history), but hasn't been tried on a real device yet.
+- Automations has been tested against the mock only.
 - Gateway Settings has been tested against the mock only. It doesn't browse the ClawHub catalog, show install progress, or edit lists of objects in forms (use the raw editor).
 
 ## License

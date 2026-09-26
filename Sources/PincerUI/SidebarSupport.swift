@@ -128,6 +128,7 @@ struct SidebarActions {
     var toggleThreads: (String) -> Void
     var setCollapsed: (String, Bool) -> Void
     var refresh: () async -> Void
+    var openAutomations: () -> Void
 }
 
 // MARK: Row appearance
@@ -344,6 +345,8 @@ enum SidebarMenus {
                 },
             ]
             return items
+        case .automations:
+            return [.action("Manage Automations…", image: "clock.arrow.circlepath") { actions.openAutomations() }]
         case .other where section.id == "group:":
             return [.action("New Group…", image: "folder.badge.plus") { self.newGroup(gateway: gateway, actions: actions) }]
         default:

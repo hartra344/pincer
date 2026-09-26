@@ -7,6 +7,7 @@ import SwiftUI
 struct ChannelList: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
+    @Environment(\.openAutomations) private var openAutomations
     /// Called when the reader picks a chat, so compact layouts can show it.
     var openChat: () -> Void = {}
     @State private var search = ""
@@ -63,6 +64,7 @@ struct ChannelList: View {
                             .disabled(!self.gateway.state.isConnected)
                     }
                     Divider()
+                    Button("Automations…") { self.openAutomations(self.gateway) }
                     Button("Gateway Settings…") { self.openGatewaySettings(self.gateway) }
                         .keyboardShortcut(",", modifiers: [.command, .shift])
                     Button("Edit Connection…") { self.openGatewaySettings(self.gateway, at: .connection) }
@@ -140,7 +142,8 @@ struct ChannelList: View {
                 if self.expandedThreads.contains(key) { self.expandedThreads.remove(key) } else { self.expandedThreads.insert(key) }
             },
             setCollapsed: { id, collapsed in self.gateway.setSectionCollapsed(id, collapsed) },
-            refresh: { await self.gateway.refreshSessions() })
+            refresh: { await self.gateway.refreshSessions() },
+            openAutomations: { self.openAutomations(self.gateway) })
     }
 }
 

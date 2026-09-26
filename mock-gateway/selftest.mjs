@@ -206,6 +206,21 @@ try {
   assert.equal(snapshot.config.gateway.auth.token, '__OPENCLAW_REDACTED__');
   const schema = await client.send('config.schema');
   assert.equal(schema.uiHints['gateway.auth.token'].sensitive, true);
+  // Cron: reads with operator.read, writes need operator.admin.
+  const cronStatus = await client.send('cron.status');
+  assert.equal(cronStatus.enabled, true);
+  assert.equal(cronStatus.jobs, 3);
+  const cronList = await client.send('cron.list', { includeDisabled: true, limit: 2, sortBy: 'nextRunAtMs', sortDir: 'asc' });
+  assert.equal(cronList.total, 3);
+  assert.equal(cronList.hasMore, true);
+  const cronRest = await client.send('cron.list', { includeDisabled: true, limit: 2, offset: cronList.nextOffset });
+  assert.equal(cronList.jobs.length + cronRest.jobs.length, 3);
+  const enabledOnly = await client.send('cron.list', {});
+  assert.ok(enabledOnly.jobs.every((job) => job.enabled), 'disabled jobs hidden by default');
+  const diskRuns = await client.send('cron.runs', { scope: 'job', id: 'disk-check', limit: 50, sortDir: 'desc' });
+  assert.equal(diskRuns.entries[0].status, 'error');
+  assert.equal(diskRuns.entries[0].sessionKey, 'agent:main:cron:disk-check');
+  assert.equal((await client.call('cron.run', { id: 'disk-check' })).error.details.code, 'MISSING_SCOPE');
   const denied = await client.call('config.patch', { raw: '{"agents":{"defaults":{"timeoutSeconds":5}}}', baseHash: snapshot.hash });
   assert.equal(denied.ok, false);
   assert.match(denied.error.message, /operator\.admin/);
@@ -223,6 +238,37 @@ try {
   assert.equal(server.state.configState.config.gateway.auth.token, 'dev-token', 'redacted secret restored');
   const restart = await admin.send('config.patch', { raw: '{"gateway":{"port":18790}}', baseHash: hot.hash });
   assert.equal(restart.restart.delayMs, 2000);
+
+  const added = await admin.send('cron.add', {
+    name: 'Selftest job',
+    agentId: 'main',
+    schedule: { kind: 'every', everyMs: 3_600_000 },
+    sessionTarget: 'isolated',
+    wakeMode: 'now',
+    payload: { kind: 'agentTurn', message: 'Say hi' },
+    delivery: { mode: 'none' },
+  });
+  assert.ok(added.id && added.state.nextRunAtMs > Date.now());
+  const mismatched = await admin.call('cron.add', { name: 'Bad', schedule: { kind: 'every', everyMs: 1000 }, sessionTarget: 'main', wakeMode: 'now', payload: { kind: 'agentTurn', message: 'x' } });
+  assert.match(mismatched.error.message, /systemEvent/);
+  const paused = await admin.send('cron.update', { id: added.id, expectedConfigRevision: added.configRevision, patch: { enabled: false } });
+  assert.equal(paused.enabled, false);
+  assert.equal(paused.state.nextRunAtMs, undefined);
+  const staleCron = await admin.call('cron.update', { id: added.id, expectedConfigRevision: added.configRevision, patch: { name: 'x' } });
+  assert.match(staleCron.error.message, /revision/);
+  const cronStarted = admin.waitEvent('cron', (p) => p.jobId === added.id && p.action === 'started');
+  const cronFinished = admin.waitEvent('cron', (p) => p.jobId === added.id && p.action === 'finished');
+  const ran = await admin.send('cron.run', { id: added.id, mode: 'force' });
+  assert.equal(ran.enqueued, true);
+  await cronStarted;
+  await cronFinished;
+  const addedRuns = await admin.send('cron.runs', { scope: 'job', id: added.id });
+  assert.equal(addedRuns.entries[0].runId, ran.runId);
+  assert.equal(addedRuns.entries[0].status, 'ok');
+  const runChat = await admin.send('chat.history', { sessionKey: addedRuns.entries[0].sessionKey });
+  assert.ok(runChat.messages.some((m) => m.content.some((b) => b.text === 'Say hi')), 'run linked to its chat');
+  await admin.send('cron.remove', { id: added.id });
+  assert.equal((await admin.call('cron.get', { id: added.id })).ok, false);
 
   const plugins = await admin.send('plugins.list');
   assert.equal(plugins.plugins.find((p) => p.id === 'weather').state, 'needs-setup');

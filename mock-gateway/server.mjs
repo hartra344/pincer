@@ -3,6 +3,7 @@ import zlib from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
+import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const METHODS = [
@@ -31,6 +32,7 @@ const METHODS = [
   'progressCard.get',
   'progressCard.put',
   ...CONFIG_METHODS,
+  ...CRON_METHODS,
 ];
 const EVENTS = [
   'connect.challenge',
@@ -44,6 +46,7 @@ const EVENTS = [
   'users.prefs.changed',
   'plugins.changed',
   'progressCard.changed',
+  'cron',
 ];
 
 function canonicalJson(value) {
@@ -221,6 +224,36 @@ function projectForHistory(message, maxChars = HISTORY_TEXT_MAX_CHARS) {
   return projected;
 }
 
+function makeSessionRow(key, props, base = nowMs()) {
+  return {
+    key,
+    sessionId: crypto.randomUUID(),
+    kind: 'direct',
+    label: props.label ?? null,
+    displayName: props.displayName,
+    derivedTitle: props.derivedTitle ?? props.label ?? 'Untitled',
+    lastMessagePreview: props.lastMessagePreview ?? 'Ready when you are.',
+    channel: props.channel ?? 'webchat',
+    agentId: props.agentId,
+    isMain: Boolean(props.isMain),
+    category: props.category,
+    color: props.color,
+    pinned: Boolean(props.pinned),
+    unread: Boolean(props.unread),
+    archived: false,
+    updatedAt: base - (props.age ?? 0),
+    lastActivityAt: base - (props.age ?? 0),
+    status: props.status ?? 'idle',
+    parentSessionKey: props.parentSessionKey,
+    spawnedBy: props.spawnedBy,
+    hasActiveRun: false,
+    activeRunIds: [],
+    model: DEFAULT_MODEL.model,
+    modelProvider: DEFAULT_MODEL.provider,
+    modelOverrideSource: null,
+  };
+}
+
 function createSeedState() {
   const base = nowMs();
   const agents = new Map([
@@ -235,33 +268,7 @@ function createSeedState() {
   ]);
 
   function row(key, props) {
-    const entry = {
-      key,
-      sessionId: crypto.randomUUID(),
-      kind: 'direct',
-      label: props.label ?? null,
-      displayName: props.displayName,
-      derivedTitle: props.derivedTitle ?? props.label ?? 'Untitled',
-      lastMessagePreview: props.lastMessagePreview ?? 'Ready when you are.',
-      channel: props.channel ?? 'webchat',
-      agentId: props.agentId,
-      isMain: Boolean(props.isMain),
-      category: props.category,
-      color: props.color,
-      pinned: Boolean(props.pinned),
-      unread: Boolean(props.unread),
-      archived: false,
-      updatedAt: base - (props.age ?? 0),
-      lastActivityAt: base - (props.age ?? 0),
-      status: props.status ?? 'idle',
-      parentSessionKey: props.parentSessionKey,
-      spawnedBy: props.spawnedBy,
-      hasActiveRun: false,
-      activeRunIds: [],
-      model: DEFAULT_MODEL.model,
-      modelProvider: DEFAULT_MODEL.provider,
-      modelOverrideSource: null,
-    };
+    const entry = makeSessionRow(key, props, base);
     sessions.set(key, entry);
     transcripts.set(key, []);
     return entry;
@@ -328,6 +335,30 @@ function createSeedState() {
     lastMessagePreview: 'No active coding run.',
   });
 
+  // Chats of the seeded automations (see cron.mjs); their runs append here.
+  row('agent:main:cron:morning-briefing', {
+    agentId: 'main',
+    label: 'Automation: Morning briefing',
+    channel: 'cron',
+    age: 3 * 3_600_000,
+    lastMessagePreview: 'Clear skies, two meetings, and the lab sensor is quiet.',
+  });
+  row('agent:main:cron:disk-check', {
+    agentId: 'main',
+    label: 'Automation: Check disk space',
+    channel: 'cron',
+    age: 2 * 3_600_000,
+    lastMessagePreview: 'df: /Volumes/Backup: No such file or directory',
+  });
+  transcripts.get('agent:main:cron:morning-briefing').push(
+    makeMessage('user', [textBlock('Write my morning briefing: weather, calendar and anything odd overnight.')]),
+    makeMessage('assistant', [textBlock('Clear skies, two meetings, and the lab sensor is quiet.')]),
+  );
+  transcripts.get('agent:main:cron:disk-check').push(
+    makeMessage('user', [textBlock('Check free space on every volume and warn me under 10%.')]),
+    makeMessage('assistant', [textBlock('df: /Volumes/Backup: No such file or directory')]),
+  );
+
   const dfCall = 'call_seed_df';
   transcripts.get('agent:main:main').push(
     makeMessage('user', [textBlock('Can you check disk usage and show me a quick status?')]),
@@ -391,6 +422,7 @@ function createSeedState() {
     activeRuns: new Map(),
     connections: new Set(),
     configState: createConfigState(),
+    cronState: createCronState(base),
   };
 }
 
@@ -751,9 +783,31 @@ async function simulateRun(state, run, params) {
   }
 }
 
+// Cron runs write into their automation's chat (`agent:<agent>:cron:<job>`), creating it on first use.
+function postToSession(state, key, { agentId, label, userText, replyText }) {
+  let row = state.sessions.get(key);
+  if (!row) {
+    row = makeSessionRow(key, { agentId, label, derivedTitle: label, channel: 'cron' });
+    state.sessions.set(key, row);
+    state.transcripts.set(key, []);
+  }
+  const transcript = state.transcripts.get(key);
+  const userMsg = makeMessage('user', [textBlock(userText)]);
+  const reply = makeMessage('assistant', [textBlock(replyText)]);
+  transcript.push(userMsg, reply);
+  broadcastSessionMessage(state, key, userMsg, transcript.length - 1);
+  broadcastSessionMessage(state, key, reply, transcript.length);
+  row.unread = true;
+  row.lastMessagePreview = replyText;
+  updateSessionRow(row, { lastActivityAt: nowMs() });
+  broadcastSessionChanged(state, key, 'cron', row);
+  return row;
+}
+
 function handleAuthedRequest(state, conn, msg) {
   const { id, method, params = {} } = msg;
   if (handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
+  if (handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession })) return;
   switch (method) {
     case 'progressCard.get': {
       const key = params.sessionKey;
@@ -1192,6 +1246,7 @@ export async function startServer(opts = {}) {
     close: () =>
       new Promise((resolve) => {
         if (backgroundTimer) clearInterval(backgroundTimer);
+        for (const timer of state.cronState.active.values()) clearTimeout(timer);
         for (const conn of state.connections) conn.ws.close(1001, 'server closing');
         wss.close(() => resolve());
       }),

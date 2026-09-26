@@ -36,6 +36,14 @@ public struct PincerScene: Scene {
         .defaultSize(width: 860, height: 640)
         .restorationBehavior(.disabled)
 
+        WindowGroup("Automations", id: "automations", for: UUID.self) { $gatewayId in
+            AutomationsWindow(gatewayId: gatewayId)
+                .environment(self.app)
+                .themed()
+        }
+        .defaultSize(width: 900, height: 640)
+        .restorationBehavior(.disabled)
+
         Settings {
             SettingsView()
                 .environment(self.app)
@@ -65,6 +73,8 @@ struct RootView: View {
     @State private var addingGateway = false
     /// iOS: Gateway Settings shown as a sheet.
     @State private var settingsRequest: GatewaySettingsRequest?
+    /// iOS: Automations shown as a sheet.
+    @State private var automationsRequest: AutomationsRequest?
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -97,7 +107,11 @@ struct RootView: View {
         .sheet(item: self.$settingsRequest) { request in
             GatewaySettingsWindow(gatewayId: request.id, close: { self.settingsRequest = nil })
         }
+        .sheet(item: self.$automationsRequest) { request in
+            AutomationsWindow(gatewayId: request.id, close: { self.automationsRequest = nil })
+        }
         .environment(\.openGatewaySettings, self.settingsOpener)
+        .environment(\.openAutomations, self.automationsOpener)
         .onChange(of: self.scenePhase, initial: true) { _, phase in
             self.app.appIsActive = phase == .active
         }
@@ -121,6 +135,16 @@ struct RootView: View {
             self.openWindow(id: "gateway-settings", value: gateway.id)
             #else
             self.settingsRequest = GatewaySettingsRequest(id: gateway.id)
+            #endif
+        }
+    }
+
+    private var automationsOpener: AutomationsOpener {
+        AutomationsOpener { gateway in
+            #if os(macOS)
+            self.openWindow(id: "automations", value: gateway.id)
+            #else
+            self.automationsRequest = AutomationsRequest(id: gateway.id)
             #endif
         }
     }
