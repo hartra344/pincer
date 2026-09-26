@@ -4,6 +4,8 @@ import Foundation
 public enum SettingsDestination: Hashable, Codable, Sendable {
     case connection
     case overview
+    /// Gateway health: status, channels, connected clients and restart.
+    case health
     /// Approval History: past decisions on commands, plugins and system changes.
     case approvals
     /// Pairing Requests: senders waiting to DM the agents on a pairing-policy channel.

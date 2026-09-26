@@ -443,6 +443,14 @@ struct OverviewPage: View {
             Section {
                 LabeledContent("Gateway", value: profile.name)
                 LabeledContent("Status") { ConnectionStateText(state: self.gateway.state) }
+                LabeledContent("Health") {
+                    let level = self.gateway.health.level
+                    Button { self.navigator.destination = .health } label: {
+                        Label(level.label, systemImage: level.symbol)
+                            .foregroundStyle(GatewayHealthPage.color(level))
+                    }
+                    .buttonStyle(.borderless)
+                }
                 if let version = self.gateway.hello?.serverVersion { LabeledContent("Version", value: version) }
                 LabeledContent("Access") {
                     Button(settings.canEdit || profile.access == .standard ? profile.access.label : "Waiting for approval") {
@@ -523,7 +531,7 @@ struct SaveOutcomeLabel: View {
 
     var body: some View {
         switch self.outcome {
-        case .restarting, .savedNotApplied:
+        case .restarting, .restartRequired, .savedNotApplied:
             Label(self.outcome.message, systemImage: "arrow.clockwise.circle.fill").foregroundStyle(.orange)
         default:
             Label(self.outcome.message, systemImage: "checkmark.circle.fill").foregroundStyle(.green)

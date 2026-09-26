@@ -150,6 +150,7 @@ private struct GatewaySettingsRoot: View {
         switch destination {
         case .connection: ConnectionPage()
         case .overview: OverviewPage()
+        case .health: GatewayHealthPage()
         case .approvals: ApprovalHistoryPage()
         case .pairing: PairingRequestsPage()
         case let .page(id):
@@ -214,6 +215,8 @@ private struct SettingsSidebar: View {
                 Section {
                     self.row("Connection", symbol: "network", .connection)
                     self.row("Overview", symbol: "info.circle", .overview)
+                    self.row("Health", symbol: "heart.text.square", .health,
+                             attention: self.gateway.health.level == .degraded || self.gateway.health.needsRestart)
                     self.row("Approval History", symbol: "checkmark.shield", .approvals)
                     self.row("Pairing Requests", symbol: "person.badge.key", .pairing,
                              badge: self.gateway.state.isConnected ? self.gateway.pairingInbox.pendingCount(at: self.now) : 0)

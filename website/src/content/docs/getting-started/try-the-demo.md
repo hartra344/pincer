@@ -37,6 +37,7 @@ While you're there, try:
 - the **context meter** next to **Send**, which shows how full each demo chat's context is;
 - **Approval History…** in the Organize menu, which has sample decisions, and answering an approval in the demo adds to it;
 - **Gateway Settings → Pairing Requests**, to approve or dismiss the sample people waiting to message your agents on Telegram and Discord;
+- **Gateway Settings → Health**: Telegram has lost its connection, so the gateway shows **Degraded**, with its channels, last heartbeat and the three clients connected (this device, a Control UI and a node). **Restart Gateway…** simulates a safe restart: nothing real restarts, your chats are still there afterwards, and Telegram reconnects, so the gateway comes back **Healthy**. Start a reply first to see the restart wait for it, then try **Restart Now Anyway**. It works with the demo's default access, since nothing real restarts;
 - <kbd>⌘</kbd> <kbd>K</kbd>, to open the command palette.
 
 :::tip
