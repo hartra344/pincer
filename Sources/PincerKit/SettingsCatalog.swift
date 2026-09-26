@@ -6,6 +6,8 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case overview
     /// Approval History: past decisions on commands, plugins and system changes.
     case approvals
+    /// Usage & cost: tokens, spend and provider quotas.
+    case usage
     /// A curated page from `SettingsCatalog`, by id.
     case page(String)
     case plugins
@@ -22,6 +24,8 @@ public enum SettingsRoute: Hashable, Codable, Sendable {
     case plugin(String)
     /// One entry of Approval History, by approval id.
     case approval(String)
+    /// One session's usage drill-down.
+    case sessionUsage(key: String, agentId: String? = nil)
 }
 
 /// Where a setting lives in the UI: the sidebar row, the pages pushed on top, and the field.

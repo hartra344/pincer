@@ -132,6 +132,9 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var approvalHistory = ApprovalHistoryModel(
         connection: self.connection, hello: { [weak self] in self?.hello },
         localDeviceId: self.profile.isDemo ? DemoGateway.deviceId : self.deviceId)
+    /// Token and cost usage; loaded when the Usage page opens.
+    @ObservationIgnored public private(set) lazy var usage = UsageModel(
+        connection: self.connection, hello: { [weak self] in self?.hello })
 
     public init(profile: GatewayProfile) {
         self.profile = profile

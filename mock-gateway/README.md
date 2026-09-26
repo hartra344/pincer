@@ -53,3 +53,12 @@ Approval history (`approvals.mjs`):
 - Cursors are opaque and bound to their `kind`; an unknown one fails with `INVALID_REQUEST` "invalid approval.history cursor". Unknown ids fail with `INVALID_REQUEST` and `details.reason: "APPROVAL_NOT_FOUND"`.
 - `exec.approval.resolve` records the decision at the top of the history, resolved by the calling device.
 - `MOCK_NO_APPROVAL_HISTORY=1` drops both methods from `hello-ok` and answers them with `UNKNOWN_METHOD`, like an older Gateway.
+
+Usage & cost (`usage.mjs`):
+
+- `usage.status` returns four providers: Claude (a 92% 5-hour window resetting within the hour, plus weekly windows), OpenAI (a window, a credit balance and a monthly budget), Gemini (an `error`) and Ollama (a `summary` only).
+- `usage.cost` and `sessions.usage` take `startDate`/`endDate` (together, inclusive `YYYY-MM-DD`, validated), `mode`, `timeZone` and `utcOffset`, else the last `days` (30). Without `agentScope: "all"` they only count the `main` agent (or `agentId`); `agentScope: "all"` with `agentId`/`key` fails with `INVALID_REQUEST`.
+- 30 days of deterministic activity for the seeded chats with a weekday pattern, across anthropic, openai, google and ollama models. `openai/gpt-5.6-sol` has unpriced requests every fourth day (partial cost); `agent:research:subagent:abc` runs on `ollama/qwen3-coder` and has no cost at all.
+- `sessions.usage` rows are capped by `limit` (default 50); `totals` and `aggregates` (`sessionCount`, `messages`, `byModel`, `byProvider`, `byAgent`, `byChannel`, `daily`, `costDaily`) cover every matched session. With `key` it returns that chat's row, empty if it has no usage; an unknown key fails with `Invalid session key: …`. Ranges starting more than 31 days ago report the Discord chat as `usage: null, computing: true` with `cacheStatus.status: "partial"`.
+- `sessions.usage.timeseries` (`{ key }`, up to 50 cumulative points) and `sessions.usage.logs` (`{ key, limit }`, 20 entries covering all four roles) cover the whole session. A missing `key` fails with `key is required for timeseries`/`logs`; chats without seeded usage fail timeseries with `No transcript found for session: …`.
+- `MOCK_NO_USAGE=1` drops all five methods from `hello-ok` and answers them with `UNKNOWN_METHOD`. `MOCK_USAGE_FORBIDDEN=1` answers `usage.cost` with `FORBIDDEN`, as for a restricted operator.

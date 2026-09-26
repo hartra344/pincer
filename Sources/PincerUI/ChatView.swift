@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct ChatView: View {
     let chat: ChatStore
     @Environment(GatewayStore.self) private var gateway
+    @Environment(\.openGatewaySettings) private var openGatewaySettings
     @AppStorage("pincer.reasoningHintDismissed") private var hintDismissed = false
     @State private var disclosure = TranscriptDisclosure()
     @State private var previewing: ImageRef?
@@ -226,6 +227,9 @@ struct ChatView: View {
                         Task { await self.chat.load(force: true) }
                     }
                     Button("Copy Session Key", systemImage: "key") { Clipboard.copy(row.key) }
+                    Button("Session Usage…", systemImage: "chart.bar") {
+                        self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
+                    }
                 } label: {
                     Label("Session", systemImage: Theme.moreSymbol)
                 }

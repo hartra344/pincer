@@ -5,11 +5,18 @@ import SwiftUI
 
 /// Opens Gateway Settings for a gateway: its own window on macOS, a sheet on iOS.
 struct GatewaySettingsOpener {
-    var open: @MainActor (GatewayStore, SettingsDestination?) -> Void = { _, _ in }
+    var open: @MainActor (GatewayStore, SettingsDestination?, [SettingsRoute]) -> Void = { _, _, _ in }
 
     @MainActor
-    func callAsFunction(_ gateway: GatewayStore, at destination: SettingsDestination? = nil) {
-        self.open(gateway, destination)
+    func callAsFunction(_ gateway: GatewayStore, at destination: SettingsDestination? = nil, routes: [SettingsRoute] = []) {
+        self.open(gateway, destination, routes)
+    }
+
+    /// Usage for one session, pushed on the Usage dashboard. New drill-downs cover 30 days.
+    @MainActor
+    func sessionUsage(_ gateway: GatewayStore, key: String, agentId: String?) {
+        gateway.usage.prepareSession(key, agentId: agentId)
+        self(gateway, at: .usage, routes: [.sessionUsage(key: key, agentId: agentId)])
     }
 }
 
@@ -87,6 +94,7 @@ private struct GatewaySettingsRoot: View {
                         case let .list(path): StringListPage(path: path)
                         case let .plugin(id): PluginPage(pluginId: id)
                         case let .approval(id): ApprovalDetailPage(approvalId: id)
+                        case let .sessionUsage(key, agentId): SessionUsagePage(sessionKey: key, agentId: agentId)
                         }
                     }
             }
@@ -147,6 +155,7 @@ private struct GatewaySettingsRoot: View {
         case .connection: ConnectionPage()
         case .overview: OverviewPage()
         case .approvals: ApprovalHistoryPage()
+        case .usage: UsagePage()
         case let .page(id):
             if let page = SettingsCatalog.page(id) { CuratedPage(page: page) }
         case .plugins: PluginsPage()
@@ -182,8 +191,14 @@ private struct GatewaySettingsRoot: View {
 
     private func takeRequest() {
         if let requested = self.settings.requestedDestination {
+            let routes = self.settings.requestedRoutes
             self.settings.requestedDestination = nil
-            self.navigator.destination = requested
+            self.settings.requestedRoutes = []
+            if routes.isEmpty {
+                self.navigator.destination = requested
+            } else {
+                self.navigator.go(to: SettingsLocation(destination: requested, routes: routes))
+            }
         } else if self.navigator.destination == nil {
             #if os(macOS)
             self.navigator.destination = .overview
@@ -208,6 +223,7 @@ private struct SettingsSidebar: View {
                     self.row("Connection", symbol: "network", .connection)
                     self.row("Overview", symbol: "info.circle", .overview)
                     self.row("Approval History", symbol: "checkmark.shield", .approvals)
+                    self.row("Usage", symbol: "chart.bar.xaxis", .usage)
                 }
                 if settings.hasLoaded {
                     Section("Settings") {

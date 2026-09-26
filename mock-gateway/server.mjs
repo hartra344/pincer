@@ -5,6 +5,7 @@ import { WebSocketServer } from 'ws';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
+import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
@@ -30,6 +31,7 @@ const METHODS = [
   'exec.approval.list',
   'exec.approval.resolve',
   ...APPROVAL_HISTORY_METHODS,
+  ...USAGE_METHODS,
   'question.list',
   'question.resolve',
   'users.prefs.get',
@@ -595,7 +597,7 @@ function makeHelloPayload(state, params, connId, deviceId) {
     type: 'hello-ok',
     protocol: 4,
     server: { version: 'mock-2026.1', connId },
-    features: { methods: approvalHistoryDisabled() ? METHODS.filter((m) => !APPROVAL_HISTORY_METHODS.includes(m)) : METHODS, events: EVENTS },
+    features: { methods: advertisedMethods(), events: EVENTS },
     snapshot: {},
     auth: { role: 'operator', scopes: params.scopes ?? [], deviceToken: deviceTokenFor(state, deviceId) },
     policy: {
@@ -980,12 +982,18 @@ function postToSession(state, key, { agentId, label, userText, replyText }) {
   return row;
 }
 
+function advertisedMethods() {
+  const disabled = new Set([...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []), ...(usageDisabled() ? USAGE_METHODS : [])]);
+  return METHODS.filter((m) => !disabled.has(m));
+}
+
 function handleAuthedRequest(state, conn, msg) {
   const { id, method, params = {} } = msg;
   if (handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
   if (handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession })) return;
   if (handleWebPushRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   switch (method) {
     case 'progressCard.get': {
       const key = params.sessionKey;

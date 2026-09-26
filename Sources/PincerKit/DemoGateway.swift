@@ -34,7 +34,7 @@ actor DemoGateway {
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
         "approval.history", "approval.get",
-    ]
+    ] + DemoUsage.methods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -223,6 +223,8 @@ actor DemoGateway {
             return try self.approvalHistoryPage(params)
         case "approval.get":
             return try self.approvalSnapshot(params)
+        case _ where DemoUsage.methods.contains(method):
+            return try DemoUsage.handle(method, params, knownKeys: Set(self.sessions.keys))
         case "question.list":
             return ["questions": .array(self.questionOrder.compactMap { self.questions[$0] }
                     .filter { $0["status"]?.string == "pending" })]

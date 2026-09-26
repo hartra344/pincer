@@ -68,6 +68,12 @@ jobs:
           for _ in $(seq 1 30); do nc -z 127.0.0.1 18789 && break; sleep 1; done
           swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
 
+      - name: Live checks against a gateway without usage
+        run: |
+          MOCK_NO_USAGE=1 PORT=18790 node mock-gateway/server.mjs > "$RUNNER_TEMP/mock-gateway-no-usage.log" 2>&1 &
+          for _ in $(seq 1 30); do nc -z 127.0.0.1 18790 && break; sleep 1; done
+          swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token
+
       - name: Upload mock gateway log
         if: failure()
         uses: actions/upload-artifact@v4
