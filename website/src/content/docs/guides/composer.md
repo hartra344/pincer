@@ -81,3 +81,7 @@ A few notes:
 | `/reset` or `/clear` | Start the session fresh. |
 
 The exact list depends on your gateway, its skills and its plugins.
+
+## Quick Capture
+
+On macOS, you can send to any chat from any app with <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd>, without switching to Pincer. See [Quick Capture](../quick-capture/).

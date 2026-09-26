@@ -20,5 +20,7 @@ let package = Package(
         .executableTarget(name: "PincerMacDev", dependencies: ["PincerUI"]),
         // Self-checks runnable without XCTest (`swift run PincerChecks`).
         .executableTarget(name: "PincerChecks", dependencies: ["PincerKit", "PincerPush"]),
+        // Unit tests (`swift test`): pure logic only, no sockets, Keychain or shared defaults.
+        .testTarget(name: "PincerKitTests", dependencies: ["PincerKit"]),
     ]
 )
