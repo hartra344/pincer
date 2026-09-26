@@ -762,7 +762,7 @@ extension String {
 enum DebugLog {
     static let path = ProcessInfo.processInfo.environment["PINCER_REQUEST_LOG"]
     static var enabled: Bool { path != nil }
-    static let quietMethods: Set<String> = ["chat.history", "artifacts.download"]
+    static let quietMethods: Set<String> = ["chat.history", "artifacts.download", "logs.tail"]
     private static let lock = NSLock()
 
     static func brief(_ params: JSONValue) -> String {

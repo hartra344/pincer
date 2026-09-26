@@ -33,7 +33,7 @@ actor DemoGateway {
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
-        "approval.history", "approval.get", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
+        "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set",
     ] + DemoUsage.methods
@@ -54,6 +54,8 @@ actor DemoGateway {
     private var resolvedApprovals: [String: String] = [:]
     /// Terminal approvals, newest first (`approval.history`).
     private var approvalHistory: [JSONValue] = []
+    /// The simulated Gateway log file (`logs.tail`).
+    private var logs = DemoGatewayLogs()
     /// The exec approvals file (`exec.approvals.get/set`). The demo keeps no socket token.
     var execApprovals = DemoGateway.seedExecApprovals()
     var execApprovalsExists = true
@@ -251,6 +253,7 @@ actor DemoGateway {
             self.approvalHistory.insert(Self.resolvedRecord(approval, decision: decision), at: 0)
             self.approvals[id] = nil
             self.approvalOrder.removeAll { $0 == id }
+            self.logs.approvalResolved(id: id, decision: decision)
             self.emit("exec.approval.resolved", ["id": .string(id), "decision": .string(decision)])
             if id == Self.seededApprovalId { self.finishSeededPush(approved: decision != "deny") }
             return ["ok": true, "id": .string(id), "decision": .string(decision)]
@@ -258,6 +261,8 @@ actor DemoGateway {
             return try self.approvalHistoryPage(params)
         case "approval.get":
             return try self.approvalSnapshot(params)
+        case "logs.tail":
+            return try self.logs.tail(params)
         case "exec.approvals.get":
             return try self.execApprovalsGet(params)
         case "exec.approvals.set":
@@ -903,6 +908,7 @@ actor DemoGateway {
         let key = run.sessionKey
         let text = run.text
         let model = self.rowModel(key)
+        self.logs.chatStarted(runId: runId, sessionKey: key, model: "\(model.provider)/\(model.model)", text: text)
 
         var content = [Self.text(text)]
         for attachment in params["attachments"]?.array ?? [] {
@@ -944,6 +950,7 @@ actor DemoGateway {
             ]
             self.approvals[id] = approval
             self.approvalOrder.append(id)
+            self.logs.approvalRequested(id: id, command: "rm -rf ./build")
             self.emit("exec.approval.requested", approval)
         }
 
@@ -999,6 +1006,7 @@ actor DemoGateway {
         self.chat(runId, ["state": "final", "message": finalMessage])
         self.agentEvent(runId, stream: "lifecycle", ["phase": "end"])
         self.runs[runId] = nil
+        self.logs.chatFinished(runId: runId, outputTokens: reply.count / 4, usedTool: wantsTool)
         self.updateRow(key, reason: "run-finished") { row in
             row["hasActiveRun"] = false
             row["activeRunIds"] = []
@@ -1416,12 +1424,13 @@ actor DemoGateway {
 
     private static func message(
         _ role: String, _ content: [JSONValue], runId: String? = nil, idempotencyKey: String? = nil,
-        model: (provider: String, model: String)? = nil, extra: Row = [:]) -> JSONValue
+        model: (provider: String, model: String)? = nil, ago: Double = 0, extra: Row = [:]) -> JSONValue
     {
         var openclaw: Row = ["id": .string(UUID().uuidString.lowercased())]
         if let runId { openclaw["runId"] = .string(runId) }
         if let idempotencyKey { openclaw["idempotencyKey"] = .string(idempotencyKey) }
-        var message: Row = ["role": .string(role), "content": .array(content), "timestamp": Self.now(),
+        let timestamp = ago > 0 ? JSONValue.number(((Date().timeIntervalSince1970 - ago) * 1000).rounded()) : Self.now()
+        var message: Row = ["role": .string(role), "content": .array(content), "timestamp": timestamp,
                             "__openclaw": .object(openclaw)]
         if role == "assistant" {
             let model = model ?? Self.defaultModel
@@ -1471,18 +1480,46 @@ actor DemoGateway {
         }
 
         let dfCall = "call_seed_df"
+        let minute = 60.0, hour = 3600.0, day = 86400.0
+        /// A seeded message sent `ago` seconds before launch, so results show realistic dates.
+        func said(_ role: String, _ text: String, ago: Double, extra: Row = [:]) -> JSONValue {
+            Self.message(role, [Self.text(text)], ago: ago, extra: extra)
+        }
         add("agent:main:main", agent: "main", title: "Main", preview: "Disk looks healthy.", age: 10_000,
             ["isMain": true, "totalTokens": 172_000, "inputTokens": 172_000], messages: [
-                Self.message("user", [Self.text("Can you check disk usage and show me a quick status?")]),
+                said("user", "Every weekday at 7:30, send me a morning briefing: weather, calendar and anything urgent in my inbox.",
+                     ago: 9 * day),
+                said("assistant", """
+                Done. The morning briefing runs weekdays at 7:30 and posts here. Tomorrow's includes the forecast, \
+                your first three meetings and any flagged mail.
+                """, ago: 9 * day - minute),
+                said("user", "Remind me to renew my passport before the Japan trip.", ago: 6 * day),
+                said("assistant", """
+                Reminder set for Monday at 9:00: **renew your passport**. Renewals take about four weeks, which \
+                still leaves plenty of time before the flight to Tokyo.
+                """, ago: 6 * day - minute),
+                said("user", "Did last night's Time Machine backup finish?", ago: 5 * day),
+                said("assistant", """
+                Yes. The backup finished at 02:14 and copied 3.2 GB. The oldest snapshot still kept is from March.
+                """, ago: 5 * day - minute),
+                said("user", "Book a table for two at Café Lumière on Friday at 8.", ago: 3 * day),
+                said("assistant", """
+                Café Lumière has nothing at 8:00 on Friday, but 8:15 is free. I've held 8:15 for two under your \
+                name; reply *confirm* to keep it.
+                """, ago: 3 * day - minute),
+                said("user", "confirm", ago: 3 * day - 5 * minute),
+                said("assistant", "Confirmed: Café Lumière, Friday at 8:15 pm, two people. It's in your calendar with the address.",
+                     ago: 3 * day - 6 * minute),
+                Self.message("user", [Self.text("Can you check disk usage and show me a quick status?")], ago: 20 * minute),
                 Self.message("assistant", [
                     Self.thinking("I should look at disk usage and summarize the main volumes."),
                     Self.toolCall(dfCall, "exec", ["command": "df -h"]),
-                ]),
+                ], ago: 20 * minute - 5),
                 Self.message("toolResult", [Self.text("""
                 Filesystem      Size  Used Avail Use% Mounted on
                 /dev/disk3s1   926G  411G  490G  46% /
                 /dev/disk3s6   926G  7.0G  490G   2% /System/Volumes/VM
-                """)], extra: ["toolCallId": .string(dfCall), "toolName": "exec", "isError": false]),
+                """)], ago: 20 * minute - 10, extra: ["toolCallId": .string(dfCall), "toolName": "exec", "isError": false]),
                 Self.message("assistant", [
                     Self.text("""
                     ## Disk status
@@ -1498,8 +1535,8 @@ actor DemoGateway {
                     """),
                     Self.image("demo-chart", alt: "Disk usage chart"),
                     Self.file("demo-script", name: "disk-report.sh", mimeType: "text/x-shellscript"),
-                ]),
-                Self.message("user", [Self.text("Can you sketch that as a little gauge?")]),
+                ], ago: 20 * minute - 15),
+                Self.message("user", [Self.text("Can you sketch that as a little gauge?")], ago: 15 * minute),
                 Self.message("assistant", [Self.text("""
                 Here's the root volume as a gauge:
 
@@ -1510,19 +1547,42 @@ actor DemoGateway {
                   <text x="120" y="112" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="30" font-weight="600" fill="#34a37a">46%</text>
                 </svg>
                 ```
-                """)]),
+                """)], ago: 15 * minute - 10),
                 Self.message("assistant", [Self.text("""
                 👋 **Welcome to the Pincer demo.** Everything here is simulated on your device, so no Gateway \
                 is needed. Send a message to see a streamed reply. Try the words *tool*, *image*, *approve*, *ask* or *plan*, \
                 or send */compact*.
-                """)]),
+                """)], ago: 10),
             ])
+        let discord: Row = ["provenance": ["sourceChannel": "discord"]]
         add("agent:main:discord:channel:123", agent: "main", title: "home-lab", preview: "Discord bridge is online.",
             age: 20_000, ["label": "home-lab", "category": "Home", "channel": "discord", "pinned": true, "unread": true],
             messages: [
-                Self.message("user", [Self.text("The lab temperature sensor looks noisy tonight.")],
-                             extra: ["provenance": ["sourceChannel": "discord"]]),
-                Self.message("assistant", [Self.text("I'll keep an eye on the home-lab channel and flag anything unusual.")]),
+                said("user", "Nightly backup to the NAS failed again, can you check why?", ago: 12 * day, extra: discord),
+                said("assistant", """
+                The backup job stopped at 03:02 because the NAS share ran out of space: old photo library \
+                snapshots take 1.1 TB. Want me to prune everything older than 90 days?
+                """, ago: 12 * day - minute),
+                said("user", "Yes, prune them and rerun it.", ago: 12 * day - 10 * minute, extra: discord),
+                said("assistant", "Pruned 412 snapshots (780 GB freed) and reran the backup. It finished in 41 minutes with no errors.",
+                     ago: 12 * day - 55 * minute),
+                said("user", "What's drawing so much power on the rack?", ago: 8 * day, extra: discord),
+                said("assistant", """
+                The UPS reports 186 W. The old Dell server idles at 95 W of that; the switch, the NAS and the \
+                Raspberry Pis share the rest.
+                """, ago: 8 * day - minute),
+                said("user", "Add the new Zigbee door sensor to Home Assistant.", ago: 4 * day, extra: discord),
+                said("assistant", """
+                Paired it as `binary_sensor.garage_door`. It reports open, closed and battery level, and it's on \
+                the Security dashboard now.
+                """, ago: 4 * day - 2 * minute),
+                said("user", "Is the Grafana dashboard still showing the Pi-hole stats?", ago: day, extra: discord),
+                said("assistant", """
+                Yes. Pi-hole blocked 18% of 42,000 queries in the last 24 hours; the panel came back after the \
+                container restarted.
+                """, ago: day - minute),
+                said("user", "The lab temperature sensor looks noisy tonight.", ago: minute, extra: discord),
+                said("assistant", "I'll keep an eye on the home-lab channel and flag anything unusual.", ago: 20),
             ])
         add("agent:main:dashboard:trip", agent: "main", title: "Japan trip", preview: "Kyoto day plan drafted.",
             age: 60_000, ["label": "Japan trip", "category": "Personal", "color": "pink", "pinned": true,
@@ -1530,30 +1590,63 @@ actor DemoGateway {
             messages: Self.seedTripTranscript())
         add("agent:research:main", agent: "research", title: "Main", preview: "Research queue is clear.", age: 90_000,
             ["isMain": true], messages: [
-                Self.message("assistant", [Self.text("Scout is ready to dig into papers, repos, and docs.")]),
+                said("assistant", "Scout is ready to dig into papers, repos, and docs.", ago: 14 * day),
+                said("user", "Compare SQLite FTS5 and Tantivy for searching chat history on a phone.", ago: 6 * day),
+                said("assistant", """
+                FTS5 is the better fit on a phone: it ships with the OS, adds nothing to the app's size and \
+                searches a few hundred thousand messages in milliseconds. Tantivy is faster at larger scale but \
+                adds about 5 MB and a Rust toolchain.
+                """, ago: 6 * day - 2 * minute),
+                said("user", "Find the best reviewed noise-cancelling headphones for long flights.", ago: 3 * minute),
+                said("assistant", """
+                Reviewers agree on the Sony WH-1000XM6 for noise cancelling and battery life. The Bose \
+                QuietComfort Ultra is more comfortable on a long flight, like the one to Tokyo.
+                """, ago: 90),
             ])
         add("agent:research:dashboard:papers", agent: "research", title: "Paper digest",
             preview: "Three papers summarized.", age: 120_000,
             ["label": "Paper digest", "category": "Work", "unread": true, "pinned": true],
             messages: [
-                Self.message("user", [Self.text("Summarize the latest diffusion papers.")]),
-                Self.message("assistant", [Self.text("The main themes are consistency models, faster sampling, and video generation.")]),
+                said("user", "What's new in speculative decoding?", ago: 5 * day),
+                said("assistant", """
+                Two themes this week: draft models that share the target model's KV cache, and tree-based \
+                verification that accepts several tokens per step. Both report 2–3× faster generation with \
+                identical outputs.
+                """, ago: 5 * day - 2 * minute),
+                said("user", "Summarize the latest diffusion papers.", ago: 3 * minute),
+                said("assistant", "The main themes are consistency models, faster sampling, and video generation.",
+                     ago: 2 * minute),
             ])
         add("agent:research:subagent:abc", agent: "research", title: "Summarize arXiv 2401.x",
             preview: "Subagent found the main contribution.", age: 180_000,
             ["label": "Summarize arXiv 2401.x", "parentSessionKey": "agent:research:dashboard:papers",
              "spawnedBy": "agent:research:dashboard:papers"],
             messages: [
-                Self.message("assistant", [Self.text("The paper mainly improves how retrieval-augmented summaries are evaluated.")]),
+                said("assistant", "The paper mainly improves how retrieval-augmented summaries are evaluated.", ago: 3 * minute),
             ])
         add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
             ["isMain": true, "unread": true], messages: [
-                Self.message("assistant", [Self.text("Forge can edit code, run builds, and report back briefly.")]),
-                Self.message("user", [Self.text("Fix the login timeout and push it.")]),
-                Self.message("assistant", [Self.text("""
+                said("assistant", "Forge can edit code, run builds, and report back briefly.", ago: 14 * day),
+                said("user", "The login test is flaky on CI again.", ago: 10 * day),
+                said("assistant", """
+                It races the token refresh: the test signs in before the mock clock advances. I pinned the clock \
+                in `LoginTests.setUp()`, and it has passed 50 runs in a row.
+                """, ago: 10 * day - 4 * minute),
+                said("user", "Write a script that backs up the Postgres database every night.", ago: 7 * day),
+                said("assistant", """
+                Added `scripts/backup-db.sh`. It runs `pg_dump`, gzips the output to \
+                `/backups/db-$(date +%F).sql.gz` and keeps the last 14 days. A cron entry runs the backup at 02:30.
+                """, ago: 7 * day - 3 * minute),
+                said("user", "Why is the release build slower than debug?", ago: 2 * day),
+                said("assistant", """
+                Whole-module optimization was off in the Release configuration, so every file compiled on its \
+                own. Turning it on cut the build from 6 min 40 s to 2 min 55 s.
+                """, ago: 2 * day - 2 * minute),
+                said("user", "Fix the login timeout and push it.", ago: 3 * minute),
+                said("assistant", """
                 Raised the login timeout to 30 s and the tests pass. I've asked to run \
                 `git push origin fix/login-timeout`; approve it and I'll push.
-                """)]),
+                """, ago: 45),
             ])
         return (sessions, transcripts)
     }
@@ -1573,9 +1666,12 @@ actor DemoGateway {
             ("A museum we shouldn't miss?", "the Ghibli Museum, if we can get tickets on the 10th of the month before"),
         ]
         var messages: [JSONValue] = []
+        // Planned over about a month, newest a minute ago, so search results show realistic dates.
+        let pairs = 91 + Self.tripRoute.count
         func pair(_ user: String, _ assistant: String) {
-            messages.append(Self.message("user", [Self.text(user)]))
-            messages.append(Self.message("assistant", [Self.text(assistant)]))
+            let ago = Double(pairs - 1 - messages.count / 2) * 5 * 3600 + 60
+            messages.append(Self.message("user", [Self.text(user)], ago: ago + 60))
+            messages.append(Self.message("assistant", [Self.text(assistant)], ago: ago))
         }
         for index in 0..<91 {
             let idea = ideas[index % ideas.count]

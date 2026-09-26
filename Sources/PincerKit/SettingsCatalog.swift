@@ -8,6 +8,8 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case health
     /// Approval History: past decisions on commands, plugins and system changes.
     case approvals
+    /// Gateway Logs: a live tail of the Gateway's log file (`logs.tail`).
+    case logs
     /// Command Policy: the exec approvals file (`exec.approvals.get/set`).
     case execPolicy
     /// Usage & cost: tokens, spend and provider quotas.

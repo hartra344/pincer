@@ -87,11 +87,28 @@ Pincer uses the server's slug from the gateway's Discord config when it's set. O
 ## The Quick Capture shortcut does nothing
 
 - Pincer has to be running. The shortcut stops working when you quit it.
+- Pincer isn't running after you log in: turn on **Open at Login** in **Settings → General → Launch**.
 - Check that **Quick Capture shortcut** is on in **Settings → General → Quick Capture**.
 - If Settings says the shortcut "is used by another app", another app already registered that combination. Record a different one, or change it in the other app.
 - Quick Capture is macOS only.
 
 See [Quick Capture](../../guides/quick-capture/).
+
+## Open at Login doesn't stick or says it needs approval
+
+- If Settings says to allow Pincer, click **Open Login Items Settings…** and turn Pincer on under **System Settings → General → Login Items & Extensions**. The toggle updates when you come back to Pincer.
+- If Settings says it couldn't turn Open at Login on or off, try again, or add or remove Pincer yourself in **System Settings → General → Login Items & Extensions**.
+- Open at Login is macOS only.
+
+See [Start Pincer at login](../../guides/quick-capture/#start-pincer-at-login).
+
+## The menu bar item doesn't appear
+
+- Check that **Show Pincer in the menu bar** is on in **Settings → General → Menu Bar**. Dragging the item out of the menu bar turns it off.
+- When the menu bar is full, macOS hides items that don't fit, for example behind the camera notch. Quit some menu bar apps, or hold <kbd>⌘</kbd> and drag items to make room.
+- The menu bar item is macOS only.
+
+See [Menu bar](../../guides/menu-bar/).
 
 ## Quick Capture won't send
 
@@ -145,6 +162,16 @@ See [Shortcuts & Siri](../../guides/shortcuts-and-siri/).
 ## Images from the web don't load
 
 Check that **Load images the agent links from the web** is on in Settings. Images from the gateway itself always load.
+
+## Message search misses messages or says it's indexing
+
+- **"Indexing chats…":** after updating Pincer, the search index is built in the background from chats you already had cached, once Pincer connects. Results are shown while it works and fill in when it's done.
+- **Older messages don't show up:** search only covers cached history, up to the latest 20,000 messages of each chat, and only on the selected gateway. Chats cache in the background after connecting.
+- **Archived chats don't show up:** turn on **Show Archived** in the sidebar's Organize menu.
+- **Nothing matches:** each word has to match from its start (`tok` finds "Tokyo", `kyo` doesn't), and several words have to appear together. Thinking and tool output aren't searched; use Find in Chat's options for those.
+- **"Message search needs the transcript cache":** `PINCER_CACHE_DIR=off` is set. Search needs the cache.
+
+A damaged or outdated search index is deleted and rebuilt on its own, so you never need to clear it yourself. See [Search messages](../../guides/search/).
 
 ## "Always allow" is missing
 
@@ -231,7 +258,15 @@ For a detailed log of every request and the gateway's reply, run the app with a 
 open --env PINCER_REQUEST_LOG=/tmp/pincer.log /Applications/Pincer.app
 ```
 
-Each request is logged with ✓ or the gateway's error. History and image downloads are left out.
+Each request is logged with ✓ or the gateway's error. History and image downloads, and Gateway Logs polls, are left out.
+
+This is Pincer's own log. To see the **gateway's** log, open [Gateway Logs](../../guides/gateway-logs/) (**Organize → Gateway Logs…** or <kbd>⌘</kbd> <kbd>K</kbd>).
+
+## Gateway Logs says it isn't available or can't read the log
+
+- **Gateway Logs Aren't Available:** the gateway doesn't offer `logs.tail`. Update OpenClaw on the gateway host.
+- **Needs the operator.read scope:** approve the scope for this device on the gateway host, then choose **Try Again**.
+- **Couldn't read the gateway log:** the gateway couldn't open its log file, often a permissions problem on the gateway host. Pincer keeps retrying and keeps the lines it already has. Check the path shown at the bottom of the page.
 
 ## Still stuck?
 

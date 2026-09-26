@@ -42,6 +42,10 @@ Helper (subagent) runs and archived chats aren't listed.
 | **Usage & Cost…** | Opens the [Usage](../usage-and-cost/) dashboard for the selected gateway. |
 | **Session Usage…** | Opens the current chat's [usage drill-down](../usage-and-cost/). Shown only when a chat is open. |
 
+### Searching messages
+
+Once you've typed at least 2 characters, the palette also offers **Search Messages for “*query*”**, right after the matching chats, or first when no chat matches. Choose it, or press <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>F</kbd> (**Go → Search Messages…**), to search the text of every cached chat on the selected gateway. See [Search messages](../search/).
+
 ### Choosing a model
 
 **Change Model…** opens a second page with "Choose a model…" in the field:
@@ -67,7 +71,7 @@ If nothing matches, the palette shows "No matches".
 | --- | --- |
 | Move through results | <kbd>↑</kbd> <kbd>↓</kbd> |
 | Run the selected result | <kbd>Return</kbd> |
-| Back to commands from the models page | <kbd>Esc</kbd>, or <kbd>Delete</kbd> in an empty field |
+| Back to commands from the models or messages page | <kbd>Esc</kbd>, or <kbd>Delete</kbd> in an empty field |
 | Close the palette | <kbd>Esc</kbd> |
 
 The selection wraps from the last result to the first. Clicking outside the palette also closes it.

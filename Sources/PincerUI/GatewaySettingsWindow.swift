@@ -206,6 +206,7 @@ private struct GatewaySettingsRoot: View {
         case .overview: OverviewPage()
         case .health: GatewayHealthPage()
         case .approvals: ApprovalHistoryPage()
+        case .logs: GatewayLogsPage()
         case .execPolicy: ExecPolicyPage()
         case .usage: UsagePage()
         case .pairing: PairingRequestsPage()
@@ -312,6 +313,7 @@ private struct SettingsSidebar: View {
                     self.row("Health", symbol: "heart.text.square", .health,
                              attention: self.gateway.health.level == .degraded || self.gateway.health.needsRestart)
                     self.row("Approval History", symbol: "checkmark.shield", .approvals)
+                    self.row("Gateway Logs", symbol: "doc.text.magnifyingglass", .logs)
                     self.row("Command Policy", symbol: "lock.shield", .execPolicy,
                              unsaved: self.gateway.execPolicy.hasChanges)
                     self.row("Usage", symbol: "chart.bar.xaxis", .usage)

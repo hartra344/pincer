@@ -36,7 +36,7 @@ Set your team, then run **Pincer-macOS** or **Pincer-iOS**. The Xcode-built macO
 - device signing and the connect handshake
 - TLS pinning, URL policy and failure classification
 - reconnect backoff and protocol frame decoding
-- the transcript cache and composer drafts
+- the transcript cache, message search matching and composer drafts
 - sidebar grouping, slash commands and approvals
 
 ```sh
@@ -59,14 +59,16 @@ The tests are hermetic:
 PINCER_KEYCHAIN=memory swift run PincerChecks          # offline checks
 PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo gateway
 PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+PINCER_KEYCHAIN=memory swift run -c release PincerChecks --perf   # message search at scale
 PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock started with MOCK_NO_USAGE=1 PORT=18790
 ```
 
 | Mode | What it checks |
 | --- | --- |
-| no flag | Offline checks: identity, protocol models, stores, the transcript cache and composer drafts. |
-| `--demo` | The offline checks, then a full run against the in-process demo gateway, including sidebar navigation. |
+| no flag | Offline checks: identity, protocol models, stores, the transcript cache, message search and composer drafts. |
+| `--demo` | The offline checks, then a full run against the in-process demo gateway, including sidebar navigation and message search. |
 | `--live <url> <token>` | The offline checks, then an end-to-end run against a real or [mock](../mock-gateway/) gateway. |
+| `--perf` | Builds a message search index over 20 synthetic chats of 20,000 messages each and checks build time, query time, memory and index size. Build it in release (`-c release`), since its time targets assume an optimized build. |
 | `--live-no-usage <url> <token>` | The offline checks, then a run against a gateway without the usage methods (the mock with `MOCK_NO_USAGE=1`), checking that Usage reports them as unsupported. |
 
 Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaults suite, so concurrent runs don't share storage.
@@ -92,7 +94,7 @@ To reproduce CI locally, run the same commands. For the live step, start the moc
 | Variable | Effect |
 | --- | --- |
 | `PINCER_KEYCHAIN=memory` | Keep identities and secrets in memory, so checks and dev runs never touch your real Keychain. |
-| `PINCER_CACHE_DIR` | `off` disables the transcript cache. A path moves it. |
+| `PINCER_CACHE_DIR` | `off` disables the transcript cache and message search. A path moves both. |
 | `PINCER_DRAFTS_DIR` | `off` disables saved composer drafts. A path moves them. |
 | `PINCER_REQUEST_LOG` | A file path to log every request and the gateway's reply. |
 | `PINCER_DEMO_DELAY_SCALE` | Multiplies the demo gateway's simulated streaming and tool delays. `0.2` runs the demo five times faster. `0` removes them entirely, but then the demo checks can't see the streaming phases. |
