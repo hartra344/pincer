@@ -18,6 +18,12 @@ struct CommandPaletteView: View {
     @State private var page = Page.root
     @State private var selection: String?
     @FocusState private var focused: Bool
+    #if os(macOS)
+    @State private var keyMonitor: Any?
+    @State private var host = HostWindow()
+    /// Pointer location at the last arrow-key move; hovers without the pointer moving come from scrolling.
+    @State private var keyboardMoveMouseLocation: CGPoint?
+    #endif
 
     enum Page { case root, models }
 
@@ -69,7 +75,24 @@ struct CommandPaletteView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.separator))
         .shadow(color: .black.opacity(0.25), radius: 24, y: 10)
-        .onAppear { self.focused = true }
+        #if os(macOS)
+        .background(HostWindowReader(host: self.host))
+        #endif
+        .onAppear {
+            #if os(macOS)
+            self.installKeyMonitor()
+            // An AppKit first responder (the composer) keeps focus unless it's resigned first.
+            DispatchQueue.main.async {
+                self.host.window?.makeFirstResponder(nil)
+                self.focused = true
+            }
+            #else
+            self.focused = true
+            #endif
+        }
+        #if os(macOS)
+        .onDisappear { self.removeKeyMonitor() }
+        #endif
         .onChange(of: self.query) { self.selection = nil }
         .task(id: self.page) {
             guard self.page == .models, let gateway = self.gateway, let row = self.row else { return }
@@ -133,7 +156,16 @@ struct CommandPaletteView: View {
         .buttonStyle(.plain)
         .disabled(!item.isEnabled)
         .opacity(item.isEnabled ? 1 : 0.45)
-        .onHover { if $0 { self.selection = item.id } }
+        .onHover { hovering in
+            guard hovering else { return }
+            #if os(macOS)
+            if let location = self.keyboardMoveMouseLocation {
+                guard NSEvent.mouseLocation != location else { return }
+                self.keyboardMoveMouseLocation = nil
+            }
+            #endif
+            self.selection = item.id
+        }
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -201,7 +233,33 @@ struct CommandPaletteView: View {
         guard !results.isEmpty else { return }
         let current = self.currentSelection(in: results).flatMap { id in results.firstIndex { $0.id == id } } ?? 0
         self.selection = results[(current + offset + results.count) % results.count].id
+        #if os(macOS)
+        self.keyboardMoveMouseLocation = NSEvent.mouseLocation
+        #endif
     }
+
+    #if os(macOS)
+    /// The text field's field editor swallows ↑/↓ before `onKeyPress` sees them, so catch them here.
+    private func installKeyMonitor() {
+        guard self.keyMonitor == nil else { return }
+        self.keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard let window = self.host.window, event.window === window else { return event }
+            let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            guard modifiers.isEmpty else { return event }
+            switch event.keyCode {
+            case 126: self.move(-1, in: self.results)
+            case 125: self.move(1, in: self.results)
+            default: return event
+            }
+            return nil
+        }
+    }
+
+    private func removeKeyMonitor() {
+        if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+        self.keyMonitor = nil
+    }
+    #endif
 
     private func runSelection(in results: [PaletteItem]) {
         guard let id = self.currentSelection(in: results), let item = results.first(where: { $0.id == id }) else { return }
@@ -284,6 +342,34 @@ struct CommandPaletteView: View {
         }
     }
 }
+
+#if os(macOS)
+private final class HostWindow {
+    weak var window: NSWindow?
+}
+
+private struct HostWindowReader: NSViewRepresentable {
+    let host: HostWindow
+
+    func makeNSView(context: Context) -> NSView { Probe(host: self.host) }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class Probe: NSView {
+        let host: HostWindow
+        init(host: HostWindow) {
+            self.host = host
+            super.init(frame: .zero)
+        }
+
+        @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            self.host.window = self.window
+        }
+    }
+}
+#endif
 
 /// Dims the window behind the palette; clicking outside closes it.
 struct CommandPaletteOverlay: View {
