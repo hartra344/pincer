@@ -19,7 +19,7 @@ struct Composer: View {
 
     private static let corner: CGFloat = 22
     /// Height of a single-line field, which the side controls match.
-    fileprivate static let controlHeight: CGFloat = 40
+    static let controlHeight: CGFloat = 40
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -51,6 +51,7 @@ struct Composer: View {
                     onCaretAtEnd: { if self.caretAtEnd != $0 { self.caretAtEnd = $0 } })
                     .padding(.vertical, 11)
                     .frame(minHeight: Self.controlHeight)
+                ContextMeter(chat: self.chat)
                 if self.chat.isRunning {
                     Button {
                         Task { await self.chat.abort() }
@@ -114,6 +115,12 @@ struct Composer: View {
             guard self.isTypingCommand else { return }
             await self.gateway.loadCommands(sessionKey: self.chat.sessionKey, agentId: self.agentId)
             await self.gateway.loadModels(agentId: self.agentId)
+        }
+        .task(id: self.chat.sessionKey) {
+            // The meter falls back to the model's context window when the session row has none.
+            if self.gateway.needsModelCatalogForContext(self.chat.sessionKey) {
+                await self.gateway.loadModels(agentId: self.agentId)
+            }
         }
         .onChange(of: self.photoItems) { _, items in
             guard !items.isEmpty else { return }
