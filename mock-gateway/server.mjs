@@ -1119,6 +1119,10 @@ function handleAuthedRequest(state, conn, msg) {
       const key = params.sessionKey;
       if (!params.idempotencyKey) return sendErr(conn, id, 'INVALID_REQUEST', 'idempotencyKey is required');
       if (!state.sessions.has(key)) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown session');
+      // Test hooks: `[mock:fail-send]` in the message refuses it; `[mock:drop]` drops this connection.
+      const message = String(params.message ?? '');
+      if (message.includes('[mock:fail-send]')) return sendErr(conn, id, 'UNAVAILABLE', 'mock send failure');
+      if (message.includes('[mock:drop]')) return conn.ws.close(1012, 'mock drop');
       if (state.idempotency.has(params.idempotencyKey)) {
         return sendRes(conn, id, { runId: state.idempotency.get(params.idempotencyKey), status: 'started' });
       }

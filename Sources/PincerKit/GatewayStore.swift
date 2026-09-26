@@ -475,7 +475,8 @@ public final class GatewayStore: Identifiable {
 
     // MARK: Mutations
 
-    public func createSession(agentId: String?, label: String?, category: String? = nil) async -> String? {
+    /// Creates a chat and, with `select`, opens it in the main window.
+    public func createSession(agentId: String?, label: String?, category: String? = nil, select: Bool = true) async -> String? {
         var params: [String: JSONValue] = ["agentId": .string(agentId ?? self.defaultAgentId)]
         if let label = label?.nilIfEmpty { params["label"] = .string(label) }
         if let category = category?.nilIfEmpty { params["category"] = .string(category) }
@@ -487,7 +488,7 @@ public final class GatewayStore: Identifiable {
             } else {
                 await self.refreshSessions()
             }
-            self.selectedKey = key
+            if select { self.selectedKey = key }
             return key
         } catch {
             self.lastError = error.localizedDescription
