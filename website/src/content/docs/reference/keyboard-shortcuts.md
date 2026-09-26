@@ -92,6 +92,8 @@ Number keys work while the question card is selected, not while you're typing an
 | Action | Shortcut |
 | --- | --- |
 | Save gateway settings | <kbd>⌘</kbd> <kbd>S</kbd> |
+| Search the log (Gateway Logs, macOS) | <kbd>⌘</kbd> <kbd>F</kbd> |
+| Copy selected log lines (Gateway Logs, macOS) | <kbd>⌘</kbd> <kbd>C</kbd> |
 
 ## Usage (macOS)
 

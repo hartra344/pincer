@@ -56,7 +56,8 @@ struct CommandPaletteView: View {
     }
 
     private enum Command: String {
-        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, usage, sessionUsage
+        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, usage, sessionUsage,
+             gatewayLogs
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -409,6 +410,8 @@ struct CommandPaletteView: View {
                 item(.automations, "Automations…", "clock", keywords: ["cron", "jobs", "schedule"]),
                 item(.approvalHistory, "Approval History…", "checkmark.shield",
                      keywords: ["approvals", "audit", "log", "exec", "plugin", "decisions"]),
+                item(.gatewayLogs, "Gateway Logs…", "doc.text.magnifyingglass",
+                     keywords: ["logs", "tail", "debug", "diagnose", "errors", "console"]),
                 item(.execPolicy, "Command Policy…", "lock.shield",
                      keywords: ["exec", "allowlist", "always allow", "approval policy", "ask", "security", "commands"]),
                 item(.usage, "Usage & Cost…", "chart.bar.xaxis",
@@ -554,6 +557,8 @@ struct CommandPaletteView: View {
             if let gateway { self.openAutomations(gateway) }
         case .approvalHistory:
             if let gateway { self.openGatewaySettings(gateway, at: .approvals) }
+        case .gatewayLogs:
+            if let gateway { self.openGatewaySettings(gateway, at: .logs) }
         case .execPolicy:
             if let gateway { self.openGatewaySettings(gateway, at: .execPolicy) }
         case .usage:

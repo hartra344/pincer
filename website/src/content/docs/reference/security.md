@@ -21,6 +21,7 @@ Pincer connects to a Gateway you already run and speaks the Gateway WebSocket pr
 
 `operator.admin` is only requested when you choose **Full Management**, and the gateway has to approve it separately.
 
+[Gateway Logs](../../guides/gateway-logs/) needs only `operator.read`.
 `operator.questions` lets Pincer answer [agent questions](../../guides/approvals-and-notifications/#agent-questions). Devices paired before Pincer asked for it raise a one-time scope upgrade on the gateway. Until it's approved, Pincer connects without it, and you can answer questions in the Control UI or the channel instead. `operator.admin` includes it.
 
 ### Pairing requests
@@ -82,6 +83,12 @@ Transcripts are cached so chats open instantly:
 - **Cleanup:** removing a gateway deletes its index along with its transcripts. It's derived data: if it's deleted, damaged or from an older version, Pincer rebuilds it from the transcript cache.
 
 To turn the cache off, set `PINCER_CACHE_DIR=off`. This turns off the search index too, and nothing is written. To use another folder, set it to a path; the index moves with the transcripts.
+
+## Gateway logs
+
+[Gateway Logs](../../guides/gateway-logs/) keeps the lines it fetches (`logs.tail`) in memory only, up to the last 2,000 lines or 8 MB. They're never cached on disk or written to Pincer's own logs, and `PINCER_REQUEST_LOG` leaves these requests out.
+
+The gateway redacts tokens and other secrets before it sends log lines; Pincer doesn't add redaction of its own. Lines can still contain hostnames, file paths and message content, so **Export…** reminds you to review a file before sharing it.
 
 ## Shortcuts and Siri
 

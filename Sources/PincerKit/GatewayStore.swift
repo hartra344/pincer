@@ -143,6 +143,9 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var approvalHistory = ApprovalHistoryModel(
         connection: self.connection, hello: { [weak self] in self?.hello },
         localDeviceId: self.profile.isDemo ? DemoGateway.deviceId : self.deviceId)
+    /// The Gateway's recent log lines (memory only); polled while Gateway Logs is showing.
+    @ObservationIgnored public private(set) lazy var gatewayLogs = GatewayLogsModel(
+        connection: self.connection, hello: { [weak self] in self?.hello })
     /// Command Policy (the exec approvals file); loaded when its page opens. The demo may write
     /// it without `operator.admin`.
     @ObservationIgnored public private(set) lazy var execPolicy = ExecPolicyModel(

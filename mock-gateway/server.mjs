@@ -5,6 +5,7 @@ import { WebSocketServer } from 'ws';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
+import { LOGS_METHODS, createLogsState, handleLogsRequest, logsDisabled, noteApprovalForLogs, noteChatForLogs, stopLogs } from './logs.mjs';
 import { EXEC_APPROVALS_METHODS, createExecApprovalsState, execApprovalsDisabled, handleExecApprovalsRequest, recordAllowAlways } from './exec-approvals.mjs';
 import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, createChannelPairingState, handleChannelPairingRequest } from './pairing.mjs';
@@ -45,6 +46,7 @@ const METHODS = [
   'progressCard.put',
   ...CONFIG_METHODS,
   ...CRON_METHODS,
+  ...LOGS_METHODS,
   ...CHANNEL_PAIRING_METHODS,
   ...HEALTH_METHODS,
 ];
@@ -466,6 +468,7 @@ function createSeedState() {
     webPushState: createWebPushState(),
     cronState: createCronState(base),
     approvalHistoryState: createApprovalHistoryState(base),
+    logsState: createLogsState(base),
     execApprovalsState: createExecApprovalsState(base),
     channelPairingState: createChannelPairingState(base),
     healthState: createHealthState(base),
@@ -609,6 +612,7 @@ function advertisedMethods() {
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
     ...(healthDisabled() ? HEALTH_METHODS : []),
     ...(usageDisabled() ? USAGE_METHODS : []),
+    ...(logsDisabled() ? LOGS_METHODS : []),
   ];
   return METHODS.filter((m) => !hidden.includes(m));
 }
@@ -875,6 +879,7 @@ async function simulateRun(state, run, params) {
       setTimeout(() => {
         if (state.pendingApprovals.get(approval.id) === approval) state.pendingApprovals.delete(approval.id);
       }, ttlMs).unref?.();
+      noteApprovalForLogs(state, approval);
       broadcast(state, 'exec.approval.requested', clone(approval));
     }
 
@@ -1009,6 +1014,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession })) return;
   if (handleWebPushRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleLogsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleExecApprovalsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
@@ -1155,6 +1161,7 @@ function handleAuthedRequest(state, conn, msg) {
       }
       const runId = shortId('run_');
       state.idempotency.set(params.idempotencyKey, runId);
+      noteChatForLogs(state, key, message, runId);
       const run = {
         runId,
         sessionKey: key,
@@ -1546,6 +1553,7 @@ export async function startServer(opts = {}) {
         if (backgroundTimer) clearInterval(backgroundTimer);
         if (pairingTimer) clearInterval(pairingTimer);
         for (const timer of state.cronState.active.values()) clearTimeout(timer);
+        stopLogs(state.logsState);
         cancelPendingRestart(state);
         for (const conn of state.connections) conn.ws.close(1001, 'server closing');
         wss.close(() => resolve());

@@ -33,7 +33,7 @@ actor DemoGateway {
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
         "users.prefs.set", "commands.list", "progressCard.get", "progressCard.put", "question.list", "question.resolve",
-        "approval.history", "approval.get", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
+        "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set",
     ] + DemoUsage.methods
@@ -54,6 +54,8 @@ actor DemoGateway {
     private var resolvedApprovals: [String: String] = [:]
     /// Terminal approvals, newest first (`approval.history`).
     private var approvalHistory: [JSONValue] = []
+    /// The simulated Gateway log file (`logs.tail`).
+    private var logs = DemoGatewayLogs()
     /// The exec approvals file (`exec.approvals.get/set`). The demo keeps no socket token.
     var execApprovals = DemoGateway.seedExecApprovals()
     var execApprovalsExists = true
@@ -251,6 +253,7 @@ actor DemoGateway {
             self.approvalHistory.insert(Self.resolvedRecord(approval, decision: decision), at: 0)
             self.approvals[id] = nil
             self.approvalOrder.removeAll { $0 == id }
+            self.logs.approvalResolved(id: id, decision: decision)
             self.emit("exec.approval.resolved", ["id": .string(id), "decision": .string(decision)])
             if id == Self.seededApprovalId { self.finishSeededPush(approved: decision != "deny") }
             return ["ok": true, "id": .string(id), "decision": .string(decision)]
@@ -258,6 +261,8 @@ actor DemoGateway {
             return try self.approvalHistoryPage(params)
         case "approval.get":
             return try self.approvalSnapshot(params)
+        case "logs.tail":
+            return try self.logs.tail(params)
         case "exec.approvals.get":
             return try self.execApprovalsGet(params)
         case "exec.approvals.set":
@@ -903,6 +908,7 @@ actor DemoGateway {
         let key = run.sessionKey
         let text = run.text
         let model = self.rowModel(key)
+        self.logs.chatStarted(runId: runId, sessionKey: key, model: "\(model.provider)/\(model.model)", text: text)
 
         var content = [Self.text(text)]
         for attachment in params["attachments"]?.array ?? [] {
@@ -944,6 +950,7 @@ actor DemoGateway {
             ]
             self.approvals[id] = approval
             self.approvalOrder.append(id)
+            self.logs.approvalRequested(id: id, command: "rm -rf ./build")
             self.emit("exec.approval.requested", approval)
         }
 
@@ -999,6 +1006,7 @@ actor DemoGateway {
         self.chat(runId, ["state": "final", "message": finalMessage])
         self.agentEvent(runId, stream: "lifecycle", ["phase": "end"])
         self.runs[runId] = nil
+        self.logs.chatFinished(runId: runId, outputTokens: reply.count / 4, usedTool: wantsTool)
         self.updateRow(key, reason: "run-finished") { row in
             row["hasActiveRun"] = false
             row["activeRunIds"] = []

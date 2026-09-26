@@ -367,12 +367,15 @@ struct TranscriptFindBar: View {
 /// Edit ▸ Find items for the focused chat: Find in Chat (⌘F), Find Next (⌘G), Find Previous (⇧⌘G).
 struct TranscriptFindCommands: Commands {
     @FocusedValue(\.transcriptFind) private var find
+    @FocusedValue(\.gatewayLogsSearch) private var logsSearch
 
     var body: some Commands {
         CommandGroup(after: .textEditing) {
-            Button("Find in Chat…") { self.find?.present() }
+            Button(self.find == nil && self.logsSearch != nil ? "Find in Logs…" : "Find in Chat…") {
+                if let find = self.find { find.present() } else { self.logsSearch?.wrappedValue = true }
+            }
                 .keyboardShortcut("f", modifiers: .command)
-                .disabled(self.find == nil)
+                .disabled(self.find == nil && self.logsSearch == nil)
             Button("Find Next") { self.find?.next() }
                 .keyboardShortcut("g", modifiers: .command)
                 .disabled(self.find == nil)
