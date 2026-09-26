@@ -1,6 +1,6 @@
 ---
 title: Building from source
-description: Build Pincer for macOS and iOS, run the self-checks, and find your way around the code.
+description: Build Pincer for macOS and iOS, run the unit tests and self-checks, and find your way around the code.
 ---
 
 ## Requirements
@@ -27,17 +27,61 @@ xcodegen generate
 open Pincer.xcodeproj
 ```
 
-Set your team, then run **Pincer-macOS** or **Pincer-iOS**. The Xcode-built macOS app is sandboxed.
+Set your team, then run **Pincer-macOS** or **Pincer-iOS**. The Xcode-built macOS app is sandboxed. Xcode builds also include the Share extensions and, on iOS, the notification service extension. The SwiftPM bundle doesn't.
+
+## Unit tests
+
+`Tests/PincerKitTests` is a [Swift Testing](https://developer.apple.com/documentation/testing) suite for PincerKit:
+
+- device signing and the connect handshake
+- TLS pinning, URL policy and failure classification
+- reconnect backoff and protocol frame decoding
+- the transcript cache and composer drafts
+- sidebar grouping, slash commands and approvals
+
+```sh
+swift test              # run the suite
+swift test --parallel   # run tests in parallel worker processes, as CI does
+swift test --filter "Device identity"   # one suite or test by name
+```
+
+The tests are hermetic:
+
+- They open no sockets and never touch the real Keychain, `UserDefaults.standard` or Application Support.
+- Each test uses its own temporary folder and scratch defaults suite, and cleans them up afterwards.
+- They don't need `PINCER_KEYCHAIN=memory`, and they can run alongside `PincerChecks` without either run affecting the other.
 
 ## Self-checks
 
+`PincerChecks` is an executable harness that exercises the stores end to end. It complements the unit tests:
+
 ```sh
-PINCER_KEYCHAIN=memory swift run PincerChecks
+PINCER_KEYCHAIN=memory swift run PincerChecks          # offline checks
+PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo gateway
 PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
-PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo
 ```
 
-`--live` runs an end-to-end check against a gateway, such as the [mock gateway](../mock-gateway/).
+| Mode | What it checks |
+| --- | --- |
+| no flag | Offline checks: identity, protocol models, stores, the transcript cache and composer drafts. |
+| `--demo` | The offline checks, then a full run against the in-process demo gateway, including sidebar navigation. |
+| `--live <url> <token>` | The offline checks, then an end-to-end run against a real or [mock](../mock-gateway/) gateway. |
+
+Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaults suite, so concurrent runs don't share storage.
+
+## Continuous integration
+
+`.github/workflows/tests.yml` runs on every pull request and every push to `main`:
+
+1. **Mock gateway selftest** (Ubuntu): `npm ci && npm run selftest` in `mock-gateway/`.
+2. **Swift build and checks** (macOS, `PINCER_KEYCHAIN=memory`):
+   - `swift build`
+   - `swift test --parallel`
+   - `swift run PincerChecks`
+   - `swift run PincerChecks --demo`
+   - `swift run PincerChecks --live` against the mock gateway started in the background
+
+To reproduce CI locally, run the same commands in that order. For the live step, start the mock first: see [Mock gateway](../mock-gateway/).
 
 ## Environment variables
 
@@ -45,6 +89,7 @@ PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo
 | --- | --- |
 | `PINCER_KEYCHAIN=memory` | Keep identities and secrets in memory, so checks and dev runs never touch your real Keychain. |
 | `PINCER_CACHE_DIR` | `off` disables the transcript cache. A path moves it. |
+| `PINCER_DRAFTS_DIR` | `off` disables saved composer drafts. A path moves them. |
 | `PINCER_REQUEST_LOG` | A file path to log every request and the gateway's reply. |
 
 They work for the app too:
@@ -61,10 +106,15 @@ open --env PINCER_REQUEST_LOG=/tmp/pincer.log build/Pincer.app
 | `Sources/PincerKit` | Protocol client (handshake, signing, reconnect, TLS pinning), models, and the observable stores. No UI. |
 | `Sources/PincerUI` | Shared UI for macOS and iOS. The shell is SwiftUI. The transcript and sidebar are native for performance: `NSTableView`/`NSOutlineView` on macOS and `UICollectionView` on iOS, with Markdown laid out once with TextKit. |
 | `Apps/macOS`, `Apps/iOS` | `@main` app shells used by the Xcode project. |
-| `Apps/Shared` | Resources shared by both apps, including the layered app icon (`AppIcon.icon`). |
+| `Apps/Shared` | Resources shared by both apps, including the layered app icon (`AppIcon.icon`) and the Info.plist keys that name the App Group and Keychain group. |
+| `Apps/ShareExtension` | Share extensions for iOS and macOS: a view controller per platform plus the shared SwiftUI sheet. The logic lives in PincerKit. |
+| `Apps/iOSNotificationService` | iOS notification service extension that decrypts relayed pushes. |
 | `Design/AppIcon` | Flattened reference artwork for the app icon. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |
-| `Sources/PincerChecks` | Self-checks, with an optional live end-to-end run. |
+| `Sources/PincerChecks` | Self-checks, with optional demo and live end-to-end runs. |
+| `Sources/PincerPush` | Web Push decryption (RFC 8291), per-gateway push keys and payload parsing, shared by the app and its notification service extension. |
+| `push-relay/` | Zero-dependency Node relay from Gateway Web Push to APNs. See [Push notifications](../../guides/push-notifications/). |
+| `Tests/PincerKitTests` | Unit tests for PincerKit (`swift test`). |
 | `mock-gateway/` | Node mock of the Gateway protocol for offline development. |
 | `website/` | This documentation site. |
 

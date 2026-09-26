@@ -409,12 +409,25 @@ extension FocusedValues {
 struct GoCommands: Commands {
     let app: AppModel
     @FocusedValue(\.commandPalette) private var palette
+    #if os(macOS)
+    /// Commands live in the app's scenes, so this can open a main window even when none has
+    /// existed since launch; Quick Capture uses it for Send & Open and Open in Pincer.
+    @Environment(\.openWindow) private var openWindow
+    #endif
 
     var body: some Commands {
+        #if os(macOS)
+        let _ = (QuickCaptureController.shared.openWindow = self.openWindow)
+        #endif
         CommandMenu("Go") {
             Button("Command Palette…") { self.palette?.wrappedValue.toggle() }
                 .keyboardShortcut("k", modifiers: .command)
                 .disabled(self.palette == nil)
+            #if os(macOS)
+            Button(QuickCaptureController.shared.displayShortcut.map { "Quick Capture…  \($0)" } ?? "Quick Capture…") {
+                QuickCaptureController.shared.show()
+            }
+            #endif
             Divider()
             Button("Back") { self.app.goBack() }
                 .keyboardShortcut("[", modifiers: .command)

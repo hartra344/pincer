@@ -206,10 +206,12 @@ extension GatewayStore {
 public enum CommandPalette {
     /// Chats across every Gateway: recently visited first, then the selected Gateway's chats in
     /// sidebar order, then the other Gateways'. Subagent runs are left out, like the sidebar does
-    /// by default.
+    /// by default. `include` leaves out more rows, and `order` replaces the sidebar order.
     @MainActor
     public static func chatItems(gateways: [GatewayStore], selectedGatewayId: UUID?,
-                                 recent: [Notifier.Target] = []) -> [PaletteItem]
+                                 recent: [Notifier.Target] = [],
+                                 include: (SessionRow) -> Bool = { _ in true },
+                                 order: ((GatewayStore) -> [SessionRow])? = nil) -> [PaletteItem]
     {
         let multiple = gateways.count > 1
         let byId = Dictionary(uniqueKeysWithValues: gateways.map { ($0.id, $0) })
@@ -221,7 +223,7 @@ public enum CommandPalette {
 
         func add(_ row: SessionRow, in gateway: GatewayStore) {
             let target = Notifier.Target(gatewayId: gateway.id, sessionKey: row.key)
-            guard !row.isSubagent, !row.isArchived, seen.insert(target).inserted else { return }
+            guard !row.isSubagent, !row.isArchived, include(row), seen.insert(target).inserted else { return }
             let agent = gateway.agent(row.agentId)
             var subtitle = [agent.name]
             if let origin = row.originLabel { subtitle.append(origin) }
@@ -243,7 +245,7 @@ public enum CommandPalette {
         }
         let ordered = gateways.sorted { lhs, _ in lhs.id == selectedGatewayId }
         for gateway in ordered {
-            for row in gateway.sortedRows { add(row, in: gateway) }
+            for row in order?(gateway) ?? gateway.sortedRows { add(row, in: gateway) }
         }
         return items
     }
