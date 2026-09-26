@@ -56,14 +56,15 @@ public struct ContextUsage: Equatable, Sendable {
 }
 
 public enum TokenCount {
-    /// Compact token counts: `950`, `12.3k`, `172k`, `1.2M`.
+    /// Compact token counts: `950`, `12.3k`, `172k`, `1.2M`, `3.4B`.
     public static func format(_ count: Int) -> String {
         let value = Double(count)
         switch abs(count) {
         case ..<1000: return "\(count)"
         case ..<100_000: return Self.trimmed(value / 1000) + "k"
         case ..<999_500: return "\(Int((value / 1000).rounded()))k"
-        default: return Self.trimmed(value / 1_000_000) + "M"
+        case ..<999_950_000: return Self.trimmed(value / 1_000_000) + "M"
+        default: return Self.trimmed(value / 1_000_000_000) + "B"
         }
     }
 

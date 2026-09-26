@@ -5,6 +5,7 @@ import { WebSocketServer } from 'ws';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
+import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, createChannelPairingState, handleChannelPairingRequest } from './pairing.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 
@@ -31,6 +32,7 @@ const METHODS = [
   'exec.approval.list',
   'exec.approval.resolve',
   ...APPROVAL_HISTORY_METHODS,
+  ...USAGE_METHODS,
   'question.list',
   'question.resolve',
   'users.prefs.get',
@@ -597,6 +599,7 @@ function advertisedMethods() {
   const hidden = [
     ...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []),
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
+    ...(usageDisabled() ? USAGE_METHODS : []),
   ];
   return METHODS.filter((m) => !hidden.includes(m));
 }
@@ -997,6 +1000,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession })) return;
   if (handleWebPushRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
   switch (method) {
     case 'progressCard.get': {
