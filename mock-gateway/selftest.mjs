@@ -5,6 +5,7 @@ import http from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import { startServer } from './server.mjs';
+import { SEEDED_HISTORY_COUNTS } from './approvals.mjs';
 import { decryptWebPush, sessionPath } from './webpush.mjs';
 
 function b64url(buf) {
@@ -257,7 +258,72 @@ try {
   assert.equal(approvalPush.url, `approve/${requested.id}`);
   assert.equal(approvalPush.title, 'OpenClaw approval requested');
   assert.equal(pushed.find((p) => p.headers.urgency === 'high')?.headers.ttl, '120');
+  const pendingLookup = await client.send('approval.get', { id: requested.id });
+  assert.equal(pendingLookup.approval.status, 'pending');
+  assert.equal(pendingLookup.approval.presentation.commandText, 'rm -rf ./build');
+  assert.ok(!JSON.stringify(pendingLookup).includes('/home/claw'), 'approval snapshots never carry cwd');
   await client.send('exec.approval.resolve', { id: requested.id, decision: 'deny' });
+
+  // Approval history: newest-first terminal ledger with opaque cursors and a kind filter.
+  const seededTotal = Object.values(SEEDED_HISTORY_COUNTS).reduce((a, b) => a + b, 0);
+  assert.ok(client.hello.features.methods.includes('approval.history'));
+  assert.ok(client.hello.features.methods.includes('approval.get'));
+  const page1 = await client.send('approval.history', {});
+  assert.equal(page1.items.length, 50, 'default limit is 50');
+  assert.ok(page1.nextCursor);
+  const page2 = await client.send('approval.history', { cursor: page1.nextCursor });
+  assert.equal(page2.nextCursor, undefined);
+  const allItems = [...page1.items, ...page2.items];
+  assert.equal(allItems.length, seededTotal + 1, 'seeded history plus the approval just resolved');
+  assert.equal(new Set(allItems.map((r) => r.id)).size, allItems.length, 'no duplicates across pages');
+  assert.ok(allItems.every((r, i) => i === 0 || allItems[i - 1].resolvedAtMs >= r.resolvedAtMs), 'newest first');
+  assert.ok(allItems.every((r) => r.status !== 'pending' && !('cwd' in r.presentation)));
+  assert.deepEqual(new Set(allItems.map((r) => r.status)), new Set(['allowed', 'denied', 'expired', 'cancelled']));
+  assert.deepEqual(new Set(allItems.map((r) => r.resolver?.kind ?? 'none')), new Set(['device', 'channel', 'runtime', 'system', 'none']));
+  const [top] = page1.items;
+  assert.equal(top.id, requested.id, 'resolved approval is at the top');
+  assert.equal(top.status, 'denied');
+  assert.equal(top.decision, 'deny');
+  assert.equal(top.reason, 'user');
+  assert.deepEqual(top.resolver, { kind: 'device', id: device.id });
+  assert.deepEqual(top.source, { agentId: 'main', sessionKey: 'agent:main:main' });
+  const resolvedLookup = await client.send('approval.get', { id: requested.id });
+  assert.equal(resolvedLookup.approval.status, 'denied');
+  assert.equal((await client.send('approval.history', { limit: 100 })).items.length, seededTotal + 1);
+  assert.equal((await client.call('approval.history', { limit: 101 })).error.code, 'INVALID_REQUEST');
+  assert.equal((await client.call('approval.history', { limit: 0 })).error.code, 'INVALID_REQUEST');
+  assert.equal((await client.call('approval.history', { kind: 'bogus' })).error.code, 'INVALID_REQUEST');
+  for (const kind of ['exec', 'plugin', 'system-agent']) {
+    const expected = SEEDED_HISTORY_COUNTS[kind] + (kind === 'exec' ? 1 : 0);
+    const small1 = await client.send('approval.history', { kind, limit: 7 });
+    assert.ok(small1.items.every((r) => r.presentation.kind === kind), `${kind} filter`);
+    const filtered = [...small1.items];
+    let cursor = small1.nextCursor;
+    while (cursor) {
+      const next = await client.send('approval.history', { kind, limit: 7, cursor });
+      assert.ok(next.items.every((r) => r.presentation.kind === kind));
+      filtered.push(...next.items);
+      cursor = next.nextCursor;
+    }
+    assert.equal(filtered.length, expected, `${kind} total`);
+    assert.equal(new Set(filtered.map((r) => r.id)).size, expected);
+  }
+  const execCursor = (await client.send('approval.history', { kind: 'exec', limit: 5 })).nextCursor;
+  const kindMismatch = await client.call('approval.history', { kind: 'plugin', cursor: execCursor });
+  assert.equal(kindMismatch.error.code, 'INVALID_REQUEST', 'cursor is bound to its filter');
+  for (const cursor of ['not-a-cursor', Buffer.from('{"v":1,"after":"nope"}').toString('base64url')]) {
+    const badCursor = await client.call('approval.history', { cursor });
+    assert.equal(badCursor.ok, false);
+    assert.equal(badCursor.error.code, 'INVALID_REQUEST');
+    assert.equal(badCursor.error.message, 'invalid approval.history cursor');
+  }
+  const plugin = allItems.find((r) => r.presentation.kind === 'plugin');
+  assert.deepEqual((await client.send('approval.get', { id: plugin.id })).approval, plugin, 'approval.get round-trips a history row');
+  const system = allItems.find((r) => r.presentation.kind === 'system-agent');
+  assert.deepEqual((await client.send('approval.get', { id: system.id })).approval, system);
+  const missing = await client.call('approval.get', { id: 'approval_missing' });
+  assert.equal(missing.error.code, 'INVALID_REQUEST');
+  assert.equal(missing.error.details.reason, 'APPROVAL_NOT_FOUND');
   assert.equal((await client.send('push.web.unsubscribe', { endpoint })).removed, true);
   pushSink.close();
 
@@ -461,6 +527,27 @@ try {
   assert.equal(coderRow.totalTokens, 34_200);
   reader.ws.close();
   admin.ws.close();
+
+  // Approval history needs operator.approvals; MOCK_NO_APPROVAL_HISTORY=1 hides it entirely.
+  const noApprovals = await connectClient(url, device, 'dev-token', true, ['operator.read']);
+  const noScope = await noApprovals.call('approval.history', {});
+  assert.equal(noScope.error.details.code, 'MISSING_SCOPE');
+  noApprovals.ws.close();
+  process.env.MOCK_NO_APPROVAL_HISTORY = '1';
+  try {
+    const legacy = await connectClient(url, device, deviceToken, true);
+    assert.ok(!legacy.hello.features.methods.includes('approval.history'));
+    assert.ok(!legacy.hello.features.methods.includes('approval.get'));
+    assert.ok(legacy.hello.features.methods.includes('exec.approval.resolve'));
+    for (const method of ['approval.history', 'approval.get']) {
+      const unknown = await legacy.call(method, { id: 'x' });
+      assert.equal(unknown.error.code, 'UNKNOWN_METHOD');
+      assert.equal(unknown.error.message, `unknown method: ${method}`);
+    }
+    legacy.ws.close();
+  } finally {
+    delete process.env.MOCK_NO_APPROVAL_HISTORY;
+  }
   console.log('PASS');
 } finally {
   await server.close();
