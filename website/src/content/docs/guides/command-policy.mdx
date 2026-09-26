@@ -3,7 +3,13 @@ title: Command Policy
 description: Choose which commands your agents can run on the Gateway host, and review what you've always allowed.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import mac from '../../../assets/screenshots/command-policy.png';
+import ios from '../../../assets/screenshots/ios/command-policy.png';
+
 **Command Policy** controls which commands your agents can run on the Gateway host, and when they have to ask. It's also where you review and remove the commands and tools you allowed with **Always allow**.
+
+<DocScreenshot src={mac} ios={ios} iosAlt="iPhone Command Policy with allowlist defaults and rules for approval requests and timeouts." alt="Command Policy showing allowlist defaults, approval rules, and recently allowed commands." caption="Demo policy: ask before running commands that are not on the allowlist. These settings do not control a real host." />
 
 ## Opening Command Policy
 

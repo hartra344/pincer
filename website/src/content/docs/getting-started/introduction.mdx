@@ -6,14 +6,15 @@ sidebar:
 ---
 
 import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
-import { Image } from 'astro:assets';
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import phone from '../../../assets/screenshots/ios/transcript.png';
 import shot from '../../../assets/screenshots/transcript.png';
 
 Pincer is a native macOS and iOS app for talking to your [OpenClaw](https://github.com/openclaw/openclaw) agents.
 
 If you already chat with OpenClaw through a messaging app, Pincer will feel familiar. It keeps what works there, like servers, `#channels` and notifications, and adds what a plain chat window can't show: the agent's **thinking**, its **tool calls**, **inline images**, and your own messages shown under **your name**.
 
-<Image src={shot} alt="Pincer on macOS with a sidebar of agents and channels, and a chat showing a tool call and a chart." />
+<DocScreenshot src={shot} ios={phone} alt="Pincer on macOS with agents, channels, a tool call, and a chart." iosAlt="Pincer on iPhone with a disk status reply and chart." caption="Explore a conversation in the built-in demo. All content is synthetic." />
 
 ## What you get
 

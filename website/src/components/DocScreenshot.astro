@@ -5,25 +5,87 @@ interface Props {
   src: ImageMetadata;
   alt: string;
   caption: string;
+  ios?: ImageMetadata;
+  iosAlt?: string;
+  iosCaption?: string;
+  platformNote?: string;
   narrow?: boolean;
   focus?: { x: number; y: number; width: number; height: number };
 }
-const { src, alt, caption, narrow = false, focus } = Astro.props;
+const { src, alt, caption, ios, iosAlt, iosCaption, platformNote, narrow = false, focus } = Astro.props;
+const group = `platform-${crypto.randomUUID()}`;
+const shots = [
+  { platform: 'macos', label: 'macOS', src, alt, caption, focus },
+  ...(ios ? [{ platform: 'ios', label: 'iOS', src: ios, alt: iosAlt ?? alt, caption: iosCaption ?? caption, focus: undefined }] : []),
+];
 ---
-<figure class:list={['doc-screenshot', { narrow }]}>
-  <a class:list={{ focused: !!focus }} style={focus ? `aspect-ratio:${focus.width}/${focus.height};--shot-width:${src.width / focus.width * 100}%;--shot-left:${-focus.x / focus.width * 100}%;--shot-top:${-focus.y / focus.height * 100}%;` : undefined} href={src.src} aria-label={`Open full-size screenshot: ${alt}`}>
-    <Image src={src} alt={alt} widths={[640, 960, src.width]} sizes={narrow ? '(max-width: 600px) 100vw, 520px' : '(max-width: 900px) 100vw, 800px'} loading="lazy" />
-  </a>
-  <figcaption>{caption} <span>Click to view full size.</span></figcaption>
-</figure>
+<platform-screenshot class="doc-screenshot">
+  {ios && <fieldset hidden>
+    <legend>Screenshot platform</legend>
+    {shots.map(shot => <label><input type="radio" name={group} value={shot.platform} checked={shot.platform === 'macos'} /><span>{shot.label}</span></label>)}
+  </fieldset>}
+  {shots.map(shot => <figure data-platform={shot.platform} class:list={{ narrow, phone: shot.platform === 'ios' }}>
+    <p class="platform-label">{shot.label}</p>
+    <a class:list={{ focused: !!shot.focus }} style={shot.focus ? `aspect-ratio:${shot.focus.width}/${shot.focus.height};--shot-width:${shot.src.width / shot.focus.width * 100}%;--shot-left:${-shot.focus.x / shot.focus.width * 100}%;--shot-top:${-shot.focus.y / shot.focus.height * 100}%;` : undefined} href={shot.src.src} aria-label={`Open full-size ${shot.label} screenshot: ${shot.alt}`}>
+      <Image src={shot.src} alt={shot.alt} widths={[640, 960, shot.src.width]} sizes={shot.platform === 'ios' ? '(max-width: 480px) 100vw, 390px' : narrow ? '(max-width: 600px) 100vw, 520px' : '(max-width: 900px) 100vw, 800px'} loading="lazy" />
+    </a>
+    <figcaption>{shot.caption} <span>Open image for full size.</span></figcaption>
+  </figure>)}
+  {platformNote && <p class="platform-note">{platformNote}</p>}
+</platform-screenshot>
+<script>
+  const key = 'pincer-docs-screenshot-platform';
+  class PlatformScreenshot extends HTMLElement {
+    connectedCallback() {
+      const controls = this.querySelector('fieldset');
+      if (!controls) return;
+      controls.hidden = false;
+      this.classList.add('interactive');
+      let platform = 'macos';
+      try { platform = localStorage.getItem(key) ?? platform; } catch { /* Storage is optional. */ }
+      this.select(platform);
+      this.addEventListener('change', this.onChange);
+      window.addEventListener('pincer-screenshot-platform', this.onPlatform);
+    }
+    disconnectedCallback() {
+      this.removeEventListener('change', this.onChange);
+      window.removeEventListener('pincer-screenshot-platform', this.onPlatform);
+    }
+    select(platform: string) {
+      const selected = platform === 'ios' ? 'ios' : 'macos';
+      this.querySelectorAll<HTMLElement>('figure[data-platform]').forEach(figure => { figure.hidden = figure.dataset.platform !== selected; });
+      this.querySelectorAll<HTMLInputElement>('input').forEach(input => { input.checked = input.value === selected; });
+    }
+    onChange = (event: Event) => {
+      const input = event.target;
+      if (!(input instanceof HTMLInputElement)) return;
+      try { localStorage.setItem(key, input.value); } catch { /* Storage is optional. */ }
+      window.dispatchEvent(new CustomEvent('pincer-screenshot-platform', { detail: input.value }));
+    };
+    onPlatform = (event: Event) => this.select((event as CustomEvent<string>).detail);
+  }
+  if (!customElements.get('platform-screenshot')) customElements.define('platform-screenshot', PlatformScreenshot);
+</script>
 <style>
-  .doc-screenshot { margin-block: 1.5rem 2rem; }
-  .doc-screenshot.narrow { max-width: 32.5rem; margin-inline: auto; }
-  .doc-screenshot a { display: block; border: 1px solid var(--sl-color-gray-5); border-radius: 0.75rem; overflow: hidden; }
-  .doc-screenshot a.focused { position: relative; }
-  .doc-screenshot a.focused img { position: absolute; width: var(--shot-width); max-width: none; left: var(--shot-left); top: var(--shot-top); }
-  .doc-screenshot a:focus-visible { outline: 3px solid var(--sl-color-accent); outline-offset: 4px; }
-  .doc-screenshot img { display: block; width: 100%; height: auto; margin: 0; }
-  .doc-screenshot figcaption { margin-top: 0.65rem; color: var(--sl-color-gray-2); font-size: var(--sl-text-sm); line-height: 1.6; }
-  .doc-screenshot figcaption span { white-space: nowrap; }
+  .doc-screenshot { display: block; margin-block: 1.5rem 2rem; }
+  [hidden] { display: none !important; }
+  fieldset { display: flex; gap: .3rem; border: 0; padding: 0; margin: 0 0 1rem; }
+  legend { font-size: var(--sl-text-sm); margin-bottom: .4rem; color: var(--sl-color-gray-2); }
+  label { position: relative; cursor: pointer; scroll-margin-block: 8rem; }
+  input { scroll-margin-block: 8rem; position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  label span { display: block; padding: .4rem 1rem; border: 1px solid var(--sl-color-gray-4); border-radius: .5rem; font-size: var(--sl-text-sm); }
+  input:checked + span { background: var(--sl-color-accent-low); border-color: var(--sl-color-accent); color: var(--sl-color-text-accent); }
+  input:focus-visible + span, a:focus-visible { outline: 3px solid var(--sl-color-accent); outline-offset: 4px; }
+  figure { margin: 0; }
+  figure + figure { margin-top: 1.5rem; }
+  .interactive figure { margin-top: 0; }
+  .narrow { max-width: 32.5rem; margin-inline: auto; }
+  .phone { max-width: 24.375rem; margin-inline: auto; }
+  .interactive .platform-label { display: none; }
+  .platform-label { font-weight: 600; }
+  a { display: block; border: 1px solid var(--sl-color-gray-5); border-radius: .75rem; overflow: hidden; }
+  a.focused { position: relative; }
+  a.focused img { position: absolute; width: var(--shot-width); max-width: none; left: var(--shot-left); top: var(--shot-top); }
+  img { display: block; width: 100%; height: auto; margin: 0; }
+  figcaption, .platform-note { margin-top: .65rem; color: var(--sl-color-gray-2); font-size: var(--sl-text-sm); line-height: 1.6; }
 </style>

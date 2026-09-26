@@ -3,11 +3,17 @@ title: Usage & cost
 description: See how many tokens your OpenClaw Gateway has used, what it cost, and how close each provider is to its rate limits.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import mac from '../../../assets/screenshots/usage.png';
+import ios from '../../../assets/screenshots/ios/usage.png';
+
 The **Usage** page shows what your gateway has spent on tokens: totals, a daily chart, a breakdown by model, provider or agent, the top sessions, and each provider's rate limits. You can drill into any session for its own totals, usage over time and log.
 
 :::note[Costs are estimates]
 Costs are the gateway's estimates in US dollars, worked out from each model's pricing. When a provider doesn't report pricing, Pincer shows the cost as unknown or partial instead of guessing. See [Unknown and partial costs](#unknown-and-partial-costs).
 :::
+
+<DocScreenshot src={mac} ios={ios} iosAlt="iPhone Usage dashboard showing the daily cost chart for seven days of demo activity." iosCaption="Scroll below the totals to compare daily spending and model, provider, or agent breakdowns. All figures are synthetic." alt="Usage dashboard showing seven days of sample token costs, totals, and daily spending." caption="Demo usage figures. The asterisk marks a partial cost total because some requests have no pricing." />
 
 ## Opening Usage
 
@@ -101,7 +107,7 @@ Some providers, such as local models, don't report pricing. Pincer never shows t
 
 | You see | Meaning |
 | --- | --- |
-| **$12.34** | Every request was priced. Amounts under a cent show as **<$0.01**. |
+| **$12.34** | Every request was priced. Amounts under a cent show as **&lt;$0.01**. |
 | **$12.34\*** | Partial: some requests had no pricing and aren't included. The tile says how many, for example *Excludes 3 requests without pricing*. |
 | **—** | Unknown: none of the requests had pricing. The tile says *Pricing unavailable*. |
 
