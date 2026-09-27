@@ -12,6 +12,12 @@ struct DemoChannelsState {
     var loggedOut: Set<String> = []
     var stoppedAt: [String: Double] = [:]
     var startedAt: [String: Double] = [:]
+
+    /// A Gateway restart starts every configured account again; logged-out ones stay down.
+    mutating func restart(at nowMs: Double) {
+        for channel in self.stopped.subtracting(self.loggedOut) { self.startedAt[channel] = nowMs }
+        self.stopped.formIntersection(self.loggedOut)
+    }
 }
 
 extension DemoGateway {

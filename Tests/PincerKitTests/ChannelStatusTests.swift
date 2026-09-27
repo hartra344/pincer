@@ -352,7 +352,7 @@ final class FakeChannelsGateway {
         let probe = gateway.calls.last?.params
         #expect(probe?["probe"]?.bool == true && probe?["timeoutMs"]?.int == ChannelsModel.probeTimeoutMs)
         #expect(!model.isProbing && model.account(ChannelFixtures.telegram)?.probeOk == false)
-        #expect(model.state(of: ChannelFixtures.telegram).needsAttention)
+        #expect(model.state(of: ChannelFixtures.telegram) == .degraded)
     }
 
     @Test func unsupportedAndFailingStatus() async {
@@ -532,6 +532,17 @@ final class FakeChannelsGateway {
         #expect(health.activeIssues.contains { $0.id == "channel:telegram:default" })
         #expect(await channels.reconnect(key))
         #expect(health.activeIssues.contains { $0.id == "channel:telegram:default" }, "still failing: the issue stays")
-        #expect(channels.state(of: key).needsAttention)
+        #expect(channels.state(of: key) == .degraded)
+    }
+}
+
+@Suite struct DemoChannelsStateTests {
+    @Test func restartStartsStoppedAccountsButNotLoggedOutOnes() {
+        var state = DemoChannelsState()
+        state.stopped = ["discord", "telegram"]
+        state.loggedOut = ["telegram"]
+        state.restart(at: 42)
+        #expect(state.stopped == ["telegram"], "logged-out Telegram stays down")
+        #expect(state.startedAt == ["discord": 42])
     }
 }

@@ -50,7 +50,7 @@ Use the account's **…** button or its context menu. On iPhone and iPad, touch 
 | --- | --- | --- |
 | **Reconnect** | Stops the account, then starts it again. Often fixes a Degraded or Disconnected account. | No |
 | **Start** | Starts a stopped account. | No |
-| **Stop…** | Stops the account until you start it again or the gateway restarts. Messages to it won't be answered. | Yes |
+| **Stop…** | Asks "Stop Telegram (Default)?", then stops the account until you start it again or the gateway restarts. Messages to it won't be answered. | Yes |
 | **Log Out…** | Removes the saved login. To reconnect, scan a QR code again (WhatsApp) or set the account up again. | Yes |
 | **Link with QR Code…** | Links an account that needs login. **Relink with QR Code…** for one that's already linked. | No |
 
@@ -72,7 +72,7 @@ The [setup wizard](../../getting-started/setup-wizard/)'s Channels step uses the
 
 A channel account that isn't running, isn't connected or reported an error shows up as an issue on the [Health page](../gateway-health/). Its context menu has:
 
-- **Reconnect Account**, the same as **Reconnect** here. On iOS you can also swipe right on the issue, and VoiceOver has it in the actions rotor. Without Full Management it shows as **Reconnect Account (Needs Full Management)**, locked. The issue shows "Reconnecting…" while it runs and clears after the refresh if the account comes back. If it's still failing, the issue stays and says why.
+- **Reconnect Account**, the same as **Reconnect** here. For a logged-out account that links with a QR code, like WhatsApp, it's **Link with QR Code…** instead, which opens the same QR sheet. On iOS you can also swipe right on the issue, and VoiceOver has it in the actions rotor. Without Full Management it shows as locked, for example **Reconnect Account (Needs Full Management)**. The issue shows "Reconnecting…" while it runs and clears after the refresh if the account comes back. If it's still failing, the issue stays and says why.
 - **Show in Channel Status**, which opens this page at that account.
 
 ## In the demo
@@ -84,5 +84,4 @@ The [demo](../../getting-started/try-the-demo/) has a connected Discord account,
 - Channel Status has been tested against the demo and the [mock gateway](../../development/mock-gateway/) only.
 - The gateway has no channel-specific event, so the page updates on health changes, when it opens and when you refresh.
 - Some channels can't be started or logged out at runtime. Pincer only finds out when the gateway says so, then hides that action.
-- Reconnecting a logged-out account can't log it in; Pincer says to link it first.
 - Adding a channel account is done on the **Channels** settings page or in the setup wizard.

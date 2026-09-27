@@ -535,6 +535,7 @@ actor DemoGateway {
         self.restartTask = nil
         // A fresh start reconnects Telegram, so the restart visibly fixes the demo's one problem.
         self.telegramRecovered = true
+        self.channelLifecycle.restart(at: Date().timeIntervalSince1970 * 1000)
         for id in self.runs.keys { self.abort(sessionKey: nil, runId: id) }
         self.restartingUntil = Date().addingTimeInterval(Double(Self.restartExpectedMs) / 1000)
         self.emit("shutdown", ["reason": .string(reason ?? "gateway restart"), "restartExpectedMs": JSONValue(Self.restartExpectedMs)])
