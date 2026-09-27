@@ -956,8 +956,9 @@ actor DemoGateway {
                 code: "INVALID_REQUEST", message: "invalid chat.send params: at root: unexpected property 'replyToId'", details: nil)
         }
         let key = try self.knownSession(params["sessionKey"])
+        // Like the Gateway's dedupe: a repeated key starts nothing, answering `in_flight`, then `ok`.
         if let existing = self.idempotency[idempotencyKey] {
-            return ["runId": .string(existing), "status": "started"]
+            return ["runId": .string(existing), "status": .string(self.runs[existing] != nil ? "in_flight" : "ok")]
         }
         let runId = Self.shortId("run_")
         self.idempotency[idempotencyKey] = runId

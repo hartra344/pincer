@@ -407,7 +407,8 @@ func runLiveAgents(profile: GatewayProfile, gateway: GatewayStore, admin: Gatewa
 
         // A dropped connection mid-check (what made this flaky): the next call waits for the reconnect.
         step = "reconnect"
-        _ = await admin.chat(for: "agent:main:main").send("agents check [mock:drop] \(suffix)")
+        // Not a user message: it mustn't wait in the outbox (it would drop again on every reconnect).
+        _ = await admin.chat(for: "agent:main:main").send("agents check [mock:drop] \(suffix)", requiresConnection: true)
         let sawDrop = await waitFor("admin drop", timeout: 5, every: 10) { !admin.state.isConnected }
 
         // Create.

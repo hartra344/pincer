@@ -703,6 +703,7 @@ public final class GatewayStore: Identifiable {
         if let existing = self.chats[key] { return existing }
         let store = ChatStore(sessionKey: key, agentId: self.sessions[key]?.agentId, gateway: self)
         self.chats[key] = store
+        store.syncOutbox(self.outbox.entries(for: key))
         return store
     }
 

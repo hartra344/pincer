@@ -31,7 +31,13 @@ extension GatewayStore {
     func loadOutbox() async {
         guard !self.outboxLoaded else { return }
         self.outboxLoaded = true
-        guard !self.profile.isDemo else { return }
+        guard !self.profile.isDemo else {
+            // The demo keeps its outbox in memory, seeded with a failed message to retry.
+            for entry in DemoGateway.seedOutbox() where self.outbox.entry(id: entry.id) == nil {
+                self.injectOutboxEntry(entry)
+            }
+            return
+        }
         let (saved, _) = await OutboxStore.load(gatewayId: self.id)
         guard var saved, !saved.isEmpty else { return }
         saved.recoverAfterLaunch()

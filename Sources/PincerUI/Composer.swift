@@ -31,6 +31,12 @@ struct Composer: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
+            if let offlineNote = self.offlineNote {
+                Label(offlineNote, systemImage: "icloud.slash")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .combine)
+            }
             if let target = self.chat.replyTarget {
                 ReplyChip(target: target) { self.chat.replyTarget = nil }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -81,8 +87,8 @@ struct Composer: View {
                 .buttonStyle(.plain)
                 .composerControl()
                 .disabled(!self.canSend)
-                .help(self.chat.isRunning ? "Queue a follow-up" : "Send")
-                .accessibilityLabel(self.chat.isRunning ? "Queue a follow-up" : "Send")
+                .help(self.sendLabel)
+                .accessibilityLabel(self.sendLabel)
             }
             .padding(.leading, 10)
             .padding(.trailing, 7)
@@ -200,8 +206,30 @@ struct Composer: View {
     }
 
     private var canSend: Bool {
-        self.gateway.state.isConnected
-            && (!self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty)
+        guard !self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty else { return false }
+        // Offline, plain messages queue in the outbox; attachments and commands need the Gateway.
+        return self.gateway.state.isConnected || (self.attachments.isEmpty && !self.isTypingCommand)
+    }
+
+    private var sendLabel: String {
+        if !self.gateway.state.isConnected { return "Send when back online" }
+        return self.chat.isRunning ? "Queue a follow-up" : "Send"
+    }
+
+    /// Offline: what happens to what's typed, and how many messages are waiting.
+    private var offlineNote: String? {
+        guard !self.gateway.state.isConnected else { return nil }
+        let queued = self.chat.unsentEntries.filter { $0.state == .queued }.count
+        let hasDraft = !self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty
+        guard hasDraft || queued > 0 else { return nil }
+        let waiting = queued == 0 ? nil : queued == 1 ? "1 message queued" : "\(queued) messages queued"
+        if !self.attachments.isEmpty {
+            return [waiting, "Connect to send attachments"].compactMap(\.self).joined(separator: " · ")
+        }
+        if self.isTypingCommand {
+            return [waiting, "Connect to run commands"].compactMap(\.self).joined(separator: " · ")
+        }
+        return [waiting, "Offline — messages send when you reconnect"].compactMap(\.self).joined(separator: " · ")
     }
 
     private func submit() {

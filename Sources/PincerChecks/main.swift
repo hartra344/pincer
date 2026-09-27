@@ -34,6 +34,9 @@ setenv("PINCER_DRAFTS_DIR", draftsRoot.path(percentEncoded: false), 1)
 // them), so concurrent runs (and `swift test`) never share one.
 let cacheRoot = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-cache-\(UUID().uuidString)")
 setenv("PINCER_CACHE_DIR", cacheRoot.path(percentEncoded: false), 1)
+// And for unsent messages (the outbox).
+let outboxRoot = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-outbox-\(UUID().uuidString)")
+setenv("PINCER_OUTBOX_DIR", outboxRoot.path(percentEncoded: false), 1)
 
 @MainActor
 func check(_ condition: @autoclosure () -> Bool, _ label: String, line: UInt = #line) {
@@ -2408,6 +2411,7 @@ print("Deep links & Handoff")
 runDeepLinkChecks()
 
 checkToolDiffs()
+checkOutboxLogic()
 
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
@@ -2430,6 +2434,8 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     await runLiveToolDiffs(url: url, token: token)
     print("Agent avatars (live)")
     await runLiveAvatars(url: url, token: token)
+    print("Outbox & retry (live)")
+    await runLiveOutbox(url: url, token: token)
 }
 if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count > index + 2 {
     print("Scope upgrade fallback against \(arguments[index + 1])")
@@ -2470,6 +2476,8 @@ if arguments.contains("--demo") {
     await runDemoToolDiffs()
     print("Agent avatars (demo)")
     await runDemoAvatars()
+    print("Outbox & retry (demo)")
+    await runDemoOutbox()
 }
 
 print("Keychain isolation")
@@ -2479,6 +2487,7 @@ check(KeychainMode.realKeychainCalls == 0, "no real Keychain (SecItem) calls dur
 print("\n\(passes) passed, \(failures) failed")
 try? FileManager.default.removeItem(at: draftsRoot)
 try? FileManager.default.removeItem(at: cacheRoot)
+try? FileManager.default.removeItem(at: outboxRoot)
 exit(failures == 0 ? 0 : 1)
 
 /// Gateway Logs polling against a scripted `logs.tail`: cursor echo, markers, ring buffer, errors.

@@ -1,7 +1,7 @@
 import Foundation
 
 /// Where an outgoing user message is in its delivery lifecycle.
-public enum OutboxState: Codable, Equatable, Sendable {
+public enum OutboxState: Codable, Hashable, Sendable {
     /// Waiting for a connection (or its turn in the session queue).
     case queued
     /// `chat.send` is in flight.
@@ -10,7 +10,7 @@ public enum OutboxState: Codable, Equatable, Sendable {
     case failed(OutboxFailure)
 }
 
-public struct OutboxFailure: Codable, Equatable, Sendable {
+public struct OutboxFailure: Codable, Hashable, Sendable {
     public var message: String
     /// Retrying may succeed (transient failure, revoked auth after re-pairing). False when the
     /// Gateway rejected the message itself.
@@ -23,7 +23,7 @@ public struct OutboxFailure: Codable, Equatable, Sendable {
 }
 
 /// A user message that hasn't landed in the transcript yet.
-public struct OutboxEntry: Codable, Equatable, Identifiable, Sendable {
+public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
     /// The `chat.send` idempotency key; stable across retries so the Gateway dedupes resends.
     public var id: String
     public var sessionKey: String
@@ -103,6 +103,41 @@ public enum SendFailure {
     /// the operator lost access rather than the message being bad.
     static let authCodes: Set<String> = ["NOT_PAIRED", "NOT_LINKED", "FORBIDDEN"]
 
+    public static let signInRequired = "Sign-in required"
+    public static let sessionMissing = "Session no longer exists"
+
+    /// What an unsent message's Failed line says: the Gateway's own message for a rejection
+    /// (or "Session no longer exists" when that's what it means), "Sign-in required" for auth.
+    public static func message(for error: Error) -> String {
+        switch self.classify(error) {
+        case .authRevoked:
+            return self.signInRequired
+        case let .rejected(reason):
+            return self.isSessionMissing(error) ? self.sessionMissing : reason
+        case .transient:
+            return error.localizedDescription
+        }
+    }
+
+    /// The socket went away under the send (rather than the Gateway timing out while connected):
+    /// the message stays queued for the next connection.
+    public static func isDisconnect(_ error: Error) -> Bool {
+        switch error as? GatewayError {
+        case .notConnected, .closed: true
+        default: false
+        }
+    }
+
+    /// `chat.send` rejects a session it can't use: an incognito or harness-owned key that's gone,
+    /// or an agent removed from the config (openclaw `src/gateway/server-methods/chat-send-session.ts`).
+    static func isSessionMissing(_ error: Error) -> Bool {
+        guard case let .rpc(code, message, _) = error as? GatewayError, code == "INVALID_REQUEST" else { return false }
+        let lower = message.lowercased()
+        return (lower.contains("session") && lower.contains("was not found"))
+            || lower.contains("no longer exists")
+            || lower.contains("reserved for agent harness-owned sessions")
+    }
+
     public static func classify(_ error: Error) -> SendFailureKind {
         guard let gateway = error as? GatewayError else { return .transient }
         switch gateway {
@@ -157,22 +192,30 @@ public struct Outbox: Codable, Equatable, Sendable {
         }
     }
 
-    /// The oldest `.queued` entry whose session has nothing earlier sending or failed.
+    /// The oldest `.queued` entry whose session has nothing earlier sending or failed. Entries
+    /// with attachments are never auto-sent (only an explicit Retry sends them) and block their
+    /// session until then.
     public func nextToSend(sessionKey: String? = nil) -> OutboxEntry? {
         var blocked = Set<String>()
         for entry in self.entries {
             if let sessionKey, entry.sessionKey != sessionKey { continue }
             if blocked.contains(entry.sessionKey) { continue }
-            if entry.state == .queued { return entry }
+            if entry.state == .queued, !entry.hasAttachments { return entry }
             blocked.insert(entry.sessionKey)
         }
         return nil
     }
 
+    /// Whether this entry is its chat's oldest unsent message, so sending it keeps the order.
+    public func isHead(id: String) -> Bool {
+        guard let entry = self.entry(id: id) else { return false }
+        return self.entries.first { $0.sessionKey == entry.sessionKey }?.id == id
+    }
+
     /// Whether a queued entry waits behind an earlier message of its chat.
     public func isBlocked(id: String) -> Bool {
         guard let entry = self.entry(id: id), entry.state == .queued else { return false }
-        return self.nextToSend(sessionKey: entry.sessionKey)?.id != id
+        return !self.isHead(id: id)
     }
 
     public mutating func markSending(id: String) {
@@ -195,7 +238,7 @@ public struct Outbox: Codable, Equatable, Sendable {
         guard let index = self.index(id) else { return }
         switch kind {
         case .transient:
-            if isConnected {
+            if isConnected || self.entries[index].hasAttachments {
                 self.entries[index].state = .failed(OutboxFailure(message: message ?? "Couldn't send.", retryable: true))
             } else {
                 self.entries[index].state = .queued
@@ -204,7 +247,7 @@ public struct Outbox: Codable, Equatable, Sendable {
             self.entries[index].state = .failed(OutboxFailure(message: message ?? reason, retryable: false))
         case .authRevoked:
             self.entries[index].state = .failed(OutboxFailure(
-                message: message ?? "Not authorized. Reconnect this gateway, then retry.",
+                message: message ?? SendFailure.signInRequired,
                 retryable: true))
         }
     }
@@ -227,8 +270,12 @@ public struct Outbox: Codable, Equatable, Sendable {
         self.entries.removeAll { $0.id == id }
     }
 
-    /// The socket dropped: in-flight sends go back to the queue (the same key makes the resend safe).
+    /// The socket dropped: in-flight sends go back to the queue (the same key makes the resend
+    /// safe). Ones with attachments, which never auto-send, fail retryably instead.
     public mutating func connectionLost() {
+        for index in self.entries.indices where self.entries[index].state == .sending && self.entries[index].hasAttachments {
+            self.entries[index].state = .failed(OutboxFailure(message: "Couldn’t send: the connection was lost.", retryable: true))
+        }
         self.requeueSending()
     }
 
