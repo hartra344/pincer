@@ -72,6 +72,8 @@ struct ChannelList: View {
                     }
                     .pickerStyle(.inline)
                     Toggle("Show Archived", isOn: $gateway.showArchived)
+                    Toggle("Show Automations", isOn: $gateway.showAutomations)
+                    Toggle("Show Slash Commands", isOn: $gateway.showSlashCommands)
                     if self.gateway.organization == .group || self.gateway.organization == .servers {
                         Button("New Group…") { SidebarMenus.newGroup(gateway: self.gateway, actions: self.actions) }
                             .disabled(!self.gateway.state.isConnected)
