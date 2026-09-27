@@ -10,6 +10,10 @@ public final class AppModel {
         didSet {
             // Shared so the Share extension starts on the same gateway.
             self.sharedDefaults.set(self.selectedGatewayId?.uuidString, forKey: Self.selectedGatewayKey)
+            // A pending demo setup offer is only for while the demo stays selected.
+            for gateway in self.gateways where gateway.profile.isDemo && gateway.id != self.selectedGatewayId {
+                gateway.setup.withdrawOffer()
+            }
             self.updateVisible()
         }
     }
@@ -209,11 +213,13 @@ public final class AppModel {
     }
 
     /// Selects the built-in demo, adding it the first time.
+    /// Offers its setup wizard on this connection (now, if it's already connected).
     public func openDemo() {
         if let existing = self.gateways.first(where: { $0.profile.isDemo }) {
             self.selectedGatewayId = existing.id
+            existing.setup.requestOffer(connected: existing.hasConnected && existing.state.isConnected)
         } else {
-            self.add(.demo(), secret: nil)
+            self.add(.demo(), secret: nil).setup.requestOffer(connected: false)
         }
     }
 
@@ -249,6 +255,13 @@ public final class AppModel {
         store.forgetLocalHealthDismissals()
         self.persist()
         if self.selectedGatewayId == id { self.selectedGatewayId = self.gateways.first?.id }
+    }
+
+    /// Deletes every Gateway's cached transcripts and search indexes (Settings' Clear Cache), then
+    /// refills them from what's open and from the Gateways. Nothing on the Gateways changes.
+    public func clearTranscriptCache() async {
+        await Task.detached(priority: .userInitiated) { TranscriptCache.removeEverything() }.value
+        for gateway in self.gateways { await gateway.cacheCleared() }
     }
 
     public func move(_ id: UUID, by offset: Int) {

@@ -82,6 +82,8 @@ struct ChannelList: View {
                     Button("Gateway Logs…") { self.openGatewaySettings(self.gateway, at: .logs) }
                     Button("Command Policy…") { self.openGatewaySettings(self.gateway, at: .execPolicy) }
                     Button("Usage & Cost…") { self.openGatewaySettings(self.gateway, at: .usage) }
+                    Button("Set Up Gateway…") { self.gateway.setup.present() }
+                        .disabled(!self.gateway.state.isConnected)
                     Button("Gateway Settings…") { self.openGatewaySettings(self.gateway) }
                         .keyboardShortcut(",", modifiers: [.command, .shift])
                     Button("Edit Connection…") { self.openGatewaySettings(self.gateway, at: .connection) }
