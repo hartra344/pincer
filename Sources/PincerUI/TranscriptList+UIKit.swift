@@ -17,6 +17,8 @@ struct TranscriptList: UIViewRepresentable {
     var topInset: CGFloat = 0
     /// Find in chat's matches to highlight, and the selected one to scroll to.
     var highlight = TranscriptHighlight()
+    /// A message to scroll to and flash, e.g. from a `pincer://` link.
+    var jump: TranscriptJump?
 
     func makeCoordinator() -> Coordinator { Coordinator(context: self.context) }
 
@@ -27,6 +29,7 @@ struct TranscriptList: UIViewRepresentable {
     func updateUIView(_ view: UICollectionView, context: Context) {
         context.coordinator.update(rows: self.rows, context: self.context, insets: (self.topInset, self.bottomInset))
         context.coordinator.apply(self.highlight)
+        context.coordinator.apply(self.jump)
     }
 
     @MainActor
@@ -215,6 +218,14 @@ struct TranscriptList: UIViewRepresentable {
         }
 
         /// Highlights Find's matches and scrolls the selected one into view when asked to.
+        private var lastJump: UUID?
+
+        func apply(_ jump: TranscriptJump?) {
+            guard let jump, jump.id != self.lastJump else { return }
+            self.lastJump = jump.id
+            self.renderer.showOriginal(jump.messageId, missingNotice: PincerRoute.Notice.unknownMessage)
+        }
+
         func apply(_ highlight: TranscriptHighlight) {
             guard let id = self.renderer.update(highlight: highlight) else { return }
             self.reveal(id)
