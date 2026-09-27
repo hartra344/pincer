@@ -10,7 +10,9 @@ struct PincerMenuBar: Scene {
     @AppStorage(MenuBarSettings.enabledKey) private var enabled = false
 
     var body: some Scene {
-        MenuBarExtra(isInserted: self.$enabled) {
+        // Not `self.$enabled`: the extra writes the binding back on every update, and an
+        // unconditional @AppStorage write re-triggers that update forever (#119).
+        MenuBarExtra(isInserted: Binding(get: { self.enabled }, set: { MenuBarSettings().setEnabled($0) })) {
             MenuBarContent(app: self.app)
         } label: {
             MenuBarLabel(app: self.app)

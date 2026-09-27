@@ -158,19 +158,9 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var pairingInbox = PairingInboxModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
     /// Health, uptime, connected clients and restart; seeded from every hello and kept current by events.
-    @ObservationIgnored public private(set) lazy var health: GatewayHealthModel = {
-        let health = GatewayHealthModel(
-            connection: self.connection, hello: { [weak self] in self?.hello },
-            localDeviceId: self.profile.isDemo ? DemoGateway.deviceId : self.deviceId,
-            simulatedRestart: self.profile.isDemo)
-        health.onRestarted = { [weak self] in
-            guard let self, self.settings.hasLoaded else { return }
-            Task { await self.settings.load() }
-        }
-        health.dismissals = self.healthDismissals
-        health.onDismissalsChanged = { [weak self] changes in self?.applyHealthDismissals(changes) }
-        return health
-    }()
+    /// Built in `init`, not lazily, so reading it from a view body (the menu bar item, #119) never
+    /// creates it or wires up its callbacks mid-update.
+    @ObservationIgnored public let health: GatewayHealthModel
 
     /// Where per-gateway sidebar and selection preferences persist.
     @ObservationIgnored let defaults: UserDefaults
@@ -204,7 +194,19 @@ public final class GatewayStore: Identifiable {
         let images = ArtifactImageLoader()
         self.images = images
         self.files = FileContentLoader(images: images)
+        let connection = self.connection
+        self.health = GatewayHealthModel(
+            connection: connection, hello: { nil },
+            localDeviceId: profile.isDemo ? DemoGateway.deviceId : identity.deviceId,
+            simulatedRestart: profile.isDemo)
         images.gateway = self
+        self.health.hello = { [weak self] in self?.hello }
+        self.health.onRestarted = { [weak self] in
+            guard let self, self.settings.hasLoaded else { return }
+            Task { await self.settings.load() }
+        }
+        self.health.dismissals = self.healthDismissals
+        self.health.onDismissalsChanged = { [weak self] changes in self?.applyHealthDismissals(changes) }
     }
 
     public var deviceId: String { self.identity.deviceId }
@@ -1175,12 +1177,20 @@ public final class GatewayStore: Identifiable {
         }
     }
 
-    private func applyHealthDismissals(_ changes: [String: String?]) {
+    /// Saves and syncs dismissals the health model changed. A no-op, with no write to the observable
+    /// `healthDismissals` and no `users.prefs` push, when they're already in place.
+    func applyHealthDismissals(_ changes: [String: String?]) {
+        let effective = changes.filter { self.healthDismissals[$0.key] != $0.value }
+        guard !effective.isEmpty else { return }
         var next = self.healthDismissals
-        for (id, value) in changes { next[id] = value }
+        for (id, value) in effective { next[id] = value }
         self.healthDismissals = next
-        Task { await self.push(self.syncedMap(Self.healthDismissalsPref), changes) }
+        self.healthDismissalPushes += 1
+        Task { await self.push(self.syncedMap(Self.healthDismissalsPref), effective) }
     }
+
+    /// `users.prefs` pushes started by `applyHealthDismissals`, for checks.
+    @ObservationIgnored private(set) var healthDismissalPushes = 0
 
     /// Forgets this device's copy of the dismissals when the gateway is removed. The gateway's
     /// user prefs keep them for other devices, and re-adding the gateway pulls them back.

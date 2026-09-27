@@ -12,10 +12,22 @@ public struct MenuBarSettings {
         self.defaults = defaults
     }
 
-    /// Off until the user turns it on.
+    /// Off until the user turns it on. Read like `@AppStorage` does, so "YES" strings (e.g. a
+    /// `-pincer.menuBar.enabled YES` launch argument) agree with the scene's value.
     public var isEnabled: Bool {
-        get { self.defaults.object(forKey: Self.enabledKey) as? Bool ?? false }
+        get { self.defaults.bool(forKey: Self.enabledKey) }
         nonmutating set { self.defaults.set(newValue, forKey: Self.enabledKey) }
+    }
+
+    /// Saves `enabled` only when it differs from the stored value; returns whether it wrote.
+    /// `MenuBarExtra(isInserted:)` sets its binding again on every app update, even to the same
+    /// value, and a write that always lands posts `UserDefaults.didChangeNotification`, which
+    /// starts another update: the launch freeze in #119.
+    @discardableResult
+    public func setEnabled(_ enabled: Bool) -> Bool {
+        guard enabled != self.isEnabled else { return false }
+        self.isEnabled = enabled
+        return true
     }
 }
 
