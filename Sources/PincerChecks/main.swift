@@ -2400,6 +2400,9 @@ await runShareChecks()
 print("Shortcuts & Siri")
 await runIntentChecks()
 
+print("Deep links & Handoff")
+runDeepLinkChecks()
+
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     let url = arguments[index + 1]
@@ -2410,6 +2413,8 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     await runQuickCaptureLive(url: url, token: token)
     print("Replies & reactions (live)")
     await runLiveReactionsReply(url: url, token: token)
+    print("Deep links (live)")
+    await runLiveDeepLinks(url: url, token: token)
 }
 if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count > index + 2 {
     print("Scope upgrade fallback against \(arguments[index + 1])")
@@ -2442,6 +2447,8 @@ if arguments.contains("--demo") {
     await runDemoReactionsReply()
     print("Menu bar (demo)")
     await runMenuBarDemo()
+    print("Deep links (demo)")
+    await runDemoDeepLinks()
 }
 
 print("Keychain isolation")

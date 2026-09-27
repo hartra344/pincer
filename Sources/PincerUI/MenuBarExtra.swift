@@ -95,7 +95,7 @@ struct MenuBarContent: View {
 
     /// Selects the chat first, so a window created by `showMainWindow` starts on it.
     private func open(_ target: Notifier.Target) {
-        self.app.open(target)
+        self.app.open(self.app.route(for: target), verifySession: false)
         self.showMainWindow()
     }
 

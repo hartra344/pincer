@@ -16,6 +16,7 @@ public struct PincerScene: Scene {
     public var body: some Scene {
         WindowGroup("Pincer", id: "main") {
             RootView()
+                .deepLinkRouting()
                 .environment(self.app)
                 .themed()
                 .task {
@@ -150,7 +151,7 @@ struct RootView: View {
         .onChange(of: self.scenePhase, initial: true) { _, phase in
             self.app.appIsActive = phase == .active
         }
-        .onChange(of: self.app.openRequests) { self.compactColumn = .detail }
+        .modifier(CompactColumnRouting(column: self.$compactColumn))
         .background { UnreadBadgeSync() }
         .onAppear {
             if self.app.gateways.isEmpty { self.addingGateway = true }
@@ -192,6 +193,19 @@ struct RootView: View {
             self.automationsRequest = AutomationsRequest(id: gateway.id)
             #endif
         }
+    }
+}
+
+/// iPhone: opening a chat shows the detail column; a link to an unknown gateway shows the list.
+/// Its own modifier to keep `RootView.body` within the type checker's limits.
+private struct CompactColumnRouting: ViewModifier {
+    @Binding var column: NavigationSplitViewColumn
+    @Environment(AppModel.self) private var app
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: self.app.openRequests) { self.column = .detail }
+            .onChange(of: self.app.gatewayListRequests) { self.column = .sidebar }
     }
 }
 
