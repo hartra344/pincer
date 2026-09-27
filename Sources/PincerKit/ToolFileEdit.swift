@@ -160,9 +160,12 @@ public struct ToolFileEdit: Hashable, Sendable {
     /// Lines added/removed across all files. See `isStatExact`.
     public let additions: Int
     public let deletions: Int
-    /// False when a cap or the source hid part of the change, or an overwrite's removals are
-    /// unknown, so the counts are a lower bound and shouldn't be shown as the total.
-    public let isStatExact: Bool
+    /// How far `additions` / `deletions` can be trusted: a cap or the source can hide part of
+    /// the change (the count is a lower bound), and an overwrite doesn't say what it removed.
+    public let additionsBound: StatBound
+    public let deletionsBound: StatBound
+    /// Both counts are the whole change.
+    public var isStatExact: Bool { self.additionsBound == .exact && self.deletionsBound == .exact }
     /// Some of the change isn't shown.
     public let isTruncated: Bool
     /// Diff lines not shown, when known.
@@ -170,17 +173,41 @@ public struct ToolFileEdit: Hashable, Sendable {
     /// What Copy puts on the pasteboard: the raw content for a write, else the unified diff.
     public let copyText: String
 
-    public init(kind: Kind, files: [FileDiff], isStatExact: Bool = true, isTruncated: Bool = false,
-                omittedLines: Int? = nil, copyText: String? = nil)
+    public enum StatBound: Hashable, Sendable {
+        case exact
+        /// At least this many; shown with a trailing "+".
+        case atLeast
+        /// Not known at all; not shown.
+        case unknown
+    }
+
+    public init(kind: Kind, files: [FileDiff], additionsBound: StatBound = .exact, deletionsBound: StatBound = .exact,
+                isTruncated: Bool = false, omittedLines: Int? = nil, copyText: String? = nil)
     {
         self.kind = kind
         self.files = files
         self.additions = files.reduce(0) { $0 + $1.additions }
         self.deletions = files.reduce(0) { $0 + $1.deletions }
-        self.isStatExact = isStatExact
+        self.additionsBound = additionsBound
+        self.deletionsBound = deletionsBound
         self.isTruncated = isTruncated || (omittedLines ?? 0) > 0
         self.omittedLines = omittedLines
-        self.copyText = copyText ?? files.map(\.unifiedText).joined(separator: "\n")
+        if let copyText {
+            self.copyText = copyText
+        } else {
+            // Review text, not a patch to apply: say where it was cut.
+            let unified = files.map(\.unifiedText).joined(separator: "\n")
+            self.copyText = self.isTruncated
+                ? unified + (unified.isEmpty ? "" : "\n") + Self.text(for: .truncated(omitted: omittedLines)) : unified
+        }
+    }
+
+    public init(kind: Kind, files: [FileDiff], isStatExact: Bool, isTruncated: Bool = false,
+                omittedLines: Int? = nil, copyText: String? = nil)
+    {
+        let bound: StatBound = isStatExact ? .exact : .atLeast
+        self.init(kind: kind, files: files, additionsBound: bound, deletionsBound: bound, isTruncated: isTruncated,
+                  omittedLines: omittedLines, copyText: copyText)
     }
 
     // MARK: Presentation
@@ -218,8 +245,12 @@ public struct ToolFileEdit: Hashable, Sendable {
     }
 
     /// "New file", "Edited", "Deleted", "Moved", "Inserted", "Written" or "Patch".
-    public var statusLabel: String {
+    public var statusLabel: String { self.statusLabel(isRunning: false) }
+
+    /// While a write runs nothing says yet whether it creates the file: "Writing".
+    public func statusLabel(isRunning: Bool) -> String {
         switch self.kind {
+        case .write where isRunning: return "Writing"
         case .write: return self.files.first?.operation == .add ? "New file" : "Written"
         case .insert: return "Inserted"
         case .edit: return "Edited"
@@ -234,17 +265,32 @@ public struct ToolFileEdit: Hashable, Sendable {
         }
     }
 
+    /// "+3", "+3+" (at least 3), or nil when there's nothing or nothing known to show.
+    public var additionsLabel: String? { Self.countLabel("+", self.additions, self.additionsBound) }
+    /// "−1", "−12+" (at least 12), or nil.
+    public var deletionsLabel: String? { Self.countLabel("−", self.deletions, self.deletionsBound) }
+
+    private static func countLabel(_ sign: String, _ count: Int, _ bound: StatBound) -> String? {
+        guard count > 0, bound != .unknown else { return nil }
+        return sign + String(count) + (bound == .atLeast ? "+" : "")
+    }
+
     /// "Edited foo.swift, 3 added, 1 removed", for VoiceOver.
-    public var accessibilitySummary: String {
+    public var accessibilitySummary: String { self.accessibilitySummary(isRunning: false) }
+
+    /// "Edited foo.swift, 3 added, at least 12 removed"; a running write is "Writing foo.swift".
+    public func accessibilitySummary(isRunning: Bool) -> String {
         let verb: String = switch self.files.count == 1 ? self.files[0].operation : .update {
+        case _ where isRunning && self.kind == .write: "Writing"
         case .add: "Created"
         case .delete: "Deleted"
         case .move: "Moved"
         case .update: self.kind == .write ? "Wrote" : "Edited"
         }
         let title = self.title.replacingOccurrences(of: "→", with: "to")
-        guard self.isStatExact else { return "\(verb) \(title)" }
-        let counts = [(self.additions, "added"), (self.deletions, "removed")].filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }
+        let counts = [(self.additions, self.additionsBound, "added"), (self.deletions, self.deletionsBound, "removed")]
+            .filter { $0.0 > 0 && $0.1 != .unknown }
+            .map { ($0.1 == .atLeast ? "at least " : "") + "\($0.0) \($0.2)" }
         return ([verb + " " + title] + counts).joined(separator: ", ")
     }
 
@@ -380,8 +426,15 @@ extension ToolFileEdit {
         let args = arguments.flatMap { $0.data(using: .utf8) }.flatMap { try? JSONValue.decode($0) }?.object
         let path = args.flatMap { Self.string($0, Self.pathKeys) }?.trimmingCharacters(in: .whitespacesAndNewlines)
         let filePath = path?.isEmpty == false ? path : nil
-        if let diff = details?["diff"]?.string, let parsed = Self.detailsDiff(diff, path: filePath, toolName: name) {
-            return parsed
+        if let diff = details?["diff"]?.string {
+            // `details.diff` has no file headers. A multi-file patch keeps its per-file sections from
+            // the input; a one-file patch takes its path from the envelope.
+            let patch = Self.patchToolNames.contains(name) ? args.flatMap(Self.patch) : nil
+            if let patch, patch.files.count > 1 { return patch }
+            if let parsed = Self.detailsDiff(diff, path: filePath ?? patch?.files.first?.path, toolName: name,
+                                              created: details?["created"]?.bool == true) {
+                return parsed
+            }
         }
         guard !isError, let args else { return nil }
         if Self.textEditorToolNames.contains(name) {
@@ -441,7 +494,7 @@ extension ToolFileEdit {
 
     /// The Gateway's applied diff: numbered lines (`+ 12 text`, `- 3 text`, `  4 text`) with `...`
     /// between hunks and `...(truncated)...` where it was cut.
-    static func detailsDiff(_ diff: String, path: String?, toolName: String) -> ToolFileEdit? {
+    static func detailsDiff(_ diff: String, path: String?, toolName: String, created: Bool = false) -> ToolFileEdit? {
         var hunks: [DiffHunk] = []
         var current: [DiffLine] = []
         var clipped = false
@@ -473,7 +526,10 @@ extension ToolFileEdit {
         guard additions + deletions > 0 else { return nil }
         let kind: Kind = Self.writeToolNames.contains(toolName) ? .write
             : Self.patchToolNames.contains(toolName) ? .patch : .edit
-        let file = FileDiff(path: path, operation: .update, hunks: hunks, additions: additions, deletions: deletions)
+        // A write receipt with `created: true` made the file: nothing was removed.
+        let isNew = created && kind == .write && deletions == 0
+        let file = FileDiff(path: path, operation: isNew ? .add : .update, hunks: hunks, additions: additions,
+                            deletions: deletions)
         return ToolFileEdit(kind: kind, files: [file], isStatExact: !clipped, isTruncated: clipped,
                             omittedLines: clipped ? nil : omitted)
     }
@@ -507,8 +563,9 @@ extension ToolFileEdit {
         let isNew = details == nil || details?["created"]?.bool == true
         let file = FileDiff(path: path, operation: isNew ? .add : .update,
                             hunks: [DiffHunk(lines: shown, oldStart: 0, newStart: 1)], additions: all.count, deletions: 0)
-        return ToolFileEdit(kind: .write, files: [file], isStatExact: isNew, omittedLines: all.count - shown.count,
-                            copyText: content)
+        // An overwrite's additions are the new content; what it replaced isn't known.
+        return ToolFileEdit(kind: .write, files: [file], deletionsBound: isNew ? .exact : .unknown,
+                            omittedLines: all.count - shown.count, copyText: content)
     }
 
     private static func insertion(_ text: String?, path: String?, at line: Int?, exact: Bool = true) -> ToolFileEdit? {
@@ -518,7 +575,8 @@ extension ToolFileEdit {
         let kept = Array(all.prefix(Limits.maxRenderedLines))
         let lines = kept.enumerated().map { offset, text in DiffLine(.addition, text, lineNumber: line.map { $0 + offset }) }
         let file = FileDiff(path: path, operation: .update, hunks: [DiffHunk(lines: lines)], additions: all.count, deletions: 0)
-        return ToolFileEdit(kind: .insert, files: [file], isStatExact: exact, omittedLines: all.count - kept.count)
+        return ToolFileEdit(kind: .insert, files: [file], deletionsBound: exact ? .exact : .unknown,
+                            omittedLines: all.count - kept.count)
     }
 
     // MARK: edit
@@ -696,8 +754,8 @@ extension ToolFileEdit {
         guard files.contains(where: { !$0.hunks.isEmpty || $0.operation == .delete || $0.operation == .move }) else { return nil }
         // A delete with no lines listed doesn't say how many it removed.
         let headerOnlyDelete = files.contains { $0.operation == .delete && $0.deletions == 0 }
-        return ToolFileEdit(kind: .patch, files: files, isStatExact: !clipped && !headerOnlyDelete,
-                            isTruncated: clipped, omittedLines: clipped ? nil : omitted,
+        return ToolFileEdit(kind: .patch, files: files, additionsBound: clipped ? .atLeast : .exact,
+                            deletionsBound: clipped || headerOnlyDelete ? .atLeast : .exact, isTruncated: clipped, omittedLines: clipped ? nil : omitted,
                             copyText: clipped ? raw : nil)
     }
 
@@ -737,8 +795,9 @@ public enum DiffBuilder {
         public let isTruncated: Bool
     }
 
-    /// Diffs `old` against `new`. Short diffs come back as one hunk with every line; long or
-    /// clipped ones are cut to the changes plus `context` lines around them, one hunk per run.
+    /// Diffs `old` against `new`. Diffs of up to `Limits.collapseThreshold` lines come back as one
+    /// hunk with every line; longer or clipped ones are cut to the changes plus `context` lines
+    /// around them, one hunk per run.
     public static func diff(old: String, new: String, context: Int = ToolFileEdit.Limits.contextLines) -> Result {
         let limit = ToolFileEdit.Limits.maxInputLines
         let oldLines = ToolFileEdit.splitLines(old)
@@ -751,7 +810,9 @@ public enum DiffBuilder {
         var lines = oldLines[..<prefix].map { DiffLine(.context, $0) }
         lines += self.lines(old: Array(oldMiddle.prefix(limit)), new: Array(newMiddle.prefix(limit)))
         if !clipped { lines += oldLines[(oldLines.count - suffix)...].map { DiffLine(.context, $0) } }
-        guard clipped || lines.count > ToolFileEdit.Limits.maxRenderedLines else {
+        // Short diffs keep every line; past the collapse threshold, a collapsed card's first rows
+        // must reach the change, so trim to `context` lines around it.
+        guard clipped || lines.count > ToolFileEdit.Limits.collapseThreshold else {
             return Result(hunks: lines.isEmpty ? [] : [DiffHunk(lines: lines)], isTruncated: false)
         }
         return Result(hunks: self.hunks(lines, context: context), isTruncated: clipped)

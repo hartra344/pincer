@@ -5,12 +5,25 @@ import AppKit
 import UIKit
 #endif
 
-/// Colors and text of a file edit's diff in a tool card. System colors, so dark mode and
-/// increased contrast resolve when drawn; fonts come from `TranscriptStyle`, so Dynamic Type applies.
+/// Colors and text of a file edit's diff in a tool card. Colors resolve per appearance when drawn;
+/// fonts come from `TranscriptStyle`, so Dynamic Type applies.
 @MainActor
 enum TranscriptDiffText {
-    static var addition: PColor { .systemGreen }
-    static var deletion: PColor { .systemRed }
+    // systemGreen / systemRed are too faint on white (about 2.2:1 and 3.6:1), so light mode uses
+    // darker shades that pass 4.5:1; dark mode keeps the system colors.
+    static let addition = adaptive(light: (0x1A, 0x7F, 0x37), dark: .systemGreen)
+    static let deletion = adaptive(light: (0xCF, 0x22, 0x2E), dark: .systemRed)
+
+    private static func adaptive(light rgb: (Int, Int, Int), dark: PColor) -> PColor {
+        let (r, g, b) = (CGFloat(rgb.0) / 255, CGFloat(rgb.1) / 255, CGFloat(rgb.2) / 255)
+        #if os(macOS)
+        let light = NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
+        return NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light }
+        #else
+        let light = UIColor(red: r, green: g, blue: b, alpha: 1)
+        return UIColor { $0.userInterfaceStyle == .dark ? dark : light }
+        #endif
+    }
 
     /// The rows one per line, in the same strings Find counts (`ToolFileEdit.text(for:)`).
     static func text(_ rows: [ToolFileEdit.Row]) -> NSAttributedString {

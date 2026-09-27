@@ -1406,7 +1406,7 @@ final class TranscriptToolView: TranscriptBaseView {
         self.header.configure(tool, trailing: tool.run == nil ? 10 : 6)
         self.header.onTap = { [weak actions] in actions?.setExpanded(tool.key, !tool.isExpanded, row: rowId) }
         if let edit = tool.edit {
-            self.header.accessibilityText = edit.accessibilitySummary + (tool.tool.isRunning ? ", running" : "")
+            self.header.accessibilityText = edit.accessibilitySummary(isRunning: tool.tool.isRunning) + (tool.tool.isRunning ? ", running" : "")
                 + (tool.tool.isError ? ", failed" : "") + (tool.isExpanded ? ", expanded" : ", collapsed")
         } else {
             self.header.accessibilityText = [tool.tool.name, tool.tool.summary].compactMap(\.self).joined(separator: " ")
@@ -1588,7 +1588,7 @@ extension TranscriptToolHeaderView {
         var right = chevronX - 8
 
         let badgeFont = style.caption2Medium
-        let badgeText = part.tool.isError ? "Failed" : edit.statusLabel
+        let badgeText = part.tool.isError ? "Failed" : edit.statusLabel(isRunning: part.tool.isRunning)
         let badgeColor = part.tool.isError ? TranscriptColors.red : TranscriptColors.secondary
         let badge = singleLine(badgeText, badgeFont, badgeColor)
         let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
@@ -1603,17 +1603,15 @@ extension TranscriptToolHeaderView {
 
         let countFont = style.captionMono
         let countY = nameY + nameFont.ascender - countFont.ascender
-        if edit.isStatExact {
-            for (text, color) in [("−\(edit.deletions)", TranscriptDiffText.deletion), ("+\(edit.additions)", TranscriptDiffText.addition)]
-                where !(text == "−0" && edit.additions > 0) && !(text == "+0" && edit.deletions > 0)
-            {
-                let count = singleLine(text, countFont, color)
-                guard right - count.lineWidth > nameX + 40 else { break }
-                count.drawLine(at: CGPoint(x: right - count.lineWidth, y: countY), width: count.lineWidth, font: countFont)
-                right -= count.lineWidth + 6
-            }
-            right -= 2
+        let counts = [(edit.deletionsLabel, TranscriptDiffText.deletion), (edit.additionsLabel, TranscriptDiffText.addition)]
+            .compactMap { label, color in label.map { ($0, color) } }
+        for (text, color) in counts {
+            let count = singleLine(text, countFont, color)
+            guard right - count.lineWidth > nameX + 40 else { break }
+            count.drawLine(at: CGPoint(x: right - count.lineWidth, y: countY), width: count.lineWidth, font: countFont)
+            right -= count.lineWidth + 6
         }
+        if !counts.isEmpty { right -= 2 }
 
         let name = singleLine(edit.title, nameFont, TranscriptColors.label, truncation: .byTruncatingMiddle)
         let nameWidth = min(name.lineWidth, max(right - nameX, 0))

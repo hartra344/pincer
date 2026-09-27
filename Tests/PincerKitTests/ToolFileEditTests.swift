@@ -1,4 +1,3 @@
-#if true
 import Foundation
 import Testing
 @testable import PincerKit
@@ -364,7 +363,126 @@ struct ToolFileEditTests {
         #expect(!small.isLarge && small.rows(collapsed: true).hidden == 0)
     }
 
+    // MARK: Stat bounds and labels
+
+    @Test func exactCountsLabelBothSides() throws {
+        let edit = try #require(Self.parse("edit", ["path": "src/a.ts", "oldText": "b\n", "newText": "c\nd\n"]))
+        #expect(edit.additionsBound == .exact && edit.deletionsBound == .exact && edit.isStatExact)
+        #expect(edit.additionsLabel == "+2" && edit.deletionsLabel == "−1")
+        #expect(edit.accessibilitySummary == "Edited a.ts, 2 added, 1 removed")
+        let addOnly = try #require(Self.parse("edit", ["path": "a", "oldText": "x", "newText": "x\ny"]))
+        #expect(addOnly.additionsLabel == "+1" && addOnly.deletionsLabel == nil, "a zero side isn't shown")
+        #expect(addOnly.accessibilitySummary == "Edited a, 1 added")
+    }
+
+    @Test func clippedEditIsALowerBoundOnBothSides() throws {
+        let old = (1...1000).map { "old \($0)" }.joined(separator: "\n")
+        let new = (1...1000).map { $0 == 3 || $0 == 998 ? "changed \($0)" : "old \($0)" }.joined(separator: "\n")
+        let edit = try #require(Self.parse("edit", ["path": "a", "oldText": old, "newText": new]))
+        #expect(edit.additionsBound == .atLeast && edit.deletionsBound == .atLeast)
+        #expect(edit.additionsLabel == "+\(edit.additions)+" && edit.deletionsLabel == "−\(edit.deletions)+")
+        #expect(edit.accessibilitySummary == "Edited a, at least \(edit.additions) added, at least \(edit.deletions) removed")
+    }
+
+    @Test func onlyATruncatedReceiptIsALowerBound() throws {
+        let details = JSONValue.object(["changed": true, "diff": .string(Self.receipt)])
+        let edit = try #require(Self.parse("edit", ["path": "src/net/retry.ts", "oldText": "a", "newText": "b"], details: details))
+        #expect(edit.isStatExact && edit.additionsLabel == "+4" && edit.deletionsLabel == "−1", "a whole receipt is exact")
+        let clipped = try #require(ToolFileEdit.parse(toolName: "edit", arguments: nil,
+                                                      details: .object(["diff": "+1 a\n+2 b\n-1 c\n...(truncated)..."])))
+        #expect(clipped.additionsBound == .atLeast && clipped.deletionsBound == .atLeast)
+        #expect(clipped.additionsLabel == "+2+" && clipped.deletionsLabel == "−1+")
+    }
+
+    @Test func headerOnlyDeleteLeavesAdditionsExact() throws {
+        let patch = try #require(Self.parse("apply_patch", ["input": Self.envelope]))
+        #expect(patch.additionsBound == .exact && patch.deletionsBound == .atLeast && !patch.isStatExact)
+        #expect(patch.additionsLabel == "+10" && patch.deletionsLabel == "−3+")
+        #expect(patch.accessibilitySummary == "Edited 4 files, 10 added, at least 3 removed")
+    }
+
+    @Test func overwriteAndNotebookInsertHideRemovals() throws {
+        let overwrite = try #require(Self.parse("write", ["path": "src/w.ts", "content": "a\nb\n"],
+                                                details: Fixtures.json(#"{"changed":true,"created":false}"#)))
+        #expect(overwrite.additionsBound == .exact && overwrite.deletionsBound == .unknown)
+        #expect(overwrite.additionsLabel == "+2" && overwrite.deletionsLabel == nil)
+        #expect(overwrite.accessibilitySummary == "Wrote w.ts, 2 added")
+        let notebook = try #require(Self.parse("notebook_edit", ["notebook_path": "n.ipynb", "new_source": "x = 1\ny = 2"]))
+        #expect(notebook.deletionsBound == .unknown && notebook.deletionsLabel == nil && notebook.additionsLabel == "+2")
+    }
+
+    @Test func runningWriteSaysWriting() throws {
+        let write = try #require(Self.parse("write", ["path": "src/w.ts", "content": "a\nb\n"]))
+        #expect(write.statusLabel(isRunning: true) == "Writing")
+        #expect(write.accessibilitySummary(isRunning: true) == "Writing w.ts, 2 added")
+        #expect(write.statusLabel == write.statusLabel(isRunning: false) && write.statusLabel == "New file")
+        #expect(write.accessibilitySummary == "Created w.ts, 2 added")
+        let edit = try #require(Self.parse("edit", ["path": "a", "oldText": "x", "newText": "y"]))
+        #expect(edit.statusLabel(isRunning: true) == "Edited", "only writes change wording while running")
+    }
+
+    @Test func legacyInitMapsInexactToLowerBounds() {
+        let file = FileDiff(path: "a", operation: .update, hunks: [DiffHunk(lines: [DiffLine(.addition, "x", lineNumber: 1)])])
+        let inexact = ToolFileEdit(kind: .edit, files: [file], isStatExact: false)
+        #expect(inexact.additionsBound == .atLeast && inexact.deletionsBound == .atLeast)
+        let exact = ToolFileEdit(kind: .edit, files: [file], isStatExact: true)
+        #expect(exact.additionsBound == .exact && exact.deletionsBound == .exact)
+    }
+
+    // MARK: Copy text
+
+    @Test func truncatedCopyTextSaysWhereItWasCut() throws {
+        let old = (1...500).map { "a\($0)" }.joined(separator: "\n")
+        let new = (1...500).map { "b\($0)" }.joined(separator: "\n")
+        let capped = try #require(Self.parse("edit", ["path": "a", "oldText": old, "newText": new]))
+        #expect(capped.copyText == capped.unifiedText + "\nDiff truncated — 600 more lines")
+        let receipt = try #require(ToolFileEdit.parse(toolName: "edit", arguments: nil,
+                                                      details: .object(["diff": "+1 a\n...(truncated)..."])))
+        #expect(receipt.copyText.hasSuffix("\nDiff truncated"))
+        let whole = try #require(Self.parse("edit", ["path": "a", "oldText": "x", "newText": "y"]))
+        #expect(whole.copyText == whole.unifiedText, "an untruncated edit copies just the diff")
+    }
+
+    // MARK: apply_patch with a receipt
+
+    @Test func multiFilePatchReceiptKeepsPerFileSections() throws {
+        let details = JSONValue.object(["diff": "+1 something else"])
+        let patch = try #require(Self.parse("apply_patch", ["input": Self.envelope], details: details))
+        #expect(patch.files.count == 4 && patch.title == "4 files")
+        #expect(patch.files.map(\.operation) == [.update, .move, .add, .delete])
+    }
+
+    @Test func singleFilePatchReceiptTakesThePathFromTheEnvelope() throws {
+        let input = "*** Begin Patch\n*** Update File: src/a.ts\n@@\n-x\n+y\n*** End Patch"
+        let details = JSONValue.object(["diff": "- 4 old line\n+ 4 new line\n  5 tail"])
+        let patch = try #require(Self.parse("apply_patch", ["input": input], details: details))
+        #expect(patch.title == "a.ts" && patch.directory == "src/" && patch.primaryPath == "src/a.ts")
+        #expect(Self.lines(patch) == ["-old line", "+new line", " tail"], "the applied diff wins over the envelope's lines")
+        #expect(patch.files[0].hunks[0].lines.map(\.lineNumber) == [4, 4, 5])
+    }
+
     // MARK: DiffBuilder
+
+    @Test func diffsPastTheCollapseThresholdKeepThreeLinesOfContext() throws {
+        let old = (1...30).map { "same \($0)" } + ["old line", "end"]
+        let new = (1...30).map { "same \($0)" } + ["new line", "end"]
+        let result = DiffBuilder.diff(old: old.joined(separator: "\n"), new: new.joined(separator: "\n"))
+        #expect(result.hunks.count == 1 && !result.isTruncated)
+        #expect(result.hunks[0].lines.map(\.unified) == [" same 28", " same 29", " same 30", "-old line", "+new line", " end"])
+        let edit = try #require(Self.parse("edit", ["path": "a", "oldText": old.joined(separator: "\n"),
+                                                    "newText": new.joined(separator: "\n")]))
+        let shown = edit.rows(collapsed: true).rows
+        #expect(shown.contains { if case let .line(line) = $0 { line.kind == .deletion && line.text == "old line" } else { false } },
+                "the first change is visible on a collapsed card")
+    }
+
+    @Test func diffsUpToTheCollapseThresholdStayWhole() {
+        let old = (1...18).map { "same \($0)" } + ["old line"]
+        let new = (1...18).map { "same \($0)" } + ["new line"]
+        let result = DiffBuilder.diff(old: old.joined(separator: "\n"), new: new.joined(separator: "\n"))
+        #expect(result.hunks.count == 1 && result.hunks[0].lines.count == ToolFileEdit.Limits.collapseThreshold)
+        #expect(result.hunks[0].lines.first?.text == "same 1")
+    }
 
     @Test func lineDiffIsMinimalAndOrdered() {
         let result = DiffBuilder.diff(old: "a\nb\nc\n", new: "a\nB\nc\nd\n")
@@ -452,4 +570,3 @@ struct SplitMix {
         return z ^ (z >> 31)
     }
 }
-#endif

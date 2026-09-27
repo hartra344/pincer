@@ -95,13 +95,17 @@ private func checkRetryFixChat(_ chat: ChatStore, label: String, editHasReceipt:
     }
     check(write?.kind == .write && write?.files.first?.operation == .add && write?.additions == 17 && write?.deletions == 0
           && write?.primaryPath == "src/net/retry.test.ts" && write?.isStatExact == true,
-          "\(label): write → new file, 17 additions")
+          "\(label): write → new file, 17 additions (\(write?.files.first?.operation.rawValue ?? "nil"), \(write?.statusLabel ?? ""), +\(write?.additions ?? -1) -\(write?.deletions ?? -1), exact \(write?.isStatExact ?? false))")
     check(patch?.kind == .patch && patch?.files.map(\.operation) == [.update, .move, .add, .delete]
           && patch?.files.first?.hunks.count == 3 && patch?.files[1].sourcePath == "src/net/errors.ts"
           && patch?.files[1].path == "src/net/http-errors.ts",
           "\(label): apply_patch → update (3 hunks), move, add, delete (\(patch?.files.map(\.operation.rawValue) ?? []))")
     check(patch?.additions == 11 && patch?.deletions == 3 && patch?.title == "4 files",
           "\(label): patch counts +11 -3 (+\(patch?.additions ?? -1) -\(patch?.deletions ?? -1))")
+    // The delete is header-only, so removals are a lower bound; additions stay exact.
+    check(patch?.additionsLabel == "+11" && patch?.deletionsLabel == "−3+"
+          && patch?.accessibilitySummary == "Edited 4 files, 11 added, at least 3 removed",
+          "\(label): patch header reads +11 −3+ (\(patch?.additionsLabel ?? "nil") \(patch?.deletionsLabel ?? "nil"), \(patch?.accessibilitySummary ?? ""))")
     check(patch?.unifiedText.contains("--- /dev/null\n+++ b/docs/retry.md") == true
           && patch?.unifiedText.contains("--- a/src/net/legacy-retry.ts\n+++ /dev/null") == true,
           "\(label): patch unified text marks the add and the delete")
