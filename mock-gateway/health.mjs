@@ -1,6 +1,12 @@
 // Gateway health, presence and safe restart, shaped like OpenClaw's `health`, `status`,
 // `last-heartbeat`, `system-presence` and `gateway.restart.request`.
 import { ADMIN_SCOPE } from './config.mjs';
+import { channelAccountSnapshots } from './setup.mjs';
+
+function lifecycleOf(account) {
+  if (!account.enabled || !account.configured) return 'stopped';
+  return account.connected ? 'ready' : 'recovering';
+}
 
 export const HEALTH_READ_METHODS = ['health', 'status', 'last-heartbeat', 'system-presence'];
 export const RESTART_METHOD = 'gateway.restart.request';
@@ -55,47 +61,19 @@ export function isRestarting(state) {
 
 export function healthSummary(state) {
   const now = Date.now();
-  const discordEnabled = state.configState?.config?.channels?.discord?.enabled !== false;
+  const accounts = channelAccountSnapshots(state);
+  const channel = (id, account) => ({ ...account, lifecycle: lifecycleOf(account), accounts: { default: { ...account } } });
   return {
     ok: true,
     ts: now,
     durationMs: 12,
     channels: {
-      discord: {
-        accountId: 'default',
-        name: 'Discord',
-        enabled: discordEnabled,
-        configured: true,
-        running: discordEnabled,
-        connected: discordEnabled,
-        restartPending: false,
-        reconnectAttempts: 0,
-        lastConnectedAt: state.healthState.startedAt + 2_000,
-        lastError: null,
-        lifecycle: discordEnabled ? 'ready' : 'stopped',
-        accounts: {
-          default: {
-            accountId: 'default',
-            enabled: discordEnabled,
-            configured: true,
-            running: discordEnabled,
-            connected: discordEnabled,
-            restartPending: false,
-            lastError: null,
-          },
-        },
-      },
-      slack: {
-        accountId: 'default',
-        name: 'Slack',
-        enabled: false,
-        configured: false,
-        running: false,
-        connected: false,
-      },
+      discord: channel('discord', accounts.discord),
+      whatsapp: channel('whatsapp', accounts.whatsapp),
+      slack: { ...accounts.slack },
     },
-    channelOrder: ['discord', 'slack'],
-    channelLabels: { discord: 'Discord', slack: 'Slack' },
+    channelOrder: ['discord', 'whatsapp', 'slack'],
+    channelLabels: { discord: 'Discord', whatsapp: 'WhatsApp', slack: 'Slack' },
     heartbeatSeconds: 1800,
     defaultAgentId: 'main',
     agents: [...state.agents.values()].map((agent) => ({
@@ -105,7 +83,7 @@ export function healthSummary(state) {
       heartbeat: { enabled: agent.id === 'main', every: '30m', everyMs: 1_800_000 },
     })),
     sessions: { count: state.sessions.size, recent: [] },
-    plugins: { loaded: ['discord', 'memory-core'], errors: [], unavailable: [] },
+    plugins: { loaded: ['discord', 'whatsapp', 'memory-core'], errors: [], unavailable: [] },
     deliveryQueues: { failed: state.healthState.failedDelivery ? [{ ...state.healthState.failedDelivery }] : [] },
     contextEngines: { quarantined: [] },
     modelPricing: { state: 'ok', sources: [] },

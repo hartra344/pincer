@@ -459,6 +459,7 @@ struct OverviewPage: View {
                     .buttonStyle(.borderless)
                 }
             }
+            SetupGatewaySection()
             if let snapshot = settings.snapshot {
                 Section("Config") {
                     if let path = snapshot.path {

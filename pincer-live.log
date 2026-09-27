@@ -1,0 +1,1066 @@
+Building for debugging...
+[1 / 1]
+Build complete! (0.31 sec)
+Payload & identity
+  ✓ v2 payload layout, empty token
+  ✓ deviceId is sha256 hex
+  ✓ identity persists
+  ✓ public key is base64url
+URL policy
+  ✓ bare .ts.net → wss
+  ✓ tailnet IP → ws
+  ✓ loopback ws allowed
+  ✓ LAN ws allowed
+  ✓ public ws rejected
+  ✓ public wss allowed
+  ✓ https → wss
+  ✓ other schemes rejected
+Session rows
+  ✓ agentId from key
+  ✓ title/pinned/unread
+  ✓ parent key → thread
+  ✓ origin label
+  ✓ activity uses latest timestamp
+  ✓ rows without key rejected
+  ✓ partial row keeps previous preview
+  ✓ partial row keeps its own fields
+  ✓ new preview replaces old
+Discord channels
+  ✓ guild-id prefix dropped from channel title (got finances)
+  ✓ server id and name from origin
+  ✓ generated label is cleaned (got gyms)
+  ✓ unnamed server fallback
+  ✓ user label wins
+  ✓ Discord thread keeps its own title
+  ✓ DMs are not server channels
+  ✓ subagent detection by key
+  ✓ automation run subagents fall back to the automation
+  ✓ subagents are not server channels
+  ✓ channel stays in server after a web UI reply
+  ✓ slash session titled (got Slash commands)
+  ✓ new chats started from main aren't nested under it
+  ✓ forks stay nested
+  ✓ chats branched from a channel stay nested
+  ✓ automation title
+Media directives
+  ✓ MEDIA: URL becomes an image
+  ✓ directive line removed from text (got Here's a real photograph of two mallard ducks.
+Photo: Richard Bartz / Wikimedia Commons.)
+  ✓ image named after file
+  ✓ local image + non-image file
+  ✓ directives inside code fences stay text
+  ✓ partial streamed directive hidden
+  ✓ normal streaming text untouched
+  ✓ SVG directive renders as an image
+  ✓ attachment block SVG is an image
+  ✓ code attachment keeps its source and previews
+  ✓ text files recognized
+  ✓ SVG sniffing
+  ✓ SVG size from viewBox
+  ✓ SVG size from width/height
+  ✓ SVG rasterizes to fit preview bounds
+  ✓ SVG rasterizes
+  ✓ transcript turn renders MEDIA as image
+Transcript
+  ✓ parses all messages
+  ✓ user provenance → via Discord
+  ✓ user / assistant turn / user (got 3)
+  ✓ thinking folded into turn
+  ✓ tool call paired with result
+  ✓ tool arguments rendered
+  ✓ reply text
+  ✓ image block
+  ✓ a reply from another run gets its own row (got 2)
+  ✓ each assistant message stays a separate text entry
+  ✓ each message keeps its own timestamp
+  ✓ reply body still joins every message
+  ✓ error-only assistant message
+  ✓ spawn label derived once
+  ✓ subagent key found in tool result
+  ✓ row id is stable across pages
+  ✓ capped assistant message flagged
+  ✓ sentinel text alone isn't a cap
+  ✓ only assistant/pending messages are recoverable
+  ✓ uploaded media facts show on user messages
+  ✓ image-only upload keeps its row
+  ✓ omitted tool-result images don't leave blank slots
+  ✓ empty thinking blocks are hidden
+Models
+  ✓ model ref qualified with provider
+  ✓ already-qualified ref kept
+  ✓ short model name
+  ✓ models.list entry
+  ✓ session row model ref
+  ✓ assistant messages carry their model
+  ✓ turn takes its latest model
+  ✓ each message keeps its own model
+  ✓ gateway-injected messages have no model
+  ✓ model survives the transcript cache
+Exec approvals
+  ✓ approval payload
+  ✓ no allowedDecisions (older gateway) → all three actions
+  ✓ expiresAtMs past → expired
+  ✓ allowedDecisions without allow-always → approval-once
+  ✓ allowedDecisions with allow-always → approval, no expiry
+Approval notification actions
+  ✓ registered categories
+  ✓ approval: Allow once, Always allow, Deny in order
+  ✓ legacy approval-push keeps the same actions
+  ✓ approval-once has no Always allow
+  ✓ reply has no actions
+  ✓ no approval action opens the app
+  ✓ Allow actions need unlocking
+  ✓ Deny is destructive and works locked
+  ✓ approval categories
+  ✓ action → decision
+  ✓ tap, dismiss and unknown actions decide nothing
+  ✓ approve-once resolves on its own gateway
+  ✓ approve-always resolves on its own gateway
+  ✓ deny resolves on its own gateway
+  ✓ legacy and once-only categories resolve
+  ✓ plain tap opens the chat
+  ✓ dismiss sends nothing
+  ✓ unknown action does nothing
+  ✓ approval action on a reply notification is dropped
+  ✓ missing gateway → nothing sent
+  ✓ invalid gateway → nothing sent
+  ✓ missing approval id → nothing sent
+  ✓ undecrypted push (only pincer.g) never resolves, opens its gateway
+  ✓ lowercase gateway UUID → same gateway
+Approval outcomes
+  ✓ APPROVAL_NOT_FOUND → expired
+  ✓ reason alone → expired
+  ✓ legacy message → expired
+  ✓ message without details → expired
+  ✓ APPROVAL_ALREADY_RESOLVED → answered elsewhere
+  ✓ already-resolved message → answered elsewhere
+  ✓ decision carried when the Gateway sends it
+  ✓ APPROVAL_ALLOW_ALWAYS_UNAVAILABLE → still pending
+  ✓ timeout, not connected, closed, UNAVAILABLE → unreachable
+  ✓ FORBIDDEN or missing scope → not permitted
+  ✓ other error keeps its message
+  ✓ which outcomes remove the approval
+  ✓ no follow-up on success or a duplicate
+  ✓ expired copy
+  ✓ answered elsewhere copy
+  ✓ allow-always unavailable copy
+  ✓ unreachable copy names the gateway
+  ✓ not permitted copy names the gateway
+  ✓ unknown gateway copy
+  ✓ other errors show the clipped message
+  ✓ still pending: Allow once and Deny
+  ✓ unreachable keeps the actions
+  ✓ final outcomes have no actions
+  ✓ in-app messages
+  ✓ a follow-up for every stale or failed outcome
+  ✓ follow-ups name the gateway and never the command
+  ✓ follow-ups keep the thread and ids, not time-sensitive
+  ✓ follow-up names the chat
+  ✓ no follow-up on success
+  ✓ concurrent resolves: one attempt, one no-op ([PincerKit.ApprovalOutcome.alreadyHandled, PincerKit.ApprovalOutcome.unreachable])
+  ✓ unreachable shows in lastError
+  ✓ a dropped decision can be retried, never buffered
+  ✓ notification for a removed gateway → no longer in Pincer, nothing sent
+Approval history
+  ✓ exec snapshot decodes
+  ✓ exec presentation fields
+  ✓ timestamps from *AtMs
+  ✓ source wins over presentation agent
+  ✓ allowed once capsule
+  ✓ resolver matching this device → This device
+  ✓ resolver on another device
+  ✓ no local id → another device
+  ✓ plugin presentation fields
+  ✓ agent from presentation without source
+  ✓ always allowed capsule
+  ✓ channel resolver
+  ✓ system-agent decodes
+  ✓ denied no-route capsule
+  ✓ system resolver
+  ✓ reason explained
+  ✓ denied malformed-verdict capsule, runtime resolver
+  ✓ denied by user, missing resolver → Unknown
+  ✓ expired capsule
+  ✓ cancelled capsule
+  ✓ pending approval.get snapshot
+  ✓ unknown kind kept raw, capitalized
+  ✓ unknown status/reason kept raw, extra fields ignored
+  ✓ unknown resolver kind humanized
+  ✓ record without id rejected
+  ✓ empty id and non-objects rejected
+  ✓ flat legacy record, status from decision, requested/decidedAtMs
+  ✓ missing status derived from allow decision
+  ✓ kind inferred from commandText
+  ✓ kind filter labels and wire values
+  ✓ filtered empty messages
+  ✓ approvals alias decodes, duplicate ids dropped
+  ✓ first page asks for 50 without cursor or kind
+  ✓ bare array result, records without id skipped
+  ✓ entries alias decodes
+  ✓ page size override
+  ✓ loadMore echoes the cursor, dedups by id
+  ✓ repeated cursor stops paging
+  ✓ no request without a cursor
+  ✓ refresh replaces with page 1
+  ✓ empty page stops paging
+  ✓ kind filter reloads page 1 with kind
+  ✓ system filter sends system-agent
+  ✓ same filter doesn't reload
+  ✓ All omits kind
+  ✓ invalid cursor → one fresh reload, no error
+  ✓ load-more failure keeps rows and cursor
+  ✓ missing scope → approve operator.approvals message
+  ✓ other errors show the gateway's message
+  ✓ hello without approval.history → unsupported, no request, no error
+  ✓ UNKNOWN_METHOD → unsupported, no error
+  ✓ advertised approval.history loads
+  ✓ row before approval.get
+  ✓ approval.get detail replaces the row
+  ✓ model decidedBy uses its device id
+  ✓ approval.get failure keeps the row
+  ✓ unknown ids have no record
+  ✓ approval.get unknown method is quiet
+  ✓ hello without approval.get skips the request
+Gateway logs
+  ✓ tslog line parses like the Control UI
+  ✓ plain text line, ANSI stripped
+  ✓ first logs.tail omits cursor, asks for 500 lines / 250 KB
+  ✓ first page buffered, recent-only note
+  ✓ next poll echoes the cursor
+  ✓ reset and file change add one marker each, buffer kept
+  ✓ copy/export leave markers out
+  ✓ default levels hide debug, keep unleveled lines
+  ✓ log read failure keeps polling
+  ✓ missing operator.read stops polling
+  ✓ Try Again clears the error
+  ✓ export filename
+  ✓ gateway without logs.tail is unsupported
+  ✓ ring buffer evicts by UTF-8 bytes
+  ✓ paused: no polling, cursor kept
+  ✓ resume catches up from the cursor
+Command policy
+  ✓ snapshot path, exists, hash
+  ✓ resolvedDefaults decoded
+  ✓ missing resolvedDefaults → nil
+  ✓ exists:false decoded
+  ✓ defaults decoded, unset fields nil
+  ✓ agent keys incl. * (["*", "ghost", "main", "research"])
+  ✓ agent overrides decoded
+  ✓ unknown enum value kept
+  ✓ allowlist entry: every field, lastUsedAt in ms
+  ✓ hand-added entry: no id, no source
+  ✓ mcpTools grant decoded
+  ✓ unknown value humanized, unranked
+  ✓ known labels
+  ✓ field labels
+  ✓ missing file → version 1
+  ✓ mode projection like resolveExecModeFromPolicy
+  ✓ mode summaries
+  ✓ agent override loosened
+  ✓ wildcard agent named All agents
+  ✓ default loosened: listed once under Defaults (["Defaults: Commands → Allow any command"])
+  ✓ unset default loosened against resolvedDefaults
+  ✓ clearing a tighter override inherits a looser default
+  ✓ clearing a looser override is tightening
+  ✓ unknown new value counts as loosening
+  ✓ first override for an agent not in the file
+  ✓ tightening changes need no confirmation
+  ✓ removals need no confirmation
+  ✓ Use Defaults on a stricter agent loosens it
+  ✓ ask toward off loosens
+  ✓ unknown/missing old → loosest counts as loosening
+  ✓ unknown/missing old → a non-loosest known value doesn't
+  ✓ unknown new counts; unchanged doesn't
+  ✓ clearing to no value counts as loosening
+  ✓ no defaults and no resolvedDefaults: Allow any command asks first
+  ✓ no resolvedDefaults: agent trusting skills asks first
+  ✓ no resolvedDefaults: middle/safe values don't ask
+  ✓ unknown saved value → Allow any command asks first
+  ✓ agents without an ask override inherit * (even ones not in the file)
+  ✓ an agent's own override beats *
+  ✓ * itself inherits the defaults
+  ✓ fields * doesn't set fall through to defaults, then the Gateway default
+  ✓ an override looser than the inherited * value asks first
+  ✓ an override equal to the inherited * value doesn't
+  ✓ clearing * is listed once under All agents, not per inheriting agent (["All agents: Ask for approval → When not on the allowlist"])
+  ✓ loosening * listed once
+  ✓ a looser default hidden by * for every agent is listed under Defaults only
+  ✓ baseHash from the snapshot
+  ✓ edit applied
+  ✓ only the edited key changes; unknown keys, entry ids and fields survive
+  ✓ unknown fields preserved
+  ✓ socket.token never sent
+  ✓ token-only socket left out
+  ✓ version stays 1
+  ✓ exists:false still sends baseHash
+  ✓ agent left empty by edits is pruned
+  ✓ set then cleared → no changes
+  ✓ agent with no keys left is removed on save
+  ✓ Use Defaults keeps allowlist, tools, unknown keys
+  ✓ remove the entry at its index
+  ✓ Gateway default removes the key instead of writing the resolved value
+  ✓ Gateway default only for unset fields
+  ✓ agent value, else default, else resolved default
+  ✓ FORBIDDEN MISSING_SCOPE → needs admin
+  ✓ MISSING_SCOPE code → needs admin
+  ✓ unknown method → unsupported
+  ✓ changed since last load / base hash required → conflict
+  ✓ other INVALID_REQUEST → validation
+  ✓ other codes → other
+  ✓ wildcard first, then by display name (["*", "research", "coder", "ghost", "main"])
+  ✓ * is All agents
+  ✓ unknown agent labeled by id, not current
+  ✓ agent only in agents.list
+  ✓ row summary and badge (Blocks all commands · Trusts skill commands · 3 allowed commands · 1 allowed tool)
+  ✓ unknown override phrase humanized
+  ✓ recently allowed, newest first, across agents
+  ✓ search "command policy" → Command Policy
+  ✓ search "exec" → Command Policy
+  ✓ search "allowlist" → Command Policy
+  ✓ search "always allow" → Command Policy
+  ✓ search "approval policy" → Command Policy
+  ✓ search "ask" → Command Policy
+  ✓ search "security" → Command Policy
+  ✓ search "Command" → Command Policy
+  ✓ unrelated and empty queries
+  ✓ nothing loaded before the page opens
+  ✓ model loads the snapshot
+  ✓ model modes
+  ✓ edit makes the draft dirty
+  ✓ load with a draft does nothing
+  ✓ loosening asks first, nothing sent
+  ✓ Save Anyway sends set with baseHash, no extra get
+  ✓ snapshot and hash replaced from the response, draft cleared
+  ✓ removal saves without asking
+  ✓ nothing to save
+  ✓ Revert drops the draft
+  ✓ stale hash → reloaded, draft discarded, conflict banner
+  ✓ the next edit clears the conflict banner
+  ✓ base hash required → conflict path
+  ✓ INVALID_REQUEST → inline error, draft kept
+  ✓ rejected banner text
+  ✓ other errors → banner with retry, draft kept
+  ✓ retry saves
+  ✓ MISSING_SCOPE → needs admin
+  ✓ needs-admin copy
+  ✓ get without admin → read-only
+  ✓ read-only never sends set
+  ✓ read-only save → notice banner with the reason
+  ✓ savedValue vs draft value
+  ✓ the demo may write without admin
+  ✓ hello without exec.approvals.get → unsupported, no request
+  ✓ unknown method → unsupported
+  ✓ get without set → read-only
+  ✓ get without set → update-OpenClaw reason
+  ✓ set answered UNKNOWN_METHOD → read-only notice, draft kept
+  ✓ no more set after UNKNOWN_METHOD
+  ✓ set MISSING_SCOPE → needs-admin notice, draft kept
+  ✓ conflict whose reload fails → failed banner (reload), not conflict
+  ✓ UNAVAILABLE on load → error with Try Again
+  ✓ exists:false loaded
+  ✓ saving creates the file, baseHash sent
+  ✓ edit during a reload is kept with the snapshot it's based on
+  ✓ saving that edit later still hits the stale hash check
+  ✓ Reload (discarding the draft) replaces edits made in flight
+  ✓ a reload with no edits in flight applies
+Pairing requests
+  ✓ request without accountLabel, labels or metadata
+  ✓ senderId and requestId required
+  ✓ title uses metadata name (case-insensitive key)
+  ✓ other metadata humanized, name and username left out
+  ✓ blank name → @username
+  ✓ username keeps a single @
+  ✓ empty metadata → senderId
+  ✓ sender and account lines
+  ✓ timing line (Requested 5 min ago · Expires in 55 min)
+  ✓ last seen only when > 1 min later
+  ✓ expired request
+  ✓ ISO dates with fractional seconds
+  ✓ list is called with {}
+  ✓ loaded
+  ✓ newest first
+  ✓ expired requests left out of the count
+  ✓ accounts and limits
+  ✓ channel filter with two channels
+  ✓ channel filter is local
+  ✓ filter cleared when its channel is gone
+  ✓ notify sent when supported
+  ✓ notify omitted when unsupported
+  ✓ bootstrapCommandOwner only when chosen and allowed
+  ✓ dismiss params
+  ✓ admin can manage and bootstrap the command owner
+  ✓ approve removes the row, silent when notified
+  ✓ notification failure notice; command owner now configured
+  ✓ command owner unavailable notice
+  ✓ dismiss removes the row
+  ✓ stale request removed with a notice, then refreshed
+  ✓ not-pairing error refreshes and shows the gateway's message
+  ✓ other errors keep the row with the error
+  ✓ admin scope refusal on approve stays on the row
+  ✓ retry after an error
+  ✓ no duplicate send while in flight
+  ✓ poll keeps the in-flight row, updates the rest
+  ✓ approved row leaves once the action finishes
+  ✓ approve during a poll removes the row
+  ✓ a poll started before the approve finished doesn't resurrect the row (["other"])
+  ✓ a later list shows the row again if the Gateway still has it
+  ✓ expired row listed but not counted
+  ✓ approving an expired request sends nothing and says it expired
+  ✓ an expired request can still be dismissed
+  ✓ rows expire as time passes
+  ✓ stale dismiss (any case) removes the row, shows a notice and refreshes
+  ✓ other INVALID_REQUEST errors stay on the row
+  ✓ no pairing scope → access needed, no request
+  ✓ operator.pairing or operator.admin can manage
+  ✓ command owner needs admin
+  ✓ MISSING_SCOPE reply → Full Management message
+  ✓ hello without channels.pairing.list → unsupported, no request
+  ✓ unknown-method error → unsupported, no error
+  ✓ advertised list is supported
+  ✓ seed lists once for the badge
+  ✓ load failure shows the message
+  ✓ failed refresh keeps the last list
+  ✓ plain FORBIDDEN → access needed
+  ✓ badge before the scope went away
+  ✓ details.code MISSING_SCOPE → access needed, badge hidden
+  ✓ access comes back after a successful list
+  ✓ UNKNOWN_METHOD (mock shape) → unsupported, list and badge cleared
+  ✓ seed and poll send nothing when unsupported
+  ✓ no command owner, but operator.pairing can't bootstrap
+  ✓ admin isn't offered bootstrap when a command owner exists
+  ✓ accounts without requests
+  ✓ no pairing accounts, no limits
+  ✓ lenient parsing skips bad rows and duplicates
+Gateway health
+  ✓ empty health parses to nothing
+  ✓ non-object health rejected
+  ✓ wrong-typed fields ignored, non-object channels skipped
+  ✓ plugin errors, failed queues (count > 0) and quarantined engines
+  ✓ channelOrder first, then the rest sorted
+  ✓ channel statuses
+  ✓ restartPending, heartbeat enabled, last error
+  ✓ only the active broken account is an issue
+  ✓ disabled or unconfigured accounts don't count
+  ✓ null heartbeat is none; bad status tolerated
+  ✓ stale only past 2x the interval while heartbeats are on
+  ✓ late and failed heartbeats are issues
+  ✓ levels: healthy, degraded, down, restarting wins
+  ✓ presence parses, duplicates and non-objects dropped
+  ✓ presence event wrapper and null
+  ✓ deferred restart result
+  ✓ counts summed without totalActive; missing status is scheduled
+  ✓ hello snapshot: uptime anchored, empty health not stored
+  ✓ load reads three sections, degraded by a channel
+  ✓ this device first; indicator shows degraded
+  ✓ refresh skips presence
+  ✓ admin can restart
+  ✓ scheduled restart, reason sent, no skipDeferral
+  ✓ shutdown: restarting
+  ✓ reconnecting after restartExpectedMs
+  ✓ not back after the limit
+  ✓ not back message
+  ✓ reconnect: restarted, restart-required cleared, callback
+  ✓ dismiss restarted status
+  ✓ deferred: waiting, force offered
+  ✓ force sends skipDeferral: true; coalesced reads Restarting…
+  ✓ losing the socket while scheduled means restarting
+  ✓ back after scheduled
+  ✓ restart error RATE_LIMITED
+  ✓ restart error FORBIDDEN
+  ✓ restart error INVALID_REQUEST
+  ✓ socket closed mid-request means restarting
+  ✓ non-admin can't restart
+  ✓ non-admin restart sends nothing
+  ✓ UNKNOWN_METHOD marks sections unavailable
+  ✓ unavailable sections aren't asked again
+  ✓ method missing from hello: no restart
+  ✓ health UNAVAILABLE is down
+  ✓ disconnected: down, no issues, no indicator
+  ✓ health, heartbeat and presence events
+  ✓ restart required indicator
+  ✓ terminal shutdown leaves restart state alone (object([:]))
+  ✓ terminal shutdown leaves restart state alone (object(["reason": PincerKit.JSONValue.string("stop"), "restartExpectedMs": PincerKit.JSONValue.null]))
+  ✓ terminal shutdown leaves restart state alone (object(["restartExpectedMs": PincerKit.JSONValue.string("1500")]))
+  ✓ restartExpectedMs must be a number
+  ✓ shutdown with restartExpectedMs is a restart, even from elsewhere
+  ✓ shutdown without restartExpectedMs after our own request is our restart
+  ✓ older process keeps restart-required
+  ✓ newer process clears restart-required
+Usage & cost
+  ✓ rows without key skipped, others kept
+  ✓ session usage decoded, agent from key
+  ✓ usage: null row is computing
+  ✓ missing optional fields default
+  ✓ aggregates decoded
+  ✓ aggregates.daily has no categories
+  ✓ partial cost status
+  ✓ partial cacheStatus is incomplete
+  ✓ empty object ok, array rejected
+  ✓ usage.cost without totals sums days
+  ✓ missing totalTokens summed
+  ✓ usage.status providers and windows
+  ✓ billing decoded, provider name fallback
+  ✓ timeseries sorted, points without timestamp skipped
+  ✓ utcOffset like formatUtcOffset
+  ✓ range keys in the device's zone (2026-09-21…2026-09-27)
+  ✓ date params (half-hour zone)
+  ✓ date params (negative zone, one day)
+  ✓ YYYY-MM-DD parsed as local midnight
+  ✓ custom range clamped to today
+  ✓ presets, 7 Days by default
+  ✓ days zero-filled across the range
+  ✓ usage.cost is Gateway-wide
+  ✓ sessions.usage dashboard params
+  ✓ single-session params
+  ✓ timeseries and logs params
+  ✓ token formatting incl. B tier
+  ✓ tokens spoken
+  ✓ currency (["$0.00", "<$0.01", "$12.34", "$99.99", "$1,234", "$123K"])
+  ✓ currency grouping follows the locale
+  ✓ unknown cost
+  ✓ partial cost
+  ✓ known cost
+  ✓ percent clamped
+  ✓ quota levels
+  ✓ relative reset under a day
+  ✓ absolute reset after a day (Resets Sep 24 at 2:13 PM)
+  ✓ reset spoken
+  ✓ range and day labels
+  ✓ billing units: ISO currency only
+  ✓ durations
+  ✓ middle truncation
+  ✓ computing rows sort last
+  ✓ top 8 plus Other
+  ✓ unsupported by hello.methods without requests
+  ✓ usage.status unsupported alone
+  ✓ usage.cost unsupported alone
+  ✓ sessions.usage unsupported alone
+  ✓ sessions.usage.timeseries unsupported alone
+  ✓ sessions.usage.logs unsupported alone
+  ✓ totals and days fall back to usage.cost
+  ✓ FORBIDDEN keeps the gateway message
+  ✓ errors per method, decode failure plain
+  ✓ range change skips forbidden usage.cost and range-free usage.status (["sessions.usage"])
+  ✓ Refresh retries everything
+  ✓ stale response dropped
+  ✓ drill-down defaults to 30 days, agent from key
+  ✓ drill-down totals
+  ✓ no transcript is an empty timeseries
+  ✓ logs newest first, non-text content as plain text
+  ✓ new range keeps cached timeseries and logs
+  ✓ session range change reloads totals only
+Replies & reactions
+  ✓ replyToId and replyToPreview parse
+  ✓ transport messageId, channel and conversationRef parse
+  ✓ messages without reply or transport facts parse as before
+  ✓ empty reply and transport strings are nil
+  ✓ empty senderLabel is nil
+  ✓ committed user and assistant messages are replyable
+  ✓ pending: ids aren't replyable
+  ✓ messages without a transcript id aren't replyable
+  ✓ optimistic sends aren't replyable
+  ✓ markers aren't replyable
+  ✓ textIds parallel text; tool-only messages add none ([Optional("a1"), nil, Optional("a3")])
+  ✓ messageId → channelMessageId, then → transcriptId (["👍", "🚀"])
+  ✓ no or unmatched messageId → latest user message before the call (["🎉", "✅", "🔥"])
+  ✓ later user messages don't get earlier reactions
+  ✓ messageId naming an assistant transcript id
+  ✓ remove: true drops the earlier agent reaction (["u1": ["✅"]])
+  ✓ removing the only reaction leaves no entry
+  ✓ errored tool results are ignored (["u1": ["🎉"]])
+  ✓ non-react message calls, other tools and missing emoji are ignored ([:])
+  ✓ no user message before the call → no reaction
+  ✓ pending user messages aren't fallback targets
+  ✓ chat.send carries replyToId, text unmodified
+  ✓ chat.send omits replyToId without a target
+  ✓ fallback quotes each line, sender first, blank line, text
+  ✓ fallback without a sender
+  ✓ fallback truncates at 280 characters + …
+  ✓ fallback truncation counts over all lines
+  ✓ exactly 280 characters isn't truncated
+  ✓ headings, fences, quote markers and blank lines don't break the quote
+  ✓ upstream's replyToId rejection is recognised
+  ✓ other send failures aren't a replyToId rejection
+  ✓ pref key format
+  ✓ pref values decode in order, deduped
+  ✓ pref values encode space-joined; empty deletes the key
+  ✓ toggle appends in order added, removes, last removal deletes
+  ✓ multi-scalar emoji round-trip
+  ✓ recent key and quick defaults
+  ✓ recent is MRU, deduped
+  ✓ recent caps at 8
+  ✓ no recent → defaults
+  ✓ recent first, padded with defaults to 6
+  ✓ padding skips emoji already in the bar
+  ✓ quick bar shows 6 of the recent
+  ✓ picker grid: ~40 unique emoji including the defaults
+  ✓ agent reactions first, then yours, one group per emoji
+  ✓ who reacted (You and Claw)
+  ✓ VoiceOver label (👍, 2 reactions, you and Claw)
+  ✓ an actor counts once per emoji
+  ✓ message.action top-level shape
+  ✓ react params: messageId, emoji, to
+  ✓ remove: true, no `to` without a conversation
+  ✓ 👀 on your latest message while running
+  ✓ no 👀 when idle
+  ✓ no 👀 when the agent already reacted 👀
+  ✓ other agent reactions keep the 👀
+  ✓ the run's own output keeps the 👀
+  ✓ a reply from another run after it → no 👀
+  ✓ never on older messages
+  ✓ a newer pending send → no 👀 on the old one
+Agent questions
+  ✓ question.requested record parses
+  ✓ question.get wrapper parses
+  ✓ prompt without questions rejected
+  ✓ prompt without id rejected
+  ✓ tool-argument question id
+  ✓ only http(s) question links
+  ✓ options keep descriptions, blank ones dropped
+  ✓ free text needs isOther or no options
+  ✓ pending prompt answerable
+  ✓ prompt expires at expiresAtMs
+  ✓ prompt matched to its chat
+  ✓ answered prompt not answerable
+  ✓ no answers until every question has one
+  ✓ single choice replaces the pick
+  ✓ tapping the pick again clears it
+  ✓ unknown labels ignored
+  ✓ number key picks an option
+  ✓ out-of-range number keys ignored
+  ✓ typed answer replaces a single pick, trimmed
+  ✓ picking an option clears typed text
+  ✓ blank text keeps the pick
+  ✓ multi-select answers in option order
+  ✓ no free text without isOther
+  ✓ still missing the open question
+  ✓ answers cover every question
+  ✓ multi-select keeps picks alongside typed text
+  ✓ secret answers sent exactly as typed
+  ✓ ask_user card summarized by its question
+  ✓ scope upgrade refusal drops operator.questions for a legacy device
+  ✓ read is implied by an approved write scope
+  ✓ first pairing isn't treated as a scope upgrade
+  ✓ admin approval leaves nothing to drop
+  ✓ already-approved questions scope isn't dropped
+  ✓ no fallback when a required scope is missing too
+  ✓ errors without details don't fall back
+Gateway config schema
+  ✓ schema version
+  ✓ top-level sections, ordered by hint (["Gateway", "Agents", "Plugins", "Tools"])
+  ✓ $ref resolved: required integer with bounds
+  ✓ hint help and order
+  ✓ const union → choice
+  ✓ enum → choice
+  ✓ sensitive hint → secret field
+  ✓ SecretRef-capable secret stays a secret field
+  ✓ schema with a ref branch allows SecretRefs
+  ✓ SecretRef parsed
+  ✓ SecretRef JSON
+  ✓ SecretRef passes validation
+  ✓ allOf properties merged
+  ✓ minLength enforced
+  ✓ string arrays are lists, object arrays JSON
+  ✓ map-like plugin config lists existing keys
+  ✓ wildcard hint matches plugin id
+  ✓ additionalProperties object is a map
+Gateway config values
+  ✓ required field
+  ✓ range check
+  ✓ non-numeric input rejected
+  ✓ integer parsed
+  ✓ integer shown without decimals
+  ✓ choice validated
+  ✓ list input split by line
+  ✓ list shown one per line
+  ✓ invalid JSON rejected
+  ✓ redacted secret passes
+  ✓ value(at:)
+  ✓ setting the same value is not a change
+  ✓ edits → merge patch with removal
+  ✓ edited values read through
+  ✓ leaf changes counted by section
+  ✓ isChanged
+  ✓ setting the loaded value drops the edit
+  ✓ revert2026-09-27 10:34:40.424 PincerChecks[36721:28673263] [Pincer] Push key write failed: -34018
+2026-09-27 10:34:40.425 PincerChecks[36721:28673263] [Pincer] Push key write failed: -34018
+2026-09-27 10:34:40.426 PincerChecks[36721:28673263] [Pincer] Push key write failed: -34018
+ a whole section
+  ✓ editing inside a new entry
+  ✓ missing paths read as absent
+  ✓ a removed key reads as absent
+  ✓ no patch without changes
+  ✓ replacePaths lists changed and deleted arrays (["old.list", "tools.allow"])
+  ✓ rebase reports real conflicts only
+  ✓ rebase keeps edits over the newer config
+  ✓ mergeDiff
+  ✓ advanced tiers inherit from the nearest hint
+  ✓ unhinted paths are advanced only with tiers
+  ✓ search index reaches nested fields
+  ✓ curated location
+  ✓ plugin setting opens its plugin
+  ✓ unknown settings fall back to All Settings
+  ✓ RFC 7386 merge
+  ✓ nested merge patch
+Gateway config feedback
+  ✓ validation issues parsed from error details
+  ✓ error without issues keeps its message
+  ✓ noop patch
+  ✓ restart scheduled
+  ✓ hot-applied
+  ✓ plugin restart needed
+  ✓ plugin entry
+  ✓ bundled plugins aren't removable by default
+  ✓ plugin credential (non-https signup dropped)
+  ✓ array credential paths skipped
+Progress card
+  ✓ card parses, drops blank/unknown steps
+  ✓ current step is the in-progress one
+  ✓ markdown summary strips emphasis
+  ✓ incomplete card
+  ✓ empty card is nil
+  ✓ markdown drops raw HTML tags
+  ✓ null card is nil
+  ✓ complete card keeps last step current
+  ✓ legacy plan: string steps, one in-progress step
+Slash commands
+  ✓ commands.list parsed, native-only dropped
+  ✓ aliases and dynamic args
+  ✓ static choices
+  ✓ bare slash lists every command
+  ✓ prefix match (got ["restart", "reset"])
+  ✓ alias exact match ranks first (got ["think", "restart", "reset", "weather"])
+  ✓ client /clear offered
+  ✓ argument choices, via alias
+  ✓ no suggestions off-command
+  ✓ paths and multi-line text ignored
+  ✓ command replacement
+  ✓ arg-taking command adds a space
+  ✓ model choices from the provider (got ["/model openai/gpt", "/model anthropic/claude"])
+  ✓ /clear sent as /reset
+  ✓ a Gateway /clear is sent as is
+  ✓ only a bare /clear is rewritten
+  ✓ model id after the provider matches as a prefix
+  ✓ session thinking levels
+Automations
+  ✓ job state from `state`
+  ✓ next run date
+  ✓ schedule and delivery
+  ✓ automation chat key
+  ✓ interval summaries
+  ✓ event schedules aren't editable
+  ✓ top-level state fields (older gateways)
+  ✓ running job
+  ✓ run log entry links to its chat
+  ✓ run entries need a timestamp
+  ✓ draft from job, unchanged
+  ✓ patch sends only what changed (keeps delivery target, model)
+  ✓ payload patch
+  ✓ delivery patch when toggled
+  ✓ main chat → systemEvent
+  ✓ cron expression validated
+  ✓ interval shown in the largest unit; anchor kept
+  ✓ schedule patch
+  ✓ script jobs: only name, agent and enabled are edited
+  ✓ new draft needs a name and task
+  ✓ cron.add params
+  ✓ main-chat job has no delivery
+Web Push
+  ✓ p256dh is the uncompressed public point
+  ✓ decrypts the RFC 8291 test vector
+  ✓ encrypts to the RFC 8291 test vector
+  ✓ tampered ciphertext is rejected
+  ✓ other keys can't decrypt
+  ✓ truncated body is rejected
+  ✓ generated keys have Web Push sizes
+  ✓ keys round-trip through storage
+  ✓ malformed stored keys are ignored
+  ✓ encrypt/decrypt round trip
+  ✗ push keys persist per gateway  (line 957)
+  ✓ no keys for an unknown gateway
+Push messages
+  ✓ agent main chat
+  ✓ multi-segment session
+  ✓ ~key session, percent-decoded
+  ✓ gatewayUrl fragment ignored
+  ✓ absolute URL with a base path
+  ✓ approval path
+  ✓ other paths
+  ✓ chat push parsed
+  ✓ chat push threads with its chat
+  ✓ chat push userInfo
+  ✓ pending approval push has actions
+  ✓ pending approval push actions resolve on its gateway
+  ✓ pending approval push offers all three actions
+  ✓ resolved approval push has none
+  ✓ push without text ignored
+  ✓ malformed push ignored
+  ✗ relay payload decrypted with the stored keys  (line 996)
+  ✓ unknown gateway ignored
+  ✗ lowercase pincer.g → same gateway  (line 998)
+  ✓ non-Pincer payload ignored
+  ✓ push keys deleted
+Push registration
+  ✓ https relay
+  ✓ loopback http relay
+  ✓ other relays rejected
+  ✓ background: local notification deferred to push
+  ✓ background without push: local notification posted
+  ✓ foreground: local notification posted
+Find in chat
+  ✓ replies only by default, in transcript order (got ["u-f1", "a-f2", "a-f2"])
+  ✓ back-to-back messages are separate sections
+  ✓ case and diacritics ignored
+  ✓ blank and missing queries find nothing
+  ✓ thinking and tool text searched when included (got 9)
+  ✓ thinking occurrences numbered
+  ✓ tool input then output counted as one section
+  ✓ within a turn: thinking, tools, then messages, as drawn
+  ✓ tool text past the display limit isn't searched
+  ✓ occurrences don't overlap
+  ✓ ranges are UTF-16, for attributed text
+  ✓ first step starts at an end
+  ✓ next and previous wrap around
+  ✓ no step without matches
+  ✓ a new search selects the latest match
+  ✓ the selected match survives new messages
+  ✓ a vanished selection falls back near where the reader was
+  ✓ nothing selected without matches
+  ✓ searched text is the rendered text, without Markdown syntax
+  ✓ link targets aren't counted
+  ✓ phrases match across styled words
+  ✓ one text per view, with list markers, split at quotes and rules
+  ✓ tables are searched cell by cell, padded to the header
+  ✓ soft line breaks are drawn as line separators
+  ✓ SVG source (shown as an image) is skipped; code and table cells are counted (got 2)
+  ✓ code fence languages aren't searched
+  ✓ list numbers are searched as drawn
+  ✓ quick source check doesn't drop partial words
+Command palette
+  ✓ history starts empty
+  ✓ revisiting the current chat isn't recorded
+  ✓ visits build the back stack; recent is newest first
+  ✓ back moves to the previous chat
+  ✓ back stops at the first chat
+  ✓ forward retraces
+  ✓ a new visit clears forward
+  ✓ back stack is capped at the limit
+  ✓ back skips chats that no longer exist
+  ✓ recent drops the current chat and duplicates (["x"])
+  ✓ prune drops removed chats
+  ✓ empty query matches
+  ✓ non-matching query rejected
+  ✓ case-insensitive
+  ✓ diacritic-insensitive
+  ✓ in-order subsequence only
+  ✓ substring beats subsequence
+  ✓ prefix beats mid-word
+  ✓ empty query keeps order
+  ✓ filters by title
+  ✓ matches keywords
+  ✓ every word must match
+  ✓ best match first
+  ✓ exact title outranks a later match
+Composer drafts
+  ✓ new chats start with an empty draft
+  ✓ switching chats keeps each chat's draft
+  ✓ drafts are per chat
+  ✓ drafts are saved without an explicit flush
+  ✓ draft text survives relaunch
+  ✓ pending attachments survive relaunch (bytes, names, ids)
+  ✓ other chat's draft restored separately
+  ✓ removed attachment's file is deleted (["94F046D1-D960-4E5D-80D5-CA83B65476A4.bin", "draft.json"])
+  ✓ an empty draft removes its folder
+  ✓ a sent draft doesn't come back after relaunch
+  ✓ a draft started before restore isn't overwritten
+  ✓ latest draft is the one on disk
+  ✓ last of many quick edits is saved (got edit 20)
+  ✓ all drafts cleared
+Message search
+  ✓ query words become folded, quoted prefixes
+  ✓ too short or no words: nothing to search
+  ✓ one-letter words are dropped
+  ✓ FTS syntax typed is quoted as words ("foo"* "and"* "bar"* "near"*)
+  ✓ documents: a user message and an assistant turn's two texts (got 3)
+  ✓ user message document keeps via
+  ✓ assistant texts are sections of the turn's entry
+  ✓ each assistant text has its own timestamp
+  ✓ document match is Find's
+  ✓ thinking, tools, markers and pending messages aren't indexed
+  ✓ link target alone doesn't verify
+  ✓ phrase verifies across styling
+  ✓ punctuation breaks a phrase
+  ✓ verification ignores case and accents
+  ✓ verified hits are exactly the messages Find in Chat matches
+  ✓ snippet highlights are UTF-16 ranges ([{3, 7}, {20, 7}])
+  ✓ far match: leading … and the match in view
+  ✓ snippet respects the length cap (140)
+  ✓ snippet collapses newlines and spaces ("line one line two • item three code block")
+  ✓ custom cap, match at the start keeps no leading …
+  ✓ cuts never split a surrogate pair
+  ✓ chats ordered by newest hit; keys not allowed dropped
+  ✓ 3 per chat, the 4th sets hasMore
+  ✓ undated hits sort last
+  ✓ exactly 3 hits: no More
+  ✓ maxChats caps the chats
+  ✓ collect verifies, caps and drops other chats
+  ✓ today: the time (9:05 AM)
+  ✓ this week: the weekday (Thursday)
+  ✓ a week ago: the date (Sep 19)
+  ✓ this year: month and day (Mar 4)
+  ✓ older: with the year (Mar 4, 2025)
+  ✓ the preferred match wins over the latest
+  ✓ the preferred match wins over the previous selection
+  ✓ a missing preferred match falls back to the usual rules
+  ✓ messageMatchCount counts rendered occurrences
+Message index
+  ✓ saved transcript is searchable (accents folded)
+  ✓ case and accents are ignored
+  ✓ thinking and link targets don't match
+  ✓ a verified hit is the match Find reports
+  ✓ index file sits next to the transcripts
+  ✓ removing the gateway deletes its index
+  ✓ search after removal is empty
+  ✓ status is ready with a cache
+  ✓ saved text is found
+  ✓ CAFE finds café and Café, newest first
+  ✓ cafe finds Café
+  ✓ a word's start matches
+  ✓ a word's middle doesn't
+  ✓ words out of order don't match a phrase
+  ✓ the phrase does
+  ✓ one letter searches nothing
+  ✓ FTS syntax in a query is harmless
+  ✓ index intact after a hostile query
+  ✓ an appended message is found
+  ✓ a replaced message stops matching its old text
+  ✓ saving an unchanged transcript rewrites no rows ([3, 4, 8])
+  ✓ isIndexed
+  ✓ an older snapshot than the one indexed is ignored
+  ✓ the FTS table has no leftover terms for replaced text
+  ✓ FTS integrity-check passes after updates
+  ✓ gateways have separate indexes
+  ✓ one index file per gateway
+  ✓ removeAll deletes the index; searching after is empty
+  ✓ saving after removeAll rebuilds the index
+  ✓ a garbage index file is rebuilt
+  ✓ an index with a lower user_version is rebuilt (2005)
+  ✓ a corrupted index is refilled by reconcile
+  ✓ cache files written without indexing
+  ✓ reconcile indexes cached transcripts
+  ✓ reconcile reports progress ([PincerKit.MessageIndex.Status.building(done: 0, total: 2), PincerKit.MessageIndex.Status.building(done: 1, total: 2), PincerKit.MessageIndex.Status.ready])
+  ✓ reconcile skips chats already indexed
+  ✓ back-to-back searches: the latest wins (round 0)
+  ✓ back-to-back searches: the latest wins (round 1)
+  ✓ back-to-back searches: the latest wins (round 2)
+  ✓ back-to-back searches: the latest wins (round 3)
+  ✓ back-to-back searches: the latest wins (round 4)
+  ✓ cancelling one search doesn't interrupt another (5/5 survived)
+  ✓ interrupting a search leaves the index intact
+  ✓ perf smoke: 2 × 5k messages saved and indexed in 386 ms
+  ✓ perf smoke: selective query results
+  ✓ perf smoke: selective query, slowest of 5: 2 ms
+  ✓ cancelling one search doesn't interrupt another, larger index (5/5 survived)
+  ✓ perf smoke: append to a 5k chat saved and indexed in 108 ms
+  ✓ cache off: index unavailable, search empty
+  ✓ cache off: the gateway reports search unavailable
+  ✓ cache off: searchMessages is empty, not failed
+  ✓ cache off: no files written
+Message search in the palette
+  ✓ rows: header, messages, More; unique ids
+  ✓ all in the Messages section
+  ✓ headers: chat title, archived marked, not selectable
+  ✓ rows: sender, snippet, date
+  ✓ rows: date label (9:05 AM)
+  ✓ a row opens its chat at its match
+  ✓ More opens Find in the chat
+  ✓ no results, no rows
+  ✓ Search Messages needs 2 characters
+  ✓ Search Messages for “q”
+  ✓ Search Messages right after the chats
+  ✓ first when no chat matches
+  ✓ alone when nothing matches
+  ✓ not without a gateway or with a 1-character query
+Context usage
+  ✓ usage from row (Optional(PincerKit.ContextUsage(used: 172000, limit: 200000, isApproximate: false, isPromptBudget: false)))
+  ✓ usage labels
+  ✓ last run in/out tokens
+  ✓ stale totals are approximate and never warn
+  ✓ prompt budget preferred over the window
+  ✓ fallback limit when the row has none
+  ✓ no snapshot, no meter
+  ✓ warning at 85%, critical at 95%
+  ✓ overflow clamps
+  ✓ token formatting
+  ✓ model context cap prefers contextTokens
+  ✓ compaction messages
+Quick Capture
+  ✓ default shortcut is ⌃⇧Space (⌃⇧Space)
+  ✓ modifiers show in Apple order (⌃⌥⇧⌘K)
+  ✓ shortcut storage round-trips (40:control,option,shift,command)
+  ✓ shortcut validation
+  ✓ Quick Capture starts on with the default
+  ✓ turning it off keeps the combo
+  ✓ reset restores the default
+  ✓ last target storage round-trips
+  ✓ Return, Tab, arrows and F-keys have readable names
+  ✓ Carbon modifiers round-trip
+  ✓ a modifier key on its own isn't a shortcut
+  ✓ NSEvent flags map to modifiers, ignoring caps lock
+  ✓ shortcut storage rejects unknown modifiers and bad key codes
+  ✓ ⌃⌥Space and ⌘Q are taken; F-keys, ⌃⌥⌘N and the default are fine
+  ✓ an unreadable stored shortcut loads the default
+  ✓ turning it off is saved
+  ✓ turning it back on restores the recorded combo
+  ✓ reset turns it back on with the default
+  ✓ last target can be cleared
+  ✓ target storage is <gateway>|<share target> (C053B59E-302E-47E9-A93C-1BC79842BB58|chat:agent:main:dashboard:trip)
+  ✓ only chat targets have a session key
+  ✓ palette items map to targets
+  ✓ helper runs, automations, slash-command sessions and archived chats aren't targets
+  ✓ disabled rows say why
+  ✓ the draft's target comes first
+  ✓ then the last target
+  ✓ a last target on a removed Gateway is skipped for the current chat
+  ✓ then the selected Gateway's share default
+  ✓ an unknown Gateway resolves to nothing
+  ✓ a Gateway that isn't connected offers no New Chat items
+Menu bar inbox
+  ✓ needs you: approvals, then questions, expired left out (["Approve: rm -rf ./build — Main · Forge", "Question: What do you want removed? — 🦞 Asked · Claw"])
+  ✓ running and unread deduped, subagent and archived rows left out
+  ✓ menu bar counts include deduped chats
+  ✓ rows open their chat
+  ✓ caps of 5 and 8 with overflow; gateway named with several
+  ✓ a gateway that isn't connected only shows its status
+  ✓ caught up only with a connected gateway
+  ✓ gateway status wording
+  ✓ the menu bar item starts off
+  ✓ turning it on is saved
+  ✓ badge caps at 99+, text cut at 40
+Open at Login
+  ✓ notRegistered with failure none maps to the right toggle and footer
+  ✓ notRegistered with failure register maps to the right toggle and footer
+  ✓ notRegistered with failure unregister maps to the right toggle and footer
+  ✓ enabled with failure none maps to the right toggle and footer
+  ✓ enabled with failure register maps to the right toggle and footer
+  ✓ enabled with failure unregister maps to the right toggle and footer
+  ✓ requiresApproval with failure none maps to the right toggle and footer
+  ✓ requiresApproval with failure register maps to the right toggle and footer
+  ✓ requiresApproval with failure unregister maps to the right toggle and footer
+  ✓ notFound with failure none maps to the right toggle and footer
+  ✓ notFound with failure register maps to the right toggle and footer
+  ✓ notFound with failure unregister maps to the right toggle and footer
+  ✓ every footer points at Login Items
+Share extension
+  ✓ default upload limits
+  ✓ limits stay under 70% of maxPayload
+  ✓ chat.send params for an agent-scoped key
+  ✓ chat.send attachment shape
+  ✓ agentId sent for keys without an agent
+  ✓ note, then text, then links (got "summarize this\n\nGreat read\n\nhttps://example.com/article\nhttps://example.com/b")
+  ✓ links already in the text aren't repeated
+  ✓ links already in the note aren't repeated
+  ✓ duplicate text collapses
+  ✓ empty share
+  ✓ test image is small on disk (36256 bytes)
+  ✓ fitting files attached (got ["photo.png", "report.pdf", "bl
