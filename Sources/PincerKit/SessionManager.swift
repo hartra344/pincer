@@ -522,7 +522,9 @@ public final class SessionManagerModel {
 
     private func rows(for keys: some Collection<String>) -> [SessionRow] {
         let wanted = Set(keys)
-        return self.rows.filter { wanted.contains($0.key) }
+        let listed = self.rows.filter { wanted.contains($0.key) }
+        let listedKeys = Set(listed.map(\.key))
+        return listed + wanted.subtracting(listedKeys).sorted().compactMap { self.details[$0] }
     }
 
     /// Loads `sessions.list` for `filter`.

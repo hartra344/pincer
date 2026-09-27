@@ -509,6 +509,7 @@ await checkGatewayLogsModel()
 await checkExecPolicy()
 await checkAgentManagement()
 await checkSkillsTools()
+await checkSessionManager()
 print("Pairing requests")
 await checkPairingInboxModel()
 await checkGatewayHealth()
@@ -3287,6 +3288,7 @@ func runDemo() async {
     await runDemoExecPolicy(gateway, chat: chat)
     await runDemoAgents(gateway)
     await runDemoSkills(gateway)
+    await runDemoSessions(gateway)
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
     let pairing = gateway.pairingInbox
@@ -4623,6 +4625,7 @@ func runLive(url: String, token: String) async {
     await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
     await runLiveAgents(profile: profile, gateway: gateway, admin: admin)
     await runLiveSkills(profile: profile, admin: admin)
+    await runLiveSessions(profile: profile, gateway: gateway, admin: admin)
 
     // Gateway Logs after Pairing Requests, whose seeded request expires minutes after the mock starts.
     await checkGatewayLogsLive(admin)
