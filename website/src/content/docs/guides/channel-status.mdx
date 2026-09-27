@@ -28,7 +28,7 @@ Accounts are grouped by channel. Each one shows its state, its last error if it 
 | **Not Configured** | It's missing settings it needs. Add them on the **Channels** settings page. |
 | **Disabled** | It's turned off in the gateway's config. |
 
-If no channel is set up yet, the page says **No Channels** with **Open Channels Settings**. If your gateway doesn't report channel status, the page says **Unavailable on this Gateway** and shows the channels from Health, read-only. While Pincer isn't connected, it shows the last list it had, dimmed.
+Channels are optional: Pincer talks to your agents directly. If none is set up, the page just says **No Channels** (with **Open Channels Settings**); it's never flagged as a problem. If your gateway doesn't report channel status, the page says **Unavailable on this Gateway** and shows the channels from Health, read-only. While Pincer isn't connected, it shows the last list it had, dimmed.
 
 At the bottom, **Approving new senders? See Pairing Requests.** opens [Pairing Requests](../gateway-settings/#pairing-requests).
 
@@ -66,8 +66,6 @@ For channels that log in with a QR code, like WhatsApp:
 
 Choose **Cancel** to stop waiting. If linking fails, the sheet says why and offers **Try Again**.
 
-The [setup wizard](../../getting-started/setup-wizard/)'s Channels step uses the same QR linking.
-
 ## Reconnecting from Health
 
 A channel account that isn't running, isn't connected or reported an error shows up as an issue on the [Health page](../gateway-health/). Its context menu has:
@@ -84,4 +82,4 @@ The [demo](../../getting-started/try-the-demo/) has a connected Discord account,
 - Channel Status has been tested against the demo and the [mock gateway](../../development/mock-gateway/) only.
 - The gateway has no channel-specific event, so the page updates on health changes, when it opens and when you refresh.
 - Some channels can't be started or logged out at runtime. Pincer only finds out when the gateway says so, then hides that action.
-- Adding a channel account is done on the **Channels** settings page or in the setup wizard.
+- Adding a channel account is done on the **Channels** settings page.

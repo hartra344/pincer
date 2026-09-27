@@ -20,6 +20,10 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case pairing
     /// Channel Status: each channel account's connection, and start, stop, log out, reconnect and QR login.
     case channelStatus
+    /// Devices: operator devices paired with the Gateway and devices waiting to pair (`device.pair.*`).
+    case devices
+    /// Nodes: devices that run commands for agents (`node.list`).
+    case nodes
     /// A curated page from `SettingsCatalog`, by id.
     case page(String)
     case plugins
@@ -174,6 +178,11 @@ public enum SettingsCatalog {
         SettingsDestinationMatch(destination: .execPolicy, title: "Command Policy", symbol: "lock.shield",
                                  keywords: ["command policy", "exec", "allowlist", "always allow", "approval policy",
                                             "ask", "security"]),
+        SettingsDestinationMatch(destination: .devices, title: "Devices", symbol: "laptopcomputer.and.iphone",
+                                 keywords: ["devices", "device pairing", "pair", "approve", "reject", "revoke", "remove",
+                                            "fingerprint", "paired", "operators", "access"]),
+        SettingsDestinationMatch(destination: .nodes, title: "Nodes", symbol: "cpu",
+                                 keywords: ["nodes", "node", "paired nodes", "companion", "rename", "unpair"]),
         SettingsDestinationMatch(destination: .skills, title: "Skills", symbol: "wand.and.stars",
                                  keywords: ["skills", "clawhub", "install skill", "skill", "tools", "api key"]),
     ]

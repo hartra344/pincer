@@ -354,7 +354,6 @@ private struct SetupChannelsStep: View {
                 ProgressView()
             }
             SetupLink(title: "Open Channels", symbol: "bubble.left.and.bubble.right") { self.openSettings(.page("channels")) }
-            SetupLink(title: "Open Channel Status", symbol: "antenna.radiowaves.left.and.right") { self.openSettings(.channelStatus) }
         }
     }
 }

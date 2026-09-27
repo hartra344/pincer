@@ -509,6 +509,7 @@ await checkGatewayLogsModel()
 await checkExecPolicy()
 await checkAgentManagement()
 await checkChannelStatus()
+await checkDeviceManagement()
 await checkSkillsTools()
 print("Pairing requests")
 await checkPairingInboxModel()
@@ -3289,6 +3290,7 @@ func runDemo() async {
     await checkDemoSentMessageSearch(gateway, chat)
     await runDemoExecPolicy(gateway, chat: chat)
     await runDemoAgents(gateway)
+    await runDemoDevices(gateway)
     await runDemoSkills(gateway)
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
@@ -4627,6 +4629,7 @@ func runLive(url: String, token: String) async {
     await runLiveAgents(profile: profile, gateway: gateway, admin: admin)
     // Before Health: reconnects the mock's degraded Telegram so only the failed delivery is left.
     await runLiveChannels(profile: profile, admin: admin)
+    await runLiveDevices(profile: profile, gateway: gateway, admin: admin)
     await runLiveSkills(profile: profile, admin: admin)
 
     // Gateway Logs after Pairing Requests, whose seeded request expires minutes after the mock starts.

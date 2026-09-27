@@ -150,7 +150,7 @@ struct ChannelStatusPage: View {
         ContentUnavailableView {
             Label("No Channels", systemImage: "bubble.left.and.bubble.right")
         } description: {
-            Text("Add a channel with the Setup Wizard or in Settings.")
+            Text("This Gateway has no channel accounts. Pincer talks to your agents directly, so you don't need any.")
         } actions: {
             Button("Open Channels Settings") { self.navigator.destination = .page("channels") }
         }
