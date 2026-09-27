@@ -2,9 +2,10 @@
 // `last-heartbeat`, `system-presence` and `gateway.restart.request`.
 import { ADMIN_SCOPE } from './config.mjs';
 import { channelAccountSnapshots } from './setup.mjs';
+import { resetChannelsForRestart } from './channels.mjs';
 
 function lifecycleOf(account) {
-  if (!account.enabled || !account.configured) return 'stopped';
+  if (!account.enabled || !account.configured || !account.running) return 'stopped';
   return account.connected ? 'ready' : 'recovering';
 }
 
@@ -69,11 +70,12 @@ export function healthSummary(state) {
     durationMs: 12,
     channels: {
       discord: channel('discord', accounts.discord),
+      telegram: channel('telegram', accounts.telegram),
       whatsapp: channel('whatsapp', accounts.whatsapp),
       slack: { ...accounts.slack },
     },
-    channelOrder: ['discord', 'whatsapp', 'slack'],
-    channelLabels: { discord: 'Discord', whatsapp: 'WhatsApp', slack: 'Slack' },
+    channelOrder: ['discord', 'telegram', 'whatsapp', 'slack'],
+    channelLabels: { discord: 'Discord', telegram: 'Telegram', whatsapp: 'WhatsApp', slack: 'Slack' },
     heartbeatSeconds: 1800,
     defaultAgentId: 'main',
     agents: [...state.agents.values()].map((agent) => ({
@@ -83,7 +85,7 @@ export function healthSummary(state) {
       heartbeat: { enabled: agent.id === 'main', every: '30m', everyMs: 1_800_000 },
     })),
     sessions: { count: state.sessions.size, recent: [] },
-    plugins: { loaded: ['discord', 'whatsapp', 'memory-core'], errors: [], unavailable: [] },
+    plugins: { loaded: ['discord', 'telegram', 'whatsapp', 'memory-core'], errors: [], unavailable: [] },
     deliveryQueues: { failed: state.healthState.failedDelivery ? [{ ...state.healthState.failedDelivery }] : [] },
     contextEngines: { quarantined: [] },
     modelPricing: { state: 'ok', sources: [] },
@@ -191,6 +193,7 @@ function performRestart(state, broadcast, reason, abortRun) {
   hs.restartCount += 1;
   hs.restartingUntil = Date.now() + RESTART_EXPECTED_MS;
   hs.startedAt = hs.restartingUntil;
+  resetChannelsForRestart(state);
   broadcast(state, 'shutdown', { reason: reason ?? 'gateway restart', restartExpectedMs: RESTART_EXPECTED_MS });
   // A restart kills whatever was still running.
   for (const run of [...state.activeRuns.values()]) abortRun?.(state, run);

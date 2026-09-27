@@ -36,7 +36,7 @@ A healthy gateway shows nothing there.
   - a quarantined context engine;
   - a failed heartbeat, or one that's more than twice its interval late while heartbeats are on.
 - **Dismissed:** issues you [dismissed](#dismissing-issues), collapsed until you open it.
-- **Channels:** each channel with its status (Connected, Stopped, Error…) and its last error.
+- **Channels:** each channel with its status (Connected, Degraded, Stopped…) and its last error. Status labels match [Channel Status](../channel-status/); Control-click or touch and hold a channel and choose **Show in Channel Status** to manage it.
 - **Connected Clients:** the apps and nodes connected to the gateway right now, with their platform, role and last activity. **This device** is marked.
 
 The page updates live from the gateway's events and refreshes every 30 seconds while it's open. Use **Refresh** in the toolbar, or pull down on iOS, to refresh now.
@@ -78,7 +78,7 @@ Open **Dismissed**, then choose **Restore** from the context menu (swipe on iOS,
 
 ### Fixing instead
 
-For channel, plugin and context engine issues, the context menu also has **Restart Gateway…** (with Full Management), which often fixes them. There's no way to retry or clear failed deliveries from Pincer yet: the gateway doesn't offer a method for it. That needs an upstream OpenClaw change; until then, dismiss the issue.
+For a channel account issue, the context menu has **Reconnect Account** (with Full Management; on iOS also a swipe right, and in the VoiceOver actions rotor), which stops and starts just that account; the issue clears once the refresh shows it working. For a logged-out WhatsApp or Zalo account it has **Link with QR Code…** instead, which opens the QR code in a sheet. Without Full Management these show as locked. **Show in Channel Status** opens the account on the [Channel Status](../channel-status/) page. For channel, plugin and context engine issues, the context menu also has **Restart Gateway…** (with Full Management), which often fixes them. There's no way to retry or clear failed deliveries from Pincer yet: the gateway doesn't offer a method for it. That needs an upstream OpenClaw change; until then, dismiss the issue.
 
 ### Syncing
 

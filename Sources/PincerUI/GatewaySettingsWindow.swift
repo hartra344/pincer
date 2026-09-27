@@ -245,6 +245,7 @@ private struct GatewaySettingsRoot: View {
         case .skills: SkillsPage()
         case .usage: UsagePage()
         case .pairing: PairingRequestsPage()
+        case .channelStatus: ChannelStatusPage()
         case .devices: DevicesPage()
         case .nodes: NodesPage()
         case let .page(id):
@@ -362,6 +363,8 @@ private struct SettingsSidebar: View {
                     self.row("Overview", symbol: "info.circle", .overview)
                     self.row("Health", symbol: "heart.text.square", .health,
                              attention: self.gateway.health.level == .degraded || self.gateway.health.needsRestart)
+                    self.row("Channel Status", symbol: "antenna.radiowaves.left.and.right", .channelStatus,
+                             attention: self.gateway.health.hasChannelAccountIssues)
                     self.row("Approval History", symbol: "checkmark.shield", .approvals)
                     self.row("Gateway Logs", symbol: "doc.text.magnifyingglass", .logs)
                     self.row("Command Policy", symbol: "lock.shield", .execPolicy,

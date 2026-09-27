@@ -166,6 +166,19 @@ public struct HotKeyShortcut: Codable, Hashable, Sendable {
     }
 }
 
+// MARK: Composer Return
+
+/// What Return does in a composer, given the held modifiers.
+public enum ComposerReturnAction: Equatable, Sendable {
+    case newline, send, sendAndOpen
+
+    /// Shift/Option insert a newline; Command sends and opens when the composer supports it, else plain send.
+    public static func resolve(shift: Bool, option: Bool, command: Bool, supportsSendAndOpen: Bool) -> ComposerReturnAction {
+        if shift || option { return .newline }
+        return command && supportsSendAndOpen ? .sendAndOpen : .send
+    }
+}
+
 // MARK: Settings
 
 /// The Quick Capture shortcut and last target, in the app's own defaults (the extensions don't
