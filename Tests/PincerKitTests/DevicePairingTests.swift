@@ -117,7 +117,7 @@ struct DeviceRecordTests {
         #expect(request.requestsNodeRole)
         #expect(request.requestedAt == DeviceFixtures.now.addingTimeInterval(-120))
         #expect(request.title == "Travis’s iPad")
-        #expect(request.subtitle == "iPad · ios · 192.168.1.42")
+        #expect(request.subtitle == "iPadOS · OpenClaw app")
         #expect(request.clientMode == "ui" && request.remoteIp == "192.168.1.42" && request.publicKey == "pk")
     }
 
@@ -211,7 +211,7 @@ struct DeviceManagementModelTests {
         #expect(fake.calls.count == 1 && fake.calls[0].method == "device.pair.list" && fake.calls[0].params == [:])
         #expect(model.hasLoaded && model.loadState == .idle)
         #expect(model.pending.map(\.requestId) == ["new", "old"], "newest first, duplicates and broken rows dropped")
-        #expect(model.paired.map(\.title) == ["Me", "Connected", "Offline recent", "Offline old"])
+        #expect(model.paired.map(\.title) == ["Me", "Connected", "Offline old", "Offline recent"], "this device first, then by name")
         #expect(model.isSelf(model.paired[0]) && !model.isSelf(model.paired[1]))
         #expect(model.pendingCount == 2)
     }
@@ -481,7 +481,7 @@ struct DemoDeviceSeedTests {
         let paired = DemoGateway.seedPairedDevices(now: now).compactMap(PairedDevice.init)
         let nodes = DemoGateway.seedNodes(now: now).compactMap(GatewayNode.init)
         #expect(pending.count == DemoGateway.seedPendingDevices(now: now).count && pending.count == 2)
-        #expect(paired.count == DemoGateway.seedPairedDevices(now: now).count && paired.count >= 4)
+        #expect(paired.count == DemoGateway.seedPairedDevices(now: now).count && paired.count == 3)
         #expect(nodes.count == 2)
 
         let ipad = try #require(pending.first { !$0.isRepair })
@@ -495,7 +495,11 @@ struct DemoDeviceSeedTests {
         #expect(me.connected && me.scopes.contains(GatewayConnection.adminScope) && me.clientId == GatewayConnection.clientId)
         #expect(Set(paired.map(\.deviceId)).count == paired.count && Set(pending.map(\.requestId)).count == pending.count)
         #expect(paired.filter { !$0.connected }.allSatisfy { $0.lastSeenAt.map { $0 < now } ?? false }, "offline devices were seen before")
-        #expect(paired.contains { $0.clientMode == "cli" } && paired.contains { $0.isNode && $0.roles.contains("operator") })
+        #expect(paired.map(\.title).sorted() == ["Pixel 9", "Studio MacBook Pro", me.title].sorted())
+        let studio = try #require(paired.first { $0.title == "Studio MacBook Pro" })
+        #expect(studio.clientId == "cli" && abs((studio.lastSeenAt ?? .distantPast).timeIntervalSince(now) + 3 * 3600) < 1)
+        let pixel = try #require(paired.first { $0.title == "Pixel 9" })
+        #expect(pixel.isNode && pixel.roles.contains("operator") && abs((pixel.lastSeenAt ?? .distantPast).timeIntervalSince(now) + 2 * 86400) < 1)
         #expect(paired.allSatisfy { !$0.tokens.isEmpty && $0.approvedAt != nil })
 
         // Every seeded key hashes to its device id, like the Gateway's (Pincer's own id is the demo's constant).
@@ -506,7 +510,7 @@ struct DemoDeviceSeedTests {
         }
 
         let pairedIds = Set(paired.map(\.deviceId))
-        #expect(nodes.allSatisfy { pairedIds.contains($0.nodeId) }, "nodes are paired devices")
+        #expect(nodes.first { $0.title == "Pixel 9" }.map { pairedIds.contains($0.nodeId) } == true, "the Pixel node is a paired device")
         #expect(nodes.filter(\.connected).map(\.title) == ["Mac mini (home)"] && nodes.contains { !$0.connected && $0.title == "Pixel 9" })
         #expect(nodes.allSatisfy { $0.version != nil && !$0.caps.isEmpty && $0.approvalState == "approved" })
     }

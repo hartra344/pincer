@@ -4,13 +4,12 @@ import Foundation
 /// Owned by the tester; the handlers live in DemoGateway+DevicePairing.swift.
 ///
 /// Pending: a brand-new iPad and a scope upgrade (the Studio MacBook Pro's CLI asking for
-/// `operator.admin`). Paired: Pincer itself (connected, `DemoGateway.deviceId`), the owner's other
-/// Pincer device, the Studio MacBook Pro CLI, a Pixel 9 that's also a node, and the Mac mini node host.
-/// Nodes: the Mac mini (connected) and the Pixel (offline). Device ids are the hex SHA-256 of the
-/// public key, like the Gateway's (except Pincer's own, which is `DemoGateway.deviceId`).
+/// `operator.admin`). Paired: Pincer itself (connected, `DemoGateway.deviceId`), the Studio MacBook
+/// Pro CLI (seen 3 h ago) and a Pixel 9 that's also a node (seen 2 d ago). Nodes: the Mac mini
+/// (connected) and the Pixel (offline). Device ids are the hex SHA-256 of the public key, like the
+/// Gateway's (except Pincer's own, which is `DemoGateway.deviceId`).
 extension DemoGateway {
     static let demoStudioDeviceId = "aa0a1b5c1530dc5c7ec20e0641e5ee33ecbe1c9a85dea543b1fcbb80ef1b0282"
-    static let demoCompanionDeviceId = "aa721710c215010b48f1fd9ccd493a8399e6cb177e65674e03eda34faf3f6061"
     static let demoPixelDeviceId = "8f8305ee22fcb175207541bacdbbf1bf5dfcebc3fa5c764ef15c53a204fe5a17"
     static let demoMacMiniDeviceId = "38e20cce67628990f4c584acf43206f4f7e9ff2ea3817df3d44754c96c4d9438"
     static let demoIPadDeviceId = "971eb0348e5329977dd18c02ba95a9632f2676f809533a76a0822e44eb423cf1"
@@ -23,13 +22,6 @@ extension DemoGateway {
     private static let day: TimeInterval = 86400
 
     private static let studioScopes = ["operator.read", "operator.write", "operator.approvals", "operator.pairing"]
-
-    /// Pincer's other half: the iPhone when the demo runs on a Mac, the Mac on an iPhone/iPad.
-    private static var companion: (name: String, clientId: String, platform: String, family: String) {
-        GatewayConnection.platform == "ios"
-            ? ("Travis’s MacBook Pro", "openclaw-macos", "macos", "Mac")
-            : ("Travis’s iPhone", "openclaw-ios", "ios", "iPhone")
-    }
 
     private static var selfName: String {
         GatewayConnection.platform == "ios" ? "Travis’s iPhone" : "Travis’s MacBook Pro"
@@ -64,7 +56,6 @@ extension DemoGateway {
     /// `device.pair.list` `paired[]`, including Pincer's own device (`DemoGateway.deviceId`).
     static func seedPairedDevices(now: Date = Date()) -> [JSONValue] {
         let selfScopes = GatewayConnection.scopes + [PairingInboxModel.pairingScope, GatewayConnection.adminScope]
-        let companion = Self.companion
         return [
             Self.paired(
                 deviceId: Self.deviceId, publicKey: "MjvLK1rwG2gsY2fajuW0bicAn_60l-u8oeFy8hT4Rjo",
@@ -72,12 +63,6 @@ extension DemoGateway {
                 clientId: GatewayConnection.clientId, mode: "ui", roles: ["operator"], scopes: selfScopes,
                 remoteIp: "192.168.1.18", approvedVia: "owner", connected: true,
                 approvedAt: Self.ago(now, 30 * Self.day), lastSeenAt: Self.ms(now)),
-            Self.paired(
-                deviceId: Self.demoCompanionDeviceId, publicKey: "5dmNgMqQ_DacXiN7bkdSWrPYtCJ_5qWJwdBSyhvXfMM",
-                name: companion.name, platform: companion.platform, family: companion.family,
-                clientId: companion.clientId, mode: "ui", roles: ["operator"], scopes: GatewayConnection.scopes,
-                remoteIp: "100.101.7.23", approvedVia: "owner", connected: false,
-                approvedAt: Self.ago(now, 21 * Self.day), lastSeenAt: Self.ago(now, 20 * 60)),
             Self.paired(
                 deviceId: Self.demoStudioDeviceId, publicKey: "LjriRfo5ljbrSOQ1Vu22__8prJRD_RTwaNPhMb1P4Ts",
                 name: "Studio MacBook Pro", platform: "darwin", family: "Mac",
@@ -91,12 +76,6 @@ extension DemoGateway {
                 scopes: ["operator.read", "operator.write"],
                 remoteIp: "100.84.12.7", approvedVia: "owner", connected: false,
                 approvedAt: Self.ago(now, 12 * Self.day), lastSeenAt: Self.ago(now, 2 * Self.day)),
-            Self.paired(
-                deviceId: Self.demoMacMiniDeviceId, publicKey: "JHvgkGK84Usz9Jr7JUFhxleKC00rLq5iA-rjS45r9uY",
-                name: "Mac mini (home)", platform: "darwin", family: "Mac",
-                clientId: "node-host", mode: "node", roles: ["node"], scopes: [],
-                remoteIp: "192.168.1.10", approvedVia: "owner", connected: true,
-                approvedAt: Self.ago(now, 90 * Self.day), lastSeenAt: Self.ago(now, 60)),
         ]
     }
 

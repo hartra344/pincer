@@ -74,8 +74,9 @@ public struct PendingDeviceRequest: Identifiable, Hashable, Sendable {
     /// Node-role devices can run commands for agents; approving them needs Full Management.
     public var requestsNodeRole: Bool { self.roles.contains { $0 != "operator" } }
     /// "iPhone · ios · 192.168.1.20".
+    /// "iPadOS · OpenClaw app".
     public var subtitle: String {
-        [self.deviceFamily, self.platform, self.remoteIp].compactMap(\.self).joined(separator: " · ")
+        DeviceLabels.summary(platform: self.platform, family: self.deviceFamily, clientId: self.clientId, mode: self.clientMode)
     }
 }
 
@@ -85,7 +86,7 @@ public struct PairedDevice: Identifiable, Hashable, Sendable {
     public let publicKey: String?
     public let displayName: String?
     /// A name an operator gave it (`device.pair.rename`); shown instead of `displayName`.
-    public let operatorLabel: String?
+    public internal(set) var operatorLabel: String?
     public let platform: String?
     public let deviceFamily: String?
     public let clientId: String?
@@ -136,8 +137,9 @@ public struct PairedDevice: Identifiable, Hashable, Sendable {
     public var isNode: Bool { self.roles.contains("node") }
 
     /// "Mac · macos · 10.0.0.4".
+    /// "macOS · OpenClaw CLI".
     public var subtitle: String {
-        [self.deviceFamily, self.platform, self.remoteIp].compactMap(\.self).joined(separator: " · ")
+        DeviceLabels.summary(platform: self.platform, family: self.deviceFamily, clientId: self.clientId, mode: self.clientMode)
     }
 
     /// Scopes of the live (unrevoked) tokens, else the approved `scopes`.
@@ -170,7 +172,7 @@ public struct PairedDevice: Identifiable, Hashable, Sendable {
 /// A node known to the Gateway (`node.list` `nodes[]`): a device that runs commands for agents.
 public struct GatewayNode: Identifiable, Hashable, Sendable {
     public let nodeId: String
-    public let displayName: String?
+    public internal(set) var displayName: String?
     public let platform: String?
     public let version: String?
     public let deviceFamily: String?
@@ -244,8 +246,49 @@ public enum DeviceFingerprint {
     /// The first 8 hex digits.
     public static func short(_ deviceId: String) -> String { String(deviceId.lowercased().prefix(8)) }
 
+    /// "a1b2c3d4…9f0e": the first 8 and last 4 hex digits, for rows.
+    public static func compact(_ deviceId: String) -> String {
+        let hex = deviceId.lowercased()
+        guard hex.count > 12 else { return hex }
+        return "\(hex.prefix(8))…\(hex.suffix(4))"
+    }
+
     /// "just now", "5 min ago".
     public static func ago(_ date: Date, now: Date) -> String { PairingRequest.ago(date, now: now) }
+}
+
+/// Friendly names for the platform and client fields of pairing records.
+public enum DeviceLabels {
+    /// "macOS", "iPadOS", "iOS", "Android"…; nil when unknown.
+    public static func platform(_ platform: String?, family: String?) -> String? {
+        let raw = (platform ?? "").lowercased()
+        let family = family?.lowercased() ?? ""
+        switch raw {
+        case "macos", "darwin", "mac": return "macOS"
+        case "ios", "ipados": return family == "ipad" || raw == "ipados" ? "iPadOS" : "iOS"
+        case "android": return "Android"
+        case "linux": return "Linux"
+        case "windows", "win32": return "Windows"
+        case "": return family.isEmpty ? nil : (family == "mac" ? "macOS" : family == "ipad" ? "iPadOS" : family == "iphone" ? "iOS" : nil)
+        default: return platform
+        }
+    }
+
+    /// "OpenClaw CLI", "OpenClaw app", "Control UI", "Node host"; the raw client id otherwise.
+    public static func client(_ clientId: String?, mode: String?) -> String? {
+        guard let clientId, !clientId.isEmpty else { return nil }
+        switch clientId {
+        case "cli", "openclaw-cli": return "OpenClaw CLI"
+        case "openclaw-ios", "openclaw-macos", "openclaw-android": return mode == "node" ? "OpenClaw node" : "OpenClaw app"
+        case "openclaw-control-ui", "webchat", "webchat-ui": return "Control UI"
+        case "node-host": return "Node host"
+        default: return clientId
+        }
+    }
+
+    static func summary(platform: String?, family: String?, clientId: String?, mode: String?) -> String {
+        [Self.platform(platform, family: family), Self.client(clientId, mode: mode)].compactMap(\.self).joined(separator: " · ")
+    }
 }
 
 enum DeviceRecords {
@@ -509,11 +552,9 @@ public final class DeviceManagementModel {
         devices.sorted { lhs, rhs in
             let lhsSelf = self.isSelf(lhs), rhsSelf = self.isSelf(rhs)
             if lhsSelf != rhsSelf { return lhsSelf }
-            if lhs.connected != rhs.connected { return lhs.connected }
-            let lhsActive = lhs.lastActive ?? lhs.approvedAt ?? .distantPast
-            let rhsActive = rhs.lastActive ?? rhs.approvedAt ?? .distantPast
-            if lhsActive != rhsActive { return lhsActive > rhsActive }
-            return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+            let order = lhs.title.localizedStandardCompare(rhs.title)
+            if order != .orderedSame { return order == .orderedAscending }
+            return lhs.deviceId < rhs.deviceId
         }
     }
 
@@ -659,8 +700,12 @@ public final class DeviceManagementModel {
         }
         self.operations[key] = .running
         do {
-            _ = try await self.request(Self.renameMethod, ["deviceId": .string(device.deviceId), "label": .string(trimmed)])
+            let result = try await self.request(Self.renameMethod, ["deviceId": .string(device.deviceId), "label": .string(trimmed)])
             self.operations[key] = nil
+            // The `device.pair.changed` reload can supersede the load below, so show the new name now.
+            if let index = self.paired.firstIndex(where: { $0.deviceId == device.deviceId }) {
+                self.paired[index].operatorLabel = result["label"]?.text ?? trimmed
+            }
             await self.load()
             return true
         } catch let error where GatewayConfigClient.isUnknownMethod(error) {
@@ -680,8 +725,11 @@ public final class DeviceManagementModel {
         guard self.canRenameNodes, !trimmed.isEmpty, self.operations[key]?.isRunning != true else { return false }
         self.operations[key] = .running
         do {
-            _ = try await self.request(Self.nodeRenameMethod, ["nodeId": .string(node.nodeId), "displayName": .string(trimmed)])
+            let result = try await self.request(Self.nodeRenameMethod, ["nodeId": .string(node.nodeId), "displayName": .string(trimmed)])
             self.operations[key] = nil
+            if let index = self.nodes.firstIndex(where: { $0.nodeId == node.nodeId }) {
+                self.nodes[index].displayName = result["displayName"]?.text ?? trimmed
+            }
             await self.loadNodes()
             return true
         } catch let error where GatewayConfigClient.isUnknownMethod(error) {
@@ -757,19 +805,24 @@ public final class DeviceManagementModel {
 
     // MARK: Errors
 
+    public nonisolated static let needsAccessTitle = "Managing devices needs Full Management"
     public nonisolated static let needsAccessMessage =
-        "Managing devices needs Full Management. Turn it on under Connection, then approve this device on the Gateway host."
+        "You can only see this device. Turn on Full Management under Connection, then approve this device on the Gateway host."
     public nonisolated static let readOnlyMessage =
-        "Approving, rejecting and removing devices needs Full Management. Turn it on under Connection."
+        "Approving, rejecting and revoking devices needs Full Management. Turn it on under Connection."
+    public nonisolated static let unsupportedMessage = "This Gateway can't manage devices."
+    public nonisolated static let disconnectedMessage = "Connect to a Gateway to manage devices."
     public nonisolated static let staleRequestMessage = "This request was already handled or expired."
-    public nonisolated static let staleDeviceMessage = "This device was already removed."
+    public nonisolated static let staleDeviceMessage = "This device was already revoked."
     public nonisolated static let staleNodeMessage = "This node was already removed."
     public nonisolated static let labelTooLongMessage = "Names can be at most 64 characters."
     public nonisolated static let renameUnsupportedMessage = "This gateway can't rename devices. Update OpenClaw to rename them here."
     public nonisolated static let nodeUnsupportedMessage = "This gateway can't change nodes. Update OpenClaw to manage them here."
-    /// Shown before removing the device Pincer itself connects with.
-    public nonisolated static let selfRemoveWarning =
-        "This is the device Pincer is using. Removing it disconnects Pincer from this gateway right away, and it will have to be approved again on the Gateway host before it can reconnect."
+    public nonisolated static let revokeMessage = "This device will be disconnected and must pair again to reconnect."
+    /// Shown before revoking the device Pincer itself connects with.
+    public nonisolated static func selfRevokeWarning(gateway: String) -> String {
+        "This is the device Pincer is using to connect. Pincer will be disconnected from \(gateway) and can't reconnect until a new pairing request is approved on the Gateway host (`openclaw devices approve`)."
+    }
 
     static func isUnknown(_ error: Error, _ needle: String) -> Bool {
         guard case let GatewayError.rpc(code, message, _) = error, code == "INVALID_REQUEST" else { return false }

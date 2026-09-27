@@ -1,15 +1,15 @@
 import PincerKit
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
-/// Gateway Settings → Devices: operator devices paired with the Gateway and devices waiting to pair
-/// (`device.pair.*`). Listing needs `operator.pairing`; approving, rejecting, renaming and removing
-/// need Full Management. `device.pair.requested` / `resolved` / `changed` events keep it current.
+/// Gateway Settings → Devices: devices waiting to pair and devices paired with the Gateway
+/// (`device.pair.*`). Listing every device and changing them needs Full Management.
+/// `device.pair.requested` / `resolved` / `changed` events keep it current.
 struct DevicesPage: View {
     @Environment(GatewayStore.self) private var gateway
-    @Environment(SettingsNavigator.self) private var navigator
-    @State private var approving: PendingDeviceRequest?
-    @State private var rejecting: PendingDeviceRequest?
-    @State private var removing: PairedDevice?
+    @State private var revoking: PairedDevice?
     @State private var renaming: PairedDevice?
     @State private var renameText = ""
 
@@ -18,15 +18,16 @@ struct DevicesPage: View {
     var body: some View {
         let model = self.model
         let connected = self.gateway.state.isConnected
+        let gatewayName = self.gateway.profile.name
         Group {
             if !connected {
                 ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to manage its devices."))
+                                       description: Text(DeviceManagementModel.disconnectedMessage))
             } else if !model.supported {
                 ContentUnavailableView("Devices Aren't Available", systemImage: "laptopcomputer.and.iphone",
-                                       description: Text("This Gateway doesn't support device pairing. Update OpenClaw to manage devices here."))
+                                       description: Text(DeviceManagementModel.unsupportedMessage))
             } else if model.needsAccess {
-                DeviceAccessNeeded()
+                List { DeviceAccessNeeded() }
             } else {
                 self.list(model)
             }
@@ -44,32 +45,16 @@ struct DevicesPage: View {
         .task(id: connected) {
             if connected { await model.load() }
         }
-        .confirmationDialog(self.approving.map { "Approve \($0.title)?" } ?? "", isPresented: Binding(
-            get: { self.approving != nil }, set: { if !$0 { self.approving = nil } }
-        ), titleVisibility: .visible, presenting: self.approving) { request in
-            Button("Approve") { Task { await model.approve(request) } }
-            Button("Cancel", role: .cancel) {}
-        } message: { request in
-            Text(DevicesUI.approveMessage(request))
-        }
-        .confirmationDialog(self.rejecting.map { "Reject \($0.title)?" } ?? "", isPresented: Binding(
-            get: { self.rejecting != nil }, set: { if !$0 { self.rejecting = nil } }
-        ), titleVisibility: .visible, presenting: self.rejecting) { request in
-            Button("Reject", role: .destructive) { Task { await model.reject(request) } }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("The device won't be able to connect. It can ask again.")
-        }
-        .confirmationDialog(self.removing.map { model.isSelf($0) ? "Remove This Device?" : "Remove \($0.title)?" } ?? "",
-                            isPresented: Binding(get: { self.removing != nil }, set: { if !$0 { self.removing = nil } }),
-                            titleVisibility: .visible, presenting: self.removing) { device in
-            Button(model.isSelf(device) ? "Remove and Disconnect" : "Remove", role: .destructive) {
+        .confirmationDialog(self.revoking.map { model.isSelf($0) ? "Revoke this device?" : "Revoke “\($0.title)”?" } ?? "",
+                            isPresented: Binding(get: { self.revoking != nil }, set: { if !$0 { self.revoking = nil } }),
+                            titleVisibility: .visible, presenting: self.revoking) { device in
+            Button(model.isSelf(device) ? "Revoke and Disconnect" : "Revoke", role: .destructive) {
                 Task { await model.remove(device) }
             }
             Button("Cancel", role: .cancel) {}
         } message: { device in
-            Text(model.isSelf(device) ? DeviceManagementModel.selfRemoveWarning
-                : "\(device.title) loses access right away and is disconnected. To use it again, it has to pair again.")
+            Text(model.isSelf(device) ? DeviceManagementModel.selfRevokeWarning(gateway: gatewayName)
+                : DeviceManagementModel.revokeMessage)
         }
         .alert("Rename Device", isPresented: Binding(
             get: { self.renaming != nil }, set: { if !$0 { self.renaming = nil } }
@@ -89,11 +74,8 @@ struct DevicesPage: View {
 
     private func list(_ model: DeviceManagementModel) -> some View {
         List {
-            if let reason = model.readOnlyReason {
-                Section {
-                    Label(reason, systemImage: "lock").font(.callout).foregroundStyle(.secondary)
-                    Button("Open Connection") { self.navigator.destination = .connection }
-                }
+            if model.readOnlyReason != nil {
+                DeviceAccessNeeded(message: DeviceManagementModel.readOnlyMessage)
             }
             if let error = model.loadState.error, model.hasLoaded {
                 Section {
@@ -101,32 +83,33 @@ struct DevicesPage: View {
                     Button("Try Again") { Task { await model.refresh() } }
                 }
             }
-            if !model.pending.isEmpty {
+            if model.hasLoaded || !model.pending.isEmpty || !model.paired.isEmpty {
                 Section {
+                    if model.pending.isEmpty {
+                        DeviceEmptyRow(title: "No pending requests", detail: "New devices that try to connect show up here.")
+                    }
                     ForEach(model.pending) { request in
-                        PendingDeviceRow(request: request, model: model,
-                                         approve: { self.approving = request }, reject: { self.rejecting = request })
+                        PendingDeviceRow(request: request, model: model)
                     }
                 } header: {
-                    Text("Waiting for Approval")
+                    Text("Pending Requests")
                 } footer: {
-                    Text("Check the fingerprint against the device before approving: on the device, it's the device id shown while it waits.")
+                    if !model.pending.isEmpty {
+                        Text("Only approve devices you recognize. Compare the fingerprint with the one the device shows while it waits.")
+                    }
                 }
-            }
-            if !model.paired.isEmpty {
-                Section {
+                Section("Paired Devices") {
                     ForEach(model.paired) { device in
                         PairedDeviceRow(device: device, model: model,
                                         rename: {
                                             self.renameText = device.operatorLabel ?? device.displayName ?? ""
                                             self.renaming = device
                                         },
-                                        remove: { self.removing = device })
+                                        revoke: { self.revoking = device })
                     }
-                } header: {
-                    Text("Paired Devices")
-                } footer: {
-                    Text("Removing a device revokes its access and disconnects it.")
+                    if !model.paired.contains(where: { !model.isSelf($0) }) {
+                        DeviceEmptyRow(title: "No other paired devices", detail: nil)
+                    }
                 }
             }
         }
@@ -134,14 +117,7 @@ struct DevicesPage: View {
         .refreshable { await model.refresh() }
         #endif
         .overlay {
-            if model.pending.isEmpty, model.paired.isEmpty {
-                if !model.hasLoaded {
-                    ProgressView()
-                } else if model.loadState.error == nil {
-                    ContentUnavailableView("No Devices", systemImage: "laptopcomputer.and.iphone",
-                                           description: Text("Devices that pair with this gateway show up here."))
-                }
-            }
+            if !model.hasLoaded, model.pending.isEmpty, model.paired.isEmpty { ProgressView() }
         }
     }
 }
@@ -151,16 +127,14 @@ struct DevicesPage: View {
 private struct PendingDeviceRow: View {
     let request: PendingDeviceRequest
     let model: DeviceManagementModel
-    let approve: () -> Void
-    let reject: () -> Void
 
     var body: some View {
         let operation = self.model.operation(for: self.request)
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(self.request.title).font(.headline).lineLimit(1)
-                if self.request.isRepair { DeviceTag(text: "Re-pair", color: .orange) }
-                if self.model.isSelf(self.request) { DeviceTag(text: "This Device", color: .accentColor) }
+                if self.request.isRepair { DeviceTag(text: "Scope upgrade", color: .orange) }
+                if self.model.isSelf(self.request) { DeviceTag(text: DevicesUI.thisDeviceLabel, color: .accentColor) }
                 Spacer(minLength: 8)
                 #if os(macOS)
                 self.buttons(busy: operation.isRunning)
@@ -169,27 +143,26 @@ private struct PendingDeviceRow: View {
             if !self.request.subtitle.isEmpty {
                 Text(self.request.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
+            if let requestedAt = self.request.requestedAt {
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Text("Requested \(DeviceFingerprint.ago(requestedAt, now: context.date))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help(requestedAt.formatted(date: .abbreviated, time: .shortened))
+                }
+            }
             FingerprintText(deviceId: self.request.deviceId)
-            Text(DevicesUI.accessLine(roles: self.request.roles, scopes: self.request.scopes))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            AccessChips(roles: self.request.roles, scopes: self.request.scopes)
             if self.request.requestsNodeRole {
                 Label("Asks to run commands for agents (node role).", systemImage: "exclamationmark.shield")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            if let requestedAt = self.request.requestedAt {
-                TimelineView(.periodic(from: .now, by: 30)) { context in
-                    Text("Requested \(DeviceFingerprint.ago(requestedAt, now: context.date))")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .help(requestedAt.formatted(date: .abbreviated, time: .shortened))
-                }
-            }
             DisclosureGroup("Details") {
                 DeviceDetails(deviceId: self.request.deviceId, clientId: self.request.clientId,
                               clientMode: self.request.clientMode, origin: self.request.browserOrigin,
                               scopes: self.request.scopes, requestId: self.request.requestId)
+                if let ip = self.request.remoteIp { LabeledContent("Address", value: ip).font(.caption) }
             }
             .font(.caption)
             if let error = operation.error {
@@ -213,11 +186,11 @@ private struct PendingDeviceRow: View {
     @ViewBuilder private func buttons(busy: Bool) -> some View {
         if busy { ProgressView().controlSize(.small) }
         if self.model.canManage {
-            Button("Reject", action: self.reject)
+            Button("Reject", role: .destructive) { Task { await self.model.reject(self.request) } }
                 .buttonStyle(.bordered)
                 .disabled(busy)
                 .accessibilityLabel("Reject \(self.request.title)")
-            Button("Approve", action: self.approve)
+            Button("Approve") { Task { await self.model.approve(self.request) } }
                 .buttonStyle(.borderedProminent)
                 .disabled(busy)
                 .accessibilityLabel("Approve \(self.request.title)")
@@ -229,39 +202,26 @@ private struct PairedDeviceRow: View {
     let device: PairedDevice
     let model: DeviceManagementModel
     let rename: () -> Void
-    let remove: () -> Void
+    let revoke: () -> Void
 
     var body: some View {
         let operation = self.model.operation(for: self.device)
         let isSelf = self.model.isSelf(self.device)
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Circle()
-                    .fill(self.device.connected ? Color.green : Color.secondary.opacity(0.4))
-                    .frame(width: 8, height: 8)
-                    .accessibilityLabel(self.device.connected ? "Connected" : "Not connected")
                 Text(self.device.title).font(.headline).lineLimit(1)
-                if isSelf { DeviceTag(text: "This Device", color: .accentColor) }
+                if isSelf { DeviceTag(text: DevicesUI.thisDeviceLabel, color: .accentColor) }
                 if self.device.isNode { DeviceTag(text: "Node", color: .purple) }
                 Spacer(minLength: 8)
                 if operation.isRunning { ProgressView().controlSize(.small) }
-                if self.model.canManage { self.menu(busy: operation.isRunning) }
+                self.menu(busy: operation.isRunning, isSelf: isSelf)
             }
             if !self.device.subtitle.isEmpty {
                 Text(self.device.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
+            DevicePresence(connected: self.device.connected, lastSeen: self.device.lastActive)
             FingerprintText(deviceId: self.device.deviceId)
-            Text(DevicesUI.accessLine(roles: self.device.roles, scopes: self.device.effectiveScopes))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if let lastActive = self.device.lastActive, !self.device.connected {
-                TimelineView(.periodic(from: .now, by: 60)) { context in
-                    Text("Last seen \(DeviceFingerprint.ago(lastActive, now: context.date))")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .help(lastActive.formatted(date: .abbreviated, time: .shortened))
-                }
-            }
+            AccessChips(roles: self.device.roles, scopes: self.device.effectiveScopes)
             DisclosureGroup("Details") {
                 DeviceDetails(deviceId: self.device.deviceId, clientId: self.device.clientId,
                               clientMode: self.device.clientMode, origin: nil,
@@ -269,6 +229,7 @@ private struct PairedDeviceRow: View {
                 if let label = self.device.operatorLabel, let name = self.device.displayName, label != name {
                     LabeledContent("Device name", value: name).font(.caption)
                 }
+                if let ip = self.device.remoteIp { LabeledContent("Address", value: ip).font(.caption) }
                 if let via = self.device.approvedViaLabel { LabeledContent("Approval", value: via).font(.caption) }
                 if let approvedAt = self.device.approvedAt {
                     LabeledContent("Approved", value: approvedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption)
@@ -283,20 +244,21 @@ private struct PairedDeviceRow: View {
             }
         }
         .padding(.vertical, 4)
-        .contextMenu {
-            Button("Copy Device ID", systemImage: "doc.on.doc") { Clipboard.copy(self.device.deviceId) }
-            if self.model.canManage {
-                if self.model.canRename { Button("Rename…", systemImage: "pencil", action: self.rename) }
-                Button(isSelf ? "Remove This Device…" : "Remove…", systemImage: "trash", role: .destructive, action: self.remove)
-            }
+        .contextMenu { self.actions(isSelf: isSelf) }
+    }
+
+    @ViewBuilder private func actions(isSelf: Bool) -> some View {
+        Button("Copy Device ID", systemImage: "doc.on.doc") { Clipboard.copy(self.device.deviceId) }
+        if self.model.canManage {
+            if self.model.canRename { Button("Rename…", systemImage: "pencil", action: self.rename) }
+            Divider()
+            Button(isSelf ? "Revoke This Device…" : "Revoke…", systemImage: "xmark.shield", role: .destructive, action: self.revoke)
         }
     }
 
-    private func menu(busy: Bool) -> some View {
+    private func menu(busy: Bool, isSelf: Bool) -> some View {
         Menu {
-            if self.model.canRename { Button("Rename…", systemImage: "pencil", action: self.rename) }
-            Button(self.model.isSelf(self.device) ? "Remove This Device…" : "Remove…", systemImage: "trash",
-                   role: .destructive, action: self.remove)
+            self.actions(isSelf: isSelf)
         } label: {
             Label("Actions", systemImage: "ellipsis.circle").labelStyle(.iconOnly)
         }
@@ -329,17 +291,123 @@ private struct FingerprintText: View {
 
     var body: some View {
         Label {
-            Text(DeviceFingerprint.format(self.deviceId))
+            Text(DeviceFingerprint.compact(self.deviceId))
                 .font(.caption.monospaced())
                 .textSelection(.enabled)
                 .lineLimit(1)
-                .truncationMode(.tail)
         } icon: {
             Image(systemName: "touchid").font(.caption)
         }
         .foregroundStyle(.secondary)
-        .help("Device fingerprint (SHA-256 of its public key): \(self.deviceId)")
-        .accessibilityLabel("Fingerprint \(DeviceFingerprint.short(self.deviceId))")
+        .help("Fingerprint (SHA-256 of the device's public key): \(self.deviceId)")
+        .accessibilityLabel("Fingerprint \(DeviceFingerprint.compact(self.deviceId))")
+    }
+}
+
+/// "Connected" with a green dot, or "Last seen 3 hr ago".
+private struct DevicePresence: View {
+    let connected: Bool
+    let lastSeen: Date?
+
+    var body: some View {
+        if self.connected {
+            Label {
+                Text("Connected")
+            } icon: {
+                Circle().fill(Color.green).frame(width: 7, height: 7)
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        } else if let lastSeen = self.lastSeen {
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                Text("Last seen \(DeviceFingerprint.ago(lastSeen, now: context.date))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help(lastSeen.formatted(date: .abbreviated, time: .shortened))
+            }
+        } else {
+            Text("Not connected").font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Role and scope chips, with full scope names.
+private struct AccessChips: View {
+    let roles: [String]
+    let scopes: [String]
+
+    var body: some View {
+        let roles = self.roles.isEmpty ? ["operator"] : self.roles
+        ChipFlow(spacing: 4) {
+            ForEach(roles, id: \.self) { role in
+                DeviceTag(text: role, color: role == "node" ? .purple : .blue)
+            }
+            ForEach(self.scopes, id: \.self) { scope in
+                Text(scope)
+                    .font(.caption2.monospaced())
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Color.secondary.opacity(0.12), in: Capsule())
+                    .foregroundStyle(scope == GatewayConnection.adminScope ? Color.orange : Color.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Wraps chips onto new lines.
+private struct ChipFlow: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = self.rows(width: proposal.width ?? .infinity, subviews: subviews)
+        let width = rows.map(\.width).max() ?? 0
+        let height = rows.map(\.height).reduce(0, +) + self.spacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in self.rows(width: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + self.spacing
+            }
+            y += row.height + self.spacing
+        }
+    }
+
+    private struct Row { var indices: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func rows(width: CGFloat, subviews: Subviews) -> [Row] {
+        var rows: [Row] = [Row()]
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let extra = rows[rows.count - 1].indices.isEmpty ? size.width : rows[rows.count - 1].width + self.spacing + size.width
+            if extra > width, !rows[rows.count - 1].indices.isEmpty {
+                rows.append(Row(indices: [index], width: size.width, height: size.height))
+            } else {
+                rows[rows.count - 1].indices.append(index)
+                rows[rows.count - 1].width = extra
+                rows[rows.count - 1].height = max(rows[rows.count - 1].height, size.height)
+            }
+        }
+        return rows.filter { !$0.indices.isEmpty }
+    }
+}
+
+private struct DeviceEmptyRow: View {
+    let title: String
+    let detail: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(self.title).foregroundStyle(.secondary)
+            if let detail { Text(detail).font(.caption).foregroundStyle(.tertiary) }
+        }
+        .padding(.vertical, 2)
     }
 }
 
@@ -396,48 +464,41 @@ private struct DeviceNotice: View {
     }
 }
 
-/// Listing devices needs `operator.pairing`, which Pincer gets with Full Management.
+/// Managing devices needs Full Management (`operator.admin`, which covers `operator.pairing`).
 private struct DeviceAccessNeeded: View {
+    var message = DeviceManagementModel.needsAccessMessage
     @Environment(GatewayStore.self) private var gateway
     @Environment(SettingsNavigator.self) private var navigator
 
     var body: some View {
-        ContentUnavailableView {
-            Label("Full Management Needed", systemImage: "lock")
-        } description: {
-            Text(DeviceManagementModel.needsAccessMessage)
-        } actions: {
-            if self.gateway.profile.access == .admin, !self.gateway.settings.canEdit {
-                Text("The Gateway hasn't granted Full Management to this device yet.")
-                    .foregroundStyle(.orange)
-                ApprovalInstructions(requestId: nil)
-                    .frame(maxWidth: 420)
+        Section {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(DeviceManagementModel.needsAccessTitle, systemImage: "lock.shield")
+                    .font(.callout.weight(.medium))
+                Text(self.message).font(.caption).foregroundStyle(.secondary)
+                if self.gateway.profile.access == .admin, !self.gateway.settings.canEdit {
+                    Text("The Gateway hasn't granted Full Management to this device yet.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    ApprovalInstructions(requestId: nil)
+                        .frame(maxWidth: 420, alignment: .leading)
+                }
+                Button("Open Connection") { self.navigator.destination = .connection }
             }
-            Button("Open Connection") { self.navigator.destination = .connection }
+            .padding(.vertical, 4)
         }
     }
 }
 
 enum DevicesUI {
-    /// "Operator · Full Management" / "Operator · read, write, approvals".
-    static func accessLine(roles: [String], scopes: [String]) -> String {
-        let role = (roles.isEmpty ? ["operator"] : roles).map(\.capitalized).joined(separator: " + ")
-        guard !scopes.isEmpty else { return role }
-        if scopes.contains(GatewayConnection.adminScope) { return "\(role) · Full Management" }
-        let names = scopes.map { $0.hasPrefix("operator.") ? String($0.dropFirst("operator.".count)) : $0 }
-        return "\(role) · \(names.joined(separator: ", "))"
-    }
-
-    static func approveMessage(_ request: PendingDeviceRequest) -> String {
-        var lines = [
-            "Fingerprint: \(DeviceFingerprint.format(request.deviceId))",
-            "Access: \(Self.accessLine(roles: request.roles, scopes: request.scopes))",
-        ]
-        if let ip = request.remoteIp { lines.append("From: \(ip)") }
-        if request.requestsNodeRole { lines.append("It will be able to run commands for your agents.") }
-        lines.append("Only approve devices you recognize.")
-        return lines.joined(separator: "\n")
-    }
+    /// "This Mac", "This iPhone" or "This iPad".
+    @MainActor static let thisDeviceLabel: String = {
+        #if os(macOS)
+        "This Mac"
+        #else
+        UIDevice.current.userInterfaceIdiom == .pad ? "This iPad" : "This iPhone"
+        #endif
+    }()
 
     static func tokenLine(_ token: DeviceTokenSummary) -> String {
         if let revokedAt = token.revokedAt { return "Revoked \(revokedAt.formatted(date: .abbreviated, time: .omitted))" }
@@ -449,11 +510,10 @@ enum DevicesUI {
 
 // MARK: Nodes
 
-/// Gateway Settings → Nodes: devices that run commands for agents (`node.list`), with rename
-/// (`node.rename`) and remove (`node.pair.remove`) for Full Management.
+/// Gateway Settings → Nodes: devices that run commands for agents (`node.list`), read-only except
+/// rename (`node.rename`) with Full Management. Pincer never registers as a node.
 struct NodesPage: View {
     @Environment(GatewayStore.self) private var gateway
-    @State private var removing: GatewayNode?
     @State private var renaming: GatewayNode?
     @State private var renameText = ""
 
@@ -465,10 +525,10 @@ struct NodesPage: View {
         Group {
             if !connected {
                 ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see its nodes."))
+                                       description: Text("Connect to a Gateway to see its nodes."))
             } else if !model.nodesSupported {
                 ContentUnavailableView("Nodes Aren't Available", systemImage: "cpu",
-                                       description: Text("This Gateway doesn't list nodes. Update OpenClaw to see them here."))
+                                       description: Text("This Gateway can't list nodes."))
             } else {
                 self.list(model)
             }
@@ -485,15 +545,6 @@ struct NodesPage: View {
         }
         .task(id: connected) {
             if connected { await model.loadNodes() }
-        }
-        .confirmationDialog(self.removing.map { "Remove \($0.title)?" } ?? "", isPresented: Binding(
-            get: { self.removing != nil }, set: { if !$0 { self.removing = nil } }
-        ), titleVisibility: .visible, presenting: self.removing) { node in
-            Button("Remove", role: .destructive) { Task { await model.removeNode(node) } }
-            Button("Cancel", role: .cancel) {}
-        } message: { node in
-            Text(model.isSelf(node) ? DeviceManagementModel.selfRemoveWarning
-                : "Agents can no longer run commands on \(node.title), and it's disconnected. It has to pair again to come back.")
         }
         .alert("Rename Node", isPresented: Binding(
             get: { self.renaming != nil }, set: { if !$0 { self.renaming = nil } }
@@ -520,18 +571,16 @@ struct NodesPage: View {
             if !model.nodes.isEmpty {
                 Section {
                     ForEach(model.nodes) { node in
-                        NodeRow(node: node, model: model,
-                                rename: {
-                                    self.renameText = node.displayName ?? ""
-                                    self.renaming = node
-                                },
-                                remove: { self.removing = node })
+                        NodeRow(node: node, model: model) {
+                            self.renameText = node.displayName ?? ""
+                            self.renaming = node
+                        }
                     }
                 } footer: {
-                    if model.canRemoveNodes || model.canRenameNodes {
+                    if model.canRenameNodes {
                         Text("Approve new nodes on the Devices page.")
                     } else {
-                        Text("Renaming and removing nodes needs Full Management.")
+                        Text("Renaming nodes needs Full Management.")
                     }
                 }
             }
@@ -544,8 +593,8 @@ struct NodesPage: View {
                 if !model.nodesLoaded {
                     ProgressView()
                 } else if model.nodesLoadState.error == nil {
-                    ContentUnavailableView("No Nodes", systemImage: "cpu",
-                                           description: Text("Macs, phones and servers that run commands for your agents show up here once they pair."))
+                    ContentUnavailableView("No paired nodes", systemImage: "cpu",
+                                           description: Text("Nodes such as the OpenClaw Mac, iOS or Android apps show up here after they pair."))
                 }
             }
         }
@@ -556,53 +605,33 @@ private struct NodeRow: View {
     let node: GatewayNode
     let model: DeviceManagementModel
     let rename: () -> Void
-    let remove: () -> Void
 
     var body: some View {
         let operation = self.model.operation(for: self.node)
-        let canAct = self.model.canRenameNodes || self.model.canRemoveNodes
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Circle()
-                    .fill(self.node.connected ? Color.green : Color.secondary.opacity(0.4))
-                    .frame(width: 8, height: 8)
-                    .accessibilityLabel(self.node.connected ? "Connected" : "Not connected")
                 Text(self.node.title).font(.headline).lineLimit(1)
                 if self.node.active { DeviceTag(text: "Active", color: .green) }
                 if self.node.gatewayLocal { DeviceTag(text: "Gateway Host", color: .blue) }
                 if let approval = self.node.approvalLabel { DeviceTag(text: approval, color: .orange) }
                 Spacer(minLength: 8)
                 if operation.isRunning { ProgressView().controlSize(.small) }
-                if canAct {
-                    Menu {
-                        if self.model.canRenameNodes { Button("Rename…", systemImage: "pencil", action: self.rename) }
-                        if self.model.canRemoveNodes {
-                            Button("Remove…", systemImage: "trash", role: .destructive, action: self.remove)
-                        }
-                    } label: {
-                        Label("Actions", systemImage: "ellipsis.circle").labelStyle(.iconOnly)
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .disabled(operation.isRunning)
-                    .accessibilityLabel("Actions for \(self.node.title)")
+                if self.model.canRenameNodes {
+                    Button("Rename…", action: self.rename)
+                        .buttonStyle(.borderless)
+                        .disabled(operation.isRunning)
+                        .accessibilityLabel("Rename \(self.node.title)")
                 }
             }
             if !self.node.subtitle.isEmpty {
                 Text(self.node.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
-            FingerprintText(deviceId: self.node.nodeId)
+            DevicePresence(connected: self.node.connected, lastSeen: self.node.lastSeenAt)
             if !self.node.commands.isEmpty || !self.node.caps.isEmpty {
                 Text(Self.capabilityLine(self.node)).font(.caption).foregroundStyle(.secondary)
+                    .help(self.node.caps.joined(separator: ", "))
             }
-            if let lastSeen = self.node.lastSeenAt, !self.node.connected {
-                TimelineView(.periodic(from: .now, by: 60)) { context in
-                    Text("Last seen \(DeviceFingerprint.ago(lastSeen, now: context.date))")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
+            FingerprintText(deviceId: self.node.nodeId)
             if let error = operation.error {
                 Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.red)
             }
@@ -611,15 +640,14 @@ private struct NodeRow: View {
         .contextMenu {
             Button("Copy Node ID", systemImage: "doc.on.doc") { Clipboard.copy(self.node.nodeId) }
             if self.model.canRenameNodes { Button("Rename…", systemImage: "pencil", action: self.rename) }
-            if self.model.canRemoveNodes { Button("Remove…", systemImage: "trash", role: .destructive, action: self.remove) }
         }
     }
 
-    /// "12 commands · camera, screen".
+    /// "3 capabilities · 12 commands".
     static func capabilityLine(_ node: GatewayNode) -> String {
         var parts: [String] = []
+        if !node.caps.isEmpty { parts.append("\(node.caps.count) capabilit\(node.caps.count == 1 ? "y" : "ies")") }
         if !node.commands.isEmpty { parts.append("\(node.commands.count) command\(node.commands.count == 1 ? "" : "s")") }
-        if !node.caps.isEmpty { parts.append(node.caps.joined(separator: ", ")) }
         return parts.joined(separator: " · ")
     }
 }
