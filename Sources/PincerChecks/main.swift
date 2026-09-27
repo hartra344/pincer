@@ -2407,6 +2407,8 @@ await runIntentChecks()
 print("Deep links & Handoff")
 runDeepLinkChecks()
 
+checkToolDiffs()
+
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     let url = arguments[index + 1]
@@ -2424,6 +2426,8 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     await runLiveSetup(url: url, token: token)
     print("Deep links (live)")
     await runLiveDeepLinks(url: url, token: token)
+    print("Tool diffs (live)")
+    await runLiveToolDiffs(url: url, token: token)
     print("Agent avatars (live)")
     await runLiveAvatars(url: url, token: token)
 }
@@ -2464,6 +2468,8 @@ if arguments.contains("--demo") {
     await runDemoDeepLinks()
     print("Channel status (demo)")
     await runDemoChannels()
+    print("Tool diffs (demo)")
+    await runDemoToolDiffs()
     print("Agent avatars (demo)")
     await runDemoAvatars()
 }

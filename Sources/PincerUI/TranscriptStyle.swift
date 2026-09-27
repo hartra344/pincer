@@ -163,6 +163,8 @@ enum TranscriptMetrics {
     static let cardRadius: CGFloat = 8
     static let iconBox: CGFloat = 16
     static let toolOutputMaxHeight: CGFloat = 240
+    /// A diff scrolls inside its card past this.
+    static let diffMaxHeight: CGFloat = 480
     static let toolOutputLimit = 20000
     static let filePreviewMaxHeight: CGFloat = 360
 

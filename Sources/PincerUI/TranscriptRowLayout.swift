@@ -68,6 +68,17 @@ enum TranscriptPart {
             let title: String
         }
 
+        /// The Copy and "Show all lines" controls of a diff, in card coordinates.
+        struct Diff {
+            let copyText: String
+            let copyFrame: CGRect
+            /// Disclosure key of the full diff, and the toggle's title and frame when it has one.
+            let key: String
+            let isExpanded: Bool
+            let toggleTitle: String?
+            let toggleFrame: CGRect
+        }
+
         let tool: ToolActivity
         let key: String
         let isExpanded: Bool
@@ -76,6 +87,9 @@ enum TranscriptPart {
         let sections: [Section]
         /// Where "Running…" goes when there's no output yet.
         let runningY: CGFloat?
+        /// The call read as a file diff; the card then shows it in place of the raw input.
+        var edit: ToolFileEdit?
+        var diff: Diff?
     }
 
     /// The line under a message: a Copy button and details such as when it was sent.
@@ -661,7 +675,9 @@ struct TranscriptLayoutBuilder {
 
     private func tool(_ tool: ToolActivity, first: Bool, into stack: inout Stack, layout: inout TranscriptRowLayout) {
         let key = "tool:\(tool.id)"
-        let expanded = self.context.disclosure.isExpanded(key, default: false)
+        let edit = tool.fileEdit
+        // A diff is the point of an edit card, so it starts open; long ones start cut short.
+        let expanded = self.context.disclosure.isExpanded(key, default: edit != nil)
         let width = min(stack.width, TranscriptMetrics.maxCardWidth)
         let headerHeight = 6 + max(TranscriptStyle.lineHeight(self.style.calloutMonoMedium), TranscriptMetrics.iconBox) + 6
         let run = self.spawnedRun(tool)
@@ -670,16 +686,28 @@ struct TranscriptLayoutBuilder {
         var sections: [TranscriptPart.Tool.Section] = []
         var runningY: CGFloat?
         var toolMatchY: CGFloat?
+        var diff: TranscriptPart.Tool.Diff?
         var height = headerHeight
         if expanded {
             var y = headerHeight + 1 + 10
             let inner = max(width - 20, 20)
             let titleHeight = TranscriptStyle.lineHeight(self.style.captionSemibold)
             var entries: [(String, String)] = []
-            if let arguments = tool.arguments, !arguments.isEmpty { entries.append(("Input", arguments)) }
+            if let edit {
+                let placed = self.diff(edit, tool: tool, row: layout.id, width: width, y: y)
+                sections.append(placed.section)
+                diff = placed.diff
+                if let match = placed.match {
+                    toolMatchY = placed.section.frame.minY
+                        + min(self.marks.lineBottom(of: match, in: placed.section.text, width: inner), placed.section.frame.height)
+                }
+                y = placed.bottom
+            } else if let arguments = tool.arguments, !arguments.isEmpty {
+                entries.append(("Input", arguments))
+            }
             if let result = tool.result, !result.isEmpty { entries.append((tool.isError ? "Error" : "Output", result)) }
             for (index, (title, body)) in entries.enumerated() {
-                if index > 0 { y += 8 }
+                if index > 0 || edit != nil { y += 8 }
                 let limited = body.count > TranscriptMetrics.toolOutputLimit
                     ? String(body.prefix(TranscriptMetrics.toolOutputLimit)) + "\n…" : body
                 let (text, match) = self.marks.mark(
@@ -697,16 +725,60 @@ struct TranscriptLayoutBuilder {
                 y += visible
             }
             if entries.count < 2, tool.result?.isEmpty ?? true, tool.isRunning {
-                if !entries.isEmpty { y += 8 }
+                if !entries.isEmpty || edit != nil { y += 8 }
                 runningY = y
                 y += TranscriptStyle.lineHeight(self.style.caption)
             }
             height = y + 10
         }
         let part = TranscriptPart.Tool(tool: tool, key: key, isExpanded: expanded, run: run, headerHeight: headerHeight,
-                                       sections: sections, runningY: runningY)
+                                       sections: sections, runningY: runningY, edit: edit, diff: diff)
         stack.add(.tool(part), height: height, width: width, spacing: first ? TranscriptMetrics.blockSpacing : TranscriptMetrics.toolSpacing)
         if let toolMatchY, let frame = stack.parts.last?.frame { layout.matchY = frame.minY + toolMatchY }
+    }
+
+    /// An edit card's diff: a "Changes" title with Copy, the colored lines (the first few when it's
+    /// long and not opened in full), and a toggle to show all or fewer lines.
+    private func diff(_ edit: ToolFileEdit, tool: ToolActivity, row: String, width: CGFloat, y top: CGFloat)
+        -> (section: TranscriptPart.Tool.Section, diff: TranscriptPart.Tool.Diff, match: NSRange?, bottom: CGFloat)
+    {
+        let key = "diff:\(tool.id)"
+        // Find counts every line of the diff, so while it has matches in this row nothing is hidden.
+        let finding = self.highlight.isActive && self.highlight.options.includeTools && self.highlight.rows.contains(row)
+        let showsAll = finding || self.context.disclosure.isExpanded(key, default: false)
+        let (rows, hidden) = edit.rows(collapsed: !showsAll)
+        let inner = max(width - 20, 20)
+        let copySize = TranscriptLabelButton.size(title: "Copied")
+        let titleRow = max(TranscriptStyle.lineHeight(self.style.captionSemibold), copySize.height)
+        var y = top
+        let copyFrame = CGRect(x: width - 10 - copySize.width, y: y + (titleRow - copySize.height) / 2,
+                               width: copySize.width, height: copySize.height)
+        let titleY = y + (titleRow - TranscriptStyle.lineHeight(self.style.captionSemibold)) / 2
+        y += titleRow + 4
+        let (text, match) = self.marks.mark(TranscriptDiffText.text(rows), .tool(tool.id))
+        let contentHeight = TranscriptText.size(text, width: inner).height
+        let visible = min(contentHeight, TranscriptMetrics.diffMaxHeight)
+        let section = TranscriptPart.Tool.Section(title: "Changes", titleY: titleY, text: text,
+                                                  frame: CGRect(x: 10, y: y, width: inner, height: visible), contentHeight: contentHeight)
+        y += visible
+        var toggleTitle: String?
+        if finding {
+            toggleTitle = nil
+        } else if hidden > 0 {
+            toggleTitle = "Show all \(edit.rows.count) lines"
+        } else if showsAll, edit.isLarge {
+            toggleTitle = "Show fewer lines"
+        }
+        var toggleFrame = CGRect.zero
+        if let toggleTitle {
+            y += 6
+            let size = TranscriptLabelButton.size(title: toggleTitle)
+            toggleFrame = CGRect(x: 10, y: y, width: size.width, height: size.height)
+            y += size.height
+        }
+        let diff = TranscriptPart.Tool.Diff(copyText: edit.copyText, copyFrame: copyFrame, key: key, isExpanded: showsAll,
+                                            toggleTitle: toggleTitle, toggleFrame: toggleFrame)
+        return (section, diff, match, y)
     }
 
     /// Subagent run this tool call started, so the run can be opened from where it happened.
