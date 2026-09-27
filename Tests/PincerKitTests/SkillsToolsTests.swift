@@ -216,7 +216,14 @@ struct SkillsToolsTests {
         #expect(!Skills.forceRequired(CancellationError()))
     }
 
+    @Test func settingsSearchFindsSkills() {
+        #expect(SettingsCatalog.destinations(matching: "skills").map(\.destination) == [.skills])
+        #expect(SettingsCatalog.destinations(matching: "clawhub").map(\.title) == ["Skills"])
+        #expect(SettingsCatalog.destinations(matching: "tools").contains { $0.destination == .skills })
+    }
+
     @Test func confirmationCopy() {
+        #expect(Skills.installWarning == "This downloads the skill into the default agent's workspace on the gateway host. Skills can run commands and read files with the agent's permissions. Only install skills you trust.")
         #expect(Skills.clawHubInstallTitle("NAS Report") == "Install “NAS Report” from ClawHub?")
         #expect(Skills.installerTitle(SkillInstallOption(id: "brew", kind: "brew", label: "Install ffmpeg (brew)"))
             == "Run installer “Install ffmpeg (brew)” on the gateway host?")
@@ -480,6 +487,7 @@ struct SkillsToolsTests {
         let states2 = catalog.map { Skills.installState(for: $0, in: skills) }
         #expect(states2.contains { if case .updateAvailable = $0 { true } else { false } }, "a ClawHub skill has an update")
         #expect(states2.contains(.notInstalled))
+        #expect(states2.filter { $0.label != nil }.count >= 2, "ClawHub results include installed skills")
 
         let effective = EffectiveTools(DemoGateway.seedEffectiveTools(agentId: "main"))
         #expect(Set(effective.groups.map(\.source)).isSuperset(of: [.core, .plugin, .mcp]) && !effective.notices.isEmpty)

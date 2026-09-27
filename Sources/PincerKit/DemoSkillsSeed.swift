@@ -16,8 +16,8 @@ extension DemoGateway {
 
     // MARK: skills.status
 
-    /// One `skills.status` entry per state: ready (bundled, managed, workspace), missing a binary
-    /// (with a brew installer), missing an env var, missing config, other-OS only, disabled,
+    /// One `skills.status` entry per state: ready (bundled, workspace), missing a binary (with a
+    /// brew installer; `summarize` is the managed one the setup wizard flags), missing an env var, missing config, other-OS only, disabled,
     /// blocked by the bundled allowlist, and two ClawHub-tracked skills behind the registry
     /// (`grocery-list` was edited locally, so updating it needs `force`).
     static func seedSkills() -> [JSONValue] {
@@ -52,8 +52,11 @@ extension DemoGateway {
             Self.seedSkill("openai-image-gen", "Batch-generate images with the OpenAI Images API.", source: "openclaw-bundled",
                            emoji: "🖼️", primaryEnv: "OPENAI_API_KEY", requirements: ["env": ["OPENAI_API_KEY"]],
                            blockedByAllowlist: true),
-            Self.seedSkill("summarize", "Summarize URLs, podcasts, and local files.", source: "openclaw-managed", emoji: "🧾",
-                           requirements: ["anyBins": ["uv", "python3"]]),
+            // The setup wizard's (and the docs') "summarize is missing its CLI".
+            Self.seedSkill("summarize", "Summarize or transcribe URLs, videos, podcasts, PDFs, and local files.",
+                           source: "openclaw-managed", emoji: "🧾", requirements: ["bins": ["summarize"]],
+                           missing: ["bins": ["summarize"]],
+                           install: [["id": "brew", "kind": "brew", "label": "Install summarize (brew)", "bins": ["summarize"]]]),
             Self.seedSkill("homelab-runbook", "Runbooks for the home lab: NAS, Raspberry Pis, and backups.",
                            source: "openclaw-workspace", emoji: "🏠"),
             Self.seedSkill("nas-report", "Summarize Synology NAS health: disks, volumes, and scrubs.", source: "openclaw-workspace",

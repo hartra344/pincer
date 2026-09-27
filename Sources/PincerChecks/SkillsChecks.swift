@@ -106,6 +106,22 @@ func runDemoSkills(_ gateway: GatewayStore) async {
     } else {
         check(false, "demo tools inspector (\(inspector.error ?? "nil"))")
     }
+
+    // What ChatSessionMenu's `.sheet(item:)` relies on: every "Tools & Policy…" gives a new model
+    // (so reopening re-presents), scoped to that chat, created without loading anything.
+    let again = gateway.toolsInspector(sessionKey: "agent:main:main")
+    check(again.id != inspector.id && again.inspection == nil && !again.isLoading, "each open gets a fresh, unloaded inspector")
+    check(again.scope == .session(key: "agent:main:main", agentId: "main"), "chat inspector scope (\(again.scope))")
+    // Criterion 19: works in a new chat before any run.
+    if let newKey = await gateway.createSession(agentId: "research", label: "Tools check", select: false) {
+        let fresh = gateway.toolsInspector(sessionKey: newKey)
+        await fresh.load()
+        check(fresh.scope.agentId == "research" && fresh.inspection?.isLive == true && fresh.effectiveNote == nil,
+              "new chat's live policy before any run (\(fresh.error ?? fresh.effectiveNote ?? "ok"))")
+        await gateway.patch(newKey, ["archived": true])
+    } else {
+        check(false, "demo creates a chat for the tools check")
+    }
 }
 
 /// Against the mock: `admin` has Full Management; a fresh store reads without it. Restores what it changes
