@@ -64,6 +64,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - **inline images** with a Quick Look-style preview and sharing. This covers attachments and the agent's `MEDIA:` lines, the same as the web UI. Local files are fetched through the gateway's `assistant-media` route. Public `https` images are downloaded directly, with no credentials or cookies sent; you can turn this off in Settings with "Load images the agent links from the web".
 - **Appearance:** Settings → Appearance picks Light, Dark or System and a theme: Default (your system accent), Lobster, Ocean, Forest, Grape, Sunset, Graphite or Midnight. Themes color the accent, links, both avatars, and the chat, sidebar and code backgrounds, with separate shades for light and dark mode. Any of those colors can be overridden with your own pick, and reset back to the theme's.
 - **Animated avatars:** each agent gets a small companion pet (a blob, owl, rock or sprout, drawn in pixel art or as a soft plush) that reacts to what the agent is doing: it blinks when idle, wiggles while thinking, sways while replying, shows a tool badge while a tool runs, raises a paw for approvals, hops when a run finishes, wobbles on errors and dozes while compacting. The look is picked from the agent's identity, so each agent is different. Settings → Appearance turns them off, switches Pixel and Plush, and lets you pick a character per agent. Reduce Motion gives still poses. The website's Agent avatars guide has the details.
+- **Accessibility:** VoiceOver reads each message as one item, with Copy, Reply and Add Reaction in the actions rotor, and announces when the agent finishes replying in the open chat. Sidebar rows, the composer's controls and Settings have spoken labels. The transcript, sidebar and composer follow Dynamic Type on iOS, and the keyboard reaches the sidebar, command palette, composer and find bar. The website's Accessibility guide has the details.
 - **Owner attribution:** messages from you appear under your own name (set in Settings, default is your macOS full name), even when they came in through Discord. A small "via Discord" tag shows where they came from.
 - **Models:** the chat toolbar shows the session's model; pick another (from the Gateway's `models.list`) or go back to the agent's default, and new messages use it. Each reply's footer shows the model the Gateway recorded for it, so earlier replies keep their original model after a switch.
 - **Composer:** Return sends and ⇧/⌥-Return adds a new line. You can paste, drag in or pick images and files; they are downscaled to fit the gateway's limits. Stop a run with ⌘.
@@ -152,6 +153,10 @@ To produce signed macOS and iOS apps, generate the Xcode project with [XcodeGen]
 xcodegen generate
 open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pincer-iOS
 ```
+
+### Localization
+
+UI strings live in `Sources/PincerUI/Resources/Localizable.xcstrings`, which SwiftPM bundles with PincerUI (not the app's main bundle). Look strings up with `Text("key", bundle: .module)` or `String(localized: "key", bundle: .module)`, or the `Text(l:)` / `L()` shorthands in `Localization.swift`. A bare `Text("key")` misses the catalog. Moving strings into the catalog is ongoing. The website's Localization page explains how to add a language.
 
 ### Tests on CI
 

@@ -47,7 +47,7 @@ private struct TipsCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("Tips", systemImage: "lightbulb").font(.headline)
+            Label(L("Tips"), systemImage: "lightbulb").font(.headline)
             ForEach(self.tips, id: \.tip.id) { entry in
                 Label {
                     Text(entry.text).fixedSize(horizontal: false, vertical: true)
@@ -59,7 +59,7 @@ private struct TipsCard: View {
             HStack {
                 Spacer()
                 // No default-action shortcut: Return belongs to the composer underneath.
-                Button("Got It", action: self.dismiss)
+                Button(L("Got It"), action: self.dismiss)
                     .buttonStyle(.borderedProminent)
             }
         }
@@ -75,12 +75,12 @@ private struct TipsCard: View {
 struct TipsSettingsSection: View {
     var body: some View {
         Section {
-            Button("Show Tips Again") { TipsModel.shared.showAgain() }
+            Button(L("Show Tips Again")) { TipsModel.shared.showAgain() }
                 .disabled(!TipsModel.shared.hasSeen)
         } header: {
-            Text("Tips")
+            Text("Tips", bundle: .module)
         } footer: {
-            Text("Shows the tips card again the next time the main window is open.")
+            Text("Shows the tips card again the next time the main window is open.", bundle: .module)
         }
     }
 }

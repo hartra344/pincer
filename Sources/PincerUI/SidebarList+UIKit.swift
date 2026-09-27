@@ -563,12 +563,8 @@ private final class SidebarChatListCell: UICollectionViewListCell {
         }
         self.accessories = accessories
 
-        var label = row.title
-        if row.isPinned { label += ", pinned" }
-        if unread { label += ", unread" }
-        if working { label += ", working" }
-        if let preview = entry.preview { label += ", \(preview)" }
-        self.accessibilityLabel = label
+        self.accessibilityLabel = AccessibilityText.sessionRow(
+            title: row.title, isUnread: unread, isPinned: row.isPinned, isRunning: working, preview: entry.preview)
         self.accessibilityHint = ChannelRowStyle.help(for: row)
         self.accessibilityTraits.insert(.button)
     }

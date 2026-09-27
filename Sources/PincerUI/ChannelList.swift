@@ -496,7 +496,8 @@ struct SymbolPickerSheet: View {
         }
         .buttonStyle(.plain)
         .help(symbol)
-        .accessibilityLabel(symbol)
+        .accessibilityLabel(AccessibilityText.symbolName(symbol))
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

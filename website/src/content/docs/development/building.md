@@ -29,6 +29,10 @@ open Pincer.xcodeproj
 
 Set your team, then run **Pincer-macOS** or **Pincer-iOS**. The Xcode-built macOS app is sandboxed. Xcode builds also include the Share extensions and, on iOS, the notification service extension. The SwiftPM bundle doesn't.
 
+## Localization
+
+UI strings live in `Sources/PincerUI/Resources/Localizable.xcstrings` and are looked up with `bundle: .module`. See [Localization](../localization/).
+
 ## Unit tests
 
 `Tests/PincerKitTests` is a [Swift Testing](https://developer.apple.com/documentation/testing) suite for PincerKit:

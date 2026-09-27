@@ -2406,6 +2406,8 @@ await runIntentChecks()
 print("Deep links & Handoff")
 runDeepLinkChecks()
 
+runLocalizationChecks()
+
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     let url = arguments[index + 1]
@@ -2463,6 +2465,8 @@ if arguments.contains("--demo") {
     await runDemoDeepLinks()
     print("Agent avatars (demo)")
     await runDemoAvatars()
+    print("Accessibility labels (demo)")
+    await runDemoAccessibility()
 }
 
 print("Keychain isolation")

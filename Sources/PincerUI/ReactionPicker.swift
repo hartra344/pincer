@@ -115,7 +115,7 @@ private struct QuickReactionsRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("React \(emoji)")
+                .accessibilityLabel(L("React \(emoji)"))
             }
         }
         .padding(.horizontal, 12)

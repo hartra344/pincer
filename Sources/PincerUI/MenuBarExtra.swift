@@ -51,19 +51,19 @@ struct MenuBarContent: View {
     var body: some View {
         let inbox = MenuBarInbox(app: self.app, now: self.clock.now)
         Button(QuickCaptureController.shared.menuTitle) { QuickCaptureController.shared.show() }
-        Button("Open Pincer") { self.showMainWindow() }
+        Button(L("Open Pincer")) { self.showMainWindow() }
         Divider()
         self.section("Needs You", inbox.needsYou, overflow: inbox.needsYouOverflow)
         self.section("Running", inbox.running, overflow: inbox.runningOverflow)
         self.section("Unread", inbox.unread, overflow: inbox.unreadOverflow)
         if inbox.isCaughtUp {
-            Button("You're all caught up") {}
+            Button(L("You're all caught up")) {}
                 .disabled(true)
         }
         Divider()
-        Section("Gateways") {
+        Section(L("Gateways")) {
             if inbox.gateways.isEmpty {
-                Button("No gateways yet") {}
+                Button(L("No gateways yet")) {}
                     .disabled(true)
             }
             ForEach(inbox.gateways) { status in
@@ -75,12 +75,12 @@ struct MenuBarContent: View {
             }
         }
         Divider()
-        Button("Settings…") {
+        Button(L("Settings…")) {
             NSApp.activate()
             self.openSettings()
         }
         .keyboardShortcut(",", modifiers: .command)
-        Button("Quit Pincer") { NSApp.terminate(nil) }
+        Button(L("Quit Pincer")) { NSApp.terminate(nil) }
             .keyboardShortcut("q", modifiers: .command)
     }
 
@@ -91,7 +91,7 @@ struct MenuBarContent: View {
                     Button(item.title) { self.open(item.target) }
                 }
                 if overflow > 0 {
-                    Button("\(overflow) more…") { self.showMainWindow() }
+                    Button(L("\(overflow) more…")) { self.showMainWindow() }
                 }
             }
         }

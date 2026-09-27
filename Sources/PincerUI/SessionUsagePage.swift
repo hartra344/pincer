@@ -24,8 +24,8 @@ struct SessionUsagePage: View {
         let loading = detail.map { $0.totals.loadState.isRunning || $0.timeseries.loadState.isRunning || $0.logs.loadState.isRunning } ?? false
         Group {
             if !connected, detail?.totals.value == nil, detail?.timeseries.value == nil, detail?.logs.value == nil {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see this session's usage."))
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Connect to the gateway to see this session's usage.", bundle: .module))
             } else {
                 Form {
                     Section {
@@ -40,7 +40,7 @@ struct SessionUsagePage: View {
                         SessionLogsSection(model: model, detail: detail)
                     }
                     if !connected {
-                        Section { } footer: { Text("Not connected.") }
+                        Section { } footer: { Text("Not connected.", bundle: .module) }
                     }
                 }
                 .formStyle(.grouped)
@@ -70,9 +70,9 @@ struct SessionUsagePage: View {
                 if loading, detail?.totals.value != nil {
                     ProgressView().controlSize(.small)
                 } else {
-                    Button { Task { await model.loadSession(self.sessionKey) } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    Button { Task { await model.loadSession(self.sessionKey) } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
                         .disabled(!connected || loading)
-                        .help("Refresh")
+                        .help(L("Refresh"))
                 }
             }
         }
@@ -104,7 +104,7 @@ private struct SessionTotalsSection: View {
         Section {
             UsageSectionBody(status: status, unsupported: "This gateway doesn't report usage by session.", height: 120) {
                 if totals.isEmpty {
-                    Text("No usage in this range.")
+                    Text("No usage in this range.", bundle: .module)
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -115,10 +115,10 @@ private struct SessionTotalsSection: View {
                 }
             }
         } header: {
-            Text("Totals")
+            Text("Totals", bundle: .module)
         }
         if let usage, usage.modelUsage.count > 1 {
-            Section("Models") {
+            Section(L("Models")) {
                 ForEach(Array(usage.modelUsage.enumerated()), id: \.offset) { _, item in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
@@ -128,7 +128,7 @@ private struct SessionTotalsSection: View {
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
                             UsageCostText(totals: item.totals)
-                            Text("\(UsageFormat.tokens(item.totals.totalTokens)) tokens")
+                            Text("\(UsageFormat.tokens(item.totals.totalTokens)) tokens", bundle: .module)
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
@@ -141,20 +141,20 @@ private struct SessionTotalsSection: View {
 
     @ViewBuilder private func facts(_ usage: SessionUsageSummary) -> some View {
         if let messages = usage.messageCounts {
-            LabeledContent("Messages", value: "\(messages.user) user · \(messages.assistant) assistant")
-            LabeledContent("Tool calls", value: (usage.toolCalls ?? messages.toolCalls).formatted())
+            LabeledContent(L("Messages"), value: "\(messages.user) user · \(messages.assistant) assistant")
+            LabeledContent(L("Tool calls"), value: (usage.toolCalls ?? messages.toolCalls).formatted())
             if messages.errors > 0 {
-                LabeledContent("Errors", value: messages.errors.formatted())
+                LabeledContent(L("Errors"), value: messages.errors.formatted())
             }
         }
         if let duration = usage.durationMs, duration > 0 {
-            LabeledContent("Duration", value: UsageFormat.duration(ms: duration))
+            LabeledContent(L("Duration"), value: UsageFormat.duration(ms: duration))
         }
         if let first = usage.firstActivity {
-            LabeledContent("First activity", value: first.formatted(date: .abbreviated, time: .shortened))
+            LabeledContent(L("First activity"), value: first.formatted(date: .abbreviated, time: .shortened))
         }
         if let last = usage.lastActivity {
-            LabeledContent("Last activity", value: last.formatted(date: .abbreviated, time: .shortened))
+            LabeledContent(L("Last activity"), value: last.formatted(date: .abbreviated, time: .shortened))
         }
     }
 }
@@ -209,7 +209,7 @@ private struct SessionTimeseriesSection: View {
         Section {
             UsageSectionBody(status: status, unsupported: "This gateway doesn't report usage over time.",
                              isEmpty: points.isEmpty, empty: "No usage recorded for this session yet.", height: 180) {
-                Picker("Metric", selection: Binding(get: { metric }, set: { self.metric = $0 })) {
+                Picker(L("Metric"), selection: Binding(get: { metric }, set: { self.metric = $0 })) {
                     ForEach(UsageMetric.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -217,9 +217,9 @@ private struct SessionTimeseriesSection: View {
                 SessionTimeseriesChart(points: points, metric: metric, unpriced: unpriced)
             }
         } header: {
-            Text("Usage Over Time")
+            Text("Usage Over Time", bundle: .module)
         } footer: {
-            Text("Entire session, not limited to the range above.")
+            Text("Entire session, not limited to the range above.", bundle: .module)
         }
     }
 }
@@ -251,7 +251,7 @@ private struct SessionTimeseriesChart: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(point.timestamp.formatted(date: .abbreviated, time: .shortened)).font(.caption.weight(.semibold))
                             Text(self.unpriced ? "Cost unknown" : UsageFormat.currency(point.cumulativeCost)).font(.caption.monospacedDigit())
-                            Text("\(UsageFormat.tokens(point.cumulativeTokens)) tokens").font(.caption.monospacedDigit())
+                            Text("\(UsageFormat.tokens(point.cumulativeTokens)) tokens", bundle: .module).font(.caption.monospacedDigit())
                         }
                         .padding(6)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -306,10 +306,10 @@ private struct SessionLogsSection: View {
                 ForEach(logs) { SessionLogRow(entry: $0, unpriced: self.detail.isUnpriced) }
             }
         } header: {
-            Text("Log")
+            Text("Log", bundle: .module)
         } footer: {
             if logs.count >= UsageRequests.logLimit {
-                Text("Showing the latest \(logs.count) entries.")
+                Text("Showing the latest \(logs.count) entries.", bundle: .module)
             }
         }
     }
@@ -348,14 +348,14 @@ private struct SessionLogRow: View {
                     Spacer(minLength: 8)
                     VStack(alignment: .trailing, spacing: 2) {
                         if let tokens = entry.tokens {
-                            Text("\(UsageFormat.tokens(tokens)) tokens").font(.caption.monospacedDigit())
+                            Text("\(UsageFormat.tokens(tokens)) tokens", bundle: .module).font(.caption.monospacedDigit())
                         }
                         if self.unpriced, entry.tokens != nil, (entry.cost ?? 0) == 0 {
                             Text("—")
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                                 .help(UsageFormat.unknownCostHelp)
-                                .accessibilityLabel("Cost unknown")
+                                .accessibilityLabel(L("Cost unknown"))
                         } else if let cost = entry.cost {
                             Text(UsageFormat.currency(cost)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         }
