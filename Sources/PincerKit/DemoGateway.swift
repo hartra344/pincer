@@ -38,7 +38,7 @@ actor DemoGateway {
         "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
-    ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
+    ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.channelLifecycleMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -63,6 +63,8 @@ actor DemoGateway {
     var execApprovals = DemoGateway.seedExecApprovals()
     /// WhatsApp link state and the running QR login (`DemoGateway+Setup.swift`).
     var setup = DemoSetupState()
+    /// Channels stopped or logged out from Channel Status (`DemoGateway+Channels.swift`).
+    var channelLifecycle = DemoChannelsState()
     var agentIds: [String] { self.agents.compactMap { $0["id"]?.text } }
     func hasSession(_ key: String) -> Bool { self.sessions[key] != nil }
     var execApprovalsExists = true
@@ -201,6 +203,7 @@ actor DemoGateway {
 
     func handle(_ method: String, _ params: JSONValue) async throws -> JSONValue {
         if let result = try self.handleAgents(method, params) { return result }
+        if let result = try await self.handleChannelLifecycle(method, params) { return result }
         if let result = try self.handleDevices(method, params) { return result }
         if let result = try self.handleSkills(method, params) { return result }
         switch method {
@@ -422,13 +425,12 @@ actor DemoGateway {
     func health() -> JSONValue {
         let now = Self.now()
         let nowMs = now.double ?? 0
-        return [
-            "ok": true, "ts": now, "durationMs": 42,
-            "channels": [
+        let channels: JSONValue = [
                 "discord": [
                     "accountId": "default", "name": "Discord", "enabled": true, "configured": true, "running": true,
                     "connected": true, "restartPending": false, "reconnectAttempts": 0,
                     "lastConnectedAt": .number(self.startedAt.timeIntervalSince1970 * 1000), "lifecycle": "ready",
+                    "lastInboundAt": .number(nowMs - 4 * 60_000), "lastOutboundAt": .number(nowMs - 3 * 60_000),
                 ],
                 "telegram": self.telegramRecovered ? [
                     "accountId": "default", "name": "Telegram", "enabled": true, "configured": true, "running": true,
@@ -438,10 +440,13 @@ actor DemoGateway {
                     "accountId": "default", "name": "Telegram", "enabled": true, "configured": true, "running": true,
                     "connected": false, "restartPending": false, "reconnectAttempts": 4,
                     "lastConnectedAt": .number(nowMs - 25 * 60_000), "lifecycle": "recovering",
-                    "lastError": "Telegram API timed out (getUpdates). Retrying.",
+                    "lastError": "getUpdates: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
                 ],
                 "whatsapp": self.whatsappAccount(),
-            ],
+            ]
+        return [
+            "ok": true, "ts": now, "durationMs": 42,
+            "channels": .object((channels.object ?? [:]).reduce(into: [:]) { $0[$1.key] = self.applyChannelLifecycle($1.key, $1.value) }),
             "channelOrder": ["discord", "telegram", "whatsapp"],
             "channelLabels": ["discord": "Discord", "telegram": "Telegram", "whatsapp": "WhatsApp"],
             "heartbeatSeconds": 1800,
@@ -536,13 +541,14 @@ actor DemoGateway {
     }
 
     private var restartSkipsDeferral = false
-    private var telegramRecovered = false
+    var telegramRecovered = false
     private var waitingForRuns: Bool { !self.runs.isEmpty && !self.restartSkipsDeferral }
 
     private func shutdownForRestart(reason: String?) {
         self.restartTask = nil
         // A fresh start reconnects Telegram, so the restart visibly fixes the demo's one problem.
         self.telegramRecovered = true
+        self.channelLifecycle.restart(at: Date().timeIntervalSince1970 * 1000)
         for id in self.runs.keys { self.abort(sessionKey: nil, runId: id) }
         self.restartingUntil = Date().addingTimeInterval(Double(Self.restartExpectedMs) / 1000)
         self.emit("shutdown", ["reason": .string(reason ?? "gateway restart"), "restartExpectedMs": JSONValue(Self.restartExpectedMs)])

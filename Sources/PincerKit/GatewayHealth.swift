@@ -42,10 +42,22 @@ public struct GatewayChannelAccountHealth: Identifiable, Hashable, Sendable {
     public let lastConnectedAt: Date?
     public let lastError: String?
     public let lifecycle: String?
+    /// `channels.status` account snapshot fields (absent from `health`).
+    public let linked: Bool?
+    public let healthState: String?
+    public let lastStartAt: Date?
+    public let lastStopAt: Date?
+    public let lastInboundAt: Date?
+    public let lastOutboundAt: Date?
+    public let lastProbeAt: Date?
+    public let mode: String?
+    /// `probe.ok` after `channels.status` with `probe: true`.
+    public let probeOk: Bool?
 
     public var id: String { self.accountId }
 
     public init(_ json: JSONValue, fallbackId: String) {
+        func date(_ key: String) -> Date? { json[key]?.double.map { Date(timeIntervalSince1970: $0 / 1000) } }
         self.accountId = json["accountId"]?.text ?? fallbackId
         self.name = json["name"]?.text
         self.enabled = json["enabled"]?.bool
@@ -54,9 +66,23 @@ public struct GatewayChannelAccountHealth: Identifiable, Hashable, Sendable {
         self.connected = json["connected"]?.bool
         self.restartPending = json["restartPending"]?.bool == true
         self.reconnectAttempts = json["reconnectAttempts"]?.int
-        self.lastConnectedAt = json["lastConnectedAt"]?.double.map { Date(timeIntervalSince1970: $0 / 1000) }
+        self.lastConnectedAt = date("lastConnectedAt")
         self.lastError = json["lastError"]?.text
         self.lifecycle = json["lifecycle"]?.text
+        self.linked = json["linked"]?.bool
+        self.healthState = json["healthState"]?.text
+        self.lastStartAt = date("lastStartAt")
+        self.lastStopAt = date("lastStopAt")
+        self.lastInboundAt = date("lastInboundAt")
+        self.lastOutboundAt = date("lastOutboundAt")
+        self.lastProbeAt = date("lastProbeAt")
+        self.mode = json["mode"]?.text
+        self.probeOk = json["probe"]?["ok"]?.bool
+    }
+
+    /// The latest message in or out.
+    public var lastActivityAt: Date? {
+        [self.lastInboundAt, self.lastOutboundAt].compactMap(\.self).max()
     }
 
     /// Enabled and set up, unless the Gateway says otherwise.
@@ -453,6 +479,12 @@ public struct GatewayHealthIssue: Identifiable, Hashable, Sendable {
     /// Channel, plugin and context engine problems are often fixed by a restart.
     public var offersRestart: Bool { self.kind == .channel || self.kind == .plugin || self.kind == .contextEngine }
 
+    /// The channel account a channel issue is about (`channel:<channel>:<accountId>`).
+    public var channelAccount: ChannelAccountKey? { ChannelAccountKey(healthIssueId: self.id) }
+
+    /// Channel account issues offer Reconnect Account and Show in Channel Status.
+    public var offersReconnect: Bool { self.channelAccount != nil }
+
     /// The kind an issue id stands for, from its prefix.
     public static func kind(ofId id: String) -> Kind? {
         if id.hasPrefix("channel:") { return .channel }
@@ -804,6 +836,9 @@ public final class GatewayHealthModel {
     public func activeIssues(now: Date) -> [GatewayHealthIssue] {
         self.issues(now: now).filter { !self.isDismissed($0) }
     }
+
+    /// A channel account has an issue that isn't dismissed (the Channel Status sidebar mark).
+    public var hasChannelAccountIssues: Bool { self.activeIssues.contains { $0.channelAccount != nil } }
 
     /// Reported issues that are dismissed or always ignored.
     public var dismissedIssues: [GatewayHealthIssue] { self.dismissedIssues(now: Date()) }
