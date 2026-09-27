@@ -2412,6 +2412,7 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     await runLiveReactionsReply(url: url, token: token)
     print("Transcript cache recovery (live)")
     await runLiveCacheRecovery(url: url, token: token)
+    await runLiveCacheRefill(url: url, token: token)
 }
 if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count > index + 2 {
     print("Scope upgrade fallback against \(arguments[index + 1])")

@@ -60,6 +60,7 @@ func checkTranscriptCacheVersioning() async {
         check(futureSnapshot == nil && futureOutcome == .future(version: current + 1) && futureOutcome.discarded,
               "newer file → future (\(futureOutcome))")
         check(!fileExists(future) && !fileExists(future?.appendingPathExtension("meta")), "future file and .meta discarded")
+        check(quarantineCount(gatewayId) == 0, "outdated and future files deleted, not quarantined")
 
         let corruptCases: [(String, Data)] = [
             ("garbage", Data("🦞 not json".utf8)),
@@ -94,6 +95,13 @@ func checkTranscriptCacheVersioning() async {
                            gatewayId: indexed, sessionKey: "good")
         await MessageIndex.shared(gatewayId: indexed).reconcile(sessionKeys: ["bad", "good"])
         await checkAsync({ await indexHits(indexed, "wombat").count == 1 }, "index reconcile skips a corrupt transcript")
+        // A decodable transcript sitting in Quarantine is never read back or indexed.
+        if let quarantine = TranscriptCache.quarantineDirectory(gatewayId: indexed) {
+            try? cacheData(ids: ["q"]).write(to: quarantine.appending(path: "stray-1.json"))
+        }
+        await MessageIndex.shared(gatewayId: indexed).reconcile(sessionKeys: ["good"])
+        let strayHits = await indexHits(indexed, "cached")
+        check(strayHits.isEmpty, "Quarantine is never indexed (\(strayHits.count) hits)")
         TranscriptCache.removeAll(gatewayId: indexed)
 
         // A chat over a corrupt cache, offline: nothing shown, and it isn't marked loaded. (Not
@@ -128,6 +136,16 @@ func checkTranscriptCacheVersioning() async {
         await checkAsync({ await indexHits(gatewayId, "zebra").count == 1 }, "search index rebuilt after removeEverything")
         TranscriptCache.removeAll(gatewayId: gatewayId)
     }
+
+    // PINCER_CACHE_DIR=off: nothing to measure, clear, load or quarantine.
+    let previous = ProcessInfo.processInfo.environment["PINCER_CACHE_DIR"]
+    setenv("PINCER_CACHE_DIR", "off", 1)
+    let offUsage = await TranscriptCache.diskUsage()
+    TranscriptCache.removeEverything()
+    let (offSnapshot, offOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: UUID(), sessionKey: "k")
+    check(offUsage == 0 && offSnapshot == nil && offOutcome == .missing
+          && TranscriptCache.quarantineDirectory(gatewayId: UUID()) == nil, "cache off: usage 0, clear no-op, no quarantine")
+    if let previous { setenv("PINCER_CACHE_DIR", previous, 1) } else { unsetenv("PINCER_CACHE_DIR") }
 }
 
 /// Live: a chat whose cache file was corrupted between launches still loads its history.
@@ -178,4 +196,50 @@ func runLiveCacheRecovery(url: String, token: String) async {
     }
     let (_, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: profile.id, sessionKey: key)
     check(rewritten && outcome == .loaded, "cache rewritten after recovery (\(outcome))")
+}
+
+/// Live: Clear Cache empties the disk, keeps open chats on screen, and the cache refills (open
+/// chats saved again at once, the rest by the background prefetch) without a relaunch.
+@MainActor
+func runLiveCacheRefill(url: String, token: String) async {
+    let (defaults, suite) = scratchDefaults()
+    let model = AppModel(defaults: defaults)
+    let profile = GatewayProfile(name: "Mock refill", url: url, authMode: .token)
+    let gateway = model.add(profile, secret: token)
+    defer {
+        model.remove(gateway.id)
+        UserDefaults.standard.removePersistentDomain(forName: suite)
+    }
+    guard await waitFor("refill connect", timeout: 25, { gateway.state.isConnected && !gateway.sessions.isEmpty }) else {
+        return check(false, "connected for the refill check")
+    }
+    let key = "agent:main:main"
+    let chat = gateway.chat(for: key)
+    await chat.load()
+    _ = await waitFor("history") { chat.hasLoaded }
+    let shown = chat.items.map(\.id)
+    let others = gateway.sessions.values.filter { !$0.isSubagent && $0.key != key }.map(\.key)
+    func cachedOthers() -> Int { others.filter { fileExists(TranscriptCache.file(gatewayId: gateway.id, sessionKey: $0)) }.count }
+    let filled = await waitFor("prefetch fills the cache", timeout: 30) {
+        fileExists(TranscriptCache.file(gatewayId: gateway.id, sessionKey: key)) && cachedOthers() > 0
+    }
+    check(filled && !shown.isEmpty, "cache filled before clearing (\(cachedOthers()) other chats)")
+    let before = await TranscriptCache.diskUsage()
+
+    await model.clearTranscriptCache()
+    check(chat.items.map(\.id) == shown, "open chat keeps its transcript after Clear Cache")
+    let (reSaved, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: gateway.id, sessionKey: key)
+    check(outcome == .loaded && reSaved?.items.map(\.id) == shown, "open chat saved again right after clearing (\(outcome))")
+    let usageAfter = await TranscriptCache.diskUsage()
+    check(usageAfter < before, "Clear Cache freed space (\(before) → \(usageAfter) bytes)")
+    let quarantine = TranscriptCache.quarantineDirectory(gatewayId: gateway.id)
+    check(!fileExists(quarantine), "no Quarantine left after clearing")
+    let refilled = await waitFor("prefetch refills", timeout: 30) { cachedOthers() > 0 }
+    check(refilled, "background prefetch refills other chats after clearing (\(cachedOthers()))")
+    let term = chat.items.last { !$0.plainText.isEmpty && $0.plainText.count > 8 }?.plainText
+        .split(separator: " ").first { $0.count >= 5 }.map(String.init)
+    if let term {
+        let found = await waitForSearch(gateway, term, timeout: 15) { $0.chats.contains { $0.sessionKey == key } }
+        check(found != nil, "search finds the open chat again after clearing (“\(term)”)")
+    }
 }

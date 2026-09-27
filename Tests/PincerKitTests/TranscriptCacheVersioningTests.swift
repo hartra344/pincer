@@ -122,12 +122,12 @@ struct TranscriptCacheVersioningTests {
         let v = Self.current
         // Chain missing a step.
         let gap = Cache.decode(try self.snapshotData(version: v - 2), migrations: [v - 1: { _ in }], oldestMigratableVersion: v - 2)
-        #expect(gap.snapshot == nil && gap.outcome.discarded)
+        #expect(gap.snapshot == nil && gap.outcome == .outdated(version: v - 2))
         // A step that throws.
         struct Nope: Error {}
         let failing = Cache.decode(try self.snapshotData(version: v - 1), migrations: [v - 1: { _ in throw Nope() }],
                                    oldestMigratableVersion: v - 1)
-        #expect(failing.snapshot == nil && failing.outcome.discarded)
+        #expect(failing.snapshot == nil && failing.outcome == .outdated(version: v - 1))
         // A step that leaves an undecodable shape.
         let broken = Cache.decode(try self.snapshotData(version: v - 1), migrations: [v - 1: { $0["items"] = 7 }],
                                   oldestMigratableVersion: v - 1)
@@ -171,6 +171,8 @@ struct TranscriptCacheVersioningTests {
         #expect(!temp.exists(file) && !temp.exists(file.appendingPathExtension("meta")))
         #expect(await Cache.meta(gatewayId: self.gateway, sessionKey: self.key, root: temp.url) == nil)
         #expect(await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url).outcome == .missing)
+        // Not damaged, so not quarantined.
+        #expect(try self.quarantined(temp).isEmpty)
     }
 
     @Test func futureFileIsDiscarded() async throws {
@@ -180,6 +182,7 @@ struct TranscriptCacheVersioningTests {
         let (snapshot, outcome) = await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
         #expect(snapshot == nil && outcome == .future(version: Self.current + 3))
         #expect(!temp.exists(file) && !temp.exists(file.appendingPathExtension("meta")))
+        #expect(try self.quarantined(temp).isEmpty)
         #expect(await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url).outcome == .missing)
     }
 
@@ -336,6 +339,9 @@ struct TranscriptCacheVersioningTests {
         let one = try JSONEncoder().encode(big).count
         #expect(usage >= Int64(2 * one), "usage \(usage) < 2 × \(one)")
         #expect(await Cache.diskUsage(root: nil) == 0)
+        // Cache off: clearing is a no-op.
+        Cache.removeEverything(root: nil)
+        #expect(await Cache.diskUsage(root: temp.url) == usage)
 
         Cache.removeEverything(root: temp.url)
         #expect(await Cache.diskUsage(root: temp.url) == 0)
