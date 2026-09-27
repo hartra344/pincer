@@ -339,8 +339,17 @@ private struct GatewayHealthIssueRow: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(SettingsNavigator.self) private var navigator
     @State private var hovering = false
+    @State private var qrAccount: ChannelAccountKey?
 
     private var channels: ChannelsModel { self.gateway.channels }
+
+    /// A logged-out QR channel account (e.g. WhatsApp): Reconnect can't help, linking can.
+    private func needsQRLogin(_ key: ChannelAccountKey) -> Bool {
+        guard self.channels.offersQRLogin(key) else { return false }
+        let state: ChannelAccountState? = self.channels.snapshot?.state(of: key)
+            ?? self.model.health.map { ChannelsStatusSnapshot(health: $0) }?.state(of: key)
+        return state == .loggedOut || state == .notConfigured
+    }
 
     private var isDismissed: Bool { self.dismissedCaption != nil }
 
@@ -385,10 +394,16 @@ private struct GatewayHealthIssueRow: View {
         .contextMenu { self.menu }
         #if os(iOS)
         .swipeActions(edge: .leading) {
-            if let reconnect = self.reconnectAction {
-                Button("Reconnect Account", systemImage: ChannelsModel.Action.reconnect.symbol, action: reconnect)
-                    .tint(.blue)
-                    .disabled(self.issue.channelAccount.map(self.channels.isBusy) ?? true)
+            if !self.isDismissed, let key = self.issue.channelAccount, self.channels.canManage {
+                if self.needsQRLogin(key) {
+                    Button("Link with QR Code…", systemImage: "qrcode") { self.qrAccount = key }
+                        .tint(.blue)
+                        .disabled(self.channels.isBusy(key) || !self.gateway.state.isConnected)
+                } else if let reconnect = self.reconnectAction {
+                    Button("Reconnect Account", systemImage: ChannelsModel.Action.reconnect.symbol, action: reconnect)
+                        .tint(.blue)
+                        .disabled(self.channels.isBusy(key) || !self.gateway.state.isConnected)
+                }
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -404,7 +419,10 @@ private struct GatewayHealthIssueRow: View {
         .accessibilityElement(children: .combine)
         .modifier(IssueAccessibilityActions(issue: self.issue, model: self.model, isDismissed: self.isDismissed,
                                             alwaysIgnoreTitle: self.alwaysIgnoreTitle))
-        .modifier(ReconnectAccessibilityAction(reconnect: self.reconnectAction))
+        .modifier(ReconnectAccessibilityAction(reconnect: self.reconnectAction, linkWithQR: self.linkAction))
+        .sheet(item: self.$qrAccount) { key in
+            ChannelQRLoginSheet(model: self.channels, key: key, channelLabel: self.channels.label(for: key))
+        }
     }
 
     @ViewBuilder private var menu: some View {
@@ -430,7 +448,15 @@ private struct GatewayHealthIssueRow: View {
     /// refreshes `health`, so the issue clears once the account is back.
     @ViewBuilder private func channelItems(_ key: ChannelAccountKey) -> some View {
         let channels = self.channels
-        if channels.supports(.reconnect) {
+        if self.needsQRLogin(key) {
+            if channels.canManage {
+                Button("Link with QR Code…", systemImage: "qrcode") { self.qrAccount = key }
+                    .disabled(channels.isBusy(key) || !self.gateway.state.isConnected)
+            } else {
+                Button("Link with QR Code (\(SetupWizardModel.fullManagementTitle))", systemImage: "lock") {}
+                    .disabled(true)
+            }
+        } else if channels.supports(.reconnect) {
             if channels.canManage {
                 Button("Reconnect Account", systemImage: ChannelsModel.Action.reconnect.symbol) {
                     Task { await channels.reconnect(key) }
@@ -466,17 +492,27 @@ extension GatewayHealthIssueRow {
     /// The accessibility Reconnect Account action, when this is an active channel issue it can reconnect.
     fileprivate var reconnectAction: (() -> Void)? {
         guard !self.isDismissed, let key = self.issue.channelAccount, self.channels.supports(.reconnect),
-              self.channels.canManage else { return nil }
+              self.channels.canManage, self.gateway.state.isConnected, !self.needsQRLogin(key) else { return nil }
         let channels = self.channels
         return { Task { await channels.reconnect(key) } }
+    }
+
+    /// The accessibility Link with QR Code action, for a logged-out QR channel account.
+    fileprivate var linkAction: (() -> Void)? {
+        guard !self.isDismissed, let key = self.issue.channelAccount, self.channels.canManage,
+              self.gateway.state.isConnected, self.needsQRLogin(key) else { return nil }
+        return { self.qrAccount = key }
     }
 }
 
 private struct ReconnectAccessibilityAction: ViewModifier {
     let reconnect: (() -> Void)?
+    let linkWithQR: (() -> Void)?
 
     func body(content: Content) -> some View {
-        if let reconnect = self.reconnect {
+        if let linkWithQR = self.linkWithQR {
+            content.accessibilityAction(named: "Link with QR Code", linkWithQR)
+        } else if let reconnect = self.reconnect {
             content.accessibilityAction(named: "Reconnect Account", reconnect)
         } else {
             content

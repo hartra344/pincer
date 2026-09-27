@@ -361,6 +361,8 @@ public final class ChannelsModel {
     @ObservationIgnored private let request: Request
     @ObservationIgnored var methods: @MainActor () -> Set<String>?
     @ObservationIgnored var scopes: @MainActor () -> [String]
+    /// Gateway Health's channels, for labels before `channels.status` has loaded.
+    @ObservationIgnored var fallbackChannels: @MainActor () -> [GatewayChannelHealth] = { [] }
     @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
     @ObservationIgnored private var generation = 0
     private var unknownMethod = false
@@ -460,7 +462,7 @@ public final class ChannelsModel {
     }
 
     public func label(for key: ChannelAccountKey) -> String {
-        let channel = self.snapshot?.channel(key.channel)
+        let channel = self.snapshot?.channel(key.channel) ?? self.fallbackChannels().first { $0.id == key.channel }
         let label = channel?.label ?? ApprovalRecord.humanized(key.channel)
         guard let channel, channel.effectiveAccounts.count > 1 || key.accountId != "default" else { return label }
         let name = channel.effectiveAccounts.first { $0.accountId == key.accountId }?.name ?? key.accountId

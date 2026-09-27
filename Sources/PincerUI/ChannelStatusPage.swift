@@ -15,6 +15,8 @@ struct ChannelStatusPage: View {
         let action: ChannelsModel.Action
         let key: ChannelAccountKey
         let label: String
+        /// As the row shows it: "Default", or the account's name.
+        let accountName: String
         var id: String { "\(self.action.rawValue):\(self.key.id)" }
     }
 
@@ -84,7 +86,7 @@ struct ChannelStatusPage: View {
 
     /// "Stop Telegram (default)?" / "Log out of WhatsApp (default)?"
     static func confirmTitle(_ pending: PendingAction) -> String {
-        let name = "\(pending.label) (\(pending.key.accountId))"
+        let name = "\(pending.label) (\(pending.accountName))"
         return pending.action == .logout ? "Log out of \(name)?" : "\(pending.action.title) \(name)?"
     }
 
@@ -188,7 +190,10 @@ struct ChannelStatusPage: View {
                 let key = ChannelAccountKey(channel: channel.id, accountId: account.accountId)
                 ChannelAccountRow(key: key, channel: channel, account: account,
                                   issues: snapshot.issues(for: key), model: model, readOnly: readOnly,
-                                  confirm: { self.confirming = PendingAction(action: $0, key: key, label: channel.label) },
+                                  confirm: {
+                                      self.confirming = PendingAction(action: $0, key: key, label: channel.label,
+                                                                      accountName: ChannelAccountRow.displayName(key, account))
+                                  },
                                   logIn: { self.qrAccount = key })
                     .id(key.id)
                     .listRowBackground(model.focusedAccount == key ? Color.accentColor.opacity(0.12) : nil)
@@ -285,12 +290,12 @@ private struct ChannelAccountRow: View {
     let confirm: (ChannelsModel.Action) -> Void
     let logIn: () -> Void
     @State private var errorExpanded = false
-    @State private var hovering = false
 
-    private var name: String {
-        if self.key.accountId == "default" { return "Default" }
-        return self.account.name ?? self.key.accountId
+    static func displayName(_ key: ChannelAccountKey, _ account: GatewayChannelAccountHealth) -> String {
+        key.accountId == "default" ? "Default" : account.name ?? key.accountId
     }
+
+    private var name: String { Self.displayName(self.key, self.account) }
 
     var body: some View {
         let state = ChannelRules.state(of: self.account, issues: self.issues)
@@ -471,8 +476,8 @@ private struct ChannelAccountRow: View {
 }
 
 /// QR login for one account, in a sheet: starts on open, closes itself a moment after linking, and
-/// stops waiting when closed.
-private struct ChannelQRLoginSheet: View {
+/// stops waiting when closed. Used by Channel Status and Gateway Health.
+struct ChannelQRLoginSheet: View {
     let model: ChannelsModel
     let key: ChannelAccountKey
     let channelLabel: String

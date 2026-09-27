@@ -32,7 +32,7 @@ func checkChannelStatus() async {
     check(snapshot.channels.map(\.id) == ["discord", "telegram", "whatsapp"] && snapshot.channel("telegram")?.accounts.count == 2,
           "channels in order, Telegram with two accounts")
     check(snapshot.state(of: discordKey) == .connected && snapshot.state(of: work) == .stopped
-          && snapshot.state(of: whatsappKey) == .loggedOut && snapshot.state(of: telegramKey)?.needsAttention == true,
+          && snapshot.state(of: whatsappKey) == .loggedOut && snapshot.state(of: telegramKey) == .degraded,
           "badges: connected, stopped, logged out, Telegram needs attention (\(String(describing: snapshot.state(of: telegramKey))))")
     check(snapshot.account(discordKey)?.lastActivityAt == Date(timeIntervalSince1970: 1_699_999_500), "last activity is the latest message")
     check(snapshot.issues(for: whatsappKey).map(\.kind) == ["auth"], "status issues keyed by account")
@@ -80,6 +80,9 @@ func checkChannelStatus() async {
     check(!reader.canManage && !denied && calls.isEmpty && reader.operation(for: telegramKey)?.state.error == SetupWizardModel.fullManagementMessage,
           "without Full Management nothing is sent")
     check(!reader.supports(.logout) && reader.supports(.reconnect), "actions follow the advertised methods")
+    check(SetupWizardModel.fullManagementTitle == "Needs Full Management"
+          && SetupWizardModel.fullManagementMessage == "This device can view but not change this. Open Connection to request Full Management.",
+          "scope lock uses the shared Full Management copy")
 }
 
 /// A fresh demo Gateway (the main demo run keeps Telegram degraded for its Health checks).
@@ -100,7 +103,7 @@ func runDemoChannels() async {
     check(channels.hasLoaded && channels.canManage, "demo loads channels and manages them without admin")
     check(channels.state(of: discordKey) == .connected && channels.account(discordKey)?.lastActivityAt != nil,
           "demo Discord connected with recent activity (\(channels.state(of: discordKey)))")
-    check(channels.state(of: telegramKey).needsAttention && channels.account(telegramKey)?.lastError != nil,
+    check(channels.state(of: telegramKey) == .degraded && channels.account(telegramKey)?.lastError?.contains("409 Conflict") == true,
           "demo Telegram degraded with a last error (\(channels.state(of: telegramKey)))")
     check(channels.state(of: whatsappKey) == .loggedOut && channels.canLogIn(whatsappKey), "demo WhatsApp logged out, QR login offered")
     check(channels.attentionCount == 2, "demo attention: Telegram and WhatsApp (\(channels.attentionCount))")
@@ -130,7 +133,8 @@ func runDemoChannels() async {
     check(discordClear, "starting clears it")
     let logoutDiscord = await channels.logout(discordKey)
     check(!logoutDiscord && channels.operation(for: discordKey)?.state.error == "Discord doesn't support logging out."
-          && channels.state(of: discordKey) == .connected, "demo Discord logout unsupported, nothing changes")
+          && channels.state(of: discordKey) == .connected && !channels.offers(.logout, on: discordKey),
+          "demo Discord logout unsupported, then hidden")
 
     // QR login links WhatsApp; logging out unlinks it again.
     channels.startQRLogin(whatsappKey)
@@ -178,7 +182,7 @@ func runLiveChannels(profile: GatewayProfile, admin: GatewayStore) async {
     await channels.load()
     check(channels.canManage, "admin manages channels")
     check(channels.state(of: discordKey) == .connected, "mock Discord connected")
-    check(channels.state(of: telegramKey).needsAttention
+    check(channels.state(of: telegramKey) == .degraded
           && channels.account(telegramKey)?.lastError?.contains("409 Conflict") == true, "mock Telegram degraded (409 Conflict)")
     check(channels.state(of: whatsappKey) == .loggedOut && channels.snapshot?.issues(for: whatsappKey).first?.kind == "auth",
           "mock WhatsApp logged out with an auth issue")
@@ -193,7 +197,8 @@ func runLiveChannels(profile: GatewayProfile, admin: GatewayStore) async {
     let started = await channels.start(discordKey)
     check(started && channels.state(of: discordKey) == .connected, "mock start Discord")
     let logoutDiscord = await channels.logout(discordKey)
-    check(!logoutDiscord && channels.operation(for: discordKey)?.state.error == "Discord doesn't support logging out.",
+    check(!logoutDiscord && channels.operation(for: discordKey)?.state.error == "Discord doesn't support logging out."
+          && !channels.offers(.logout, on: discordKey),
           "Discord logout unsupported (\(String(describing: channels.operation(for: discordKey))))")
 
     // WhatsApp: start is skipped until linked; QR login links it; log out unlinks it again.

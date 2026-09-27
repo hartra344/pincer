@@ -220,7 +220,7 @@ final class FakeChannelsGateway {
     @Test func seededStates() throws {
         let snapshot = try #require(ChannelsStatusSnapshot(ChannelFixtures.status))
         #expect(snapshot.state(of: ChannelFixtures.discord) == .connected)
-        #expect(snapshot.state(of: ChannelFixtures.telegram)?.needsAttention == true)
+        #expect(snapshot.state(of: ChannelFixtures.telegram) == .degraded, "running, not connected, last error → Degraded")
         #expect(snapshot.state(of: ChannelFixtures.whatsapp) == .loggedOut)
         #expect(snapshot.state(of: ChannelAccountKey(channel: "slack", accountId: nil)) == .disabled)
         #expect(snapshot.state(of: ChannelAccountKey(channel: "irc", accountId: nil)) == nil)
@@ -342,7 +342,7 @@ final class FakeChannelsGateway {
         #expect(model.hasLoaded && model.loadState == .idle && model.snapshot?.channels.count == 3)
         #expect(gateway.calls.first?.params["probe"]?.bool == false)
         #expect(model.state(of: ChannelFixtures.discord) == .connected)
-        #expect(model.state(of: ChannelFixtures.telegram).needsAttention)
+        #expect(model.state(of: ChannelFixtures.telegram) == .degraded)
         #expect(model.state(of: ChannelFixtures.whatsapp) == .loggedOut)
         #expect(model.attentionCount == 2, "Telegram and WhatsApp")
         #expect(model.label(for: ChannelFixtures.telegram) == "Telegram")

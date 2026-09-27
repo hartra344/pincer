@@ -252,6 +252,7 @@ public final class GatewayStore: Identifiable {
         self.channels.scopes = { [weak self] in self?.hello?.scopes ?? [] }
         // A lifecycle change shows up in `health` too, so its channel issue clears (or appears).
         self.channels.onChanged = { [weak self] in await self?.health.refresh() }
+        self.channels.fallbackChannels = { [weak self] in self?.health.health?.channels ?? [] }
         self.health.onRestarted = { [weak self] in
             guard let self, self.settings.hasLoaded else { return }
             Task { await self.settings.load() }
