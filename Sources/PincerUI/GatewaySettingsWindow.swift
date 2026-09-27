@@ -222,7 +222,10 @@ private struct GatewaySettingsRoot: View {
         }
         .task(id: self.gateway.state.isConnected) {
             // One list, so the sidebar badge shows how many senders are waiting.
-            if self.gateway.state.isConnected { await self.gateway.pairingInbox.seed() }
+            if self.gateway.state.isConnected {
+                await self.gateway.pairingInbox.seed()
+                await self.gateway.devices.seed()
+            }
         }
     }
 
@@ -242,6 +245,8 @@ private struct GatewaySettingsRoot: View {
         case .skills: SkillsPage()
         case .usage: UsagePage()
         case .pairing: PairingRequestsPage()
+        case .devices: DevicesPage()
+        case .nodes: NodesPage()
         case let .page(id):
             if let page = SettingsCatalog.page(id) { CuratedPage(page: page) }
         case .plugins: PluginsPage()
@@ -367,6 +372,11 @@ private struct SettingsSidebar: View {
                     self.row("Usage", symbol: "chart.bar.xaxis", .usage)
                     self.row("Pairing Requests", symbol: "person.badge.key", .pairing,
                              badge: self.gateway.state.isConnected ? self.gateway.pairingInbox.pendingCount(at: self.now) : 0)
+                    self.row("Devices", symbol: "laptopcomputer.and.iphone", .devices,
+                             badge: self.gateway.state.isConnected ? self.gateway.devices.pendingCount : 0)
+                    if self.gateway.devices.nodesSupported {
+                        self.row("Nodes", symbol: "cpu", .nodes)
+                    }
                 }
                 if settings.hasLoaded {
                     Section("Settings") {
