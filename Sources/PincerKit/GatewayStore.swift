@@ -172,6 +172,10 @@ public final class GatewayStore: Identifiable {
     /// Built in `init`, not lazily, so reading it from a view body (the menu bar item, #119) never
     /// creates it or wires up its callbacks mid-update.
     @ObservationIgnored public let health: GatewayHealthModel
+    /// Paired operator devices, pending device requests and nodes (`device.pair.*`, `node.*`); seeded
+    /// when Gateway Settings opens and kept current by pairing events. Built in `init` so the sidebar
+    /// badge never creates it from a view body (#119). The demo may manage without `operator.admin`.
+    @ObservationIgnored public let devices: DeviceManagementModel
 
     /// The first-run setup wizard (Set Up Gateway…); offered after the first successful connection.
     @ObservationIgnored public private(set) lazy var setup: SetupWizardModel = {
@@ -246,8 +250,12 @@ public final class GatewayStore: Identifiable {
             connection: connection, hello: { nil },
             localDeviceId: profile.isDemo ? DemoGateway.deviceId : identity.deviceId,
             simulatedRestart: profile.isDemo)
+        self.devices = DeviceManagementModel(
+            connection: connection, selfDeviceId: profile.isDemo ? DemoGateway.deviceId : identity.deviceId,
+            allowsWritesWithoutAdmin: profile.isDemo)
         images.gateway = self
         self.health.hello = { [weak self] in self?.hello }
+        self.devices.bind(hello: { [weak self] in self?.hello })
         self.health.onRestarted = { [weak self] in
             guard let self, self.settings.hasLoaded else { return }
             Task { await self.settings.load() }
@@ -315,7 +323,10 @@ public final class GatewayStore: Identifiable {
     private func update(state: ConnectionState, hello: GatewayHello?) {
         self.state = state
         if case let .failed(message) = state { self.lastError = message }
-        if !state.isConnected { self.pairingInbox.reset() }
+        if !state.isConnected {
+            self.pairingInbox.reset()
+            self.devices.reset()
+        }
         guard state == .connected, let hello else {
             self.health.connectionChanged(state, hello: nil)
             return
@@ -331,6 +342,7 @@ public final class GatewayStore: Identifiable {
         Task { await self.bootstrap() }
         self.execPolicy.handleReconnect()
         self.agentManagement.handleReconnect()
+        self.devices.handleReconnect()
         self.skills.handleReconnect()
     }
 
@@ -603,6 +615,9 @@ public final class GatewayStore: Identifiable {
             if let id = payload["id"]?.text {
                 self.questions.removeAll { $0.id == id }
             }
+        case DeviceManagementModel.requestedEvent, DeviceManagementModel.resolvedEvent, DeviceManagementModel.changedEvent,
+             DeviceManagementModel.nodeRequestedEvent, DeviceManagementModel.nodeResolvedEvent:
+            self.devices.handle(event: event.name, payload: payload)
         case "cron":
             self.automations.handleCronEvent(payload)
         case "plugins.changed":
