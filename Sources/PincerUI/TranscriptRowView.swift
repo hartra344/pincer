@@ -771,9 +771,37 @@ final class TranscriptAvatarView: TranscriptBaseView {
     private var avatar: TranscriptPart.Avatar?
     private var key: String?
 
+    /// The row it's attached to in the live avatar, which animates the latest reply's avatar.
+    var liveRowId: String?
+    private weak var liveController: TranscriptLiveAvatar?
+    /// Set by the live avatar: the chat's state, and the frame to draw (nil holds the still pose).
+    private var liveFrame: (state: AvatarState, pose: AvatarPose?)?
+
+    var agentSeed: String { self.avatar?.seed ?? "" }
+    var isPlush: Bool { self.avatar?.creature?.renderStyle == .plush }
+
     override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
         guard case let .avatar(avatar) = part else { return }
         self.avatar = avatar
+        if avatar.isAgent, let live = actions.liveAvatar {
+            self.liveController = live
+            live.attach(self, rowId: row.id, style: avatar.creature)
+        } else {
+            self.liveController?.detach(self)
+            self.liveFrame = nil
+        }
+        self.refresh()
+    }
+
+    override func didHide() {
+        self.liveController?.detach(self)
+        self.liveFrame = nil
+    }
+
+    func showLive(_ frame: (state: AvatarState, pose: AvatarPose?)?) {
+        if frame == nil, self.liveFrame == nil { return }
+        self.liveFrame = frame
+        self.key = nil
         self.refresh()
     }
 
@@ -793,13 +821,29 @@ final class TranscriptAvatarView: TranscriptBaseView {
         self.refresh()
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        self.liveController?.moved(self)
+    }
+
     private var scale: CGFloat { self.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2 }
+    private var isDark: Bool { self.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
     #else
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        self.liveController?.moved(self)
+    }
+
     private var scale: CGFloat { max(self.traitCollection.displayScale, 1) }
+    private var isDark: Bool { self.traitCollection.userInterfaceStyle == .dark }
     #endif
 
     private func refresh() {
         guard let avatar, self.bounds.width > 0 else { return }
+        if let creature = avatar.creature {
+            self.refresh(creature, state: avatar.state)
+            return
+        }
         let top = self.resolved(lighten(avatar.color, by: 0.18)), bottom = self.resolved(avatar.color)
         let size = self.bounds.size, scale = self.scale
         let key = "\(avatar.text)|\(avatar.emoji ?? "")|\(top.components ?? [])|\(bottom.components ?? [])|\(size.width)|\(scale)"
@@ -809,6 +853,34 @@ final class TranscriptAvatarView: TranscriptBaseView {
         if let image {
             if Self.cache.count > 64 { Self.cache.removeAll() }
             Self.cache[key] = image
+        }
+        withoutLayerAnimations {
+            self.hostLayer.contentsScale = scale
+            self.hostLayer.contents = image
+        }
+    }
+
+    /// The companion's pose for the row. Still poses are drawn once per look and shared like the
+    /// initials; the live avatar's moving frames are drawn fresh each time.
+    private func refresh(_ style: AvatarStyle, state: AvatarState) {
+        let size = self.bounds.size, scale = self.scale, dark = self.isDark
+        let state = self.liveFrame?.state ?? state
+        let accent = AvatarArt.showsGlow(state) ? self.resolved(TranscriptColors.tint) : nil
+        let badge = AgentAvatarView.badgeSymbol(for: state)
+        let image: CGImage?
+        if let pose = self.liveFrame?.pose {
+            self.key = nil
+            image = AvatarArt.image(style, pose: pose, dark: dark, accent: accent, badge: badge, size: size, scale: scale)
+        } else {
+            let key = "creature|\(style)|\(state)|\(dark)|\(accent?.components ?? [])|\(size.width)|\(scale)"
+            guard key != self.key else { return }
+            self.key = key
+            image = Self.cache[key] ?? AvatarArt.image(style, pose: AvatarMotion.keyPose(for: state), dark: dark,
+                                                       accent: accent, badge: badge, size: size, scale: scale)
+            if let image {
+                if Self.cache.count > 64 { Self.cache.removeAll() }
+                Self.cache[key] = image
+            }
         }
         withoutLayerAnimations {
             self.hostLayer.contentsScale = scale

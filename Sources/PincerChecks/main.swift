@@ -508,6 +508,7 @@ await checkApprovalHistoryModel()
 await checkGatewayLogsModel()
 await checkExecPolicy()
 await checkAgentManagement()
+await checkSkillsTools()
 print("Pairing requests")
 await checkPairingInboxModel()
 await checkGatewayHealth()
@@ -2426,6 +2427,8 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     await runLiveDeepLinks(url: url, token: token)
     print("Tool diffs (live)")
     await runLiveToolDiffs(url: url, token: token)
+    print("Agent avatars (live)")
+    await runLiveAvatars(url: url, token: token)
 }
 if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count > index + 2 {
     print("Scope upgrade fallback against \(arguments[index + 1])")
@@ -2464,6 +2467,8 @@ if arguments.contains("--demo") {
     await runDemoDeepLinks()
     print("Tool diffs (demo)")
     await runDemoToolDiffs()
+    print("Agent avatars (demo)")
+    await runDemoAvatars()
 }
 
 print("Keychain isolation")
@@ -3281,6 +3286,7 @@ func runDemo() async {
     await checkDemoSentMessageSearch(gateway, chat)
     await runDemoExecPolicy(gateway, chat: chat)
     await runDemoAgents(gateway)
+    await runDemoSkills(gateway)
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
     let pairing = gateway.pairingInbox
@@ -4616,6 +4622,7 @@ func runLive(url: String, token: String) async {
     }
     await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
     await runLiveAgents(profile: profile, gateway: gateway, admin: admin)
+    await runLiveSkills(profile: profile, admin: admin)
 
     // Gateway Logs after Pairing Requests, whose seeded request expires minutes after the mock starts.
     await checkGatewayLogsLive(admin)

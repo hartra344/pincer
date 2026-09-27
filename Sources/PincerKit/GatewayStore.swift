@@ -157,6 +157,11 @@ public final class GatewayStore: Identifiable {
         connection: self.connection, hello: { [weak self] in self?.hello },
         allowsWritesWithoutAdmin: self.profile.isDemo,
         onAgentsChanged: { [weak self] in await self?.agentsDidChange() })
+    /// Skills (`skills.*`): the per-agent list, ClawHub search, installs and config. The demo may
+    /// write without `operator.admin`.
+    @ObservationIgnored public private(set) lazy var skills = SkillsModel(
+        connection: self.connection, hello: { [weak self] in self?.hello },
+        allowsWritesWithoutAdmin: self.profile.isDemo)
     /// Token and cost usage; loaded when the Usage page opens.
     @ObservationIgnored public private(set) lazy var usage = UsageModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
@@ -326,6 +331,7 @@ public final class GatewayStore: Identifiable {
         Task { await self.bootstrap() }
         self.execPolicy.handleReconnect()
         self.agentManagement.handleReconnect()
+        self.skills.handleReconnect()
     }
 
     private func bootstrap() async {
@@ -1226,6 +1232,38 @@ public final class GatewayStore: Identifiable {
     /// is only tried when the Gateway advertises it.
     public var supportsMessageAction: Bool {
         self.hello?.methods.contains("message.action") ?? false
+    }
+
+    /// Whether the Gateway advertises `method` (false before hello).
+    public func advertises(_ method: String) -> Bool {
+        self.hello?.methods.contains(method) ?? false
+    }
+
+    /// The Skills page: `skills.status` is advertised.
+    public var supportsSkills: Bool { self.advertises(Skills.statusMethod) }
+    /// The chat's Tools & Policy inspector: `tools.effective` is advertised.
+    public var supportsToolsEffective: Bool { self.advertises(ToolsPolicy.effectiveMethod) }
+    /// An agent's Tools inspector: `tools.catalog` is advertised.
+    public var supportsToolsCatalog: Bool { self.advertises(ToolsPolicy.catalogMethod) }
+
+    /// A new inspector for one chat. Create it outside `body` (e.g. in `.task`).
+    public func toolsInspector(sessionKey: String) -> ToolsInspectorModel {
+        let agentId = self.sessions[sessionKey]?.agentId ?? SessionKey.agentId(from: sessionKey)
+        return ToolsInspectorModel(scope: .session(key: sessionKey, agentId: agentId),
+                                   methods: { [weak self] in self?.hello?.methods }, request: self.toolsRequest)
+    }
+
+    /// A new inspector for one agent, using its most recent chat (if any) for live policy.
+    public func toolsInspector(agentId: String) -> ToolsInspectorModel {
+        let chats = self.sessions.values.filter { $0.agentId == agentId && !$0.isArchived }
+        let session = chats.first(where: \.isMain) ?? chats.max { $0.activityMs < $1.activityMs }
+        return ToolsInspectorModel(scope: .agent(agentId, sessionKey: session?.key),
+                                   methods: { [weak self] in self?.hello?.methods }, request: self.toolsRequest)
+    }
+
+    private var toolsRequest: ToolsInspectorModel.Request {
+        let connection = self.connection
+        return { method, params in try await connection.request(method, params, timeout: 30) }
     }
 
     /// `message.action` calls the built-in demo received, oldest first (for checks; empty for real Gateways).

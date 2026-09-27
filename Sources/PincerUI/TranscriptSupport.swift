@@ -100,6 +100,8 @@ protocol TranscriptRowActions: AnyObject {
     func pickReaction(for messageId: String, from view: PView, rect: CGRect)
     /// Scrolls to the message a reply quotes (loading older history if needed) and flashes it.
     func showOriginal(_ messageId: String)
+    /// Animates the latest reply's avatar.
+    var liveAvatar: TranscriptLiveAvatar? { get }
 }
 
 /// Lays out rows for the AppKit and UIKit lists and tells them when a row's layout is stale:
@@ -115,6 +117,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     private enum ImageState: Equatable { case loading, loaded, failed }
 
     private(set) var context: TranscriptContext
+    let liveAvatar: TranscriptLiveAvatar? = TranscriptLiveAvatar()
     private(set) var highlight = TranscriptHighlight()
     private var settings: TranscriptSettings
     private var cache: [String: Entry] = [:]
@@ -165,6 +168,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     func update(context: TranscriptContext) {
         let changed = context.differs(from: self.context)
         self.context = context
+        self.liveAvatar?.update(chat: context.chat)
         if changed {
             self.settings = .current(for: context)
             self.flash = nil
