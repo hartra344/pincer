@@ -39,6 +39,12 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - **Search Messages** (⇧⌘F, "Search Messages for …" in ⌘K, or the "Search messages for …" row that appears above the sidebar's chat list while you type in "Find a chat") searches the text of every cached chat on the selected gateway, including older history you haven't scrolled to. Results are grouped by chat (newest first, up to 3 per chat) with the sender, date and a highlighted snippet; picking one opens the chat with Find in Chat on that message. Matching ignores case and accents, each word must match from its start (`tok` finds "Tokyo", `kyo` doesn't), and multi-word queries must appear as a phrase. Only user and assistant message text is searched, not thinking or tool output. The index lives on disk next to the transcript cache and is built in the background;
   - Back (⌘[) and Forward (⌘]) move through the chats you've visited, like a browser;
   - ⌘1–⌘9 open the selected gateway's pinned chats, in sidebar order.
+- **Deep links and Handoff** ([guide](website/src/content/docs/guides/deep-links-and-handoff.md)):
+  - `pincer://open?gateway=<UUID|demo>[&url=<gatewayURL>]&session=<sessionKey>[&message=<id>]` opens a chat, and scrolls to a message if one is given. Values are percent-encoded. `url` (credentials stripped, never a token) lets another device find the gateway when its UUID differs. Links therefore contain your gateway's address, so don't share them publicly if the host is private. The gateway and session match the Shortcuts chat identifier `<gatewayUUID>/<sessionKey>`;
+  - **Copy Link to Chat** in the chat's ⋯ menu copies the link. Demo chats have links too (`gateway=demo`), and opening one adds the demo gateway if it's missing;
+  - an unknown gateway, chat or message opens Pincer with a short notice instead of failing silently;
+  - Handoff offers the open chat to your other Mac or iPhone while it's visible, and stops when the gateway disconnects. It needs the same Apple Account and an app signed with the same Team ID on both devices;
+  - links, notifications, the menu bar, message search, **Open Chat** and Handoff share one router. A link or Handoff only navigates: it never sends, fills in the composer or answers an approval.
 - **Quick Capture** (macOS): press ⌃⇧Space from any app to open a small floating composer, even when the main window is closed. It remembers the chat you last sent to.
   - To pick a recent chat or **New Chat with** an agent, click the target or press ⌘J (or Tab). Type to filter, ↑/↓ to move, and ⌘1–⌘9 for pinned chats.
   - Return sends (`chat.send`, after `sessions.create` for a new chat) without leaving what you're doing. ⌘Return sends and opens the chat in Pincer, ⌘O opens it without sending, and Esc closes and keeps your text.
@@ -231,6 +237,7 @@ To see what the gateway says about each request, run the app with `open --env PI
 
 - iOS runs in the simulator (connect, sidebar, history), but hasn't been tried on a real device yet.
 - The Share extension is tested against the demo and the mock over a real socket; it hasn't been tried from the share sheet on a real device yet.
+- Handoff between Mac and iPhone needs two real devices on the same Apple Account, so it's covered by unit tests only.
 - Automations has been tested against the mock only.
 - Health and restart have been tested against the demo and the mock only, not a real gateway restart.
 - Gateway Settings has been tested against the mock only. It doesn't browse the ClawHub catalog, show install progress, or edit lists of objects in forms (use the raw editor).

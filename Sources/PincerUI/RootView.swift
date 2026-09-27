@@ -16,6 +16,7 @@ public struct PincerScene: Scene {
     public var body: some Scene {
         WindowGroup("Pincer", id: "main") {
             RootView()
+                .deepLinkRouting()
                 .environment(self.app)
                 .themed()
                 .task {
@@ -151,6 +152,7 @@ struct RootView: View {
             self.app.appIsActive = phase == .active
         }
         .onChange(of: self.app.openRequests) { self.compactColumn = .detail }
+        .onChange(of: self.app.gatewayListRequests) { self.compactColumn = .sidebar }
         .background { UnreadBadgeSync() }
         .onAppear {
             if self.app.gateways.isEmpty { self.addingGateway = true }

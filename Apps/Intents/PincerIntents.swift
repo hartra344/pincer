@@ -155,7 +155,7 @@ struct OpenChatIntent: OpenIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        AppModel.shared.open(self.target.chat.target)
+        AppModel.shared.open(AppModel.shared.route(for: self.target.chat.target), verifySession: false)
         return .result()
     }
 }

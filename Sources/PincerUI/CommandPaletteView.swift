@@ -495,7 +495,7 @@ struct CommandPaletteView: View {
         switch item.action {
         case let .openChat(target):
             self.close()
-            self.app.open(target)
+            self.app.open(self.app.route(for: target), verifySession: false)
         case let .newChat(gatewayId, agentId):
             self.close()
             guard let gateway = self.app.gateways.first(where: { $0.id == gatewayId }) else { return }
@@ -518,10 +518,10 @@ struct CommandPaletteView: View {
             self.show(.messages, query: query)
         case let .openMessage(target, query, match):
             self.close()
-            self.app.open(target, find: query, match: match)
+            self.app.open(self.app.route(for: target), find: query, match: match)
         case let .findInChat(target, query):
             self.close()
-            self.app.open(target, find: query, match: nil)
+            self.app.open(self.app.route(for: target), find: query, match: nil)
         }
     }
 
