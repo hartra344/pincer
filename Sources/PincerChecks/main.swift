@@ -1157,6 +1157,7 @@ checkMessageSearchLogic()
 
 print("Message index")
 await checkMessageIndex()
+await checkTranscriptCacheVersioning()
 
 print("Message search in the palette")
 checkPaletteMessages()
@@ -2414,6 +2415,9 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     await runQuickCaptureLive(url: url, token: token)
     print("Replies & reactions (live)")
     await runLiveReactionsReply(url: url, token: token)
+    print("Transcript cache recovery (live)")
+    await runLiveCacheRecovery(url: url, token: token)
+    await runLiveCacheRefill(url: url, token: token)
     print("Setup wizard (live)")
     await runLiveSetup(url: url, token: token)
     print("Deep links (live)")

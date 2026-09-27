@@ -47,6 +47,7 @@ export default defineConfig({
 						{ slug: 'guides/command-palette-and-navigation' },
 						{ slug: 'guides/transcript' },
 						{ slug: 'guides/search' },
+						{ slug: 'guides/local-cache' },
 						{ slug: 'guides/composer' },
 						{ slug: 'guides/quick-capture' },
 						{ slug: 'guides/menu-bar' },

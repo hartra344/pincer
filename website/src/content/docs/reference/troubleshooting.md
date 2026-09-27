@@ -173,6 +173,12 @@ Check that **Load images the agent links from the web** is on in Settings. Image
 
 A damaged or outdated search index is deleted and rebuilt on its own, so you never need to clear it yourself. See [Search messages](../../guides/search/).
 
+## A chat's history reloaded from scratch, or there's a Quarantine folder
+
+After an update that changes the cache format, or when a cached transcript file is damaged, Pincer discards that file and loads the chat's history from the gateway again. This is expected and nothing is lost. Damaged files are kept in `Quarantine/` inside the gateway's cache folder (the 5 most recent) only for bug reports; you can delete them.
+
+If chats keep reloading or the cache looks wrong, choose **Settings → Storage → Clear Cache…**. It deletes cached history and search indexes for every gateway, not anything on the gateway. See [Local cache](../../guides/local-cache/).
+
 ## "Always allow" is missing
 
 The gateway only offers **Always allow** for some commands. When the approval doesn't permit it, Pincer shows just **Allow once** and **Deny**.

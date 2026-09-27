@@ -444,6 +444,14 @@ public final class GatewayStore: Identifiable {
         return MessageSearch.Results(query: query, chats: chats)
     }
 
+    /// The transcript cache was cleared (Settings): chats open here are saved again and the rest
+    /// refetched in the background, so the cache and search index fill back up without a relaunch.
+    func cacheCleared() async {
+        for chat in self.chats.values { await chat.saveToCache() }
+        guard self.state.isConnected else { return }
+        self.startPrefetch()
+    }
+
     /// Quietly caches every chat's full history, most recently active first, so opening any
     /// channel is instant. Chats that haven't changed since they were cached are skipped.
     private func startPrefetch() {

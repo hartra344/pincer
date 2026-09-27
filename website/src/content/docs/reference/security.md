@@ -79,7 +79,10 @@ Transcripts are cached so chats open instantly:
 - **Location:** `~/Library/Caches/Pincer/Transcripts/<gateway>/`, one file per chat.
 - **Size:** up to 20,000 messages per chat.
 - **Protection:** files use complete file protection.
-- **Cleanup:** removing a gateway deletes its cache.
+- **Cleanup:** removing a gateway deletes its cache. **Settings → Storage → Clear Cache…** deletes the cache for every gateway.
+- **Versioning:** each file records its format version. Files from a version Pincer can't upgrade, or from a newer Pincer, are deleted and reloaded from the gateway. Damaged files are moved to a `Quarantine/` folder in the same place (the 5 most recent are kept) and reloaded.
+
+See [Local cache](../../guides/local-cache/) for details.
 
 ### Search index
 
