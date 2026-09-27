@@ -30,7 +30,7 @@ actor DemoGateway {
          "unavailableReason": "missing-auth"],
     ]
     private static let methods = [
-        "agents.list", "sessions.subscribe", "sessions.list", "sessions.groups.list", "sessions.groups.put",
+        "agents.list", "agent.identity.get", "sessions.subscribe", "sessions.list", "sessions.groups.list", "sessions.groups.put",
         "sessions.groups.rename", "sessions.groups.delete", "sessions.messages.subscribe",
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
@@ -185,6 +185,8 @@ actor DemoGateway {
         switch method {
         case "agents.list":
             return ["defaultId": "main", "mainKey": "main", "scope": "per-sender", "agents": .array(self.agents)]
+        case "agent.identity.get":
+            return try self.identity(params)
         case "sessions.subscribe":
             self.sessionsSubscribed = true
             return ["subscribed": true, "list": self.sessionList(params)]
@@ -1002,6 +1004,11 @@ actor DemoGateway {
                               "message": Self.message("assistant", [Self.thinking(thinking)], runId: runId, model: model)])
         }
 
+        if lowered.range(of: #"\bfail\b"#, options: .regularExpression) != nil {
+            await self.simulateFailure(runId: runId, key: key)
+            return
+        }
+
         if lowered.range(of: #"\bplan\b"#, options: .regularExpression) != nil {
             guard await self.simulatePlan(runId: runId, key: key, model: model) else { return }
         }
@@ -1061,6 +1068,21 @@ actor DemoGateway {
             }
         }
         if approvesLater { self.scheduleLaterApproval(sessionKey: key) }
+    }
+
+    /// Ends the run the way a provider timeout does: a chat `error`, then an `error` lifecycle phase.
+    private func simulateFailure(runId: String, key: String) async {
+        guard await self.pause(runId, milliseconds: 600) else { return }
+        let message = "LLM request timed out."
+        self.chat(runId, ["state": "error", "errorMessage": .string(message), "errorKind": "timeout"])
+        self.agentEvent(runId, stream: "lifecycle", ["phase": "error", "error": .string(message)])
+        self.runs[runId] = nil
+        self.logs.chatFailed(runId: runId, message: message)
+        self.updateRow(key, reason: "run-finished") { row in
+            row["hasActiveRun"] = false
+            row["activeRunIds"] = []
+            row["status"] = "idle"
+        }
     }
 
     // MARK: Demo showcase: approve later
@@ -1403,6 +1425,7 @@ actor DemoGateway {
         **approve later** sends one a few seconds after the reply.
         - **ask** brings up a question card.
         - **plan** walks the task progress card.
+        - **fail** ends the run with an error.
         - Send **/compact**, or use **Compact Now** in the context ring.
         - **⌘F** searches the chat — try "onsen" in *Japan trip*.
         - **⌘K** opens the command palette, and **⌘1–⌘3** jump to pinned chats.
@@ -1473,6 +1496,26 @@ actor DemoGateway {
             ? self.agentName(self.sessions[key]?["agentId"]?.string ?? "main") : GatewayConnection.displayName
         return ["replyToId": .string(targetId),
                 "replyToPreview": ["text": .string(String(text.prefix(2000))), "senderLabel": .string(sender)]]
+    }
+
+    /// Like the Gateway for an emoji-only identity: `agentId`, else the session key's agent, else the default,
+    /// with the emoji projected as `avatar`.
+    private func identity(_ params: JSONValue) throws -> JSONValue {
+        let fromKey = params["sessionKey"]?.string.flatMap { key -> String? in
+            let parts = key.split(separator: ":")
+            return parts.count > 2 && parts[0] == "agent" ? String(parts[1]) : nil
+        }
+        let requested = params["agentId"]?.string?.trimmingCharacters(in: .whitespaces)
+        let agentId = requested.flatMap { $0.isEmpty ? nil : $0 } ?? fromKey ?? "main"
+        guard let agent = self.agents.first(where: { $0["id"]?.string == agentId }) else {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "unknown agent id \"\(agentId)\"", details: nil)
+        }
+        let name = agent["identity"]?["name"]?.string
+        let emoji = agent["identity"]?["emoji"]?.string
+        var result: Row = ["agentId": .string(agentId), "name": .string(name ?? "Assistant"),
+                           "nameSource": .string(name == nil ? "default" : "agent"), "avatar": .string(emoji ?? "A")]
+        if let emoji { result["emoji"] = .string(emoji) }
+        return .object(result)
     }
 
     private func agentName(_ id: String) -> String {

@@ -172,6 +172,13 @@ try {
   assert.equal(agents.defaultId, 'main');
   assert.ok(agents.agents.some((a) => a.id === 'research'));
 
+  const scoutIdentity = await client.send('agent.identity.get', { agentId: 'research' });
+  assert.deepEqual(scoutIdentity, { agentId: 'research', name: 'Scout', nameSource: 'agent', emoji: '🔭', avatar: '🔭' });
+  const mainIdentity = await client.send('agent.identity.get', { sessionKey: 'agent:main:main' });
+  assert.equal(mainIdentity.agentId, 'main');
+  assert.equal(mainIdentity.name, 'Claw');
+  await assert.rejects(client.send('agent.identity.get', { agentId: 'nobody' }));
+
   const sessions = await client.send('sessions.subscribe', { limit: 20 });
   assert.ok(sessions.list.sessions.some((s) => s.key === 'agent:main:main'));
 
@@ -220,6 +227,20 @@ try {
   assert.equal(await closed, 1012);
   const afterHooks = await client.send('chat.history', { sessionKey: 'agent:main:main' });
   assert.ok(!afterHooks.messages.some((m) => JSON.stringify(m.content).includes('[mock:')), 'hooked sends leave no messages');
+
+  // `[mock:fail-run]` ends the run with a chat `error` and an `error` lifecycle phase, like a provider timeout.
+  const failedChat = client.waitEvent('chat', (p) => p.sessionKey === 'agent:research:main' && p.state === 'error', 10_000);
+  const failedLifecycle = client.waitEvent('agent', (p) => p.sessionKey === 'agent:research:main' && p.stream === 'lifecycle' && p.data?.phase === 'error', 10_000);
+  const failing = await client.send('chat.send', {
+    sessionKey: 'agent:research:main',
+    message: 'this one breaks [mock:fail-run]',
+    idempotencyKey: `idem_${crypto.randomUUID()}`,
+  });
+  const failed = await failedChat;
+  assert.equal(failed.runId, failing.runId);
+  assert.equal(failed.errorKind, 'timeout');
+  assert.ok(failed.errorMessage);
+  assert.equal((await failedLifecycle).runId, failing.runId);
 
   // Replies: replyToId persists the quoted target's id and a preview, like upstream.
   const quotedTarget = afterHooks.messages.find((m) => m.role === 'assistant' && m.content.some((b) => b.type === 'text'));

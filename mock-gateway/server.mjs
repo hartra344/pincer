@@ -15,6 +15,7 @@ import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const METHODS = [
   'agents.list',
+  'agent.identity.get',
   'sessions.subscribe',
   'sessions.list',
   'sessions.groups.list',
@@ -930,6 +931,21 @@ async function simulateRun(state, run, params, replyMeta = {}) {
       });
     }
 
+    if (String(text ?? '').includes('[mock:fail-run]')) {
+      // Like a provider timeout: the run ends with a chat `error` event and an `error` lifecycle phase.
+      const errorMessage = 'LLM request timed out.';
+      broadcast(state, 'chat', { runId: run.runId, sessionKey, seq: ++run.seq, state: 'error', errorMessage, errorKind: 'timeout' });
+      broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'lifecycle', data: { phase: 'error', error: errorMessage } });
+      row.hasActiveRun = false;
+      row.activeRunIds = row.activeRunIds.filter((id) => id !== run.runId);
+      row.status = 'idle';
+      updateSessionRow(row, { lastActivityAt: nowMs() });
+      broadcastSessionChanged(state, sessionKey, 'run-finished', row);
+      run.finished = true;
+      state.activeRuns.delete(run.runId);
+      return;
+    }
+
     if (/\bplan\b/i.test(String(text ?? ''))) {
       await simulatePlan(state, run, sessionKey, row);
       if (run.aborted) return;
@@ -1082,6 +1098,22 @@ function handleAuthedRequest(state, conn, msg) {
         agents: [...state.agents.values()].map(clone),
       });
       break;
+    }
+    case 'agent.identity.get': {
+      // Upstream resolves `agentId`, else the session key's agent, else the default agent.
+      const fromKey = /^agent:([^:]+):/.exec(String(params.sessionKey ?? ''))?.[1];
+      const agentId = String(params.agentId ?? '').trim() || fromKey || 'main';
+      const agent = state.agents.get(agentId);
+      if (!agent) return sendErr(conn, id, 'INVALID_REQUEST', `unknown agent id "${agentId}"`);
+      const { name, emoji } = agent.identity ?? {};
+      sendRes(conn, id, {
+        agentId,
+        ...(name ? { name, nameSource: 'agent' } : { name: 'Assistant', nameSource: 'default' }),
+        ...(emoji ? { emoji } : {}),
+        // Emoji-only identities project the emoji as the avatar (no image resolution); default is "A".
+        avatar: emoji ?? 'A',
+      });
+      return;
     }
     case 'sessions.subscribe': {
       conn.sessionSubscribed = true;
