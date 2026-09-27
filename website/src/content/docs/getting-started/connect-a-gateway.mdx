@@ -43,6 +43,8 @@ You'll need:
    openclaw devices approve <requestId>
    ```
 
+   Pincer can't approve its own first pairing, so the first device always needs the host. After that, a device paired with **Full Management** can approve your other devices from **Gateway Settings → Devices**. See [Devices & Nodes](../../guides/devices/).
+
 5. Pincer reconnects on its own as soon as you approve it. Your agents and chats appear in the sidebar, and the full history of each chat starts caching in the background.
 
 6. Pincer offers to **set up the gateway**: a short check of its health, channels, default agent and model, and skills, ending with a test message. See [Set up a gateway](../setup-wizard/). You can skip it and come back later.

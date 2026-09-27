@@ -50,7 +50,7 @@ If there's nothing left to send, the section says "Nothing to share."
 - **Add a gateway in Pincer first.** Otherwise the sheet says "Add a Gateway in Pincer first, then share again."
 - **Open Pincer once after installing or updating.** The share extension uses the device key and secrets Pincer has already set up, and Pincer moves them where the extension can read them the first time it opens. Until then, the sheet says "Open Pincer once to finish setting up sharing, then share again."
 
-There's nothing new to pair. The extension connects as the same device you already approved. If the gateway hasn't approved this device yet, the sheet says so and shows the device to approve with `openclaw devices approve`. See [Connect a gateway](../../getting-started/connect-a-gateway/).
+There's nothing new to pair. The extension connects as the same device you already approved. If the gateway hasn't approved this device yet, the sheet says so and shows the device to approve with `openclaw devices approve`, or from [Devices](../devices/) on another device with Full Management. See [Connect a gateway](../../getting-started/connect-a-gateway/).
 
 ## Privacy
 
