@@ -16,7 +16,12 @@ import UserNotifications
 //   swift run -c release PincerChecks --perf → message index at 20 chats × 20k messages
 //   swift run PincerChecks --live-no-usage URL TOKEN → a Gateway without usage (mock with MOCK_NO_USAGE=1)
 //   swift run PincerChecks --live-no-reply-to URL TOKEN → a Gateway without replyToId (mock with MOCK_NO_REPLY_TO=1)
-// Run with PINCER_KEYCHAIN=memory so nothing touches the real Keychain.
+// Secrets always stay in memory here (no PINCER_KEYCHAIN needed), so checks never touch or
+// prompt for the real Keychain.
+
+// First, before anything reads or writes a secret.
+Keychain.useInMemoryStore()
+PushKeyStore.useInMemoryStore()
 
 var failures = 0
 var passes = 0
@@ -2437,6 +2442,10 @@ if arguments.contains("--demo") {
     print("Menu bar (demo)")
     await runMenuBarDemo()
 }
+
+print("Keychain isolation")
+check(Keychain.isInMemory && KeychainMode.isInMemory, "secrets use the in-memory store")
+check(KeychainMode.realKeychainCalls == 0, "no real Keychain (SecItem) calls during checks")
 
 print("\n\(passes) passed, \(failures) failed")
 try? FileManager.default.removeItem(at: draftsRoot)

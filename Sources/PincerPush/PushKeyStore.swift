@@ -6,8 +6,12 @@ import Security
 public enum PushKeyStore {
     static let service = "chat.pincer.push"
 
-    private static let memory: MemoryStore? =
-        ProcessInfo.processInfo.environment["PINCER_KEYCHAIN"] == "memory" ? MemoryStore() : nil
+    /// Process-local store used in `KeychainMode` memory mode (checks, tests, `PINCER_KEYCHAIN=memory`).
+    private static let memoryStore = MemoryStore()
+    private static var memory: MemoryStore? { KeychainMode.isInMemory ? self.memoryStore : nil }
+
+    /// Keeps push keys in memory for the rest of the process (see `KeychainMode.useInMemoryStore`).
+    public static func useInMemoryStore() { KeychainMode.useInMemoryStore() }
 
     private final class MemoryStore: @unchecked Sendable {
         private let lock = NSLock()
@@ -40,6 +44,7 @@ public enum PushKeyStore {
     public static func delete(for gatewayId: UUID) {
         let account = self.account(gatewayId)
         if let memory { memory[account] = nil; return }
+        KeychainMode.recordRealAccess()
         SecItemDelete(self.query(account, group: nil) as CFDictionary)
     }
 
@@ -60,6 +65,7 @@ public enum PushKeyStore {
 
     private static func write(_ value: String, account: String) {
         if let memory { memory[account] = value; return }
+        KeychainMode.recordRealAccess()
         SecItemDelete(self.query(account, group: nil) as CFDictionary)
         for group in [self.accessGroup, nil] {
             var query = self.query(account, group: group)
@@ -77,6 +83,7 @@ public enum PushKeyStore {
 
     private static func read(_ account: String) -> String? {
         if let memory { return memory[account] }
+        KeychainMode.recordRealAccess()
         var query = self.query(account, group: nil)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne

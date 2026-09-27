@@ -210,20 +210,20 @@ To run the unit tests:
 swift test --parallel
 ```
 
-They use fixed signing keys, their own temp folders and throwaway defaults suites, so they need no gateway, socket or Keychain (no `PINCER_KEYCHAIN` either) and can run alongside the self-checks.
+They use fixed signing keys, their own temp folders and throwaway defaults suites, so they need no gateway or socket, and secrets always stay in memory, so they never touch the Keychain (no `PINCER_KEYCHAIN` either) and can run alongside the self-checks.
 
 To run the self-checks:
 
 ```sh
-PINCER_KEYCHAIN=memory swift run PincerChecks
-PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
-PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo
-PINCER_KEYCHAIN=memory swift run -c release PincerChecks --perf   # message search at 20 chats × 20,000 messages
-PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock started with MOCK_NO_USAGE=1 PORT=18790
-PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token   # mock started with MOCK_NO_REPLY_TO=1 PORT=18791
+swift run PincerChecks
+swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+swift run PincerChecks --demo   # the built-in demo
+swift run -c release PincerChecks --perf   # message search at 20 chats × 20,000 messages
+swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock started with MOCK_NO_USAGE=1 PORT=18790
+swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token   # mock started with MOCK_NO_REPLY_TO=1 PORT=18791
 ```
 
-`PINCER_KEYCHAIN=memory` keeps identities and secrets in memory, so checks and dev runs never touch your real Keychain. It works for the app too: `open --env PINCER_KEYCHAIN=memory build/Pincer.app`.
+The self-checks always keep identities and secrets in memory, so they never touch or prompt for your real Keychain. For dev runs of the app, `PINCER_KEYCHAIN=memory` does the same: `open --env PINCER_KEYCHAIN=memory build/Pincer.app`.
 
 To see what the gateway says about each request, run the app with `open --env PINCER_REQUEST_LOG=/tmp/pincer.log build/Pincer.app`. Every request is logged with ✓ or the gateway's error, along with the fields of each sidebar update. History and image downloads, and Gateway Logs polls (`logs.tail`), are left out. This is Pincer's own request log, not the gateway's log; for that, open **Gateway Logs**.
 
