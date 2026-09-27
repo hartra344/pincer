@@ -60,8 +60,13 @@ func runDemoSetup() async {
           "Telegram is the degraded channel")
     check(setup.status(of: .agent).isDone, "demo Agent & Model is Done (\(setup.status(of: .agent)))")
     let skills = setup.status(of: .skills)
-    check(skills.needsAttention && setup.skills?.missing.map(\.name) == ["summarize"],
-          "demo Skills: exactly summarize missing (\(skills), \(setup.skills?.missing.map(\.name) ?? []))")
+    // The wizard reads the Skills page's seed: every Needs Setup skill there (not disabled, blocked or other-OS) is missing.
+    await gateway.skills.load(agentId: nil)
+    let seedMissing = gateway.skills.skills.filter { $0.state == .needsSetup && !$0.platformIncompatible }.map(\.name)
+    let wizardMissing = setup.skills?.missing.map(\.name) ?? []
+    check(skills.needsAttention && wizardMissing.contains("summarize") && Set(wizardMissing) == Set(seedMissing),
+          "demo Skills: the seed's needs-setup skills are missing, summarize included (\(skills), \(wizardMissing) vs \(seedMissing))")
+    check(setup.skills?.missing.first { $0.name == "summarize" }?.missing == ["summarize"], "demo summarize is missing its CLI")
     check(!setup.hasAdmin && setup.needsFullManagement(.channels) && setup.needsFullManagement(.agent)
           && !setup.needsFullManagement(.health) && !setup.canStartQRLogin(channel: "whatsapp"),
           "demo has no Full Management: channel and agent actions locked, rest read-only (admin \(setup.hasAdmin), qr \(setup.canStartQRLogin(channel: "whatsapp")))")
@@ -136,7 +141,8 @@ func runLiveSetup(url: String, token: String) async {
     let whatsapp = setup.channels?.channels.first { $0.id == "whatsapp" }
     check(setup.channels?.channels.map(\.id).contains("discord") == true && whatsapp != nil,
           "channels.status lists Discord and WhatsApp (\(setup.channels?.channels.map(\.id) ?? []))")
-    check(setup.skills?.missing.map(\.name) == ["summarize"], "skills.status: summarize missing (\(setup.skills?.missing.map(\.name) ?? []))")
+    // Earlier live Skills checks install and fix some skills, so only check the ones they leave alone.
+    check(Set(["notion", "voice-call"]).isSubset(of: setup.skills?.missing.map(\.name) ?? []), "skills.status: needs-setup skills missing (\(setup.skills?.missing.map(\.name) ?? []))")
     check(setup.status(of: .skills).needsAttention, "Skills needs attention")
     check(!setup.hasAdmin && setup.needsFullManagement(.channels) && !setup.canStartQRLogin(channel: "whatsapp"),
           "standard access can't start a QR login")

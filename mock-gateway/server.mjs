@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
 import { AGENT_MANAGEMENT_METHODS, agentManagementDisabled, createAgentWorkspaces, handleAgentsRequest } from './agents.mjs';
+import { SKILLS_METHODS, TOOLS_METHODS, handleSkillsRequest, skillsDisabled, toolsDisabled } from './skills.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
 import { LOGS_METHODS, createLogsState, handleLogsRequest, logsDisabled, noteApprovalForLogs, noteChatForLogs, stopLogs } from './logs.mjs';
@@ -20,6 +21,8 @@ const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const METHODS = [
   'agents.list',
   ...AGENT_MANAGEMENT_METHODS,
+  ...SKILLS_METHODS,
+  ...TOOLS_METHODS,
   'sessions.subscribe',
   'sessions.list',
   'sessions.groups.list',
@@ -635,6 +638,8 @@ function advertisedMethods() {
     ...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []),
     ...(execApprovalsDisabled() ? EXEC_APPROVALS_METHODS : []),
     ...(agentManagementDisabled() ? AGENT_MANAGEMENT_METHODS : []),
+    ...(skillsDisabled() ? SKILLS_METHODS : []),
+    ...(toolsDisabled() ? TOOLS_METHODS : []),
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
     ...(healthDisabled() ? HEALTH_METHODS : []),
     ...(usageDisabled() ? USAGE_METHODS : []),
@@ -957,6 +962,21 @@ async function simulateRun(state, run, params, replyMeta = {}) {
       });
     }
 
+    if (String(text ?? '').includes('[mock:fail-run]')) {
+      // Like a provider timeout: the run ends with a chat `error` event and an `error` lifecycle phase.
+      const errorMessage = 'LLM request timed out.';
+      broadcast(state, 'chat', { runId: run.runId, sessionKey, seq: ++run.seq, state: 'error', errorMessage, errorKind: 'timeout' });
+      broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'lifecycle', data: { phase: 'error', error: errorMessage } });
+      row.hasActiveRun = false;
+      row.activeRunIds = row.activeRunIds.filter((id) => id !== run.runId);
+      row.status = 'idle';
+      updateSessionRow(row, { lastActivityAt: nowMs() });
+      broadcastSessionChanged(state, sessionKey, 'run-finished', row);
+      run.finished = true;
+      state.activeRuns.delete(run.runId);
+      return;
+    }
+
     if (/\bplan\b/i.test(String(text ?? ''))) {
       await simulatePlan(state, run, sessionKey, row);
       if (run.aborted) return;
@@ -1084,6 +1104,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleLogsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleExecApprovalsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleAgentsRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
+  if (handleSkillsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleSetupRequest(state, conn, msg, { sendRes, sendErr, broadcast, healthSummary })) return;

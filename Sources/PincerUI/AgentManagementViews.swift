@@ -274,6 +274,15 @@ struct AgentPage: View {
             self.workspace(agent, edit: edit)
             self.bindings(agent)
             self.filesSection(agent)
+            if self.gateway.supportsToolsCatalog {
+                Section {
+                    NavigationLink(value: SettingsRoute.agentTools(agent.id)) {
+                        Label("Tools", systemImage: "wrench.and.screwdriver")
+                    }
+                } footer: {
+                    Text("The tools this agent can use, and the policy that allows or denies each.")
+                }
+            }
             self.danger(agent)
         }
         .formStyle(.grouped)

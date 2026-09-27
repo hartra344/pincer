@@ -275,6 +275,9 @@ struct ChatChrome: ViewModifier {
     @Environment(GatewayStore.self) private var gateway
     /// Per window, and kept across chat switches.
     @State private var showRuns = false
+    /// The "Tools & Policy…" sheet. Held here, not on the toolbar menu, so a menu re-render or the
+    /// session row briefly going away (refresh, reconnect) doesn't dismiss it.
+    @State private var toolsInspector: ChatToolsInspection?
 
     private var key: String? { self.gateway.selectedKey }
     private var row: SessionRow? { self.key.flatMap { self.gateway.sessions[$0] } }
@@ -288,8 +291,16 @@ struct ChatChrome: ViewModifier {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
+                #if os(macOS)
+                ToolbarItem(placement: .navigation) { ChatHeaderAvatar() }
+                #else
+                ToolbarItem(placement: .topBarLeading) { ChatHeaderAvatar() }
+                #endif
                 ToolbarItem(placement: .primaryAction) { ChatModelItem() }
-                ToolbarItem(placement: .primaryAction) { ChatSessionMenu(showRuns: self.$showRuns) }
+                ToolbarItem(placement: .primaryAction) { ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector) }
+            }
+            .sheet(item: self.$toolsInspector) { inspection in
+                ChatToolsInspectorSheet(model: inspection.model, scopeTitle: inspection.scopeTitle, gateway: self.gateway)
             }
             .modifier(RunsPanelChrome(isPresented: self.$showRuns))
     }
@@ -322,6 +333,7 @@ private struct ChatSessionMenu: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @FocusedValue(\.transcriptFind) private var find
+    @Binding var toolsInspector: ChatToolsInspection?
 
     var body: some View {
         if let key = self.gateway.selectedKey, let row = self.gateway.sessions[key] {
@@ -343,11 +355,25 @@ private struct ChatSessionMenu: View {
                 Button("Session Usage…", systemImage: "chart.bar") {
                     self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
                 }
+                if self.gateway.supportsToolsEffective {
+                    Button("Tools & Policy…", systemImage: "wrench.and.screwdriver") {
+                        self.toolsInspector = ChatToolsInspection(model: self.gateway.toolsInspector(sessionKey: row.key),
+                                                                  scopeTitle: "Session: \(row.title)")
+                    }
+                }
             } label: {
                 Label("Session", systemImage: Theme.moreSymbol)
             }
         }
     }
+}
+
+/// A presented "Tools & Policy…" sheet: its inspector (made in the menu action) and scope title.
+struct ChatToolsInspection: Identifiable {
+    let model: ToolsInspectorModel
+    let scopeTitle: String
+
+    var id: ObjectIdentifier { ObjectIdentifier(self.model) }
 }
 
 /// What the Gateway saves and streams of the agent's reasoning for this session. How much of it

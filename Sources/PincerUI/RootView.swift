@@ -294,7 +294,7 @@ struct SettingsView: View {
                 SettingsForm(sections: [.you, .launch, .quickCapture, .menuBar, .device, .storage, .tips])
             }
             Tab("Appearance", systemImage: "paintpalette") {
-                SettingsForm(sections: [.appearance, .colors], scrolls: true)
+                SettingsForm(sections: [.appearance, .avatars, .colors], scrolls: true)
             }
             Tab("Conversation", systemImage: "bubble.left.and.text.bubble.right") {
                 SettingsForm(sections: [.conversation, .sidebar])
@@ -322,7 +322,7 @@ enum ReactionFeature {
 
 private struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, launch, quickCapture, menuBar, appearance, colors, conversation, sidebar, notifications, device, storage, tips
+        case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, sidebar, notifications, device, storage, tips
 
         /// Sections that exist on this platform.
         static var available: [Self] {
@@ -410,6 +410,8 @@ private struct SettingsForm: View {
             } footer: {
                 Text("Themes set the accent, links, avatars and backgrounds. Default follows your system accent color.")
             }
+        case .avatars:
+            AvatarSettingsSection()
         case .colors:
             SwiftUI.Section {
                 ForEach(ThemeRole.allCases) { role in

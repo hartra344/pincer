@@ -11,6 +11,13 @@ enum TranscriptPart {
         let text: String
         let emoji: String?
         let color: PColor
+        /// The agent's companion, drawn instead of the initial when animated avatars are on.
+        var creature: AvatarStyle?
+        var state = AvatarState.idle
+        /// The agent's, not the owner's: the latest reply's can come alive.
+        var isAgent = false
+        /// Staggers blinks between agents.
+        var seed = ""
     }
 
     struct Header {
@@ -252,13 +259,16 @@ struct TranscriptSettings: Equatable {
     var reasoningOff = false
     /// Colors are baked into layouts (avatars) and drawn by row views, so a theme change redoes them.
     var theme = AppTheme()
+    /// The agent's companion, when animated avatars are on.
+    var avatarStyle: AvatarStyle?
 
     @MainActor static func current(for context: TranscriptContext) -> TranscriptSettings {
         TranscriptSettings(
             thinking: ThinkingDisplay.current,
             reactionsEnabled: ReactionFeature.isEnabled,
             reasoningOff: context.gateway.sessions[context.sessionKey]?.reasoningLevel == "off",
-            theme: AppTheme.current)
+            theme: AppTheme.current,
+            avatarStyle: AvatarSettings.isEnabled ? AvatarSettings.style(for: context.agent) : nil)
     }
 }
 
@@ -418,7 +428,10 @@ struct TranscriptLayoutBuilder {
         // A finished turn with nothing else to show keeps its steps, folded, so it isn't blank.
         case .live: hasReply ? .hidden : .grouped
         }
-        self.scaffold(avatar: .init(text: String(agent.name.prefix(1)).uppercased(), emoji: agent.emoji, color: TranscriptColors.agentAvatar),
+        let avatar = TranscriptPart.Avatar(text: String(agent.name.prefix(1)).uppercased(), emoji: agent.emoji,
+                                           color: TranscriptColors.agentAvatar, creature: self.settings.avatarStyle,
+                                           state: turn.isStreaming ? .streaming : .idle, isAgent: true, seed: agent.id)
+        self.scaffold(avatar: avatar,
                       header: header, into: &layout) { stack, layout in
             switch steps {
             case .hidden:
