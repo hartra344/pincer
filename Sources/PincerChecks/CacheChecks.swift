@@ -237,7 +237,7 @@ func runLiveCacheRefill(url: String, token: String) async {
     let refilled = await waitFor("prefetch refills", timeout: 30) { cachedOthers() > 0 }
     check(refilled, "background prefetch refills other chats after clearing (\(cachedOthers()))")
     let term = chat.items.last { !$0.plainText.isEmpty && $0.plainText.count > 8 }?.plainText
-        .split(separator: " ").first { $0.count >= 5 }.map(String.init)
+        .split(whereSeparator: { !$0.isLetter && !$0.isNumber }).first { $0.count >= 5 }.map(String.init)
     if let term {
         let found = await waitForSearch(gateway, term, timeout: 15) { $0.chats.contains { $0.sessionKey == key } }
         check(found != nil, "search finds the open chat again after clearing (“\(term)”)")
