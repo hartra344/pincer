@@ -9,8 +9,11 @@ struct ToolsInspectorView: View {
     let model: ToolsInspectorModel
     /// "Session: Trip planning" or "Agent: Scout".
     let scopeTitle: String
-    /// Opens where tool policy is edited.
-    var openPolicySettings: (() -> Void)?
+    /// "Live policy from “Main”." when an agent's inspector used one of its chats.
+    var scopeDetail: String?
+    /// Where tool policy is edited, and the button's title.
+    var policySettings: ToolPolicySettings?
+    var openPolicySettings: ((SettingsDestination) -> Void)?
     @State private var filter = ToolFilter.all
     @State private var search = ""
 
@@ -19,6 +22,9 @@ struct ToolsInspectorView: View {
         Form {
             Section {
                 Text(self.scopeTitle).font(.headline)
+                if let detail = self.scopeDetail {
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                }
                 if let inspection = model.inspection {
                     Text(inspection.summary).foregroundStyle(.secondary)
                 }
@@ -62,8 +68,8 @@ struct ToolsInspectorView: View {
                 Section { ProgressView().frame(maxWidth: .infinity) }
             }
             Section {
-                if let open = self.openPolicySettings {
-                    Button("Tool Settings…", systemImage: "wrench.and.screwdriver", action: open)
+                if let open = self.openPolicySettings, let target = self.policySettings {
+                    Button(target.title, systemImage: target.symbol) { open(target.destination) }
                 }
             } footer: {
                 Text(ToolsPolicy.policyFootnote)
@@ -125,9 +131,10 @@ struct ChatToolsInspectorSheet: View {
 
     var body: some View {
         NavigationStack {
-            ToolsInspectorView(model: self.model, scopeTitle: self.scopeTitle) {
+            ToolsInspectorView(model: self.model, scopeTitle: self.scopeTitle,
+                               policySettings: ToolPolicySettings(self.gateway)) { destination in
                 self.dismiss()
-                self.openGatewaySettings(self.gateway, at: .page("tools"))
+                self.openGatewaySettings(self.gateway, at: destination)
             }
             .navigationTitle("Tools & Policy")
             #if os(iOS)
@@ -159,8 +166,10 @@ struct AgentToolsPage: View {
                 ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
                                        description: Text("Connect to the gateway to see this agent's tools."))
             } else if let model {
-                ToolsInspectorView(model: model, scopeTitle: "Agent: \(agent?.title ?? self.agentId)") {
-                    self.navigator.destination = .page("tools")
+                ToolsInspectorView(model: model, scopeTitle: "Agent: \(agent?.title ?? self.agentId)",
+                                   scopeDetail: model.effective == nil ? nil : self.liveChatTitle(model).map(ToolsPolicy.livePolicyNote),
+                                   policySettings: ToolPolicySettings(self.gateway)) { destination in
+                    self.navigator.destination = destination
                 }
             } else {
                 ProgressView()
@@ -171,5 +180,33 @@ struct AgentToolsPage: View {
             guard self.gateway.state.isConnected else { return }
             if self.model == nil { self.model = self.gateway.toolsInspector(agentId: self.agentId) }
         }
+    }
+
+    private func liveChatTitle(_ model: ToolsInspectorModel) -> String? {
+        guard let key = model.scope.sessionKey else { return nil }
+        return self.gateway.sessions[key]?.title ?? key
+    }
+}
+
+/// Where the inspector's settings button goes: the Tools & Skills page when this Gateway's config
+/// has one, else Raw Config (so it never opens a dead page).
+struct ToolPolicySettings {
+    let title: String
+    let symbol: String
+    let destination: SettingsDestination
+
+    @MainActor init(_ gateway: GatewayStore) {
+        let settings = gateway.settings
+        if settings.hasLoaded, let page = SettingsCatalog.pages.first(where: { $0.id == "tools" }), settings.shows(page) {
+            self = ToolPolicySettings(title: "Tool Settings…", symbol: "wrench.and.screwdriver", destination: .page(page.id))
+        } else {
+            self = ToolPolicySettings(title: "Raw Config…", symbol: "curlybraces", destination: .raw)
+        }
+    }
+
+    private init(title: String, symbol: String, destination: SettingsDestination) {
+        self.title = title
+        self.symbol = symbol
+        self.destination = destination
     }
 }

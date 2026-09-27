@@ -16,10 +16,12 @@ struct SkillsPage: View {
 
     private var model: SkillsModel { self.gateway.skills }
     private var selectedAgent: String { self.agentId.isEmpty ? self.gateway.defaultAgentId : self.agentId }
+    /// What `skills.status` gets: nil (the Gateway default) until an agent id is known.
+    private var requestAgent: String? { self.selectedAgent.isEmpty ? nil : self.selectedAgent }
 
     private struct LoadKey: Hashable {
         let connected: Bool
-        let agentId: String
+        let agentId: String?
     }
 
     var body: some View {
@@ -59,14 +61,15 @@ struct SkillsPage: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button("Refresh", systemImage: "arrow.clockwise") {
-                    Task { await model.load(agentId: self.selectedAgent) }
+                    Task { await model.load(agentId: self.requestAgent) }
                 }
                 .disabled(!connected || model.isLoading)
             }
         }
-        .task(id: LoadKey(connected: connected, agentId: self.selectedAgent)) {
+        .onAppear { model.clearMessages() }
+        .task(id: LoadKey(connected: connected, agentId: self.requestAgent)) {
             guard connected else { return }
-            await model.loadIfNeeded(agentId: self.selectedAgent)
+            await model.loadIfNeeded(agentId: self.requestAgent)
         }
     }
 
@@ -77,7 +80,7 @@ struct SkillsPage: View {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled)
-                    Button("Retry") { Task { await model.load(agentId: self.selectedAgent) } }
+                    Button("Retry") { Task { await model.load(agentId: self.requestAgent) } }
                 }
             }
         } else if model.report == nil {
@@ -140,6 +143,20 @@ private struct SkillsMessages: View {
                 .textSelection(.enabled)
         } else if let message = self.model.lastMessage {
             Label(message, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+        }
+        SkillTrustWarnings(warnings: self.model.lastWarnings)
+    }
+}
+
+/// ClawHub trust warnings from an install or update (`warning` / `details.warnings`).
+private struct SkillTrustWarnings: View {
+    let warnings: [String]
+
+    var body: some View {
+        ForEach(self.warnings, id: \.self) { warning in
+            Label(warning, systemImage: "exclamationmark.shield.fill")
+                .foregroundStyle(.orange)
+                .textSelection(.enabled)
         }
     }
 }
@@ -228,8 +245,10 @@ struct SkillDetailPage: View {
         .navigationTitle(self.model.skill(key: self.skillKey)?.name ?? self.skillKey)
         .task(id: self.gateway.state.isConnected) {
             guard self.gateway.state.isConnected, self.model.report == nil else { return }
-            await self.model.loadIfNeeded(agentId: self.model.agentId ?? self.gateway.defaultAgentId)
+            let fallback = self.gateway.defaultAgentId
+            await self.model.loadIfNeeded(agentId: self.model.agentId ?? (fallback.isEmpty ? nil : fallback))
         }
+        .onAppear { self.model.clearMessages() }
     }
 
     private var canChange: Bool { self.model.canUpdate && self.gateway.state.isConnected && !self.model.busy.contains(self.skillKey) }
@@ -388,7 +407,7 @@ struct SkillDetailPage: View {
         } header: {
             Text("Settings")
         } footer: {
-            Text("Secrets are write-only: Pincer shows whether they're set, never their values.")
+            Text("\(Skills.settingsScopeFooter) Secrets are write-only: Pincer shows whether they're set, never their values.")
         }
     }
 
@@ -433,6 +452,7 @@ struct ClawHubSearchPage: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Browse ClawHub")
+        .onAppear { model.clearMessages() }
         // Debounced: runs once typing pauses, not on every keystroke.
         .task(id: self.query) {
             let query = self.query
@@ -522,7 +542,9 @@ private struct ClawHubResultRow: View {
     }
 }
 
-/// One ClawHub result: `skills.detail` (unless install-only) and Install, after confirming.
+/// One ClawHub result: `skills.detail` (unless install-only) and, after confirming, Install (not
+/// installed), Update (`skills.update`, which checks for local changes first) or Reinstall (a forced
+/// `skills.install` that replaces the copy on the gateway).
 private struct ClawHubSkillSheet: View {
     let result: ClawHubSearchResult
     let agentName: String
@@ -531,7 +553,11 @@ private struct ClawHubSkillSheet: View {
     @State private var detail: ClawHubSkillDetail?
     @State private var detailError: String?
     @State private var confirmInstall = false
+    @State private var confirmUpdate = false
+    @State private var confirmReinstall = false
     @State private var confirmForce = false
+    /// Whether the force_required retry is an update (else an install).
+    @State private var forceIsUpdate = false
     @State private var installing = false
     @State private var outcome: SkillActionResult?
 
@@ -578,18 +604,9 @@ private struct ClawHubSkillSheet: View {
                         case let .failed(message), let .forceRequired(message):
                             Label(message, systemImage: "exclamationmark.octagon.fill").foregroundStyle(.red).textSelection(.enabled)
                         }
+                        SkillTrustWarnings(warnings: self.model.lastWarnings)
                     }
-                    if self.model.supportsInstall {
-                        Button {
-                            self.confirmInstall = true
-                        } label: {
-                            HStack {
-                                Label(self.state == .notInstalled ? "Install…" : "Reinstall…", systemImage: "arrow.down.circle")
-                                if self.installing { Spacer(); ProgressView().controlSize(.small) }
-                            }
-                        }
-                        .disabled(!self.model.canInstall || !self.gateway.state.isConnected || self.installing)
-                    }
+                    self.actionButton
                 }
             }
             .formStyle(.grouped)
@@ -608,14 +625,32 @@ private struct ClawHubSkillSheet: View {
             }
             .confirmationDialog(Skills.clawHubInstallTitle(self.result.displayName), isPresented: self.$confirmInstall,
                                 titleVisibility: .visible) {
-                Button("Install") { Task { await self.install(force: self.state != .notInstalled) } }
+                Button("Install") { Task { await self.install(force: false) } }
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text(Skills.installMessage(agentName: self.isDefaultAgent ? nil : self.agentName))
             }
+            .confirmationDialog(Skills.updateTitle(self.result.displayName), isPresented: self.$confirmUpdate,
+                                titleVisibility: .visible) {
+                Button("Update") { Task { await self.update(force: false) } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This downloads the latest version from ClawHub onto the gateway host.")
+            }
+            .confirmationDialog(Skills.reinstallTitle(self.result.displayName), isPresented: self.$confirmReinstall,
+                                titleVisibility: .visible) {
+                Button("Reinstall", role: .destructive) { Task { await self.install(force: true) } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(Skills.reinstallMessage(self.result.displayName))
+            }
             .confirmationDialog(Skills.forceReplaceMessage(self.result.displayName), isPresented: self.$confirmForce,
                                 titleVisibility: .visible) {
-                Button("Replace", role: .destructive) { Task { await self.install(force: true) } }
+                Button("Replace", role: .destructive) {
+                    Task {
+                        if self.forceIsUpdate { await self.update(force: true) } else { await self.install(force: true) }
+                    }
+                }
                 Button("Cancel", role: .cancel) {}
             }
         }
@@ -636,11 +671,61 @@ private struct ClawHubSkillSheet: View {
         }
     }
 
+    private var installedSkill: SkillStatusEntry? { self.model.installedSkill(for: self.result) }
+
+    private var isUpdate: Bool {
+        if case .updateAvailable = self.state { return true }
+        return false
+    }
+
+    private var isBusy: Bool {
+        self.installing || self.installedSkill.map { self.model.busy.contains($0.skillKey) } == true
+    }
+
+    /// Install… when not installed, Update… when ClawHub has a newer version, else Reinstall….
+    @ViewBuilder private var actionButton: some View {
+        let connected = self.gateway.state.isConnected
+        if self.isUpdate, self.installedSkill != nil, self.model.supportsUpdate {
+            self.button("Update…", symbol: "arrow.down.circle") { self.confirmUpdate = true }
+                .disabled(!self.model.canUpdate || !connected || self.isBusy)
+        } else if self.model.supportsInstall {
+            let installed = self.state != .notInstalled
+            self.button(installed ? "Reinstall…" : "Install…", symbol: installed ? "arrow.clockwise.circle" : "arrow.down.circle") {
+                if installed { self.confirmReinstall = true } else { self.confirmInstall = true }
+            }
+            .disabled(!self.model.canInstall || !connected || self.isBusy)
+        }
+    }
+
+    private func button(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Label(title, systemImage: symbol)
+                if self.isBusy { Spacer(); ProgressView().controlSize(.small) }
+            }
+        }
+    }
+
     private func install(force: Bool) async {
         self.installing = true
         let outcome = await self.model.installFromClawHub(self.result, force: force)
         self.installing = false
         if case .forceRequired = outcome {
+            self.forceIsUpdate = false
+            self.confirmForce = true
+        } else {
+            self.outcome = outcome
+        }
+    }
+
+    /// `skills.update` without `force` first, so the Gateway refuses if the copy changed locally.
+    private func update(force: Bool) async {
+        guard let skill = self.installedSkill else { return }
+        self.installing = true
+        let outcome = await self.model.updateFromClawHub(skill, force: force)
+        self.installing = false
+        if case .forceRequired = outcome {
+            self.forceIsUpdate = true
             self.confirmForce = true
         } else {
             self.outcome = outcome

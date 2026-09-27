@@ -170,7 +170,7 @@ public enum SettingsCatalog {
                                  keywords: ["command policy", "exec", "allowlist", "always allow", "approval policy",
                                             "ask", "security"]),
         SettingsDestinationMatch(destination: .skills, title: "Skills", symbol: "wand.and.stars",
-                                 keywords: ["skills", "clawhub", "install skill", "skill", "tools", "plugins", "api key"]),
+                                 keywords: ["skills", "clawhub", "install skill", "skill", "tools", "api key"]),
     ]
 
     /// The pages whose title or keywords contain every word of `query`.

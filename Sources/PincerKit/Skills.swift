@@ -60,6 +60,41 @@ public enum Skills {
     public static func clawHubInstallTitle(_ name: String) -> String { "Install “\(name)” from ClawHub?" }
     public static func updateTitle(_ name: String) -> String { "Update “\(name)”?" }
     public static func forceReplaceMessage(_ name: String) -> String { "\(name) was changed locally since it was installed. Replace it anyway?" }
+    public static func reinstallTitle(_ name: String) -> String { "Reinstall “\(name)”?" }
+    public static func reinstallMessage(_ name: String) -> String {
+        "This replaces the installed copy of “\(name)”, including any changes made on the gateway."
+    }
+    /// `skills.update` config mode writes the Gateway-wide `skills.entries.<key>`, not per agent.
+    public static let settingsScopeFooter = "Enabled, API key and environment values apply to every agent on this gateway."
+
+    /// ClawHub trust warnings in a successful `skills.install` (`warning`) or `skills.update`
+    /// (`config.results[].warning`) response.
+    public static func trustWarnings(response: JSONValue) -> [String] {
+        var warnings: [String] = []
+        if let warning = response["warning"]?.text { warnings.append(warning) }
+        for result in response["config"]?["results"]?.array ?? [] {
+            if let warning = result["warning"]?.text { warnings.append(warning) }
+        }
+        return Self.unique(warnings)
+    }
+
+    /// ClawHub trust warnings in a failed install (`details.warning`) or update (`details.warnings`,
+    /// `details.results[].warning`).
+    public static func trustWarnings(error: Error) -> [String] {
+        guard case let GatewayError.rpc(_, _, details) = error, let details else { return [] }
+        var warnings: [String] = []
+        if let warning = details["warning"]?.text { warnings.append(warning) }
+        warnings += (details["warnings"]?.array ?? []).compactMap(\.text)
+        for result in details["results"]?.array ?? [] {
+            if let warning = result["warning"]?.text { warnings.append(warning) }
+        }
+        return Self.unique(warnings)
+    }
+
+    private static func unique(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        return values.filter { seen.insert($0).inserted }
+    }
 
     /// Semver-ish comparison ("1.10.0" > "1.9.2"); falls back to string inequality.
     public static func isNewer(_ candidate: String, than current: String) -> Bool {
@@ -510,6 +545,8 @@ public final class SkillsModel {
     public private(set) var lastMessage: String?
     /// The last mutation's error.
     public private(set) var actionError: String?
+    /// ClawHub trust warnings from the last install or update, success or failure.
+    public private(set) var lastWarnings: [String] = []
 
     /// Set when a call hit a scope error, although the connection claimed `operator.admin`.
     public private(set) var deniedAdmin = false
@@ -522,6 +559,7 @@ public final class SkillsModel {
     @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
     @ObservationIgnored private var loadGeneration = 0
     @ObservationIgnored private var searchGeneration = 0
+    @ObservationIgnored private var inFlightQuery: String?
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool) {
         self.request = { method, params in try await connection.request(method, params, timeout: method == Skills.installMethod || method == Skills.updateMethod ? 180 : 30) }
@@ -584,13 +622,21 @@ public final class SkillsModel {
         Skills.installState(for: result, in: self.skills)
     }
 
+    /// The installed skill a ClawHub result tracks, if any.
+    public func installedSkill(for result: ClawHubSearchResult) -> SkillStatusEntry? {
+        Skills.installedSkill(for: result, in: self.skills)
+    }
+
     // MARK: Loading
 
     /// Loads `skills.status` for `agentId` (nil: the Gateway default).
     public func load(agentId: String?) async {
         self.loadGeneration += 1
         let generation = self.loadGeneration
-        if agentId != self.agentId { self.report = nil }
+        if agentId != self.agentId {
+            self.report = nil
+            self.clearMessages()
+        }
         self.agentId = agentId
         self.isLoading = true
         self.loadError = nil
@@ -616,6 +662,8 @@ public final class SkillsModel {
     /// Searches ClawHub. An empty query clears the results.
     public func search(_ query: String, limit: Int = 25) async {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Submit while the debounced search for the same text is running: don't send it twice.
+        if self.isSearching, !trimmed.isEmpty, trimmed == self.inFlightQuery { return }
         self.searchGeneration += 1
         let generation = self.searchGeneration
         guard !trimmed.isEmpty else {
@@ -623,11 +671,18 @@ public final class SkillsModel {
             self.searchedQuery = nil
             self.searchError = nil
             self.isSearching = false
+            self.inFlightQuery = nil
             return
         }
         self.isSearching = true
+        self.inFlightQuery = trimmed
         self.searchError = nil
-        defer { if generation == self.searchGeneration { self.isSearching = false } }
+        defer {
+            if generation == self.searchGeneration {
+                self.isSearching = false
+                self.inFlightQuery = nil
+            }
+        }
         do {
             let result = try await self.call(Skills.searchMethod, ["query": .string(trimmed), "limit": .number(Double(limit))])
             guard generation == self.searchGeneration else { return }
@@ -648,6 +703,7 @@ public final class SkillsModel {
     public func clearMessages() {
         self.lastMessage = nil
         self.actionError = nil
+        self.lastWarnings = []
     }
 
     // MARK: Mutations
@@ -716,17 +772,18 @@ public final class SkillsModel {
                         message: (JSONValue) -> String) async -> SkillActionResult
     {
         self.busy.insert(key)
-        self.actionError = nil
-        self.lastMessage = nil
+        self.clearMessages()
         defer { self.busy.remove(key) }
         do {
             let response = try await self.call(method, params)
             let text = message(response)
             self.lastMessage = text
+            self.lastWarnings = Skills.trustWarnings(response: response)
             await self.reload()
             return .done(text)
         } catch {
             let text = Self.message(error)
+            self.lastWarnings = Skills.trustWarnings(error: error)
             if Skills.forceRequired(error) { return .forceRequired(text) }
             self.actionError = text
             return .failed(text)

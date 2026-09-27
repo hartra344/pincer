@@ -86,8 +86,15 @@ extension DemoGateway {
                 self.skillEntries.remove(at: index)
             }
             self.skillEntries.append(self.installedEntry(from: entry, version: version))
-            return ["ok": true, "message": .string("Installed \(slug)@\(version)"), "stdout": "", "stderr": "", "code": 0,
-                    "slug": .string(slug), "version": .string(version), "targetDir": .string("\(self.workspaceDir("main"))/skills/\(slug)")]
+            var response: [String: JSONValue] = [
+                "ok": true, "message": .string("Installed \(slug)@\(version)"), "stdout": "", "stderr": "", "code": 0,
+                "slug": .string(slug), "version": .string(version), "targetDir": .string("\(self.workspaceDir("main"))/skills/\(slug)"),
+            ]
+            // Like the Gateway's ClawHub trust check, an unscanned skill installs with a warning.
+            if entry["trustState"]?.text == "not-scanned-by-clawhub" {
+                response["warning"] = .string("ClawHub hasn't scanned \(slug)@\(version). Review its SKILL.md before using it.")
+            }
+            return .object(response)
         }
         if source != nil { throw Self.skillsInvalid("invalid skills.install params: unsupported source \"\(source ?? "")\"") }
         try Self.checkKeys("skills.install", params, ["agentId", "name", "installId", "dangerouslyForceUnsafeInstall", "timeoutMs"])
@@ -279,11 +286,14 @@ extension DemoGateway {
         return Self.recomputed(.object(object))
     }
 
-    /// Recomputes `eligible` from `missing`, as the Gateway does on the next status read.
+    /// Recomputes `eligible` as the Gateway does on the next status read:
+    /// not disabled, not blocked by the bundled allowlist, and every requirement met.
     private static func recomputed(_ entry: JSONValue) -> JSONValue {
         let missing = entry["missing"]
         let unmet = ["bins", "anyBins", "env", "config", "os"].contains { !(missing?[$0]?.array ?? []).isEmpty }
-        return Self.setting(entry, "eligible", .bool(!unmet && entry["platformIncompatible"]?.bool != true))
+        let eligible = !unmet && entry["platformIncompatible"]?.bool != true
+            && entry["disabled"]?.bool != true && entry["blockedByAllowlist"]?.bool != true
+        return Self.setting(entry, "eligible", .bool(eligible))
     }
 
     /// The entry as `skills.status` reports it (without demo-only keys).

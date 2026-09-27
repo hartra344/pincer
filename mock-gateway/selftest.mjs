@@ -12,7 +12,7 @@ import { FAILED_DELIVERY_QUEUE, addFailedDelivery, createHealthState, healthSumm
 import { PAIRING_TTL_MS, PENDING_PER_ACCOUNT, addChannelPairingRequest, createChannelPairingState } from './pairing.mjs';
 import { appendLogLine, readLogSlice } from './logs.mjs';
 import { decryptWebPush, sessionPath } from './webpush.mjs';
-import { MISSING_SKILL, WHATSAPP_NOT_LINKED, WHATSAPP_RELINK_FIX } from './setup.mjs';
+import { WHATSAPP_NOT_LINKED, WHATSAPP_RELINK_FIX } from './setup.mjs';
 
 function b64url(buf) {
   return Buffer.from(buf).toString('base64url');
@@ -1783,16 +1783,17 @@ try {
     assert.equal(setupHealth.channels.whatsapp.configured, false);
     assert.equal(setupHealth.channels.whatsapp.accounts.default.linked, false);
 
+    // The wizard reads the same skills.status as the Skills page (skills.mjs).
     const skills = await reader.send('skills.status', {});
     assert.equal(skills.agentId, 'main');
     assert.ok(skills.workspaceDir && skills.managedSkillsDir);
     const missing = skills.skills.filter((s) => !s.eligible && !s.disabled && !s.blockedByAllowlist && !s.blockedByAgentFilter && !s.platformIncompatible);
-    assert.deepEqual(missing.map((s) => s.name), [MISSING_SKILL]);
-    assert.deepEqual(missing[0].missing, { bins: ['summarize'], anyBins: [], env: [], config: [], os: [] });
-    assert.deepEqual(missing[0].install, [{ id: 'brew', kind: 'brew', label: 'Install summarize (brew)', bins: ['summarize'] }]);
-    const macOnly = skills.skills.find((s) => s.name === 'apple-notes');
-    assert.equal(macOnly.platformIncompatible, true);
-    assert.deepEqual(macOnly.install, []);
+    assert.deepEqual(missing.map((s) => s.name), ['github', 'video-frames', 'notion', 'voice-call']);
+    assert.deepEqual(missing[0].missing, { bins: ['gh'], anyBins: [], env: [], config: [], os: [] });
+    assert.deepEqual(missing[0].install, [{ id: 'brew', kind: 'brew', label: 'Install GitHub CLI (brew)', bins: ['gh'] }]);
+    const otherOS = skills.skills.find((s) => s.name === 'apt-updates');
+    assert.equal(otherOS.platformIncompatible, true);
+    assert.deepEqual(otherOS.install, []);
     assert.ok(skills.skills.filter((s) => s.eligible).length >= 3);
     for (const s of skills.skills) {
       for (const key of ['name', 'description', 'source', 'bundled', 'filePath', 'baseDir', 'skillKey', 'always', 'disabled', 'modelVisible', 'userInvocable', 'commandVisible', 'requirements', 'configChecks']) {
