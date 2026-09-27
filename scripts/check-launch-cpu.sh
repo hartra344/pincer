@@ -13,8 +13,10 @@
 #
 # The app defaults to build/Pincer.app (`scripts/bundle-mac.sh release`). To leave your own
 # preferences, saved gateways and Keychain alone, it runs a copy under its own bundle id
-# (build/Pincer CPU Check.app, chat.pincer.cpucheck) with an in-memory Keychain and no caches.
+# (build/Pincer CPU Check.app, chat.pincer.cpucheck).
 # Pass --bundle-id chat.pincer.mac to run the app as built; the settings it changes are restored.
+# Every run, including chat.pincer.mac, sets PINCER_KEYCHAIN=memory (no Keychain access or password
+# prompts) and PINCER_CACHE_DIR=off / PINCER_DRAFTS_DIR=off (no transcript cache or drafts on disk).
 # A bare PincerMacDev binary (e.g. `$(swift build --show-bin-path)/PincerMacDev`) is wrapped in a
 # minimal bundle first, so a debug build can be checked without scripts/bundle-mac.sh.
 # macOS only. Example: scripts/bundle-mac.sh release && scripts/check-launch-cpu.sh --menu-bar on --demo
@@ -121,10 +123,9 @@ if [ "$DEMO" = 1 ]; then
   defaults write "$BUNDLE_ID" pincer.selectedGateway -string "$DEMO_ID"
 fi
 
-# An in-memory Keychain and no transcript cache or drafts, unless running the real app's domain.
-if [ "$BUNDLE_ID" != "$BUILT_ID" ]; then
-  export PINCER_KEYCHAIN=memory PINCER_CACHE_DIR=off PINCER_DRAFTS_DIR=off
-fi
+# Every launch path: an in-memory Keychain (never a Keychain password prompt, as in CI) and no
+# transcript cache or drafts on disk, even with --bundle-id chat.pincer.mac.
+export PINCER_KEYCHAIN=memory PINCER_CACHE_DIR=off PINCER_DRAFTS_DIR=off
 "$BIN" >"$STATE_DIR/app.log" 2>&1 &
 PID=$!
 echo "Launched $APP (pid $PID, menu bar $MENU_BAR$([ "$DEMO" = 1 ] && echo ', demo'))"

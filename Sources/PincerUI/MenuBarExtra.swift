@@ -24,11 +24,12 @@ struct PincerMenuBar: Scene {
 /// The template icon, with the unread plus needs-you count beside it.
 struct MenuBarLabel: View {
     let app: AppModel
+    var clock = MenuBarClock.shared
 
     private static let hasAlertSymbol = NSImage(systemSymbolName: MenuBarInbox.alertSymbol, accessibilityDescription: nil) != nil
 
     var body: some View {
-        let inbox = MenuBarInbox(app: self.app)
+        let inbox = MenuBarInbox(app: self.app, now: self.clock.now)
         HStack(spacing: 3) {
             Image(systemName: inbox.needsYouCount > 0 && Self.hasAlertSymbol ? MenuBarInbox.alertSymbol : MenuBarInbox.symbol)
             if let badge = inbox.badgeText {
@@ -43,11 +44,12 @@ struct MenuBarLabel: View {
 /// The menu. Everything it lists comes from `MenuBarInbox`; rows only open things.
 struct MenuBarContent: View {
     let app: AppModel
+    var clock = MenuBarClock.shared
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        let inbox = MenuBarInbox(app: self.app)
+        let inbox = MenuBarInbox(app: self.app, now: self.clock.now)
         Button(QuickCaptureController.shared.menuTitle) { QuickCaptureController.shared.show() }
         Button("Open Pincer") { self.showMainWindow() }
         Divider()

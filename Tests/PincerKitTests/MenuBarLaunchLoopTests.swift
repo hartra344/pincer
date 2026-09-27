@@ -309,4 +309,46 @@ struct MenuBarLaunchLoopTests {
         #expect(!tripwire.fired)
         #expect(MenuBarInbox(app: app, now: Self.now).gateways.map(\.text) == MenuBarInbox(app: app, now: Self.now.addingTimeInterval(3600)).gateways.map(\.text))
     }
+
+    // MARK: MenuBarClock (acceptance #9)
+
+    @Test func clockOnlyMovesForward() {
+        let clock = MenuBarClock(now: Self.now)
+        let tripwire = Self.track { _ = clock.now }
+        clock.tick(Self.now)
+        clock.tick(Self.now.addingTimeInterval(-5))
+        #expect(!tripwire.fired && clock.now == Self.now, "a tick that doesn't advance must not invalidate the menu")
+        clock.tick(Self.now.addingTimeInterval(30))
+        #expect(tripwire.fired && clock.now == Self.now.addingTimeInterval(30))
+    }
+
+    @Test func clockTicksOnItsIntervalAndStops() async {
+        #expect(MenuBarClock.interval <= .seconds(60), "expiries show within about a minute")
+        let clock = MenuBarClock(now: .distantPast)
+        clock.start(interval: .milliseconds(20))
+        clock.start(interval: .milliseconds(20))
+        #expect(clock.isRunning && clock.now > .distantPast, "start ticks at once")
+        let first = clock.now
+        for _ in 0..<50 where clock.now == first {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(clock.now > first, "the ticker moves now forward")
+        clock.stop()
+        #expect(!clock.isRunning)
+        let stopped = clock.now
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(clock.now == stopped, "no ticks after stop")
+    }
+
+    /// End to end with the clock: an approval expires between ticks and leaves on the next one.
+    @Test func aTickDropsAnExpiredApproval() {
+        let nowMs = Self.now.timeIntervalSince1970 * 1000
+        let approval = ExecApproval(Fixtures.json(#"{"id":"a","request":{"command":"ls"},"expiresAtMs":\#(nowMs + 10_000)}"#))!
+        let input = MenuBarInbox.GatewayInput(name: "Home", state: .connected, approvals: [approval])
+        let clock = MenuBarClock(now: Self.now)
+        #expect(MenuBarInbox.build([input], now: clock.now).needsYouCount == 1)
+        let tripwire = Self.track { _ = MenuBarInbox.build([input], now: clock.now) }
+        clock.tick(Self.now.addingTimeInterval(TimeInterval(MenuBarClock.interval.components.seconds)))
+        #expect(tripwire.fired && MenuBarInbox.build([input], now: clock.now).needsYouCount == 0)
+    }
 }

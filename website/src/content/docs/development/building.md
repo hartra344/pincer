@@ -76,6 +76,17 @@ swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token   # moc
 
 Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaults suite, so concurrent runs don't share storage. It also keeps every secret in memory, so it never touches or prompts for your real Keychain (no `PINCER_KEYCHAIN=memory` needed), and it fails if any real Keychain call happens.
 
+## Launch CPU check
+
+`scripts/check-launch-cpu.sh` launches a built Mac app, waits for it to settle, samples its CPU and fails if it isn't idle. It catches launch loops like the menu bar freeze in #119:
+
+```sh
+scripts/bundle-mac.sh release
+scripts/check-launch-cpu.sh --menu-bar on --demo
+```
+
+`--menu-bar on|off` sets the menu bar item for the run, and `--demo` saves only the built-in demo gateway, so it connects at launch. By default the script runs a copy of the app under its own bundle id with an in-memory Keychain, and it restores that bundle's defaults afterwards, so your own settings and gateways aren't touched. Run `scripts/check-launch-cpu.sh --help` for the other options.
+
 ## Continuous integration
 
 `.github/workflows/tests.yml` runs on every pull request and every push to `main`:
