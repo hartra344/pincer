@@ -340,8 +340,9 @@ public enum TranscriptCache {
     /// Deletes the Gateway's transcripts and message search index. `permanently`: the Gateway
     /// was removed from the app, so saves still under way don't write them again.
     public static func removeAll(gatewayId: UUID, permanently: Bool = false) {
-        MessageIndex.discard(gatewayId: gatewayId, permanently: permanently)
-        self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
+        MessageIndex.discard([gatewayId], permanently: permanently) {
+            self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
+        }
     }
 
     /// Deletes the Gateway's transcripts under another cache root (tests).
@@ -352,14 +353,15 @@ public enum TranscriptCache {
     /// Deletes every Gateway's cached transcripts, search indexes and quarantined files (Settings'
     /// Clear Cache). Open chats keep what they show and save again on their next change. A save
     /// under way when this runs either fails harmlessly (writes are atomic, and the sidecar only
-    /// follows a written transcript) or writes a fresh, valid file.
+    /// follows a written transcript) or writes a fresh, valid file. Such a save isn't indexed
+    /// (no index opens while the files are deleted); it's indexed when it next saves or reconciles.
     public static func removeEverything() {
         guard let root = Self.root else { return }
-        let entries = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
-        for entry in entries {
-            if let id = UUID(uuidString: entry.lastPathComponent) { MessageIndex.discard(gatewayId: id) }
+        let fileManager = FileManager.default
+        let entries = (try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        MessageIndex.discard(entries.compactMap { UUID(uuidString: $0.lastPathComponent) }) {
+            for entry in entries { try? fileManager.removeItem(at: entry) }
         }
-        self.removeEverything(root: root)
         logger.notice("Cleared the transcript cache")
     }
 

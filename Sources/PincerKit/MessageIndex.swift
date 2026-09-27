@@ -11,7 +11,6 @@ import Synchronization
 /// `TranscriptCache.save` keeps it current; `reconcile` catches up on transcripts it hasn't
 /// seen (caches written before the index existed, or while it was being rebuilt). Decoding
 /// transcripts and building what's indexed happen off the actor, so searches don't wait on them.
-func dbg(_ s: @autoclosure () -> String) { if ProcessInfo.processInfo.environment["PINCER_DEBUG_INDEX"] != nil { FileHandle.standardError.write(Data(("[IDX \(Date().timeIntervalSince1970)] " + s() + "\n").utf8)) } }
 public actor MessageIndex {
     public enum Status: Hashable, Sendable {
         case ready
@@ -27,6 +26,9 @@ public actor MessageIndex {
         case sqlite(String)
         /// Not a readable index of this version; it's deleted and rebuilt.
         case corrupt(String)
+        /// The file was deleted or replaced while open (the cache folder was cleared, or the
+        /// system purged it); it's deleted and rebuilt like a corrupt one.
+        case vanished(String)
     }
 
     /// Bump when the schema or what's indexed changes; the old index is then rebuilt.
@@ -45,6 +47,8 @@ public actor MessageIndex {
         var removed: Set<UUID> = []
         /// Gateways whose index is kept in memory while the transcript cache is off (the demo).
         var inMemory: Set<UUID> = []
+        /// Gateways whose index files are being deleted, with how many deletions are under way.
+        var deleting: [UUID: Int] = [:]
     }
 
     /// Where an index lives: next to the transcript cache, or in memory.
@@ -56,8 +60,11 @@ public actor MessageIndex {
     private static let registry = Mutex(Registry())
 
     /// The index for a Gateway. One per Gateway, shared by everything that reads or writes it.
+    /// While its files are being deleted, a stand-in that does nothing is returned, so no index
+    /// opens a file that's then deleted from under it.
     public static func shared(gatewayId: UUID) -> MessageIndex {
         self.registry.withLock { registry in
+            if registry.deleting[gatewayId] != nil { return MessageIndex(gatewayId: gatewayId, removed: true) }
             if let index = registry.indexes[gatewayId] { return index }
             let index = MessageIndex(gatewayId: gatewayId, removed: registry.removed.contains(gatewayId))
             registry.indexes[gatewayId] = index
@@ -69,15 +76,34 @@ public actor MessageIndex {
     /// still running on the old instance can't recreate the file. `permanently` (the Gateway was
     /// removed from the app): no later instance can either.
     static func discard(gatewayId: UUID, permanently: Bool = false) {
-        let index = self.registry.withLock { registry in
-            if permanently { registry.removed.insert(gatewayId) }
-            return registry.indexes.removeValue(forKey: gatewayId)
+        self.discard([gatewayId], permanently: permanently) {}
+    }
+
+    /// Forgets these Gateways' indexes and runs `deleteFiles`, which deletes their files. Until
+    /// it returns no index for them opens (saves meanwhile aren't indexed), so a save racing
+    /// Clear Cache can't leave the index on a deleted file, failing every search after it.
+    static func discard<T>(_ gatewayIds: [UUID], permanently: Bool = false, deleteFiles: () -> T) -> T {
+        let indexes = self.registry.withLock { registry in
+            gatewayIds.compactMap { id -> MessageIndex? in
+                if permanently { registry.removed.insert(id) }
+                registry.deleting[id, default: 0] += 1
+                return registry.indexes.removeValue(forKey: id)
+            }
         }
-        guard let index else { return }
-        dbg("discard \(ObjectIdentifier(index))")
-        index.removed.withLock { $0 = true }
-        index.interrupter.interruptAny()
-        Task { await index.close() }
+        for index in indexes {
+            index.removed.withLock { $0 = true }
+            index.interrupter.interruptAny()
+            Task { await index.close() }
+        }
+        defer {
+            self.registry.withLock { registry in
+                for id in gatewayIds {
+                    let count = (registry.deleting[id] ?? 1) - 1
+                    registry.deleting[id] = count > 0 ? count : nil
+                }
+            }
+        }
+        return deleteFiles()
     }
 
     /// The Gateway was removed from the app, so nothing may be cached for it again.
@@ -184,7 +210,6 @@ public actor MessageIndex {
                 try? self.exec(db, "ROLLBACK")
                 throw error
             }
-            dbg("write \(ObjectIdentifier(self)) \(sessionKey) unchanged=\(unchanged) docs=\(documents?.count ?? -1)")
             return .done
         } ?? .done
     }
@@ -362,7 +387,6 @@ public actor MessageIndex {
                         : Date(timeIntervalSinceReferenceDate: sqlite3_column_double(statement, 5)),
                     text: Self.unpacked(statement, 6) ?? ""))
             }
-            dbg("search \(ObjectIdentifier(self)) \(fts) hits=\(hits.count) keys=\(Set(hits.map(\.sessionKey)))")
             return hits
         } catch is CancellationError {
             throw CancellationError()
@@ -385,7 +409,6 @@ public actor MessageIndex {
     }
 
     public func close() {
-        dbg("close \(ObjectIdentifier(self)) db=\(self.db != nil)")
         // Once this returns no interrupt is in flight, and none can reach the freed connection.
         self.interrupter.end()
         if let db { sqlite3_close_v2(db) }
@@ -410,11 +433,12 @@ public actor MessageIndex {
         }
     }
 
-    /// Deletes the index after an error showing it's unreadable; anything else leaves it be.
+    /// Deletes the index after an error showing it's unreadable or gone; anything else leaves it be.
     private func recover(from error: Error) {
-        dbg("recover \(ObjectIdentifier(self)) \(error)")
-        guard case IndexError.corrupt = error else { return }
-        self.reset()
+        switch error {
+        case IndexError.corrupt, IndexError.vanished: self.reset()
+        default: break
+        }
     }
 
     private func open() throws -> OpaquePointer {
@@ -456,7 +480,6 @@ public actor MessageIndex {
             throw error
         }
         self.db = handle
-        dbg("connect \(ObjectIdentifier(self)) \(path)")
         self.openLocation = location
         sqlite3_busy_timeout(handle, 2000)
         // Checkpoints shrink the WAL back to this rather than leaving it at its largest.
@@ -605,11 +628,14 @@ public actor MessageIndex {
         Self.error(code: sqlite3_extended_errcode(db), message: String(cString: sqlite3_errmsg(db)))
     }
 
-    /// Only a file that isn't a database, or a damaged one, counts as corrupt. Busy, full, I/O,
-    /// can't-open and auth errors (a file-protected index while the device is locked) may pass.
+    /// Only a file that isn't a database, or a damaged one, counts as corrupt, and one deleted
+    /// while open as vanished. Busy, full, other I/O, can't-open and auth errors (a
+    /// file-protected index while the device is locked) may pass.
     private static func error(code: Int32, message: String) -> IndexError {
         switch code & 0xFF {
         case SQLITE_CORRUPT, SQLITE_NOTADB: .corrupt(message)
+        // Apple's SQLite: the file was unlinked or replaced while open. It stays so until reopened.
+        case SQLITE_IOERR where code == SQLITE_IOERR | (27 << 8): .vanished(message)
         default: .sqlite("\(message) (\(code))")
         }
     }

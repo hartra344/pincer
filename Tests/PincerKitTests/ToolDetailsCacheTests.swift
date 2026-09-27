@@ -3,7 +3,8 @@ import Testing
 @testable import PincerKit
 
 /// `ChatItem.toolDetails` (#37) in the transcript cache: kept across a save/load, and v5 files
-/// written before it existed still decode, with edit cards falling back to the tool's arguments.
+/// written before it existed are migrated (#168): edit cards fall back to the tool's arguments
+/// without calling an overwrite a new file.
 @Suite("Tool details in the transcript cache")
 struct ToolDetailsCacheTests {
     static let writeArgs = #"{"path":"src/a.ts","content":"one\ntwo\n"}"#
@@ -60,11 +61,11 @@ struct ToolDetailsCacheTests {
         for index in rows.indices { rows[index].removeValue(forKey: "toolDetails") }
         json["items"] = rows
         let (snapshot, outcome) = TranscriptCache.decode(try JSONSerialization.data(withJSONObject: json))
-        #expect(outcome == .loaded && !outcome.discarded, "no version bump: v5 without the field still loads")
+        #expect(outcome == .migrated(from: 5) && !outcome.discarded, "v5 without the field is migrated (#168)")
         let loaded = try #require(snapshot?.items)
-        #expect(loaded[1].toolDetails == nil)
+        #expect(loaded[1].toolDetails == TranscriptCache.unknownToolDetails)
         let edit = try #require(Self.tool(loaded)?.fileEdit)
-        #expect(edit.files.first?.operation == .add && edit.additions == 2 && edit.deletions == 0,
-                "without the receipt, the write is diffed from its arguments as a new file")
+        #expect(edit.files.first?.operation == .update && edit.additions == 2 && edit.deletionsBound == .unknown
+                && edit.statusLabel == "Written", "without the receipt, the write is diffed from its arguments, not as a new file")
     }
 }
