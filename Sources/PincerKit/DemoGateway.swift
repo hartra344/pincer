@@ -1495,9 +1495,9 @@ actor DemoGateway {
         prefix + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12).lowercased()
     }
 
-    private static func text(_ text: String) -> JSONValue { ["type": "text", "text": .string(text)] }
-    private static func thinking(_ text: String) -> JSONValue { ["type": "thinking", "thinking": .string(text)] }
-    private static func toolCall(_ id: String, _ name: String, _ args: JSONValue) -> JSONValue {
+    static func text(_ text: String) -> JSONValue { ["type": "text", "text": .string(text)] }
+    static func thinking(_ text: String) -> JSONValue { ["type": "thinking", "thinking": .string(text)] }
+    static func toolCall(_ id: String, _ name: String, _ args: JSONValue) -> JSONValue {
         ["type": "toolCall", "id": .string(id), "name": .string(name), "arguments": args]
     }
 
@@ -1541,7 +1541,7 @@ actor DemoGateway {
         self.agents.first { $0["id"]?.string == id }?["name"]?.string ?? id
     }
 
-    private static func message(
+    static func message(
         _ role: String, _ content: [JSONValue], runId: String? = nil, idempotencyKey: String? = nil,
         model: (provider: String, model: String)? = nil, id: String? = nil, openclaw facts: Row = [:],
         ago: Double = 0, extra: Row = [:]) -> JSONValue
@@ -1763,6 +1763,8 @@ actor DemoGateway {
             messages: [
                 said("assistant", "The paper mainly improves how retrieval-augmented summaries are evaluated.", ago: 3 * minute),
             ])
+        add(Self.fileEditsKey, agent: "coder", title: "Fix retry backoff", preview: Self.fileEditsPreview,
+            age: 5 * hour * 1000, messages: Self.seedFileEditsTranscript())
         add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
             ["isMain": true, "unread": true], messages: [
                 said("assistant", "Forge can edit code, run builds, and report back briefly.", ago: 14 * day),

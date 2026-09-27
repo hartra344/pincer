@@ -55,6 +55,7 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
 - **Menu bar** (macOS, optional): Quick Capture, unread chats, active runs, pending approvals and each gateway's status from the menu bar. Turn it on in Settings → General → Menu Bar.
 - **Transcript:**
   - live streaming, with a collapsible **thinking** section and **tool cards** showing arguments and results. Choose whether to show thinking steps never, only live, or for every turn;
+  - **file diffs** in tool cards: `write`, `edit` and `apply_patch` calls (and aliases like `edit_file`, `multi_edit`, `str_replace_editor`) show a colour-coded, monospaced diff instead of raw JSON arguments, with the file name and green/red added and removed counts. A patch shows each file it touches, and a new-file write shows every line as added. The gateway's own result diff is preferred when it sends one. Diffs over 20 lines show their first 12 until you choose **Show all**. Very large changes are capped (600 lines a side, 120,000 characters, 400 lines shown), and counts that are only a minimum end in `+`. **Copy** copies a unified diff, or a written file's contents. Find in Chat searches the diff lines. Failed calls and arguments Pincer can't read show the raw arguments. Chats cached before this version diff from the arguments until the cache is cleared. See [`website/src/content/docs/guides/file-diffs.md`](website/src/content/docs/guides/file-diffs.md);
   - the full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer quietly caches every chat (most recently active first) and skips chats that haven't changed. Opening one shows the cached transcript at once, then fetches only what's new;
   - Markdown, including tables and code blocks with a Copy button;
   - **Find in Chat** (⌘F, or the Session menu): highlights every match with a count, and ⌘G / ⇧⌘G (or Return) step through them, scrolling to each one. Matches in thinking and tool input/output are optional (the find bar's options menu) and are expanded when you land on them;
@@ -206,6 +207,7 @@ MOCK_TOKEN= MOCK_BACKGROUND=1 npm start     # no auth, simulated Discord traffic
 
 Message triggers:
 - a message containing `tool` or `disk` streams a tool call;
+- `patch` or `diff` streams an upstream-shaped `edit` call, shown as a file diff;
 - `image` also attaches an image;
 - `approve` raises an exec approval;
 - `approve once-only` raises one whose `allowedDecisions` leave out `allow-always` (Always allow then fails with `APPROVAL_ALLOW_ALWAYS_UNAVAILABLE` and the approval stays pending);

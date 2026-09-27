@@ -294,7 +294,7 @@ private struct SetupStepDetail: View {
 }
 
 /// "Needs Full Management" with the copy Gateway Settings uses, linking to Connection.
-private struct FullManagementBadge: View {
+struct FullManagementBadge: View {
     let openConnection: () -> Void
 
     var body: some View {

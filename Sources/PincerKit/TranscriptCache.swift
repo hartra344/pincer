@@ -84,6 +84,10 @@ public enum TranscriptCache {
     //    optional) but its messages would silently lack reply quotes and the channel ids agent
     //    reactions point at, and older history is never refetched once cached. So v4 isn't
     //    migratable: it's discarded and refetched, and `oldestMigratableVersion` is 5.
+    //  - Still v5 (#37, file edit diffs) added the optional `ChatItem.toolDetails`. No bump: a v5
+    //    file without it decodes, and its edit cards fall back to diffing the tool's arguments
+    //    (a `write` shows as a new file rather than an overwrite). That degrades gracefully,
+    //    unlike v4's missing reply ids, so it isn't worth refetching every cached transcript.
 
     /// Upgrades a snapshot's JSON object from the version it's keyed by to the next one.
     typealias Migration = @Sendable (inout [String: Any]) throws -> Void
