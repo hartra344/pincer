@@ -1,0 +1,59 @@
+---
+title: Agent avatars
+description: Animated companion pets that show what each agent is doing.
+---
+
+Each agent can have a small companion pet as its avatar. It reacts to what the agent is doing, so you can tell at a glance whether it's thinking, replying, running a tool or waiting for you.
+
+## Where they appear
+
+- **Chat header:** the open chat's agent. This is the one that animates.
+- **Latest reply:** the avatar next to the newest assistant message shows the same state as a still pose, with its tool badge. Older messages show the pet idle.
+- **Sidebar:** each agent's section header shows its pet, still. It raises a paw when one of the agent's chats needs an approval, and looks busy while a run is going.
+
+## Characters
+
+There are four creatures:
+
+- **Blob:** a fluffy hooded plush.
+- **Owl:** chubby, with ear tufts and a tiny beak.
+- **Rock:** a boxy pebble.
+- **Sprout:** a little body with a leaf growing on top.
+
+Each pet also gets an accessory (none, a hat, glasses, a flower clip, a bow or an antenna) and a palette (cream, apricot, moss, stone, peach, lilac or sky). All three are picked from the agent's identity name (or its id if it has no name), so different agents get different pets, and each keeps the same look on all your devices. Changing an agent's name in [Agents](../agents/#editing-an-agent) gives it a new pet unless you've picked a **Character** for it.
+
+## What the poses mean
+
+| The agent is… | The pet… |
+| --- | --- |
+| Idle | Blinks now and then. |
+| Thinking | Wiggles, with a "…" bubble above its head. |
+| Replying | Sways along while the text streams in. |
+| Running a tool | Twitches its antenna, leaf or tufts and shows a badge for the tool, such as a terminal for commands or a magnifying glass for search. |
+| Waiting for approval | Raises a paw and waves. |
+| Finished | Does a happy hop for about 1.5 seconds. |
+| Hit an error | Wobbles worriedly for about 3 seconds. |
+| Compacting its context | Dozes off, with a small "z". |
+
+If several things are happening at once, approvals win, then errors, tools, replying, thinking and compacting.
+
+## Settings
+
+Open **Settings → Appearance**:
+
+- **Animated avatars** turns the pets on or off. It's on by default. When it's off, Pincer shows the usual agent avatar.
+- **Style** picks **Pixel** (crisp pixel art) or **Plush** (soft and rounded).
+- **Character** lets you pick a creature for each agent, or leave it on **Auto** to use the one picked from its identity.
+
+These choices are saved on this device only and don't sync to your other devices.
+
+Whenever the agent isn't idle, a soft ring and glow in your theme's accent color appear behind the pet, and the tool badge uses the same accent. The creature's own colors stay the same in every theme. See [Appearance](../appearance/).
+
+## Motion and battery
+
+- With **Reduce Motion** turned on in your system's accessibility settings, each state shows a still pose instead of animating.
+- In a chat, only the header's pet animates, and only while it's visible and Pincer is in the foreground. It redraws only when its pose changes, at no more than about 10 frames a second, and when idle it just blinks now and then.
+
+## VoiceOver
+
+VoiceOver reads the agent's name and what it's doing, for example "Nova is running a tool: exec" or "Nova is waiting for your approval". It also announces when the agent starts waiting for an approval or runs into a problem.

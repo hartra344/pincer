@@ -540,6 +540,7 @@ private struct SetupAgentStep: View {
 private struct SetupSkillsStep: View {
     let setup: SetupWizardModel
     let openSettings: (SettingsDestination) -> Void
+    @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
         Section("Skills") {
@@ -570,7 +571,11 @@ private struct SetupSkillsStep: View {
             } else {
                 ProgressView()
             }
-            SetupLink(title: "Open Tools & Skills", symbol: "wrench.and.screwdriver") { self.openSettings(.page("tools")) }
+            if self.gateway.supportsSkills {
+                SetupLink(title: "Open Skills", symbol: "wand.and.stars") { self.openSettings(.skills) }
+            } else {
+                SetupLink(title: "Open Tools & Skills", symbol: "wrench.and.screwdriver") { self.openSettings(.page("tools")) }
+            }
         }
     }
 }

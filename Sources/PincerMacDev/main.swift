@@ -19,5 +19,19 @@ struct PincerMacApp: App {
     }
 }
 
+// `--avatar-snapshots <dir>` renders the avatar art to PNGs and exits, for reviewing it.
+if let index = CommandLine.arguments.firstIndex(of: "--avatar-snapshots") {
+    let path = CommandLine.arguments.dropFirst(index + 1).first ?? "avatar-snapshots"
+    let directory = URL(filePath: (path as NSString).expandingTildeInPath)
+    do {
+        let count = try MainActor.assumeIsolated { try AvatarSnapshots.write(to: directory) }
+        print("Wrote \(count) images to \(directory.path)")
+        exit(0)
+    } catch {
+        print("Couldn't write avatar snapshots: \(error)")
+        exit(1)
+    }
+}
+
 PincerMacApp.main()
 #endif

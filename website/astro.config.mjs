@@ -59,11 +59,13 @@ export default defineConfig({
 						{ slug: 'guides/gateway-settings' },
 						{ slug: 'guides/agents' },
 						{ slug: 'guides/devices' },
+						{ slug: 'guides/skills-and-tools' },
 						{ slug: 'guides/gateway-health' },
 						{ slug: 'guides/gateway-logs' },
 						{ slug: 'guides/command-policy' },
 						{ slug: 'guides/usage-and-cost' },
 						{ slug: 'guides/appearance' },
+						{ slug: 'guides/agent-avatars' },
 					],
 				},
 				{

@@ -1,8 +1,8 @@
 // What Pincer's setup wizard reads beyond `health`/`status`/`config.*`: `channels.status`
-// (operator.read), `skills.status` (operator.read) and WhatsApp QR login through
-// `web.login.start` / `web.login.wait` (operator.admin, and not advertised in hello, like the
-// Gateway's `advertise: false`). Shapes follow the Gateway's channels and skills schemas and the
-// WhatsApp plugin's login messages.
+// (operator.read) and WhatsApp QR login through `web.login.start` / `web.login.wait`
+// (operator.admin, and not advertised in hello, like the Gateway's `advertise: false`). Shapes
+// follow the Gateway's channels schema and the WhatsApp plugin's login messages. The wizard's
+// `skills.status` comes from skills.mjs, the same list as the Skills page.
 // MOCK_WEB_LOGIN=link links on the first wait (default: the QR is refreshed once first);
 // MOCK_WEB_LOGIN=timeout never links (every wait says it's still waiting).
 // MOCK_WEB_LOGIN_WAIT_MS sets how long a wait takes (default 600).
@@ -10,12 +10,11 @@ import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { ADMIN_SCOPE } from './config.mjs';
 
-export const SETUP_METHODS = ['channels.status', 'skills.status'];
+export const SETUP_METHODS = ['channels.status'];
 /** Real Gateway methods that it doesn't list in `hello.features.methods`. */
 export const WEB_LOGIN_METHODS = ['web.login.start', 'web.login.wait'];
 export const WHATSAPP_NOT_LINKED = 'Not linked (no WhatsApp Web session).';
 export const WHATSAPP_RELINK_FIX = 'Run: openclaw channels login (scan QR on the gateway host).';
-export const MISSING_SKILL = 'summarize';
 const QR_TTL_MS = 3 * 60_000;
 const WHATSAPP_SELF = '+15550100';
 const CHANNEL_META = [
@@ -212,84 +211,6 @@ export function channelsStatus(state, { probe = false, channel } = {}) {
   };
 }
 
-// --- Skills --------------------------------------------------------------------------------
-
-const none = () => ({ bins: [], anyBins: [], env: [], config: [], os: [] });
-
-function skill(name, { description, emoji, homepage, requires = {}, missing = {}, install = [], os = [] }) {
-  const requirements = { ...none(), ...requires, os };
-  const gaps = { ...none(), ...missing };
-  const platformIncompatible = gaps.os.length > 0;
-  const eligible = Object.values(gaps).every((list) => list.length === 0);
-  return {
-    name,
-    description,
-    source: 'openclaw-bundled',
-    bundled: true,
-    filePath: `/opt/openclaw/skills/${name}/SKILL.md`,
-    baseDir: `/opt/openclaw/skills/${name}`,
-    skillKey: name,
-    ...(emoji ? { emoji } : {}),
-    ...(homepage ? { homepage } : {}),
-    always: false,
-    disabled: false,
-    blockedByAllowlist: false,
-    blockedByAgentFilter: false,
-    eligible,
-    platformIncompatible,
-    modelVisible: eligible,
-    userInvocable: true,
-    commandVisible: eligible,
-    requirements,
-    missing: gaps,
-    configChecks: [],
-    // Upstream drops install recipes for another OS.
-    install: platformIncompatible ? [] : install,
-  };
-}
-
-/** Three ready skills, one missing its CLI (the wizard's one to fix), one for macOS only. */
-export function skillsReport(agentId = 'main') {
-  return {
-    workspaceDir: `/home/mock/.openclaw/workspace${agentId === 'main' ? '' : `-${agentId}`}`,
-    managedSkillsDir: '/home/mock/.openclaw/skills',
-    agentId,
-    skills: [
-      skill('github', {
-        description: 'GitHub CLI for issues, PRs, CI/check logs, comments, reviews, releases, repos, and gh api queries.',
-        emoji: '🐙',
-        requires: { bins: ['gh'] },
-        install: [{ id: 'brew', kind: 'brew', label: 'Install GitHub CLI (brew)', bins: ['gh'] }],
-      }),
-      skill('weather', {
-        description: 'Current weather and forecasts with web_fetch, falling back to wttr.in curl for locations, rain, temperature, travel planning.',
-        emoji: '☔',
-        install: [{ id: 'brew', kind: 'brew', label: 'Install curl (brew)', bins: ['curl'] }],
-      }),
-      skill('tmux', {
-        description: 'Remote-control tmux sessions for interactive CLIs by sending keystrokes and scraping pane output.',
-        emoji: '🧵',
-        requires: { bins: ['tmux'] },
-        install: [{ id: 'brew', kind: 'brew', label: 'Install tmux (brew)', bins: ['tmux'] }],
-      }),
-      skill(MISSING_SKILL, {
-        description: 'Summarize or transcribe URLs, YouTube/videos, podcasts, articles, transcripts, PDFs, and local files.',
-        emoji: '🧾',
-        requires: { bins: ['summarize'] },
-        missing: { bins: ['summarize'] },
-        install: [{ id: 'brew', kind: 'brew', label: 'Install summarize (brew)', bins: ['summarize'] }],
-      }),
-      skill('apple-notes', {
-        description: 'Manage Apple Notes via the memo CLI on macOS.',
-        emoji: '📝',
-        requires: { bins: ['memo'] },
-        os: ['darwin'],
-        missing: { bins: ['memo'], os: ['darwin'] },
-      }),
-    ],
-  };
-}
-
 // --- Web login -----------------------------------------------------------------------------
 
 function loginFlow() {
@@ -346,17 +267,6 @@ export function handleSetupRequest(state, conn, msg, { sendRes, sendErr, broadca
       }
       const channel = params.channel === undefined ? undefined : String(params.channel).trim().toLowerCase();
       sendRes(conn, id, channelsStatus(state, { probe: params.probe === true, channel }));
-      return true;
-    }
-    case 'skills.status': {
-      const invalid = checkParams(params, ['agentId', 'sessionKey'], method);
-      if (invalid) return fail('INVALID_REQUEST', invalid), true;
-      const agentId = params.agentId ?? 'main';
-      if (!state.agents.has(agentId)) return fail('INVALID_REQUEST', `unknown agent id "${agentId}"`), true;
-      if (params.sessionKey !== undefined && !state.sessions.has(params.sessionKey)) {
-        return fail('INVALID_REQUEST', 'Session not found.'), true;
-      }
-      sendRes(conn, id, skillsReport(agentId));
       return true;
     }
     case 'web.login.start': {

@@ -129,6 +129,10 @@ public final class ChatStore: Identifiable {
     public var notice: String?
     /// The quoted message being looked for in older history, while paging.
     public private(set) var locatingReplyId: String?
+    /// How the latest run ended, and when, for the avatar's transient success and error poses.
+    public private(set) var lastOutcome = AvatarOutcome.none
+    public private(set) var lastOutcomeAt: Date?
+    @ObservationIgnored private var outcomeRunId: String?
     /// Reactions the agent added with its `message` tool, by transcript id.
     public private(set) var agentReactions: [String: [String]] = [:]
     /// Committed items by transcript id.
@@ -674,6 +678,7 @@ public final class ChatStore: Identifiable {
             }
             self.live = run
         case "final", "aborted", "error":
+            self.noteOutcome(runId, state == "final" ? .success : state == "error" ? .error : .none)
             if state == "error" {
                 self.errorMessage = payload["errorMessage"]?.text ?? "The run failed."
             }
@@ -729,7 +734,10 @@ public final class ChatStore: Identifiable {
             if phase == "end" { self.scheduleReload(after: .milliseconds(500)) }
         case "lifecycle":
             let phase = data["phase"]?.string
-            if phase == "end" || phase == "error" { self.finishRun(runId) }
+            if phase == "end" || phase == "error" {
+                self.noteOutcome(runId, phase == "end" ? .success : .error)
+                self.finishRun(runId)
+            }
         case "plan":
             // Durable cards are authoritative; this stream only stands in on Gateways without them.
             guard self.progressCardStoreAvailable == false, data["phase"]?.string == "update" else { return }
@@ -841,6 +849,32 @@ public final class ChatStore: Identifiable {
         } catch {
             self.refreshProgressCard()
         }
+    }
+
+    /// Records how a run ended, once per run (its `chat` final and `lifecycle` end both report it).
+    private func noteOutcome(_ runId: String, _ outcome: AvatarOutcome) {
+        guard self.outcomeRunId != runId else { return }
+        self.outcomeRunId = runId
+        self.lastOutcome = outcome
+        self.lastOutcomeAt = outcome == .none ? nil : Date()
+    }
+
+    /// Inputs for the agent's avatar; derive its state with `AvatarStateMachine`.
+    public var avatarSignals: AvatarSignals {
+        // A run that has ended stays live until its reload lands; it's done, not still replying.
+        let live = self.live.flatMap { $0.runId == self.outcomeRunId ? nil : $0 }
+        let runningTool = live?.tools.last(where: \.isRunning)?.name
+        let streaming = !(live?.text.isEmpty ?? true)
+        let compacting = live?.isCompacting == true || self.compaction?.isRunning == true
+        return AvatarSignals(
+            isRunning: self.live != nil && live == nil ? false : self.isRunning,
+            isThinking: live != nil && runningTool == nil && !streaming && !compacting,
+            isStreaming: streaming,
+            runningToolName: runningTool,
+            awaitingApproval: self.gateway?.approvals.contains { $0.sessionKey == self.sessionKey } ?? false,
+            isCompacting: compacting,
+            lastOutcome: self.lastOutcome,
+            outcomeAt: self.lastOutcomeAt)
     }
 
     private func finishRun(_ runId: String) {

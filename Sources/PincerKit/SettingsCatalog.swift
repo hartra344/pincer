@@ -12,6 +12,8 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case logs
     /// Command Policy: the exec approvals file (`exec.approvals.get/set`).
     case execPolicy
+    /// Skills: discovered skills by state, ClawHub search and installs (`skills.*`).
+    case skills
     /// Usage & cost: tokens, spend and provider quotas.
     case usage
     /// Pairing Requests: senders waiting to DM the agents on a pairing-policy channel.
@@ -44,6 +46,12 @@ public enum SettingsRoute: Hashable, Codable, Sendable {
     case agent(String)
     /// One workspace file of an agent (`agents.files.get/set`).
     case agentFile(agentId: String, name: String)
+    /// One skill's detail on the Skills page, by skill key.
+    case skill(String)
+    /// ClawHub search on the Skills page.
+    case clawHub
+    /// One agent's tool catalog and effective policy (`tools.catalog/effective`), by agent id.
+    case agentTools(String)
 }
 
 /// A sidebar page found by Gateway Settings search, shown above the matching settings.
@@ -170,6 +178,8 @@ public enum SettingsCatalog {
                                             "fingerprint", "paired", "operators", "access"]),
         SettingsDestinationMatch(destination: .nodes, title: "Nodes", symbol: "cpu",
                                  keywords: ["nodes", "node", "paired nodes", "companion", "rename", "unpair"]),
+        SettingsDestinationMatch(destination: .skills, title: "Skills", symbol: "wand.and.stars",
+                                 keywords: ["skills", "clawhub", "install skill", "skill", "tools", "api key"]),
     ]
 
     /// The pages whose title or keywords contain every word of `query`.

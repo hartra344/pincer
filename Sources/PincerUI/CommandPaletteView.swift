@@ -56,7 +56,7 @@ struct CommandPaletteView: View {
     }
 
     private enum Command: String {
-        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, usage, sessionUsage,
+        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, skills, usage, sessionUsage,
              gatewayLogs, devices, setupGateway
     }
 
@@ -420,6 +420,10 @@ struct CommandPaletteView: View {
                 item(.usage, "Usage & Cost…", "chart.bar.xaxis",
                      keywords: ["usage", "cost", "tokens", "spend", "billing", "quota", "rate limit", "budget"]),
             ]
+            if self.gateway?.supportsSkills == true {
+                items.append(item(.skills, "Skills…", "wand.and.stars",
+                                  keywords: ["skills", "clawhub", "install", "plugins", "requirements"]))
+            }
             if row != nil {
                 items.append(item(.sessionUsage, "Session Usage…", "chart.bar", keywords: ["usage", "cost", "tokens", "session"]))
             }
@@ -564,6 +568,8 @@ struct CommandPaletteView: View {
             if let gateway { self.openGatewaySettings(gateway, at: .logs) }
         case .execPolicy:
             if let gateway { self.openGatewaySettings(gateway, at: .execPolicy) }
+        case .skills:
+            if let gateway { self.openGatewaySettings(gateway, at: .skills) }
         case .usage:
             if let gateway { self.openGatewaySettings(gateway, at: .usage) }
         case .devices:
