@@ -273,6 +273,8 @@ struct ChatView: View {
 /// of its buttons flash, the sidebar's included.
 struct ChatChrome: ViewModifier {
     @Environment(GatewayStore.self) private var gateway
+    /// Per window, and kept across chat switches.
+    @State private var showRuns = false
 
     private var key: String? { self.gateway.selectedKey }
     private var row: SessionRow? { self.key.flatMap { self.gateway.sessions[$0] } }
@@ -287,8 +289,9 @@ struct ChatChrome: ViewModifier {
             #endif
             .toolbar {
                 ToolbarItem(placement: .primaryAction) { ChatModelItem() }
-                ToolbarItem(placement: .primaryAction) { ChatSessionMenu() }
+                ToolbarItem(placement: .primaryAction) { ChatSessionMenu(showRuns: self.$showRuns) }
             }
+            .modifier(RunsPanelChrome(isPresented: self.$showRuns))
     }
 
     private var subtitle: String {
@@ -315,6 +318,7 @@ private struct ChatModelItem: View {
 }
 
 private struct ChatSessionMenu: View {
+    @Binding var showRuns: Bool
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @FocusedValue(\.transcriptFind) private var find
@@ -329,6 +333,7 @@ private struct ChatSessionMenu: View {
                 }
                 ThinkingDisplayPicker()
                 ReasoningMenu(row: row)
+                ShowRunsButton(isPresented: self.$showRuns)
                 Divider()
                 Button("Reload", systemImage: "arrow.clockwise") {
                     Task { await self.gateway.chat(for: key).load(force: true) }

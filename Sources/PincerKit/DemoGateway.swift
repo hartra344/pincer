@@ -76,6 +76,8 @@ actor DemoGateway {
     private var idempotency: [String: String] = [:]
     private var runs: [String: Run] = [:]
     private var sessionsSubscribed = false
+    /// The seeded runs' activity streams once per demo connection (DemoGateway+Subagents.swift).
+    private var replayedSeededRuns = false
     private var messageSubscriptions: Set<String> = []
     private var eventSeq = 0
     private var sink: (@Sendable (GatewayEvent) -> Void)?
@@ -100,6 +102,8 @@ actor DemoGateway {
         let seeded = Self.seed()
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
+        Self.seedSubagents(sessions: &self.sessions, transcripts: &self.transcripts)
+        self.runs[Self.seededRunningSubagentRunId] = Run(sessionKey: Self.seededSubagents.running, text: "", seq: 10)
         self.approvalHistory = Self.seedApprovalHistory()
         let pending = Self.seedPendingApproval()
         if let id = pending["id"]?.string {
@@ -191,6 +195,10 @@ actor DemoGateway {
             return ["defaultId": "main", "mainKey": "main", "scope": "per-sender", "agents": .array(self.agents)]
         case "sessions.subscribe":
             self.sessionsSubscribed = true
+            if !self.replayedSeededRuns {
+                self.replayedSeededRuns = true
+                for event in Self.seededRunEvents() { self.emit("agent", event) }
+            }
             return ["subscribed": true, "list": self.sessionList(params)]
         case "sessions.list":
             return self.sessionList(params)
@@ -1311,9 +1319,22 @@ actor DemoGateway {
                 row["hasActiveRun"] = false
                 row["activeRunIds"] = []
                 row["status"] = "idle"
+                Self.markSubagentAborted(&row)
             }
+            // Like the Gateway: a terminal lifecycle end marked aborted, then the chat state.
+            var lifecycle: [String: JSONValue] = [
+                "runId": .string(id), "sessionKey": .string(run.sessionKey), "seq": JSONValue(run.seq + 1),
+                "stream": "lifecycle", "ts": Self.now(),
+                "data": ["phase": "end", "status": "cancelled", "aborted": true, "stopReason": "user", "endedAt": Self.now()],
+            ]
+            if let parent = self.sessions[run.sessionKey]?["spawnedBy"]?.string {
+                lifecycle["spawnedBy"] = .string(parent)
+                let running = Self.hasRunningChild(parent, in: self.sessions)
+                self.updateRow(parent, reason: "subagent") { $0["hasActiveSubagentRun"] = .bool(running) }
+            }
+            self.emit("agent", .object(lifecycle))
             self.emit("chat", ["runId": .string(id), "sessionKey": .string(run.sessionKey),
-                               "seq": JSONValue(run.seq + 1), "state": "aborted"])
+                               "seq": JSONValue(run.seq + 2), "state": "aborted"])
         }
     }
 
