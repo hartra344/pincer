@@ -18,6 +18,10 @@ struct SidebarModel: Equatable {
         let newChatAgent: String?
         /// Custom SF Symbol for a group (already checked for this OS).
         var icon: String?
+        /// The agent's companion, shown instead of its emoji when animated avatars are on, and
+        /// the still pose it holds for what the agent's chats are doing.
+        var avatar: AvatarStyle?
+        var avatarState = AvatarState.idle
 
         /// The symbol the header shows, if any.
         var symbol: String? {
@@ -28,6 +32,7 @@ struct SidebarModel: Equatable {
             lhs.id == rhs.id && lhs.isCollapsed == rhs.isCollapsed && lhs.newChatAgent == rhs.newChatAgent && lhs.icon == rhs.icon
                 && lhs.section.title == rhs.section.title && lhs.section.emoji == rhs.section.emoji
                 && lhs.section.kind == rhs.section.kind && lhs.section.unreadCount == rhs.section.unreadCount
+                && lhs.avatar == rhs.avatar && lhs.avatarState == rhs.avatarState
         }
     }
 
@@ -64,6 +69,8 @@ struct SidebarModel: Equatable {
                       showPreviews: Bool) -> SidebarModel
     {
         let selected = gateway.selectedKey
+        let avatarsOn = AvatarSettings.isEnabled
+        let approvalKeys = avatarsOn ? Set(gateway.approvals.compactMap(\.sessionKey)) : []
         var model = SidebarModel()
         for section in gateway.sections(search: search) {
             var entries: [Entry] = []
@@ -104,12 +111,27 @@ struct SidebarModel: Equatable {
             let newChatAgent = section.agentId ?? (gateway.organization == .recent ? gateway.defaultAgentId : nil)
             var icon: String?
             if case let .group(name) = section.kind { icon = SymbolCatalog.symbol(for: gateway.groupIcon(for: name)) }
-            let header = Header(id: self.headerId(section.id), section: section,
+            var header = Header(id: self.headerId(section.id), section: section,
                                 isCollapsed: collapsed.contains(section.id), newChatAgent: newChatAgent, icon: icon)
+            if avatarsOn, let agentId = section.agentId {
+                header.avatar = AvatarSettings.style(for: gateway.agent(agentId))
+                let rows = section.channels.flatMap { [$0.row] + $0.threads }
+                if rows.contains(where: { approvalKeys.contains($0.key) }) {
+                    header.avatarState = .awaitingApproval
+                } else if rows.contains(where: \.hasActiveRun) {
+                    header.avatarState = .thinking
+                }
+            }
             model.groups.append(Group(header: header, entries: entries))
         }
         return model
     }
+}
+
+/// The companion on an agent's section header: a still pose, no timeline.
+enum SidebarAvatar {
+    /// One point per pixel cell, so the pixel style stays crisp.
+    static let side: CGFloat = 18
 }
 
 /// Things the sidebar asks its SwiftUI owner to do (sheets and view state live there).

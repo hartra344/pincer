@@ -223,6 +223,14 @@ public struct AvatarStyle: Hashable, Sendable, Codable {
         self.renderStyle = renderStyle
     }
 
+    /// What an agent's companion is seeded from: its identity name (from `agents.list` /
+    /// `agent.identity.get`), so two users' "main" agents with different identities differ, or its
+    /// id when it has no name.
+    public static func identitySeed(name: String?, agentId: String) -> String {
+        let name = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? agentId : name
+    }
+
     /// Same seed, same companion, on every device and launch (FNV-1a, not `hashValue`).
     public static func seeded(from identitySeed: String, renderStyle: AvatarRenderStyle = .pixel) -> AvatarStyle {
         let hash = self.fnv1a(identitySeed)

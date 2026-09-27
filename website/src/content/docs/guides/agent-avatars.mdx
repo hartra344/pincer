@@ -7,9 +7,9 @@ Each agent can have a small companion pet as its avatar. It reacts to what the a
 
 ## Where they appear
 
-- **Chat header:** the agent of the open chat.
-- **Latest reply:** the avatar next to the newest assistant message. Older messages keep a still pose.
-- **Sidebar:** each chat row shows its agent's pet. Rows change pose but don't idle-animate.
+- **Chat header:** the open chat's agent. This is the one that animates.
+- **Latest reply:** the avatar next to the newest assistant message shows the same state as a still pose, with its tool badge. Older messages show the pet idle.
+- **Sidebar:** each agent's section header shows its pet, still. It raises a paw when one of the agent's chats needs an approval, and looks busy while a run is going.
 
 ## Characters
 
@@ -20,7 +20,7 @@ There are four creatures:
 - **Rock:** a boxy pebble.
 - **Sprout:** a little body with a leaf growing on top.
 
-Each pet also gets an accessory (none, hat, glasses, leaf or bow) and a palette (cream, apricot, moss, stone, peach, lilac or sky). All three are picked from the agent's identity, so every agent looks different and keeps the same look on all your devices.
+Each pet also gets an accessory (none, a hat, glasses, a flower clip, a bow or an antenna) and a palette (cream, apricot, moss, stone, peach, lilac or sky). All three are picked from the agent's identity name (or its id if it has no name), so different agents get different pets, and each keeps the same look on all your devices. Renaming an agent's identity gives it a new pet unless you've picked a character.
 
 ## What the poses mean
 
@@ -47,13 +47,13 @@ Open **Settings → Appearance**:
 
 These choices are saved on this device only and don't sync to your other devices.
 
-The pet's badge and ring use your theme's accent or the chat's color. The creature's own colors stay the same in every theme. See [Appearance](../appearance/).
+Whenever the agent isn't idle, a soft ring and glow in your theme's accent color appear behind the pet, and the tool badge uses the same accent. The creature's own colors stay the same in every theme. See [Appearance](../appearance/).
 
 ## Motion and battery
 
 - With **Reduce Motion** turned on in your system's accessibility settings, each state shows a still pose instead of animating.
-- Pets only animate while they're visible and Pincer is in the foreground. When idle, they only animate an occasional blink.
+- In a chat, only the header's pet animates, and only while it's visible and Pincer is in the foreground. It redraws only when its pose changes, at no more than about 10 frames a second, and when idle it just blinks now and then.
 
 ## VoiceOver
 
-VoiceOver reads the agent's name and what it's doing, for example "Nova is running a tool: exec" or "Nova is waiting for your approval".
+VoiceOver reads the agent's name and what it's doing, for example "Nova is running a tool: exec" or "Nova is waiting for your approval". It also announces when the agent starts waiting for an approval or runs into a problem.

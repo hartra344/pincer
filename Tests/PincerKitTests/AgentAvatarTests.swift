@@ -112,6 +112,7 @@ struct AvatarStateMachineTests {
 
     @Test func galleryCoversEveryState() {
         let gallery = AvatarState.gallery
+        #expect(gallery.count == 8 && gallery.contains(.tool(.exec)))
         #expect(Set(gallery).count == gallery.count)
         for state in [AvatarState.idle, .thinking, .streaming, .awaitingApproval, .success, .error, .compacting] {
             #expect(gallery.contains(state))
@@ -170,13 +171,39 @@ struct AvatarStyleTests {
         #expect(AvatarStyle.fnv1a("foobar") == 0x85944171F73967E8)
     }
 
+    /// Distinct names don't all get the same pet (no exact outcomes: the art set may still change).
     @Test func namesSpreadAcrossStyles() {
-        let names = (0..<64).map { "agent-\($0)" }
+        let names = ["Claw", "Scout", "Forge", "Nova", "Atlas", "Pip", "Juniper", "Echo", "main", "research", "coder"]
         let styles = names.map { AvatarStyle.seeded(from: $0) }
-        #expect(Set(styles).count >= 24)
-        #expect(Set(styles.map(\.creature)) == Set(AvatarCreature.allCases))
-        #expect(Set(styles.map(\.palette)).count == AvatarPalette.allCases.count)
-        #expect(Set(styles.map(\.accessory)).count >= 4)
+        #expect(Set(styles.map(\.creature)).count > 1)
+        #expect(Set(styles.map(\.palette)).count > 1)
+        #expect(Set(styles).count > 1)
+    }
+
+    @Test func identitySeedPrefersTheName() {
+        #expect(AvatarStyle.identitySeed(name: "Scout", agentId: "research") == "Scout")
+        #expect(AvatarStyle.identitySeed(name: "  Scout \n", agentId: "research") == "Scout")
+    }
+
+    @Test(arguments: [nil, "", "   ", "\n\t"] as [String?])
+    func identitySeedFallsBackToTheAgentId(name: String?) {
+        #expect(AvatarStyle.identitySeed(name: name, agentId: "research") == "research")
+    }
+
+    /// Renaming an agent changes its pet; the same identity always gets the same one.
+    @Test func identitySeedDrivesTheStyle() {
+        let named = AvatarStyle.seeded(from: AvatarStyle.identitySeed(name: "Scout", agentId: "research"))
+        #expect(named == AvatarStyle.seeded(from: "Scout"))
+        let unnamed = AvatarStyle.seeded(from: AvatarStyle.identitySeed(name: nil, agentId: "research"))
+        #expect(unnamed == AvatarStyle.seeded(from: "research"))
+        #expect(named != unnamed)
+    }
+
+    /// Distinct identity names (as agents.list reports them) don't all get the same creature.
+    @Test func distinctIdentitiesSpreadAcrossCreatures() {
+        let agents: [(name: String?, id: String)] = [("Claw", "main"), ("Scout", "research"), ("Forge", "coder"), (nil, "ops"), ("", "qa")]
+        let creatures = agents.map { AvatarStyle.seeded(from: AvatarStyle.identitySeed(name: $0.name, agentId: $0.id)).creature }
+        #expect(Set(creatures).count > 1)
     }
 
     @Test func nearbySeedsDiffer() {
@@ -200,13 +227,19 @@ struct AvatarStyleTests {
         #expect(pixel == AvatarStyle.seeded(from: "Claw"))
     }
 
+    /// Whatever the pairing rules, a style never ends up wearing something its creature can't.
     @Test func unsuitedAccessoryIsDropped() {
-        #expect(AvatarStyle(creature: .sprout, accessory: .glasses).accessory == .none)
-        #expect(AvatarStyle(creature: .owl, accessory: .glasses).accessory == .glasses)
-        let owl = AvatarStyle(creature: .owl, accessory: .glasses, palette: .moss)
-        let sprout = owl.with(creature: .sprout)
-        #expect(sprout.creature == .sprout && sprout.accessory == .none && sprout.palette == .moss)
-        #expect(owl.with(creature: .blob).accessory == .glasses)
+        for creature in AvatarCreature.allCases {
+            for accessory in AvatarAccessory.allCases {
+                let style = AvatarStyle(creature: creature, accessory: accessory)
+                #expect(AvatarAccessory.allowed(for: creature).contains(style.accessory))
+                for other in AvatarCreature.allCases {
+                    let swapped = style.with(creature: other)
+                    #expect(swapped.creature == other && swapped.palette == style.palette)
+                    #expect(AvatarAccessory.allowed(for: other).contains(swapped.accessory))
+                }
+            }
+        }
     }
 
     @Test func everyCreatureAllowsNoAccessory() {
@@ -216,7 +249,7 @@ struct AvatarStyleTests {
     }
 
     @Test func codableRoundTrip() throws {
-        let style = AvatarStyle(creature: .rock, accessory: .hat, palette: .sky, renderStyle: .plush)
+        let style = AvatarStyle.seeded(from: "Scout", renderStyle: .plush)
         let decoded = try JSONDecoder().decode(AvatarStyle.self, from: JSONEncoder().encode(style))
         #expect(decoded == style)
     }

@@ -12,7 +12,7 @@ public struct AvatarPose: Hashable, Sendable {
         case down
         /// Lifted 1px, as when tapping along.
         case tap
-        /// Raised above the shoulder; `wave` shifts it sideways by its value (0 or 1).
+        /// Raised above the shoulder; `wave` shifts it outward by its value (0 or 1).
         case up(wave: Int)
     }
 
@@ -85,7 +85,7 @@ public enum AvatarMotion {
             pose.twitch = [0, 1, 0, 0, 1, 0, 0, 0][step % 8]
             pose.bob = self.breathOffset(at: time)
         case .awaitingApproval:
-            pose.rightArm = .up(wave: (step / 2) % 2)
+            pose.leftArm = .up(wave: (step / 2) % 2)
         case .success:
             pose.eyes = .happy
             pose.mouth = true
@@ -104,17 +104,23 @@ public enum AvatarMotion {
             }
         case .error:
             pose.sweat = true
+            pose.gaze = 1
             let t = max(elapsed, 0)
             if t < self.wobbleDuration {
-                let tilts = [-1, 1, -1, 1, -1, 1, 0]
+                let tilts = [-1, 1, -1, 1, -1, 1]
                 let index = min(Int(t / (self.wobbleDuration / Double(tilts.count))), tilts.count - 1)
                 pose.sway = tilts[index]
                 pose.tilt = Double(tilts[index]) * 8
+            } else {
+                // Settles into the worried lean of the still pose.
+                pose.sway = 1
+                pose.tilt = 6
             }
         case .compacting:
             pose.eyes = .closed
             pose.bob = 1 + self.breathOffset(at: time * 0.6)
-            pose.zRise = (max(elapsed, 0).truncatingRemainder(dividingBy: 2)) / 2
+            // In eighths, so frames between steps draw the same pose and can be skipped.
+            pose.zRise = (max(elapsed, 0).truncatingRemainder(dividingBy: 2) * 4).rounded(.down) / 8
         }
         return pose
     }
@@ -131,13 +137,18 @@ public enum AvatarMotion {
             pose.rightArm = .tap
             pose.mouth = true
         case .tool: pose.twitch = 1
-        case .awaitingApproval: pose.rightArm = .up(wave: 0)
+        case .awaitingApproval: pose.leftArm = .up(wave: 0)
         case .success:
             pose.eyes = .happy
             pose.mouth = true
             pose.leftArm = .up(wave: 0)
             pose.rightArm = .up(wave: 0)
-        case .error: pose.sweat = true
+        case .error:
+            // Worried: leaning over, eyes lowered, a sweat drop.
+            pose.sweat = true
+            pose.sway = 1
+            pose.tilt = 6
+            pose.gaze = 1
         case .compacting:
             pose.eyes = .closed
             pose.bob = 1
@@ -151,7 +162,8 @@ public enum AvatarMotion {
     public static func frameInterval(for state: AvatarState, plush: Bool) -> TimeInterval? {
         switch state {
         case .idle: nil
-        default: plush ? 1.0 / 16 : 0.125
+        // Low on purpose: pixel poses step in whole cells, and plush reads fine at 10fps.
+        default: plush ? 0.1 : 0.125
         }
     }
 

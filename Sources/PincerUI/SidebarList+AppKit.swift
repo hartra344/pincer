@@ -599,11 +599,13 @@ private final class SidebarHeaderCell: NSTableCellView {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("SidebarHeaderCell")
 
     private let emoji = NSTextField(labelWithString: "")
+    private let creature = NSImageView()
     private let icon = NSImageView()
     private let title = NSTextField(labelWithString: "")
     private let badge = NSTextField(labelWithString: "")
     private let add = NSButton()
     private var onAdd: (() -> Void)?
+    private var avatar: (style: AvatarStyle, state: AvatarState)?
 
     init() {
         super.init(frame: .zero)
@@ -631,12 +633,15 @@ private final class SidebarHeaderCell: NSTableCellView {
         self.add.toolTip = "New chat"
         self.add.target = self
         self.add.action = #selector(self.addChat)
-        for view in [self.emoji, self.icon, self.badge, self.add] as [NSView] {
+        self.creature.imageScaling = .scaleNone
+        self.creature.widthAnchor.constraint(equalToConstant: SidebarAvatar.side).isActive = true
+        self.creature.heightAnchor.constraint(equalToConstant: SidebarAvatar.side).isActive = true
+        for view in [self.emoji, self.creature, self.icon, self.badge, self.add] as [NSView] {
             view.setContentHuggingPriority(.required, for: .horizontal)
         }
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let row = NSStackView(views: [self.emoji, self.icon, self.title, self.badge, spacer, self.add])
+        let row = NSStackView(views: [self.emoji, self.creature, self.icon, self.title, self.badge, spacer, self.add])
         row.spacing = 5
         row.alignment = .centerY
         row.translatesAutoresizingMaskIntoConstraints = false
@@ -656,8 +661,10 @@ private final class SidebarHeaderCell: NSTableCellView {
     @MainActor
     func configure(_ header: SidebarModel.Header, actions: SidebarActions) {
         let section = header.section
+        self.avatar = header.avatar.map { ($0, header.avatarState) }
+        self.drawAvatar()
         self.emoji.stringValue = section.emoji ?? ""
-        self.emoji.isHidden = section.emoji == nil
+        self.emoji.isHidden = section.emoji == nil || header.avatar != nil
         let symbol = header.symbol
         self.icon.image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) }
         self.icon.isHidden = symbol == nil
@@ -673,6 +680,25 @@ private final class SidebarHeaderCell: NSTableCellView {
 
     @objc private func addChat() {
         self.onAdd?()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        self.drawAvatar()
+    }
+
+    private func drawAvatar() {
+        self.creature.isHidden = self.avatar == nil
+        guard let avatar else { self.creature.image = nil; return }
+        var image: NSImage?
+        self.effectiveAppearance.performAsCurrentDrawingAppearance {
+            let dark = self.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            let accent = TranscriptColors.tint.cgColor
+            let scale = self.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+            image = AvatarArt.still(avatar.style, state: avatar.state, dark: dark, accent: accent, side: SidebarAvatar.side, scale: scale)
+                .map { NSImage(cgImage: $0, size: NSSize(width: SidebarAvatar.side, height: SidebarAvatar.side)) }
+        }
+        self.creature.image = image
     }
 }
 
