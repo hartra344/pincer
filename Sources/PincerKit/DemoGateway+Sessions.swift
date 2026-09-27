@@ -123,7 +123,7 @@ extension DemoGateway {
         // Interrupted by a Gateway restart: recoverable into a fresh chat.
         let photoEnded = now - 3 * day
         seed(SessionManagerSeed.photoImport, agent: "main", title: "Photo import", activity: photoEnded,
-             ["category": "Personal", "status": "killed", "restartRecoveryStatus": "tombstoned",
+             ["category": "Home", "status": "killed", "restartRecoveryStatus": "tombstoned",
               "startedAt": .number(photoEnded - 12 * minute), "endedAt": .number(photoEnded), "runtimeMs": .number(12 * minute)],
              messages: [
                  message("user", "Import the SD card photos into the Family library and tag them by date.",

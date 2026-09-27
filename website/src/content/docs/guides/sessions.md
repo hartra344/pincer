@@ -3,53 +3,72 @@ title: Session manager
 description: Browse every session on your OpenClaw Gateway with previews, details and run status, archive or delete them in bulk, and switch branches, rewind or recover a session.
 ---
 
-The **Sessions** page lists every session on your gateway, not just the chats in your sidebar. You can preview a session, see its details and run status, archive or delete several at once, and manage a session's branches: switch between them, rewind to an earlier message, or recover a session the gateway stopped when it restarted.
+The **Sessions** page lists every session on your gateway, not just the chats in your sidebar. You can preview a session, see its details and run status, archive or delete several at once, switch between a session's branches, rewind it to an earlier message, or recover a session a gateway restart interrupted.
 
 ## Opening Sessions
 
-- **Gateway Settings → Sessions**. On macOS Gateway Settings opens in its own window; on iOS it opens as a sheet. See [Gateway Settings](../gateway-settings/).
+- **Gateway Settings → Sessions**, in the sidebar after **Command Policy** (and **Skills**). On macOS Gateway Settings opens in its own window; on iOS it opens as a sheet. See [Gateway Settings](../gateway-settings/).
+- The command palette (<kbd>⌘</kbd> <kbd>K</kbd>): **Manage Sessions…** opens the list; **Manage Session…** opens the current chat's details.
+- A chat's ⋯ menu → **Manage Session…** opens that chat's details.
 
-If the gateway doesn't offer `sessions.list`, the page says **Session Management Isn't Available**. Update OpenClaw to manage sessions here.
+If the gateway doesn't offer `sessions.list`, **Sessions** isn't in Gateway Settings and the menu items are hidden. Update OpenClaw to manage sessions here.
 
 ## Browsing sessions
 
-Each row shows the session's title, agent and channel, when it was last active, and its run status (**Idle**, **Queued**, **Running**, **Done**, **Failed**, **Killed** or **Timed Out**) with how long the last run took. Archived sessions are marked.
+Each row shows the session's title, its agent and channel, and when it was last active. If it has run, the row also shows the latest run's status (**Queued**, **Running**, **Done**, **Error**, **Stopped** or **Timed Out**) and how long it took; a running session's time counts up. Archived sessions have an **Archived** tag, and sessions interrupted by a gateway restart have an orange icon.
 
-- **Filter:** choose **Active** (the default), **Archived** or **All**.
-- **Search:** filter by title, key, label or agent.
+- **Show:** **Active** (the default), **Archived** or **All**.
+- **Filter sessions:** match the title, key, label, agent or channel.
 
-Select a session to see a preview of its last few messages. Open it for **Details**: its key, agent, model, when it was created and last updated, and token counts. Previews and details load when you ask for them, so the list stays fast on gateways with hundreds of sessions.
+The newest activity is at the top. On macOS, select a session to see a preview of its last few messages under the list. Double-click it or choose **Details…** (on iOS, tap it) to open its details:
+
+| Section | What's there |
+| --- | --- |
+| **Details** | Run status, agent, channel, model, context and last-run tokens, branch count, when it was created and last active, archive date and reason, key and session ID. |
+| **Preview** | The last few messages. |
+| **Actions** | **Recover Session** (when it can be recovered), **Archive** or **Unarchive**, and **Delete…**. |
+| **Branches** | Every branch of the conversation. See [Branches](#branches). |
+| **Rewind** | Your recent messages to rewind to. See [Rewinding](#rewinding). |
+
+Previews, details and branches load only when you look at a session, so the list stays quick on gateways with hundreds of sessions. **Refresh** reloads them.
 
 ## Archiving and deleting
 
-Select several sessions at once: on macOS with <kbd>⌘</kbd>-click or <kbd>⇧</kbd>-click, on iOS with **Select**. The toolbar then shows how many are selected, with **Archive**, **Unarchive** and **Delete…**.
+To act on several sessions at once, select them: on macOS with <kbd>⌘</kbd>-click, <kbd>⇧</kbd>-click or <kbd>⌘</kbd> <kbd>A</kbd>; on iOS with **Edit**. A bar at the bottom shows how many are selected, with **Archive**, **Unarchive** and **Delete…**. The same actions are in the right-click (or long-press) menu, and on macOS <kbd>⌫</kbd> deletes.
 
-- **Archive** and **Unarchive** happen straight away. Pincer tells you how many sessions changed and lists any the gateway refused. Archived sessions leave the sidebar but aren't deleted.
-- **Delete…** always asks first. Deleting removes the session and its transcript from the gateway, and it can't be undone. Pincer also removes the session's [locally cached transcript](../local-cache/).
+- **Archive** and **Unarchive** happen straight away, and Pincer says how many sessions changed, for example **Archived 3 sessions**. If the gateway refuses some, they're listed with its reason and stay selected. Archived sessions leave the sidebar but keep their transcripts.
+- **Delete…** always asks first, for example **Delete 3 sessions?** or, for one, **Delete “Garden planner”?**: *This permanently deletes the transcript on the gateway and can't be undone.* Pincer also drops those sessions' [locally cached transcripts](../local-cache/) and removes them from message search, and if one was open, Pincer switches to another chat.
+
+Changing the filter clears the selection.
 
 :::caution[Some actions need Full Management]
-Browsing, previews, details and branch lists need `operator.read`. Archiving, unarchiving, recovering and deleting **archived** sessions need `operator.write`. Deleting a session that isn't archived, switching branches and rewinding need `operator.admin`: set **Access** to **Full Management** on the **Connection** page, then approve this device on the gateway host. See [Access levels](../../getting-started/connect-a-gateway/#access-levels).
+Browsing, previews, details and branches need `operator.read`. Archiving, unarchiving, recovering and deleting **archived** sessions need `operator.write`. Deleting sessions that aren't archived, switching branches and rewinding need `operator.admin`: set **Access** to **Full Management** on the **Connection** page, then approve this device on the gateway host. See [Access levels](../../getting-started/connect-a-gateway/#access-levels).
 
-Without it, those actions show a **Needs Full Management** badge. To delete an active session without Full Management, archive it first.
+Without it, those buttons are turned off and the page shows **Needs Full Management**. If your selection includes sessions that aren't archived, it says *Only archived sessions can be deleted without Full Management*. Archive them first, then delete them.
 :::
 
 ## Branches
 
-When you edit or retry earlier messages, the gateway keeps each version of the conversation as a branch. A session's details list its branches, with a headline, message count and when each was last updated. The current branch is marked.
+When earlier messages are edited, retried or rewound, the gateway keeps each version of the conversation as a branch. The **Branches** section lists them with a headline, message count and when each was last updated. The current branch has a checkmark.
 
-- **Switch** makes another branch the current one, after a confirmation.
-- **Rewind…** picks one of your recent messages and rewinds the session to it, after a confirmation. The later messages stay on their own branch, so you can switch back.
+Choose **Switch…** on another branch, then **Switch Branch** to confirm. The chat continues from that branch, and the one you left is kept, so you can switch back.
 
-After a switch or rewind, the open chat reloads from the gateway and Pincer refreshes its cached transcript.
+## Rewinding
+
+The **Rewind** section lists your recent messages in the session. Choose **Rewind…** on one, then **Rewind** to confirm. The session goes back to just before that message, the message goes back into the chat's composer so you can edit and resend it, and everything after it stays on its own branch.
+
+You can't rewind an archived session (unarchive it first) or a session with a reply in progress.
+
+After a branch switch or a rewind, from Pincer or anywhere else, Pincer drops the session's cached transcript and reloads the open chat from the gateway.
 
 ## Recovering a session
 
-If the gateway restarted in the middle of a run, it can mark the session as needing recovery. Those sessions show **Recover**, which asks the gateway (OpenClaw 2026.8 or later) to continue the session and tells you whether the run restarted.
+If the gateway restarted in the middle of a run, it marks that session as interrupted. **Recover Session** (OpenClaw 2026.8 or later) asks the gateway to start a new session that continues from it. Pincer opens the new session's details, and the interrupted one is archived.
 
-## Missing features
+## Older gateways
 
-Pincer only shows what your gateway offers. If the gateway doesn't offer previews, details, branches, rewind, recover or bulk archive, those controls are hidden, and the rest of the page still works. On older gateways without bulk archive, Pincer archives sessions one at a time.
+Pincer only shows what your gateway offers. Without previews, the preview says *Previews need a newer gateway*; without branches, *Branches need a newer gateway*. Without rewind or recovery, those controls are hidden, and the rest of the page still works. On gateways without bulk archive (`sessions.patchMany`), Pincer archives sessions one at a time.
 
 ## In the demo
 
-The [demo](../../getting-started/try-the-demo/) has sample sessions to try everything on: active and archived ones, a running one, one with several branches and one waiting to be recovered. Archiving, deleting, switching branches, rewinding and recovering all work without a real gateway, and nothing is kept after you quit.
+The [demo](../../getting-started/try-the-demo/) has sample sessions for every action: *2025 taxes* and *GPU benchmarks* are archived, *Refactor auth module* is running, *Fix flaky CI* failed, *Photo import* was interrupted by a restart and can be recovered, and *Garden planner* has three branches. Archiving, deleting, switching branches, rewinding and recovering all work, with no gateway and no Full Management needed, and nothing is kept once you quit.

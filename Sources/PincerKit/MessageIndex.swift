@@ -380,6 +380,22 @@ public actor MessageIndex {
         return (row.itemCount, row.lastItemId, row.digest, Date(timeIntervalSinceReferenceDate: row.mtime))
     }
 
+    /// Drops a chat and its messages from search (the session was deleted on the Gateway).
+    public func remove(sessionKey: String) {
+        guard !self.isRemoved else { return }
+        self.withRecovery { db in
+            try self.exec(db, "BEGIN IMMEDIATE")
+            do {
+                try self.replace(sessionKey: sessionKey, with: [], db: db)
+                try self.run(db, "DELETE FROM chats WHERE session_key = ?", [.text(sessionKey)])
+                try self.exec(db, "COMMIT")
+            } catch {
+                try? self.exec(db, "ROLLBACK")
+                throw error
+            }
+        }
+    }
+
     public func close() {
         // Once this returns no interrupt is in flight, and none can reach the freed connection.
         self.interrupter.end()

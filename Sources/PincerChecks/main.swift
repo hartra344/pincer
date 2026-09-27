@@ -3673,7 +3673,10 @@ func runMenuBarDemo() async {
     check(Set(inbox.unread.map(\.target.sessionKey)) == [homeLab, papers] && inbox.unreadCount == 3
           && inbox.unread.map(\.title) == ["🦞 home-lab · Claw", "🔭 Paper digest · Scout"],
           "unread lists home-lab and Paper digest (\(inbox.unread.map(\.title)), \(inbox.unreadCount) unread)")
-    check(inbox.running.isEmpty && !inbox.isCaughtUp && inbox.badgeText == "4", "nothing running; the icon shows 4 (\(inbox.badgeText ?? "none"))")
+    // The demo seeds one run in flight (the Sessions page's run duration, #38); runs don't count toward the badge.
+    let seededRun = "agent:coder:dashboard:refactor"
+    check(inbox.running.map(\.target.sessionKey) == [seededRun] && !inbox.isCaughtUp && inbox.badgeText == "4",
+          "only the seeded run is running; the icon shows 4 (\(inbox.running.map(\.title)), \(inbox.badgeText ?? "none"))")
     // #9: the menu takes `now` from a tick, not body. Past its 30 minutes the seeded approval drops out.
     let expired = MenuBarInbox(app: app, now: Date().addingTimeInterval(31 * 60))
     check(expired.needsYou.isEmpty && expired.needsYouCount == 0 && expired.badgeText == "3" && !expired.accessibilityLabel.contains("need"),
@@ -3747,6 +3750,7 @@ func runMenuBarDemo() async {
         let recorded = await waitFor("seeded approval in history", timeout: 5) { history.items.first?.id == pending.id }
         check(recorded && history.items.first?.sessionKey == coderKey, "the resolved seeded approval shows in Approval History")
         for row in gateway.sessions.values where row.isUnread { await gateway.markRead(row.key) }
+        await gateway.chat(for: seededRun).abort()
         let caughtUp = await waitFor("caught up") { MenuBarInbox(app: app).isCaughtUp }
         check(caughtUp && MenuBarInbox(app: app).badgeText == nil, "with nothing left the menu is all caught up")
     } else {
@@ -4628,7 +4632,7 @@ func runLive(url: String, token: String) async {
     await runLiveAgents(profile: profile, gateway: gateway, admin: admin)
     await runLiveDevices(profile: profile, gateway: gateway, admin: admin)
     await runLiveSkills(profile: profile, admin: admin)
-    await runLiveSessions(profile: profile, gateway: gateway, admin: admin)
+    await runLiveSessions(profile: profile, admin: admin)
 
     // Gateway Logs after Pairing Requests, whose seeded request expires minutes after the mock starts.
     await checkGatewayLogsLive(admin)

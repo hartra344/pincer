@@ -89,7 +89,9 @@ func runDemoSessions(_ gateway: GatewayStore) async {
     check(active.isSuperset(of: [garden, refactor, ciFix, photo]) && active.isDisjoint(with: [taxes, bench]),
           "demo active list (\(active.count))")
     await manager.load(filter: .archived)
-    check(Set(manager.visibleRows().map(\.key)) == [taxes, bench], "demo archived list")
+    let archivedKeys = Set(manager.visibleRows().map(\.key))
+    check(archivedKeys.isSuperset(of: [taxes, bench]) && archivedKeys.isDisjoint(with: active)
+          && manager.visibleRows().allSatisfy(\.isArchived), "demo archived list (\(archivedKeys.count))")
     await manager.load(filter: .all)
     check(manager.visibleRows().count >= active.count + 2, "demo all list")
     check(manager.visibleRows(search: "garden").map(\.key) == [garden], "demo search")
@@ -156,14 +158,20 @@ func runDemoSessions(_ gateway: GatewayStore) async {
     }
 }
 
-/// Against the mock: `gateway` reads and writes without admin; `admin` has Full Management.
-/// Uses the mock's session-manager seeds (mock-gateway/sessions.mjs); fresh mock per run.
+/// Against the mock: a fresh store reads and writes without admin; `admin` has Full Management.
+/// Uses the mock's session-manager seeds (mock-gateway/sessions.mjs); fresh mock per run. Stops the
+/// seeded run at the end, so the restart check after it isn't deferred.
 @MainActor
-func runLiveSessions(profile: GatewayProfile, gateway: GatewayStore, admin: GatewayStore) async {
+func runLiveSessions(profile: GatewayProfile, admin: GatewayStore) async {
     print("Session manager (live)")
     let garden = "agent:main:dashboard:garden", taxes = "agent:main:dashboard:tax-2025"
     let bench = "agent:research:dashboard:gpu-bench", refactor = "agent:coder:dashboard:refactor"
     let ciFix = "agent:coder:dashboard:ci-fix", photo = "agent:main:dashboard:photo-import"
+    let writerProfile = GatewayProfile(name: "Sessions writer", url: profile.url, authMode: .token)
+    writerProfile.secret = profile.secret
+    let gateway = GatewayStore(profile: writerProfile)
+    gateway.start()
+    defer { gateway.stop() }
     let writerReady = await agentsReady(gateway, "sessions writer")
     let adminReady = await agentsReady(admin, "sessions admin")
     check(writerReady && adminReady, "both stores connected before session checks")
@@ -270,4 +278,8 @@ func runLiveSessions(profile: GatewayProfile, gateway: GatewayStore, admin: Gate
     let unarchive = await manager.setArchived([taxes], archived: false)
     check(unarchive.succeeded == [taxes], "admin unarchive (\(manager.actionError ?? ""))")
     _ = await manager.setArchived([taxes], archived: true)
+
+    await admin.chat(for: refactor).abort()
+    let stopped = await waitFor("seeded run stopped", timeout: 5) { admin.sessions[refactor]?.hasActiveRun == false }
+    check(stopped, "chat.abort stops the seeded run")
 }

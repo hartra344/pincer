@@ -361,7 +361,7 @@ export function seedSessionManager({ row, transcripts, makeMessage, textBlock, b
     agentId: 'main',
     label: 'Photo import',
     derivedTitle: 'Photo import',
-    category: 'Personal',
+    category: 'Home',
     age: 3 * DAY,
     lastMessagePreview: 'Imported 212 of 480 photos from the SD card…',
   });

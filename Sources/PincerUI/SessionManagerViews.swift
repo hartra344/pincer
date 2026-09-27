@@ -37,6 +37,10 @@ struct SessionsPage: View {
                 Divider()
                 SessionPreviewPanel(model: model, row: row)
                     .frame(height: 170)
+                    .overlay(alignment: .topTrailing) {
+                        Button("Details…") { self.open(key) }
+                            .padding(8)
+                    }
             }
             #endif
             if !self.selection.isEmpty {
@@ -56,11 +60,16 @@ struct SessionsPage: View {
                 .disabled(!connected || model.isLoading)
             }
         }
-        .confirmationDialog(SessionManager.deleteTitle(count: self.selection.count), isPresented: self.$confirmingDelete,
+        .confirmationDialog(SessionManager.deleteTitle(count: self.selection.count,
+                                                        title: self.selection.first.flatMap(model.row)?.title),
+                            isPresented: self.$confirmingDelete,
                             titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 let keys = Array(self.selection)
-                Task { _ = await model.delete(keys) }
+                Task {
+                    let outcome = await model.delete(keys)
+                    if outcome.failed.isEmpty, !self.selection.isEmpty { self.selection = [] }
+                }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -150,10 +159,10 @@ struct SessionsPage: View {
         if !keys.isEmpty {
             let rows = keys.compactMap(model.row)
             if model.supportsArchive, rows.contains(where: { !$0.isArchived }) {
-                Button("Archive") { Task { _ = await model.setArchived(Array(keys), archived: true) } }
+                Button("Archive") { Task { await self.setArchived(model, Array(keys), archived: true) } }
             }
             if model.supportsArchive, rows.contains(where: \.isArchived) {
-                Button("Unarchive") { Task { _ = await model.setArchived(Array(keys), archived: false) } }
+                Button("Unarchive") { Task { await self.setArchived(model, Array(keys), archived: false) } }
             }
             if model.supportsDelete {
                 Button("Delete…", role: .destructive) {
@@ -177,11 +186,11 @@ struct SessionsPage: View {
                 Spacer()
                 if model.supportsArchive {
                     Button("Archive", systemImage: "archivebox") {
-                        Task { _ = await model.setArchived(keys, archived: true) }
+                        Task { await self.setArchived(model, keys, archived: true) }
                     }
                     .disabled(model.isWorking || !rows.contains { !$0.isArchived })
                     Button("Unarchive", systemImage: "tray.and.arrow.up") {
-                        Task { _ = await model.setArchived(keys, archived: false) }
+                        Task { await self.setArchived(model, keys, archived: false) }
                     }
                     .disabled(model.isWorking || !rows.contains(where: \.isArchived))
                 }
@@ -199,6 +208,12 @@ struct SessionsPage: View {
             }
         }
         .padding(12)
+    }
+
+    /// Archives or unarchives, clearing the selection once every key succeeded.
+    private func setArchived(_ model: SessionManagerModel, _ keys: [String], archived: Bool) async {
+        let outcome = await model.setArchived(keys, archived: archived)
+        if outcome.failed.isEmpty, !self.selection.isEmpty { self.selection = [] }
     }
 
     private func canDelete(_ model: SessionManagerModel) -> Bool {
@@ -316,12 +331,19 @@ struct SessionPreviewPanel: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
         }
-        .task(id: self.row.key) {
+        .task(id: PreviewLoad(key: self.row.key, isMissing: self.model.previews[self.row.key] == nil)) {
+            guard self.model.previews[self.row.key] == nil else { return }
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             await self.model.loadPreview(key: self.row.key)
         }
     }
+}
+
+/// Re-runs a preview load when the key changes or its cached preview was dropped.
+private struct PreviewLoad: Hashable {
+    let key: String
+    let isMissing: Bool
 }
 
 struct SessionPreviewContent: View {
@@ -444,7 +466,7 @@ struct SessionDetailPage: View {
                     .disabled(!connected)
             }
         }
-        .confirmationDialog(SessionManager.deleteTitle(count: 1), isPresented: self.$confirmingDelete,
+        .confirmationDialog(SessionManager.deleteTitle(count: 1, title: row?.title), isPresented: self.$confirmingDelete,
                             titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 Task {
@@ -481,15 +503,39 @@ struct SessionDetailPage: View {
             guard connected else { return }
             await self.load(model, force: false)
         }
+        .task(id: DetailReload(connected: connected, previewMissing: model.previews[self.sessionKey] == nil,
+                               pointsMissing: model.rewindPoints[self.sessionKey] == nil)) {
+            // After a rewind, switch or `sessions.changed` drops them, fetch them again.
+            guard connected else { return }
+            if model.previews[self.sessionKey] == nil, model.previewErrors[self.sessionKey] == nil {
+                await model.loadPreview(key: self.sessionKey)
+            }
+            if model.rewindPoints[self.sessionKey] == nil, model.rewindErrors[self.sessionKey] == nil,
+               !model.busy.contains(self.sessionKey) {
+                await model.loadRewindPoints(key: self.sessionKey)
+            }
+        }
     }
 
+    private struct DetailReload: Hashable {
+        let connected: Bool
+        let previewMissing: Bool
+        let pointsMissing: Bool
+    }
+
+    /// Details and branches; the preview and rewind points load in the `DetailReload` task.
+    /// Refresh (`force`) drops and refetches all of them and the list.
     private func load(_ model: SessionManagerModel, force: Bool) async {
         async let details: Void = model.loadDetails(key: self.sessionKey)
-        async let preview: Void = model.loadPreview(key: self.sessionKey)
         async let branches: Void = model.loadBranches(key: self.sessionKey)
+        guard force else {
+            _ = await (details, branches)
+            return
+        }
+        async let preview: Void = model.reloadPreview(key: self.sessionKey)
         async let points: Void = model.loadRewindPoints(key: self.sessionKey)
-        _ = await (details, preview, branches, points)
-        if force { await model.reload() }
+        _ = await (details, branches, preview, points)
+        await model.reload()
     }
 
     @ViewBuilder private func details(_ row: SessionRow, model: SessionManagerModel) -> some View {
@@ -499,6 +545,12 @@ struct SessionDetailPage: View {
             if let channel = row.channel, !channel.isEmpty { LabeledContent("Channel", value: channel) }
             if let model = row.modelRef { LabeledContent("Model", value: ModelRef.shortName(model)) }
             if let tokens = row.totalTokens { LabeledContent("Context", value: "\(tokens.formatted()) tokens") }
+            if let input = row.raw["inputTokens"]?.double, let output = row.raw["outputTokens"]?.double {
+                LabeledContent("Last Run Tokens", value: "\(Int(input).formatted()) in · \(Int(output).formatted()) out")
+            }
+            if let branches = model.branches[row.key], !branches.isEmpty {
+                LabeledContent("Branches", value: branches.count.formatted())
+            }
             if let created = Self.date(row.raw["createdAt"]) {
                 LabeledContent("Created", value: created.formatted(date: .abbreviated, time: .shortened))
             }

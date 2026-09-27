@@ -41,6 +41,12 @@ public enum SessionManager {
         count == 1 ? "Delete 1 session?" : "Delete \(count) sessions?"
     }
 
+    /// Names the session when there's one: "Delete “Garden planner”?".
+    public static func deleteTitle(count: Int, title: String?) -> String {
+        guard count == 1, let title, !title.isEmpty else { return self.deleteTitle(count: count) }
+        return "Delete “\(title)”?"
+    }
+
     public static func rewindTitle(_ sessionTitle: String) -> String { "Rewind “\(sessionTitle)”?" }
     public static let rewindMessage = "Messages after this point move to a new branch. The message you rewind to goes back into the composer."
     public static func switchTitle(_ branch: String) -> String { "Switch to branch “\(branch)”?" }
@@ -446,6 +452,8 @@ public final class SessionManagerModel {
     @ObservationIgnored private let onSessionsChanged: @MainActor () async -> Void
     @ObservationIgnored private var loadGeneration = 0
     @ObservationIgnored private var previewsInFlight: Set<String> = []
+    /// Bumped whenever a key's preview is dropped, so a reply already in flight is ignored.
+    @ObservationIgnored private var previewGenerations: [String: Int] = [:]
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool,
@@ -559,20 +567,30 @@ public final class SessionManagerModel {
     /// `sessions.preview` for one key, once per page lifetime (until the session changes).
     public func loadPreview(key: String) async {
         guard self.supportsPreview, self.previews[key] == nil, self.previewsInFlight.insert(key).inserted else { return }
-        defer { self.previewsInFlight.remove(key) }
+        let generation = self.previewGenerations[key, default: 0]
+        defer { if self.previewGenerations[key, default: 0] == generation { self.previewsInFlight.remove(key) } }
         do {
             let result = try await self.call(SessionManager.previewMethod, [
                 "keys": [.string(key)],
                 "limit": .number(Double(SessionManager.previewItemLimit)),
                 "maxChars": .number(Double(SessionManager.previewMaxChars)),
             ])
+            // The session changed while this was in flight; a newer load owns the entry.
+            guard self.previewGenerations[key, default: 0] == generation else { return }
             let preview = result["previews"]?.array?.compactMap(SessionPreview.init).first { $0.key == key }
                 ?? SessionPreview(key: key, status: .missing, items: [])
-            self.previews[key] = preview
+            if self.previews[key] != preview { self.previews[key] = preview }
             self.previewErrors[key] = nil
         } catch {
+            guard self.previewGenerations[key, default: 0] == generation else { return }
             self.previewErrors[key] = Self.message(error)
         }
+    }
+
+    /// Drops the cached preview and fetches it again (Refresh).
+    public func reloadPreview(key: String) async {
+        self.forgetPreview(key)
+        await self.loadPreview(key: key)
     }
 
     /// `sessions.describe` for one key.
@@ -801,7 +819,7 @@ public final class SessionManagerModel {
         }
         if let index = self.rows.firstIndex(where: { $0.key == row.key }) {
             let previous = self.rows[index]
-            if previous.activityMs != row.activityMs { self.previews[row.key] = nil }
+            if previous.activityMs != row.activityMs { self.forgetPreview(row.key) }
             let merged = row.keepingPreview(of: previous)
             if merged != previous { self.rows[index] = merged }
         } else if self.filter.includes(row) {
@@ -813,6 +831,8 @@ public final class SessionManagerModel {
     func handleReconnect() {
         self.deniedAdmin = false
         self.rejectedMethods = []
+        for key in Set(self.previews.keys).union(self.previewsInFlight) { self.previewGenerations[key, default: 0] += 1 }
+        self.previewsInFlight = []
         self.previews = [:]
         self.previewErrors = [:]
         self.branches = [:]
@@ -858,9 +878,16 @@ public final class SessionManagerModel {
     }
 
     private func forgetCaches(_ key: String) {
-        self.previews[key] = nil
-        self.previewErrors[key] = nil
+        self.forgetPreview(key)
         self.rewindPoints[key] = nil
+    }
+
+    /// Views reload a preview (and rewind points) whenever the entry goes missing.
+    private func forgetPreview(_ key: String) {
+        self.previewGenerations[key, default: 0] += 1
+        self.previewsInFlight.remove(key)
+        if self.previews[key] != nil { self.previews[key] = nil }
+        if self.previewErrors[key] != nil { self.previewErrors[key] = nil }
     }
 
     private func begin(_ keys: [String]) {

@@ -1293,10 +1293,20 @@ public final class GatewayStore: Identifiable {
             self.chats.removeValue(forKey: key)?.stopCaching()
             self.sessions.removeValue(forKey: key)
             if self.selectedKey == key { self.selectedKey = self.defaultSessionKey }
-            await TranscriptCache.remove(gatewayId: self.id, sessionKey: key)
+            await self.forgetTranscript(key)
+        } else if let chat = self.chats[key] {
+            // The whole cache entry goes (messages and tool details) before the refetch can save.
+            await chat.reloadAfterHistoryChange { await self.forgetTranscript(key) }
         } else {
-            await TranscriptCache.remove(gatewayId: self.id, sessionKey: key)
-            await self.chats[key]?.reloadAfterHistoryChange()
+            await self.forgetTranscript(key)
+        }
+    }
+
+    /// Drops a chat's cached transcript and its messages from search; a refetch re-adds both.
+    private func forgetTranscript(_ key: String) async {
+        await TranscriptCache.remove(gatewayId: self.id, sessionKey: key)
+        if MessageIndex.status(gatewayId: self.id) != .unavailable {
+            await self.messageIndex.remove(sessionKey: key)
         }
     }
 

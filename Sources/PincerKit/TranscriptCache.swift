@@ -317,14 +317,11 @@ public enum TranscriptCache {
         _ = await Writer.shared.write(snapshot, to: url)
     }
 
-    /// Deletes one chat's cached transcript (it was deleted, rewound or switched branch on the
-    /// Gateway) and drops it from message search. Queued behind saves already under way.
+    /// Deletes one chat's whole cached transcript (it was deleted, rewound or switched branch on
+    /// the Gateway). Queued behind saves already under way. Message search is separate
+    /// (`MessageIndex.remove(sessionKey:)`).
     public static func remove(gatewayId: UUID, sessionKey: String) async {
         await self.remove(gatewayId: gatewayId, sessionKey: sessionKey, root: Self.root)
-        if MessageIndex.status(gatewayId: gatewayId) != .unavailable {
-            await MessageIndex.shared(gatewayId: gatewayId)
-                .index(sessionKey: sessionKey, snapshot: Snapshot(items: [], complete: true), fileMtime: Date())
-        }
     }
 
     /// Deletes one chat's cached transcript under another cache root (tests).

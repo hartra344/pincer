@@ -310,9 +310,9 @@ public final class ChatStore: Identifiable {
             activityMs: activityMs)
     }
 
-    /// The session's history changed on the Gateway (rewind, branch switch): forget what's loaded,
-    /// cached or saving, and fetch it again.
-    func reloadAfterHistoryChange() async {
+    /// The Gateway rewrote this chat's history (rewind, branch switch, recovery): drops what's
+    /// loaded, including tool details, runs `clearCache` once no save can land, then refetches.
+    func reloadAfterHistoryChange(clearingCache clearCache: @MainActor () async -> Void = {}) async {
         self.saveTask?.cancel()
         self.backfillTask?.cancel()
         self.olderTask?.cancel()
@@ -325,6 +325,7 @@ public final class ChatStore: Identifiable {
         let pending = self.items.filter(\.isPending)
         if pending != self.items { self.items = pending }
         self.hasLoaded = false
+        await clearCache()
         await self.load(force: true)
     }
 
