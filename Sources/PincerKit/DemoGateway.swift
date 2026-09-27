@@ -1385,9 +1385,6 @@ actor DemoGateway {
         row["lastActivityAt"] = Self.now()
     }
 
-    /// Whether a chat with this key exists (e.g. `tools.effective` needs one).
-    func hasSession(_ key: String) -> Bool { self.sessions[key] != nil }
-
     /// Drops a deleted agent's chats, telling subscribers like the Gateway does.
     func removeSessions(ofAgent agentId: String) {
         let keys = self.sessions.filter { $0.value["agentId"]?.string == agentId || $0.key.hasPrefix("agent:\(agentId):") }.keys
