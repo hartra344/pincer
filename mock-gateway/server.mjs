@@ -15,6 +15,7 @@ import { HEALTH_EVENTS, HEALTH_METHODS, addFailedDelivery, broadcastPresence, ca
 import { SETUP_METHODS, createSetupState, handleSetupRequest } from './setup.mjs';
 import { healthSummary } from './health.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
+import { DEVICE_PAIRING_EVENTS, DEVICE_PAIRING_METHODS, NODE_METHODS, approvePendingDevice, createDevicePairingState, devicePairingDisabled, handleDevicesRequest, noteDeviceConnected, nodesDisabled, openPairingRequest } from './devices.mjs';
 import { liveFileEditCall, seededFileEditCalls } from './file-edits.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
@@ -57,6 +58,8 @@ const METHODS = [
   ...CRON_METHODS,
   ...LOGS_METHODS,
   ...CHANNEL_PAIRING_METHODS,
+  ...DEVICE_PAIRING_METHODS,
+  ...NODE_METHODS,
   ...HEALTH_METHODS,
   ...SETUP_METHODS,
 ];
@@ -75,6 +78,7 @@ const EVENTS = [
   'plugins.changed',
   'progressCard.changed',
   'cron',
+  ...DEVICE_PAIRING_EVENTS,
   ...HEALTH_EVENTS,
 ];
 
@@ -500,8 +504,8 @@ function createSeedState() {
     sessions,
     transcripts,
     artifacts,
-    pairedDevices: new Map(),
-    pendingPairing: new Map(),
+    // Connect-time pairing and device.pair.*: seeded with a few devices and two pending requests.
+    ...createDevicePairingState(),
     pendingApprovals: new Map(),
     // Resolved approvals keep their decision so identical retries stay idempotent, as on the Gateway.
     resolvedApprovals: new Map(),
@@ -628,7 +632,8 @@ function deviceTokenFor(state, deviceId, scopes = []) {
     return existing.deviceToken;
   }
   const deviceToken = `dt_${randHex(18)}`;
-  state.pairedDevices.set(deviceId, { deviceToken, pairedAt: nowMs(), scopes: new Set(scopes) });
+  const now = nowMs();
+  state.pairedDevices.set(deviceId, { deviceId, deviceToken, pairedAt: now, createdAtMs: now, approvedAtMs: now, tokenCreatedAtMs: now, scopes: new Set(scopes) });
   return deviceToken;
 }
 
@@ -638,10 +643,7 @@ function scopeApproved(scope, approved) {
 }
 
 function approvePairing(state, requestId) {
-  const pending = state.pendingPairing.get(requestId);
-  if (!pending) return false;
-  deviceTokenFor(state, pending.deviceId, pending.scopes ?? []);
-  state.pendingPairing.delete(requestId);
+  if (!approvePendingDevice(state, requestId, broadcast)) return false;
   console.log(`Pairing approved ${requestId}`);
   return true;
 }
@@ -665,6 +667,8 @@ function advertisedMethods() {
     ...(toolsDisabled() ? TOOLS_METHODS : []),
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
     ...(healthDisabled() ? HEALTH_METHODS : []),
+    ...(devicePairingDisabled() ? DEVICE_PAIRING_METHODS : []),
+    ...(nodesDisabled() ? NODE_METHODS : []),
     ...(usageDisabled() ? USAGE_METHODS : []),
     ...(logsDisabled() ? LOGS_METHODS : []),
   ];
@@ -676,7 +680,7 @@ function makeHelloPayload(state, params, connId, deviceId) {
     type: 'hello-ok',
     protocol: 4,
     server: { version: 'mock-2026.1', connId },
-    features: { methods: advertisedMethods(), events: EVENTS },
+    features: { methods: advertisedMethods(), events: devicePairingDisabled() ? EVENTS.filter((e) => !DEVICE_PAIRING_EVENTS.includes(e)) : EVENTS },
     snapshot: healthDisabled() ? {} : helloSnapshot(state),
     auth: { role: 'operator', scopes: params.scopes ?? [], deviceToken: deviceTokenFor(state, deviceId) },
     policy: {
@@ -1137,6 +1141,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleSetupRequest(state, conn, msg, { sendRes, sendErr, broadcast, healthSummary })) return;
+  if (handleDevicesRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
   if (handleHealthRequest(state, conn, msg, { sendRes, sendErr, broadcast, abortRun: finishRunAbort })) return;
   switch (method) {
     case 'progressCard.get': {
@@ -1525,8 +1530,9 @@ function handleConnect(state, conn, msg, options) {
 
   const issued = state.pairedDevices.get(deviceId)?.deviceToken;
   let authOk = false;
+  let isDeviceTokenAuth = false;
   if (token === options.mockToken) authOk = true;
-  else if (issued && token === issued) authOk = true;
+  else if (issued && token === issued) authOk = isDeviceTokenAuth = true;
 
   if (!authOk) {
     const detailCode = String(token).startsWith('dt_') ? 'AUTH_DEVICE_TOKEN_MISMATCH' : 'AUTH_TOKEN_MISMATCH';
@@ -1540,11 +1546,11 @@ function handleConnect(state, conn, msg, options) {
   const upgrade = paired && requestedScopes.some((scope) => !scopeApproved(scope, paired.scopes));
   if ((!paired || upgrade) && options.pairing !== 'off') {
     const reason = paired ? 'scope-upgrade' : 'not-paired';
-    const requestId = shortId('pair_');
     // MOCK_LEGACY_PAIRING=1 approves first pairings without operator.questions, like a device
     // paired before Pincer asked for it, so the next connect needs a scope upgrade.
     const grantScopes = !paired && options.legacyPairing ? requestedScopes.filter((scope) => scope !== 'operator.questions') : requestedScopes;
-    state.pendingPairing.set(requestId, { deviceId, scopes: grantScopes, displayName: params.client?.displayName ?? 'unknown', createdAt: nowMs() });
+    const remoteIp = conn.ws._socket?.remoteAddress;
+    const { requestId } = openPairingRequest(state, { deviceId, params, scopes: grantScopes, remoteIp, isRepair: Boolean(paired) }, broadcast);
     console.log(`Pairing request ${requestId} (${reason}) from ${params.client?.displayName ?? 'unknown'} (${deviceId.slice(0, 8)})`);
     sendErr(conn, id, 'NOT_PAIRED', `pairing required (requestId: ${requestId})`, {
       code: 'PAIRING_REQUIRED',
@@ -1563,6 +1569,8 @@ function handleConnect(state, conn, msg, options) {
   conn.authenticated = true;
   conn.connId = shortId('conn_');
   conn.deviceId = deviceId;
+  conn.isDeviceTokenAuth = isDeviceTokenAuth;
+  noteDeviceConnected(state, deviceId, params, conn.ws._socket?.remoteAddress);
   conn.scopes = Array.isArray(params.scopes) ? params.scopes : [];
   conn.client = params.client ?? {};
   conn.connectedAt = nowMs();

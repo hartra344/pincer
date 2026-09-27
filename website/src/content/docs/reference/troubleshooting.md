@@ -14,6 +14,8 @@ openclaw devices approve <requestId>
 
 Pincer reconnects on its own after you approve it. If you switched a gateway to **Full Management**, it needs to be approved again for the extra access.
 
+If another Mac, iPhone or iPad is already paired with **Full Management**, you can approve the request from **Gateway Settings → Devices** on that device instead. See [Devices & Nodes](../../guides/devices/).
+
 ## "ws:// isn't allowed" for my address
 
 Plain `ws://` only works with loopback (`127.0.0.1`), private LAN, and Tailscale addresses. For anything else, use `wss://`.
