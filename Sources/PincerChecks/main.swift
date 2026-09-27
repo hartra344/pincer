@@ -508,6 +508,7 @@ await checkApprovalHistoryModel()
 await checkGatewayLogsModel()
 await checkExecPolicy()
 await checkAgentManagement()
+await checkDeviceManagement()
 await checkSkillsTools()
 await checkSessionManager()
 print("Pairing requests")
@@ -3287,6 +3288,7 @@ func runDemo() async {
     await checkDemoSentMessageSearch(gateway, chat)
     await runDemoExecPolicy(gateway, chat: chat)
     await runDemoAgents(gateway)
+    await runDemoDevices(gateway)
     await runDemoSkills(gateway)
     await runDemoSessions(gateway)
 
@@ -4624,6 +4626,7 @@ func runLive(url: String, token: String) async {
     }
     await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
     await runLiveAgents(profile: profile, gateway: gateway, admin: admin)
+    await runLiveDevices(profile: profile, gateway: gateway, admin: admin)
     await runLiveSkills(profile: profile, admin: admin)
     await runLiveSessions(profile: profile, gateway: gateway, admin: admin)
 

@@ -30,6 +30,10 @@ Approving a [pairing request](../../guides/gateway-settings/#pairing-requests) l
 
 The gateway's pairing methods need `operator.pairing`. Pincer never asks for it, because that scope also lets a device approve new devices and nodes. Reviewing pairing requests uses **Full Management** instead, whose `operator.admin` covers it. Making someone the command owner always needs `operator.admin`.
 
+### Devices
+
+Approving a [device](../../guides/devices/) gives it the scopes it asked for on your gateway, including `operator.admin` if it asked for Full Management. Check the fingerprint before you approve; device names aren't verified. Managing devices needs **Full Management** for the same reason as pairing requests: the device methods need `operator.pairing`, which Pincer never asks for. Revoking a device disconnects it, and it has to be approved again to reconnect. Pincer warns you before revoking the device it's using itself. Approving a request for the `node` role lets agents run commands on that device.
+
 ## Command policy
 
 The gateway's command policy (which commands agents may run, and their allowlists) can only be read or changed with `operator.admin`, so Pincer shows it only with **Full Management**. See [Command Policy](../../guides/command-policy/).
