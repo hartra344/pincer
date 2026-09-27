@@ -21,6 +21,11 @@
 			</array>
 		</dict>
 	</array>
+	<!-- The first-run wizard's Nearby list: Gateways advertise over Bonjour (upstream docs/gateway/bonjour.md). -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_openclaw-gw._tcp</string>
+	</array>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>chat.pincer.chat</string>

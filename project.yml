@@ -44,6 +44,7 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.social-networking
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer looks for OpenClaw Gateways on your network."
   Pincer-iOS:
     type: application
     scheme: {}
@@ -70,7 +71,7 @@ targets:
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer connects to your OpenClaw Gateway on your local network or tailnet."
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer looks for OpenClaw Gateways on your network."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach photos to messages you send to your agents."
         TARGETED_DEVICE_FAMILY: "1,2"
   # Share extensions: send text, links and files into a chat. They connect as the app's paired

@@ -3,10 +3,9 @@ import Observation
 
 // MARK: Steps and status
 
-/// The first-run setup wizard's steps, in order.
+/// The per-gateway setup steps, in order. Health is shown on the first-run Verify screen and
+/// channels aren't part of setup (#175): Pincer chats with agents directly.
 public enum SetupStep: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
-    case health
-    case channels
     case agent
     case skills
     case testMessage
@@ -15,26 +14,31 @@ public enum SetupStep: String, CaseIterable, Codable, Hashable, Sendable, Identi
 
     public var title: String {
         switch self {
-        case .health: "Gateway Health"
-        case .channels: "Channels"
         case .agent: "Agent & Model"
         case .skills: "Skills"
         case .testMessage: "Test Message"
         }
     }
 
+    /// One line under the step's title.
+    public var summary: String {
+        switch self {
+        case .agent: "Pincer starts new chats with this agent and model."
+        case .skills: "Skills add abilities to your agent. You can add them any time."
+        case .testMessage: "Send a quick message to make sure your agent answers."
+        }
+    }
+
     public var symbol: String {
         switch self {
-        case .health: "stethoscope"
-        case .channels: "bubble.left.and.bubble.right"
         case .agent: "person.crop.circle"
         case .skills: "wrench.and.screwdriver"
         case .testMessage: "paperplane"
         }
     }
 
-    /// The step has actions that need `operator.admin` (QR login, `config.patch`).
-    public var hasAdminActions: Bool { self == .channels || self == .agent }
+    /// The step has actions that need `operator.admin` (`config.patch`).
+    public var hasAdminActions: Bool { self == .agent }
 }
 
 /// What a step shows next to its title: exactly one of four.
@@ -79,59 +83,6 @@ public enum SetupStepStatus: Hashable, Sendable {
 }
 
 // MARK: Gateway results
-
-/// `channels.status` (operator.read): channels with their account snapshots, plus the Gateway's
-/// own status issues. Channels are `GatewayChannelHealth`, the same type Gateway Health shows.
-public struct SetupChannelsSnapshot: Hashable, Sendable {
-    public struct Issue: Hashable, Sendable {
-        public let channel: String
-        public let accountId: String
-        public let kind: String
-        public let message: String
-        public let fix: String?
-    }
-
-    public let channels: [GatewayChannelHealth]
-    public let issues: [Issue]
-
-    public init(channels: [GatewayChannelHealth], issues: [Issue] = []) {
-        self.channels = channels
-        self.issues = issues
-    }
-
-    /// Parses a `channels.status` result: `channelOrder`, `channelLabels`, `channelAccounts`
-    /// (`{ <channel>: [accountSnapshot] }`), `channels` (per-channel summaries) and `statusIssues`.
-    public init?(_ json: JSONValue) {
-        guard json.object != nil else { return nil }
-        let labels = json["channelLabels"]?.object ?? [:]
-        let summaries = json["channels"]?.object ?? [:]
-        let accounts = json["channelAccounts"]?.object ?? [:]
-        let order = (json["channelOrder"]?.array ?? []).compactMap(\.text)
-        var seen: Set<String> = []
-        let ids = (order + accounts.keys.sorted() + summaries.keys.sorted()).filter { seen.insert($0).inserted }
-        self.channels = ids.map { id in
-            var entry = summaries[id]?.object ?? [:]
-            var byId: [String: JSONValue] = [:]
-            for account in accounts[id]?.array ?? [] {
-                guard let accountId = account["accountId"]?.text else { continue }
-                byId[accountId] = account
-            }
-            if !byId.isEmpty { entry["accounts"] = .object(byId) }
-            return GatewayChannelHealth(id: id, label: labels[id]?.text, .object(entry))
-        }
-        self.issues = (json["statusIssues"]?.array ?? []).compactMap { issue in
-            guard let channel = issue["channel"]?.text, let message = issue["message"]?.text else { return nil }
-            return Issue(channel: channel, accountId: issue["accountId"]?.text ?? "default",
-                         kind: issue["kind"]?.text ?? "runtime", message: message, fix: issue["fix"]?.text)
-        }
-    }
-
-    /// From the `health` payload, when `channels.status` isn't available.
-    public init(health: GatewayHealthSummary) {
-        self.channels = health.channels
-        self.issues = []
-    }
-}
 
 /// One entry of `skills.status` (operator.read) `skills[]`.
 public struct SetupSkill: Identifiable, Hashable, Sendable {
@@ -189,78 +140,10 @@ public struct SetupSkillsReport: Hashable, Sendable {
     public var ready: [SetupSkill] { self.skills.filter { $0.eligible && !$0.disabled } }
 }
 
-/// `web.login.start` / `web.login.wait` results (operator.admin; not advertised in `hello.methods`).
-public struct WebLoginResult: Hashable, Sendable {
-    public let qrDataUrl: String?
-    public let sessionKey: String?
-    public let connected: Bool?
-    public let message: String?
-
-    public init(_ json: JSONValue) {
-        self.qrDataUrl = json["qrDataUrl"]?.text
-        self.sessionKey = json["sessionKey"]?.text
-        self.connected = json["connected"]?.bool
-        self.message = json["message"]?.text
-    }
-
-    /// The PNG in `qrDataUrl` (`data:image/png;base64,…`).
-    public var qrImageData: Data? {
-        guard let url = self.qrDataUrl, let comma = url.firstIndex(of: ","),
-              url[..<comma].hasSuffix(";base64") else { return nil }
-        return Data(base64Encoded: String(url[url.index(after: comma)...]))
-    }
-}
-
 // MARK: Rules
 
 /// How each step's status follows from what the Gateway reports. Pure, for tests.
 public enum SetupRules {
-    /// Channels whose plugin implements QR login (`loginWithQrStart`) upstream.
-    public static let qrLoginChannels: Set<String> = ["whatsapp", "zalouser"]
-
-    public static func supportsQRLogin(_ channelId: String) -> Bool { self.qrLoginChannels.contains(channelId) }
-
-    /// Healthy: done; degraded or down: attention (the first active issue); restarting: not checked.
-    /// With `channelsSeparate`, channel issues are left to the Channels step: a Gateway degraded only by
-    /// channels counts as healthy here.
-    public static func health(level: GatewayHealthLevel, activeIssues: [GatewayHealthIssue], loaded: Bool,
-                              channelsSeparate: Bool = false) -> SetupStepStatus {
-        if channelsSeparate, level == .degraded, !activeIssues.isEmpty, activeIssues.allSatisfy({ $0.kind == .channel }) {
-            return loaded ? .done("The Gateway is healthy. Channel problems are covered in Channels.") : .notChecked(nil)
-        }
-        let activeIssues = channelsSeparate ? activeIssues.filter { $0.kind != .channel } : activeIssues
-        switch level {
-        case .healthy:
-            return loaded ? .done("The Gateway is healthy.") : .notChecked(nil)
-        case .degraded:
-            guard let first = activeIssues.first else { return .needsAttention("The Gateway's health check isn't available.") }
-            let count = activeIssues.count
-            return .needsAttention(count == 1 ? first.title : "\(first.title) and \(count - 1) more")
-        case .down:
-            return .needsAttention("The Gateway isn't connected.")
-        case .restarting:
-            return .notChecked("The Gateway is restarting.")
-        }
-    }
-
-    /// Done when some channel is connected (or running) and none has a problem or status issue.
-    public static func channels(_ snapshot: SetupChannelsSnapshot?, failure: String? = nil) -> SetupStepStatus {
-        guard let snapshot else { return .notChecked(failure) }
-        let active = snapshot.channels.filter { $0.effectiveAccounts.contains(where: \.isActive) }
-        let problems = active.filter { !$0.problemAccounts.isEmpty }
-        if let channel = problems.first {
-            guard problems.count == 1 else { return .needsAttention("\(problems.count) channels need attention.") }
-            return .needsAttention("\(channel.label): \(channel.lastError ?? "not connected")")
-        }
-        if let issue = snapshot.issues.first {
-            let label = snapshot.channels.first { $0.id == issue.channel }?.label ?? ApprovalRecord.humanized(issue.channel)
-            return .needsAttention("\(label): \(issue.message)")
-        }
-        guard !active.isEmpty else { return .needsAttention("No channels are set up yet.") }
-        let names = active.map(\.label)
-        return .done(names.count == 1 ? "\(names[0]) is connected." : "\(names.count) channels are connected.")
-    }
-
     /// Done when there's a default agent and a default model.
     public static func agent(agents: [AgentSummary], defaultAgentId: String, defaultModelRef: String?, loaded: Bool) -> SetupStepStatus {
         guard loaded else { return .notChecked(nil) }
@@ -270,17 +153,15 @@ public enum SetupRules {
         return .done("\(agent) · \(ModelRef.shortName(model))")
     }
 
-    /// Done when no wanted skill is missing requirements.
+    /// Skills are optional: once checked it's done, with skills that aren't set up as plain info.
+    /// Missing requirements never need attention.
     public static func skills(_ report: SetupSkillsReport?, failure: String? = nil) -> SetupStepStatus {
         guard let report else { return .notChecked(failure) }
-        let missing = report.missing
-        guard let first = missing.first else {
-            let count = report.ready.count
-            return .done(count == 1 ? "1 skill is ready." : "\(count) skills are ready.")
-        }
-        guard missing.count == 1 else { return .needsAttention("\(missing.count) skills are missing requirements.") }
-        let needs = first.missing.isEmpty ? "" : " (needs \(first.missing.joined(separator: ", ")))"
-        return .needsAttention("\(first.name) is missing requirements\(needs).")
+        let ready = report.ready.count
+        let readyText = ready == 1 ? "1 skill is ready." : "\(ready) skills are ready."
+        let notSetUp = report.missing.count
+        guard notSetUp > 0 else { return .done(readyText) }
+        return .done("\(readyText) \(notSetUp) \(notSetUp == 1 ? "isn't" : "aren't") set up.")
     }
 
     /// Done once a send was accepted (the reply isn't awaited).
@@ -311,6 +192,18 @@ public struct SetupProgress: Codable, Hashable, Sendable {
         self.completed = completed
         self.skipped = skipped
         self.testMessageSent = testMessageSent
+    }
+
+    private enum CodingKeys: String, CodingKey { case offered, completed, skipped, testMessageSent }
+
+    /// Skipped steps that no longer exist (Health, Channels before #175) are dropped, not a decode failure.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.offered = try container.decodeIfPresent(Bool.self, forKey: .offered) ?? false
+        self.completed = try container.decodeIfPresent(Bool.self, forKey: .completed) ?? false
+        let skipped = try container.decodeIfPresent([String].self, forKey: .skipped) ?? []
+        self.skipped = Set(skipped.compactMap(SetupStep.init(rawValue:)))
+        self.testMessageSent = try container.decodeIfPresent(Bool.self, forKey: .testMessageSent) ?? false
     }
 
     public static func key(for gatewayId: UUID) -> String { "pincer.setup.v1.\(gatewayId.uuidString)" }
@@ -425,7 +318,7 @@ public final class TipsModel {
 // MARK: Model
 
 /// The setup wizard for one gateway: step statuses, persisted progress, and the checks it runs
-/// (`channels.status`, `skills.status`, QR login). Health and agent status come from the store's
+/// (`skills.status`). Agent status comes from the store's
 /// existing models through `Environment`.
 @MainActor
 @Observable
@@ -438,49 +331,25 @@ public final class SetupWizardModel {
         public var hasAdmin: @MainActor () -> Bool
         /// `hello.methods` (nil or empty when unknown).
         public var methods: @MainActor () -> Set<String>?
-        public var healthStatus: @MainActor () -> SetupStepStatus
         public var agentStatus: @MainActor () -> SetupStepStatus
-        /// `health.channels`, for when `channels.status` isn't available.
-        public var healthChannels: @MainActor () -> GatewayHealthSummary?
         /// Refreshes what the store keeps (health, agents); run alongside `load()`'s own checks.
         public var refresh: @MainActor () async -> Void
 
         public init(request: @escaping Request,
                     hasAdmin: @escaping @MainActor () -> Bool = { false },
                     methods: @escaping @MainActor () -> Set<String>? = { nil },
-                    healthStatus: @escaping @MainActor () -> SetupStepStatus = { .notChecked(nil) },
                     agentStatus: @escaping @MainActor () -> SetupStepStatus = { .notChecked(nil) },
-                    healthChannels: @escaping @MainActor () -> GatewayHealthSummary? = { nil },
                     refresh: @escaping @MainActor () async -> Void = {})
         {
             self.refresh = refresh
             self.request = request
             self.hasAdmin = hasAdmin
             self.methods = methods
-            self.healthStatus = healthStatus
             self.agentStatus = agentStatus
-            self.healthChannels = healthChannels
         }
     }
 
-    /// QR login for one channel account (`web.login.start`, then `web.login.wait`).
-    public enum QRLoginState: Hashable, Sendable {
-        case idle
-        case starting
-        /// Scan this; `web.login.wait` is running.
-        case showing(qr: Data, message: String?)
-        case connected(String?)
-        case failed(String)
-
-        public var isRunning: Bool {
-            switch self {
-            case .starting, .showing: true
-            default: false
-            }
-        }
-    }
-
-    public static let testMessageText = "hello"
+    public static let testMessageText = "Hi! Are you there?"
 
     public let gatewayId: UUID
     public let isDemo: Bool
@@ -489,19 +358,13 @@ public final class SetupWizardModel {
     public var isPresented = false
     /// The offer page ("Set Up <Gateway>", Start Setup / Not Now) instead of the steps.
     public var showsIntro = false
-    public var currentStep: SetupStep = .health
-    public private(set) var channels: SetupChannelsSnapshot?
-    public private(set) var channelsFailure: String?
+    public var currentStep: SetupStep = .agent
     public private(set) var skills: SetupSkillsReport?
     public private(set) var skillsFailure: String?
     public private(set) var loadState = OperationState.idle
-    /// Keyed by `"<channel>/<accountId>"` (accountId `default` when omitted).
-    public private(set) var qrLogins: [String: QRLoginState] = [:]
-
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let connectedBefore: Bool
     @ObservationIgnored private let environment: Environment
-    @ObservationIgnored private var qrTasks: [String: Task<Void, Never>] = [:]
 
     /// `connectedBefore`: this gateway connected before the wizard existed, so it isn't offered.
     /// The demo's progress lives in memory only, so every "Try the Demo" offers it again.
@@ -533,17 +396,10 @@ public final class SetupWizardModel {
 
     private func evaluated(_ step: SetupStep, progress: SetupProgress) -> SetupStepStatus {
         switch step {
-        case .health: self.environment.healthStatus()
-        case .channels: SetupRules.channels(self.channelsSnapshot, failure: self.channelsFailure)
         case .agent: self.environment.agentStatus()
         case .skills: SetupRules.skills(self.skills, failure: self.skillsFailure)
         case .testMessage: SetupRules.testMessage(sent: progress.testMessageSent)
         }
-    }
-
-    /// `channels.status`, else the channels in the `health` payload.
-    public var channelsSnapshot: SetupChannelsSnapshot? {
-        self.channels ?? self.environment.healthChannels().map(SetupChannelsSnapshot.init(health:))
     }
 
     /// Steps done or skipped, for "3 of 5".
@@ -619,7 +475,7 @@ public final class SetupWizardModel {
     /// The first step neither done nor skipped, else the first not done, else the first.
     public var resumeStep: SetupStep {
         let statuses = SetupStep.allCases.map { ($0, self.status(of: $0)) }
-        return statuses.first { !$0.1.isSettled }?.0 ?? statuses.first { !$0.1.isDone }?.0 ?? .health
+        return statuses.first { !$0.1.isSettled }?.0 ?? statuses.first { !$0.1.isDone }?.0 ?? .agent
     }
 
     public var nextStep: SetupStep? {
@@ -668,7 +524,6 @@ public final class SetupWizardModel {
         self.isPresented = false
         self.isEmbedded = false
         self.showsIntro = false
-        self.cancelQRLogins()
     }
 
     /// Showing inside the first-run wizard rather than as its own sheet. Finish and Close end it.
@@ -692,10 +547,13 @@ public final class SetupWizardModel {
     public func endEmbedded() {
         guard self.isEmbedded else { return }
         self.isEmbedded = false
-        self.cancelQRLogins()
     }
 
-    public func markTestMessageSent() {
+    /// The Setup Test chat the test message went to this time, for Finish to open.
+    public private(set) var testChatKey: String?
+
+    public func markTestMessageSent(chatKey: String? = nil) {
+        if let chatKey { self.testChatKey = chatKey }
         self.update { $0.testMessageSent = true }
     }
 
@@ -727,32 +585,15 @@ public final class SetupWizardModel {
         return methods.contains(method)
     }
 
-    /// Runs the channel and skill checks (health and agents are kept current by the store).
+    /// Runs the skill check (health and agents are kept current by the store).
     public func load() async {
         guard !self.loadState.isRunning else { return }
         self.loadState = .running
-        async let channels: Void = self.loadChannels()
         async let skills: Void = self.loadSkills()
         let refresh = self.environment.refresh
         async let store: Void = refresh()
-        _ = await (channels, skills, store)
+        _ = await (skills, store)
         self.loadState = .idle
-    }
-
-    private func loadChannels() async {
-        guard self.isAdvertised("channels.status") else {
-            self.channels = nil
-            self.channelsFailure = self.environment.healthChannels() == nil ? "This Gateway doesn't report channel status." : nil
-            return
-        }
-        do {
-            let result = try await self.environment.request("channels.status", ["probe": false])
-            self.channels = SetupChannelsSnapshot(result)
-            self.channelsFailure = self.channels == nil ? "The Gateway sent an unexpected channel status." : nil
-        } catch {
-            self.channels = nil
-            self.channelsFailure = self.environment.healthChannels() == nil ? Self.message(error) : nil
-        }
     }
 
     private func loadSkills() async {
@@ -774,120 +615,5 @@ public final class SetupWizardModel {
     static func message(_ error: Error) -> String {
         if case let GatewayError.rpc(_, message, _) = error { return message }
         return error.localizedDescription
-    }
-
-    // MARK: QR login
-
-    public static func qrKey(channel: String, accountId: String?) -> String { "\(channel)/\(accountId ?? "default")" }
-
-    public func qrLogin(channel: String, accountId: String? = nil) -> QRLoginState {
-        self.qrLogins[Self.qrKey(channel: channel, accountId: accountId)] ?? .idle
-    }
-
-    /// QR login needs Full Management and a channel whose plugin supports it.
-    public func canStartQRLogin(channel: String) -> Bool {
-        self.hasAdmin && SetupRules.supportsQRLogin(channel)
-    }
-
-    /// `web.login.start` then `web.login.wait` (refreshing the QR when the provider rotates it)
-    /// until connected, failed or cancelled.
-    public func startQRLogin(channel: String, accountId: String? = nil, force: Bool = false) {
-        let key = Self.qrKey(channel: channel, accountId: accountId)
-        self.qrTasks[key]?.cancel()
-        self.qrLogins[key] = .starting
-        self.qrTasks[key] = Task { [weak self] in
-            await self?.runQRLogin(key: key, channel: channel, accountId: accountId, force: force)
-        }
-    }
-
-    public func cancelQRLogin(channel: String, accountId: String? = nil) {
-        let key = Self.qrKey(channel: channel, accountId: accountId)
-        self.qrTasks.removeValue(forKey: key)?.cancel()
-        self.qrLogins[key] = nil
-    }
-
-    private func cancelQRLogins() {
-        for task in self.qrTasks.values { task.cancel() }
-        self.qrTasks = [:]
-        self.qrLogins = self.qrLogins.filter { !$0.value.isRunning }
-    }
-
-    public nonisolated static let qrStartTimeoutMs = 30000
-    public nonisolated static let qrWaitTimeoutMs = 120_000
-    public nonisolated static let qrMaxRounds = 5
-
-    /// Upstream has no structured flag for a wait that timed out; the WhatsApp and Zalo plugins both
-    /// return `connected:false` with a "Still waiting…" message, while other messages are terminal.
-    public nonisolated static func isStillWaiting(_ message: String) -> Bool {
-        message.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("still waiting")
-    }
-
-    /// Upstream `web.login.start` without `force` on a linked account answers with just a message:
-    /// WhatsApp "WhatsApp is already linked (…). Say “relink” …", Zalo "Zalo is already linked (…)."
-    /// Relinking is `startQRLogin(…, force: true)`.
-    public nonisolated static func isAlreadyLinked(_ message: String) -> Bool {
-        message.lowercased().contains("is already linked")
-    }
-
-    private func runQRLogin(key: String, channel: String, accountId: String?, force: Bool) async {
-        var start: [String: JSONValue] = ["channel": .string(channel), "force": .bool(force),
-                                          "timeoutMs": .number(Double(Self.qrStartTimeoutMs))]
-        if let accountId { start["accountId"] = .string(accountId) }
-        do {
-            var result = WebLoginResult(try await self.environment.request("web.login.start", .object(start)))
-            var rounds = 0
-            while !Task.isCancelled {
-                if result.connected == true {
-                    self.qrLogins[key] = .connected(result.message)
-                    await self.loadChannels()
-                    return
-                }
-                // Starting on a linked account returns only a message (no `connected` flag): it's linked.
-                if result.qrImageData == nil, let message = result.message, Self.isAlreadyLinked(message) {
-                    self.qrLogins[key] = .connected(message)
-                    await self.loadChannels()
-                    return
-                }
-                guard let qr = result.qrImageData else {
-                    self.qrLogins[key] = .failed(result.message ?? "The Gateway didn't send a QR code.")
-                    return
-                }
-                self.qrLogins[key] = .showing(qr: qr, message: result.message)
-                rounds += 1
-                guard rounds <= Self.qrMaxRounds else {
-                    self.qrLogins[key] = .failed("The QR code expired. Try again.")
-                    return
-                }
-                var wait: [String: JSONValue] = ["channel": .string(channel), "timeoutMs": .number(Double(Self.qrWaitTimeoutMs))]
-                if let accountId { wait["accountId"] = .string(accountId) }
-                if let sessionKey = result.sessionKey { wait["sessionKey"] = .string(sessionKey) }
-                if let url = result.qrDataUrl { wait["currentQrDataUrl"] = .string(url) }
-                let next = WebLoginResult(try await self.environment.request("web.login.wait", .object(wait)))
-                // A wait without a new QR keeps showing the current one.
-                result = next.qrDataUrl == nil && next.connected != true
-                    ? WebLoginResult(qrDataUrl: result.qrDataUrl, sessionKey: next.sessionKey ?? result.sessionKey,
-                                     connected: next.connected, message: next.message)
-                    : next
-                if next.connected == false, next.qrDataUrl == nil, let message = next.message,
-                   !Self.isStillWaiting(message) {
-                    self.qrLogins[key] = .failed(message)
-                    return
-                }
-            }
-        } catch is CancellationError {
-            return
-        } catch {
-            guard !Task.isCancelled else { return }
-            self.qrLogins[key] = .failed(Self.message(error))
-        }
-    }
-}
-
-extension WebLoginResult {
-    init(qrDataUrl: String?, sessionKey: String?, connected: Bool?, message: String?) {
-        self.qrDataUrl = qrDataUrl
-        self.sessionKey = sessionKey
-        self.connected = connected
-        self.message = message
     }
 }

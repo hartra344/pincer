@@ -2409,6 +2409,9 @@ runDeepLinkChecks()
 
 checkToolDiffs()
 
+print("First-run wizard")
+await runFirstRunChecks()
+
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     let url = arguments[index + 1]
@@ -2430,6 +2433,9 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     await runLiveToolDiffs(url: url, token: token)
     print("Agent avatars (live)")
     await runLiveAvatars(url: url, token: token)
+    // Last: it pairs a fresh device identity.
+    print("First-run wizard (live)")
+    await runLiveFirstRun(url: url, token: token)
 }
 if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count > index + 2 {
     print("Scope upgrade fallback against \(arguments[index + 1])")
@@ -2470,6 +2476,8 @@ if arguments.contains("--demo") {
     await runDemoToolDiffs()
     print("Agent avatars (demo)")
     await runDemoAvatars()
+    print("First-run wizard (demo)")
+    await runDemoFirstRun()
 }
 
 print("Keychain isolation")

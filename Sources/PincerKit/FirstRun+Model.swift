@@ -2,62 +2,114 @@ import Foundation
 import Network
 import Observation
 
-// MARK: Error copy
+// MARK: Copy
 
-/// Plain-language messages for what went wrong while finding or signing in to a Gateway.
+/// The wizard's plain-language messages (product spec #175 §2), and the `openclaw` commands it shows.
+/// Commands verified against upstream docs: start/getting-started, gateway/troubleshooting, cli/devices,
+/// gateway/tailscale.
 public enum FirstRunCopy {
-    /// A sign-in failure, from `ConnectionState.failed`/`.reconnecting` text ("message [CODE]").
-    public static func signInError(_ message: String) -> String {
-        let code = message.range(of: #"\[([A-Z_]+)\]\s*$"#, options: .regularExpression)
+    public static let installCommand = "curl -fsSL https://openclaw.ai/install.sh | bash"
+    public static let installCommandWindows = "iwr -useb https://openclaw.ai/install.ps1 | iex"
+    public static let keepRunningCommand = "openclaw gateway install"
+    public static let statusCommand = "openclaw gateway status"
+    public static let tokenCommand = "openclaw config get gateway.auth.token"
+    public static let passwordCommand = "openclaw config get gateway.auth.password"
+    public static let listDevicesCommand = "openclaw devices list"
+    public static let tailscaleServeCommands = ["openclaw config set gateway.tailscale.mode serve", "openclaw gateway restart"]
+    public static let installGuideURL = URL(string: "https://docs.openclaw.ai/start/getting-started")!
+    public static let chooseHelpURL = URL(string: "https://docs.openclaw.ai/gateway/remote")!
+
+    public static func approveCommand(requestId: String?) -> String {
+        requestId.map { "openclaw devices approve \($0)" } ?? self.listDevicesCommand
+    }
+
+    public static let addressMissing = "Enter your Gateway's address."
+    public static let invalidAddress =
+        "That doesn't look like a Gateway address. Try something like wss://my-mac.tailnet.ts.net or ws://192.168.1.20:18789."
+    public static let insecureAddress =
+        "For safety, Pincer only uses unencrypted ws:// on this Mac, your local network, or Tailscale. Use a wss:// address instead."
+    public static let cantReach =
+        "Can't reach a Gateway at that address. Make sure OpenClaw is running (openclaw gateway status) and that this device can reach it."
+    public static let tailscaleHint = "Is Tailscale connected on this device?"
+    public static let notAGateway = "Something answered, but it isn't an OpenClaw Gateway. Check the address and port (usually 18789)."
+    public static let tlsFailed =
+        "Couldn't make a secure connection to that address. If you use Tailscale Serve, check that HTTPS is enabled for your tailnet."
+    public static let pinMismatch = "The Gateway's certificate doesn't match the fingerprint you entered."
+
+    public static let tokenWrong = "That token didn't work. Copy it again with the command below and paste the whole thing."
+    public static let tokenMissing = "This Gateway needs a token."
+    public static let passwordWrong = "That password didn't work. Check it and try again."
+    public static let passwordNeeded = "This Gateway uses a password. Choose Use a password instead."
+    public static let methodMismatch = "This Gateway isn't set up for that sign-in method. Try the other one."
+    public static let rateLimited = "Too many tries. Wait a minute, then try again."
+    public static let versionMismatch = "This Gateway's version doesn't work with this Pincer. Update OpenClaw or Pincer."
+    public static let deviceTurnedDown =
+        "The Gateway turned down this device. Go back and try again, or approve it with the command above."
+    public static let requestChanged = "The request changed. Use this new command."
+
+    /// The `[CODE]` suffix of `GatewayError.rpc` text, if any.
+    static func code(in message: String) -> String? {
+        message.range(of: #"\[([A-Z_]+)\]\s*$"#, options: .regularExpression)
             .map { String(message[$0]).trimmingCharacters(in: CharacterSet(charactersIn: "[] ")) }
+    }
+
+    /// A refused sign-in (`ConnectionState.failed` text, "message [CODE]") as spec copy.
+    public static func signInError(_ message: String, authMode: GatewayProfile.AuthMode, whilePairing: Bool = false) -> String {
+        let code = self.code(in: message)
         switch code {
-        case "AUTH_TOKEN_MISMATCH", "AUTH_UNAUTHORIZED":
-            return "The Gateway didn't accept that token. Copy it again from the Gateway host and try once more."
-        case "AUTH_PASSWORD_MISMATCH":
-            return "The Gateway didn't accept that password. Check it and try again."
-        case "AUTH_TOKEN_MISSING", "AUTH_REQUIRED":
-            return "This Gateway needs a token. Paste it above and try again."
-        case "AUTH_PASSWORD_MISSING":
-            return "This Gateway needs a password. Enter it above and try again."
-        case "AUTH_TOKEN_NOT_CONFIGURED":
-            return "This Gateway doesn't use a token. Try Password or No Sign-In instead."
-        case "AUTH_PASSWORD_NOT_CONFIGURED":
-            return "This Gateway doesn't use a password. Try Token or No Sign-In instead."
-        case "AUTH_RATE_LIMITED":
-            return "Too many failed attempts. Wait a minute, then try again."
-        case let code? where code.hasPrefix("AUTH_TAILSCALE"):
-            return "The Gateway couldn't confirm your Tailscale identity. Use a token instead, or connect through Tailscale Serve."
-        case "PROTOCOL_MISMATCH", "CLIENT_VERSION_MISMATCH":
-            return "This Gateway runs a different OpenClaw version than Pincer supports. Update OpenClaw on the Gateway host."
-        default:
-            return message
+        case "AUTH_TOKEN_MISMATCH": return self.tokenWrong
+        case "AUTH_UNAUTHORIZED": return authMode == .password ? self.passwordWrong : self.tokenWrong
+        case "AUTH_PASSWORD_MISMATCH": return self.passwordWrong
+        case "AUTH_TOKEN_MISSING": return self.tokenMissing
+        case "AUTH_PASSWORD_MISSING": return self.passwordNeeded
+        case "AUTH_TOKEN_NOT_CONFIGURED", "AUTH_PASSWORD_NOT_CONFIGURED": return self.methodMismatch
+        case "AUTH_RATE_LIMITED": return self.rateLimited
+        case "PROTOCOL_MISMATCH", "CLIENT_VERSION_MISMATCH": return self.versionMismatch
+        default: break
         }
+        if whilePairing, let code, code.hasPrefix("DEVICE_") || code.hasPrefix("AUTH_") { return self.deviceTurnedDown }
+        if self.isRateLimit(message) { return self.rateLimited }
+        if code == nil, message.localizedCaseInsensitiveContains("invalid") && message.contains("Gateway address") {
+            return self.invalidAddress
+        }
+        return message
+    }
+
+    /// A sign-in whose connection dropped or never opened (`ConnectionState.reconnecting`).
+    public static func signInDropped(_ reason: String) -> String {
+        self.isRateLimit(reason) ? self.rateLimited : self.cantReach
+    }
+
+    private static func isRateLimit(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("rate limit") || lower.contains("too many failed")
     }
 
     /// Why a WebSocket to the Gateway didn't open.
-    public static func reachabilityError(_ error: Error, host: String) -> String {
-        let code = (error as? URLError)?.code
-        switch code {
-        case .cannotFindHost?, .dnsLookupFailed?:
-            return "Couldn't find \(host). Check the spelling, and that this device is on the same network or tailnet."
-        case .cannotConnectToHost?, .networkConnectionLost?:
-            return "Nothing answered at \(host). Make sure the Gateway is running and listening on this network (by default it only listens on its own computer)."
-        case .timedOut?:
-            return "\(host) didn't answer in time. Check that the Gateway is running and this device can reach it."
-        case .notConnectedToInternet?:
-            return "This device is offline. Connect to your network or tailnet and try again."
+    public static func reachabilityError(_ error: Error) -> String {
+        switch (error as? URLError)?.code {
         case .serverCertificateUntrusted?, .serverCertificateHasBadDate?, .serverCertificateHasUnknownRoot?,
-             .serverCertificateNotYetValid?, .secureConnectionFailed?:
-            return "\(host)'s certificate isn't trusted. Use Tailscale Serve (wss://…ts.net), or pin the certificate under Advanced."
+             .serverCertificateNotYetValid?, .secureConnectionFailed?, .clientCertificateRejected?:
+            return self.tlsFailed
         case .badServerResponse?:
-            return "Something answered at \(host), but it isn't an OpenClaw Gateway. Check the address and port (the default is 18789)."
+            return self.notAGateway
         default:
-            return "Couldn't reach \(host): \(error.localizedDescription)"
+            return self.cantReach
         }
     }
 
-    public static let notAGateway =
-        "Something answered, but it didn't greet Pincer like an OpenClaw Gateway. Check the address and port (the default is 18789)."
+    /// One line from the hello snapshot's health, when it reports a problem (channels aren't setup's concern).
+    public static func healthProblem(_ health: GatewayHealthSummary?) -> String? {
+        guard let health else { return nil }
+        if let plugin = health.pluginErrors.first { return "The \(plugin.id) plugin failed to load." }
+        if let queue = health.failedQueues.first(where: { $0.count > 0 }) {
+            return "\(queue.count) queued \(queue.count == 1 ? "item" : "items") failed in \(queue.queueName)."
+        }
+        if !health.unavailablePlugins.isEmpty {
+            return "Unavailable plugins: \(health.unavailablePlugins.joined(separator: ", "))."
+        }
+        return nil
+    }
 }
 
 // MARK: Model
@@ -117,14 +169,21 @@ public final class FirstRunModel {
         if let saved = FirstRunStore.load(from: defaults) {
             self.state = saved
             self.presentation = hasGateways ? .sheet : .window
-            self.secret = saved.gatewayId == nil ? (GatewayProfile(id: saved.profileId, name: "", url: "", authMode: .token).secret ?? "") : ""
         } else {
-            self.state = .start(hasGateways: hasGateways)
+            self.state = .start(hasGateways: hasGateways, macOS: Self.isMacOS)
             self.presentation = hasGateways ? nil : .window
         }
     }
 
     public var isPresented: Bool { self.presentation != nil }
+
+    public nonisolated static var isMacOS: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }
 
     /// The sheet binding's value.
     public var isSheetPresented: Bool {
@@ -142,7 +201,7 @@ public final class FirstRunModel {
     public func present() {
         let hasGateways = !(self.app?.gateways.isEmpty ?? true)
         if self.presentation == nil {
-            self.state = .start(hasGateways: hasGateways)
+            self.state = .start(hasGateways: hasGateways, macOS: Self.isMacOS)
             self.secret = ""
         }
         self.presentation = hasGateways ? (self.presentation ?? .sheet) : .window
@@ -154,11 +213,18 @@ public final class FirstRunModel {
     public func showIfNoGateways() {
         guard self.app?.gateways.isEmpty ?? false, self.presentation != .window else { return }
         if self.presentation == nil {
-            self.state = .start(hasGateways: false)
+            self.state = .start(hasGateways: false, macOS: Self.isMacOS)
             self.secret = ""
         }
         self.presentation = .window
         self.resumeEffects()
+    }
+
+    /// A gateway was added some other way (Advanced…, the demo, a deep link): the run that filled
+    /// the window gives way to it. Its own `addGateway` is ignored.
+    func gatewayAdded(_ id: UUID) {
+        guard id != self.state.gatewayId, self.presentation != nil, self.state.gatewayId == nil else { return }
+        self.send(.cancel)
     }
 
     /// Restarts discovery after a resume or a new presentation.
@@ -253,7 +319,7 @@ public final class FirstRunModel {
             }
             self.presentation = nil
             self.secret = ""
-            self.state = .start(hasGateways: !(self.app?.gateways.isEmpty ?? true))
+            self.state = .start(hasGateways: !(self.app?.gateways.isEmpty ?? true), macOS: Self.isMacOS)
             FirstRunStore.clear(self.defaults)
             if self.app?.gateways.isEmpty ?? false { self.presentation = .window }
         }
@@ -266,7 +332,6 @@ public final class FirstRunModel {
 public enum FirstRunProbe {
     /// Opens a WebSocket and waits (up to `timeout`) for the Gateway's `connect.challenge` event.
     public static func checkReachability(_ url: URL, timeout: TimeInterval = 8) async -> FirstRunReachability {
-        let host = url.port.map { "\(url.host ?? url.absoluteString):\($0)" } ?? (url.host ?? url.absoluteString)
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = timeout
@@ -288,7 +353,7 @@ public enum FirstRunProbe {
                 group.cancelAll()
                 return first
             }
-            guard let message else { return .unreachable(FirstRunCopy.reachabilityError(URLError(.timedOut), host: host)) }
+            guard let message else { return .unreachable(FirstRunCopy.cantReach) }
             let data: Data? = switch message {
             case let .data(data): data
             case let .string(text): Data(text.utf8)
@@ -299,7 +364,7 @@ public enum FirstRunProbe {
             }
             return .reachable
         } catch {
-            return .unreachable(FirstRunCopy.reachabilityError(error, host: host))
+            return .unreachable(FirstRunCopy.reachabilityError(error))
         }
     }
 
@@ -318,14 +383,17 @@ public enum FirstRunProbe {
                     case let .awaitingPairing(requestId, deviceId):
                         continuation.yield(.awaitingPairing(requestId: requestId, deviceId: deviceId))
                     case .connected:
-                        continuation.yield(.connected(FirstRunVerified(serverVersion: hello?.serverVersion,
-                                                                       scopes: hello?.scopes ?? [])))
+                        let health = hello?.snapshot?["health"].flatMap(GatewayHealthSummary.init)
+                        continuation.yield(.connected(FirstRunVerified(
+                            serverVersion: hello?.serverVersion, scopes: hello?.scopes ?? [],
+                            questionsRequestId: hello?.scopeUpgradeRequestId,
+                            healthProblem: FirstRunCopy.healthProblem(health))))
                         continuation.finish()
                     case let .reconnecting(_, _, reason):
-                        continuation.yield(.failed(FirstRunCopy.signInError(reason)))
+                        continuation.yield(.dropped(reason))
                         continuation.finish()
                     case let .failed(message):
-                        continuation.yield(.failed(FirstRunCopy.signInError(message)))
+                        continuation.yield(.failed(message))
                         continuation.finish()
                     }
                 })

@@ -119,7 +119,12 @@ struct ConnectionFields: View {
 struct ConnectionSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
-    @State private var draft = ConnectionDraft()
+    @State private var draft: ConnectionDraft
+
+    /// `draft`: what the first-run wizard had so far (Advanced…).
+    init(draft: ConnectionDraft = ConnectionDraft()) {
+        self._draft = State(initialValue: draft)
+    }
 
     var body: some View {
         NavigationStack {

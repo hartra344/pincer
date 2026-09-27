@@ -38,7 +38,7 @@ actor DemoGateway {
         "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
-    ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
+    ] + DemoUsage.methods + DemoGateway.agentMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -61,8 +61,6 @@ actor DemoGateway {
     private var logs = DemoGatewayLogs()
     /// The exec approvals file (`exec.approvals.get/set`). The demo keeps no socket token.
     var execApprovals = DemoGateway.seedExecApprovals()
-    /// WhatsApp link state and the running QR login (`DemoGateway+Setup.swift`).
-    var setup = DemoSetupState()
     var agentIds: [String] { self.agents.compactMap { $0["id"]?.text } }
     func hasSession(_ key: String) -> Bool { self.sessions[key] != nil }
     var execApprovalsExists = true
@@ -326,8 +324,6 @@ actor DemoGateway {
             return .array(self.presence())
         case "gateway.restart.request":
             return self.requestRestart(params)
-        case _ where Self.setupMethods.contains(method) || Self.webLoginMethods.contains(method):
-            return try await self.handleSetup(method, params) ?? .null
         default:
             throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "The demo doesn't support \(method).", details: nil)
         }
@@ -418,7 +414,7 @@ actor DemoGateway {
     // MARK: Health and restart
 
     /// Discord is fine; Telegram lost its connection until a restart, so the demo starts out degraded.
-    /// WhatsApp is enabled but not linked yet (not configured, so not a problem) for the setup wizard.
+    /// WhatsApp is enabled but not linked (not configured, so not a problem).
     func health() -> JSONValue {
         let now = Self.now()
         let nowMs = now.double ?? 0

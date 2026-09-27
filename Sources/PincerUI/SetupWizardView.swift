@@ -51,6 +51,8 @@ private struct SetupWizardSheet: ViewModifier {
 struct SetupWizardView: View {
     let setup: SetupWizardModel
     let openSettings: (SettingsDestination) -> Void
+    /// Inside the first-run wizard, which supplies the window, title and close button.
+    var embedded = false
     @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
@@ -62,7 +64,8 @@ struct SetupWizardView: View {
             }
         }
         #if os(macOS)
-        .frame(width: 720, height: 520)
+        .frame(width: self.embedded ? nil : 720, height: self.embedded ? nil : 520)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         #endif
         .task(id: self.gateway.state.isConnected) {
             guard self.gateway.state.isConnected else { return }
@@ -70,7 +73,7 @@ struct SetupWizardView: View {
         }
     }
 
-    private var steps: some View {
+    @ViewBuilder private var steps: some View {
         #if os(macOS)
         HStack(spacing: 0) {
             SetupStepList(setup: self.setup)
@@ -79,6 +82,20 @@ struct SetupWizardView: View {
             SetupStepDetail(setup: self.setup, openSettings: self.openSettings)
         }
         #else
+        if self.embedded {
+            VStack(spacing: 0) {
+                SetupStepStrip(setup: self.setup)
+                Divider()
+                SetupStepDetail(setup: self.setup, openSettings: self.openSettings)
+            }
+        } else {
+            self.navigationSteps
+        }
+        #endif
+    }
+
+    #if os(iOS)
+    private var navigationSteps: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 SetupStepStrip(setup: self.setup)
@@ -91,8 +108,8 @@ struct SetupWizardView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { self.setup.close() } }
             }
         }
-        #endif
     }
+    #endif
 }
 
 private struct SetupIntroView: View {
@@ -108,7 +125,7 @@ private struct SetupIntroView: View {
             Text("Set Up \(self.gateway.profile.name)")
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
-            Text("Check the Gateway's health, channels, default agent and skills, then send a test message. Skip anything you like.")
+            Text("Pick your default agent and model, look over skills, then send a test message. Skip anything you like.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 420)
@@ -222,6 +239,7 @@ private struct SetupStepDetail: View {
     let setup: SetupWizardModel
     let openSettings: (SettingsDestination) -> Void
     @Environment(GatewayStore.self) private var gateway
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         let step = self.setup.currentStep
@@ -238,6 +256,7 @@ private struct SetupStepDetail: View {
                                 Text(status.label).foregroundStyle(SetupStatusIcon.color(status))
                             }
                             .font(.callout)
+                            Text(step.summary).font(.callout).foregroundStyle(.secondary)
                             if let detail = status.detail ?? self.setup.evaluated(step).detail {
                                 Text(detail).font(.callout).foregroundStyle(.secondary)
                             }
@@ -248,8 +267,6 @@ private struct SetupStepDetail: View {
                     }
                 }
                 switch step {
-                case .health: SetupHealthStep(openSettings: self.openSettings)
-                case .channels: SetupChannelsStep(setup: self.setup, openSettings: self.openSettings)
                 case .agent: SetupAgentStep(setup: self.setup, openSettings: self.openSettings)
                 case .skills: SetupSkillsStep(setup: self.setup, openSettings: self.openSettings)
                 case .testMessage: SetupTestMessageStep(setup: self.setup)
@@ -259,6 +276,13 @@ private struct SetupStepDetail: View {
             Divider()
             self.footer(step: step, status: status)
         }
+    }
+
+    /// Finish after a test message lands on its Setup Test chat.
+    private func advance() {
+        let chatKey = self.setup.nextStep == nil ? self.setup.testChatKey : nil
+        self.setup.advance()
+        if let chatKey { self.app.open(Notifier.Target(gatewayId: self.gateway.id, sessionKey: chatKey)) }
     }
 
     private func footer(step: SetupStep, status: SetupStepStatus) -> some View {
@@ -285,7 +309,7 @@ private struct SetupStepDetail: View {
                 Button("Skip") { self.setup.skipCurrent() }
             }
             // On Test Message, Return sends from the text field; it mustn't also Finish.
-            Button(self.setup.nextStep == nil ? "Finish" : "Continue") { self.setup.advance() }
+            Button(self.setup.nextStep == nil ? "Finish" : "Continue") { self.advance() }
                 .keyboardShortcut(step == .testMessage ? nil : KeyboardShortcut.defaultAction)
                 .buttonStyle(.borderedProminent)
         }
@@ -321,150 +345,6 @@ private struct SetupLink: View {
             Label(self.title, systemImage: self.symbol)
         }
         .buttonStyle(.borderless)
-    }
-}
-
-// MARK: Health
-
-private struct SetupHealthStep: View {
-    let openSettings: (SettingsDestination) -> Void
-    @Environment(GatewayStore.self) private var gateway
-
-    var body: some View {
-        let model = self.gateway.health
-        let level = model.level
-        Section {
-            LabeledContent("Status") {
-                Label(level.label, systemImage: level.symbol).foregroundStyle(GatewayHealthPage.color(level))
-            }
-            if let version = model.serverVersion { LabeledContent("Version", value: version) }
-            ForEach(model.activeIssues) { issue in
-                VStack(alignment: .leading, spacing: 2) {
-                    Label(issue.title, systemImage: issue.symbol).foregroundStyle(.orange)
-                    if let detail = issue.detail { Text(detail).font(.caption).foregroundStyle(.secondary) }
-                }
-            }
-            SetupLink(title: "Open Gateway Health", symbol: "stethoscope") { self.openSettings(.health) }
-        }
-    }
-}
-
-// MARK: Channels
-
-private struct SetupChannelsStep: View {
-    let setup: SetupWizardModel
-    let openSettings: (SettingsDestination) -> Void
-
-    var body: some View {
-        let snapshot = self.setup.channelsSnapshot
-        Section("Channels") {
-            if let snapshot {
-                if snapshot.channels.isEmpty {
-                    Text("No channels yet. Add one in Gateway Settings → Channels.").foregroundStyle(.secondary)
-                }
-                ForEach(snapshot.channels) { channel in
-                    SetupChannelRow(setup: self.setup, channel: channel,
-                                    issues: snapshot.issues.filter { $0.channel == channel.id })
-                }
-            } else if let failure = self.setup.channelsFailure {
-                Text(failure).foregroundStyle(.secondary)
-            } else {
-                ProgressView()
-            }
-            SetupLink(title: "Open Channels", symbol: "bubble.left.and.bubble.right") { self.openSettings(.page("channels")) }
-        }
-    }
-}
-
-private struct SetupChannelRow: View {
-    let setup: SetupWizardModel
-    let channel: GatewayChannelHealth
-    let issues: [SetupChannelsSnapshot.Issue]
-
-    var body: some View {
-        let status = self.channel.status
-        VStack(alignment: .leading, spacing: 6) {
-            LabeledContent(self.channel.label) {
-                Text(status.label).foregroundStyle(GatewayHealthPage.color(status))
-            }
-            if let error = self.channel.lastError {
-                Text(error).font(.caption).foregroundStyle(.secondary)
-            }
-            ForEach(self.issues, id: \.self) { issue in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(issue.message).font(.caption)
-                    if let fix = issue.fix { Text(fix).font(.caption).foregroundStyle(.secondary) }
-                }
-            }
-            if SetupRules.supportsQRLogin(self.channel.id) {
-                self.qrLogin
-            }
-        }
-        .padding(.vertical, 2)
-    }
-
-    @ViewBuilder private var qrLogin: some View {
-        let accountId = self.channel.accounts.count == 1 ? self.channel.accounts[0].accountId : nil
-        let state = self.setup.qrLogin(channel: self.channel.id, accountId: accountId)
-        switch state {
-        case .idle, .failed:
-            if case let .failed(message) = state {
-                Text(message).font(.caption).foregroundStyle(.red)
-            }
-            Button {
-                self.setup.startQRLogin(channel: self.channel.id, accountId: accountId,
-                                        force: self.channel.status == .connected)
-            } label: {
-                Label(self.channel.status == .connected ? "Relink with QR Code…" : "Link with QR Code…", systemImage: "qrcode")
-            }
-            .buttonStyle(.borderless)
-            .disabled(!self.setup.canStartQRLogin(channel: self.channel.id))
-        case .starting:
-            ProgressView("Getting a QR code…").controlSize(.small)
-        case let .showing(qr, message):
-            VStack(alignment: .leading, spacing: 6) {
-                if let image = PlatformImage(data: qr) {
-                    Self.image(image)
-                        .interpolation(.none)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 200, height: 200)
-                        .accessibilityLabel("QR code for \(self.channel.label)")
-                }
-                Text(message ?? "Scan this with \(self.channel.label) on your phone to link it.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button("Cancel") { self.setup.cancelQRLogin(channel: self.channel.id, accountId: accountId) }
-                    .buttonStyle(.borderless)
-            }
-        case let .connected(message):
-            Label(message.map(Self.linkedMessage) ?? "Linked", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.callout)
-            Button {
-                self.setup.startQRLogin(channel: self.channel.id, accountId: accountId, force: true)
-            } label: {
-                Label("Relink with QR Code…", systemImage: "qrcode")
-            }
-            .buttonStyle(.borderless)
-            .disabled(!self.setup.canStartQRLogin(channel: self.channel.id))
-        }
-    }
-
-    /// Drops upstream's chat-agent hint ("Say “relink” …"): here it's the Relink button.
-    static func linkedMessage(_ message: String) -> String {
-        guard let range = message.range(of: " Say “relink”") else { return message }
-        return String(message[..<range.lowerBound])
-    }
-}
-
-extension SetupChannelRow {
-    static func image(_ image: PlatformImage) -> Image {
-        #if os(macOS)
-        Image(nsImage: image)
-        #else
-        Image(uiImage: image)
-        #endif
     }
 }
 
@@ -548,6 +428,8 @@ private struct SetupSkillsStep: View {
                 let missing = report.missing
                 if missing.isEmpty {
                     Label("Every skill has what it needs.", systemImage: "checkmark.circle").foregroundStyle(.secondary)
+                } else {
+                    Text("Not set up").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 }
                 ForEach(missing) { skill in
                     VStack(alignment: .leading, spacing: 2) {
@@ -557,7 +439,7 @@ private struct SetupSkillsStep: View {
                             if let emoji = skill.emoji { Text(emoji) } else { Image(systemName: "puzzlepiece.extension") }
                         }
                         if !skill.missing.isEmpty {
-                            Text("Needs \(skill.missing.joined(separator: ", "))").font(.caption).foregroundStyle(.orange)
+                            Text("Needs \(skill.missing.joined(separator: ", "))").font(.caption).foregroundStyle(.secondary)
                         }
                         if !skill.installOptions.isEmpty {
                             Text("Install: \(skill.installOptions.joined(separator: " · "))")
@@ -590,19 +472,22 @@ private struct SetupTestMessageStep: View {
     @State private var sending = false
     @State private var error: String?
     @State private var sentKey: String?
+    /// The test chat, kept from the send so the body never creates a chat store.
+    @State private var chat: ChatStore?
 
     var body: some View {
         Section {
             TextField("Message", text: self.$text)
                 .onSubmit(self.send)
             HStack {
-                Button(self.text == SetupWizardModel.testMessageText ? "Send \u{201C}hello\u{201D}" : "Send", action: self.send)
+                Button(self.sentKey == nil ? "Send" : "Try Again", action: self.send)
                     .disabled(self.sending || !self.gateway.state.isConnected
                         || self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if self.sending { ProgressView().controlSize(.small) }
             }
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
-            if let key = self.sentKey {
+            if let chat = self.chat, let key = self.sentKey {
+                SetupTestReply(chat: chat)
                 Button("Open Chat") {
                     self.setup.close()
                     self.app.open(Notifier.Target(gatewayId: self.gateway.id, sessionKey: key))
@@ -610,7 +495,7 @@ private struct SetupTestMessageStep: View {
                 .buttonStyle(.borderless)
             }
         } footer: {
-            Text("Starts a new chat with \(self.gateway.agent(self.gateway.defaultAgentId).name). The reply shows up there.")
+            Text("Starts a new chat with \(self.gateway.agent(self.gateway.defaultAgentId).name) in Pincer.")
         }
     }
 
@@ -623,10 +508,54 @@ private struct SetupTestMessageStep: View {
             let result = await self.gateway.sendSetupTestMessage(text)
             self.sending = false
             switch result.outcome {
-            case .sent: self.sentKey = result.key
-            case let .failed(message): self.error = message
+            case .sent:
+                self.sentKey = result.key
+                self.chat = result.key.map { self.gateway.chat(for: $0) }
+            case let .failed(message):
+                self.error = message
             }
         }
+    }
+}
+
+/// The agent's answer to the test message, as it streams in.
+private struct SetupTestReply: View {
+    let chat: ChatStore
+
+    var body: some View {
+        let reply = Self.reply(in: self.chat)
+        if let reply, reply.isError {
+            Label("Your agent didn't answer. You can try again, or skip and chat later.", systemImage: "exclamationmark.bubble")
+                .foregroundStyle(.red)
+        } else if let reply, !reply.body.isEmpty, !reply.isStreaming {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Your agent replied.", systemImage: "checkmark.bubble.fill").foregroundStyle(.green)
+                Text(reply.body).lineLimit(6).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            .accessibilityElement(children: .combine)
+        } else if self.chat.errorMessage != nil {
+            Label("Your agent didn't answer. You can try again, or skip and chat later.", systemImage: "exclamationmark.bubble")
+                .foregroundStyle(.red)
+        } else {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(self.chat.live?.text.isEmpty == false ? self.chat.live?.text ?? "" : "Waiting for a reply…")
+                    .lineLimit(3)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// The last assistant turn after the last user message.
+    static func reply(in chat: ChatStore) -> AssistantTurn? {
+        for entry in chat.entries.reversed() {
+            switch entry {
+            case let .assistant(turn): return turn
+            case .user: return nil
+            case .marker: continue
+            }
+        }
+        return nil
     }
 }
 
@@ -635,6 +564,7 @@ private struct SetupTestMessageStep: View {
 /// "Set Up Gateway…" with the wizard's progress.
 struct SetupGatewaySection: View {
     @Environment(GatewayStore.self) private var gateway
+    @Environment(AppModel.self) private var app
     @Environment(\.closeGatewaySettings) private var closeGatewaySettings
 
     var body: some View {
@@ -655,15 +585,15 @@ struct SetupGatewaySection: View {
     }
 
     private func open(_ setup: SetupWizardModel) {
+        // The wizard is presented on the main window, for the selected gateway.
+        self.app.selectedGatewayId = self.gateway.id
         #if os(macOS)
         setup.present()
+        // Over Gateway Settings, not behind it (#131).
+        QuickCaptureController.shared.showMainWindow()
         #else
-        // Gateway Settings is a sheet here: the wizard shows once it's gone.
-        self.closeGatewaySettings()
-        Task {
-            try? await Task.sleep(for: .milliseconds(600))
-            setup.present()
-        }
+        // Gateway Settings is a sheet here: the wizard shows once it's gone (#133).
+        self.closeGatewaySettings { setup.present() }
         #endif
     }
 }

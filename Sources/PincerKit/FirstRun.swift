@@ -32,11 +32,11 @@ public enum FirstRunStage: Int, CaseIterable, Comparable, Hashable, Sendable {
 
     public var title: String {
         switch self {
-        case .welcome: "Welcome"
+        case .welcome: "Get started"
         case .find: "Find"
-        case .signIn: "Sign In"
+        case .signIn: "Sign in"
         case .verify: "Verify"
-        case .setUp: "Set Up"
+        case .setUp: "Set up"
         case .done: "Done"
         }
     }
@@ -80,10 +80,16 @@ public enum FirstRunSignIn: Hashable, Sendable {
 public struct FirstRunVerified: Codable, Hashable, Sendable {
     public var serverVersion: String?
     public var scopes: [String]
+    /// A scope upgrade (answering agent questions) waiting for `openclaw devices approve <id>`.
+    public var questionsRequestId: String?
+    /// A one-line problem from the hello snapshot's health, if any. Never blocks Continue.
+    public var healthProblem: String?
 
-    public init(serverVersion: String?, scopes: [String]) {
+    public init(serverVersion: String?, scopes: [String], questionsRequestId: String? = nil, healthProblem: String? = nil) {
         self.serverVersion = serverVersion
         self.scopes = scopes
+        self.questionsRequestId = questionsRequestId
+        self.healthProblem = healthProblem
     }
 
     public var hasFullManagement: Bool { self.scopes.contains(GatewayConnection.adminScope) }
@@ -94,7 +100,27 @@ public enum FirstRunSignInUpdate: Hashable, Sendable {
     case connecting
     case awaitingPairing(requestId: String?, deviceId: String)
     case connected(FirstRunVerified)
+    /// The Gateway refused (`ConnectionState.failed`): raw `GatewayError` text, mapped by `FirstRunCopy.signInError`.
     case failed(String)
+    /// The connection dropped or couldn't open (`ConnectionState.reconnecting`): raw reason.
+    case dropped(String)
+}
+
+/// Where the Gateway runs, on Find: picks the placeholder, help text and default address.
+public enum FirstRunLocation: String, CaseIterable, Codable, Hashable, Sendable, Identifiable {
+    /// macOS only: fills `ws://127.0.0.1:18789`.
+    case thisMac
+    case tailscale
+    case sameNetwork
+
+    public var id: String { self.rawValue }
+
+    public static let thisMacAddress = "ws://127.0.0.1:18789"
+
+    /// The choices on this platform (This Mac only on macOS).
+    public static func available(macOS: Bool) -> [Self] { macOS ? Self.allCases : [.tailscale, .sameNetwork] }
+
+    public static func `default`(macOS: Bool) -> Self { macOS ? .thisMac : .tailscale }
 }
 
 /// A Gateway advertising `_openclaw-gw._tcp` over Bonjour. TXT records are unauthenticated hints
@@ -111,14 +137,16 @@ public struct FirstRunDiscoveredGateway: Codable, Hashable, Identifiable, Sendab
         self.address = address
     }
 
-    /// Builds the address from the TXT hints `lanHost`, `gatewayPort` and `gatewayTls`; nil without a host.
+    /// Builds the address from the TXT hints `lanHost`, `gatewayPort` and `gatewayTls`; the name from
+    /// `displayName`, else the service name. Nil without a host.
     public init?(name: String, txt: [String: String]) {
         guard let host = txt["lanHost"]?.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: ".")),
               !host.isEmpty else { return nil }
         let port = txt["gatewayPort"].flatMap(Int.init) ?? 18789
         let scheme = txt["gatewayTls"] == "1" ? "wss" : "ws"
-        let displayName = name.replacingOccurrences(of: " (OpenClaw)", with: "")
-        self.init(name: displayName.isEmpty ? host : displayName, address: "\(scheme)://\(host):\(port)")
+        let display = (txt["displayName"]?.trimmingCharacters(in: .whitespaces)).flatMap { $0.isEmpty ? nil : $0 }
+            ?? name.replacingOccurrences(of: " (OpenClaw)", with: "")
+        self.init(name: display.isEmpty ? host : display, address: "\(scheme)://\(host):\(port)")
     }
 }
 
@@ -150,28 +178,31 @@ public enum FirstRunEvent: Hashable, Sendable {
     case getStarted
     case tryDemo
     case answerHaveGateway(Bool)
-    /// "I've Started It" on the install screen.
+    /// "My Gateway Is Running" on the install screen.
     case installed
     case back
+    /// "Continue Anyway" after a failed check; "Skip to Chats" on Verify and during setup.
     case skip
+    case setLocation(FirstRunLocation)
     case setAddress(String)
     case setName(String)
+    /// Token ↔ password ("Use a password instead"). `.none` is only offered in Advanced.
     case setAuthMode(GatewayProfile.AuthMode)
     case discovered([FirstRunDiscoveredGateway])
     case useDiscovered(FirstRunDiscoveredGateway)
     /// Continue on Find: validates the address and checks it's reachable.
     case checkAddress
     case reachabilityResult(address: String, FirstRunReachability)
-    /// Sign In. `hasSecret`: a token or password was entered (or is saved for this attempt).
+    /// Sign In. `hasSecret`: a token or password was entered.
     case signIn(hasSecret: Bool)
     case signInUpdate(FirstRunSignInUpdate)
-    /// Continue on Verify.
+    /// Continue Setup on Verify: saves the gateway and starts its setup steps.
     case continueToSetup
     /// The embedded per-gateway wizard finished or was closed.
     case gatewaySetupEnded
-    /// Done on the last screen.
+    /// Go to Chats on the last screen.
     case finish
-    /// Cancel / Set Up Later / Esc: leave the wizard.
+    /// Close / Esc / ⌘.: leave the wizard.
     case cancel
 }
 
@@ -179,48 +210,51 @@ public enum FirstRunEvent: Hashable, Sendable {
 
 /// The first-run wizard as a pure value: `send(_:)` applies an event and returns the side effects
 /// for `FirstRunModel` to perform. Codable so it resumes after a quit; in-flight checks
-/// (`reachability`, `signIn`, `discovered`) aren't saved and resume as idle. Never holds secrets.
+/// (`reachability`, `signInStatus`, `discovered`) aren't saved and resume as idle. Never holds secrets.
 public struct FirstRunState: Codable, Hashable, Sendable {
     public private(set) var step: FirstRunStep
-    /// Where this run started: `.welcome` on a fresh install, `.haveGateway` from "Add Gateway…".
+    /// Where this run started: `.welcome` on a fresh install, `.findGateway` from "Add Gateway…".
     public private(set) var entry: FirstRunStep
     /// Also the id of the gateway it becomes, so the Keychain secret and device token carry over.
     public private(set) var profileId: UUID
+    public private(set) var location: FirstRunLocation
+    /// What the user typed; `normalizedAddress` is what Pincer connects to.
     public private(set) var address: String
     public private(set) var name: String
-    /// Whether the user typed the name (else it follows the address).
+    /// Whether the user typed the name (else it follows the address or the Bonjour name).
     public private(set) var nameEdited: Bool
     public private(set) var authMode: GatewayProfile.AuthMode
     public private(set) var verified: FirstRunVerified?
-    /// Set once the profile was added to the app.
+    /// Set once the profile was added to the app (leaving Verify).
     public private(set) var gatewayId: UUID?
-    /// The embedded per-gateway wizard was skipped ("Set Up Later").
-    public private(set) var skippedGatewaySetup: Bool
 
     public private(set) var reachability: FirstRunReachability = .unknown
     public private(set) var signInStatus: FirstRunSignIn = .idle
+    /// The pairing request id changed while waiting (superseded or rejected and retried).
+    public private(set) var pairingRequestChanged = false
     public private(set) var discovered: [FirstRunDiscoveredGateway] = []
 
-    public init(entry: FirstRunStep = .welcome, profileId: UUID = UUID()) {
+    public init(entry: FirstRunStep = .welcome, profileId: UUID = UUID(), location: FirstRunLocation = .tailscale) {
         self.step = entry
         self.entry = entry
         self.profileId = profileId
-        self.address = ""
+        self.location = location
+        self.address = location == .thisMac ? FirstRunLocation.thisMacAddress : ""
         self.name = ""
         self.nameEdited = false
         self.authMode = .token
         self.verified = nil
         self.gatewayId = nil
-        self.skippedGatewaySetup = false
     }
 
-    /// A fresh run: from Welcome when there are no gateways, else straight to "Do you have a gateway?".
-    public static func start(hasGateways: Bool, profileId: UUID = UUID()) -> FirstRunState {
-        FirstRunState(entry: hasGateways ? .haveGateway : .welcome, profileId: profileId)
+    /// A fresh run: from Welcome when there are no gateways, else straight to Find ("Add Gateway…").
+    public static func start(hasGateways: Bool, macOS: Bool, profileId: UUID = UUID()) -> FirstRunState {
+        FirstRunState(entry: hasGateways ? .findGateway : .welcome, profileId: profileId,
+                      location: .default(macOS: macOS))
     }
 
     private enum CodingKeys: String, CodingKey {
-        case step, entry, profileId, address, name, nameEdited, authMode, verified, gatewayId, skippedGatewaySetup
+        case step, entry, profileId, location, address, name, nameEdited, authMode, verified, gatewayId
     }
 
     public init(from decoder: Decoder) throws {
@@ -228,104 +262,133 @@ public struct FirstRunState: Codable, Hashable, Sendable {
         let step = try container.decode(FirstRunStep.self, forKey: .step)
         self.entry = try container.decodeIfPresent(FirstRunStep.self, forKey: .entry) ?? .welcome
         self.profileId = try container.decode(UUID.self, forKey: .profileId)
+        self.location = try container.decodeIfPresent(FirstRunLocation.self, forKey: .location) ?? .tailscale
         self.address = try container.decodeIfPresent(String.self, forKey: .address) ?? ""
         self.name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
         self.nameEdited = try container.decodeIfPresent(Bool.self, forKey: .nameEdited) ?? false
         self.authMode = try container.decodeIfPresent(GatewayProfile.AuthMode.self, forKey: .authMode) ?? .token
         self.verified = try container.decodeIfPresent(FirstRunVerified.self, forKey: .verified)
         self.gatewayId = try container.decodeIfPresent(UUID.self, forKey: .gatewayId)
-        self.skippedGatewaySetup = try container.decodeIfPresent(Bool.self, forKey: .skippedGatewaySetup) ?? false
-        // Signed in but the app quit before the gateway was saved: sign in again.
-        self.step = (step == .verify || step == .gatewaySetup) && self.gatewayId == nil ? .signIn : step
+        // Signed in but quit before the gateway was saved: sign in again (the device stays paired).
+        self.step = (step == .verify || step == .gatewaySetup || step == .done) && self.gatewayId == nil ? .signIn : step
     }
 
     // MARK: Derived
 
     public var stage: FirstRunStage { self.step.stage }
 
-    /// Stages shown in the progress indicator (Welcome only on a fresh install).
-    public var stages: [FirstRunStage] {
-        self.entry == .welcome ? FirstRunStage.allCases : FirstRunStage.allCases.filter { $0 != .welcome }
-    }
+    /// The five connection stages the progress indicator counts ("Step N of 5").
+    public static let countedStages: [FirstRunStage] = [.welcome, .find, .signIn, .verify, .setUp]
 
-    /// 0-based position of the current stage in `stages`.
-    public var stageIndex: Int { self.stages.firstIndex(of: self.stage) ?? 0 }
+    /// 1-based "Step N of 5"; nil on Done.
+    public var stepNumber: Int? { Self.countedStages.firstIndex(of: self.stage).map { $0 + 1 } }
 
     public var trimmedAddress: String { self.address.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// What Pincer connects to: bare `*.ts.net` hosts get `wss://`, other bare hosts `ws://`, and
+    /// `ws://` without a port gets the Gateway's default `:18789`. `http(s)://` becomes `ws(s)://`.
+    public var normalizedAddress: String { Self.normalize(self.trimmedAddress) }
+
+    public static let defaultPort = 18789
+
+    public static func normalize(_ raw: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return "" }
+        let lower = text.lowercased()
+        if lower.hasPrefix("https://") { text = "wss://" + text.dropFirst(8) }
+        else if lower.hasPrefix("http://") { text = "ws://" + text.dropFirst(7) }
+        if !text.contains("://") {
+            let host = text.split(separator: "/").first.map(String.init) ?? text
+            text = (host.lowercased().hasSuffix(".ts.net") || host.lowercased().contains(".ts.net:") ? "wss://" : "ws://") + text
+        }
+        guard text.lowercased().hasPrefix("ws://"), let schemeEnd = text.range(of: "://") else { return text }
+        let rest = text[schemeEnd.upperBound...]
+        let authority = rest.split(separator: "/", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        guard !authority.isEmpty else { return text }
+        let hasPort: Bool = if authority.hasPrefix("[") {
+            authority.contains("]:")
+        } else {
+            authority.filter { $0 == ":" }.count == 1
+        }
+        guard !hasPort else { return text }
+        // A bare IPv6 address needs brackets before a port can follow it.
+        let host = authority.contains(":") && !authority.hasPrefix("[") ? "[\(authority)]" : authority
+        let path = rest.dropFirst(authority.count)
+        return "ws://\(host):\(Self.defaultPort)\(path)"
+    }
 
     /// The name the gateway is saved with: the typed one, else one derived from the address.
     public var resolvedName: String {
         let typed = self.name.trimmingCharacters(in: .whitespaces)
-        return typed.isEmpty ? Self.suggestedName(for: self.trimmedAddress) : typed
+        return typed.isEmpty ? Self.suggestedName(for: self.normalizedAddress) : typed
     }
 
     /// The profile a sign-in uses and the app saves: Chat & Approvals access, no TLS pin.
     public var profile: GatewayProfile {
-        GatewayProfile(id: self.profileId, name: self.resolvedName, url: self.trimmedAddress, authMode: self.authMode)
+        GatewayProfile(id: self.profileId, name: self.resolvedName, url: self.normalizedAddress, authMode: self.authMode)
     }
 
-    /// Why the address can't be used, or nil when it's empty or valid.
+    /// Why the address can't be used (spec copy), or nil when it's empty or valid.
     public var addressError: String? {
         guard !self.trimmedAddress.isEmpty else { return nil }
         do {
             _ = try self.profile.resolvedURL()
             return nil
+        } catch GatewayError.insecureURL {
+            return FirstRunCopy.insecureAddress
         } catch {
-            return error.localizedDescription
+            return FirstRunCopy.invalidAddress
         }
     }
 
     /// A likely problem to point out before connecting, e.g. `ws://` to a Tailscale Serve name.
     public var addressHint: String? {
-        let lower = self.trimmedAddress.lowercased()
+        let lower = self.normalizedAddress.lowercased()
         if lower.hasPrefix("ws://"), lower.contains(".ts.net") {
             return "Tailscale Serve uses HTTPS, so this is usually wss://. Use ws:// only with the tailnet IP and port."
         }
         return nil
     }
 
+    /// The reachability error to show, with the Tailscale hint when that's the chosen location.
+    public var reachabilityMessage: String? {
+        guard let error = self.reachability.error else { return nil }
+        return error == FirstRunCopy.cantReach && self.location == .tailscale ? "\(error) \(FirstRunCopy.tailscaleHint)" : error
+    }
+
     public var needsSecret: Bool { self.authMode != .none }
 
-    public var canGoBack: Bool { self.previousStep != nil }
+    /// Back: everywhere but Welcome, the embedded setup (it has its own) and Done.
+    public var canGoBack: Bool {
+        switch self.step {
+        case .welcome, .gatewaySetup, .done: false
+        default: true
+        }
+    }
 
-    /// Skip exists here: "Connect Anyway" after a failed check, "Skip Setup" on Verify, "Set Up Later".
+    /// Skip exists here: "Continue Anyway" after a failed check, "Skip to Chats" on Verify and in setup.
     public var canSkip: Bool {
         switch self.step {
         case .findGateway: self.reachability.error != nil && self.addressError == nil && !self.trimmedAddress.isEmpty
-        case .verify, .gatewaySetup: self.gatewayId != nil
+        case .verify: self.verified != nil
+        case .gatewaySetup: self.gatewayId != nil
         default: false
         }
     }
 
-    public var canCheckAddress: Bool {
-        !self.trimmedAddress.isEmpty && !self.reachability.isChecking
+    public var canCheckAddress: Bool { !self.trimmedAddress.isEmpty && !self.reachability.isChecking }
+
+    /// Worth saving to resume: moved past where it started, or typed an address.
+    public var isInProgress: Bool {
+        self.step != self.entry || (!self.trimmedAddress.isEmpty && self.trimmedAddress != FirstRunLocation.thisMacAddress)
     }
 
-    public var isInProgress: Bool { self.step != self.entry || !self.trimmedAddress.isEmpty }
-
-    private var previousStep: FirstRunStep? {
-        switch self.step {
-        case .welcome, .done: nil
-        case .haveGateway: self.entry == .welcome ? .welcome : nil
-        case .install: .haveGateway
-        case .findGateway: .haveGateway
-        case .signIn: .findGateway
-        // The gateway is saved once signed in; there's nothing to go back to.
-        case .verify, .gatewaySetup: nil
-        }
-    }
-
-    /// "home.tailnet.ts.net" → "home"; "localhost" → "This Computer"; IPs and the rest → "Gateway".
+    /// "home.tailnet.ts.net" → "Home"; loopback → "This Mac"; IPs and the rest → "Gateway".
     public static func suggestedName(for address: String) -> String {
-        var raw = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let range = raw.range(of: "://") { raw = String(raw[range.upperBound...]) }
-        let host = raw.split(separator: "/").first.map(String.init) ?? ""
-        let hostOnly = (host.split(separator: ":").first.map(String.init) ?? host).lowercased()
-        if hostOnly == "localhost" || hostOnly == "127.0.0.1" || hostOnly == "::1" { return "This Computer" }
-        let isIP = hostOnly.split(separator: ".").allSatisfy { Int($0) != nil } || hostOnly.contains(":")
-        guard !hostOnly.isEmpty, !isIP, let first = hostOnly.split(separator: ".").first, !first.isEmpty else {
-            return "Gateway"
-        }
+        guard let url = URL(string: normalize(address)), let host = url.host?.lowercased(), !host.isEmpty else { return "Gateway" }
+        if host == "localhost" || host == "127.0.0.1" || host == "::1" { return "This Mac" }
+        let isIP = host.split(separator: ".").allSatisfy { Int($0) != nil } || host.contains(":")
+        guard !isIP, let first = host.split(separator: ".").first, !first.isEmpty else { return "Gateway" }
         return first.prefix(1).uppercased() + first.dropFirst()
     }
 
@@ -341,32 +404,58 @@ public struct FirstRunState: Codable, Hashable, Sendable {
 
         case .tryDemo:
             guard self.step == .welcome || self.step == .haveGateway || self.step == .install else { return [] }
-            return self.leave(selecting: nil) + [.openDemo]
+            return [.openDemo] + self.leave(selecting: nil)
 
         case let .answerHaveGateway(yes):
             guard self.step == .haveGateway else { return [] }
-            return yes ? self.go(to: .findGateway) : self.go(to: .install)
+            return self.go(to: yes ? .findGateway : .install)
 
         case .installed:
             guard self.step == .install else { return [] }
             return self.go(to: .findGateway)
 
         case .back:
-            guard let previous = self.previousStep else { return [] }
-            return self.go(to: previous)
+            switch self.step {
+            case .welcome, .gatewaySetup, .done: return []
+            case .haveGateway: return self.go(to: .welcome)
+            case .install: return self.go(to: .haveGateway)
+            case .findGateway: return self.entry == .findGateway ? self.leave(selecting: nil) : self.go(to: .haveGateway)
+            case .signIn:
+                // Back from "Signing in…" or "Waiting for approval…" returns to the sign-in form.
+                guard !self.signInStatus.isBusy else {
+                    self.signInStatus = .idle
+                    self.pairingRequestChanged = false
+                    return [.cancelSignIn]
+                }
+                return self.go(to: .findGateway)
+            case .verify:
+                self.verified = nil
+                return self.go(to: .signIn)
+            }
 
         case .skip:
             guard self.canSkip else { return [] }
             switch self.step {
             case .findGateway:
                 return self.go(to: .signIn)
-            case .verify, .gatewaySetup:
-                self.skippedGatewaySetup = true
-                self.step = .done
-                return []
+            case .verify:
+                return self.addGateway() + self.leave(selecting: self.profileId)
+            case .gatewaySetup:
+                return self.leave(selecting: self.gatewayId)
             default:
                 return []
             }
+
+        case let .setLocation(location):
+            guard location != self.location, self.step == .findGateway else { return [] }
+            if location == .thisMac, self.trimmedAddress.isEmpty {
+                self.address = FirstRunLocation.thisMacAddress
+            } else if self.location == .thisMac, self.trimmedAddress == FirstRunLocation.thisMacAddress {
+                self.address = ""
+            }
+            self.location = location
+            self.reachability = .unknown
+            return []
 
         case let .setAddress(address):
             guard address != self.address, self.step == .findGateway else { return [] }
@@ -375,7 +464,7 @@ public struct FirstRunState: Codable, Hashable, Sendable {
             return []
 
         case let .setName(name):
-            guard name != self.name, self.step == .findGateway || self.step == .signIn else { return [] }
+            guard name != self.name, self.step == .verify || self.step == .findGateway else { return [] }
             self.name = name
             self.nameEdited = !name.trimmingCharacters(in: .whitespaces).isEmpty
             return []
@@ -399,11 +488,11 @@ public struct FirstRunState: Codable, Hashable, Sendable {
             return self.checkAddress()
 
         case .checkAddress:
-            guard self.step == .findGateway else { return [] }
+            guard self.step == .findGateway, !self.reachability.isChecking else { return [] }
             return self.checkAddress()
 
         case let .reachabilityResult(address, result):
-            guard self.step == .findGateway, address == self.trimmedAddress, self.reachability.isChecking else { return [] }
+            guard self.step == .findGateway, address == self.normalizedAddress, self.reachability.isChecking else { return [] }
             self.reachability = result
             return result == .reachable ? self.go(to: .signIn) : []
 
@@ -414,41 +503,55 @@ public struct FirstRunState: Codable, Hashable, Sendable {
                 return []
             }
             if self.needsSecret, !hasSecret {
-                self.signInStatus = .failed(self.authMode == .token ? "Enter the Gateway token." : "Enter the Gateway password.")
+                self.signInStatus = .failed(self.authMode == .token ? FirstRunCopy.tokenMissing : FirstRunCopy.passwordNeeded)
                 return []
             }
             self.signInStatus = .connecting
+            self.pairingRequestChanged = false
             return [.signIn(self.profile)]
 
         case let .signInUpdate(update):
             guard self.step == .signIn, self.signInStatus.isBusy else { return [] }
             switch update {
             case .connecting:
+                // Retrying while waiting for approval: keep showing the waiting screen, no flashing.
+                if case .awaitingPairing = self.signInStatus { return [] }
                 self.signInStatus = .connecting
                 return []
             case let .awaitingPairing(requestId, deviceId):
+                if case let .awaitingPairing(previous?, _) = self.signInStatus, let requestId, requestId != previous {
+                    self.pairingRequestChanged = true
+                }
                 self.signInStatus = .awaitingPairing(requestId: requestId, deviceId: deviceId)
                 return []
             case let .failed(message):
-                self.signInStatus = .failed(message)
+                let wasPairing = if case .awaitingPairing = self.signInStatus { true } else { false }
+                self.signInStatus = .failed(FirstRunCopy.signInError(message, authMode: self.authMode, whilePairing: wasPairing))
+                return [.cancelSignIn]
+            case let .dropped(reason):
+                self.signInStatus = .failed(FirstRunCopy.signInDropped(reason))
                 return [.cancelSignIn]
             case let .connected(verified):
                 self.verified = verified
                 self.signInStatus = .idle
-                self.gatewayId = self.profileId
+                self.pairingRequestChanged = false
+                if !self.nameEdited, self.name.trimmingCharacters(in: .whitespaces).isEmpty {
+                    self.name = Self.suggestedName(for: self.normalizedAddress)
+                }
                 self.step = .verify
-                return [.cancelSignIn, .addGateway(self.profile)]
+                return [.cancelSignIn]
             }
 
         case .continueToSetup:
-            guard self.step == .verify, let gatewayId = self.gatewayId else { return [] }
+            guard self.step == .verify, self.verified != nil else { return [] }
+            let effects = self.addGateway()
             self.step = .gatewaySetup
-            return [.beginGatewaySetup(gatewayId: gatewayId)]
+            return effects + [.beginGatewaySetup(gatewayId: self.profileId)]
 
         case .gatewaySetupEnded:
+            // Straight to the chat list (spec 2.9: the Done screen is optional).
             guard self.step == .gatewaySetup else { return [] }
-            self.step = .done
-            return []
+            return self.leave(selecting: self.gatewayId)
 
         case .finish:
             guard self.step == .done else { return [] }
@@ -459,37 +562,43 @@ public struct FirstRunState: Codable, Hashable, Sendable {
         }
     }
 
+    private mutating func addGateway() -> [FirstRunEffect] {
+        guard self.gatewayId == nil else { return [] }
+        self.gatewayId = self.profileId
+        return [.addGateway(self.profile)]
+    }
+
     /// Effects for the step being entered or left: discovery runs only on Find, sign-in only on Sign In.
     private mutating func go(to next: FirstRunStep) -> [FirstRunEffect] {
         let previous = self.step
         guard next != previous else { return [] }
         var effects: [FirstRunEffect] = []
-        if previous == .signIn, self.signInStatus.isBusy { effects.append(.cancelSignIn) }
-        if previous == .signIn { self.signInStatus = .idle }
+        if previous == .signIn {
+            if self.signInStatus.isBusy { effects.append(.cancelSignIn) }
+            self.signInStatus = .idle
+            self.pairingRequestChanged = false
+        }
         if previous == .findGateway { effects.append(.stopDiscovery) }
         self.step = next
         if next == .findGateway {
-            if self.reachability.isChecking { self.reachability = .unknown }
+            if self.reachability.isChecking || self.reachability == .reachable { self.reachability = .unknown }
             effects.append(.startDiscovery)
         }
         return effects
     }
 
     private mutating func checkAddress() -> [FirstRunEffect] {
-        let address = self.trimmedAddress
-        guard !address.isEmpty else {
-            self.reachability = .unreachable("Enter your Gateway's address.")
+        guard !self.trimmedAddress.isEmpty else {
+            self.reachability = .unreachable(FirstRunCopy.addressMissing)
             return []
         }
-        let url: URL
-        do {
-            url = try self.profile.resolvedURL()
-        } catch {
-            self.reachability = .unreachable(error.localizedDescription)
+        if let error = self.addressError {
+            self.reachability = .unreachable(error)
             return []
         }
+        guard let url = try? self.profile.resolvedURL() else { return [] }
         self.reachability = .checking
-        return [.checkReachability(address: address, url: url)]
+        return [.checkReachability(address: self.normalizedAddress, url: url)]
     }
 
     private mutating func leave(selecting gatewayId: UUID?) -> [FirstRunEffect] {
@@ -515,8 +624,9 @@ public enum FirstRunStore {
     }
 
     public static func save(_ state: FirstRunState, to defaults: UserDefaults) {
-        guard let data = try? JSONEncoder().encode(state) else { return }
-        guard defaults.data(forKey: self.key) != data else { return }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        guard let data = try? encoder.encode(state), defaults.data(forKey: self.key) != data else { return }
         defaults.set(data, forKey: self.key)
     }
 

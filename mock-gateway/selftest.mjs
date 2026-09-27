@@ -324,9 +324,10 @@ async function firstRunSelftest() {
     const url = `ws://127.0.0.1:${manual.address().port}`;
     const admin = makeDevice();
     manual.state.pairedDevices.set(admin.id, { deviceToken: 'dt_admin', pairedAt: Date.now(), scopes: new Set(['operator.admin']) });
-    const approver = await connectClient(url, admin, 'dt_admin', true, ['operator.read', 'operator.pairing']);
+    const approver = await connectClient(url, admin, 'dt_admin', true, ['operator.read', 'operator.admin']);
     const reader = await connectClient(url, admin, 'dt_admin', true, ['operator.read']);
     assert.ok(approver.hello.features.methods.includes('device.pair.approve'));
+    assert.equal((await approver.send('device.pair.list')).pending.length, 2, 'seeded requests');
     assert.ok(approver.hello.features.events.includes('device.pair.resolved'));
     assert.equal((await reader.call('device.pair.list')).error.details.missingScope, 'operator.pairing');
 
@@ -346,8 +347,9 @@ async function firstRunSelftest() {
     const again = await rawConnect(url, device, { token: 'dev-token' });
     assert.equal(again.connectRes.error.details.requestId, requestId, 'a retry with the same scopes reuses the request');
     const listed = await approver.send('device.pair.list');
-    assert.deepEqual(listed.pending.map((p) => p.requestId), [requestId]);
-    assert.equal(listed.pending[0].displayName, 'Pincer Selftest');
+    const mine = listed.pending.filter((p) => p.deviceId === device.id);
+    assert.deepEqual(mine.map((p) => p.requestId), [requestId]);
+    assert.equal(mine[0].displayName, 'Pincer Selftest');
     const changed = await rawConnect(url, device, { token: 'dev-token' }, [...BASE_SCOPES, 'operator.admin']);
     const supersededId = changed.connectRes.error.details.requestId;
     assert.notEqual(supersededId, requestId, 'changed scopes supersede the request');
