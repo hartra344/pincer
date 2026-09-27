@@ -10,7 +10,9 @@ struct PincerMenuBar: Scene {
     @AppStorage(MenuBarSettings.enabledKey) private var enabled = false
 
     var body: some Scene {
-        MenuBarExtra(isInserted: self.$enabled) {
+        // Not `self.$enabled`: the extra writes the binding back on every update, and an
+        // unconditional @AppStorage write re-triggers that update forever (#119).
+        MenuBarExtra(isInserted: Binding(get: { self.enabled }, set: { MenuBarSettings().setEnabled($0) })) {
             MenuBarContent(app: self.app)
         } label: {
             MenuBarLabel(app: self.app)
@@ -22,11 +24,12 @@ struct PincerMenuBar: Scene {
 /// The template icon, with the unread plus needs-you count beside it.
 struct MenuBarLabel: View {
     let app: AppModel
+    var clock = MenuBarClock.shared
 
     private static let hasAlertSymbol = NSImage(systemSymbolName: MenuBarInbox.alertSymbol, accessibilityDescription: nil) != nil
 
     var body: some View {
-        let inbox = MenuBarInbox(app: self.app)
+        let inbox = MenuBarInbox(app: self.app, now: self.clock.now)
         HStack(spacing: 3) {
             Image(systemName: inbox.needsYouCount > 0 && Self.hasAlertSymbol ? MenuBarInbox.alertSymbol : MenuBarInbox.symbol)
             if let badge = inbox.badgeText {
@@ -41,11 +44,12 @@ struct MenuBarLabel: View {
 /// The menu. Everything it lists comes from `MenuBarInbox`; rows only open things.
 struct MenuBarContent: View {
     let app: AppModel
+    var clock = MenuBarClock.shared
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        let inbox = MenuBarInbox(app: self.app)
+        let inbox = MenuBarInbox(app: self.app, now: self.clock.now)
         Button(QuickCaptureController.shared.menuTitle) { QuickCaptureController.shared.show() }
         Button("Open Pincer") { self.showMainWindow() }
         Divider()
@@ -95,7 +99,7 @@ struct MenuBarContent: View {
 
     /// Selects the chat first, so a window created by `showMainWindow` starts on it.
     private func open(_ target: Notifier.Target) {
-        self.app.open(target)
+        self.app.open(self.app.route(for: target), verifySession: false)
         self.showMainWindow()
     }
 

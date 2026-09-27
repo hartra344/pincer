@@ -7,5 +7,23 @@
 	<string>$(PINCER_APP_GROUP)</string>
 	<key>PincerKeychainGroup</key>
 	<string>$(AppIdentifierPrefix)chat.pincer.shared</string>
+	<!-- pincer://open?gateway=…&session=… links and Handoff of the visible chat (PincerRoute). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>chat.pincer.open</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>pincer</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>chat.pincer.chat</string>
+	</array>
 </dict>
 </plist>

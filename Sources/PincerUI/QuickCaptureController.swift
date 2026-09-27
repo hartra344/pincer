@@ -175,6 +175,8 @@ final class QuickCaptureController: NSObject, NSWindowDelegate {
         guard !self.launched, let app else { return }
         self.launched = true
         app.start()
+        // Drives the menu bar item's `now` (#119); only the menu bar views read it.
+        MenuBarClock.shared.start()
         GlobalHotKey.shared.onPress = { [weak self] in self?.toggle() }
         self.applyRegistration()
     }

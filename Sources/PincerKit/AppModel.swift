@@ -10,6 +10,10 @@ public final class AppModel {
         didSet {
             // Shared so the Share extension starts on the same gateway.
             self.sharedDefaults.set(self.selectedGatewayId?.uuidString, forKey: Self.selectedGatewayKey)
+            // A pending demo setup offer is only for while the demo stays selected.
+            for gateway in self.gateways where gateway.profile.isDemo && gateway.id != self.selectedGatewayId {
+                gateway.setup.withdrawOffer()
+            }
             self.updateVisible()
         }
     }
@@ -18,7 +22,13 @@ public final class AppModel {
     /// Counts `open(_:)` calls (from notifications), so the UI can bring the chat on screen.
     public private(set) var openRequests = 0
     /// Find in Chat to open with a chat, e.g. after picking a message search result.
-    public private(set) var findRequest: FindRequest?
+    public internal(set) var findRequest: FindRequest?
+    /// A message to scroll to when its chat opens, e.g. from a `pincer://` link's `message`.
+    public internal(set) var messageJump: MessageJump?
+    /// A passing note about a link that couldn't be followed (unknown gateway or chat).
+    public var routeNotice: RouteNotice?
+    /// Counts links to gateways that aren't saved, so a compact layout can show the gateway list.
+    public internal(set) var gatewayListRequests = 0
     /// Chats visited, for Back/Forward and the palette's recent chats.
     public private(set) var history = ChatHistory<Notifier.Target>()
     public var appIsActive = true {
@@ -61,7 +71,10 @@ public final class AppModel {
         let saved = (sharedDefaults.string(forKey: Self.selectedGatewayKey)
             ?? localDefaults.string(forKey: Self.selectedGatewayKey)).flatMap(UUID.init(uuidString:))
         self.selectedGatewayId = self.gateways.first { $0.id == saved }?.id ?? self.gateways.first?.id
-        self.notifier.onOpen = { [weak self] target in self?.open(target) }
+        self.notifier.onOpen = { [weak self] target in
+            guard let self else { return }
+            self.open(self.route(for: target), verifySession: false)
+        }
         self.notifier.approvalResolver = { [weak self] gatewayId, approvalId, decision in
             await self?.respondToApproval(gatewayId: gatewayId, approvalId: approvalId, decision: decision) ?? .unknownGateway
         }
@@ -133,6 +146,12 @@ public final class AppModel {
         {
             self.findRequest = nil
         }
+        if let jump = self.messageJump,
+           jump.target.gatewayId != gateway.id
+           || gateway.resolveSessionKey(jump.target.sessionKey) != gateway.selectedKey
+        {
+            self.messageJump = nil
+        }
         self.selectedGatewayId = gateway.id
         self.updateVisible()
         self.openRequests += 1
@@ -194,11 +213,13 @@ public final class AppModel {
     }
 
     /// Selects the built-in demo, adding it the first time.
+    /// Offers its setup wizard on this connection (now, if it's already connected).
     public func openDemo() {
         if let existing = self.gateways.first(where: { $0.profile.isDemo }) {
             self.selectedGatewayId = existing.id
+            existing.setup.requestOffer(connected: existing.hasConnected && existing.state.isConnected)
         } else {
-            self.add(.demo(), secret: nil)
+            self.add(.demo(), secret: nil).setup.requestOffer(connected: false)
         }
     }
 

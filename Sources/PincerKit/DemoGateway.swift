@@ -30,7 +30,7 @@ actor DemoGateway {
          "unavailableReason": "missing-auth"],
     ]
     private static let methods = [
-        "agents.list", "agent.identity.get", "sessions.subscribe", "sessions.list", "sessions.groups.list", "sessions.groups.put",
+        "agents.list", "sessions.subscribe", "sessions.list", "sessions.groups.list", "sessions.groups.put",
         "sessions.groups.rename", "sessions.groups.delete", "sessions.messages.subscribe",
         "sessions.messages.unsubscribe", "chat.history", "chat.send", "chat.abort", "sessions.patch", "models.list",
         "sessions.create", "artifacts.download", "exec.approval.list", "exec.approval.resolve", "users.prefs.get",
@@ -38,11 +38,12 @@ actor DemoGateway {
         "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
-    ] + DemoUsage.methods
+    ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
-    private let agents: [JSONValue] = [
+    /// The roster (`agents.list`); `agents.create/update/delete` edit it (DemoGateway+Agents.swift).
+    var agents: [JSONValue] = [
         ["id": "main", "name": "Claw", "identity": ["name": "Claw", "emoji": "🦞"]],
         ["id": "research", "name": "Scout", "identity": ["name": "Scout", "emoji": "🔭"]],
         ["id": "coder", "name": "Forge", "identity": ["name": "Forge", "emoji": "🛠️"]],
@@ -60,7 +61,13 @@ actor DemoGateway {
     private var logs = DemoGatewayLogs()
     /// The exec approvals file (`exec.approvals.get/set`). The demo keeps no socket token.
     var execApprovals = DemoGateway.seedExecApprovals()
+    /// WhatsApp link state and the running QR login (`DemoGateway+Setup.swift`).
+    var setup = DemoSetupState()
+    var agentIds: [String] { self.agents.compactMap { $0["id"]?.text } }
+    func hasSession(_ key: String) -> Bool { self.sessions[key] != nil }
     var execApprovalsExists = true
+    /// Agent workspace files by workspace path (`agents.files.*`).
+    var agentWorkspaces = DemoGateway.seedAgentWorkspaces()
     /// `ask_user` prompts by id, in the order they were asked.
     private var questions: [String: JSONValue] = [:]
     private var questionOrder: [String] = []
@@ -181,12 +188,11 @@ actor DemoGateway {
         ]
     }
 
-    func handle(_ method: String, _ params: JSONValue) throws -> JSONValue {
+    func handle(_ method: String, _ params: JSONValue) async throws -> JSONValue {
+        if let result = try self.handleAgents(method, params) { return result }
         switch method {
         case "agents.list":
             return ["defaultId": "main", "mainKey": "main", "scope": "per-sender", "agents": .array(self.agents)]
-        case "agent.identity.get":
-            return try self.identity(params)
         case "sessions.subscribe":
             self.sessionsSubscribed = true
             return ["subscribed": true, "list": self.sessionList(params)]
@@ -307,6 +313,8 @@ actor DemoGateway {
             return .array(self.presence())
         case "gateway.restart.request":
             return self.requestRestart(params)
+        case _ where Self.setupMethods.contains(method) || Self.webLoginMethods.contains(method):
+            return try await self.handleSetup(method, params) ?? .null
         default:
             throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "The demo doesn't support \(method).", details: nil)
         }
@@ -397,7 +405,8 @@ actor DemoGateway {
     // MARK: Health and restart
 
     /// Discord is fine; Telegram lost its connection until a restart, so the demo starts out degraded.
-    private func health() -> JSONValue {
+    /// WhatsApp is enabled but not linked yet (not configured, so not a problem) for the setup wizard.
+    func health() -> JSONValue {
         let now = Self.now()
         let nowMs = now.double ?? 0
         return [
@@ -418,9 +427,10 @@ actor DemoGateway {
                     "lastConnectedAt": .number(nowMs - 25 * 60_000), "lifecycle": "recovering",
                     "lastError": "Telegram API timed out (getUpdates). Retrying.",
                 ],
+                "whatsapp": self.whatsappAccount(),
             ],
-            "channelOrder": ["discord", "telegram"],
-            "channelLabels": ["discord": "Discord", "telegram": "Telegram"],
+            "channelOrder": ["discord", "telegram", "whatsapp"],
+            "channelLabels": ["discord": "Discord", "telegram": "Telegram", "whatsapp": "WhatsApp"],
             "heartbeatSeconds": 1800,
             "agents": .array(self.agents.map { agent in
                 let id = agent["id"] ?? "main"
@@ -430,7 +440,7 @@ actor DemoGateway {
                 ]
             }),
             "sessions": ["count": JSONValue(self.sessions.count), "recent": []],
-            "plugins": ["loaded": ["discord", "telegram", "memory-core"], "errors": [], "unavailable": []],
+            "plugins": ["loaded": ["discord", "telegram", "whatsapp", "memory-core"], "errors": [], "unavailable": []],
             "deliveryQueues": ["failed": []],
             "contextEngines": ["quarantined": []],
             "modelPricing": ["state": "ok"],
@@ -1337,6 +1347,10 @@ actor DemoGateway {
 
     // MARK: Events
 
+    func emitHealth() {
+        self.emit("health", self.health())
+    }
+
     private func emit(_ name: String, _ payload: JSONValue) {
         self.eventSeq += 1
         self.sink?(GatewayEvent(name: name, payload: payload, seq: self.eventSeq))
@@ -1384,6 +1398,16 @@ actor DemoGateway {
     private func touch(_ row: inout Row) {
         row["updatedAt"] = Self.now()
         row["lastActivityAt"] = Self.now()
+    }
+
+    /// Drops a deleted agent's chats, telling subscribers like the Gateway does.
+    func removeSessions(ofAgent agentId: String) {
+        let keys = self.sessions.filter { $0.value["agentId"]?.string == agentId || $0.key.hasPrefix("agent:\(agentId):") }.keys
+        for key in keys {
+            self.sessions[key] = nil
+            self.transcripts[key] = nil
+            if self.sessionsSubscribed { self.emit("sessions.changed", ["sessionKey": .string(key), "reason": "delete"]) }
+        }
     }
 
     private func sessionChanged(_ key: String, reason: String) {
@@ -1496,26 +1520,6 @@ actor DemoGateway {
             ? self.agentName(self.sessions[key]?["agentId"]?.string ?? "main") : GatewayConnection.displayName
         return ["replyToId": .string(targetId),
                 "replyToPreview": ["text": .string(String(text.prefix(2000))), "senderLabel": .string(sender)]]
-    }
-
-    /// Like the Gateway for an emoji-only identity: `agentId`, else the session key's agent, else the default,
-    /// with the emoji projected as `avatar`.
-    private func identity(_ params: JSONValue) throws -> JSONValue {
-        let fromKey = params["sessionKey"]?.string.flatMap { key -> String? in
-            let parts = key.split(separator: ":")
-            return parts.count > 2 && parts[0] == "agent" ? String(parts[1]) : nil
-        }
-        let requested = params["agentId"]?.string?.trimmingCharacters(in: .whitespaces)
-        let agentId = requested.flatMap { $0.isEmpty ? nil : $0 } ?? fromKey ?? "main"
-        guard let agent = self.agents.first(where: { $0["id"]?.string == agentId }) else {
-            throw GatewayError.rpc(code: "INVALID_REQUEST", message: "unknown agent id \"\(agentId)\"", details: nil)
-        }
-        let name = agent["identity"]?["name"]?.string
-        let emoji = agent["identity"]?["emoji"]?.string
-        var result: Row = ["agentId": .string(agentId), "name": .string(name ?? "Assistant"),
-                           "nameSource": .string(name == nil ? "default" : "agent"), "avatar": .string(emoji ?? "A")]
-        if let emoji { result["emoji"] = .string(emoji) }
-        return .object(result)
     }
 
     private func agentName(_ id: String) -> String {

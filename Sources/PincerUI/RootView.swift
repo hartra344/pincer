@@ -16,6 +16,7 @@ public struct PincerScene: Scene {
     public var body: some Scene {
         WindowGroup("Pincer", id: "main") {
             RootView()
+                .deepLinkRouting()
                 .environment(self.app)
                 .themed()
                 .task {
@@ -63,9 +64,7 @@ public struct PincerScene: Scene {
                 .themed()
         }
 
-        // The menu bar item is disabled for now: its MenuBarExtra scene sends the SwiftUI
-        // app graph into an update loop at launch (main thread pinned, app frozen).
-        // PincerMenuBar(app: self.app)
+        PincerMenuBar(app: self.app)
         #endif
     }
 }
@@ -130,6 +129,8 @@ struct RootView: View {
         .focusedSceneValue(\.commandPalette, self.showsCommandPalette)
         .focusedSceneValue(\.searchMessages, self.app.selectedGateway == nil ? nil : self.searchMessagesAction)
         .sheet(isPresented: self.$addingGateway) { ConnectionSheet() }
+        .modifier(SetupWizardPresenter())
+        .modifier(TipsOverlay())
         #if os(iOS)
         .sheet(isPresented: self.$showingAppSettings) {
             NavigationStack {
@@ -150,7 +151,7 @@ struct RootView: View {
         .onChange(of: self.scenePhase, initial: true) { _, phase in
             self.app.appIsActive = phase == .active
         }
-        .onChange(of: self.app.openRequests) { self.compactColumn = .detail }
+        .modifier(CompactColumnRouting(column: self.$compactColumn))
         .background { UnreadBadgeSync() }
         .onAppear {
             if self.app.gateways.isEmpty { self.addingGateway = true }
@@ -192,6 +193,19 @@ struct RootView: View {
             self.automationsRequest = AutomationsRequest(id: gateway.id)
             #endif
         }
+    }
+}
+
+/// iPhone: opening a chat shows the detail column; a link to an unknown gateway shows the list.
+/// Its own modifier to keep `RootView.body` within the type checker's limits.
+private struct CompactColumnRouting: ViewModifier {
+    @Binding var column: NavigationSplitViewColumn
+    @Environment(AppModel.self) private var app
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: self.app.openRequests) { self.column = .detail }
+            .onChange(of: self.app.gatewayListRequests) { self.column = .sidebar }
     }
 }
 
@@ -277,7 +291,7 @@ struct SettingsView: View {
         #if os(macOS)
         TabView {
             Tab("General", systemImage: "gearshape") {
-                SettingsForm(sections: [.you, .launch, .quickCapture, .device])
+                SettingsForm(sections: [.you, .launch, .quickCapture, .menuBar, .device, .tips])
             }
             Tab("Appearance", systemImage: "paintpalette") {
                 SettingsForm(sections: [.appearance, .avatars, .colors], scrolls: true)
@@ -308,7 +322,7 @@ enum ReactionFeature {
 
 private struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, sidebar, notifications, device
+        case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, sidebar, notifications, device, tips
 
         /// Sections that exist on this platform.
         static var available: [Self] {
@@ -370,6 +384,8 @@ private struct SettingsForm: View {
             } footer: {
                 Text("Your messages show under this name, whichever channel they came from.")
             }
+        case .tips:
+            TipsSettingsSection()
         case .launch:
             #if os(macOS)
             LaunchAtLoginSettingsSection()

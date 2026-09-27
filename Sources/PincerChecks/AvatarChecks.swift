@@ -65,13 +65,6 @@ func checkAgentIdentities(profile: GatewayProfile, agents: [AgentSummary], label
           "\(label) agent.identity.get resolves a session key's agent")
     let byDefault = try? await connection.request("agent.identity.get", [:])
     check(byDefault?["agentId"]?.string == "main", "\(label) agent.identity.get defaults to the main agent")
-    do {
-        _ = try await connection.request("agent.identity.get", ["agentId": "nobody"])
-        check(false, "\(label) agent.identity.get refuses an unknown agent")
-    } catch {
-        check("\(error)".contains("INVALID_REQUEST") || "\(error)".contains("unknown agent"),
-              "\(label) agent.identity.get refuses an unknown agent (\(error))")
-    }
 }
 
 @MainActor

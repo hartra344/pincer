@@ -3,6 +3,7 @@ import zlib from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
+import { AGENT_MANAGEMENT_METHODS, agentManagementDisabled, createAgentWorkspaces, handleAgentsRequest } from './agents.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
 import { LOGS_METHODS, createLogsState, handleLogsRequest, logsDisabled, noteApprovalForLogs, noteChatForLogs, stopLogs } from './logs.mjs';
@@ -10,12 +11,14 @@ import { EXEC_APPROVALS_METHODS, createExecApprovalsState, execApprovalsDisabled
 import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, createChannelPairingState, handleChannelPairingRequest } from './pairing.mjs';
 import { HEALTH_EVENTS, HEALTH_METHODS, addFailedDelivery, broadcastPresence, cancelPendingRestart, createHealthState, handleHealthRequest, healthDisabled, helloSnapshot, isRestarting } from './health.mjs';
+import { SETUP_METHODS, createSetupState, handleSetupRequest } from './setup.mjs';
+import { healthSummary } from './health.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const METHODS = [
   'agents.list',
-  'agent.identity.get',
+  ...AGENT_MANAGEMENT_METHODS,
   'sessions.subscribe',
   'sessions.list',
   'sessions.groups.list',
@@ -51,6 +54,7 @@ const METHODS = [
   ...LOGS_METHODS,
   ...CHANNEL_PAIRING_METHODS,
   ...HEALTH_METHODS,
+  ...SETUP_METHODS,
 ];
 const EVENTS = [
   'connect.challenge',
@@ -291,8 +295,9 @@ function createSeedState() {
   const agents = new Map([
     ['main', { id: 'main', name: 'Claw', identity: { name: 'Claw', emoji: '🦞' } }],
     ['research', { id: 'research', name: 'Scout', identity: { name: 'Scout', emoji: '🔭' } }],
-    ['coder', { id: 'coder', name: 'Forge', identity: { name: 'Forge', emoji: '🛠️' } }],
+    ['coder', { id: 'coder', name: 'Forge', identity: { name: 'Forge', emoji: '🛠️' }, model: 'anthropic/claude-sonnet-5' }],
   ]);
+  const agentWorkspaces = createAgentWorkspaces(agents, base);
   const sessions = new Map();
   const transcripts = new Map();
   const artifacts = new Map([
@@ -459,6 +464,7 @@ function createSeedState() {
 
   return {
     agents,
+    agentWorkspaces,
     sessions,
     transcripts,
     artifacts,
@@ -484,6 +490,7 @@ function createSeedState() {
     execApprovalsState: createExecApprovalsState(base),
     channelPairingState: createChannelPairingState(base),
     healthState: createHealthState(base),
+    setupState: createSetupState(),
   };
 }
 
@@ -621,6 +628,7 @@ function advertisedMethods() {
   const hidden = [
     ...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []),
     ...(execApprovalsDisabled() ? EXEC_APPROVALS_METHODS : []),
+    ...(agentManagementDisabled() ? AGENT_MANAGEMENT_METHODS : []),
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
     ...(healthDisabled() ? HEALTH_METHODS : []),
     ...(usageDisabled() ? USAGE_METHODS : []),
@@ -1062,8 +1070,10 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleLogsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleExecApprovalsRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleAgentsRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
   if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleSetupRequest(state, conn, msg, { sendRes, sendErr, broadcast, healthSummary })) return;
   if (handleHealthRequest(state, conn, msg, { sendRes, sendErr, broadcast, abortRun: finishRunAbort })) return;
   switch (method) {
     case 'progressCard.get': {
@@ -1088,31 +1098,6 @@ function handleAuthedRequest(state, conn, msg) {
         return;
       }
       sendRes(conn, id, { card: clone(putProgressCard(state, key, { markdown: params.markdown, steps: params.plan })) });
-      return;
-    }
-    case 'agents.list': {
-      sendRes(conn, id, {
-        defaultId: 'main',
-        mainKey: 'main',
-        scope: 'per-sender',
-        agents: [...state.agents.values()].map(clone),
-      });
-      break;
-    }
-    case 'agent.identity.get': {
-      // Upstream resolves `agentId`, else the session key's agent, else the default agent.
-      const fromKey = /^agent:([^:]+):/.exec(String(params.sessionKey ?? ''))?.[1];
-      const agentId = String(params.agentId ?? '').trim() || fromKey || 'main';
-      const agent = state.agents.get(agentId);
-      if (!agent) return sendErr(conn, id, 'INVALID_REQUEST', `unknown agent id "${agentId}"`);
-      const { name, emoji } = agent.identity ?? {};
-      sendRes(conn, id, {
-        agentId,
-        ...(name ? { name, nameSource: 'agent' } : { name: 'Assistant', nameSource: 'default' }),
-        ...(emoji ? { emoji } : {}),
-        // Emoji-only identities project the emoji as the avatar (no image resolution); default is "A".
-        avatar: emoji ?? 'A',
-      });
       return;
     }
     case 'sessions.subscribe': {

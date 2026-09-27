@@ -38,6 +38,14 @@ The gateway's command policy (which commands agents may run, and their allowlist
 - **No lost updates:** every save carries the hash of the version it was based on (`baseHash`). If the file changed on the gateway in the meantime, the gateway refuses the save, and Pincer loads the latest version instead of overwriting it.
 - **The socket token is never sent:** the gateway leaves the approval socket's token out of what it sends, and Pincer never includes `socket.token` in a save. The gateway keeps its own.
 
+## Agents and workspace files
+
+Viewing agents and reading their workspace files (`agents.list`, `agent.identity.get`, `agents.files.list`, `agents.files.get`) needs only `operator.read`. Creating, editing and deleting agents (`agents.create`, `agents.update`, `agents.delete`) and saving workspace files (`agents.files.set`) need `operator.admin`, so without **Full Management** these pages are read-only. See [Agents & workspace files](../../guides/agents/).
+
+- **No lost updates:** every file save carries the hash of the version it was based on (`expectedHash`), or `expectedMissing` when creating a file. If the file changed on the gateway in the meantime, the gateway refuses the save and Pincer keeps your edits until you choose to reload or overwrite.
+- **Deleting is explicit:** the gateway would move an agent's workspace, sessions and other data to the Trash unless told otherwise, so Pincer always sends `deleteFiles`, and sets it only when you choose **Delete and Move Files to Trash**. **Delete Agent** keeps them on the gateway host.
+- **Only bootstrap files:** the gateway limits reads and writes to its own list of bootstrap files (such as `AGENTS.md` and `SOUL.md`), each up to 2 MB, inside the agent's workspace. Pincer can't read or write other files there, and checks the size before sending.
+
 ## Device identity
 
 Each install creates its own **Ed25519 device key**, stored in the Keychain and marked *this device only*, so it never syncs to other devices or backups. The gateway must approve each device once.
@@ -89,6 +97,16 @@ To turn the cache off, set `PINCER_CACHE_DIR=off`. This turns off the search ind
 [Gateway Logs](../../guides/gateway-logs/) keeps the lines it fetches (`logs.tail`) in memory only, up to the last 2,000 lines or 8 MB. They're never cached on disk or written to Pincer's own logs, and `PINCER_REQUEST_LOG` leaves these requests out.
 
 The gateway redacts tokens and other secrets before it sends log lines; Pincer doesn't add redaction of its own. Lines can still contain hostnames, file paths and message content, so **Export…** reminds you to review a file before sharing it.
+
+## Deep links and Handoff
+
+[`pincer://` links and Handoff](../../guides/deep-links-and-handoff/) only **navigate**:
+
+- Opening a link or a Handoff activity selects a gateway, opens a chat and can scroll to a message. It never sends a message, fills in the composer, answers an approval or pairing request, changes settings, or adds or edits a gateway. Parameters other than `gateway`, `session` and `message` are ignored.
+- Links carry only the gateway ID, the gateway's URL, the session key and an optional message ID. Handoff carries the same, minus the message ID. They never carry a token, password or message text, and any user name or password in the gateway URL is removed. The URL lets another of your devices find the same gateway.
+- **Links include your gateway's address**, and session keys can reveal a chat's channel, such as a Discord channel ID. If your gateway host is private, don't share links publicly.
+- Handoff activities aren't indexed by Spotlight and have no web URL, so they only reach your own devices signed in to the same Apple Account.
+- Notices for a missing gateway, chat or message use fixed text. Pincer doesn't display the link's contents.
 
 ## Shortcuts and Siri
 

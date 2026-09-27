@@ -752,7 +752,7 @@ public final class GatewayHealthModel {
     public typealias Request = @MainActor (_ method: String, _ params: JSONValue) async throws -> JSONValue
 
     @ObservationIgnored private let request: Request
-    @ObservationIgnored private let hello: @MainActor () -> GatewayHello?
+    @ObservationIgnored var hello: @MainActor () -> GatewayHello?
     @ObservationIgnored private var scopesOverride: (@MainActor () -> [String])?
     @ObservationIgnored private var methodsOverride: (@MainActor () -> Set<String>?)?
     @ObservationIgnored private var restartTimer: Task<Void, Never>?
@@ -843,10 +843,12 @@ public final class GatewayHealthModel {
         self.setDismissals([id: nil])
     }
 
+    /// Applies and reports only the changes that alter `dismissals`; nothing happens when none do.
     private func setDismissals(_ changes: [String: String?]) {
-        guard !changes.isEmpty else { return }
-        for (id, value) in changes { self.dismissals[id] = value }
-        self.onDismissalsChanged?(changes)
+        let effective = changes.filter { self.dismissals[$0.key] != $0.value }
+        guard !effective.isEmpty else { return }
+        for (id, value) in effective { self.dismissals[id] = value }
+        self.onDismissalsChanged?(effective)
     }
 
     /// A fresh result for `source` came in: forget until-changed dismissals it no longer reports.

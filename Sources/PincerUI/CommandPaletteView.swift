@@ -57,7 +57,7 @@ struct CommandPaletteView: View {
 
     private enum Command: String {
         case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, usage, sessionUsage,
-             gatewayLogs
+             gatewayLogs, setupGateway
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -404,6 +404,7 @@ struct CommandPaletteView: View {
                  enabled: self.app.totalUnread > 0),
             item(.appSettings, "Open Settings…", "gearshape", keywords: ["preferences"], shortcut: "⌘,"),
         ]
+        if let setup = CommandPalette.setupGatewayItem(gateway: self.gateway) { items.append(setup) }
         if self.gateway != nil {
             items += [
                 item(.gatewaySettings, "Gateway Settings…", "server.rack", keywords: ["config"], shortcut: "⇧⌘,"),
@@ -495,7 +496,7 @@ struct CommandPaletteView: View {
         switch item.action {
         case let .openChat(target):
             self.close()
-            self.app.open(target)
+            self.app.open(self.app.route(for: target), verifySession: false)
         case let .newChat(gatewayId, agentId):
             self.close()
             guard let gateway = self.app.gateways.first(where: { $0.id == gatewayId }) else { return }
@@ -518,10 +519,10 @@ struct CommandPaletteView: View {
             self.show(.messages, query: query)
         case let .openMessage(target, query, match):
             self.close()
-            self.app.open(target, find: query, match: match)
+            self.app.open(self.app.route(for: target), find: query, match: match)
         case let .findInChat(target, query):
             self.close()
-            self.app.open(target, find: query, match: nil)
+            self.app.open(self.app.route(for: target), find: query, match: nil)
         }
     }
 
@@ -565,6 +566,8 @@ struct CommandPaletteView: View {
             if let gateway { self.openGatewaySettings(gateway, at: .usage) }
         case .sessionUsage:
             if let gateway, let row { self.openGatewaySettings.sessionUsage(gateway, key: row.key, agentId: row.agentId) }
+        case .setupGateway:
+            gateway?.setup.present()
         }
     }
 }

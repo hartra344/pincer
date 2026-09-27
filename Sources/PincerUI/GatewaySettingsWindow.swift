@@ -65,13 +65,18 @@ private struct GatewaySettingsRoot: View {
     @State private var search = ""
     @State private var confirmClose = false
     @State private var confirmPolicyClose = false
+    /// Unsaved agent or workspace file edits when closing.
+    @State private var confirmAgentsClose = false
     /// Close once the Command Policy save that the close dialog started (maybe after confirming loosening) succeeds.
     @State private var closeAfterPolicySave = false
     @State private var toast: (outcome: ConfigApplyOutcome, id: UUID)?
     @State private var policyToast: UUID?
+    /// macOS: closes the window without asking again.
+    @State private var windowCloser: (() -> Void)?
 
     private var settings: GatewaySettingsModel { self.gateway.settings }
     private var policy: ExecPolicyModel { self.gateway.execPolicy }
+    private var agentManagement: AgentManagementModel { self.gateway.agentManagement }
 
     var body: some View {
         @Bindable var navigator = self.navigator
@@ -100,6 +105,8 @@ private struct GatewaySettingsRoot: View {
                         case let .plugin(id): PluginPage(pluginId: id)
                         case let .approval(id): ApprovalDetailPage(approvalId: id)
                         case let .execAgent(id): ExecAgentPage(agentId: id)
+                        case let .agent(id): AgentPage(agentId: id)
+                        case let .agentFile(agentId, name): AgentFileEditorPage(agentId: agentId, name: name)
                         case let .sessionUsage(key, agentId): SessionUsagePage(sessionKey: key, agentId: agentId)
                         }
                     }
@@ -153,7 +160,10 @@ private struct GatewaySettingsRoot: View {
                 .disabled(!self.policy.canWrite || !self.gateway.state.isConnected)
             Button("Discard", role: .destructive) {
                 self.policy.revert()
-                self.close?()
+                Task { @MainActor in
+                    await Task.yield()
+                    self.closeAfterPolicy()
+                }
             }
             Button("Keep Editing", role: .cancel) {}
         } message: {
@@ -167,7 +177,7 @@ private struct GatewaySettingsRoot: View {
                 let names = ExecPolicyUI.agentNames(self.gateway)
                 Task {
                     let result = await self.policy.save(allowLoosening: true, agentNames: names)
-                    if result == .saved, self.closeAfterPolicySave { self.close?() }
+                    if result == .saved, self.closeAfterPolicySave { self.closeAfterPolicy() }
                     self.closeAfterPolicySave = false
                 }
             }
@@ -178,8 +188,26 @@ private struct GatewaySettingsRoot: View {
         } message: {
             Text((self.policy.pendingLoosening ?? []).joined(separator: "\n"))
         }
+        .confirmationDialog("Save changes to \(self.agentManagement.unsavedTitle(agentNames: ExecPolicyUI.agentNames(self.gateway)))?",
+                            isPresented: self.$confirmAgentsClose, titleVisibility: .visible) {
+            Button("Save") {
+                Task { if await self.agentManagement.saveAll() { self.closeWindow() } }
+            }
+            .disabled(!self.gateway.state.isConnected)
+            Button("Don't Save", role: .destructive) {
+                self.agentManagement.discardAll()
+                self.closeWindow()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your changes to agents or workspace files haven't been saved.")
+        }
         #if os(iOS)
-        .interactiveDismissDisabled(settings.hasChanges || self.policy.hasChanges)
+        .interactiveDismissDisabled(settings.hasChanges || self.policy.hasChanges || self.agentManagement.hasUnsavedChanges)
+        #else
+        .background(WindowCloseGuard(shouldBlock: { self.agentManagement.hasUnsavedChanges },
+                                     onBlocked: { self.confirmAgentsClose = true },
+                                     closer: self.$windowCloser))
         #endif
         .overlay(alignment: .bottom) { self.toastView }
         .onChange(of: settings.lastSave?.id) { self.showToast() }
@@ -223,12 +251,25 @@ private struct GatewaySettingsRoot: View {
 
     /// After the config's close dialog: ask about the Command Policy draft too, else close.
     private func closeAfterConfig() {
-        if self.policy.hasChanges { self.confirmPolicyClose = true } else { self.close?() }
+        if self.policy.hasChanges { self.confirmPolicyClose = true } else { self.closeAfterPolicy() }
+    }
+
+    /// After the Command Policy's close dialog: ask about agent drafts too, else close.
+    private func closeAfterPolicy() {
+        if self.agentManagement.hasUnsavedChanges { self.confirmAgentsClose = true } else { self.closeWindow() }
+    }
+
+    /// Closes the sheet (iOS) or window (macOS, past the close guard).
+    private func closeWindow() {
+        #if os(macOS)
+        self.windowCloser?()
+        #endif
+        self.close?()
     }
 
     private func savePolicyThenClose() async {
         switch await self.policy.save(agentNames: ExecPolicyUI.agentNames(self.gateway)) {
-        case .saved: self.close?()
+        case .saved: self.closeAfterPolicy()
         case .needsConfirmation: self.closeAfterPolicySave = true
         default: break
         }

@@ -189,6 +189,9 @@ struct CuratedPage: View {
     var body: some View {
         let settings = self.gateway.settings
         GatewaySettingsForm {
+            if self.page.id == SettingsCatalog.agentsPageId {
+                AgentManagementSection()
+            }
             ForEach(self.page.sections.filter { settings.shows($0.content) }, id: \.self) { section in
                 switch section.content {
                 case let .object(path):
@@ -459,6 +462,7 @@ struct OverviewPage: View {
                     .buttonStyle(.borderless)
                 }
             }
+            SetupGatewaySection()
             if let snapshot = settings.snapshot {
                 Section("Config") {
                     if let path = snapshot.path {

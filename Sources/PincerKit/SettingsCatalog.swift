@@ -36,6 +36,10 @@ public enum SettingsRoute: Hashable, Codable, Sendable {
     case sessionUsage(key: String, agentId: String? = nil)
     /// One agent's command policy and allowlist, by agent id (`*` for all agents).
     case execAgent(String)
+    /// One agent's identity, model, workspace, bindings and files (Agents & Models), by agent id.
+    case agent(String)
+    /// One workspace file of an agent (`agents.files.get/set`).
+    case agentFile(agentId: String, name: String)
 }
 
 /// A sidebar page found by Gateway Settings search, shown above the matching settings.
@@ -114,6 +118,9 @@ public struct SettingsPage: Identifiable, Hashable, Sendable {
 public enum SettingsCatalog {
     /// The curated pages, in sidebar order. Sections whose path isn't in the Gateway's schema or
     /// config are hidden, and so is a page left with none.
+    /// Agents & Models, which also lists the agents themselves (`agents.list`).
+    public static let agentsPageId = "agents"
+
     public static let pages: [SettingsPage] = [
         SettingsPage(id: "gateway", title: "Gateway", symbol: "server.rack", sections: [
             .init(nil, .object(["gateway"])),
@@ -121,7 +128,7 @@ public enum SettingsCatalog {
             .init("Reload", footer: "Hybrid applies what it can live and restarts the Gateway only when a change needs it.",
                   .object(["gateway", "reload"])),
         ]),
-        SettingsPage(id: "agents", title: "Agents & Models", symbol: "person.2", sections: [
+        SettingsPage(id: agentsPageId, title: "Agents & Models", symbol: "person.2", sections: [
             .init("Defaults", footer: "Every agent uses these unless it overrides them.", .object(["agents", "defaults"])),
             .init("Agents", .entries(["agents", "entries"])),
             .init("Models", .object(["models"])),
