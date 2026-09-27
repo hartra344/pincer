@@ -237,7 +237,7 @@ extension DemoGateway {
         return id
     }
 
-    private func workspaceDir(_ agentId: String) -> String {
+    func workspaceDir(_ agentId: String) -> String {
         self.agents[self.agentIndex(agentId) ?? 0]["workspace"]?.string ?? Self.defaultWorkspace(agentId)
     }
 

@@ -578,9 +578,15 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
     private let badge = UILabel()
     private let add = UIButton(configuration: .plain())
     private var onAdd: (() -> Void)?
+    /// For redrawing the companion when light and dark switch.
+    private var configured: (header: SidebarModel.Header, actions: SidebarActions)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        self.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (cell: Self, _) in
+            guard let (header, actions) = cell.configured, header.avatar != nil else { return }
+            cell.configure(header, actions: actions)
+        }
         self.badge.font = .monospacedDigitSystemFont(ofSize: 11, weight: .bold)
         self.badge.textColor = .white
         self.badge.textAlignment = .center
@@ -602,14 +608,24 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
     required init?(coder: NSCoder) { fatalError() }
 
     func configure(_ header: SidebarModel.Header, actions: SidebarActions) {
+        self.configured = (header, actions)
         let section = header.section
         var content = self.traitCollection.horizontalSizeClass == .compact
             ? UIListContentConfiguration.groupedHeader()
             : UIListContentConfiguration.sidebarHeader()
-        let title = section.emoji.map { "\($0)  \(section.title)" } ?? section.title
+        let title = section.emoji.map { header.avatar == nil ? "\($0)  \(section.title)" : section.title } ?? section.title
         content.text = title
         content.textProperties.numberOfLines = 1
-        if let symbol = header.symbol {
+        if let style = header.avatar {
+            let scale = max(self.traitCollection.displayScale, 1)
+            if let image = AvatarArt.still(style, state: header.avatarState, dark: self.traitCollection.userInterfaceStyle == .dark,
+                                           accent: TranscriptColors.tint.resolvedColor(with: self.traitCollection).cgColor,
+                                           side: SidebarAvatar.side, scale: scale)
+            {
+                content.image = UIImage(cgImage: image, scale: scale, orientation: .up)
+                content.imageProperties.reservedLayoutSize = CGSize(width: SidebarAvatar.side, height: SidebarAvatar.side)
+            }
+        } else if let symbol = header.symbol {
             content.image = UIImage(systemName: symbol)
             content.imageProperties.tintColor = .secondaryLabel
         }

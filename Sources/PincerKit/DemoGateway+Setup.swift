@@ -6,7 +6,8 @@ import UniformTypeIdentifiers
 
 /// What the first-run setup wizard reads from the demo, shaped like `mock-gateway/setup.mjs`:
 /// `channels.status` (Discord fine, Telegram degraded like `health`, WhatsApp not linked yet),
-/// `skills.status` (one skill missing its CLI) and WhatsApp QR login over `web.login.start` /
+/// `skills.status` (answered by `DemoGateway+Skills.swift` from the stateful skills seed, so installs
+/// and configuration show up here too) and WhatsApp QR login over `web.login.start` /
 /// `web.login.wait`, which the Gateway doesn't list in `hello.features.methods`.
 struct DemoSetupState {
     var whatsappLinked = false
@@ -20,7 +21,6 @@ extension DemoGateway {
     static let webLoginMethods = ["web.login.start", "web.login.wait"]
     static let whatsappNotLinked = "Not linked (no WhatsApp Web session)."
     static let whatsappRelinkFix = "Run: openclaw channels login (scan QR on the gateway host)."
-    static let missingSkill = "summarize"
     /// How long a demo `web.login.wait` takes, as if the user were scanning.
     static let webLoginWaitMs = 1200
 
@@ -52,12 +52,6 @@ extension DemoGateway {
         case "channels.status":
             try Self.closedParams(params, ["probe", "timeoutMs", "channel"], method)
             return try self.channelsStatus(params)
-        case "skills.status":
-            try Self.closedParams(params, ["agentId", "sessionKey"], method)
-            let agentId = params["agentId"]?.text ?? "main"
-            guard self.agentIds.contains(agentId) else { throw Self.invalid("unknown agent id \"\(agentId)\"") }
-            if let key = params["sessionKey"]?.text, !self.hasSession(key) { throw Self.invalid("Session not found.") }
-            return Self.skillsReport(agentId: agentId)
         case "web.login.start":
             try Self.closedParams(params, ["channel", "force", "timeoutMs", "verbose", "accountId"], method)
             try Self.webLoginChannel(params)
@@ -125,54 +119,6 @@ extension DemoGateway {
             ]]
         }
         return .object(result)
-    }
-
-    // MARK: Skills
-
-    private static func skill(_ name: String, _ description: String, emoji: String, requires: [String] = [],
-                              missing: [String] = [], os: [String] = [], missingOS: [String] = [],
-                              install: [JSONValue] = []) -> JSONValue
-    {
-        func reqs(_ bins: [String], _ os: [String]) -> JSONValue {
-            ["bins": JSONValue(bins), "anyBins": [], "env": [], "config": [], "os": JSONValue(os)]
-        }
-        let platformIncompatible = !missingOS.isEmpty
-        let eligible = missing.isEmpty && missingOS.isEmpty
-        return [
-            "name": .string(name), "description": .string(description), "source": "openclaw-bundled", "bundled": true,
-            "filePath": .string("/opt/openclaw/skills/\(name)/SKILL.md"), "baseDir": .string("/opt/openclaw/skills/\(name)"),
-            "skillKey": .string(name), "emoji": .string(emoji), "always": false, "disabled": false,
-            "blockedByAllowlist": false, "blockedByAgentFilter": false, "eligible": .bool(eligible),
-            "platformIncompatible": .bool(platformIncompatible), "modelVisible": .bool(eligible), "userInvocable": true,
-            "commandVisible": .bool(eligible), "requirements": reqs(requires, os), "missing": reqs(missing, missingOS),
-            "configChecks": [], "install": platformIncompatible ? [] : .array(install),
-        ]
-    }
-
-    private static func brew(_ label: String, _ bins: [String]) -> JSONValue {
-        ["id": "brew", "kind": "brew", "label": .string(label), "bins": JSONValue(bins)]
-    }
-
-    /// Three ready skills, `summarize` missing its CLI, and a macOS-only one on the Linux Gateway.
-    static func skillsReport(agentId: String) -> JSONValue {
-        [
-            "workspaceDir": .string(agentId == "main" ? "~/.openclaw/workspace" : "~/.openclaw/workspace-\(agentId)"),
-            "managedSkillsDir": "~/.openclaw/skills",
-            "agentId": .string(agentId),
-            "skills": [
-                self.skill("github", "GitHub CLI for issues, PRs, CI/check logs, comments, reviews, releases, repos, and gh api queries.",
-                           emoji: "🐙", requires: ["gh"], install: [self.brew("Install GitHub CLI (brew)", ["gh"])]),
-                self.skill("weather", "Current weather and forecasts with web_fetch, falling back to wttr.in curl.",
-                           emoji: "☔", install: [self.brew("Install curl (brew)", ["curl"])]),
-                self.skill("tmux", "Remote-control tmux sessions for interactive CLIs by sending keystrokes and scraping pane output.",
-                           emoji: "🧵", requires: ["tmux"], install: [self.brew("Install tmux (brew)", ["tmux"])]),
-                self.skill(self.missingSkill, "Summarize or transcribe URLs, YouTube/videos, podcasts, articles, PDFs, and local files.",
-                           emoji: "🧾", requires: ["summarize"], missing: ["summarize"],
-                           install: [self.brew("Install summarize (brew)", ["summarize"])]),
-                self.skill("apple-notes", "Manage Apple Notes via the memo CLI on macOS.", emoji: "📝",
-                           requires: ["memo"], missing: ["memo"], os: ["darwin"], missingOS: ["darwin"]),
-            ],
-        ]
     }
 
     // MARK: WhatsApp QR login

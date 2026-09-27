@@ -187,6 +187,10 @@ struct DemoGatewayLogs {
         self.log(.info, "agent", "\(runId): run finished (\(outputTokens.formatted()) output tokens)")
     }
 
+    mutating func chatFailed(runId: String, message: String) {
+        self.log(.error, "agent", "\(runId): run failed: \(message)")
+    }
+
     mutating func approvalRequested(id: String, command: String) {
         self.log(.warn, "exec", "approval \(id) waiting for a reviewer: \(command)")
     }
