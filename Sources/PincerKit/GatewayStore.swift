@@ -598,6 +598,7 @@ public final class GatewayStore: Identifiable {
             if removedId == nil || self.sessions[key]?.sessionId == removedId {
                 self.sessions.removeValue(forKey: key)
                 self.discardDraft(key)
+                if self.selectedKey == key { self.selectedKey = self.defaultSessionKey }
             }
             return
         }

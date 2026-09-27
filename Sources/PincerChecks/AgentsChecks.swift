@@ -280,8 +280,20 @@ func runDemoAgents(_ gateway: GatewayStore) async {
         check(copy.failedFiles.isEmpty && copy.copiedFiles.contains("SOUL.md") && copiedSoul.content == "someone else",
               "demo duplicate copies workspace files (\(copy.copiedFiles), \(copy.failedFiles))")
 
+        let chatKey = await gateway.createSession(agentId: copy.agentId, label: "Doomed demo chat", select: true)
+        let listed = await waitFor("demo doomed chat") { chatKey.map { gateway.sessions[$0] != nil } ?? false }
+        check(listed && gateway.selectedKey == chatKey, "demo chat with the copy open")
+        let previousSelection = gateway.selectedKey
         let deleted = try await management.delete(agentId: copy.agentId, deleteFiles: true)
         check(deleted.trashedPaths.contains { $0.hasSuffix("workspace-\(copy.agentId)") }, "demo delete trashes the workspace")
+        if let chatKey {
+            let gone = await waitFor("demo deleted chat") { gateway.sessions[chatKey] == nil }
+            let inSidebar = gateway.sections().contains { $0.channels.contains { $0.row.key == chatKey || $0.threads.contains { $0.key == chatKey } } }
+            check(gone && !inSidebar, "demo: the deleted agent's chat leaves the sidebar")
+            check(gateway.selectedKey != chatKey && gateway.selectedKey.map { gateway.sessions[$0] != nil } ?? true,
+                  "demo: selection falls back from the deleted agent's chat (selected: \(gateway.selectedKey ?? "none"))")
+            if gateway.selectedKey == previousSelection { gateway.selectedKey = "agent:main:main" }
+        }
         _ = try await management.delete(agentId: agentId, deleteFiles: true)
         check(!gateway.agents.contains { $0.id == agentId || $0.id == copy.agentId }, "demo deleted agents leave the roster")
         do {
@@ -304,11 +316,56 @@ func runDemoAgents(_ gateway: GatewayStore) async {
 
 // MARK: Live
 
+let notConnectedError = AgentManagementError.other(GatewayError.notConnected.localizedDescription)
+
+/// Waits until `store` has a hello and a socket, so requests won't throw `notConnected`.
+@MainActor
+@discardableResult
+func agentsReady(_ store: GatewayStore, _ label: String) async -> Bool {
+    await waitFor("\(label) connected", timeout: 25) { store.state.isConnected && store.hello != nil }
+}
+
+/// Runs `operation`, retrying after a reconnect when it failed with `notConnected`. That error is
+/// thrown before anything is sent, so retrying a mutation can't apply it twice.
+@MainActor
+func whenConnected<T>(_ store: GatewayStore, _ operation: () async throws -> T) async throws -> T {
+    for _ in 0..<3 {
+        do { return try await operation() } catch where AgentManagementError.classify(error) == notConnectedError {
+            await agentsReady(store, "retry")
+        }
+    }
+    return try await operation()
+}
+
+/// `load()` after a reconnect if it failed with `notConnected`.
+@MainActor
+func loadWhenConnected(_ editor: AgentFileEditorModel, _ store: GatewayStore) async {
+    for _ in 0..<3 {
+        await editor.load()
+        guard editor.loadState == .failed(notConnectedError.message) else { return }
+        await agentsReady(store, "reload")
+    }
+}
+
+/// `save()`, retried after a reconnect if it failed with `notConnected` (the draft is kept).
+@MainActor
+func saveWhenConnected(_ editor: AgentFileEditorModel, _ store: GatewayStore) async -> Bool {
+    for _ in 0..<3 {
+        if await editor.save() { return true }
+        guard editor.error == notConnectedError else { return false }
+        await agentsReady(store, "resave")
+    }
+    return await editor.save()
+}
+
 /// Against the mock: `admin` has Full Management; a fresh store reads without it. Only touches agents
 /// it creates, so later live checks see the seeded roster.
 @MainActor
 func runLiveAgents(profile: GatewayProfile, gateway: GatewayStore, admin: GatewayStore) async {
     print("Agents (live)")
+    // Earlier live checks can leave the shared admin store mid-reconnect.
+    let adminReady = await agentsReady(admin, "admin")
+    check(adminReady, "admin connected before agent checks")
     let advertised = admin.hello?.methods ?? []
     guard advertised.contains(AgentManagement.createMethod) else {
         // MOCK_NO_AGENT_MANAGEMENT=1
@@ -321,7 +378,7 @@ func runLiveAgents(profile: GatewayProfile, gateway: GatewayStore, admin: Gatewa
     readerProfile.secret = profile.secret
     let readerStore = GatewayStore(profile: readerProfile)
     readerStore.start()
-    _ = await waitFor("agents reader") { readerStore.state.isConnected && readerStore.hello != nil }
+    await agentsReady(readerStore, "agents reader")
     defer { readerStore.stop() }
     check(readerStore.hello?.scopes.contains(GatewayConnection.adminScope) == false, "agents reader has no operator.admin")
     let reader = readerStore.agentManagement
@@ -330,8 +387,9 @@ func runLiveAgents(profile: GatewayProfile, gateway: GatewayStore, admin: Gatewa
     let management = admin.agentManagement
     check(management.canManageAgents && management.canWriteFiles, "admin manages agents")
     let suffix = String(UUID().uuidString.prefix(6)).lowercased()
+    var step = "reader"
     do {
-        let readable = try await reader.listFiles(agentId: "main")
+        let readable = try await whenConnected(readerStore) { try await reader.listFiles(agentId: "main") }
         check(readable.files.map(\.name) == ["AGENTS.md", "SOUL.md", "USER.md", "MEMORY.md"], "reader lists files (operator.read)")
         do {
             _ = try await reader.create(AgentDraft(name: "Nope \(suffix)"))
@@ -340,25 +398,31 @@ func runLiveAgents(profile: GatewayProfile, gateway: GatewayStore, admin: Gatewa
             check(AgentManagementError.classify(error) == .needsAdmin, "reader create → needs admin")
         }
         do {
-            let soul = try await reader.getFile(agentId: "main", name: "SOUL.md")
+            let soul = try await whenConnected(readerStore) { try await reader.getFile(agentId: "main", name: "SOUL.md") }
             _ = try await reader.setFile(agentId: "main", name: "SOUL.md", content: "x", expectedHash: soul.hash, expectedMissing: false)
             check(false, "reader can't write files")
         } catch {
             check(AgentManagementError.classify(error) == .needsAdmin, "reader files.set → needs admin")
         }
 
+        // A dropped connection mid-check (what made this flaky): the next call waits for the reconnect.
+        step = "reconnect"
+        _ = await admin.chat(for: "agent:main:main").send("agents check [mock:drop] \(suffix)")
+        let sawDrop = await waitFor("admin drop", timeout: 5, every: 10) { !admin.state.isConnected }
+
         // Create.
+        step = "create"
         let name = "Check Owl \(suffix)"
-        let agentId = try await management.create(AgentDraft(name: name, emoji: "🦉", model: "openai/gpt-5.6-sol"))
-        check(agentId == "check-owl-\(suffix)", "create derives the id (\(agentId))")
+        let agentId = try await whenConnected(admin) { try await management.create(AgentDraft(name: name, emoji: "🦉", model: "openai/gpt-5.6-sol")) }
+        check(agentId == "check-owl-\(suffix)", "create derives the id (\(agentId)), even right after a drop (\(sawDrop))")
         let row = admin.agents.first { $0.id == agentId }
         check(row?.name == name && row?.emoji == "🦉" && row?.model == "openai/gpt-5.6-sol" && row?.workspace?.hasSuffix("workspace-\(agentId)") == true,
               "created agent in the roster (\(String(describing: row)))")
-        let seeded = try await management.listFiles(agentId: agentId)
+        let seeded = try await whenConnected(admin) { try await management.listFiles(agentId: agentId) }
         check(seeded.files.filter { !$0.missing }.map(\.name) == ["AGENTS.md", "SOUL.md", "USER.md", "BOOTSTRAP.md"]
               && seeded.files.contains { $0.name == "MEMORY.md" && $0.missing && $0.expectedAbsent }, "new workspace seeded")
         do {
-            _ = try await management.create(AgentDraft(name: name.uppercased()))
+            _ = try await whenConnected(admin) { try await management.create(AgentDraft(name: name.uppercased())) }
             check(false, "existing id refused")
         } catch {
             check(AgentManagementError.classify(error) == .validation("agent \"\(agentId)\" already exists"),
@@ -366,110 +430,134 @@ func runLiveAgents(profile: GatewayProfile, gateway: GatewayStore, admin: Gatewa
         }
 
         // Update + identity.
+        step = "update"
+        await agentsReady(admin, "admin")
         let original = AgentDraft(row!)
         var draft = original
         draft.name = "Check Heron \(suffix)"
         draft.emoji = "🪶"
         draft.model = ""
-        _ = try await management.update(agentId: agentId, original: original, draft: draft)
+        _ = try await whenConnected(admin) { try await management.update(agentId: agentId, original: original, draft: draft) }
         let updated = admin.agents.first { $0.id == agentId }
         check(updated?.name == draft.name && updated?.emoji == "🪶" && updated?.model == nil, "update: name, emoji, model cleared")
-        let identity = try await management.identity(agentId: agentId)
+        let identity = try await whenConnected(admin) { try await management.identity(agentId: agentId) }
         check(identity.name == draft.name && identity.emoji == "🪶" && identity.nameSource == "agent", "agent.identity.get after update")
-        let identityFile = try await management.getFile(agentId: agentId, name: "IDENTITY.md")
+        let identityFile = try await whenConnected(admin) { try await management.getFile(agentId: agentId, name: "IDENTITY.md") }
         check(identityFile.content?.contains(draft.name) == true, "IDENTITY.md rewritten")
 
         // Edit, save, conflict with another admin, both resolutions.
+        step = "edit"
+        await agentsReady(admin, "admin")
         let otherProfile = GatewayProfile(name: "Other agents admin", url: profile.url, authMode: .token, access: .admin)
         otherProfile.secret = profile.secret
         let other = GatewayStore(profile: otherProfile)
         other.start()
-        _ = await waitFor("other admin") { other.state.isConnected && other.hello != nil }
+        await agentsReady(other, "other admin")
         let editor = management.editor(agentId: agentId, name: "SOUL.md")
-        await editor.load()
+        await loadWhenConnected(editor, admin)
         check(editor.hasLoaded && !editor.isNew && editor.entry?.hash == editor.entry?.content.map(AgentManagement.sha256Hex), "editor loads SOUL.md")
         editor.text += "\n- Answers in haiku.\n"
-        let saved = await editor.save()
+        let saved = await saveWhenConnected(editor, admin)
         check(saved && !editor.isDirty && editor.entry?.hash == AgentManagement.sha256Hex(editor.text), "save → new hash")
-        let theirs = try await other.agentManagement.getFile(agentId: agentId, name: "SOUL.md")
-        _ = try await other.agentManagement.setFile(agentId: agentId, name: "SOUL.md", content: "# SOUL.md\n\nOther admin was here.\n",
-                                                    expectedHash: theirs.hash, expectedMissing: false)
+        let theirs = try await whenConnected(other) { try await other.agentManagement.getFile(agentId: agentId, name: "SOUL.md") }
+        _ = try await whenConnected(other) { try await other.agentManagement.setFile(agentId: agentId, name: "SOUL.md", content: "# SOUL.md\n\nOther admin was here.\n",
+                                                    expectedHash: theirs.hash, expectedMissing: false) }
         editor.text += "- Mine.\n"
         let mine = editor.text
-        let stale = await editor.save()
+        let stale = await saveWhenConnected(editor, admin)
         check(!stale && editor.conflict?.theirs == "# SOUL.md\n\nOther admin was here.\n" && editor.text == mine,
               "stale hash → conflict, draft kept")
         let overwrote = await editor.resolveConflictOverwrite()
-        let afterOverwrite = try await other.agentManagement.getFile(agentId: agentId, name: "SOUL.md")
+        let afterOverwrite = try await whenConnected(other) { try await other.agentManagement.getFile(agentId: agentId, name: "SOUL.md") }
         check(overwrote && afterOverwrite.content == mine && !editor.isDirty, "overwrite wins")
-        _ = try await other.agentManagement.setFile(agentId: agentId, name: "SOUL.md", content: "theirs again",
-                                                    expectedHash: afterOverwrite.hash, expectedMissing: false)
+        _ = try await whenConnected(other) { try await other.agentManagement.setFile(agentId: agentId, name: "SOUL.md", content: "theirs again",
+                                                    expectedHash: afterOverwrite.hash, expectedMissing: false) }
         editor.text += "- again"
-        _ = await editor.save()
+        _ = await saveWhenConnected(editor, admin)
         await editor.resolveConflictKeepTheirs()
         check(editor.text == "theirs again" && !editor.isDirty && editor.conflict == nil, "keep theirs reloads")
         management.closeEditor(editor)
 
         // Create a missing file; a second create conflicts.
+        step = "create file"
+        await agentsReady(admin, "admin")
         let memory = AgentFileEditorModel(agentId: agentId, name: "MEMORY.md", management: management)
         let memoryRace = AgentFileEditorModel(agentId: agentId, name: "MEMORY.md", management: other.agentManagement)
-        await memory.load()
-        await memoryRace.load()
+        await loadWhenConnected(memory, admin)
+        await loadWhenConnected(memoryRace, other)
         check(memory.isNew && memory.canSave && memory.text.isEmpty, "missing MEMORY.md opens as new (saving creates it)")
         memory.text = "- first"
         memoryRace.text = "- second"
-        let first = await memory.save()
-        let second = await memoryRace.save()
+        let first = await saveWhenConnected(memory, admin)
+        let second = await saveWhenConnected(memoryRace, other)
         check(first && !second && memoryRace.conflict?.theirs == "- first" && memoryRace.conflict?.theirsMissing == false,
               "expectedMissing: the second creator conflicts")
         other.stop()
 
         // Size cap: nothing is sent past 2 MiB; exactly 2 MiB is fine.
+        step = "size cap"
+        await agentsReady(admin, "admin")
         let big = AgentFileEditorModel(agentId: agentId, name: "USER.md", management: management)
-        await big.load()
+        await loadWhenConnected(big, admin)
         let userHash = big.entry?.hash
         big.text = String(repeating: "é", count: AgentManagement.maxFileBytes / 2) + "!"
         check(big.exceedsLimit && !big.canSave, "over the cap → save off")
-        let refused = await big.save()
-        let userAfter = try await management.getFile(agentId: agentId, name: "USER.md")
+        let refused = await saveWhenConnected(big, admin)
+        let userAfter = try await whenConnected(admin) { try await management.getFile(agentId: agentId, name: "USER.md") }
         check(!refused && big.error == .tooLarge(bytes: AgentManagement.maxFileBytes + 1) && userAfter.hash == userHash,
               "over-cap save not sent")
         big.text = String(repeating: "é", count: AgentManagement.maxFileBytes / 2)
-        let atCap = await big.save()
+        let atCap = await saveWhenConnected(big, admin)
         check(atCap && big.entry?.size == AgentManagement.maxFileBytes, "exactly 2 MiB saves")
 
         do {
-            _ = try await management.getFile(agentId: agentId, name: "TOOLS.md")
+            _ = try await whenConnected(admin) { try await management.getFile(agentId: agentId, name: "TOOLS.md") }
             check(false, "TOOLS.md isn't editable")
         } catch {
             check(AgentManagementError.classify(error) == .validation("unsupported file \"TOOLS.md\""), "unsupported file name")
         }
 
         // Duplicate with files.
+        step = "duplicate"
+        await agentsReady(admin, "admin")
         let current = admin.agents.first { $0.id == agentId }!
-        let copy = try await management.duplicate(sourceId: agentId, draft: AgentDraft.duplicate(of: current, existing: admin.agents),
-                                                  copyFiles: true)
-        let copiedSoul = try await management.getFile(agentId: copy.agentId, name: "SOUL.md")
-        let copiedMemory = try await management.getFile(agentId: copy.agentId, name: "MEMORY.md")
+        let copy = try await whenConnected(admin) { try await management.duplicate(sourceId: agentId, draft: AgentDraft.duplicate(of: current, existing: admin.agents),
+                                                  copyFiles: true) }
+        let copiedSoul = try await whenConnected(admin) { try await management.getFile(agentId: copy.agentId, name: "SOUL.md") }
+        let copiedMemory = try await whenConnected(admin) { try await management.getFile(agentId: copy.agentId, name: "MEMORY.md") }
         check(copy.agentId == "check-heron-\(suffix)-copy" && copy.failedFiles.isEmpty
               && copiedSoul.content == "theirs again" && copiedMemory.content == "- first",
               "duplicate copies existing files into a new workspace (\(copy.agentId), \(copy.copiedFiles), \(copy.failedFiles))")
         check(admin.agents.first { $0.id == copy.agentId }?.workspace != current.workspace, "the copy has its own workspace")
 
+        // An open chat of an agent that gets deleted: the sidebar drops it and the selection moves on.
+        step = "delete"
+        await agentsReady(admin, "admin")
+        let chatKey = await admin.createSession(agentId: agentId, label: "Doomed \(suffix)", select: true)
+        let listed = await waitFor("doomed chat") { chatKey.map { admin.sessions[$0] != nil } ?? false }
+        check(listed && admin.selectedKey == chatKey, "chat with the agent open (\(chatKey ?? "none"))")
+
         // Delete both.
-        let deleted = try await management.delete(agentId: copy.agentId, deleteFiles: false)
+        let deleted = try await whenConnected(admin) { try await management.delete(agentId: copy.agentId, deleteFiles: false) }
         check(deleted.trashedPaths.isEmpty, "deleteFiles:false keeps the files")
-        let deleted2 = try await management.delete(agentId: agentId, deleteFiles: true)
+        let deleted2 = try await whenConnected(admin) { try await management.delete(agentId: agentId, deleteFiles: true) }
         check(deleted2.trashedPaths.contains { $0.hasSuffix("workspace-\(agentId)") } && deleted2.failed.isEmpty, "delete trashes the workspace")
         check(!admin.agents.contains { $0.id == agentId || $0.id == copy.agentId } && admin.agents.contains { $0.id == "main" },
               "deleted agents leave the roster")
+        if let chatKey {
+            let gone = await waitFor("deleted agent's chat") { admin.sessions[chatKey] == nil }
+            let inSidebar = admin.sections().contains { $0.channels.contains { $0.row.key == chatKey || $0.threads.contains { $0.key == chatKey } } }
+            check(gone && !inSidebar, "the deleted agent's chat leaves the sidebar")
+            check(admin.selectedKey != chatKey && admin.selectedKey.map { admin.sessions[$0] != nil } ?? true,
+                  "selection falls back from the deleted agent's chat (selected: \(admin.selectedKey ?? "none"))")
+        }
         do {
-            _ = try await management.delete(agentId: agentId, deleteFiles: true)
+            _ = try await whenConnected(admin) { try await management.delete(agentId: agentId, deleteFiles: true) }
             check(false, "second delete fails")
         } catch {
             check(AgentManagementError.classify(error) == .notFound("agent \"\(agentId)\" not found"), "second delete → not found")
         }
     } catch {
-        check(false, "live agent management (\(AgentManagementError.classify(error).message))")
+        check(false, "live agent management, \(step) (\(AgentManagementError.classify(error).message))")
     }
 }
