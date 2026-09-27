@@ -91,6 +91,16 @@
         }
       }
     },
+    "%@ token": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ token"
+          }
+        }
+      }
+    },
     "%@ tokens": {
       "localizations": {
         "en": {
@@ -261,6 +271,26 @@
         }
       }
     },
+    "Actions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions"
+          }
+        }
+      }
+    },
+    "Actions for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actions for %@"
+          }
+        }
+      }
+    },
     "Add": {
       "localizations": {
         "en": {
@@ -337,6 +367,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add skills to the agent's workspace on the gateway host."
+          }
+        }
+      }
+    },
+    "Address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Address"
           }
         }
       }
@@ -591,12 +631,42 @@
         }
       }
     },
+    "Approve new nodes on the Devices page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve new nodes on the Devices page."
+          }
+        }
+      }
+    },
+    "Approved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved"
+          }
+        }
+      }
+    },
     "Arguments: %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Arguments: %@"
+          }
+        }
+      }
+    },
+    "Asks to run commands for agents (node role).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Asks to run commands for agents (node role)."
           }
         }
       }
@@ -861,6 +931,16 @@
         }
       }
     },
+    "Client": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Client"
+          }
+        }
+      }
+    },
     "Collapse question": {
       "localizations": {
         "en": {
@@ -987,6 +1067,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Confirm Plugin Change"
+          }
+        }
+      }
+    },
+    "Connect to a Gateway to see its nodes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to a Gateway to see its nodes."
           }
         }
       }
@@ -1201,6 +1291,16 @@
         }
       }
     },
+    "Copy Device ID": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Device ID"
+          }
+        }
+      }
+    },
     "Copy ID": {
       "localizations": {
         "en": {
@@ -1217,6 +1317,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Log File Path"
+          }
+        }
+      }
+    },
+    "Copy Node ID": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Node ID"
           }
         }
       }
@@ -1657,6 +1767,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Details"
+          }
+        }
+      }
+    },
+    "Device ID": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device ID"
+          }
+        }
+      }
+    },
+    "Device name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device name"
+          }
+        }
+      }
+    },
+    "Devices": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devices"
+          }
+        }
+      }
+    },
+    "Devices Aren't Available": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devices Aren't Available"
           }
         }
       }
@@ -2131,6 +2281,26 @@
         }
       }
     },
+    "Fingerprint %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fingerprint %@"
+          }
+        }
+      }
+    },
+    "Fingerprint (SHA-256 of the device's public key): %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fingerprint (SHA-256 of the device's public key): %@"
+          }
+        }
+      }
+    },
     "First activity": {
       "localizations": {
         "en": {
@@ -2567,6 +2737,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Last run"
+          }
+        }
+      }
+    },
+    "Last seen %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last seen %@"
           }
         }
       }
@@ -3101,6 +3281,16 @@
         }
       }
     },
+    "No paired nodes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No paired nodes"
+          }
+        }
+      }
+    },
     "No plugins installed.": {
       "localizations": {
         "en": {
@@ -3201,6 +3391,36 @@
         }
       }
     },
+    "Nodes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nodes"
+          }
+        }
+      }
+    },
+    "Nodes Aren't Available": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nodes Aren't Available"
+          }
+        }
+      }
+    },
+    "Nodes such as the OpenClaw Mac, iOS or Android apps show up here after they pair.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nodes such as the OpenClaw Mac, iOS or Android apps show up here after they pair."
+          }
+        }
+      }
+    },
     "None": {
       "localizations": {
         "en": {
@@ -3261,6 +3481,16 @@
         }
       }
     },
+    "Not connected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not connected"
+          }
+        }
+      }
+    },
     "Not connected.": {
       "localizations": {
         "en": {
@@ -3307,6 +3537,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "OK"
+          }
+        }
+      }
+    },
+    "Only approve devices you recognize. Compare the fingerprint with the one the device shows while it waits.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only approve devices you recognize. Compare the fingerprint with the one the device shows while it waits."
           }
         }
       }
@@ -3411,6 +3651,16 @@
         }
       }
     },
+    "Origin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Origin"
+          }
+        }
+      }
+    },
     "Other": {
       "localizations": {
         "en": {
@@ -3471,6 +3721,16 @@
         }
       }
     },
+    "Paired Devices": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paired Devices"
+          }
+        }
+      }
+    },
     "Pairing Requests": {
       "localizations": {
         "en": {
@@ -3527,6 +3787,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Paused"
+          }
+        }
+      }
+    },
+    "Pending Requests": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending Requests"
           }
         }
       }
@@ -3871,6 +4141,26 @@
         }
       }
     },
+    "Reject": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reject"
+          }
+        }
+      }
+    },
+    "Reject %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reject %@"
+          }
+        }
+      }
+    },
     "Reload": {
       "localizations": {
         "en": {
@@ -3981,6 +4271,56 @@
         }
       }
     },
+    "Rename %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename %@"
+          }
+        }
+      }
+    },
+    "Rename Device": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Device"
+          }
+        }
+      }
+    },
+    "Rename Node": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Node"
+          }
+        }
+      }
+    },
+    "Rename…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename…"
+          }
+        }
+      }
+    },
+    "Renaming nodes needs Full Management.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renaming nodes needs Full Management."
+          }
+        }
+      }
+    },
     "Replace": {
       "localizations": {
         "en": {
@@ -4041,12 +4381,32 @@
         }
       }
     },
+    "Request ID": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request ID"
+          }
+        }
+      }
+    },
     "Requested": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Requested"
+          }
+        }
+      }
+    },
+    "Requested %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requested %@"
           }
         }
       }
@@ -4137,6 +4497,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "Revert to Saved"
+          }
+        }
+      }
+    },
+    "Revoke": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoke"
+          }
+        }
+      }
+    },
+    "Revoke This Device…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoke This Device…"
+          }
+        }
+      }
+    },
+    "Revoke and Disconnect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoke and Disconnect"
+          }
+        }
+      }
+    },
+    "Revoke this device?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoke this device?"
+          }
+        }
+      }
+    },
+    "Revoke “%@”?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoke “%@”?"
+          }
+        }
+      }
+    },
+    "Revoke…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Revoke…"
           }
         }
       }
@@ -4287,6 +4707,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schedule"
+          }
+        }
+      }
+    },
+    "Scopes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scopes"
           }
         }
       }
@@ -4951,6 +5381,16 @@
         }
       }
     },
+    "The name is shown to every operator of this gateway (up to %lld characters).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The name is shown to every operator of this gateway (up to %lld characters)."
+          }
+        }
+      }
+    },
     "The plugin is uninstalled from the Gateway and its settings are removed. This happens right away.": {
       "localizations": {
         "en": {
@@ -5017,6 +5457,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Thinking isn’t being saved for this session."
+          }
+        }
+      }
+    },
+    "This Gateway can't list nodes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't list nodes."
           }
         }
       }

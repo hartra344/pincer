@@ -122,13 +122,14 @@ struct LocalizationCatalogTests {
 
     /// Files migrated to the catalog for #58 keep looking their strings up in PincerUI's bundle.
     /// (Theme.swift is migrated too, but only through `AccessibilityAnnouncer.announceCopied()`.)
+    /// ConnectionViews.swift is deliberately not migrated (reverted for #175).
     @Test func migratedFilesUseTheCatalog() throws {
         let migrated = [
             "Composer", "SlashCommandMenu", "ModelPicker", "ContextMeter", "TranscriptFind", "SettingsPages",
             "SettingsFields", "AvatarSettingsSection", "MenuBarSettingsSection", "QuickCaptureSettingsSection",
             "QuickCaptureView", "LaunchAtLoginSettingsSection", "UsagePage", "UsageComponents", "SessionUsagePage",
             "ApprovalHistoryPage", "ExecPolicyPage", "GatewayLogsPage", "PairingRequestsPage", "ReactionPicker",
-            "QuestionCardView", "ProgressCardView", "ConnectionViews", "TipsOverlay", "AutomationsView", "SkillsViews",
+            "QuestionCardView", "ProgressCardView", "TipsOverlay", "AutomationsView", "SkillsViews",
             "ToolsInspectorViews", "AgentManagementViews", "MenuBarExtra", "ChatView", "PluginSettings",
             "ThinkingDisplay", "ImageViews",
         ]
