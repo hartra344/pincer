@@ -67,6 +67,11 @@ func runDemoSetup() async {
           "demo setup is read-only: admin comes from hello.scopes (health.hasAdmin \(gateway.health.hasAdmin))")
     check(gateway.setupDefaultsBlocker == SetupWizardModel.fullManagementMessage, "saving defaults is blocked with the Full Management copy")
 
+    // ⌘K item.
+    let item = CommandPalette.setupGatewayItem(gateway: gateway)
+    check(item?.id == "command:setupGateway" && item?.title == "Set Up Gateway…" && item?.subtitle == "2 of 3 steps",
+          "⌘K Set Up Gateway… (\(item?.subtitle ?? "nil"))")
+
     // Start Setup opens on the first step not done.
     setup.startSetup()
     check(!setup.showsIntro && setup.currentStep == setup.resumeStep && setup.currentStep == .testMessage,
@@ -78,14 +83,9 @@ func runDemoSetup() async {
     check(setup.currentStep == .skills, "Back returns to Skills")
     setup.unskip(.skills)
     setup.skip(.testMessage)
-    check(setup.status(of: .testMessage) == .skipped && !setup.progress.completed, "skip marks Test Message skipped")
+    check(setup.status(of: .testMessage) == .skipped && setup.progress.completed, "skipping the last open step completes setup")
     setup.unskip(.testMessage)
     check(!setup.status(of: .testMessage).isSettled, "unskip restores Not Checked (\(setup.status(of: .testMessage)))")
-
-    // ⌘K item.
-    let item = CommandPalette.setupGatewayItem(gateway: gateway)
-    check(item?.id == "command:setupGateway" && item?.title == "Set Up Gateway…" && item?.subtitle == "2 of 3 steps",
-          "⌘K Set Up Gateway… (\(item?.subtitle ?? "nil"))")
 
     // Test message: a demo chat that gets a demo reply.
     let (chatKey, outcome) = await gateway.sendSetupTestMessage(SetupWizardModel.testMessageText)
