@@ -172,6 +172,10 @@ public final class GatewayStore: Identifiable {
     /// Built in `init`, not lazily, so reading it from a view body (the menu bar item, #119) never
     /// creates it or wires up its callbacks mid-update.
     @ObservationIgnored public let health: GatewayHealthModel
+    /// Channel Status: each channel account's state and its lifecycle (start, stop, log out, reconnect,
+    /// QR login). Built in `init` like `health`: Gateway Health's context menu reads it. The demo may
+    /// run lifecycle actions without `operator.admin`.
+    @ObservationIgnored public let channels: ChannelsModel
     /// Paired operator devices, pending device requests and nodes (`device.pair.*`, `node.*`); seeded
     /// when Gateway Settings opens and kept current by pairing events. Built in `init` so the sidebar
     /// badge never creates it from a view body (#119). The demo may manage without `operator.admin`.
@@ -253,9 +257,15 @@ public final class GatewayStore: Identifiable {
         self.devices = DeviceManagementModel(
             connection: connection, selfDeviceId: profile.isDemo ? DemoGateway.deviceId : identity.deviceId,
             allowsWritesWithoutAdmin: profile.isDemo)
+        self.channels = ChannelsModel(connection: connection, hello: { nil }, allowsWritesWithoutAdmin: profile.isDemo)
         images.gateway = self
         self.health.hello = { [weak self] in self?.hello }
         self.devices.bind(hello: { [weak self] in self?.hello })
+        self.channels.methods = { [weak self] in self?.hello?.methods }
+        self.channels.scopes = { [weak self] in self?.hello?.scopes ?? [] }
+        // A lifecycle change shows up in `health` too, so its channel issue clears (or appears).
+        self.channels.onChanged = { [weak self] in await self?.health.refresh() }
+        self.channels.fallbackChannels = { [weak self] in self?.health.health?.channels ?? [] }
         self.health.onRestarted = { [weak self] in
             guard let self, self.settings.hasLoaded else { return }
             Task { await self.settings.load() }
@@ -325,6 +335,7 @@ public final class GatewayStore: Identifiable {
         if case let .failed(message) = state { self.lastError = message }
         if !state.isConnected {
             self.pairingInbox.reset()
+            self.channels.disconnected()
             self.devices.reset()
         }
         guard state == .connected, let hello else {
@@ -624,6 +635,7 @@ public final class GatewayStore: Identifiable {
             self.settings.handlePluginsChanged()
         case "health", "heartbeat", "presence", "shutdown":
             self.health.handle(event: event.name, payload: payload)
+            if event.name == "health" { self.channels.healthDidChange() }
         case "exec.approval.resolved":
             if let id = payload["id"]?.text ?? payload["request"]?["id"]?.text {
                 self.approvals.removeAll { $0.id == id }

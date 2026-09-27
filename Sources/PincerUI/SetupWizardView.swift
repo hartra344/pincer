@@ -293,24 +293,6 @@ private struct SetupStepDetail: View {
     }
 }
 
-/// "Needs Full Management" with the copy Gateway Settings uses, linking to Connection.
-private struct FullManagementBadge: View {
-    let openConnection: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(SetupWizardModel.fullManagementTitle, systemImage: "lock.fill")
-                .font(.callout.weight(.semibold))
-            Text(SetupWizardModel.fullManagementMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Button("Open Connection…", action: self.openConnection)
-                .buttonStyle(.borderless)
-                .font(.callout)
-        }
-    }
-}
-
 private struct SetupLink: View {
     let title: String
     let symbol: String
@@ -403,68 +385,16 @@ private struct SetupChannelRow: View {
         .padding(.vertical, 2)
     }
 
-    @ViewBuilder private var qrLogin: some View {
+    private var qrLogin: some View {
         let accountId = self.channel.accounts.count == 1 ? self.channel.accounts[0].accountId : nil
-        let state = self.setup.qrLogin(channel: self.channel.id, accountId: accountId)
-        switch state {
-        case .idle, .failed:
-            if case let .failed(message) = state {
-                Text(message).font(.caption).foregroundStyle(.red)
-            }
-            Button {
-                self.setup.startQRLogin(channel: self.channel.id, accountId: accountId,
-                                        force: self.channel.status == .connected)
-            } label: {
-                Label(self.channel.status == .connected ? "Relink with QR Code…" : "Link with QR Code…", systemImage: "qrcode")
-            }
-            .buttonStyle(.borderless)
-            .disabled(!self.setup.canStartQRLogin(channel: self.channel.id))
-        case .starting:
-            ProgressView("Getting a QR code…").controlSize(.small)
-        case let .showing(qr, message):
-            VStack(alignment: .leading, spacing: 6) {
-                if let image = PlatformImage(data: qr) {
-                    Self.image(image)
-                        .interpolation(.none)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 200, height: 200)
-                        .accessibilityLabel("QR code for \(self.channel.label)")
-                }
-                Text(message ?? "Scan this with \(self.channel.label) on your phone to link it.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Button("Cancel") { self.setup.cancelQRLogin(channel: self.channel.id, accountId: accountId) }
-                    .buttonStyle(.borderless)
-            }
-        case let .connected(message):
-            Label(message.map(Self.linkedMessage) ?? "Linked", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.callout)
-            Button {
-                self.setup.startQRLogin(channel: self.channel.id, accountId: accountId, force: true)
-            } label: {
-                Label("Relink with QR Code…", systemImage: "qrcode")
-            }
-            .buttonStyle(.borderless)
-            .disabled(!self.setup.canStartQRLogin(channel: self.channel.id))
-        }
-    }
-
-    /// Drops upstream's chat-agent hint ("Say “relink” …"): here it's the Relink button.
-    static func linkedMessage(_ message: String) -> String {
-        guard let range = message.range(of: " Say “relink”") else { return message }
-        return String(message[..<range.lowerBound])
-    }
-}
-
-extension SetupChannelRow {
-    static func image(_ image: PlatformImage) -> Image {
-        #if os(macOS)
-        Image(nsImage: image)
-        #else
-        Image(uiImage: image)
-        #endif
+        return ChannelQRLoginView(state: self.setup.qrLogin(channel: self.channel.id, accountId: accountId),
+                                  channelLabel: self.channel.label,
+                                  linked: self.channel.status == .connected,
+                                  canStart: self.setup.canStartQRLogin(channel: self.channel.id),
+                                  start: { force in
+                                      self.setup.startQRLogin(channel: self.channel.id, accountId: accountId, force: force)
+                                  },
+                                  cancel: { self.setup.cancelQRLogin(channel: self.channel.id, accountId: accountId) })
     }
 }
 
