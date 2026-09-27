@@ -257,6 +257,13 @@ public final class AppModel {
         if self.selectedGatewayId == id { self.selectedGatewayId = self.gateways.first?.id }
     }
 
+    /// Deletes every Gateway's cached transcripts and search indexes (Settings' Clear Cache), then
+    /// refills them from what's open and from the Gateways. Nothing on the Gateways changes.
+    public func clearTranscriptCache() async {
+        await Task.detached(priority: .userInitiated) { TranscriptCache.removeEverything() }.value
+        for gateway in self.gateways { await gateway.cacheCleared() }
+    }
+
     public func move(_ id: UUID, by offset: Int) {
         guard let index = self.gateways.firstIndex(where: { $0.id == id }) else { return }
         let target = min(max(index + offset, 0), self.gateways.count - 1)
