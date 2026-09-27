@@ -273,6 +273,9 @@ struct ChatView: View {
 /// of its buttons flash, the sidebar's included.
 struct ChatChrome: ViewModifier {
     @Environment(GatewayStore.self) private var gateway
+    /// The "Tools & Policy…" sheet. Held here, not on the toolbar menu, so a menu re-render or the
+    /// session row briefly going away (refresh, reconnect) doesn't dismiss it.
+    @State private var toolsInspector: ChatToolsInspection?
 
     private var key: String? { self.gateway.selectedKey }
     private var row: SessionRow? { self.key.flatMap { self.gateway.sessions[$0] } }
@@ -287,7 +290,10 @@ struct ChatChrome: ViewModifier {
             #endif
             .toolbar {
                 ToolbarItem(placement: .primaryAction) { ChatModelItem() }
-                ToolbarItem(placement: .primaryAction) { ChatSessionMenu() }
+                ToolbarItem(placement: .primaryAction) { ChatSessionMenu(toolsInspector: self.$toolsInspector) }
+            }
+            .sheet(item: self.$toolsInspector) { inspection in
+                ChatToolsInspectorSheet(model: inspection.model, scopeTitle: inspection.scopeTitle, gateway: self.gateway)
             }
     }
 
@@ -318,8 +324,7 @@ private struct ChatSessionMenu: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @FocusedValue(\.transcriptFind) private var find
-    @State private var toolsInspector: ToolsInspectorModel?
-    @State private var toolsScopeTitle = ""
+    @Binding var toolsInspector: ChatToolsInspection?
 
     var body: some View {
         if let key = self.gateway.selectedKey, let row = self.gateway.sessions[key] {
@@ -342,18 +347,23 @@ private struct ChatSessionMenu: View {
                 }
                 if self.gateway.supportsToolsEffective {
                     Button("Tools & Policy…", systemImage: "wrench.and.screwdriver") {
-                        self.toolsScopeTitle = "Session: \(row.title)"
-                        self.toolsInspector = self.gateway.toolsInspector(sessionKey: row.key)
+                        self.toolsInspector = ChatToolsInspection(model: self.gateway.toolsInspector(sessionKey: row.key),
+                                                                  scopeTitle: "Session: \(row.title)")
                     }
                 }
             } label: {
                 Label("Session", systemImage: Theme.moreSymbol)
             }
-            .sheet(item: self.$toolsInspector) { model in
-                ChatToolsInspectorSheet(model: model, scopeTitle: self.toolsScopeTitle, gateway: self.gateway)
-            }
         }
     }
+}
+
+/// A presented "Tools & Policy…" sheet: its inspector (made in the menu action) and scope title.
+struct ChatToolsInspection: Identifiable {
+    let model: ToolsInspectorModel
+    let scopeTitle: String
+
+    var id: ObjectIdentifier { ObjectIdentifier(self.model) }
 }
 
 /// What the Gateway saves and streams of the agent's reasoning for this session. How much of it
