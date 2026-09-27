@@ -14,7 +14,7 @@ The first time a new gateway connects, Pincer shows **Set Up &lt;gateway name&gt
 You can open setup any time the gateway is connected:
 
 - choose **Set Up Gateway…** from the gateway's menu in the sidebar;
-- press <kbd>⌘</kbd> <kbd>K</kbd> and choose **Set Up Gateway…**. Until setup is complete, it shows how many steps are settled, such as *3 of 5 steps*;
+- press <kbd>⌘</kbd> <kbd>K</kbd> and choose **Set Up Gateway…** (dimmed while the gateway is disconnected). Until setup is complete, it shows how many steps are settled, such as *3 of 5 steps*;
 - open [Gateway Settings](../../guides/gateway-settings/) → **Overview** and choose **Set Up Gateway…**. It shows **Done** once setup is complete.
 
 Pincer remembers each gateway's progress separately, including after you relaunch. Setup opens on the first step that isn't done or skipped yet.
@@ -23,7 +23,7 @@ Pincer remembers each gateway's progress separately, including after you relaunc
 
 | Step | Done when | Where to change it |
 | --- | --- | --- |
-| **Gateway Health** | The gateway is **Healthy**. | [Gateway Health](../../guides/gateway-health/) |
+| **Gateway Health** | The gateway is **Healthy**, or its only problems are with channels (those show under **Channels**). | [Gateway Health](../../guides/gateway-health/) |
 | **Channels** | At least one channel (Discord, Telegram, WhatsApp, …) is connected, and none has a problem. | Gateway Settings → **Channels** |
 | **Agent & Model** | There's a default agent and a default model. | Gateway Settings → **Agents & Models** |
 | **Skills** | No skill is missing what it needs (a CLI tool, an environment variable or a setting). | Gateway Settings → **Tools & Skills** |
@@ -59,7 +59,7 @@ The **Channels** step lists each channel and account with its status, and any pr
 For **WhatsApp** and **Zalo** (personal account), choose **Link with QR Code…** (or **Relink with QR Code…** if it's already linked). Pincer asks the gateway for a QR code (`web.login.start`). Scan it with the app on your phone, and Pincer waits for the link (`web.login.wait`), showing a new code if the old one expires. QR login needs **Full Management**. Other channels are set up in **Gateway Settings → Channels**.
 
 <Aside>
-The gateway doesn't say which channels support QR login, so Pincer offers it for WhatsApp and Zalo only, like the Control UI.
+The gateway doesn't say which channels support QR login, so Pincer offers it for WhatsApp and Zalo only, like the Control UI. It also doesn't flag when a wait for the scan times out, so Pincer keeps waiting while the gateway says it's still waiting.
 </Aside>
 
 ## Agent & Model
@@ -72,20 +72,20 @@ The **Skills** step lists each skill that's missing what it needs, like a CLI to
 
 ## Test message
 
-The message starts out as **hello**. Choose **Send "hello"**, or type your own and choose **Send**. Pincer starts a new chat, *Setup Test*, with the default agent. The step is done as soon as the gateway accepts the message, without waiting for the reply. Choose **Open Chat** to see the reply.
+The message starts out as **hello**. Choose **Send "hello"**, or type your own and choose **Send** (or press Return). Pincer sends it in a chat called *Setup Test* with the default agent, starting one the first time and reusing it after that. The step is done as soon as the gateway accepts the message, without waiting for the reply. Choose **Open Chat** to see the reply.
 
 ## Tips
 
-After setup closes, Pincer shows a **Tips** card once, in the corner of the main window. It covers slash commands, `/think`, approvals, the command palette (<kbd>⌘</kbd> <kbd>K</kbd>), Find in Chat (<kbd>⌘</kbd> <kbd>F</kbd>) and searching all your messages. Choose **Got It** to dismiss it.
+After setup closes, Pincer shows a **Tips** card once, in the corner of the main window. It covers slash commands, `/think`, approvals, the command palette (<kbd>⌘</kbd> <kbd>K</kbd>), Find in Chat (<kbd>⌘</kbd> <kbd>F</kbd>) and searching all your messages. On iPad, the keyboard tips are marked *(iPad keyboard)*; on iPhone they're left out. Choose **Got It** to dismiss it.
 
 To see it again, choose **Show Tips Again** under **Settings → General → Tips**. The card comes back the next time the main window is open.
 
 ## Try it in the demo
 
-The [demo](../try-the-demo/) offers setup every time it connects, and never saves your progress, so you can try it as often as you like. It starts with a few things to find:
+The [demo](../try-the-demo/) offers setup each time you choose **Try the Demo**, and never saves your progress, so you can try it as often as you like. Any other time, open it from the demo's gateway menu or ⌘K. It starts with a few things to find:
 
-- **Gateway Health** and **Channels** need attention: Telegram has lost its connection, and WhatsApp isn't linked yet. Choose **Link with QR Code…** on WhatsApp for a simulated QR login.
+- **Channels** needs attention: Telegram has lost its connection, and WhatsApp isn't linked yet. **Gateway Health** is **Done**, because channel problems are shown under **Channels**.
 - **Skills** needs attention: the *summarize* skill is missing its CLI tool.
-- **Test Message** sends to a new demo chat and gets a demo reply.
+- **Test Message** sends to a demo *Setup Test* chat and gets a demo reply.
 
-The demo can't save a default agent or model. The demo shows the tips card again each time Pincer launches.
+The demo connects with standard access, so the **Channels**, **Agent & Model** and **Skills** steps show **Needs Full Management**, and QR login and **Save Defaults** are unavailable. The demo shows the tips card again each time Pincer launches.

@@ -395,8 +395,8 @@ final class SetupFakeGateway {
     @Test func tipsCopyAndPlatform() {
         #expect(SetupTips.all.map(\.text) == [
             "Type / in the composer for slash commands.",
-            "Ask for deeper reasoning with /think; tap a thinking block to expand it.",
-            "Approvals for commands and tools appear inline and in the menu bar. Allow once or always.",
+            "Ask for deeper reasoning with /think; expand a thinking section to read it.",
+            "Approvals for commands and tools appear in the chat and as notifications. Allow once or always.",
             "Press ⌘K to jump to any chat, agent, model, or setting.",
             "Press ⌘F to find in the current chat.",
             "Search all messages from ⌘K or the sidebar search field.",
@@ -404,7 +404,13 @@ final class SetupFakeGateway {
         let ios = SetupTips.tips(iOS: true).map(\.text)
         #expect(ios[3] == "Press ⌘K to jump to any chat, agent, model, or setting (iPad keyboard).")
         #expect(ios[0] == SetupTips.all[0].text)
+        #expect(ios[4] == "Press ⌘F to find in the current chat (iPad keyboard).")
+        #expect(ios[5] == SetupTips.all[5].text)
         #expect(SetupTips.tips(iOS: false).map(\.text) == SetupTips.all.map(\.text))
+        let iPhone = SetupTips.tips(iOS: true, iPhone: true).map(\.text)
+        #expect(!iPhone.contains { $0.contains("⌘") })
+        #expect(iPhone == [SetupTips.all[0].text, SetupTips.all[1].text, SetupTips.all[2].text,
+                           "Search all messages from the sidebar search field."])
     }
 
     @Test func tipsShowOnceNeverOverSetup() {
@@ -451,5 +457,60 @@ final class SetupFakeGateway {
         let keywords = Set(item?.keywords ?? [])
         #expect(keywords.isSuperset(of: ["setup", "wizard", "onboarding", "getting started"]))
         #expect(CommandPalette.setupGatewayItem(gateway: nil) == nil)
+        #expect(item?.isEnabled == false && item?.isSelectable == false, "disabled while disconnected")
+    }
+
+    // MARK: Offer control (demo)
+
+    @Test func autoOffersOffMeansNoOffer() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let wizard = self.model(SetupFakeGateway(), defaults: scratch.defaults, isDemo: true)
+        wizard.autoOffers = false
+        #expect(!wizard.isShowingOrPending, "not pending, so tips don't wait for it")
+        wizard.connected()
+        #expect(!wizard.isPresented && !wizard.progress.offered)
+    }
+
+    @Test func requestOfferOffersOnceThenStops() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let wizard = self.model(SetupFakeGateway(), defaults: scratch.defaults, isDemo: true)
+        wizard.autoOffers = false
+        wizard.requestOffer(connected: false)
+        #expect(!wizard.isPresented && wizard.isShowingOrPending, "pending until the connection")
+        wizard.connected()
+        #expect(wizard.isPresented && wizard.showsIntro && !wizard.autoOffers)
+        wizard.notNow()
+        wizard.connected()
+        #expect(!wizard.isPresented, "a reconnect doesn't offer it again")
+        // Try the Demo again while connected offers it at once, even after Not Now.
+        wizard.requestOffer(connected: true)
+        #expect(wizard.isPresented && wizard.showsIntro)
+        #expect(scratch.defaults.object(forKey: SetupProgress.key(for: wizard.gatewayId)) == nil, "demo never saved")
+    }
+
+    @Test func withdrawOfferCancelsPendingDemoOffer() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let wizard = self.model(SetupFakeGateway(), defaults: scratch.defaults, isDemo: true)
+        wizard.autoOffers = false
+        wizard.requestOffer(connected: false)
+        wizard.withdrawOffer()
+        #expect(!wizard.isShowingOrPending)
+        wizard.connected()
+        #expect(!wizard.isPresented)
+        // A real gateway keeps offering.
+        let real = self.model(SetupFakeGateway(), defaults: scratch.defaults)
+        real.withdrawOffer()
+        #expect(real.autoOffers && real.isShowingOrPending)
+    }
+
+    @Test func stillWaitingMessages() {
+        #expect(SetupWizardModel.isStillWaiting("Still waiting for the QR scan. Let me know when you’ve scanned it."))
+        #expect(SetupWizardModel.isStillWaiting("  still waiting…"))
+        #expect(!SetupWizardModel.isStillWaiting("The login QR expired. Ask me to generate a new one."))
+        #expect(!SetupWizardModel.isStillWaiting("No active WhatsApp login in progress."))
+        #expect(!SetupWizardModel.isStillWaiting(""))
     }
 }

@@ -438,8 +438,23 @@ private struct SetupChannelRow: View {
                     .buttonStyle(.borderless)
             }
         case let .connected(message):
-            Label(message ?? "Linked", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.callout)
+            Label(message.map(Self.linkedMessage) ?? "Linked", systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .font(.callout)
+            Button {
+                self.setup.startQRLogin(channel: self.channel.id, accountId: accountId, force: true)
+            } label: {
+                Label("Relink with QR Code…", systemImage: "qrcode")
+            }
+            .buttonStyle(.borderless)
+            .disabled(!self.setup.canStartQRLogin(channel: self.channel.id))
         }
+    }
+
+    /// Drops upstream's chat-agent hint ("Say “relink” …"): here it's the Relink button.
+    static func linkedMessage(_ message: String) -> String {
+        guard let range = message.range(of: " Say “relink”") else { return message }
+        return String(message[..<range.lowerBound])
     }
 }
 

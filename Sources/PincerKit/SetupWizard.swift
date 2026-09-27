@@ -797,6 +797,13 @@ public final class SetupWizardModel {
         message.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("still waiting")
     }
 
+    /// Upstream `web.login.start` without `force` on a linked account answers with just a message:
+    /// WhatsApp "WhatsApp is already linked (…). Say “relink” …", Zalo "Zalo is already linked (…)."
+    /// Relinking is `startQRLogin(…, force: true)`.
+    public nonisolated static func isAlreadyLinked(_ message: String) -> Bool {
+        message.lowercased().contains("is already linked")
+    }
+
     private func runQRLogin(key: String, channel: String, accountId: String?, force: Bool) async {
         var start: [String: JSONValue] = ["channel": .string(channel), "force": .bool(force),
                                           "timeoutMs": .number(Double(Self.qrStartTimeoutMs))]
@@ -807,6 +814,12 @@ public final class SetupWizardModel {
             while !Task.isCancelled {
                 if result.connected == true {
                     self.qrLogins[key] = .connected(result.message)
+                    await self.loadChannels()
+                    return
+                }
+                // Starting on a linked account returns only a message (no `connected` flag): it's linked.
+                if result.qrImageData == nil, let message = result.message, Self.isAlreadyLinked(message) {
+                    self.qrLogins[key] = .connected(message)
                     await self.loadChannels()
                     return
                 }
