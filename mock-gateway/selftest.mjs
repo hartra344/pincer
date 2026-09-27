@@ -483,6 +483,9 @@ async function subagentsSelftest() {
     client.ws.close();
   } finally {
     await subServer.close();
+  }
+}
+
 // Skills browser + effective tools, on a fresh server so installs and toggles don't leak.
 async function skillsToolsSelftest() {
   const adminScopes = [...BASE_SCOPES, 'operator.admin'];
