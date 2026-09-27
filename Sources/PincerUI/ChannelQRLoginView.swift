@@ -12,6 +12,8 @@ struct ChannelQRLoginView: View {
     let canStart: Bool
     var linkTitle = "Link with QR Code…"
     var relinkTitle = "Relink with QR Code…"
+    /// Offer Relink after linking (the sheet on Channel Status closes instead).
+    var offersRelinkWhenLinked = true
     let start: (_ force: Bool) -> Void
     let cancel: () -> Void
 
@@ -20,12 +22,18 @@ struct ChannelQRLoginView: View {
         case .idle, .failed:
             if case let .failed(message) = self.state {
                 Text(message).font(.caption).foregroundStyle(.red)
+                Button { self.start(self.linked) } label: {
+                    Label("Try Again", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!self.canStart)
+            } else {
+                Button { self.start(self.linked) } label: {
+                    Label(self.linked ? self.relinkTitle : self.linkTitle, systemImage: "qrcode")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!self.canStart)
             }
-            Button { self.start(self.linked) } label: {
-                Label(self.linked ? self.relinkTitle : self.linkTitle, systemImage: "qrcode")
-            }
-            .buttonStyle(.borderless)
-            .disabled(!self.canStart)
         case .starting:
             ProgressView("Getting a QR code…").controlSize(.small)
         case let .showing(qr, message):
@@ -43,11 +51,13 @@ struct ChannelQRLoginView: View {
             Label(message.map(Self.linkedMessage) ?? "Linked", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
                 .font(.callout)
-            Button { self.start(true) } label: {
-                Label(self.relinkTitle, systemImage: "qrcode")
+            if self.offersRelinkWhenLinked {
+                Button { self.start(true) } label: {
+                    Label(self.relinkTitle, systemImage: "qrcode")
+                }
+                .buttonStyle(.borderless)
+                .disabled(!self.canStart)
             }
-            .buttonStyle(.borderless)
-            .disabled(!self.canStart)
         }
     }
 

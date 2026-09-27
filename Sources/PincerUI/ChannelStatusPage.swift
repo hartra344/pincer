@@ -3,12 +3,13 @@ import SwiftUI
 
 /// Gateway Settings → Channel Status: every channel account's connection from `channels.status`, with
 /// Probe, Start, Stop, Log Out, Reconnect and QR login (lifecycle needs Full Management). Upstream has
-/// no channel status event, so the page loads when it opens, every 30 seconds while it's showing, on
-/// pull to refresh, and after each action.
+/// no channel status event, so the page loads when it opens, on `health` events and every 30 seconds
+/// while it's showing, on Refresh or pull to refresh, and after each action.
 struct ChannelStatusPage: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(SettingsNavigator.self) private var navigator
     @State private var confirming: PendingAction?
+    @State private var qrAccount: ChannelAccountKey?
 
     struct PendingAction: Identifiable {
         let action: ChannelsModel.Action
@@ -23,14 +24,13 @@ struct ChannelStatusPage: View {
         let model = self.model
         let connected = self.gateway.state.isConnected
         Group {
-            if !connected {
+            if connected, model.hasLoaded, !model.supported {
+                self.unsupported
+            } else if !connected, model.snapshot == nil {
                 ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see its channels."))
-            } else if !model.supported {
-                ContentUnavailableView("Channel Status Isn't Available", systemImage: "antenna.radiowaves.left.and.right",
-                                       description: Text("This Gateway doesn't report channel status. Update OpenClaw to see it here."))
+                                       description: Text("Not connected to the Gateway."))
             } else {
-                self.list(model)
+                self.list(model, connected: connected)
             }
         }
         .navigationTitle("Channel Status")
@@ -38,7 +38,7 @@ struct ChannelStatusPage: View {
             if connected, model.supported {
                 ToolbarItem {
                     Button { Task { await model.probe() } } label: {
-                        Label("Probe", systemImage: "antenna.radiowaves.left.and.right")
+                        Label(model.isProbing ? "Probing…" : "Probe", systemImage: "antenna.radiowaves.left.and.right")
                     }
                     .disabled(model.loadState.isRunning)
                     .help("Probe: ask each channel to check its connection now")
@@ -60,58 +60,79 @@ struct ChannelStatusPage: View {
                 await model.poll()
             }
         }
-        .onDisappear { model.focusedAccount = nil }
+        .onAppear { model.isShowing = true }
+        .onDisappear {
+            model.isShowing = false
+            model.focusedAccount = nil
+        }
         .confirmationDialog(self.confirming.map(Self.confirmTitle) ?? "", isPresented: Binding(
             get: { self.confirming != nil },
             set: { if !$0 { self.confirming = nil } }
         ), titleVisibility: .visible, presenting: self.confirming) { pending in
-            Button(pending.action.title, role: .destructive) {
+            Button(pending.action == .logout ? "Log Out" : pending.action.title, role: .destructive) {
                 Task { await model.perform(pending.action, on: pending.key) }
             }
             Button("Cancel", role: .cancel) {}
         } message: { pending in
             Text(Self.confirmMessage(pending))
         }
+        .sheet(item: self.$qrAccount) { key in
+            ChannelQRLoginSheet(model: model, key: key, channelLabel: model.label(for: key))
+        }
         .overlay(alignment: .bottom) { self.noticeView(model) }
     }
 
+    /// "Stop Telegram (default)?" / "Log out of WhatsApp (default)?"
     static func confirmTitle(_ pending: PendingAction) -> String {
-        pending.action == .logout ? "Log out of \(pending.label)?" : "\(pending.action.title) \(pending.label)?"
+        let name = "\(pending.label) (\(pending.key.accountId))"
+        return pending.action == .logout ? "Log out of \(name)?" : "\(pending.action.title) \(name)?"
     }
 
     static func confirmMessage(_ pending: PendingAction) -> String {
         switch pending.action {
         case .logout:
             ChannelRules.supportsQRLogin(pending.key.channel)
-                ? "This removes its saved login from the Gateway. To use it again, scan a new QR code."
-                : "This removes its saved login from the Gateway. You'll need to set it up again to use it."
+                ? "This removes the saved login. You'll need to scan a QR code again to reconnect."
+                : "This removes the saved login. You'll need to set it up again to reconnect."
         default:
-            "It stops sending and receiving messages until you start it again."
+            "Pincer stops this account until you start it again or the Gateway restarts. Messages to it won't be answered."
         }
     }
 
     // MARK: List
 
-    private func list(_ model: ChannelsModel) -> some View {
+    private func list(_ model: ChannelsModel, connected: Bool) -> some View {
         ScrollViewReader { proxy in
             Form {
-                if !model.canManage {
-                    Section { self.fullManagementNotice }
-                }
-                if let error = model.loadState.error {
+                if !connected {
                     Section {
-                        Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                        Label("Not connected to the Gateway", systemImage: "bolt.horizontal.circle")
+                            .foregroundStyle(.secondary)
+                    }
+                } else if !model.canManage {
+                    Section { FullManagementBadge { self.navigator.destination = .connection } }
+                }
+                if connected, let error = model.loadState.error {
+                    Section {
+                        HStack {
+                            Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                            Spacer()
+                            Button("Retry") { Task { await model.refresh() } }
+                        }
                     }
                 }
                 if let snapshot = model.snapshot {
                     if snapshot.channels.isEmpty {
-                        Section {
-                            Text("No channels are set up. Add one in Gateway Settings → Channels.").foregroundStyle(.secondary)
+                        Section { self.noChannels }
+                    }
+                    Group {
+                        ForEach(snapshot.channels) { channel in
+                            self.channelSection(channel, snapshot: snapshot, model: model,
+                                                readOnly: !connected || !model.canManage)
                         }
                     }
-                    ForEach(snapshot.channels) { channel in
-                        self.channelSection(channel, snapshot: snapshot, model: model)
-                    }
+                    .opacity(connected ? 1 : 0.5)
+                    .disabled(!connected)
                     self.footerSection(snapshot, model: model)
                 } else if model.loadState.isRunning || !model.hasLoaded {
                     Section { ProgressView().frame(maxWidth: .infinity) }
@@ -123,20 +144,52 @@ struct ChannelStatusPage: View {
         }
     }
 
+    private var noChannels: some View {
+        ContentUnavailableView {
+            Label("No Channels", systemImage: "bubble.left.and.bubble.right")
+        } description: {
+            Text("Add a channel with the Setup Wizard or in Settings.")
+        } actions: {
+            Button("Open Channels Settings") { self.navigator.destination = .page("channels") }
+        }
+    }
+
+    /// No `channels.status`: say so, and show Health's channel list read-only if there is one.
+    @ViewBuilder private var unsupported: some View {
+        if let health = self.gateway.health.health, !health.channels.isEmpty {
+            let snapshot = ChannelsStatusSnapshot(health: health)
+            Form {
+                Section {
+                    Label("Unavailable on this Gateway", systemImage: "antenna.radiowaves.left.and.right")
+                        .foregroundStyle(.secondary)
+                } footer: {
+                    Text("This Gateway doesn't report channel status, so these are the channels from Health, read-only.")
+                }
+                ForEach(snapshot.channels) { channel in
+                    self.channelSection(channel, snapshot: snapshot, model: self.model, readOnly: true)
+                }
+            }
+            .formStyle(.grouped)
+        } else {
+            ContentUnavailableView("Unavailable on this Gateway", systemImage: "antenna.radiowaves.left.and.right",
+                                   description: Text("This Gateway doesn't report channel status. Update OpenClaw to see it here."))
+        }
+    }
+
     private func scrollToFocus(_ proxy: ScrollViewProxy) {
         guard let key = self.model.focusedAccount, self.model.snapshot != nil else { return }
         withAnimation { proxy.scrollTo(key.id, anchor: .center) }
     }
 
     private func channelSection(_ channel: GatewayChannelHealth, snapshot: ChannelsStatusSnapshot,
-                                model: ChannelsModel) -> some View {
+                                model: ChannelsModel, readOnly: Bool) -> some View {
         Section {
             ForEach(channel.effectiveAccounts) { account in
                 let key = ChannelAccountKey(channel: channel.id, accountId: account.accountId)
                 ChannelAccountRow(key: key, channel: channel, account: account,
-                                  issues: snapshot.issues(for: key), model: model,
-                                  showsName: channel.effectiveAccounts.count > 1 || account.accountId != "default",
-                                  confirm: { self.confirming = PendingAction(action: $0, key: key, label: model.label(for: key)) })
+                                  issues: snapshot.issues(for: key), model: model, readOnly: readOnly,
+                                  confirm: { self.confirming = PendingAction(action: $0, key: key, label: channel.label) },
+                                  logIn: { self.qrAccount = key })
                     .id(key.id)
                     .listRowBackground(model.focusedAccount == key ? Color.accentColor.opacity(0.12) : nil)
             }
@@ -169,21 +222,11 @@ struct ChannelStatusPage: View {
             if let checked = snapshot.checkedAt {
                 Text("Checked \(Text(checked, style: .relative)) ago").font(.caption).foregroundStyle(.secondary)
             }
-        } footer: {
-            Text("Probe asks each channel to check its connection now. Reconnect stops the account, then starts it again.")
-        }
-    }
-
-    private var fullManagementNotice: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label(SetupWizardModel.fullManagementTitle, systemImage: "lock.fill")
-                .font(.callout.weight(.semibold))
-            Text(SetupWizardModel.fullManagementMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Button("Open Connection…") { self.navigator.destination = .connection }
+            Button("Approving new senders? See Pairing Requests.") { self.navigator.destination = .pairing }
                 .buttonStyle(.borderless)
                 .font(.callout)
+        } footer: {
+            Text("Probe asks each channel to check its connection now. Reconnect stops the account, then starts it again.")
         }
     }
 
@@ -206,13 +249,27 @@ struct ChannelStatusPage: View {
         }
     }
 
+    /// Badge colors, shared with Gateway Health's channel list. Badges always have a text label too.
     static func color(_ state: ChannelAccountState) -> Color {
         switch state {
         case .connected, .running: .green
-        case .degraded, .disconnected, .stopped: .orange
-        case .loggedOut: .red
+        case .degraded, .disconnected: .orange
+        case .loggedOut: .yellow
+        case .stopped: .gray
         case .notConfigured, .disabled, .unknown: .secondary
         }
+    }
+}
+
+/// The status badge: symbol, label and color, used on Channel Status and Gateway Health.
+struct ChannelStateBadge: View {
+    let state: ChannelAccountState
+
+    var body: some View {
+        Label(self.state.label, systemImage: self.state.symbol)
+            .font(.callout)
+            .foregroundStyle(ChannelStatusPage.color(self.state))
+            .accessibilityLabel("Status: \(self.state.label)")
     }
 }
 
@@ -223,32 +280,48 @@ private struct ChannelAccountRow: View {
     let account: GatewayChannelAccountHealth
     let issues: [ChannelsStatusSnapshot.Issue]
     let model: ChannelsModel
-    let showsName: Bool
+    /// Offline, without Full Management, or Health's list on a Gateway without `channels.status`.
+    let readOnly: Bool
     let confirm: (ChannelsModel.Action) -> Void
+    let logIn: () -> Void
+    @State private var errorExpanded = false
+    @State private var hovering = false
+
+    private var name: String {
+        if self.key.accountId == "default" { return "Default" }
+        return self.account.name ?? self.key.accountId
+    }
 
     var body: some View {
         let state = ChannelRules.state(of: self.account, issues: self.issues)
         let operation = self.model.operation(for: self.key)
+        let managing = !self.readOnly && self.model.canManage
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(self.showsName ? (self.account.name ?? self.account.accountId) : self.channel.label)
-                    if self.showsName, self.account.name != nil, self.account.name != self.account.accountId {
-                        Text(self.account.accountId).font(.caption).foregroundStyle(.secondary)
+                    Text(self.name)
+                    if self.key.accountId != "default", let name = self.account.name, name != self.key.accountId {
+                        Text(self.key.accountId).font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
-                if operation?.state.isRunning == true {
+                if let operation, operation.state.isRunning {
                     ProgressView().controlSize(.small)
+                    Text(Self.progressText(operation.action)).font(.caption).foregroundStyle(.secondary)
                 }
-                Label(state.label, systemImage: state.symbol)
-                    .font(.callout)
-                    .foregroundStyle(ChannelStatusPage.color(state))
-                    .accessibilityLabel("Status: \(state.label)")
-                self.actionsMenu(state)
+                ChannelStateBadge(state: state)
+                if managing, self.hasAnyAction {
+                    self.actionsMenu
+                }
             }
-            if let error = self.account.lastError {
-                Text(error).font(.caption).foregroundStyle(.secondary).lineLimit(4).textSelection(.enabled)
+            if let error = self.account.lastError, !error.isEmpty {
+                Text(error)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .lineLimit(self.errorExpanded ? nil : 2)
+                    .textSelection(.enabled)
+                    .help(error)
+                    .onTapGesture { self.errorExpanded.toggle() }
             }
             ForEach(self.issues, id: \.self) { issue in
                 VStack(alignment: .leading, spacing: 2) {
@@ -256,46 +329,77 @@ private struct ChannelAccountRow: View {
                     if let fix = issue.fix { Text(fix).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                 }
             }
-            self.times
+            self.times(state)
             if let operation, let failure = operation.state.error {
-                Text("\(operation.action.title) failed: \(failure)").font(.caption).foregroundStyle(.red)
+                Text("Couldn't \(operation.action.verbText): \(failure)").font(.caption).foregroundStyle(.red)
             }
-            if self.model.offersQRLogin(self.key) {
-                ChannelQRLoginView(state: self.model.qr.state(channel: self.key.channel, accountId: self.key.accountId),
-                                   channelLabel: self.channel.label,
-                                   linked: self.account.linked == true || state.isHealthy,
-                                   canStart: self.model.canLogIn(self.key) && operation?.state.isRunning != true,
-                                   linkTitle: "Log In with QR Code…",
-                                   start: { self.model.startQRLogin(self.key, force: $0) },
-                                   cancel: { self.model.cancelQRLogin(self.key) })
+            if managing, self.needsLogIn(state) {
+                Button(action: self.logIn) { Label("Link with QR Code…", systemImage: "qrcode") }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(!self.model.canLogIn(self.key) || self.model.isBusy(self.key))
             }
         }
         .padding(.vertical, 2)
-        .contextMenu { self.menuItems(state) }
-    }
-
-    @ViewBuilder private var times: some View {
-        let parts = [
-            self.account.lastActivityAt.map { ("Last activity", $0) },
-            self.account.lastActivityAt == nil ? self.account.lastConnectedAt.map { ("Connected", $0) } : nil,
-            self.account.lastProbeAt.map { ("Probed", $0) },
-        ].compactMap(\.self)
-        if !parts.isEmpty {
-            HStack(spacing: 10) {
-                ForEach(parts, id: \.0) { part in
-                    Text("\(part.0) \(Text(part.1, style: .relative)) ago")
+        .contentShape(Rectangle())
+        .contextMenu { if managing { self.menuItems(state) } }
+        #if os(iOS)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if managing {
+                if self.model.offers(.stop, on: self.key) {
+                    Button("Stop…", systemImage: ChannelsModel.Action.stop.symbol) { self.confirm(.stop) }
+                        .tint(.gray)
+                        .disabled(!self.model.canPerform(.stop, on: self.key))
+                }
+                if self.model.offers(.reconnect, on: self.key) {
+                    Button("Reconnect", systemImage: ChannelsModel.Action.reconnect.symbol) { self.run(.reconnect) }
+                        .tint(.blue)
+                        .disabled(!self.model.canPerform(.reconnect, on: self.key))
                 }
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
         }
+        #endif
+        .accessibilityElement(children: .combine)
+        .accessibilityActions { if managing { self.accessibilityItems(state) } }
+    }
+
+    private func needsLogIn(_ state: ChannelAccountState) -> Bool {
+        self.model.offersQRLogin(self.key) && (state == .loggedOut || state == .notConfigured)
+    }
+
+    static func progressText(_ action: ChannelsModel.Action) -> String {
+        switch action {
+        case .start: "Starting…"
+        case .stop: "Stopping…"
+        case .logout: "Logging out…"
+        case .reconnect: "Reconnecting…"
+        }
+    }
+
+    @ViewBuilder private func times(_ state: ChannelAccountState) -> some View {
+        HStack(spacing: 10) {
+            if let activity = self.account.lastActivityAt {
+                Text("Last message \(Text(activity, style: .relative)) ago")
+            } else if state != .disabled, state != .notConfigured {
+                Text("No activity yet")
+            }
+            if state == .connected, let since = self.account.lastConnectedAt {
+                Text("Connected since \(since.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
+            }
+            if let probed = self.account.lastProbeAt {
+                Text("Probed \(Text(probed, style: .relative)) ago")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
         if let attempts = self.account.reconnectAttempts, attempts > 0 {
             Text("\(attempts) reconnect attempt\(attempts == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary)
         }
     }
 
-    private func actionsMenu(_ state: ChannelAccountState) -> some View {
-        Menu {
+    private var actionsMenu: some View {
+        let state = ChannelRules.state(of: self.account, issues: self.issues)
+        return Menu {
             self.menuItems(state)
         } label: {
             Label("Actions", systemImage: "ellipsis.circle")
@@ -307,39 +411,136 @@ private struct ChannelAccountRow: View {
         .fixedSize()
         #endif
         .help("Actions for \(self.model.label(for: self.key))")
-        .disabled(!self.hasAnyAction(state))
     }
 
-    private func hasAnyAction(_ state: ChannelAccountState) -> Bool {
-        ChannelsModel.Action.allCases.contains { self.model.offers($0, on: self.key) }
+    private var hasAnyAction: Bool {
+        ChannelsModel.Action.allCases.contains { self.model.offers($0, on: self.key) } || self.model.offersQRLogin(self.key)
+    }
+
+    private func run(_ action: ChannelsModel.Action) {
+        let model = self.model
+        let key = self.key
+        Task { await model.perform(action, on: key) }
+    }
+
+    /// Stop and Log Out ask first; Reconnect and Start don't.
+    private func trigger(_ action: ChannelsModel.Action) {
+        switch action {
+        case .stop, .logout: self.confirm(action)
+        case .start, .reconnect: self.run(action)
+        }
+    }
+
+    private static func menuTitle(_ action: ChannelsModel.Action) -> String {
+        switch action {
+        case .stop: "Stop…"
+        case .logout: "Log Out…"
+        default: action.title
+        }
     }
 
     @ViewBuilder private func menuItems(_ state: ChannelAccountState) -> some View {
-        let model = self.model
-        let key = self.key
-        if !model.canManage {
-            Text(SetupWizardModel.fullManagementTitle)
-        }
-        if model.offers(.reconnect, on: key) {
-            Button(ChannelsModel.Action.reconnect.title, systemImage: ChannelsModel.Action.reconnect.symbol) {
-                Task { await model.reconnect(key) }
+        ForEach([ChannelsModel.Action.reconnect, .start, .stop], id: \.self) { action in
+            if self.model.offers(action, on: self.key) {
+                Button(Self.menuTitle(action), systemImage: action.symbol) { self.trigger(action) }
+                    .disabled(!self.model.canPerform(action, on: self.key))
             }
-            .disabled(!model.canPerform(.reconnect, on: key))
         }
-        if model.offers(.start, on: key) {
-            Button(ChannelsModel.Action.start.title, systemImage: ChannelsModel.Action.start.symbol) {
-                Task { await model.start(key) }
-            }
-            .disabled(!model.canPerform(.start, on: key))
+        if self.model.offersQRLogin(self.key) {
+            let linked = !self.needsLogIn(state)
+            Button(linked ? "Relink with QR Code…" : "Link with QR Code…", systemImage: "qrcode", action: self.logIn)
+                .disabled(!self.model.canLogIn(self.key) || self.model.isBusy(self.key))
         }
-        if model.offers(.stop, on: key) {
-            Button("Stop…", systemImage: ChannelsModel.Action.stop.symbol) { self.confirm(.stop) }
-                .disabled(!model.canPerform(.stop, on: key))
-        }
-        if model.offers(.logout, on: key) {
+        if self.model.offers(.logout, on: self.key) {
             Divider()
             Button("Log Out…", systemImage: ChannelsModel.Action.logout.symbol, role: .destructive) { self.confirm(.logout) }
-                .disabled(!model.canPerform(.logout, on: key))
+                .disabled(!self.model.canPerform(.logout, on: self.key))
+        }
+    }
+
+    @ViewBuilder private func accessibilityItems(_ state: ChannelAccountState) -> some View {
+        ForEach(ChannelsModel.Action.allCases, id: \.self) { action in
+            if self.model.canPerform(action, on: self.key) {
+                Button(Self.menuTitle(action)) { self.trigger(action) }
+            }
+        }
+        if self.model.canLogIn(self.key), !self.model.isBusy(self.key) {
+            Button(self.needsLogIn(state) ? "Link with QR Code…" : "Relink with QR Code…", action: self.logIn)
+        }
+    }
+}
+
+/// QR login for one account, in a sheet: starts on open, closes itself a moment after linking, and
+/// stops waiting when closed.
+private struct ChannelQRLoginSheet: View {
+    let model: ChannelsModel
+    let key: ChannelAccountKey
+    let channelLabel: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let state = self.model.qr.state(channel: self.key.channel, accountId: self.key.accountId)
+        let linked = self.model.state(of: self.key).isHealthy
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                ChannelQRLoginView(state: state, channelLabel: self.channelLabel, linked: linked,
+                                   canStart: self.model.canLogIn(self.key),
+                                   offersRelinkWhenLinked: false,
+                                   start: { self.model.startQRLogin(self.key, force: $0) },
+                                   cancel: {
+                                       self.model.cancelQRLogin(self.key)
+                                       self.dismiss()
+                                   })
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .navigationTitle("Link \(self.channelLabel)")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(state.isConnected ? "Done" : "Cancel") { self.dismiss() }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 360, minHeight: 360)
+        #else
+        .presentationDetents([.large])
+        #endif
+        .task {
+            if !state.isRunning {
+                self.model.startQRLogin(self.key, force: linked || state.isConnected)
+            }
+        }
+        .task(id: state.isConnected) {
+            guard state.isConnected else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            self.dismiss()
+        }
+        .onDisappear {
+            if self.model.qr.state(channel: self.key.channel, accountId: self.key.accountId).isRunning {
+                self.model.cancelQRLogin(self.key)
+            }
+        }
+    }
+}
+
+private extension ChannelQRLoginState {
+    var isConnected: Bool { if case .connected = self { true } else { false } }
+}
+
+private extension ChannelsModel.Action {
+    /// "Couldn't reconnect: …"
+    var verbText: String {
+        switch self {
+        case .start: "start"
+        case .stop: "stop"
+        case .logout: "log out"
+        case .reconnect: "reconnect"
         }
     }
 }

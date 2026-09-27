@@ -59,7 +59,7 @@ export default defineConfig({
 						{ slug: 'guides/gateway-settings' },
 						{ slug: 'guides/agents' },
 						{ slug: 'guides/gateway-health' },
-						{ slug: 'guides/channels' },
+						{ slug: 'guides/channel-status' },
 						{ slug: 'guides/gateway-logs' },
 						{ slug: 'guides/command-policy' },
 						{ slug: 'guides/usage-and-cost' },

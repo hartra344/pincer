@@ -321,7 +321,7 @@ public final class GatewayStore: Identifiable {
         if case let .failed(message) = state { self.lastError = message }
         if !state.isConnected {
             self.pairingInbox.reset()
-            self.channels.reset()
+            self.channels.disconnected()
         }
         guard state == .connected, let hello else {
             self.health.connectionChanged(state, hello: nil)
@@ -615,6 +615,7 @@ public final class GatewayStore: Identifiable {
             self.settings.handlePluginsChanged()
         case "health", "heartbeat", "presence", "shutdown":
             self.health.handle(event: event.name, payload: payload)
+            if event.name == "health" { self.channels.healthDidChange() }
         case "exec.approval.resolved":
             if let id = payload["id"]?.text ?? payload["request"]?["id"]?.text {
                 self.approvals.removeAll { $0.id == id }

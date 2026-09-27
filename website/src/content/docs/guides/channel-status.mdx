@@ -1,0 +1,84 @@
+---
+title: Channel Status
+description: See whether each Discord, Telegram, WhatsApp or other channel account is connected, and reconnect, start, stop, log out or log in with a QR code from Pincer.
+---
+
+**Channel Status** shows every channel account on your gateway (Discord, Telegram, WhatsApp and the rest) and whether it's working. You can reconnect, start, stop or log out an account, and log WhatsApp in with a QR code, without a terminal.
+
+This page is about whether accounts are connected. Their settings are on the **Channels** settings page, and letting a new person message your agents is under [Pairing Requests](../gateway-settings/#pairing-requests).
+
+## Opening it
+
+Open [Gateway Settings](../gateway-settings/) and choose **Channel Status** in the sidebar, just below **Health**. The row gets an attention mark when a channel account needs a look.
+
+From the [Health page](../gateway-health/), a channel account issue's context menu has **Show in Channel Status**, which opens this page at that account.
+
+## What's on the page
+
+Accounts are grouped by channel. Each one shows its state, its last error if it has one, and when it was last active, connected and probed.
+
+| State | Meaning |
+| --- | --- |
+| **Connected** | The account is running and connected. |
+| **Running** | It's running, and the channel doesn't report a connection. |
+| **Degraded** | It's running but reported an error. The last error says why. |
+| **Disconnected** | It's running but not connected. |
+| **Logged Out** | It has no saved login. For WhatsApp, [log in with a QR code](#logging-in-with-a-qr-code). |
+| **Stopped** | It's set up and enabled but not running. |
+| **Not Configured** | It's missing settings it needs. Add them on the **Channels** settings page. |
+| **Disabled** | It's turned off in the gateway's config. |
+
+If no channel is set up yet, the page says so and points you to Gateway Settings → Channels. If your gateway doesn't report channel status, the page says so.
+
+## Refreshing and probing
+
+The page loads when it opens and updates when the gateway reports a health change. Use **Refresh** in the toolbar, or pull down on iOS, to refresh now.
+
+**Probe** asks each channel to check its connection with the service now. It can take several seconds ("Probing channels…"), and anything that fails shows up as the account's last error.
+
+## Managing an account
+
+:::caution[Changing accounts needs Full Management]
+Reconnecting, starting, stopping, logging out and QR login need this device's **Access** to be **Full Management** on the **Connection** page. Without it, the page is read-only and shows **Needs Full Management** with **Open Connection…**. See [Access levels](../../getting-started/connect-a-gateway/#access-levels).
+:::
+
+Use the account's actions button or its context menu (touch and hold on iPhone and iPad).
+
+| Action | What it does | Asks first |
+| --- | --- | --- |
+| **Reconnect** | Stops the account, then starts it again. Often fixes a Degraded or Disconnected account. | No |
+| **Start** | Starts a stopped account. | No |
+| **Stop…** | It stops sending and receiving messages until you start it again. | Yes |
+| **Log Out…** | Removes its saved login from the gateway. To use it again, log in again (for WhatsApp, with a new QR code). | Yes |
+
+While an action runs, the account shows it, and Pincer says when it's done ("Reconnected Telegram."). If the gateway refuses, the reason shows on the account, for example when a channel can't be started or logged out at runtime.
+
+## Logging in with a QR code
+
+For channels that log in with a QR code, like WhatsApp:
+
+1. Choose **Log In with QR Code…** on the account. Pincer shows "Getting a QR code…", then the code.
+2. Scan it with the app on your phone (in WhatsApp: **Settings → Linked Devices → Link a Device**). If the code changes before you scan it, Pincer shows the new one.
+3. When the phone is linked, the account refreshes.
+
+Choose **Cancel** to stop waiting. An account that's already linked offers **Relink with QR Code…**.
+
+The [setup wizard](../../getting-started/setup-wizard/)'s Channels step uses the same QR login.
+
+## Reconnecting from Health
+
+A channel account that isn't running, isn't connected or reported an error shows up as an issue on the [Health page](../gateway-health/). Its context menu (touch and hold on iOS; the VoiceOver actions rotor too) has:
+
+- **Reconnect Account**, the same as **Reconnect** here. Without Full Management it shows as locked. If the account comes back, the issue clears after the refresh. If it's still failing, the issue stays.
+- **Show in Channel Status**, which opens this page at that account.
+
+## In the demo
+
+The [demo](../../getting-started/try-the-demo/) has a connected Discord account, a degraded Telegram account with a connection error, and a logged-out WhatsApp account. Every action, including QR login, is simulated.
+
+## Current limits
+
+- Channel Status has been tested against the demo and the [mock gateway](../../development/mock-gateway/) only.
+- The gateway has no channel-specific event, so the page updates on health changes, when it opens and when you refresh.
+- Some channels can't be started, stopped or logged out at runtime. The gateway says so and Pincer shows it on the account.
+- Adding a channel account is done on the **Channels** settings page or in the setup wizard.

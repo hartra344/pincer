@@ -427,7 +427,7 @@ actor DemoGateway {
                     "accountId": "default", "name": "Telegram", "enabled": true, "configured": true, "running": true,
                     "connected": false, "restartPending": false, "reconnectAttempts": 4,
                     "lastConnectedAt": .number(nowMs - 25 * 60_000), "lifecycle": "recovering",
-                    "lastError": "Telegram API timed out (getUpdates). Retrying.",
+                    "lastError": "getUpdates: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
                 ],
                 "whatsapp": self.whatsappAccount(),
             ]

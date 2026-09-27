@@ -82,20 +82,33 @@ public enum ChannelRules {
         "ingress-unavailable",
     ]
 
-    /// Disabled, logged out, not configured, stopped and disconnected come first; then an error, an
-    /// unhealthy `healthState` or a status issue make it degraded; else connected or running.
+    /// Disabled, logged out, not configured and stopped come first; then a last error makes it degraded,
+    /// not connected makes it disconnected, and an unhealthy `healthState`, a failed probe or a status
+    /// issue make it degraded; else connected or running.
     public static func state(of account: GatewayChannelAccountHealth,
                              issues: [ChannelsStatusSnapshot.Issue] = []) -> ChannelAccountState {
         if account.enabled == false { return .disabled }
         if account.linked == false { return .loggedOut }
         if account.configured == false { return .notConfigured }
         if account.running == false { return .stopped }
+        if account.lastError?.isEmpty == false { return .degraded }
         if account.connected == false { return .disconnected }
         let unhealthy = account.healthState.map { self.unhealthyHealthStates.contains($0) } ?? false
-        if account.lastError != nil || unhealthy || account.probeOk == false || !issues.isEmpty { return .degraded }
+        if unhealthy || account.probeOk == false || !issues.isEmpty { return .degraded }
         if account.connected == true { return .connected }
         if account.running == true { return .running }
         return .unknown
+    }
+
+    /// One state for a whole channel (Gateway Health's channel list): the most pressing account's.
+    public static func summaryState(of channel: GatewayChannelHealth,
+                                    issues: [ChannelsStatusSnapshot.Issue] = []) -> ChannelAccountState {
+        let states = Set(channel.effectiveAccounts.map { account in
+            self.state(of: account, issues: issues.filter { $0.channel == channel.id && $0.accountId == account.accountId })
+        })
+        let order: [ChannelAccountState] = [.degraded, .disconnected, .loggedOut, .stopped, .notConfigured,
+                                            .connected, .running, .unknown, .disabled]
+        return order.first(where: states.contains) ?? .unknown
     }
 
     /// Whether `action` makes sense for an account in `state`.
@@ -107,7 +120,7 @@ public enum ChannelRules {
         case .stop:
             return account?.running == true
         case .reconnect:
-            return [.connected, .running, .degraded, .disconnected, .stopped, .unknown].contains(state)
+            return [.connected, .running, .degraded, .disconnected, .unknown].contains(state)
         case .logout:
             return state != .notConfigured && state != .loggedOut
         }
@@ -118,6 +131,15 @@ public enum ChannelRules {
         if GatewayHealthModel.isMissingScope(error) { return SetupWizardModel.fullManagementMessage }
         if case let GatewayError.rpc(_, message, _) = error { return message }
         return error.localizedDescription
+    }
+
+    /// The action the Gateway said a channel doesn't support ("does not support logout/start"), if any.
+    public static func unsupportedAction(in error: Error) -> ChannelsModel.Action? {
+        guard case let GatewayError.rpc(_, message, _) = error else { return nil }
+        let lower = message.lowercased()
+        if lower.contains("does not support logout") { return .logout }
+        if lower.contains("does not support start") || lower.contains("does not support runtime start") { return .start }
+        return nil
     }
 
     /// A lifecycle failure, with friendlier copy for what upstream reports as unsupported.
@@ -326,6 +348,11 @@ public final class ChannelsModel {
     /// "Show in Channel Status" from Health: the page scrolls to it, then clears it.
     public var focusedAccount: ChannelAccountKey?
     public let qr: ChannelQRLoginController
+    /// Actions the Gateway said a channel doesn't support, by "<channel>:<action>". Hidden afterwards.
+    public private(set) var unsupported: Set<String> = []
+    /// The page is on screen, so `health` events refresh it.
+    @ObservationIgnored public var isShowing = false
+    @ObservationIgnored private var loadedAt: Date?
     /// After a lifecycle action or QR login succeeds, e.g. to refresh Gateway Health.
     @ObservationIgnored public var onChanged: (@MainActor () async -> Void)?
 
@@ -399,7 +426,14 @@ public final class ChannelsModel {
 
     /// Whether the account's actions list `action` at all (it may still be locked by `canManage`).
     public func offers(_ action: Action, on key: ChannelAccountKey) -> Bool {
-        self.supports(action) && ChannelRules.offers(action, state: self.state(of: key), account: self.account(key))
+        self.supports(action) && !self.isUnsupported(action, channel: key.channel)
+            && ChannelRules.offers(action, state: self.state(of: key), account: self.account(key))
+    }
+
+    /// The Gateway already said this channel can't do `action` (reconnect needs start).
+    public func isUnsupported(_ action: Action, channel: String) -> Bool {
+        let needed: Action = action == .reconnect ? .start : action
+        return self.unsupported.contains("\(channel):\(needed.rawValue)")
     }
 
     /// Offered, allowed and nothing else running on the account.
@@ -473,6 +507,7 @@ public final class ChannelsModel {
             if let snapshot = ChannelsStatusSnapshot(result) {
                 self.snapshot = snapshot
                 self.loadState = .idle
+                self.loadedAt = Date()
             } else {
                 self.loadState = .failed("The Gateway sent an unexpected channel status.")
             }
@@ -488,7 +523,27 @@ public final class ChannelsModel {
         self.hasLoaded = true
     }
 
-    /// Forgets everything, e.g. when the connection drops.
+    /// A `health` event: things changed on the Gateway, so reload while the page is showing
+    /// (at most every few seconds; there's no channel status event).
+    public func healthDidChange() {
+        guard self.isShowing, self.hasLoaded, self.supported, !self.loadState.isRunning, !self.isProbing else { return }
+        if let loadedAt, Date().timeIntervalSince(loadedAt) < Self.healthRefreshSpacing { return }
+        Task { await self.load() }
+    }
+
+    nonisolated static let healthRefreshSpacing: TimeInterval = 5
+
+    /// The connection dropped: keep the last-known list (shown dimmed), stop anything in flight.
+    public func disconnected() {
+        guard self.loadState != .idle || self.isProbing || !self.operations.isEmpty || !self.qr.logins.isEmpty else { return }
+        self.generation += 1
+        self.loadState = .idle
+        self.isProbing = false
+        self.operations = [:]
+        self.qr.reset()
+    }
+
+    /// Forgets everything.
     public func reset() {
         guard self.hasLoaded || self.snapshot != nil || !self.operations.isEmpty || !self.qr.logins.isEmpty
             || self.loadState != .idle else { return }
@@ -499,6 +554,8 @@ public final class ChannelsModel {
         self.hasLoaded = false
         self.operations = [:]
         self.unknownMethod = false
+        self.unsupported = []
+        self.loadedAt = nil
         self.qr.reset()
     }
 
@@ -548,6 +605,9 @@ public final class ChannelsModel {
             return problem == nil
         } catch {
             self.fail(action, key, ChannelRules.message(for: error, action: action, channelLabel: label))
+            if let unsupported = ChannelRules.unsupportedAction(in: error) {
+                self.unsupported.insert("\(key.channel):\(unsupported.rawValue)")
+            }
             await self.load()
             return false
         }

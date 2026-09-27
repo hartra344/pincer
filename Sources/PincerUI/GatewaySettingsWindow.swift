@@ -355,7 +355,7 @@ private struct SettingsSidebar: View {
                     self.row("Health", symbol: "heart.text.square", .health,
                              attention: self.gateway.health.level == .degraded || self.gateway.health.needsRestart)
                     self.row("Channel Status", symbol: "antenna.radiowaves.left.and.right", .channelStatus,
-                             attention: self.gateway.state.isConnected && self.gateway.channels.attentionCount > 0)
+                             attention: self.gateway.health.hasChannelAccountIssues)
                     self.row("Approval History", symbol: "checkmark.shield", .approvals)
                     self.row("Gateway Logs", symbol: "doc.text.magnifyingglass", .logs)
                     self.row("Command Policy", symbol: "lock.shield", .execPolicy,

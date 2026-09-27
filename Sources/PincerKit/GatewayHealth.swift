@@ -837,6 +837,9 @@ public final class GatewayHealthModel {
         self.issues(now: now).filter { !self.isDismissed($0) }
     }
 
+    /// A channel account has an issue that isn't dismissed (the Channel Status sidebar mark).
+    public var hasChannelAccountIssues: Bool { self.activeIssues.contains { $0.channelAccount != nil } }
+
     /// Reported issues that are dismissed or always ignored.
     public var dismissedIssues: [GatewayHealthIssue] { self.dismissedIssues(now: Date()) }
 
