@@ -449,7 +449,7 @@ private extension Array {
 
 private final class SidebarChatListCell: UICollectionViewListCell {
     private let chip = UIButton(configuration: .plain())
-    private let spinner = UIActivityIndicatorView(style: .medium)
+    private let workingAvatar = SidebarWorkingAvatarView()
     private let unreadDot = UIImageView(image: UIImage(systemName: "circle.fill"))
     private var onToggleThreads: (() -> Void)?
     var fill: UIColor? {
@@ -463,6 +463,12 @@ private final class SidebarChatListCell: UICollectionViewListCell {
             background.backgroundColor = fill
         }
         self.backgroundConfiguration = background
+        self.workingAvatar.isEmphasized = state.isSelected || state.isHighlighted
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        self.workingAvatar.stop()
     }
 
     override init(frame: CGRect) {
@@ -476,8 +482,6 @@ private final class SidebarChatListCell: UICollectionViewListCell {
         chip.cornerStyle = .capsule
         self.chip.configuration = chip
         self.chip.addAction(UIAction { [weak self] _ in self?.onToggleThreads?() }, for: .primaryActionTriggered)
-        self.spinner.hidesWhenStopped = false
-        self.spinner.sizeToFit()
         self.unreadDot.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 10)
         self.unreadDot.contentMode = .center
         self.unreadDot.frame = CGRect(x: 0, y: 0, width: 12, height: 12)
@@ -545,14 +549,12 @@ private final class SidebarChatListCell: UICollectionViewListCell {
             accessories.append(.customView(configuration: .init(customView: self.chip, placement: .trailing(),
                                                                 reservedLayoutWidth: .actual, maintainsFixedSize: true)))
         }
-        let working = row.hasActiveRun || (!entry.showSubagentRuns && entry.runningSubagents > 0)
-        if working {
-            self.spinner.startAnimating()
-            self.spinner.accessibilityLabel = row.hasActiveRun ? "Working" : "\(entry.runningSubagents) helper runs working"
-            accessories.append(.customView(configuration: .init(customView: self.spinner, placement: .trailing(),
+        if let indicator = entry.working {
+            self.workingAvatar.configure(indicator, companion: entry.workingAvatar, phaseSeed: row.key)
+            accessories.append(.customView(configuration: .init(customView: self.workingAvatar, placement: .trailing(),
                                                                 reservedLayoutWidth: .actual, maintainsFixedSize: true)))
         } else {
-            self.spinner.stopAnimating()
+            self.workingAvatar.stop()
             if unread {
                 accessories.append(.customView(configuration: .init(customView: self.unreadDot, placement: .trailing(),
                                                                     reservedLayoutWidth: .actual, maintainsFixedSize: true)))
@@ -566,7 +568,7 @@ private final class SidebarChatListCell: UICollectionViewListCell {
         var label = row.title
         if row.isPinned { label += ", pinned" }
         if unread { label += ", unread" }
-        if working { label += ", working" }
+        if let indicator = entry.working { label += ", \(indicator.label)" }
         if let preview = entry.preview { label += ", \(preview)" }
         self.accessibilityLabel = label
         self.accessibilityHint = ChannelRowStyle.help(for: row)
