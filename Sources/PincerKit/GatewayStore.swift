@@ -167,6 +167,10 @@ public final class GatewayStore: Identifiable {
     /// Built in `init`, not lazily, so reading it from a view body (the menu bar item, #119) never
     /// creates it or wires up its callbacks mid-update.
     @ObservationIgnored public let health: GatewayHealthModel
+    /// Channel Status: each channel account's state and its lifecycle (start, stop, log out, reconnect,
+    /// QR login). Built in `init` like `health`: Gateway Health's context menu reads it. The demo may
+    /// run lifecycle actions without `operator.admin`.
+    @ObservationIgnored public let channels: ChannelsModel
 
     /// The first-run setup wizard (Set Up Gateway…); offered after the first successful connection.
     @ObservationIgnored public private(set) lazy var setup: SetupWizardModel = {
@@ -241,8 +245,13 @@ public final class GatewayStore: Identifiable {
             connection: connection, hello: { nil },
             localDeviceId: profile.isDemo ? DemoGateway.deviceId : identity.deviceId,
             simulatedRestart: profile.isDemo)
+        self.channels = ChannelsModel(connection: connection, hello: { nil }, allowsWritesWithoutAdmin: profile.isDemo)
         images.gateway = self
         self.health.hello = { [weak self] in self?.hello }
+        self.channels.methods = { [weak self] in self?.hello?.methods }
+        self.channels.scopes = { [weak self] in self?.hello?.scopes ?? [] }
+        // A lifecycle change shows up in `health` too, so its channel issue clears (or appears).
+        self.channels.onChanged = { [weak self] in await self?.health.refresh() }
         self.health.onRestarted = { [weak self] in
             guard let self, self.settings.hasLoaded else { return }
             Task { await self.settings.load() }
@@ -310,7 +319,10 @@ public final class GatewayStore: Identifiable {
     private func update(state: ConnectionState, hello: GatewayHello?) {
         self.state = state
         if case let .failed(message) = state { self.lastError = message }
-        if !state.isConnected { self.pairingInbox.reset() }
+        if !state.isConnected {
+            self.pairingInbox.reset()
+            self.channels.reset()
+        }
         guard state == .connected, let hello else {
             self.health.connectionChanged(state, hello: nil)
             return

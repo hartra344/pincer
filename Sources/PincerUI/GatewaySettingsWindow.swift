@@ -238,6 +238,7 @@ private struct GatewaySettingsRoot: View {
         case .execPolicy: ExecPolicyPage()
         case .usage: UsagePage()
         case .pairing: PairingRequestsPage()
+        case .channelStatus: ChannelStatusPage()
         case let .page(id):
             if let page = SettingsCatalog.page(id) { CuratedPage(page: page) }
         case .plugins: PluginsPage()
@@ -353,6 +354,8 @@ private struct SettingsSidebar: View {
                     self.row("Overview", symbol: "info.circle", .overview)
                     self.row("Health", symbol: "heart.text.square", .health,
                              attention: self.gateway.health.level == .degraded || self.gateway.health.needsRestart)
+                    self.row("Channel Status", symbol: "antenna.radiowaves.left.and.right", .channelStatus,
+                             attention: self.gateway.state.isConnected && self.gateway.channels.attentionCount > 0)
                     self.row("Approval History", symbol: "checkmark.shield", .approvals)
                     self.row("Gateway Logs", symbol: "doc.text.magnifyingglass", .logs)
                     self.row("Command Policy", symbol: "lock.shield", .execPolicy,

@@ -16,6 +16,8 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case usage
     /// Pairing Requests: senders waiting to DM the agents on a pairing-policy channel.
     case pairing
+    /// Channel Status: each channel account's connection, and start, stop, log out, reconnect and QR login.
+    case channelStatus
     /// A curated page from `SettingsCatalog`, by id.
     case page(String)
     case plugins
@@ -158,6 +160,9 @@ public enum SettingsCatalog {
     public static let searchableDestinations: [SettingsDestinationMatch] = [
         SettingsDestinationMatch(destination: .approvals, title: "Approval History", symbol: "checkmark.shield",
                                  keywords: ["approval history", "approvals", "audit", "log", "decisions"]),
+        SettingsDestinationMatch(destination: .channelStatus, title: "Channel Status", symbol: "antenna.radiowaves.left.and.right",
+                                 keywords: ["channel status", "channels", "reconnect", "log out", "logout", "log in",
+                                            "login", "qr", "link", "whatsapp", "start", "stop", "probe", "connection"]),
         SettingsDestinationMatch(destination: .execPolicy, title: "Command Policy", symbol: "lock.shield",
                                  keywords: ["command policy", "exec", "allowlist", "always allow", "approval policy",
                                             "ask", "security"]),
