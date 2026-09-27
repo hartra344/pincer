@@ -45,6 +45,7 @@ export default defineConfig({
 						{ slug: 'guides/organizing-chats' },
 						{ slug: 'guides/command-palette-and-navigation' },
 						{ slug: 'guides/transcript' },
+						{ slug: 'guides/file-diffs' },
 						{ slug: 'guides/search' },
 						{ slug: 'guides/composer' },
 						{ slug: 'guides/quick-capture' },

@@ -47,6 +47,8 @@ How much of the agent's thinking steps (reasoning and tool calls) you see is a s
 
 Each tool call is shown as a card with its arguments and result. When a tool call starts a helper (subagent) run, the card has an **Open run** button that takes you to it.
 
+When the agent writes, edits or patches a file, the card shows the change as a colour-coded diff with the file name and added and removed line counts. See [File edit diffs](../file-diffs/).
+
 ### Try it in the demo
 
 Open **Claw → Main**, set **Thinking Steps → All** in the chat’s ⋯ menu, then expand **Thinking** and **exec df -h**. The card separates the command’s input from its output; the disk figures are simulated.

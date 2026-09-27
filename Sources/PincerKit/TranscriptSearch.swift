@@ -71,8 +71,11 @@ public enum TranscriptSearch {
     }
 
     /// Text of a tool call as its card shows it: input, then output, each cut at the limit.
+    /// A file edit's card shows its whole diff (already capped) in place of the input.
     public static func toolTexts(_ tool: ToolActivity, limit: Int) -> [String] {
-        [tool.arguments, tool.result].compactMap { text in
+        let diff = tool.fileEdit?.displayText
+        return [diff ?? tool.arguments, tool.result].enumerated().compactMap { index, text in
+            if index == 0, let diff { return diff }
             guard let text, !text.isEmpty else { return nil }
             return text.count > limit ? String(text.prefix(limit)) + "\n…" : text
         }
