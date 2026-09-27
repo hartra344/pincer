@@ -11,6 +11,7 @@ import Synchronization
 /// `TranscriptCache.save` keeps it current; `reconcile` catches up on transcripts it hasn't
 /// seen (caches written before the index existed, or while it was being rebuilt). Decoding
 /// transcripts and building what's indexed happen off the actor, so searches don't wait on them.
+func dbg(_ s: @autoclosure () -> String) { if ProcessInfo.processInfo.environment["PINCER_DEBUG_INDEX"] != nil { FileHandle.standardError.write(Data(("[IDX \(Date().timeIntervalSince1970)] " + s() + "\n").utf8)) } }
 public actor MessageIndex {
     public enum Status: Hashable, Sendable {
         case ready
@@ -73,6 +74,7 @@ public actor MessageIndex {
             return registry.indexes.removeValue(forKey: gatewayId)
         }
         guard let index else { return }
+        dbg("discard \(ObjectIdentifier(index))")
         index.removed.withLock { $0 = true }
         index.interrupter.interruptAny()
         Task { await index.close() }
@@ -182,6 +184,7 @@ public actor MessageIndex {
                 try? self.exec(db, "ROLLBACK")
                 throw error
             }
+            dbg("write \(ObjectIdentifier(self)) \(sessionKey) unchanged=\(unchanged) docs=\(documents?.count ?? -1)")
             return .done
         } ?? .done
     }
@@ -359,6 +362,7 @@ public actor MessageIndex {
                         : Date(timeIntervalSinceReferenceDate: sqlite3_column_double(statement, 5)),
                     text: Self.unpacked(statement, 6) ?? ""))
             }
+            dbg("search \(ObjectIdentifier(self)) \(fts) hits=\(hits.count) keys=\(Set(hits.map(\.sessionKey)))")
             return hits
         } catch is CancellationError {
             throw CancellationError()
@@ -381,6 +385,7 @@ public actor MessageIndex {
     }
 
     public func close() {
+        dbg("close \(ObjectIdentifier(self)) db=\(self.db != nil)")
         // Once this returns no interrupt is in flight, and none can reach the freed connection.
         self.interrupter.end()
         if let db { sqlite3_close_v2(db) }
@@ -407,6 +412,7 @@ public actor MessageIndex {
 
     /// Deletes the index after an error showing it's unreadable; anything else leaves it be.
     private func recover(from error: Error) {
+        dbg("recover \(ObjectIdentifier(self)) \(error)")
         guard case IndexError.corrupt = error else { return }
         self.reset()
     }
@@ -450,6 +456,7 @@ public actor MessageIndex {
             throw error
         }
         self.db = handle
+        dbg("connect \(ObjectIdentifier(self)) \(path)")
         self.openLocation = location
         sqlite3_busy_timeout(handle, 2000)
         // Checkpoints shrink the WAL back to this rather than leaving it at its largest.

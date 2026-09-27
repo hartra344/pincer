@@ -13,7 +13,7 @@ public enum TranscriptCache {
         /// Session activity when saved; an unchanged session needs no background refresh.
         public var activityMs: Double?
 
-        public static let currentVersion = 5
+        public static let currentVersion = 6
 
         public init(version: Int = Self.currentVersion, items: [ChatItem], complete: Bool, activityMs: Double? = nil) {
             self.version = version
@@ -84,16 +84,36 @@ public enum TranscriptCache {
     //    optional) but its messages would silently lack reply quotes and the channel ids agent
     //    reactions point at, and older history is never refetched once cached. So v4 isn't
     //    migratable: it's discarded and refetched, and `oldestMigratableVersion` is 5.
-    //  - Still v5 (#37, file edit diffs) added the optional `ChatItem.toolDetails`. No bump: a v5
-    //    file without it decodes, and its edit cards fall back to diffing the tool's arguments
-    //    (a `write` shows as a new file rather than an overwrite). That degrades gracefully,
-    //    unlike v4's missing reply ids, so it isn't worth refetching every cached transcript.
+    //  - v6 (#168) follows #154 (file edit diffs), which added the optional `ChatItem.toolDetails`
+    //    without a bump. A v5 file cached before #154 has tool results without it, and a `write`
+    //    without details reads as creating the file, so an overwrite showed as "New file". Only
+    //    the Gateway knows the real details and older history is never refetched, so
+    //    `migrations[5]` marks tool results lacking them with `unknownToolDetails`: the card
+    //    then says "Written" with nothing claimed about what was removed. Tool results that have
+    //    details (cached after #154) keep them, and nothing is refetched.
 
     /// Upgrades a snapshot's JSON object from the version it's keyed by to the next one.
     typealias Migration = @Sendable (inout [String: Any]) throws -> Void
 
+    /// `toolDetails` of a tool result cached before they were recorded: the Gateway's details
+    /// are unknown, so a file edit card claims neither a new file nor what was removed.
+    public static let unknownToolDetails: JSONValue = .object(["provenance": .string("unknown")])
+
     /// Keyed by source version: `migrations[n]` turns a version-n snapshot into version n + 1.
-    static let migrations: [Int: Migration] = [:]
+    static let migrations: [Int: Migration] = [
+        5: { json in
+            // A file that isn't a transcript is left for decoding to reject.
+            guard var items = json["items"] as? [Any] else { return }
+            for index in items.indices {
+                guard var item = items[index] as? [String: Any], item["role"] as? String == ChatRole.toolResult.rawValue,
+                      item["toolDetails"] == nil || item["toolDetails"] is NSNull
+                else { continue }
+                item["toolDetails"] = ["provenance": "unknown"]
+                items[index] = item
+            }
+            json["items"] = items
+        },
+    ]
 
     /// Older transcripts are discarded rather than migrated.
     static let oldestMigratableVersion = 5
