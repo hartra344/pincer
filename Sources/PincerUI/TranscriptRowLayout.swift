@@ -247,6 +247,7 @@ struct TranscriptDecoration: Equatable {
 /// plus the session's own `reasoningLevel`.
 struct TranscriptSettings: Equatable {
     var thinking: ThinkingDisplay
+    var reactionsEnabled = false
     /// The session has reasoning turned off on the Gateway, so no reasoning text is shown at all.
     var reasoningOff = false
     /// Colors are baked into layouts (avatars) and drawn by row views, so a theme change redoes them.
@@ -255,6 +256,7 @@ struct TranscriptSettings: Equatable {
     @MainActor static func current(for context: TranscriptContext) -> TranscriptSettings {
         TranscriptSettings(
             thinking: ThinkingDisplay.current,
+            reactionsEnabled: ReactionFeature.isEnabled,
             reasoningOff: context.gateway.sessions[context.sessionKey]?.reasoningLevel == "off",
             theme: AppTheme.current)
     }
@@ -338,7 +340,7 @@ struct TranscriptLayoutBuilder {
             }
             if item.isReplyable, let id = item.transcriptId {
                 ids = [id]
-                if chat.ackMessageId == id { decoration.ack = id }
+                if self.settings.reactionsEnabled, chat.ackMessageId == id { decoration.ack = id }
             }
         case let .assistant(turn):
             ids = turn.textIds.compactMap(\.self)
@@ -346,8 +348,10 @@ struct TranscriptLayoutBuilder {
             break
         }
         for id in ids {
-            let groups = chat.reactionGroups(for: id, agentName: agent)
-            if !groups.isEmpty { decoration.reactions[id] = groups }
+            if self.settings.reactionsEnabled {
+                let groups = chat.reactionGroups(for: id, agentName: agent)
+                if !groups.isEmpty { decoration.reactions[id] = groups }
+            }
             if id == self.flash { decoration.flash = id }
         }
         return decoration
@@ -901,6 +905,7 @@ extension TranscriptLayoutBuilder {
 
     /// Chips for a message's reactions (and the 👀 while the agent works on it), wrapped to the width.
     fileprivate func reactions(on messageId: String, canAdd: Bool = true, into stack: inout Stack, layout: TranscriptRowLayout) {
+        guard self.settings.reactionsEnabled else { return }
         let groups = layout.decoration.reactions[messageId] ?? []
         let showsAck = layout.decoration.ack == messageId && !groups.contains { $0.emoji == Reactions.ackEmoji }
         guard !groups.isEmpty || showsAck else { return }
