@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
 import { AGENT_MANAGEMENT_METHODS, agentManagementDisabled, createAgentWorkspaces, handleAgentsRequest } from './agents.mjs';
+import { SKILLS_METHODS, TOOLS_METHODS, handleSkillsRequest, skillsDisabled, toolsDisabled } from './skills.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
 import { LOGS_METHODS, createLogsState, handleLogsRequest, logsDisabled, noteApprovalForLogs, noteChatForLogs, stopLogs } from './logs.mjs';
@@ -17,6 +18,8 @@ const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const METHODS = [
   'agents.list',
   ...AGENT_MANAGEMENT_METHODS,
+  ...SKILLS_METHODS,
+  ...TOOLS_METHODS,
   'sessions.subscribe',
   'sessions.list',
   'sessions.groups.list',
@@ -625,6 +628,8 @@ function advertisedMethods() {
     ...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []),
     ...(execApprovalsDisabled() ? EXEC_APPROVALS_METHODS : []),
     ...(agentManagementDisabled() ? AGENT_MANAGEMENT_METHODS : []),
+    ...(skillsDisabled() ? SKILLS_METHODS : []),
+    ...(toolsDisabled() ? TOOLS_METHODS : []),
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
     ...(healthDisabled() ? HEALTH_METHODS : []),
     ...(usageDisabled() ? USAGE_METHODS : []),
@@ -1052,6 +1057,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleLogsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleExecApprovalsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleAgentsRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
+  if (handleSkillsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleHealthRequest(state, conn, msg, { sendRes, sendErr, broadcast, abortRun: finishRunAbort })) return;

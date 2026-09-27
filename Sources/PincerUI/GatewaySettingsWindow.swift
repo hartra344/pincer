@@ -107,6 +107,9 @@ private struct GatewaySettingsRoot: View {
                         case let .execAgent(id): ExecAgentPage(agentId: id)
                         case let .agent(id): AgentPage(agentId: id)
                         case let .agentFile(agentId, name): AgentFileEditorPage(agentId: agentId, name: name)
+                        case let .skill(key): SkillDetailPage(skillKey: key)
+                        case .clawHub: ClawHubSearchPage()
+                        case let .agentTools(id): AgentToolsPage(agentId: id)
                         case let .sessionUsage(key, agentId): SessionUsagePage(sessionKey: key, agentId: agentId)
                         }
                     }
@@ -236,6 +239,7 @@ private struct GatewaySettingsRoot: View {
         case .approvals: ApprovalHistoryPage()
         case .logs: GatewayLogsPage()
         case .execPolicy: ExecPolicyPage()
+        case .skills: SkillsPage()
         case .usage: UsagePage()
         case .pairing: PairingRequestsPage()
         case let .page(id):
@@ -357,6 +361,9 @@ private struct SettingsSidebar: View {
                     self.row("Gateway Logs", symbol: "doc.text.magnifyingglass", .logs)
                     self.row("Command Policy", symbol: "lock.shield", .execPolicy,
                              unsaved: self.gateway.execPolicy.hasChanges)
+                    if self.gateway.supportsSkills {
+                        self.row("Skills", symbol: "wand.and.stars", .skills)
+                    }
                     self.row("Usage", symbol: "chart.bar.xaxis", .usage)
                     self.row("Pairing Requests", symbol: "person.badge.key", .pairing,
                              badge: self.gateway.state.isConnected ? self.gateway.pairingInbox.pendingCount(at: self.now) : 0)
@@ -432,6 +439,7 @@ private struct SearchResults: View {
     var body: some View {
         let results = self.results
         let pages = SettingsCatalog.destinations(matching: self.query)
+            .filter { $0.destination != .skills || self.gateway.supportsSkills }
         if results.isEmpty, pages.isEmpty {
             Text("No settings match “\(self.query)”.").foregroundStyle(.secondary)
         }

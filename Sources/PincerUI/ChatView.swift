@@ -318,6 +318,8 @@ private struct ChatSessionMenu: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @FocusedValue(\.transcriptFind) private var find
+    @State private var toolsInspector: ToolsInspectorModel?
+    @State private var toolsScopeTitle = ""
 
     var body: some View {
         if let key = self.gateway.selectedKey, let row = self.gateway.sessions[key] {
@@ -338,8 +340,17 @@ private struct ChatSessionMenu: View {
                 Button("Session Usage…", systemImage: "chart.bar") {
                     self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
                 }
+                if self.gateway.supportsToolsEffective {
+                    Button("Tools & Policy…", systemImage: "wrench.and.screwdriver") {
+                        self.toolsScopeTitle = "Session: \(row.title)"
+                        self.toolsInspector = self.gateway.toolsInspector(sessionKey: row.key)
+                    }
+                }
             } label: {
                 Label("Session", systemImage: Theme.moreSymbol)
+            }
+            .sheet(item: self.$toolsInspector) { model in
+                ChatToolsInspectorSheet(model: model, scopeTitle: self.toolsScopeTitle, gateway: self.gateway)
             }
         }
     }
