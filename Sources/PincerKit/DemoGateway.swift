@@ -38,7 +38,7 @@ actor DemoGateway {
         "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
-    ] + DemoUsage.methods + DemoGateway.agentMethods
+    ] + DemoUsage.methods + DemoGateway.agentMethods + DemoGateway.deviceMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -69,6 +69,10 @@ actor DemoGateway {
     private var questionOrder: [String] = []
     /// Pending DM pairing requests (`channels.pairing.*`).
     private var pairingRequests: [JSONValue] = []
+    /// Device pairing (`device.pair.*`) and nodes (`node.*`), from the seeds in DemoGateway+Devices.swift.
+    var devicePending: [JSONValue] = []
+    var devicePaired: [JSONValue] = []
+    var demoNodes: [JSONValue] = []
     private var prefs: [String: JSONValue] = [:]
     /// Custom group catalog in display order; groups stay until deleted, even when empty.
     private var groups = ["Home", "Personal", "Work"]
@@ -107,6 +111,9 @@ actor DemoGateway {
             self.approvalOrder.append(id)
         }
         self.pairingRequests = Self.seedPairingRequests()
+        self.devicePending = Self.seedPendingDevices()
+        self.devicePaired = Self.seedPairedDevices()
+        self.demoNodes = Self.seedNodes()
         self.artifacts["demo-chart"] = ("image/png", Self.chartPNG())
         self.artifacts["demo-script"] = ("text/x-shellscript", Data(Self.diskScript.utf8))
     }
@@ -186,6 +193,7 @@ actor DemoGateway {
 
     func handle(_ method: String, _ params: JSONValue) throws -> JSONValue {
         if let result = try self.handleAgents(method, params) { return result }
+        if let result = try self.handleDevices(method, params) { return result }
         switch method {
         case "agents.list":
             return ["defaultId": "main", "mainKey": "main", "scope": "per-sender", "agents": .array(self.agents)]
@@ -1319,7 +1327,7 @@ actor DemoGateway {
 
     // MARK: Events
 
-    private func emit(_ name: String, _ payload: JSONValue) {
+    func emit(_ name: String, _ payload: JSONValue) {
         self.eventSeq += 1
         self.sink?(GatewayEvent(name: name, payload: payload, seq: self.eventSeq))
     }
