@@ -816,12 +816,12 @@ public final class DeviceManagementModel {
     public nonisolated static let staleDeviceMessage = "This device was already revoked."
     public nonisolated static let staleNodeMessage = "This node was already removed."
     public nonisolated static let labelTooLongMessage = "Names can be at most 64 characters."
-    public nonisolated static let renameUnsupportedMessage = "This gateway can't rename devices. Update OpenClaw to rename them here."
-    public nonisolated static let nodeUnsupportedMessage = "This gateway can't change nodes. Update OpenClaw to manage them here."
+    public nonisolated static let renameUnsupportedMessage = "This Gateway can't rename devices. Update OpenClaw to rename them here."
+    public nonisolated static let nodeUnsupportedMessage = "This Gateway can't change nodes. Update OpenClaw to manage them here."
     public nonisolated static let revokeMessage = "This device will be disconnected and must pair again to reconnect."
     /// Shown before revoking the device Pincer itself connects with.
     public nonisolated static func selfRevokeWarning(gateway: String) -> String {
-        "This is the device Pincer is using to connect. Pincer will be disconnected from \(gateway) and can't reconnect until a new pairing request is approved on the Gateway host (`openclaw devices approve`)."
+        "This is the device Pincer is using to connect. Pincer will be disconnected from \(gateway) and can't reconnect until its new pairing request is approved, from another device with Full Management or with openclaw devices approve on the Gateway host."
     }
 
     static func isUnknown(_ error: Error, _ needle: String) -> Bool {
