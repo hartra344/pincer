@@ -544,6 +544,8 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     public var runId: String?
     public var toolCallId: String?
     public var toolName: String?
+    /// The parts of a file-changing tool result's `details` a diff card reads (`diff`, `changed`, `created`).
+    public var toolDetails: JSONValue?
     public var isError: Bool
     public var errorMessage: String?
     /// e.g. "Discord" when a user turn arrived through another channel.
@@ -605,6 +607,7 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         self.role = self.markerKind != nil ? .marker : ChatRole(json["role"]?.string)
         self.toolCallId = json["toolCallId"]?.text ?? json["tool_call_id"]?.text
         self.toolName = json["toolName"]?.text ?? json["tool_name"]?.text
+        if self.role == .toolResult { self.toolDetails = ToolActivity.fileEditDetails(json["details"]) }
         self.isError = json["isError"]?.bool ?? json["is_error"]?.bool ?? false
         self.errorMessage = json["errorMessage"]?.text
         if let ts = json["timestamp"]?.double {
@@ -699,6 +702,8 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
     public var name: String
     public var arguments: String? { didSet { self.derive() } }
     public var result: String? { didSet { self.derive() } }
+    /// `details` of the result, trimmed to what a file-edit diff reads. See `ToolFileEdit.parse`.
+    public var details: JSONValue?
     public var isError: Bool
     public var isRunning: Bool
     /// One-line hint (command, path, query) for the collapsed card. Derived once, not per render.
@@ -708,14 +713,24 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
     /// `label` argument of a spawn call, for matching the run when no key is echoed back.
     public private(set) var spawnLabel: String?
 
-    public init(id: String, name: String, arguments: String?, result: String?, isError: Bool, isRunning: Bool) {
+    public init(id: String, name: String, arguments: String?, result: String?, details: JSONValue? = nil,
+                isError: Bool, isRunning: Bool)
+    {
         self.id = id
         self.name = name
         self.arguments = arguments
         self.result = result
+        self.details = details
         self.isError = isError
         self.isRunning = isRunning
         self.derive()
+    }
+
+    /// Keeps only the `details` keys a file-edit diff reads, so other tools' details aren't held.
+    public static func fileEditDetails(_ details: JSONValue?) -> JSONValue? {
+        guard let object = details?.object else { return nil }
+        let kept = object.filter { ["diff", "changed", "created"].contains($0.key) }
+        return kept.isEmpty ? nil : .object(kept)
     }
 
     private mutating func derive() {
@@ -853,6 +868,7 @@ public enum TranscriptBuilder {
                 let resultText = item.plainText
                 if let callId = item.toolCallId, let index = toolIndex[callId] {
                     turn.tools[index].result = resultText
+                    turn.tools[index].details = item.toolDetails
                     turn.tools[index].isError = item.isError
                 } else {
                     turn.tools.append(ToolActivity(
@@ -860,6 +876,7 @@ public enum TranscriptBuilder {
                         name: item.toolName ?? "tool",
                         arguments: nil,
                         result: resultText,
+                        details: item.toolDetails,
                         isError: item.isError,
                         isRunning: false))
                 }

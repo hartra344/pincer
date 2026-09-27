@@ -16,6 +16,7 @@ import { SETUP_METHODS, createSetupState, handleSetupRequest } from './setup.mjs
 import { healthSummary } from './health.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 import { isSpawnedBy, markSubagentAborted, seedRunningSubagentRun, seedSubagents, simulateSpawn } from './subagents.mjs';
+import { liveFileEditCall, seededFileEditCalls } from './file-edits.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const METHODS = [
@@ -385,6 +386,14 @@ function createSeedState() {
     totalTokens: 190_000,
     contextTokens: 200_000,
   });
+  // Upstream-shaped `edit`, `write` and `apply_patch` calls (see file-edits.mjs).
+  row('agent:coder:dashboard:retry-fix', {
+    agentId: 'coder',
+    label: 'Fix retry backoff',
+    derivedTitle: 'Fix retry backoff',
+    age: 6 * 3_600_000,
+    lastMessagePreview: 'Retries now stop after 4 attempts and skip 4xx errors.',
+  });
 
   // Chats of the seeded automations (see cron.mjs); their runs append here.
   row('agent:main:cron:morning-briefing', {
@@ -466,6 +475,26 @@ function createSeedState() {
     makeMessage('assistant', [textBlock('Forge can edit code, run builds, and report concise status.')]),
   );
   seedSubagents({ row, sessions, transcripts, makeMessage, textBlock, thinkingBlock, toolCallBlock, base });
+  const [editCall, writeCall, patchCall] = seededFileEditCalls();
+  const fileEditResult = (call) => makeMessage('toolResult', [textBlock(call.result)], {
+    extra: { toolCallId: call.id, toolName: call.name, details: call.details, isError: false },
+  });
+  transcripts.get('agent:coder:dashboard:retry-fix').push(
+    makeMessage('user', [textBlock('The API client hammers the server on 429s and never gives up. Fix the retry loop and add a test.')]),
+    makeMessage('assistant', [
+      thinkingBlock('withRetry loops forever and never checks the status; cap attempts and only retry 429/5xx.'),
+      toolCallBlock(editCall.id, editCall.name, editCall.args),
+    ]),
+    fileEditResult(editCall),
+    makeMessage('assistant', [toolCallBlock(writeCall.id, writeCall.name, writeCall.args)]),
+    fileEditResult(writeCall),
+    makeMessage('assistant', [
+      textBlock('Now switching the client over and removing the old helper.'),
+      toolCallBlock(patchCall.id, patchCall.name, patchCall.args),
+    ]),
+    fileEditResult(patchCall),
+    makeMessage('assistant', [textBlock('Retries now stop after 4 attempts and skip 4xx errors. `retry.test.ts` covers both cases, and `legacy-retry.ts` is gone.')]),
+  );
 
   const state = {
     agents,
@@ -1021,6 +1050,34 @@ async function simulateRun(state, run, params, replyMeta = {}) {
       const toolResult = makeMessage('toolResult', [textBlock(' 10:42  up 3 days, 4 users, load averages: 1.2 1.0 0.8')], {
         openclaw: { runId: run.runId },
         extra: { toolCallId, toolName: 'exec', isError: false },
+      });
+      transcript.push(toolMsg, toolResult);
+      broadcastSessionMessage(state, sessionKey, toolMsg, transcript.length - 1);
+      broadcastSessionMessage(state, sessionKey, toolResult, transcript.length);
+    }
+
+    // "patch"/"diff" runs an upstream-shaped `edit` so clients can render its diff live.
+    const wantsEdit = /\b(patch|diff)\b/i.test(String(text ?? ''));
+    if (wantsEdit) {
+      const call = liveFileEditCall();
+      const toolCallId = shortId('call_');
+      broadcast(state, 'agent', {
+        runId: run.runId, sessionKey, seq: ++run.seq, stream: 'tool',
+        data: { phase: 'start', name: call.name, toolCallId, args: call.args },
+      });
+      await runDelay(run, 400);
+      if (run.aborted) return;
+      broadcast(state, 'agent', {
+        runId: run.runId, sessionKey, seq: ++run.seq, stream: 'tool',
+        data: {
+          phase: 'result', name: call.name, toolCallId, isError: false,
+          result: { content: [textBlock(call.result)], details: call.details },
+        },
+      });
+      const toolMsg = makeMessage('assistant', [toolCallBlock(toolCallId, call.name, call.args)], { openclaw: { runId: run.runId }, model: rowModel(row) });
+      const toolResult = makeMessage('toolResult', [textBlock(call.result)], {
+        openclaw: { runId: run.runId },
+        extra: { toolCallId, toolName: call.name, details: call.details, isError: false },
       });
       transcript.push(toolMsg, toolResult);
       broadcastSessionMessage(state, sessionKey, toolMsg, transcript.length - 1);

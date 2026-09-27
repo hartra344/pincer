@@ -47,6 +47,7 @@ export default defineConfig({
 						{ slug: 'guides/command-palette-and-navigation' },
 						{ slug: 'guides/transcript' },
 						{ slug: 'guides/subagents-and-runs' },
+						{ slug: 'guides/file-diffs' },
 						{ slug: 'guides/search' },
 						{ slug: 'guides/local-cache' },
 						{ slug: 'guides/composer' },
