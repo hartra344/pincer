@@ -23,6 +23,25 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
 - **Drafts:** each chat keeps its unsent text and pending attachments when you switch chats or relaunch. They're saved in `~/Library/Application Support/Pincer/Drafts/<gateway>/`, one folder per chat, using complete file protection. A draft is deleted when you send it, when its chat is deleted, or when you remove its gateway. Set `PINCER_DRAFTS_DIR=off` to turn draft saving off, or set it to a path to use another folder.
 - **Sandbox:** the Xcode-built macOS app is sandboxed, with outgoing network access and read-only access to files you pick. The quick `scripts/bundle-mac.sh` dev bundle is only ad-hoc signed.
 
+## Quick start
+
+The first time you open Pincer, a short setup walks you from launch to your first chat. Every step has **Back**, a progress bar shows where you are, and Pincer resumes where you left off if you quit.
+
+1. **Welcome:** choose **Get Started** (or **Try the Demo** to look around with a simulated gateway).
+2. **Do you have a gateway?** If not, Pincer shows how to set one up. On the computer that will host it:
+   ```sh
+   curl -fsSL https://openclaw.ai/install.sh | bash   # install and onboard; choose Quick start
+   openclaw gateway install                            # keep it running in the background
+   openclaw gateway status                             # should be listening on port 18789
+   ```
+   See OpenClaw's [Getting started](https://docs.openclaw.ai/start/getting-started) (Windows: `iwr -useb https://openclaw.ai/install.ps1 | iex`).
+3. **Find your gateway:** choose **This Mac** (`ws://127.0.0.1:18789`), **Tailscale** (`wss://my-mac.tail1234.ts.net`) or **Same Wi-Fi** (`ws://192.168.1.20:18789`). Gateways that announce themselves on your network show up under **Nearby**. Pincer checks that it can reach the gateway before moving on.
+4. **Sign in** with the gateway's token. To see it, run `openclaw config get gateway.auth.token` on the gateway host (or `openclaw config get gateway.auth.password` if it uses a password).
+5. **Approve this device:** Pincer shows the command to run on the gateway host, `openclaw devices approve <requestId>`, and continues by itself once you approve it.
+6. **You're connected:** Pincer shows the gateway's name, version and access. Then **Continue Setup** to pick your default agent and model, look at skills and send a test message, or **Skip to Chats**.
+
+**Add Gateway…** (the **+** in the rail, the menu bar or ⌘K) starts the same flow at step 3. TLS pinning, access level and "no auth" live behind **Advanced…** on the **Find your gateway** step and in Gateway Settings → Connection. The full walkthrough, with every error message and what to do about it, is on the website: [Connect a gateway](website/src/content/docs/getting-started/connect-a-gateway.mdx).
+
 ## Features
 
 - **Layout:**
@@ -34,7 +53,8 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
   - compaction doesn't start a new chat. It shows up inline as a "Compacting context…" line while it runs, then as a divider in the same thread;
   - search, unread dots and dock badge;
   - "Next Unread Chat" (⌥⇧↓).
-- **Gateway setup** (offered once after a new gateway's first connection; any time from the gateway's menu, ⌘K → "Set Up Gateway…" or Gateway Settings → Overview): a guided check with **Gateway Health**, **Channels**, **Agent & Model**, **Skills** and **Test Message** steps. Each step is **Not Checked**, **Done**, **Needs Attention** or **Skipped**, links to the existing page to fix it (Gateway Health, Channels, Agents & Models, Tools & Skills), and can be skipped; progress is remembered per gateway and resumes at the first step that isn't settled. Without `operator.admin`, the steps with changes show a **Needs Full Management** badge. Channels shows `channels.status` (or `health`) and offers **Link with QR Code…** for WhatsApp and Zalo (`web.login.start` / `web.login.wait`, Full Management only). Agent & Model saves the default agent (`agents.entries.<id>.default`) and model (`agents.defaults.model.primary`) with `config.patch`. Skills lists what `skills.status` says is missing. Test Message sends "hello" (or your own text) in the default agent's *Setup Test* chat, created the first time. Afterwards, a one-time **Tips** card covers slash commands, `/think`, approvals, ⌘K, Find and Search; **Settings → General → Show Tips Again** brings it back. Gateways used before this version aren't offered setup automatically. The demo offers it right after **Try the Demo**, never saves progress, runs with standard access (so changes show **Needs Full Management**), and seeds a degraded Telegram, an unlinked WhatsApp and a missing skill. See the [setup guide](website/src/content/docs/getting-started/setup-wizard.mdx).
+- **First-run setup** (shown whenever there are no gateways, and from **Add Gateway…**): Welcome → "Do you have a gateway?" (with the real OpenClaw install commands) → Find your gateway (This Mac, Tailscale or Same Wi-Fi, with Bonjour `_openclaw-gw._tcp` results under **Nearby**, and a reachability check) → Sign in (token or password, with the `openclaw config get gateway.auth.token` command) → Approve this device (`openclaw devices approve <requestId>`, continues by itself) → You're connected (name, version, access, and any health note) → gateway setup. Resumes after a relaunch; the gateway is only saved once it connects. See the [connect guide](website/src/content/docs/getting-started/connect-a-gateway.mdx).
+- **Gateway setup** (right after first-run setup; any time from the gateway's menu, ⌘K → "Set Up Gateway…" or Gateway Settings → Overview): **Agent & Model**, **Skills** (optional) and **Test Message** steps, each skippable, with progress remembered per gateway. There's no channels step: Pincer is the direct way to talk to your agents. Agent & Model saves the default agent (`agents.entries.<id>.default`) and model (`agents.defaults.model.primary`) with `config.patch`, which needs **Full Management**. Skills lists what `skills.status` says isn't set up yet, for information only; it never counts as a problem. Test Message sends "hello" (or your own text) straight to the default agent in a *Setup Test* chat, created the first time. Afterwards, a one-time **Tips** card covers slash commands, `/think`, approvals, ⌘K, Find and Search; **Settings → General → Show Tips Again** brings it back. The demo offers setup right after **Try the Demo**, never saves progress and runs with standard access. See the [setup guide](website/src/content/docs/getting-started/setup-wizard.mdx).
 - **Command palette and quick switching** (**Go** menu):
   - ⌘K opens a palette to jump to any chat on any gateway (recently visited first), start a new chat with an agent, change the chat's model, pin or unpin it, show or hide thinking steps, switch gateways, or open Settings, Gateway Settings, Automations, Approval History, Command Policy or Gateway Logs. Type to filter (fuzzy, so `jptr` finds "Japan trip"), use ↑/↓ to move, Return to run and Esc to go back or close;
   - **Search Messages** (⇧⌘F, "Search Messages for …" in ⌘K, or the "Search messages for …" row that appears above the sidebar's chat list while you type in "Find a chat") searches the text of every cached chat on the selected gateway, including older history you haven't scrolled to. Results are grouped by chat (newest first, up to 3 per chat) with the sender, date and a highlighted snippet; picking one opens the chat with Find in Chat on that message. Matching ignores case and accents, each word must match from its start (`tok` finds "Tokyo", `kyo` doesn't), and multi-word queries must appear as a phrase. Only user and assistant message text is searched, not thinking or tool output. The index lives on disk next to the transcript cache and is built in the background;
@@ -113,17 +133,13 @@ Say "Ask Pincer", "Ask *agent* in Pincer", "What's unread in Pincer" or "Pending
 
 ## Connecting to your home gateway over Tailscale
 
-1. On the gateway host, expose the gateway with Tailscale Serve, following the OpenClaw remote-access docs.
-2. In Pincer, click **+** in the rail and enter the address:
-   - `wss://<host>.<tailnet>.ts.net`, for example `wss://my-mac.tail1234.ts.net`, since Serve uses HTTPS on port 443;
-   - or `ws://100.x.y.z:18789` if you're connecting straight to the tailnet IP and Gateway port.
-3. Pick the auth mode your gateway uses (token or password) and enter the secret.
-4. The first time you connect, Pincer shows a pairing request. On the gateway host, run:
+1. On the gateway host, turn on Tailscale Serve (the gateway stays on loopback; see OpenClaw's [stable HTTPS URL guide](https://docs.openclaw.ai/gateway/stable-https-url)):
    ```sh
-   openclaw devices list
-   openclaw devices approve <requestId>
+   openclaw config set gateway.tailscale.mode serve
+   openclaw gateway restart
    ```
-   Pincer reconnects automatically after you approve it.
+2. In Pincer's first-run setup (or **Add Gateway…**), choose **Tailscale** and enter `wss://<host>.<tailnet>.ts.net`, for example `wss://my-mac.tail1234.ts.net` (Serve uses HTTPS on port 443). If the gateway is bound to its tailnet IP instead (`gateway.bind: "tailnet"`), use `ws://100.x.y.z:18789`.
+3. Sign in with the token and approve the device with the `openclaw devices approve <requestId>` command Pincer shows.
 
 ### Seeing thinking
 
@@ -195,7 +211,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 
 ## Testing without a real gateway
 
-The app has a built-in demo: choose **Try the Demo** on the welcome screen or in the Add Gateway sheet. It runs a simulated Gateway on the device, with sample agents, grouped and pinned chats, a long searchable transcript, streamed replies, a chart, exec approvals (including one that arrives later, to answer from a notification), `ask_user` question cards, a context meter with compaction, sample approval history, an editable command policy, agents with editable workspace files, three pairing requests, 90 days of sample usage and cost data, a simulated live gateway log that grows while you watch and logs your demo chats and approvals, and gateway health (Telegram is disconnected, so it shows Degraded; **Restart Gateway** simulates a restart). Nothing leaves the device. It doesn't use push notifications, and the Share extension runs its own separate demo, so shared messages don't show up in the app's demo. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too. Its chats have weeks of seeded history for message search (⇧⌘F): try `backup` (four chats), `ghibli` (older Japan trip history) or `cafe` (matches "Café").
+The app has a built-in demo: choose **Try the Demo** on the first-run welcome screen. It runs a simulated Gateway on the device, with sample agents, grouped and pinned chats, a long searchable transcript, streamed replies, a chart, exec approvals (including one that arrives later, to answer from a notification), `ask_user` question cards, a context meter with compaction, sample approval history, an editable command policy, agents with editable workspace files, three pairing requests, 90 days of sample usage and cost data, a simulated live gateway log that grows while you watch and logs your demo chats and approvals, and gateway health (Telegram is disconnected, so it shows Degraded; **Restart Gateway** simulates a restart). Nothing leaves the device. It doesn't use push notifications, and the Share extension runs its own separate demo, so shared messages don't show up in the app's demo. This is what TestFlight and App Review testers use, so they don't need a Gateway or Tailscale. The message triggers below work in the demo too. Its chats have weeks of seeded history for message search (⇧⌘F): try `backup` (four chats), `ghibli` (older Japan trip history) or `cafe` (matches "Café").
 
 For the full protocol, including Gateway Settings, run the Node mock:
 
@@ -249,7 +265,7 @@ To see what the gateway says about each request, run the app with `open --env PI
 - Health and restart have been tested against the demo and the mock only, not a real gateway restart.
 - Gateway Settings has been tested against the mock only. It doesn't browse the ClawHub catalog, show install progress, or edit lists of objects in forms (use the raw editor).
 - Pairing Requests has been tested against the demo and the mock only. There's no approved-sender list or removal, and no push for new requests.
-- Gateway setup's QR login (`web.login.*`) has been tested against the mock only. The Gateway doesn't advertise `web.login.*` in `hello` or say which channels support it, so Pincer offers it for WhatsApp and Zalo only, like the Control UI; and `web.login.wait` has no timeout flag, so Pincer keeps waiting while the message says "Still waiting…".
+- First-run **Nearby** discovery has been tested against a mock Bonjour advertiser only. Bonjour is on by default for gateways on macOS; on other hosts run `openclaw plugins enable bonjour`, and the gateway has to accept connections beyond loopback to be reachable.
 
 ## License
 

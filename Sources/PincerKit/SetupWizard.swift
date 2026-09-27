@@ -666,7 +666,32 @@ public final class SetupWizardModel {
     /// Closes, keeping progress to resume later.
     public func close() {
         self.isPresented = false
+        self.isEmbedded = false
         self.showsIntro = false
+        self.cancelQRLogins()
+    }
+
+    /// Showing inside the first-run wizard rather than as its own sheet. Finish and Close end it.
+    public private(set) var isEmbedded = false
+
+    /// Marks the wizard offered so connecting doesn't pop it up on its own (first run embeds it instead).
+    public func markOffered() {
+        self.update { $0.offered = true }
+    }
+
+    /// The steps inside the first-run wizard, at the first not done.
+    public func beginEmbedded() {
+        self.update { $0.offered = true }
+        self.showsIntro = false
+        if !self.isEmbedded { self.currentStep = self.resumeStep }
+        self.isEmbedded = true
+        Task { await self.load() }
+    }
+
+    /// Leaves the first-run wizard without finishing, keeping progress.
+    public func endEmbedded() {
+        guard self.isEmbedded else { return }
+        self.isEmbedded = false
         self.cancelQRLogins()
     }
 

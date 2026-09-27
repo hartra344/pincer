@@ -11,6 +11,7 @@ import { LOGS_METHODS, createLogsState, handleLogsRequest, logsDisabled, noteApp
 import { EXEC_APPROVALS_METHODS, createExecApprovalsState, execApprovalsDisabled, handleExecApprovalsRequest, recordAllowAlways } from './exec-approvals.mjs';
 import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, createChannelPairingState, handleChannelPairingRequest } from './pairing.mjs';
+import { DEVICE_PAIRING_EVENTS, DEVICE_PAIRING_METHODS, announcePairingRequest, checkConnectAuth, handleDevicePairingRequest, openPairingRequest, pairingRequiredError, RATE_LIMIT_RETRY_AFTER_MS, rejectConnectAuth, rejectPairing } from './device-pairing.mjs';
 import { HEALTH_EVENTS, HEALTH_METHODS, addFailedDelivery, broadcastPresence, cancelPendingRestart, createHealthState, handleHealthRequest, healthDisabled, helloSnapshot, isRestarting } from './health.mjs';
 import { SETUP_METHODS, createSetupState, handleSetupRequest } from './setup.mjs';
 import { healthSummary } from './health.mjs';
@@ -57,6 +58,7 @@ const METHODS = [
   ...CRON_METHODS,
   ...LOGS_METHODS,
   ...CHANNEL_PAIRING_METHODS,
+  ...DEVICE_PAIRING_METHODS,
   ...HEALTH_METHODS,
   ...SETUP_METHODS,
 ];
@@ -76,6 +78,7 @@ const EVENTS = [
   'progressCard.changed',
   'cron',
   ...HEALTH_EVENTS,
+  ...DEVICE_PAIRING_EVENTS,
 ];
 
 function canonicalJson(value) {
@@ -599,10 +602,15 @@ function broadcastSessionMessage(state, sessionKey, message, messageSeq) {
   );
 }
 
-function verifyConnect(params, challenge, token) {
+function verifyConnect(params, challenge, token, protocol = 4) {
   if (!params || typeof params !== 'object') throw Object.assign(new Error('missing params'), { code: 'PROTOCOL' });
-  if (params.minProtocol > 4 || params.maxProtocol < 4) {
-    throw Object.assign(new Error('protocol mismatch'), { code: 'PROTOCOL_MISMATCH' });
+  if (params.minProtocol > protocol || params.maxProtocol < protocol) {
+    // Upstream connect-admission.ts: INVALID_REQUEST + details.code, closed with 1002.
+    throw Object.assign(new Error('protocol mismatch'), {
+      code: 'INVALID_REQUEST',
+      closeCode: 1002,
+      details: { code: 'PROTOCOL_MISMATCH', clientMinProtocol: params.minProtocol, clientMaxProtocol: params.maxProtocol, expectedProtocol: protocol },
+    });
   }
   if (params.role !== 'operator') throw Object.assign(new Error('role must be operator'), { code: 'PROTOCOL' });
   const device = params.device ?? {};
@@ -643,6 +651,8 @@ function approvePairing(state, requestId) {
   deviceTokenFor(state, pending.deviceId, pending.scopes ?? []);
   state.pendingPairing.delete(requestId);
   console.log(`Pairing approved ${requestId}`);
+  broadcast(state, 'device.pair.resolved', { requestId, deviceId: pending.deviceId, decision: 'approved', ts: nowMs() },
+    (conn) => conn.scopes?.includes('operator.pairing') || conn.scopes?.includes('operator.admin'));
   return true;
 }
 
@@ -650,8 +660,13 @@ function setupManualPairing(state, enabled) {
   if (!enabled || setupManualPairing.didSetup) return;
   setupManualPairing.didSetup = true;
   process.stdin.setEncoding('utf8');
+  // `<requestId>` approves; `reject <requestId>` rejects.
   process.stdin.on('data', (chunk) => {
-    for (const token of chunk.trim().split(/\s+/).filter(Boolean)) approvePairing(state, token);
+    for (const line of chunk.split(/\r?\n/)) {
+      const words = line.trim().split(/\s+/).filter(Boolean);
+      if (words[0] === 'reject') words.slice(1).forEach((requestId) => rejectPairing(state, requestId, broadcast));
+      else words.forEach((requestId) => approvePairing(state, requestId));
+    }
   });
   process.stdin.resume();
 }
@@ -674,7 +689,7 @@ function advertisedMethods() {
 function makeHelloPayload(state, params, connId, deviceId) {
   return {
     type: 'hello-ok',
-    protocol: 4,
+    protocol: state.protocol ?? 4,
     server: { version: 'mock-2026.1', connId },
     features: { methods: advertisedMethods(), events: EVENTS },
     snapshot: healthDisabled() ? {} : helloSnapshot(state),
@@ -1136,6 +1151,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleSkillsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleDevicePairingRequest(state, conn, msg, { sendRes, sendErr, broadcast, approvePairing })) return;
   if (handleSetupRequest(state, conn, msg, { sendRes, sendErr, broadcast, healthSummary })) return;
   if (handleHealthRequest(state, conn, msg, { sendRes, sendErr, broadcast, abortRun: finishRunAbort })) return;
   switch (method) {
@@ -1515,24 +1531,28 @@ function handleConnect(state, conn, msg, options) {
   const token = params.auth?.token ?? '';
   let deviceId;
   try {
-    ({ deviceId } = verifyConnect(params, conn.challenge, token));
+    ({ deviceId } = verifyConnect(params, conn.challenge, token, options.protocol));
   } catch (err) {
     const code = err.code ?? 'DEVICE_AUTH_INVALID';
-    sendErr(conn, id, code, err.message, { code });
-    conn.ws.close(1008, code);
+    sendErr(conn, id, code, err.message, err.details ?? { code });
+    conn.ws.close(err.closeCode ?? 1008, err.message);
     return;
   }
 
   const issued = state.pairedDevices.get(deviceId)?.deviceToken;
-  let authOk = false;
-  if (token === options.mockToken) authOk = true;
-  else if (issued && token === issued) authOk = true;
-
-  if (!authOk) {
-    const detailCode = String(token).startsWith('dt_') ? 'AUTH_DEVICE_TOKEN_MISMATCH' : 'AUTH_TOKEN_MISMATCH';
-    sendErr(conn, id, 'UNAUTHORIZED', 'unauthorized', { code: detailCode });
+  // MOCK_AUTH_RATE_LIMIT=<n>: n failed attempts lock shared-secret auth for a minute.
+  if (state.authLockedUntil && nowMs() >= state.authLockedUntil) Object.assign(state, { authLockedUntil: 0, authFailures: 0 });
+  const failure = state.authLockedUntil
+    ? 'rate_limited'
+    : checkConnectAuth(params.auth, { mode: options.auth, token: options.mockToken, password: options.mockPassword, issuedDeviceToken: issued });
+  if (failure) {
+    if (failure !== 'rate_limited' && options.authRateLimit > 0 && ++state.authFailures >= options.authRateLimit) {
+      state.authLockedUntil = nowMs() + RATE_LIMIT_RETRY_AFTER_MS;
+    }
+    rejectConnectAuth(conn, id, failure, { sendJson, auth: params.auth ?? {} });
     return;
   }
+  state.authFailures = 0;
 
   const requestedScopes = Array.isArray(params.scopes) ? params.scopes : [];
   const paired = state.pairedDevices.get(deviceId);
@@ -1540,21 +1560,21 @@ function handleConnect(state, conn, msg, options) {
   const upgrade = paired && requestedScopes.some((scope) => !scopeApproved(scope, paired.scopes));
   if ((!paired || upgrade) && options.pairing !== 'off') {
     const reason = paired ? 'scope-upgrade' : 'not-paired';
-    const requestId = shortId('pair_');
     // MOCK_LEGACY_PAIRING=1 approves first pairings without operator.questions, like a device
     // paired before Pincer asked for it, so the next connect needs a scope upgrade.
     const grantScopes = !paired && options.legacyPairing ? requestedScopes.filter((scope) => scope !== 'operator.questions') : requestedScopes;
-    state.pendingPairing.set(requestId, { deviceId, scopes: grantScopes, displayName: params.client?.displayName ?? 'unknown', createdAt: nowMs() });
-    console.log(`Pairing request ${requestId} (${reason}) from ${params.client?.displayName ?? 'unknown'} (${deviceId.slice(0, 8)})`);
-    sendErr(conn, id, 'NOT_PAIRED', `pairing required (requestId: ${requestId})`, {
-      code: 'PAIRING_REQUIRED',
-      reason,
-      requestId,
-      deviceId,
-      requestedScopes,
-      ...(paired ? { approvedScopes: [...paired.scopes] } : {}),
+    const displayName = params.client?.displayName ?? 'unknown';
+    const { request, created } = openPairingRequest(state, {
+      deviceId, scopes: requestedScopes, grantScopes, displayName, reason, makeId: () => shortId('pair_'), now: nowMs(),
     });
-    if (options.pairing === 'auto') setTimeout(() => approvePairing(state, requestId), 3000);
+    const { requestId } = request;
+    console.log(`Pairing request ${requestId} (${reason}${created ? '' : ', pending'}) from ${displayName} (${deviceId.slice(0, 8)})`);
+    const error = pairingRequiredError(request, paired ? [...paired.scopes] : undefined);
+    sendErr(conn, id, error.code, error.message, error.details);
+    if (created) {
+      announcePairingRequest(state, request, broadcast);
+      schedulePairingDecision(state, request, options);
+    }
     conn.ws.close(1008, 'PAIRING_REQUIRED');
     return;
   }
@@ -1568,6 +1588,25 @@ function handleConnect(state, conn, msg, options) {
   conn.connectedAt = nowMs();
   sendRes(conn, id, makeHelloPayload(state, params, conn.connId, deviceId));
   broadcastPresence(state, broadcast);
+}
+
+// MOCK_PAIRING=auto approves, reject rejects, reject-once rejects a device's first request and
+// approves the next; each after MOCK_PAIRING_DELAY_MS (default 3000). manual waits for stdin or
+// device.pair.approve / device.pair.reject.
+function schedulePairingDecision(state, request, options) {
+  let decision;
+  if (options.pairing === 'auto') decision = 'approve';
+  else if (options.pairing === 'reject') decision = 'reject';
+  else if (options.pairing === 'reject-once') {
+    state.rejectedOnce ??= new Set();
+    decision = state.rejectedOnce.has(request.deviceId) ? 'approve' : 'reject';
+    state.rejectedOnce.add(request.deviceId);
+  }
+  if (!decision) return;
+  setTimeout(() => {
+    if (decision === 'approve') approvePairing(state, request.requestId);
+    else rejectPairing(state, request.requestId, broadcast);
+  }, options.pairingDelayMs);
 }
 
 function simulateBackground(state) {
@@ -1594,13 +1633,24 @@ export async function startServer(opts = {}) {
     port: Number(opts.port ?? process.env.PORT ?? 18789),
     mockToken: opts.mockToken ?? process.env.MOCK_TOKEN ?? 'dev-token',
     pairing: opts.pairing ?? process.env.MOCK_PAIRING ?? 'auto',
+    pairingDelayMs: Number(opts.pairingDelayMs ?? process.env.MOCK_PAIRING_DELAY_MS ?? 3000),
+    auth: opts.auth ?? process.env.MOCK_AUTH ?? 'token',
+    mockPassword: opts.mockPassword ?? process.env.MOCK_PASSWORD ?? 'dev-password',
+    authRateLimit: Number(opts.authRateLimit ?? process.env.MOCK_AUTH_RATE_LIMIT ?? 0),
+    protocol: Number(opts.protocol ?? process.env.MOCK_PROTOCOL ?? 4),
+    challenge: opts.challenge ?? process.env.MOCK_CHALLENGE ?? 'on',
     background: opts.background ?? process.env.MOCK_BACKGROUND === '1',
     legacyPairing: opts.legacyPairing ?? process.env.MOCK_LEGACY_PAIRING === '1',
     channelPairingEvery: Number(opts.channelPairingEvery ?? process.env.MOCK_CHANNEL_PAIRING_EVERY ?? 0),
     failedDeliveryEvery: Number(opts.failedDeliveryEvery ?? process.env.MOCK_FAILED_DELIVERY_EVERY ?? 0),
   };
+  if (!['token', 'password', 'none'].includes(options.auth)) throw new Error(`MOCK_AUTH must be token, password or none, not ${options.auth}`);
+  if (!['auto', 'manual', 'off', 'reject', 'reject-once'].includes(options.pairing)) throw new Error(`unknown MOCK_PAIRING: ${options.pairing}`);
   const state = createSeedState();
-  setupManualPairing(state, options.pairing === 'manual');
+  state.protocol = options.protocol;
+  state.authFailures = 0;
+  state.authLockedUntil = 0;
+  setupManualPairing(state, options.pairing === 'manual' && opts.stdin !== false);
 
   const wss = new WebSocketServer({ host: options.host, port: options.port });
   const ready = new Promise((resolve, reject) => {
@@ -1624,7 +1674,8 @@ export async function startServer(opts = {}) {
       tickTimer: undefined,
     };
     state.connections.add(conn);
-    sendEvent(conn, 'connect.challenge', conn.challenge);
+    // MOCK_CHALLENGE=off: a WebSocket server that isn't a Gateway (never sends the challenge).
+    if (options.challenge !== 'off') sendEvent(conn, 'connect.challenge', conn.challenge);
     conn.tickTimer = setInterval(() => {
       if (conn.authenticated) sendEvent(conn, 'tick', { ts: nowMs() });
     }, 15_000);
