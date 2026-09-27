@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import PincerPush
 import Security
 
 /// Minimal generic-password Keychain wrapper. Secrets (device key, gateway token/password,
@@ -7,10 +8,18 @@ import Security
 public enum Keychain {
     static let service = "chat.pincer.gateway"
 
-    /// Process-local store for headless checks (`PINCER_KEYCHAIN=memory`), so tests never
-    /// touch or prompt for the real Keychain.
-    private static let memory: MemoryStore? =
-        ProcessInfo.processInfo.environment["PINCER_KEYCHAIN"] == "memory" ? MemoryStore() : nil
+    /// Process-local store used in `KeychainMode` memory mode (`PINCER_KEYCHAIN=memory`, test
+    /// runners, or `useInMemoryStore()`), so checks and tests never touch or prompt for the real Keychain.
+    private static let memoryStore = MemoryStore()
+    private static var memory: MemoryStore? { KeychainMode.isInMemory ? self.memoryStore : nil }
+
+    /// Keeps every secret (this store and `PushKeyStore`) in memory for the rest of the process.
+    public static func useInMemoryStore() { KeychainMode.useInMemoryStore() }
+
+    public static var isInMemory: Bool { KeychainMode.isInMemory }
+
+    /// Real `SecItem*` calls so far, from this store and `PushKeyStore`.
+    public static var realKeychainCalls: Int { KeychainMode.realKeychainCalls }
 
     private final class MemoryStore: @unchecked Sendable {
         private let lock = NSLock()
@@ -25,6 +34,7 @@ public enum Keychain {
         if let memory { memory[account] = value; return }
         guard let data = value.data(using: .utf8) else { return }
         self.delete(account)
+        KeychainMode.recordRealAccess()
         var query = self.baseQuery(account)
         query[kSecValueData as String] = data
         query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
@@ -52,6 +62,7 @@ public enum Keychain {
 
     public static func get(_ account: String) -> String? {
         if let memory { return memory[account] }
+        KeychainMode.recordRealAccess()
         for query in self.readQueries(account) {
             var item: CFTypeRef?
             if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
@@ -66,6 +77,7 @@ public enum Keychain {
 
     public static func delete(_ account: String) {
         if let memory { memory[account] = nil; return }
+        KeychainMode.recordRealAccess()
         for query in self.readQueries(account) {
             var deleteQuery = query
             deleteQuery.removeValue(forKey: kSecReturnData as String)
