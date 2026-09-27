@@ -151,6 +151,12 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var execPolicy = ExecPolicyModel(
         connection: self.connection, hello: { [weak self] in self?.hello },
         allowsWritesWithoutAdmin: self.profile.isDemo)
+    /// Creating, editing and deleting agents, and their workspace files. The demo may write
+    /// without `operator.admin`. Every agent mutation re-fetches `agents.list`.
+    @ObservationIgnored public private(set) lazy var agentManagement = AgentManagementModel(
+        connection: self.connection, hello: { [weak self] in self?.hello },
+        allowsWritesWithoutAdmin: self.profile.isDemo,
+        onAgentsChanged: { [weak self] in await self?.agentsDidChange() })
     /// Token and cost usage; loaded when the Usage page opens.
     @ObservationIgnored public private(set) lazy var usage = UsageModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
@@ -281,6 +287,7 @@ public final class GatewayStore: Identifiable {
         self.lastError = nil
         Task { await self.bootstrap() }
         self.execPolicy.handleReconnect()
+        self.agentManagement.handleReconnect()
     }
 
     private func bootstrap() async {
@@ -290,11 +297,7 @@ public final class GatewayStore: Identifiable {
             "sessions.subscribe",
             .object(self.listParams),
             timeout: 30)
-        if let agents = await agents {
-            self.agents = agents["agents"]?.array?.compactMap(AgentSummary.init) ?? []
-            self.defaultAgentId = agents["defaultId"]?.text ?? self.agents.first?.id ?? "main"
-            Self.agentsDidLoad?()
-        }
+        if let agents = await agents { self.applyAgents(agents) }
         if let list = await subscribed?["list"] {
             self.applySnapshot(list)
         } else {
@@ -467,6 +470,24 @@ public final class GatewayStore: Identifiable {
 
     /// Called after any Gateway's agent list loads, e.g. so the app can refresh Siri's App Shortcut phrases.
     public static var agentsDidLoad: (@MainActor () -> Void)?
+
+    private func applyAgents(_ result: JSONValue) {
+        self.agents = result["agents"]?.array?.compactMap(AgentSummary.init) ?? []
+        self.defaultAgentId = result["defaultId"]?.text ?? self.agents.first?.id ?? "main"
+        Self.agentsDidLoad?()
+    }
+
+    /// Re-fetches `agents.list` so the sidebar and pickers show created, renamed and deleted agents.
+    public func reloadAgents() async {
+        guard self.state.isConnected, let result = try? await self.connection.request("agents.list", [:]) else { return }
+        self.applyAgents(result)
+    }
+
+    /// After an agent mutation: the roster, and the config (its agent entries and bindings changed).
+    private func agentsDidChange() async {
+        await self.reloadAgents()
+        if self.settings.hasLoaded { await self.settings.reloadConfig() }
+    }
 
     @ObservationIgnored private var eventTaps: [Int: @MainActor (GatewayEvent) -> Void] = [:]
     @ObservationIgnored private var nextEventTap = 0

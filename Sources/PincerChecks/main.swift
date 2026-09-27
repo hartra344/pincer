@@ -501,6 +501,7 @@ do {
 await checkApprovalHistoryModel()
 await checkGatewayLogsModel()
 await checkExecPolicy()
+await checkAgentManagement()
 print("Pairing requests")
 await checkPairingInboxModel()
 await checkGatewayHealth()
@@ -3248,6 +3249,7 @@ func runDemo() async {
     check(unpinned && Set(gateway.pinnedChats.map(\.key)) == seededPins, "unpinning restores the seeded pins")
     await checkDemoSentMessageSearch(gateway, chat)
     await runDemoExecPolicy(gateway, chat: chat)
+    await runDemoAgents(gateway)
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
     let pairing = gateway.pairingInbox
@@ -4519,6 +4521,7 @@ func runLive(url: String, token: String) async {
         check(false, "nothing left to compact (\(String(describing: papers.compaction)))")
     }
     await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
+    await runLiveAgents(profile: profile, gateway: gateway, admin: admin)
 
     // Gateway Logs after Pairing Requests, whose seeded request expires minutes after the mock starts.
     await checkGatewayLogsLive(admin)
