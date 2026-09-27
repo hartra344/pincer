@@ -129,6 +129,8 @@ struct RootView: View {
         .focusedSceneValue(\.commandPalette, self.showsCommandPalette)
         .focusedSceneValue(\.searchMessages, self.app.selectedGateway == nil ? nil : self.searchMessagesAction)
         .sheet(isPresented: self.$addingGateway) { ConnectionSheet() }
+        .modifier(SetupWizardPresenter())
+        .modifier(TipsOverlay())
         #if os(iOS)
         .sheet(isPresented: self.$showingAppSettings) {
             NavigationStack {
@@ -289,7 +291,7 @@ struct SettingsView: View {
         #if os(macOS)
         TabView {
             Tab("General", systemImage: "gearshape") {
-                SettingsForm(sections: [.you, .launch, .quickCapture, .menuBar, .device])
+                SettingsForm(sections: [.you, .launch, .quickCapture, .menuBar, .device, .storage, .tips])
             }
             Tab("Appearance", systemImage: "paintpalette") {
                 SettingsForm(sections: [.appearance, .colors], scrolls: true)
@@ -320,7 +322,7 @@ enum ReactionFeature {
 
 private struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, launch, quickCapture, menuBar, appearance, colors, conversation, sidebar, notifications, device
+        case you, launch, quickCapture, menuBar, appearance, colors, conversation, sidebar, notifications, device, storage, tips
 
         /// Sections that exist on this platform.
         static var available: [Self] {
@@ -382,6 +384,8 @@ private struct SettingsForm: View {
             } footer: {
                 Text("Your messages show under this name, whichever channel they came from.")
             }
+        case .tips:
+            TipsSettingsSection()
         case .launch:
             #if os(macOS)
             LaunchAtLoginSettingsSection()
@@ -485,7 +489,54 @@ private struct SettingsForm: View {
                 }
                 LabeledContent("Role", value: "operator (read, write, approvals, questions)")
             }
+        case .storage:
+            TranscriptCacheSettingsSection()
         }
+    }
+}
+
+/// How much room cached transcripts take, and a way to clear them (e.g. after a bad cache).
+private struct TranscriptCacheSettingsSection: View {
+    @Environment(AppModel.self) private var app
+    @State private var usage: Int64?
+    @State private var confirming = false
+    private let enabled = TranscriptCache.root != nil
+
+    var body: some View {
+        SwiftUI.Section {
+            LabeledContent("Cached transcripts") {
+                if !self.enabled {
+                    Text("Off")
+                } else if let usage {
+                    Text(usage.formatted(.byteCount(style: .file)))
+                        .monospacedDigit()
+                } else {
+                    ProgressView().controlSize(.small)
+                }
+            }
+            Button("Clear Cache…", role: .destructive) { self.confirming = true }
+                .disabled(!self.enabled || self.usage == 0)
+                .confirmationDialog("Clear cached transcripts?", isPresented: self.$confirming, titleVisibility: .visible) {
+                    Button("Clear Cache", role: .destructive) {
+                        Task {
+                            await self.app.clearTranscriptCache()
+                            await self.measure()
+                        }
+                    }
+                } message: {
+                    Text("Chats are downloaded again from your gateways when you open them, and message search is rebuilt. Nothing on your gateways is deleted.")
+                }
+        } header: {
+            Text("Storage")
+        } footer: {
+            Text("Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages.")
+        }
+        .task { await self.measure() }
+    }
+
+    private func measure() async {
+        guard self.enabled else { return }
+        self.usage = await TranscriptCache.diskUsage()
     }
 }
 

@@ -57,7 +57,7 @@ struct CommandPaletteView: View {
 
     private enum Command: String {
         case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, usage, sessionUsage,
-             gatewayLogs, devices
+             gatewayLogs, devices, setupGateway
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -404,6 +404,7 @@ struct CommandPaletteView: View {
                  enabled: self.app.totalUnread > 0),
             item(.appSettings, "Open Settings…", "gearshape", keywords: ["preferences"], shortcut: "⌘,"),
         ]
+        if let setup = CommandPalette.setupGatewayItem(gateway: self.gateway) { items.append(setup) }
         if self.gateway != nil {
             items += [
                 item(.gatewaySettings, "Gateway Settings…", "server.rack", keywords: ["config"], shortcut: "⇧⌘,"),
@@ -569,6 +570,8 @@ struct CommandPaletteView: View {
             if let gateway { self.openGatewaySettings(gateway, at: .devices) }
         case .sessionUsage:
             if let gateway, let row { self.openGatewaySettings.sessionUsage(gateway, key: row.key, agentId: row.agentId) }
+        case .setupGateway:
+            gateway?.setup.present()
         }
     }
 }

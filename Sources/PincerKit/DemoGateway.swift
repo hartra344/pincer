@@ -38,7 +38,7 @@ actor DemoGateway {
         "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
-    ] + DemoUsage.methods + DemoGateway.agentMethods + DemoGateway.deviceMethods
+    ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.deviceMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -61,6 +61,10 @@ actor DemoGateway {
     private var logs = DemoGatewayLogs()
     /// The exec approvals file (`exec.approvals.get/set`). The demo keeps no socket token.
     var execApprovals = DemoGateway.seedExecApprovals()
+    /// WhatsApp link state and the running QR login (`DemoGateway+Setup.swift`).
+    var setup = DemoSetupState()
+    var agentIds: [String] { self.agents.compactMap { $0["id"]?.text } }
+    func hasSession(_ key: String) -> Bool { self.sessions[key] != nil }
     var execApprovalsExists = true
     /// Agent workspace files by workspace path (`agents.files.*`).
     var agentWorkspaces = DemoGateway.seedAgentWorkspaces()
@@ -191,7 +195,7 @@ actor DemoGateway {
         ]
     }
 
-    func handle(_ method: String, _ params: JSONValue) throws -> JSONValue {
+    func handle(_ method: String, _ params: JSONValue) async throws -> JSONValue {
         if let result = try self.handleAgents(method, params) { return result }
         if let result = try self.handleDevices(method, params) { return result }
         switch method {
@@ -317,6 +321,8 @@ actor DemoGateway {
             return .array(self.presence())
         case "gateway.restart.request":
             return self.requestRestart(params)
+        case _ where Self.setupMethods.contains(method) || Self.webLoginMethods.contains(method):
+            return try await self.handleSetup(method, params) ?? .null
         default:
             throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "The demo doesn't support \(method).", details: nil)
         }
@@ -407,7 +413,8 @@ actor DemoGateway {
     // MARK: Health and restart
 
     /// Discord is fine; Telegram lost its connection until a restart, so the demo starts out degraded.
-    private func health() -> JSONValue {
+    /// WhatsApp is enabled but not linked yet (not configured, so not a problem) for the setup wizard.
+    func health() -> JSONValue {
         let now = Self.now()
         let nowMs = now.double ?? 0
         return [
@@ -428,9 +435,10 @@ actor DemoGateway {
                     "lastConnectedAt": .number(nowMs - 25 * 60_000), "lifecycle": "recovering",
                     "lastError": "Telegram API timed out (getUpdates). Retrying.",
                 ],
+                "whatsapp": self.whatsappAccount(),
             ],
-            "channelOrder": ["discord", "telegram"],
-            "channelLabels": ["discord": "Discord", "telegram": "Telegram"],
+            "channelOrder": ["discord", "telegram", "whatsapp"],
+            "channelLabels": ["discord": "Discord", "telegram": "Telegram", "whatsapp": "WhatsApp"],
             "heartbeatSeconds": 1800,
             "agents": .array(self.agents.map { agent in
                 let id = agent["id"] ?? "main"
@@ -440,7 +448,7 @@ actor DemoGateway {
                 ]
             }),
             "sessions": ["count": JSONValue(self.sessions.count), "recent": []],
-            "plugins": ["loaded": ["discord", "telegram", "memory-core"], "errors": [], "unavailable": []],
+            "plugins": ["loaded": ["discord", "telegram", "whatsapp", "memory-core"], "errors": [], "unavailable": []],
             "deliveryQueues": ["failed": []],
             "contextEngines": ["quarantined": []],
             "modelPricing": ["state": "ok"],
@@ -1326,6 +1334,10 @@ actor DemoGateway {
     }
 
     // MARK: Events
+
+    func emitHealth() {
+        self.emit("health", self.health())
+    }
 
     func emit(_ name: String, _ payload: JSONValue) {
         self.eventSeq += 1
