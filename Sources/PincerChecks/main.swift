@@ -2461,6 +2461,8 @@ if arguments.contains("--demo") {
     await runDemoReactionsReply()
     print("Menu bar (demo)")
     await runMenuBarDemo()
+    print("Sidebar automations & slash commands (demo)")
+    await runDemoSidebarVisibility()
     print("Setup wizard (demo)")
     await runDemoSetup()
     print("Deep links (demo)")
@@ -4043,6 +4045,8 @@ func runLive(url: String, token: String) async {
     gateway.organization = .group
     check(gateway.sections().contains { $0.title == "Home" }, "group organization")
     gateway.organization = .agent
+    await checkSidebarVisibility(gateway, automations: ["agent:main:cron:morning-briefing", "agent:main:cron:disk-check"],
+                                 slashKey: "agent:main:discord:slash:418235907214753792", label: "live")
 
     let key = "agent:main:main"
     await gateway.loadCommands(sessionKey: key, agentId: "main")
