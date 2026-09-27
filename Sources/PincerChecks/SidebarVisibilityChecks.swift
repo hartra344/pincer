@@ -98,7 +98,8 @@ func checkSidebarVisibility(_ gateway: GatewayStore, automations: [String], slas
     check(Set(shown.first { $0.id == "automations" }?.channels.map(\.row.key) ?? []).isSuperset(of: automations)
           && shown.last?.id == "automations", "\(label): Automations section by server (\(shown.map(\.id)))")
     let unreadAutomations = automations.filter { gateway.sessions[$0]?.isUnread == true }.count
-    check(gateway.totalUnread == before + unreadAutomations && gateway.totalUnread == expectedUnread(gateway),
+    // Live Gateways can mark chats unread meanwhile, so compare against the rows as they are now.
+    check(gateway.totalUnread == expectedUnread(gateway) && (unreadAutomations == 0 || gateway.totalUnread > 0),
           "\(label): unread automations count once shown (\(before) → \(gateway.totalUnread))")
     if unreadAutomations > 0 {
         check((shown.first { $0.id == "automations" }?.unreadCount ?? 0) == unreadAutomations,
@@ -115,7 +116,7 @@ func checkSidebarVisibility(_ gateway: GatewayStore, automations: [String], slas
         gateway.showSlashCommands = false
     }
     gateway.showAutomations = false
-    check(sidebarKeys(gateway.sections()).isDisjoint(with: hiddenKeys) && gateway.totalUnread == before,
+    check(sidebarKeys(gateway.sections()).isDisjoint(with: hiddenKeys) && gateway.totalUnread == expectedUnread(gateway),
           "\(label): turning them off hides them again")
 
     // The open chat always shows, even a hidden kind.
@@ -173,11 +174,17 @@ func runDemoSidebarVisibility() async {
     check(!menu.unread.contains { $0.target.sessionKey == briefing } && menu.unreadCount == gateway.totalUnread,
           "menu bar leaves hidden automations out of Unread (\(menu.unread.map(\.title)), \(menu.unreadCount) vs \(gateway.totalUnread))")
 
+    let badge = gateway.totalUnread
+    gateway.showAutomations = true
+    check(gateway.totalUnread == badge + 1, "the unread morning briefing joins the badge once shown (\(badge) → \(gateway.totalUnread))")
+    gateway.showAutomations = false
+    check(gateway.totalUnread == badge, "…and leaves it once hidden")
+
     await checkSidebarVisibility(gateway, automations: [briefing, disk], slashKey: slash, label: "demo")
 
     // Per-Gateway preferences survive a relaunch.
     gateway.showAutomations = true
-    check(defaults.object(forKey: automationsKey) as? Bool == true && defaults.object(forKey: slashKey) == nil,
+    check(defaults.object(forKey: automationsKey) as? Bool == true && defaults.object(forKey: slashKey) as? Bool == false,
           "Show Automations stored per Gateway")
     let relaunched = AppModel(defaults: defaults).gateways.first { $0.id == gateway.id }
     check(relaunched?.showAutomations == true && relaunched?.showSlashCommands == false, "Show Automations restored on relaunch")

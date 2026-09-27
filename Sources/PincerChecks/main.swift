@@ -4304,7 +4304,9 @@ func runLive(url: String, token: String) async {
         }
 
         // Arrange chats within a group by hand.
-        let workKeys = gateway.sessions.values.filter { !$0.isSubagent && !$0.isArchived }.map(\.key).sorted().prefix(3)
+        // Sidebar-listed chats only: automations and slash commands are hidden by default (#174).
+        let workKeys = gateway.sessions.values.filter { !$0.isSubagent && !$0.isArchived && !gateway.isHiddenInSidebar($0) }
+            .map(\.key).sorted().prefix(3)
         for key in workKeys where gateway.sessions[key]?.category != "Work" {
             await gateway.moveChat(key, toGroup: "Work", before: nil)
         }
