@@ -1,3 +1,4 @@
+import PincerKit
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(macOS)
@@ -88,6 +89,8 @@ struct ComposerTextView: View {
     /// Takes keyboard focus each time this changes.
     var focusRequest = 0
     let onSubmit: () -> Void
+    /// ⌘↩; nil makes ⌘↩ act like ↩.
+    var onCommandSubmit: (() -> Void)? = nil
     let onMedia: ([PastedMedia]) -> Void
     /// Returns whether the key was handled.
     var onKey: (ComposerKey) -> Bool = { _ in false }
@@ -101,6 +104,7 @@ struct ComposerTextView: View {
         PlatformComposerTextView(
             text: self.$text, maxLines: self.maxLines, isEditable: self.isEditable, menuActive: self.menuActive,
             escapeActive: self.escapeActive, focusRequest: self.focusRequest, onSubmit: self.onSubmit,
+            onCommandSubmit: self.onCommandSubmit,
             onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd, autoFocus: self.autoFocus)
             .overlay(alignment: .topLeading) {
                 if self.text.isEmpty {
@@ -182,6 +186,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
     let escapeActive: Bool
     let focusRequest: Int
     let onSubmit: () -> Void
+    let onCommandSubmit: (() -> Void)?
     let onMedia: ([PastedMedia]) -> Void
     let onKey: (ComposerKey) -> Bool
     let onCaretAtEnd: (Bool) -> Void
@@ -289,10 +294,13 @@ private struct PlatformComposerTextView: NSViewRepresentable {
             }
             guard selector == #selector(NSResponder.insertNewline(_:)), !textView.hasMarkedText() else { return false }
             let flags = NSApp.currentEvent?.modifierFlags ?? []
-            if flags.contains(.shift) || flags.contains(.option) {
-                textView.insertNewlineIgnoringFieldEditor(nil)
-            } else {
-                self.parent.onSubmit()
+            switch ComposerReturnAction.resolve(
+                shift: flags.contains(.shift), option: flags.contains(.option), command: flags.contains(.command),
+                supportsSendAndOpen: self.parent.onCommandSubmit != nil)
+            {
+            case .newline: textView.insertNewlineIgnoringFieldEditor(nil)
+            case .send: self.parent.onSubmit()
+            case .sendAndOpen: self.parent.onCommandSubmit?()
             }
             return true
         }
@@ -370,6 +378,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
     let escapeActive: Bool
     let focusRequest: Int
     let onSubmit: () -> Void
+    let onCommandSubmit: (() -> Void)?
     let onMedia: ([PastedMedia]) -> Void
     let onKey: (ComposerKey) -> Bool
     let onCaretAtEnd: (Bool) -> Void
