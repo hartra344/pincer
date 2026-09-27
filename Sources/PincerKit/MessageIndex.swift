@@ -276,11 +276,15 @@ public actor MessageIndex {
         for (done, chat) in stale.enumerated() {
             if Task.isCancelled || self.isRemoved { break }
             await progress?(.building(done: done, total: stale.count))
-            guard let data = try? Data(contentsOf: chat.url),
-                  let snapshot = try? JSONDecoder().decode(TranscriptCache.Snapshot.self, from: data),
-                  snapshot.version == TranscriptCache.Snapshot.currentVersion
-            else { continue }
-            await self.index(sessionKey: chat.key, snapshot: snapshot, fileMtime: chat.mtime)
+            // Read as opening the chat would: migrated transcripts are indexed (and saved back),
+            // unusable ones quarantined or deleted.
+            let (snapshot, outcome) = await TranscriptCache.read(chat.url, gatewayId: self.gatewayId, priority: .utility)
+            guard let snapshot else { continue }
+            var rewritten = chat.url
+            rewritten.removeAllCachedResourceValues()
+            let mtime = outcome == .loaded ? chat.mtime
+                : (try? rewritten.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? chat.mtime
+            await self.index(sessionKey: chat.key, snapshot: snapshot, fileMtime: mtime)
         }
         await self.truncateLog()
         await progress?(.ready)

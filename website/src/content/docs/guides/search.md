@@ -68,4 +68,4 @@ If that message is no longer in the chat, the newest match is selected instead. 
 | **Message search needs the transcript cache, which is turned off.** | `PINCER_CACHE_DIR=off` is set. Search only covers cached chats. The built-in demo still searches, with its index kept in memory. |
 | **Message search is unavailable right now.** | The search index couldn't be read. Pincer rebuilds it on its own; try again shortly. |
 
-The search index is stored next to the transcript cache. See [Security & privacy](../../reference/security/#local-cache).
+The search index is stored next to the transcript cache and rebuilds itself when needed. See [Local cache](../local-cache/#search-index) and [Security & privacy](../../reference/security/#local-cache).

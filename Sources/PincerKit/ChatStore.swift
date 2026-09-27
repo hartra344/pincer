@@ -145,6 +145,8 @@ public final class ChatStore: Identifiable {
     /// Background cache filler: no UI, no live subscription.
     @ObservationIgnored private let headless: Bool
     @ObservationIgnored private var cacheChecked = false
+    /// What restoring from the transcript cache found; nil until it's been tried.
+    @ObservationIgnored private(set) var cacheOutcome: TranscriptCache.LoadOutcome?
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var backfillTask: Task<Void, Never>?
     @ObservationIgnored private var olderTask: Task<Bool, Never>?
@@ -217,12 +219,14 @@ public final class ChatStore: Identifiable {
     }
 
     /// Shows the cached transcript before the Gateway answers; the newest page is merged over it.
+    /// Without a usable one (missing, or discarded as corrupt, outdated or from a newer app)
+    /// nothing is shown: the chat stays loading until the Gateway's history arrives.
     private func restoreFromCache() async {
         guard !self.cacheChecked else { return }
         self.cacheChecked = true
-        guard let snapshot = await TranscriptCache.load(gatewayId: self.gatewayId, sessionKey: self.sessionKey),
-              !snapshot.items.isEmpty, self.items.isEmpty
-        else { return }
+        let (snapshot, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: self.gatewayId, sessionKey: self.sessionKey)
+        self.cacheOutcome = outcome
+        guard let snapshot, !snapshot.items.isEmpty, self.items.isEmpty else { return }
         // Item count never exceeds the raw message count, so this offset can only overlap (deduped
         // by id), never skip; the first older page's `nextOffset` makes it exact again.
         self.olderOffset = snapshot.items.count
@@ -298,6 +302,13 @@ public final class ChatStore: Identifiable {
             items: Array(kept),
             complete: !hasMoreHistory && kept.count == committed.count,
             activityMs: activityMs)
+    }
+
+    /// Writes what's loaded to the transcript cache now (after it was cleared).
+    func saveToCache() async {
+        guard self.hasLoaded else { return }
+        self.saveTask?.cancel()
+        await TranscriptCache.save(self.snapshot(), gatewayId: self.gatewayId, sessionKey: self.sessionKey)
     }
 
     private func scheduleSave() {
