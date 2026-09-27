@@ -36,6 +36,7 @@ export default defineConfig({
 						{ slug: 'getting-started/install' },
 						{ slug: 'getting-started/try-the-demo' },
 						{ slug: 'getting-started/connect-a-gateway' },
+						{ slug: 'getting-started/setup-wizard' },
 						{ slug: 'getting-started/tailscale' },
 					],
 				},

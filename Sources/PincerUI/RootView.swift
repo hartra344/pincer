@@ -129,6 +129,8 @@ struct RootView: View {
         .focusedSceneValue(\.commandPalette, self.showsCommandPalette)
         .focusedSceneValue(\.searchMessages, self.app.selectedGateway == nil ? nil : self.searchMessagesAction)
         .sheet(isPresented: self.$addingGateway) { ConnectionSheet() }
+        .modifier(SetupWizardPresenter())
+        .modifier(TipsOverlay())
         #if os(iOS)
         .sheet(isPresented: self.$showingAppSettings) {
             NavigationStack {
@@ -289,7 +291,7 @@ struct SettingsView: View {
         #if os(macOS)
         TabView {
             Tab("General", systemImage: "gearshape") {
-                SettingsForm(sections: [.you, .launch, .quickCapture, .menuBar, .device, .storage])
+                SettingsForm(sections: [.you, .launch, .quickCapture, .menuBar, .device, .storage, .tips])
             }
             Tab("Appearance", systemImage: "paintpalette") {
                 SettingsForm(sections: [.appearance, .colors], scrolls: true)
@@ -320,7 +322,7 @@ enum ReactionFeature {
 
 private struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, launch, quickCapture, menuBar, appearance, colors, conversation, sidebar, notifications, device, storage
+        case you, launch, quickCapture, menuBar, appearance, colors, conversation, sidebar, notifications, device, storage, tips
 
         /// Sections that exist on this platform.
         static var available: [Self] {
@@ -382,6 +384,8 @@ private struct SettingsForm: View {
             } footer: {
                 Text("Your messages show under this name, whichever channel they came from.")
             }
+        case .tips:
+            TipsSettingsSection()
         case .launch:
             #if os(macOS)
             LaunchAtLoginSettingsSection()

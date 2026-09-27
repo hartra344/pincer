@@ -168,6 +168,41 @@ public final class GatewayStore: Identifiable {
     /// creates it or wires up its callbacks mid-update.
     @ObservationIgnored public let health: GatewayHealthModel
 
+    /// The first-run setup wizard (Set Up Gateway…); offered after the first successful connection.
+    @ObservationIgnored public private(set) lazy var setup: SetupWizardModel = {
+        let connection = self.connection
+        let environment = SetupWizardModel.Environment(
+            request: { method, params in try await connection.request(method, params, timeout: 150) },
+            // Real scopes only: the demo's simulated restart doesn't grant setup changes.
+            hasAdmin: { [weak self] in self?.hello?.scopes.contains(GatewayConnection.adminScope) ?? false },
+            methods: { [weak self] in self?.hello?.methods },
+            healthStatus: { [weak self] in
+                guard let self else { return .notChecked(nil) }
+                return SetupRules.health(level: self.health.level, activeIssues: self.health.activeIssues,
+                                         loaded: self.health.health != nil || self.health.hasLoaded,
+                                         channelsSeparate: true)
+            },
+            agentStatus: { [weak self] in
+                guard let self else { return .notChecked(nil) }
+                return SetupRules.agent(agents: self.agents, defaultAgentId: self.defaultAgentId,
+                                        defaultModelRef: self.defaultModelRef, loaded: self.hello != nil)
+            },
+            healthChannels: { [weak self] in self?.health.health },
+            refresh: { [weak self] in
+                guard let self else { return }
+                async let health: Void = self.health.load()
+                async let agents: Void = self.reloadAgents()
+                _ = await (health, agents)
+            })
+        let model = SetupWizardModel(gatewayId: self.id, isDemo: self.profile.isDemo, defaults: self.defaults,
+                                     connectedBefore: self.connectedBeforeSetup, environment: environment)
+        // The demo is offered only right after "Try the Demo" (`AppModel.openDemo`).
+        model.autoOffers = !self.profile.isDemo
+        return model
+    }()
+    /// This gateway connected before the wizard existed (it has a saved chat selection).
+    @ObservationIgnored private let connectedBeforeSetup: Bool
+
     /// Where per-gateway sidebar and selection preferences persist.
     @ObservationIgnored let defaults: UserDefaults
     @ObservationIgnored private let identity: DeviceIdentity
@@ -196,6 +231,7 @@ public final class GatewayStore: Identifiable {
         self.reactions = defaults.dictionary(forKey: "pincer.reactions.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.healthDismissals = defaults.dictionary(forKey: "pincer.healthDismissals.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.selectedKey = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)")
+        self.connectedBeforeSetup = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)") != nil
         self.sectionCollapse = defaults.dictionary(forKey: "pincer.collapsed.\(profile.id.uuidString)") as? [String: Bool] ?? [:]
         let images = ArtifactImageLoader()
         self.images = images
@@ -311,6 +347,7 @@ public final class GatewayStore: Identifiable {
         }
         await self.refreshQuestions()
         self.bootstrapped = true
+        self.setup.connected()
         Task { await PushRegistrar.shared.sync(self) }
         self.dumpSessionShapesIfRequested()
         Task { await self.loadConfiguredServerNames() }

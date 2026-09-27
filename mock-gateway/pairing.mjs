@@ -67,7 +67,7 @@ export function createChannelPairingState(base = Date.now()) {
       makeRequest(discord, { requestId: 'pr_discord', senderId: '418820017734812160', createdAtMs: base - 20 * 60_000 }),
       makeRequest(telegram, {
         requestId: 'pr_soon', senderId: '5550199', metadata: { username: 'night_owl' },
-        createdAtMs: base - PAIRING_TTL_MS + 2 * 60_000,
+        createdAtMs: base - PAIRING_TTL_MS + 10 * 60_000,
       }),
     ],
   };
