@@ -25,7 +25,7 @@ struct AgentManagementSection: View {
             }
             AgentReadOnlyNotice(model: model)
             if agents.isEmpty {
-                Text(connected ? "No agents." : "Connect to the gateway to see its agents.")
+                Text(connected ? L("No agents.") : L("Connect to the gateway to see its agents."))
                     .foregroundStyle(.secondary)
             }
             ForEach(agents) { agent in
@@ -507,7 +507,7 @@ private struct AgentFileRow: View {
                     .accessibilityLabel(L("Unsaved changes"))
             }
             if self.file.missing {
-                Text(self.file.expectedAbsent ? "Not Created" : "Missing")
+                Text(self.file.expectedAbsent ? L("Not Created") : L("Missing"))
                     .font(.caption2.weight(.medium))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -642,7 +642,7 @@ struct AgentEditorSheet: View {
                     if self.state.isRunning {
                         ProgressView()
                     } else {
-                        Button(self.isDuplicate ? "Duplicate" : "Create") { Task { await self.submit() } }
+                        Button(self.isDuplicate ? L("Duplicate") : L("Create")) { Task { await self.submit() } }
                             .disabled(self.draft.validationError(existing: self.gateway.agents) != nil
                                 || !self.gateway.state.isConnected || !self.model.canManageAgents)
                     }

@@ -141,7 +141,7 @@ struct ExecAgentPage: View {
         .toolbar {
             if model.snapshot != nil, self.hasEntries(model) {
                 ToolbarItem {
-                    Button(self.editing ? "Done" : "Edit") { withAnimation { self.editing.toggle() } }
+                    Button(self.editing ? L("Done") : L("Edit")) { withAnimation { self.editing.toggle() } }
                         .disabled(!self.editable(model, connected: connected))
                 }
             }

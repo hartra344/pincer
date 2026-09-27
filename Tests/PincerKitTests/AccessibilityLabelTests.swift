@@ -128,7 +128,7 @@ struct AccessibilityLabelTests {
     @Test func sessionRowFullLabel() {
         let label = AccessibilityText.sessionRow(
             title: "Research", agentName: "Claude", unreadCount: 3, isPinned: true, isRunning: true)
-        #expect(label == "Research, Claude, Pinned, Running, 3 unread")
+        #expect(label == "Research, Claude, Pinned, Working, 3 unread")
     }
 
     @Test func sessionRowUnreadCounts() {

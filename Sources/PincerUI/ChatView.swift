@@ -116,17 +116,17 @@ struct ChatView: View {
     /// Tells VoiceOver the visible chat's run ended, once per run. The chat header's animated avatar
     /// already announces failures, so a failure is only spoken here when that avatar is off.
     private func announceOutcome() {
-        guard VoiceOver.isRunning else { return }
+        guard AccessibilityAnnouncer.isVoiceOverRunning else { return }
         switch self.chat.lastOutcome {
         case .none:
             return
         case .success:
             let reply = self.chat.entries.last { if case .assistant = $0 { true } else { false } }
             guard case let .assistant(turn) = reply else { return }
-            VoiceOver.announce(AccessibilityText.replyFinishedAnnouncement(author: self.agent.name, text: turn.body))
+            AccessibilityAnnouncer.announce(AccessibilityText.replyFinishedAnnouncement(author: self.agent.name, text: turn.body))
         case .error:
             guard !self.avatarAnnouncesErrors else { return }
-            VoiceOver.announce(AccessibilityText.replyFailedAnnouncement(author: self.agent.name))
+            AccessibilityAnnouncer.announce(AccessibilityText.replyFailedAnnouncement(author: self.agent.name))
         }
     }
 
@@ -357,7 +357,7 @@ private struct ChatSessionMenu: View {
             Menu {
                 Button(L("Find in Chat"), systemImage: "magnifyingglass") { self.find?.present() }
                 Divider()
-                Button(row.isPinned ? "Unpin" : "Pin", systemImage: row.isPinned ? "pin.slash" : "pin") {
+                Button(row.isPinned ? L("Unpin") : L("Pin"), systemImage: row.isPinned ? "pin.slash" : "pin") {
                     Task { await self.gateway.patch(row.key, ["pinned": .bool(!row.isPinned)]) }
                 }
                 ThinkingDisplayPicker()

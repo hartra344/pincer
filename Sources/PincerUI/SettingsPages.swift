@@ -38,7 +38,7 @@ struct ObjectSections: View {
         Section {
             ForEach(common) { FieldRow(field: $0) }
             if common.isEmpty, advanced.isEmpty {
-                Text(isMap ? "Nothing here yet." : "No settings.").foregroundStyle(.secondary)
+                Text(isMap ? L("Nothing here yet.") : L("No settings.")).foregroundStyle(.secondary)
             }
             if isMap, self.settings.canEdit {
                 Button(L("Add Entry…"), systemImage: "plus") { self.addingEntry = true }
@@ -491,7 +491,8 @@ struct OverviewPage: View {
                         Button {
                             self.navigator.destination = .plugins
                         } label: {
-                            Label("\(settings.pluginsNeedingAttention) plugin\(settings.pluginsNeedingAttention == 1 ? " needs" : "s need") attention",
+                            Label(settings.pluginsNeedingAttention == 1 ? L("1 plugin needs attention")
+                                    : L("\(settings.pluginsNeedingAttention) plugins need attention"),
                                   systemImage: "puzzlepiece.extension")
                         }
                     }
@@ -561,7 +562,7 @@ struct RawConfigPage: View {
         Form {
             if raw == nil {
                 Section {
-                    Text(settings.hasLoaded ? "The Gateway didn't send the raw config file." : "Loading…")
+                    Text(settings.hasLoaded ? L("The Gateway didn't send the raw config file.") : L("Loading…"))
                         .foregroundStyle(.secondary)
                 }
             } else {

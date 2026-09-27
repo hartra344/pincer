@@ -164,7 +164,7 @@ private struct AutomationsRoot: View {
             ToolbarItem {
                 Button(action: self.create) { Label(L("New Automation"), systemImage: "plus") }
                     .disabled(!self.gateway.state.isConnected || !model.canEdit)
-                    .help(model.canEdit ? "New Automation" : "Needs Full Management access")
+                    .help(model.canEdit ? L("New Automation") : L("Needs Full Management access"))
             }
         }
     }
@@ -173,7 +173,7 @@ private struct AutomationsRoot: View {
         let model = self.model
         Button(L("Run Now"), systemImage: "play") { Task { await model.runNow(job) } }
             .disabled(!model.canEdit)
-        Button(job.enabled ? "Pause" : "Resume", systemImage: job.enabled ? "pause" : "playpause") {
+        Button(job.enabled ? L("Pause") : L("Resume"), systemImage: job.enabled ? "pause" : "playpause") {
             Task { await model.setEnabled(job, !job.enabled) }
         }
         .disabled(!model.canEdit)
@@ -373,7 +373,7 @@ private struct AutomationDetail: View {
                 }
                 if let error = job.lastError, job.lastStatus == .error {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(job.consecutiveErrors > 1 ? "Failed \(job.consecutiveErrors) times in a row" : "Last error")
+                        Text(job.consecutiveErrors > 1 ? L("Failed \(job.consecutiveErrors) times in a row") : L("Last error"))
                             .font(.callout.weight(.medium))
                         Text(error)
                             .font(.callout)
@@ -431,7 +431,7 @@ private struct AutomationDetail: View {
         HStack {
             Button(L("Run Now"), systemImage: "play.fill") { Task { await model.runNow(job) } }
                 .glassProminentButton()
-            Button(job.enabled ? "Pause" : "Resume", systemImage: job.enabled ? "pause.fill" : "playpause.fill") {
+            Button(job.enabled ? L("Pause") : L("Resume"), systemImage: job.enabled ? "pause.fill" : "playpause.fill") {
                 Task { await model.setEnabled(job, !job.enabled) }
             }
             .glassButton()
@@ -455,7 +455,7 @@ private struct AutomationDetail: View {
             Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
             Button(L("Try Again")) { Task { await model.loadRuns(for: self.job.id) } }
         } else if runs.isEmpty {
-            Text(model.runs[self.job.id] == nil ? "Loading…" : "No runs yet.")
+            Text(model.runs[self.job.id] == nil ? L("Loading…") : L("No runs yet."))
                 .foregroundStyle(.secondary)
         } else {
             ForEach(runs) { run in
@@ -589,7 +589,7 @@ private struct AutomationEditor: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(self.draft.isNew ? "Create" : "Save", action: self.save)
+                    Button(self.draft.isNew ? L("Create") : L("Save"), action: self.save)
                         .disabled(self.saving || self.draft.problem != nil || !self.draft.hasChanges)
                         .help(self.draft.problem ?? "")
                 }
@@ -657,8 +657,8 @@ private struct AutomationEditor: View {
                 Picker(L("Runs in"), selection: self.$draft.target) {
                     ForEach(CronJobDraft.Target.allCases) { Text($0.label).tag($0) }
                 }
-                TextField(self.draft.target == .main ? "Event" : "Instructions", text: self.$draft.message,
-                          prompt: Text(self.draft.target == .main ? "Text posted to the main chat" : "What should the agent do?"),
+                TextField(self.draft.target == .main ? L("Event") : L("Instructions"), text: self.$draft.message,
+                          prompt: Text(self.draft.target == .main ? L("Text posted to the main chat") : L("What should the agent do?")),
                           axis: .vertical)
                     .lineLimit(3...10)
                 if self.draft.target == .isolated {

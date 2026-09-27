@@ -293,7 +293,7 @@ struct TranscriptFindBar: View {
                 .fixedSize()
                 .accessibilityLabel(self.find.accessibilityStatus)
                 .accessibilityIdentifier("find-status")
-                .onChange(of: self.find.accessibilityStatus) { _, status in VoiceOver.announce(status) }
+                .onChange(of: self.find.accessibilityStatus) { _, status in AccessibilityAnnouncer.announce(status) }
             Menu {
                 Toggle(L("Include Thinking"), systemImage: "brain", isOn: self.$find.includeThinking)
                     .disabled(self.reasoningOff)

@@ -6,10 +6,10 @@ import AppKit
 import UIKit
 #endif
 
-/// VoiceOver helpers shared by the AppKit and UIKit transcripts and SwiftUI views.
+/// VoiceOver announcements shared by the AppKit and UIKit transcripts and SwiftUI views.
 @MainActor
-enum VoiceOver {
-    static var isRunning: Bool {
+enum AccessibilityAnnouncer {
+    static var isVoiceOverRunning: Bool {
         #if os(macOS)
         NSWorkspace.shared.isVoiceOverEnabled
         #else
@@ -19,8 +19,13 @@ enum VoiceOver {
 
     /// Speaks `text` when VoiceOver is on; a no-op otherwise.
     static func announce(_ text: String) {
-        guard self.isRunning, !text.isEmpty else { return }
+        guard self.isVoiceOverRunning, !text.isEmpty else { return }
         AccessibilityNotification.Announcement(text).post()
+    }
+
+    /// Confirms a copy, which a button's brief "Copied" flip doesn't speak. `Clipboard.copy` calls it.
+    static func announceCopied() {
+        self.announce(L("Copied"))
     }
 }
 

@@ -302,7 +302,7 @@ private struct PairingRequestRow: View {
             .buttonStyle(.borderedProminent)
             .accessibilityLabel(L("Approve \(self.request.title)"))
             .disabled(busy || expired)
-            .help(expired ? "This request expired." : "Let this sender message your agents")
+            .help(expired ? L("This request expired.") : L("Let this sender message your agents"))
     }
 
     private var absoluteTimes: String {

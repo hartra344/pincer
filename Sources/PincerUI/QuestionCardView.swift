@@ -182,7 +182,7 @@ struct QuestionCardView: View {
                 if self.question.isSecret {
                     SecureField(L("Type your answer"), text: text)
                 } else {
-                    TextField(self.question.options.isEmpty ? "Type your answer" : "Type your own answer here",
+                    TextField(self.question.options.isEmpty ? L("Type your answer") : L("Type your own answer here"),
                               text: text, axis: .vertical)
                         .lineLimit(1...5)
                 }
@@ -251,7 +251,7 @@ struct QuestionCardView: View {
                 if self.isSending {
                     ProgressView().controlSize(.small)
                 } else {
-                    Text(self.isLastPage ? "Submit" : "Next")
+                    Text(self.isLastPage ? L("Submit") : L("Next"))
                 }
             }
             .glassProminentButton()

@@ -64,7 +64,7 @@ struct ModelPicker: View {
                 }
             }
         } else {
-            Text(self.isLoading ? "Loading models…" : "No models available")
+            Text(self.isLoading ? L("Loading models…") : L("No models available"))
         }
         Divider()
         Button(L("Refresh Models"), systemImage: "arrow.clockwise") {

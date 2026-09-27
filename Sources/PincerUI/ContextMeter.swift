@@ -122,7 +122,7 @@ struct ContextMeterPopover: View {
             if let usage {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(usage.isPromptBudget ? "Prompt Budget" : "Context Window").font(.headline)
+                        Text(usage.isPromptBudget ? L("Prompt Budget") : L("Context Window")).font(.headline)
                         Spacer(minLength: 12)
                         Text("\(usage.summary) · \(usage.percentLabel)")
                             .font(.callout.monospacedDigit())

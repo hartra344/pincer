@@ -156,7 +156,7 @@ struct FieldMenu: View {
             Button(L("Revert to Saved"), systemImage: "arrow.uturn.backward") { settings.revert(self.field.path) }
         }
         if settings.value(at: self.field.path) != nil, !self.field.isRequired, settings.canEdit {
-            Button(self.field.defaultValue == nil ? "Remove Value" : "Reset to Default", systemImage: "eraser") {
+            Button(self.field.defaultValue == nil ? L("Remove Value") : L("Reset to Default"), systemImage: "eraser") {
                 settings.set(self.field.path, nil)
             }
         }

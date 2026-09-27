@@ -191,12 +191,12 @@
         }
       }
     },
-    "%lld plugin%@ attention": {
+    "%lld plugins need attention": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$lld plugin%2$@ attention"
+            "value": "%lld plugins need attention"
           }
         }
       }
@@ -217,6 +217,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "+%lld more"
+          }
+        }
+      }
+    },
+    "1 plugin needs attention": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 plugin needs attention"
           }
         }
       }

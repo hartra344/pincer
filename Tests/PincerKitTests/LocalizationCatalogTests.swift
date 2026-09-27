@@ -100,9 +100,12 @@ struct LocalizationCatalogTests {
         String(localized: "Retry", table: "Localizable", bundle: .module)
         let url = URL("not a key")
         Text("Plain")
+        /* Text(l: "block comment") */
+        let raw = #"L("raw")"#
+        Composer(placeholder: L("Message #\(row?.title ?? L("chat"))"))
         """#
         let keys = try SourceScan.keys(in: source, file: "X.swift").map(\.key)
-        #expect(keys == ["Send", "Copy link", #"Pinned \(count)"#, #"Say "hi""#, "Retry"])
+        #expect(keys == ["Send", "Copy link", #"Pinned \(count)"#, #"Say "hi""#, "Retry", "chat", #"Message #\(row?.title ?? L("chat"))"#])
         let pattern = try #require(SourceScan.interpolationPattern(#"Pinned \(count) of \(total.formatted())"#))
         #expect("Pinned %lld of %@".wholeMatch(of: pattern) != nil)
         #expect("Pinned %1$lld of %2$@".wholeMatch(of: pattern) != nil)
@@ -178,23 +181,20 @@ enum SourceScan {
     }
 
     static func keys(in text: String, file: String) throws -> [Usage] {
-        let literal = #""((?:[^"\\\n]|\\.)*)""#
-        let calls: [Regex<AnyRegexOutput>] = [
-            try Regex(literal + #"\s*,\s*(?:(?:table|tableName)\s*:\s*[^,()]+,\s*)?bundle\s*:\s*\.module"#),
-            try Regex(#"(?:^|[^A-Za-z0-9_.])L\(\s*"# + literal),
-            try Regex(#"Text\(\s*l\s*:\s*"# + literal),
-        ]
+        let chars = Array(text)
+        let before = [try Regex(#"(?:^|[^A-Za-z0-9_.])L\(\s*$"#), try Regex(#"Text\(\s*l\s*:\s*$"#)]
+        let after = try Regex(#"^\s*,\s*(?:(?:table|tableName)\s*:\s*[^,()]+,\s*)?bundle\s*:\s*\.module"#)
+        let tableArgument = try Regex(#"(?:table|tableName)\s*:\s*$"#)
         var usages: [Usage] = []
-        for call in calls {
-            for match in text.matches(of: call) {
-                let lineStart = text[..<match.range.lowerBound].lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex
-                if text[lineStart..<match.range.lowerBound].contains("//") { continue }
-                guard let key = match[1].substring else { continue }
-                let line = text[..<match.range.lowerBound].count(where: { $0 == "\n" }) + 1
-                usages.append(Usage(file: file, line: line, key: unescape(String(key))))
-            }
+        for literal in StringLiterals.scan(chars) {
+            let prefix = String(chars[max(0, literal.start - 40)..<literal.start])
+            let suffix = String(chars[literal.end..<min(chars.count, literal.end + 80)])
+            if prefix.firstMatch(of: tableArgument) != nil { continue }
+            guard before.contains(where: { prefix.firstMatch(of: $0) != nil }) || suffix.prefixMatch(of: after) != nil else { continue }
+            let line = chars[..<literal.start].count(where: { $0 == "\n" }) + 1
+            usages.append(Usage(file: file, line: line, key: unescape(literal.content)))
         }
-        return usages.sorted { $0.line < $1.line }
+        return usages
     }
 
     static func unescape(_ literal: String) -> String {
@@ -229,6 +229,67 @@ enum SourceScan {
             index = text.index(after: index)
         }
         return nil
+    }
+}
+
+/// Single-line Swift string literals in source, including ones nested in `\\(…)` interpolations.
+/// Skips comments, raw strings and multi-line literals (never catalog keys here).
+enum StringLiterals {
+    struct Literal { let start: Int; let end: Int; let content: String }
+
+    static func scan(_ c: [Character]) -> [Literal] {
+        var found: [Literal] = []
+        var i = 0
+        func at(_ j: Int, _ s: String) -> Bool {
+            let s = Array(s)
+            return j + s.count <= c.count && Array(c[j..<j + s.count]) == s
+        }
+        func skip(to terminator: String, from j: Int) -> Int {
+            var j = j
+            while j < c.count, !at(j, terminator) { j += 1 }
+            return min(c.count, j + terminator.count)
+        }
+        /// Parses a `"…"` literal starting at `j`, recording nested ones first; returns the index after it.
+        func literal(_ j: Int) -> Int {
+            var k = j + 1
+            while k < c.count {
+                if c[k] == "\\", k + 1 < c.count, c[k + 1] == "(" {
+                    k += 2
+                    var depth = 1
+                    while k < c.count, depth > 0 {
+                        if c[k] == "\"" { k = literal(k); continue }
+                        if c[k] == "(" { depth += 1 }
+                        if c[k] == ")" { depth -= 1 }
+                        k += 1
+                    }
+                } else if c[k] == "\\" {
+                    k += 2
+                } else if c[k] == "\"" {
+                    found.append(Literal(start: j, end: k + 1, content: String(c[(j + 1)..<k])))
+                    return k + 1
+                } else if c[k] == "\n" {
+                    return k
+                } else {
+                    k += 1
+                }
+            }
+            return k
+        }
+        while i < c.count {
+            if at(i, "//") { i = skip(to: "\n", from: i) }
+            else if at(i, "/*") { i = skip(to: "*/", from: i + 2) }
+            else if c[i] == "#" {
+                var hashes = 0
+                while i + hashes < c.count, c[i + hashes] == "#" { hashes += 1 }
+                guard at(i + hashes, "\"") else { i += hashes; continue }
+                let multi = at(i + hashes, "\"\"\"")
+                let close = (multi ? "\"\"\"" : "\"") + String(repeating: "#", count: hashes)
+                i = skip(to: close, from: i + hashes + (multi ? 3 : 1))
+            } else if at(i, "\"\"\"") { i = skip(to: "\"\"\"", from: i + 3) }
+            else if c[i] == "\"" { i = literal(i) }
+            else { i += 1 }
+        }
+        return found
     }
 }
 

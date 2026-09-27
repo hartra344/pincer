@@ -9,26 +9,38 @@ Pincer uses native controls throughout, so the system's accessibility features w
 
 ### Transcript
 
-- Each message reads as one item: who wrote it, then the message, for example "Nova: Here's the summary…". Long messages are shortened to a readable excerpt. Replies start with the message they reply to.
-- **Actions rotor:** on a message, swipe up or down (iOS) or open the actions menu with <kbd>VO</kbd> <kbd>⌘</kbd> <kbd>Space</kbd> (macOS) to **Copy**, **Reply** or **Add Reaction** without moving to the buttons in the message footer. **Add Reaction** only appears when reactions are turned on.
-- Pincer says "Copied" when you copy a message or a code block.
-- The **Copy**, **Reply** and **React** buttons, reaction chips, thinking and tool call headers, images, attachments and reply quotes are all buttons with their own labels. A reaction chip you've added reads as selected.
-- The typing indicator reads as "Working".
+- Each message reads as one item: who wrote it, then the message, for example "Nova: Here's the summary…". Replies start with the message they reply to.
+- **Actions rotor:** on a message, swipe up or down (iOS) or press <kbd>VO</kbd> <kbd>⌘</kbd> <kbd>Space</kbd> (macOS) for **Copy message**, **Reply** and **Add Reaction**. **Add Reaction** only appears when reactions are turned on. Agent replies with thinking also offer **Copy Thinking**.
+- **On iPhone and iPad**, one swipe moves one whole message. The message's other buttons, such as showing thinking or a tool call's details, opening an image or toggling a reaction, are in the same actions rotor.
+- **On the Mac**, each message is a group. Press <kbd>VO</kbd> <kbd>⇧</kbd> <kbd>↓</kbd> to step inside it and reach its text, the **Copy**, **Reply** and **React** buttons, reaction chips, thinking and tool call headers, images and attachments.
+- A reaction chip you've added reads as selected. The typing indicator reads as "Working".
+- File edit cards read what changed, for example "Edited Sources/App.swift, 12 added, 3 removed, collapsed". Their copy button reads as **Copy diff**, or **Copy file contents** for a new file.
+- Pincer says "Copied" when you copy a message, a code block or a diff, or use any other copy command.
 
 ### Announcements
 
-- When the agent finishes replying in the chat you have open, VoiceOver says so, for example "Nova replied". Chats in the background don't announce.
-- The [agent's avatar](../agent-avatars/#voiceover) announces when the agent starts waiting for an approval or runs into a problem.
+- When the agent finishes replying in the chat you have open, VoiceOver reads the start of the reply, for example "Nova replied: Here's the summary…". Chats in the background don't announce.
+- If a run fails, the [agent's avatar](../agent-avatars/#voiceover) announces it. With avatars turned off, Pincer says "Nova: reply failed" instead.
+- The avatar also announces when the agent starts waiting for an approval.
+- **Find in Chat** reads its result count as it changes, for example "Result 2 of 5" or "No results".
 
 Pincer doesn't read replies token by token while they stream.
 
 ### Sidebar
 
-Each chat reads its title, then whether it's pinned, unread or working, then its preview. The subagent runs button reads as "Show 3 subagent runs" or "Hide subagent runs".
+Each chat reads its title, then whether it's pinned, working or unread, then its preview. The subagent runs button reads as "Show 3 subagent runs" or "Hide subagent runs".
 
 ### Composer
 
-The attach button reads as **Attach file** (and **Attach photos** on iOS), and Send reads as **Send**, or **Queue a follow-up** while a run is going. The [context meter](../composer/) reads as "Context window" with how full it is. Slash command suggestions are a list of buttons, with the highlighted one marked as selected.
+- The attach button reads as **Attach files**, and on iOS the photo button reads as **Attach photos**.
+- Send reads as **Send**, or **Queue a follow-up** while a run is going, and **Stop** stops it.
+- The [context meter](../composer/) reads as "Context window" with how full it is. Activate it for the details and **Compact Now**.
+- The model picker reads as "Model" with the current model.
+- Slash command suggestions are a list of buttons, with the highlighted one marked as selected.
+
+### Settings
+
+Icon buttons have spoken labels, for example **Remove** followed by the item it removes, or the theme's name in Appearance. In the chat icon picker, each symbol reads as words, and the current one reads as selected.
 
 ### Gateway Health
 
@@ -52,7 +64,7 @@ Moving through individual messages with the arrow keys isn't supported yet. Use 
 
 ## Text size
 
-On iPhone and iPad, the transcript, sidebar and composer follow your **Text Size** setting (Settings → Accessibility → Display & Text Size → Larger Text), including the larger accessibility sizes. The chat relays out as soon as you change it, without restarting Pincer.
+On iPhone and iPad, the transcript, sidebar and composer follow your **Text Size** setting (Settings → Accessibility → Display & Text Size → Larger Text), including the larger accessibility sizes. The chat lays itself out again as soon as you change it, without restarting Pincer. The composer's buttons grow with the text, up to a limit so they still fit beside it.
 
 On macOS, Pincer uses the system's standard text sizes.
 

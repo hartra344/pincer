@@ -89,7 +89,7 @@ struct SkillsPage: View {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("No skills found", bundle: .module).font(.callout.weight(.medium))
-                    Text(model.supportsSearch ? "Browse ClawHub to find skills to install." : "Add skills to the agent's workspace on the gateway host.")
+                    Text(model.supportsSearch ? L("Browse ClawHub to find skills to install.") : L("Add skills to the agent's workspace on the gateway host."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -301,7 +301,7 @@ struct SkillDetailPage: View {
                             Image(systemName: check.satisfied ? "checkmark.circle.fill" : "xmark.circle.fill")
                                 .foregroundStyle(check.satisfied ? .green : .red)
                         }
-                        .accessibilityValue(check.satisfied ? "Met" : "Missing")
+                        .accessibilityValue(check.satisfied ? L("Met") : L("Missing"))
                     }
                 }
             }

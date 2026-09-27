@@ -436,10 +436,10 @@ struct GatewayLogsPage: View {
                 Button {
                     model.isPaused.toggle()
                 } label: {
-                    Label(model.isPaused ? "Resume" : "Pause", systemImage: model.isPaused ? "play.fill" : "pause.fill")
+                    Label(model.isPaused ? L("Resume") : L("Pause"), systemImage: model.isPaused ? "play.fill" : "pause.fill")
                 }
                 .disabled(!connected)
-                .help(model.isPaused ? "Resume" : "Pause")
+                .help(model.isPaused ? L("Resume") : L("Pause"))
             }
             #if os(macOS)
             ToolbarItem {

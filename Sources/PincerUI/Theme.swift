@@ -206,6 +206,6 @@ enum Clipboard {
         #else
         UIPasteboard.general.string = text
         #endif
-        if announce { VoiceOver.announce(L("Copied")) }
+        if announce { AccessibilityAnnouncer.announceCopied() }
     }
 }

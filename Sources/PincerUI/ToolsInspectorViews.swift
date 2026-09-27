@@ -49,7 +49,7 @@ struct ToolsInspectorView: View {
                 let groups = inspection.filtered(self.filter, search: self.search)
                 if groups.isEmpty {
                     Section {
-                        Text(inspection.totalCount == 0 ? "No tools." : "No tools match.").foregroundStyle(.secondary)
+                        Text(inspection.totalCount == 0 ? L("No tools.") : L("No tools match.")).foregroundStyle(.secondary)
                     }
                 }
                 ForEach(groups) { group in
@@ -111,7 +111,7 @@ private struct ToolInspectorRow: View {
                 }
             }
             Spacer()
-            Text(self.tool.isAllowed ? "Allowed" : "Denied")
+            Text(self.tool.isAllowed ? L("Allowed") : L("Denied"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(self.tool.isAllowed ? Color.green : Color.red)
         }
