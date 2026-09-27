@@ -11,6 +11,7 @@ struct ChatView: View {
     @State private var previewing: ImageRef?
     @State private var exporting: ExportedFile?
     @State private var find = TranscriptFind()
+    @State private var jump: TranscriptJump?
 
     private var row: SessionRow? { self.gateway.sessions[self.chat.sessionKey] }
     private var agent: AgentSummary { self.gateway.agent(self.row?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main") }
@@ -83,6 +84,9 @@ struct ChatView: View {
         .onChange(of: self.chat.entries) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
         .onChange(of: self.reasoningOff) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
         .onChange(of: self.app.findRequest, initial: true) { self.takeFindRequest() }
+        .onChange(of: self.app.messageJump, initial: true) { self.takeMessageJump() }
+        .onChange(of: self.chat.hasLoaded) { self.takeMessageJump() }
+        .modifier(ChatHandoff(sessionKey: self.chat.sessionKey))
         #if os(iOS)
         // Menu commands are macOS-only; on iOS a hardware keyboard reaches these instead.
         .background {
@@ -118,6 +122,15 @@ struct ChatView: View {
               self.app.takeFindRequest(for: request.target) != nil
         else { return }
         self.find.present(query: request.query, select: request.match)
+    }
+
+    /// Scrolls to a linked message once this chat's history has loaded.
+    private func takeMessageJump() {
+        guard self.chat.hasLoaded, let pending = self.app.messageJump, pending.target.gatewayId == self.gateway.id,
+              self.gateway.resolveSessionKey(pending.target.sessionKey) == self.chat.sessionKey,
+              let jump = self.app.takeMessageJump(for: pending.target)
+        else { return }
+        self.jump = TranscriptJump(id: jump.id, messageId: jump.messageId)
     }
 
     @ViewBuilder private var errorBar: some View {
@@ -200,7 +213,8 @@ struct ChatView: View {
                     reply: { self.chat.beginReply(to: $0, agentName: self.agent.name) }),
                 bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
                 topInset: self.topChrome + self.transcriptSafeArea.top,
-                highlight: self.find.highlight)
+                highlight: self.find.highlight,
+                jump: self.jump)
                 .ignoresSafeArea(.container, edges: [.top, .bottom])
         }
     }
@@ -320,6 +334,7 @@ private struct ChatSessionMenu: View {
                     Task { await self.gateway.chat(for: key).load(force: true) }
                 }
                 Button("Copy Session Key", systemImage: "key") { Clipboard.copy(row.key) }
+                CopyChatLinkButton(sessionKey: row.key)
                 Button("Session Usage…", systemImage: "chart.bar") {
                     self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
                 }

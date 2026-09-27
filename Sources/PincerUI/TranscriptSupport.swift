@@ -475,10 +475,16 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     var reactionsEnabled: Bool { self.settings.reactionsEnabled }
 
-    func showOriginal(_ messageId: String) {
+    func showOriginal(_ messageId: String) { self.showOriginal(messageId, missingNotice: nil) }
+
+    /// Scrolls to and flashes a message, paging in older history if needed. `missingNotice`
+    /// replaces the chat's note when it can't be found.
+    func showOriginal(_ messageId: String, missingNotice: String?) {
         guard let chat = self.context.chat, chat.locatingReplyId == nil else { return }
         Task { @MainActor [weak self] in
-            guard await chat.locate(messageId), let self, chat === self.context.chat,
+            let found = await chat.locate(messageId)
+            if !found, let missingNotice { chat.notice = missingNotice }
+            guard found, let self, chat === self.context.chat,
                   let row = self.rowId(containing: messageId) else { return }
             self.flashToken += 1
             let token = self.flashToken

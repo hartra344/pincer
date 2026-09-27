@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 // MARK: Settings
 
@@ -12,11 +13,69 @@ public struct MenuBarSettings {
         self.defaults = defaults
     }
 
-    /// Off until the user turns it on.
+    /// Off until the user turns it on. Read like `@AppStorage` does, so "YES" strings (e.g. a
+    /// `-pincer.menuBar.enabled YES` launch argument) agree with the scene's value.
     public var isEnabled: Bool {
-        get { self.defaults.object(forKey: Self.enabledKey) as? Bool ?? false }
+        get { self.defaults.bool(forKey: Self.enabledKey) }
         nonmutating set { self.defaults.set(newValue, forKey: Self.enabledKey) }
     }
+
+    /// Saves `enabled` only when it differs from the stored value; returns whether it wrote.
+    /// `MenuBarExtra(isInserted:)` sets its binding again on every app update, even to the same
+    /// value, and a write that always lands posts `UserDefaults.didChangeNotification`, which
+    /// starts another update: the launch freeze in #119.
+    @discardableResult
+    public func setEnabled(_ enabled: Bool) -> Bool {
+        guard enabled != self.isEnabled else { return false }
+        self.isEnabled = enabled
+        return true
+    }
+}
+
+// MARK: Clock
+
+/// The `now` the menu bar item builds its inbox with. Views read `now` instead of calling `Date()`
+/// in `body`, and it moves forward on a slow tick so expired approvals and questions (and a stale
+/// heartbeat's Degraded) drop out without anything else changing (#119).
+@MainActor
+@Observable
+public final class MenuBarClock {
+    public static let shared = MenuBarClock()
+    /// At most this long before an expiry shows in the menu bar.
+    public nonisolated static let interval: Duration = .seconds(30)
+
+    public private(set) var now: Date
+    @ObservationIgnored private var ticker: Task<Void, Never>?
+
+    public init(now: Date = Date()) {
+        self.now = now
+    }
+
+    /// Moves `now` to `date`; ignores dates that aren't later, so observers never see it go back.
+    public func tick(_ date: Date = Date()) {
+        guard date > self.now else { return }
+        self.now = date
+    }
+
+    /// Ticks every `interval` until `stop()`. Safe to call more than once.
+    public func start(interval: Duration = MenuBarClock.interval) {
+        guard self.ticker == nil else { return }
+        self.tick()
+        self.ticker = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                guard !Task.isCancelled else { return }
+                self?.tick()
+            }
+        }
+    }
+
+    public func stop() {
+        self.ticker?.cancel()
+        self.ticker = nil
+    }
+
+    public var isRunning: Bool { self.ticker != nil }
 }
 
 // MARK: Inbox
@@ -260,7 +319,8 @@ public struct MenuBarInbox: Equatable, Sendable {
 }
 
 extension MenuBarInbox {
-    /// The live inbox for every saved Gateway, in rail order.
+    /// The live inbox for every saved Gateway, in rail order. Views pass `MenuBarClock.shared.now`,
+    /// never the `Date()` default (checks use it), so expiry moves with the clock's tick.
     @MainActor
     public init(app: AppModel, now: Date = Date()) {
         self = Self.build(app.gateways.map { gateway in

@@ -8,6 +8,14 @@ public struct AgentSummary: Identifiable, Hashable, Sendable {
     public let name: String
     public let emoji: String?
     public let avatarURL: String?
+    /// The configured avatar (path, URL or data URI), as `agents.update` takes it.
+    public let avatar: String?
+    /// The workspace folder on the Gateway host.
+    public let workspace: String?
+    /// The primary model ref; nil uses the Gateway default.
+    public let model: String?
+    /// `agent` or `system` (OpenClaw's own agents, which can't be managed).
+    public let kind: String?
 
     init?(_ json: JSONValue) {
         guard let id = json["id"]?.text else { return nil }
@@ -15,14 +23,28 @@ public struct AgentSummary: Identifiable, Hashable, Sendable {
         self.name = json["identity"]?["name"]?.text ?? json["name"]?.text ?? id.capitalized
         self.emoji = json["identity"]?["emoji"]?.text
         self.avatarURL = json["identity"]?["avatarUrl"]?.text
+        self.avatar = json["identity"]?["avatar"]?.text
+        self.workspace = json["workspace"]?.text
+        self.model = json["model"]?["primary"]?.text ?? json["model"]?.text
+        self.kind = json["kind"]?.text
     }
 
-    public init(id: String, name: String, emoji: String? = nil) {
+    public init(id: String, name: String, emoji: String? = nil, avatar: String? = nil,
+                workspace: String? = nil, model: String? = nil, kind: String? = nil)
+    {
         self.id = id
         self.name = name
         self.emoji = emoji
         self.avatarURL = nil
+        self.avatar = avatar
+        self.workspace = workspace
+        self.model = model
+        self.kind = kind
     }
+
+    public var isSystem: Bool { self.kind == "system" }
+    /// "🔭 Scout".
+    public var title: String { self.emoji.map { "\($0) \(self.name)" } ?? self.name }
 }
 
 // MARK: Sessions ("channels")

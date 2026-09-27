@@ -3,6 +3,7 @@ import Foundation
 import CryptoKit
 import ImageIO
 import Network
+import Observation
 import PincerKit
 import PincerPush
 import SQLite3
@@ -506,6 +507,7 @@ do {
 await checkApprovalHistoryModel()
 await checkGatewayLogsModel()
 await checkExecPolicy()
+await checkAgentManagement()
 print("Pairing requests")
 await checkPairingInboxModel()
 await checkGatewayHealth()
@@ -2399,6 +2401,9 @@ await runShareChecks()
 print("Shortcuts & Siri")
 await runIntentChecks()
 
+print("Deep links & Handoff")
+runDeepLinkChecks()
+
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     let url = arguments[index + 1]
@@ -2411,6 +2416,8 @@ if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
     await runLiveReactionsReply(url: url, token: token)
     print("Setup wizard (live)")
     await runLiveSetup(url: url, token: token)
+    print("Deep links (live)")
+    await runLiveDeepLinks(url: url, token: token)
 }
 if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count > index + 2 {
     print("Scope upgrade fallback against \(arguments[index + 1])")
@@ -2445,6 +2452,8 @@ if arguments.contains("--demo") {
     await runMenuBarDemo()
     print("Setup wizard (demo)")
     await runDemoSetup()
+    print("Deep links (demo)")
+    await runDemoDeepLinks()
 }
 
 print("Keychain isolation")
@@ -3261,6 +3270,7 @@ func runDemo() async {
     check(unpinned && Set(gateway.pinnedChats.map(\.key)) == seededPins, "unpinning restores the seeded pins")
     await checkDemoSentMessageSearch(gateway, chat)
     await runDemoExecPolicy(gateway, chat: chat)
+    await runDemoAgents(gateway)
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
     let pairing = gateway.pairingInbox
@@ -3644,12 +3654,18 @@ func runMenuBarDemo() async {
           && inbox.unread.map(\.title) == ["🦞 home-lab · Claw", "🔭 Paper digest · Scout"],
           "unread lists home-lab and Paper digest (\(inbox.unread.map(\.title)), \(inbox.unreadCount) unread)")
     check(inbox.running.isEmpty && !inbox.isCaughtUp && inbox.badgeText == "4", "nothing running; the icon shows 4 (\(inbox.badgeText ?? "none"))")
+    // #9: the menu takes `now` from a tick, not body. Past its 30 minutes the seeded approval drops out.
+    let expired = MenuBarInbox(app: app, now: Date().addingTimeInterval(31 * 60))
+    check(expired.needsYou.isEmpty && expired.needsYouCount == 0 && expired.badgeText == "3" && !expired.accessibilityLabel.contains("need"),
+          "31 minutes on, the expired seeded approval leaves Needs You and the badge (\(expired.badgeText ?? "none"))")
+    check(MenuBarInbox(app: app).needsYouCount == 1, "…and is still listed now")
     // The demo's Telegram account is unhealthy until a restart, so its health reads degraded once loaded.
     let degraded = await waitFor("demo health", timeout: 5) { MenuBarInbox(app: app).gateways.first?.text == "Degraded" }
     inbox = MenuBarInbox(app: app)
     check(degraded && inbox.gateways.map(\.name) == ["Demo"] && inbox.gateways.first?.symbol == "exclamationmark.triangle"
           && MenuBarInbox.statusText(state: gateway.state, healthLevel: .healthy).text == "Connected",
           "the demo's status follows its health (\(inbox.gateways.map(\.title)))")
+    await checkMenuBarDemoDismissals(app, gateway, defaults: defaults)
 
     if let seeded {
         app.open(seeded.target)
@@ -3716,6 +3732,63 @@ func runMenuBarDemo() async {
     } else {
         check(false, "the seeded approval is still there to resolve")
     }
+}
+
+/// Set by `withObservationTracking`'s `onChange`.
+final class ObservationTripwire: @unchecked Sendable {
+    var fired = false
+
+    /// Tracks what `read` reads; `fired` turns true once any of it changes.
+    @MainActor
+    static func track(_ read: () -> Void) -> ObservationTripwire {
+        let tripwire = ObservationTripwire()
+        withObservationTracking(read) { tripwire.fired = true }
+        return tripwire
+    }
+}
+
+/// #119: with a health dismissal stored, building the menu (as the menu bar label's body does on
+/// every update) changes nothing it reads, and dismissing the same issue again is a no-op.
+@MainActor
+func checkMenuBarDemoDismissals(_ app: AppModel, _ gateway: GatewayStore, defaults: UserDefaults) async {
+    let health = gateway.health
+    guard let telegram = health.activeIssues.first(where: { $0.id.hasPrefix("channel:telegram") }) else {
+        check(false, "menu bar demo: a Telegram issue to dismiss (\(health.activeIssues.map(\.id)))")
+        return
+    }
+    let synced = await waitFor("menu bar demo dismissals first sync") {
+        defaults.bool(forKey: "pincer.healthDismissalsSynced.\(gateway.id.uuidString)")
+    }
+    check(synced, "menu bar demo: health dismissals synced with users.prefs")
+    health.dismiss(telegram)
+    // The users.prefs.set round trip: the demo echoes users.prefs.changed and the store re-reads it.
+    try? await Task.sleep(for: .milliseconds(500))
+    let dismissed = gateway.healthDismissals
+    check(dismissed == [telegram.id: "until:state=not-connected"] && health.dismissals == dismissed,
+          "menu bar demo: the Telegram dismissal is stored (\(dismissed))")
+    let stored = defaults.dictionary(forKey: "pincer.healthDismissals.\(gateway.id.uuidString)") as? [String: String]
+
+    var built = MenuBarInbox()
+    let tripwire = ObservationTripwire.track { built = MenuBarInbox(app: app) }
+    for _ in 0..<20 { _ = MenuBarInbox(app: app) }
+    check(!tripwire.fired, "building the menu with a dismissal stored changes nothing the menu reads")
+    check(built.gateways.first?.text == "Connected" && built.badgeText == "4",
+          "a dismissed issue leaves the demo Connected in the menu (\(built.gateways.map(\.title)), \(built.badgeText ?? "none"))")
+    check(gateway.healthDismissals == dismissed && health.dismissals == dismissed
+          && defaults.dictionary(forKey: "pincer.healthDismissals.\(gateway.id.uuidString)") as? [String: String] == stored,
+          "building the menu leaves the dismissals alone (\(gateway.healthDismissals))")
+
+    let again = ObservationTripwire.track { _ = gateway.healthDismissals; _ = health.dismissals }
+    health.dismiss(telegram)
+    check(!again.fired, "dismissing the Telegram issue again writes nothing")
+    try? await Task.sleep(for: .milliseconds(300))
+    check(gateway.healthDismissals == dismissed, "the repeated dismissal leaves users.prefs as it was (\(gateway.healthDismissals))")
+
+    health.restore(id: telegram.id)
+    try? await Task.sleep(for: .milliseconds(300))
+    let inbox = MenuBarInbox(app: app)
+    check(gateway.healthDismissals.isEmpty && inbox.gateways.first?.text == "Degraded",
+          "restoring it brings Degraded back to the menu (\(inbox.gateways.map(\.title)))")
 }
 
 /// Quick Capture's send flows against the mock, across two Gateways (both on the same mock).
@@ -4532,6 +4605,7 @@ func runLive(url: String, token: String) async {
         check(false, "nothing left to compact (\(String(describing: papers.compaction)))")
     }
     await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
+    await runLiveAgents(profile: profile, gateway: gateway, admin: admin)
 
     // Gateway Logs after Pairing Requests, whose seeded request expires minutes after the mock starts.
     await checkGatewayLogsLive(admin)

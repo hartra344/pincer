@@ -151,6 +151,12 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var execPolicy = ExecPolicyModel(
         connection: self.connection, hello: { [weak self] in self?.hello },
         allowsWritesWithoutAdmin: self.profile.isDemo)
+    /// Creating, editing and deleting agents, and their workspace files. The demo may write
+    /// without `operator.admin`. Every agent mutation re-fetches `agents.list`.
+    @ObservationIgnored public private(set) lazy var agentManagement = AgentManagementModel(
+        connection: self.connection, hello: { [weak self] in self?.hello },
+        allowsWritesWithoutAdmin: self.profile.isDemo,
+        onAgentsChanged: { [weak self] in await self?.agentsDidChange() })
     /// Token and cost usage; loaded when the Usage page opens.
     @ObservationIgnored public private(set) lazy var usage = UsageModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
@@ -158,19 +164,9 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var pairingInbox = PairingInboxModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
     /// Health, uptime, connected clients and restart; seeded from every hello and kept current by events.
-    @ObservationIgnored public private(set) lazy var health: GatewayHealthModel = {
-        let health = GatewayHealthModel(
-            connection: self.connection, hello: { [weak self] in self?.hello },
-            localDeviceId: self.profile.isDemo ? DemoGateway.deviceId : self.deviceId,
-            simulatedRestart: self.profile.isDemo)
-        health.onRestarted = { [weak self] in
-            guard let self, self.settings.hasLoaded else { return }
-            Task { await self.settings.load() }
-        }
-        health.dismissals = self.healthDismissals
-        health.onDismissalsChanged = { [weak self] changes in self?.applyHealthDismissals(changes) }
-        return health
-    }()
+    /// Built in `init`, not lazily, so reading it from a view body (the menu bar item, #119) never
+    /// creates it or wires up its callbacks mid-update.
+    @ObservationIgnored public let health: GatewayHealthModel
 
     /// The first-run setup wizard (Set Up Gateway…); offered after the first successful connection.
     @ObservationIgnored public private(set) lazy var setup: SetupWizardModel = {
@@ -240,7 +236,19 @@ public final class GatewayStore: Identifiable {
         let images = ArtifactImageLoader()
         self.images = images
         self.files = FileContentLoader(images: images)
+        let connection = self.connection
+        self.health = GatewayHealthModel(
+            connection: connection, hello: { nil },
+            localDeviceId: profile.isDemo ? DemoGateway.deviceId : identity.deviceId,
+            simulatedRestart: profile.isDemo)
         images.gateway = self
+        self.health.hello = { [weak self] in self?.hello }
+        self.health.onRestarted = { [weak self] in
+            guard let self, self.settings.hasLoaded else { return }
+            Task { await self.settings.load() }
+        }
+        self.health.dismissals = self.healthDismissals
+        self.health.onDismissalsChanged = { [weak self] changes in self?.applyHealthDismissals(changes) }
     }
 
     public var deviceId: String { self.identity.deviceId }
@@ -317,6 +325,7 @@ public final class GatewayStore: Identifiable {
         self.lastError = nil
         Task { await self.bootstrap() }
         self.execPolicy.handleReconnect()
+        self.agentManagement.handleReconnect()
     }
 
     private func bootstrap() async {
@@ -366,17 +375,6 @@ public final class GatewayStore: Identifiable {
         }
         self.startPrefetch()
         self.reconcileMessageIndex()
-    }
-
-    private func applyAgents(_ agents: JSONValue) {
-        self.agents = agents["agents"]?.array?.compactMap(AgentSummary.init) ?? []
-        self.defaultAgentId = agents["defaultId"]?.text ?? self.agents.first?.id ?? "main"
-        Self.agentsDidLoad?()
-    }
-
-    /// Reloads `agents.list`, e.g. after the default agent changed.
-    public func reloadAgents() async {
-        if let agents = try? await self.connection.request("agents.list", [:]) { self.applyAgents(agents) }
     }
 
     /// Indexes cached transcripts the message index hasn't seen yet (caches from before it
@@ -512,6 +510,24 @@ public final class GatewayStore: Identifiable {
     /// Called after any Gateway's agent list loads, e.g. so the app can refresh Siri's App Shortcut phrases.
     public static var agentsDidLoad: (@MainActor () -> Void)?
 
+    private func applyAgents(_ result: JSONValue) {
+        self.agents = result["agents"]?.array?.compactMap(AgentSummary.init) ?? []
+        self.defaultAgentId = result["defaultId"]?.text ?? self.agents.first?.id ?? "main"
+        Self.agentsDidLoad?()
+    }
+
+    /// Re-fetches `agents.list` so the sidebar and pickers show created, renamed and deleted agents.
+    public func reloadAgents() async {
+        guard self.state.isConnected, let result = try? await self.connection.request("agents.list", [:]) else { return }
+        self.applyAgents(result)
+    }
+
+    /// After an agent mutation: the roster, and the config (its agent entries and bindings changed).
+    private func agentsDidChange() async {
+        await self.reloadAgents()
+        if self.settings.hasLoaded { await self.settings.reloadConfig() }
+    }
+
     @ObservationIgnored private var eventTaps: [Int: @MainActor (GatewayEvent) -> Void] = [:]
     @ObservationIgnored private var nextEventTap = 0
 
@@ -621,6 +637,7 @@ public final class GatewayStore: Identifiable {
             if removedId == nil || self.sessions[key]?.sessionId == removedId {
                 self.sessions.removeValue(forKey: key)
                 self.discardDraft(key)
+                if self.selectedKey == key { self.selectedKey = self.defaultSessionKey }
             }
             return
         }
@@ -1219,12 +1236,20 @@ public final class GatewayStore: Identifiable {
         }
     }
 
-    private func applyHealthDismissals(_ changes: [String: String?]) {
+    /// Saves and syncs dismissals the health model changed. A no-op, with no write to the observable
+    /// `healthDismissals` and no `users.prefs` push, when they're already in place.
+    func applyHealthDismissals(_ changes: [String: String?]) {
+        let effective = changes.filter { self.healthDismissals[$0.key] != $0.value }
+        guard !effective.isEmpty else { return }
         var next = self.healthDismissals
-        for (id, value) in changes { next[id] = value }
+        for (id, value) in effective { next[id] = value }
         self.healthDismissals = next
-        Task { await self.push(self.syncedMap(Self.healthDismissalsPref), changes) }
+        self.healthDismissalPushes += 1
+        Task { await self.push(self.syncedMap(Self.healthDismissalsPref), effective) }
     }
+
+    /// `users.prefs` pushes started by `applyHealthDismissals`, for checks.
+    @ObservationIgnored private(set) var healthDismissalPushes = 0
 
     /// Forgets this device's copy of the dismissals when the gateway is removed. The gateway's
     /// user prefs keep them for other devices, and re-adding the gateway pulls them back.
