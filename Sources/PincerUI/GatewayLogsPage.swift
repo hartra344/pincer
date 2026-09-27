@@ -373,7 +373,7 @@ struct GatewayLogsPage: View {
             .frame(minWidth: 160, maxWidth: 260)
             ForEach(GatewayLogLevel.allCases) { level in
                 Toggle(isOn: self.levelBinding(level)) {
-                    Text("\(level.label) \(model.count(level).formatted())", bundle: .module)
+                    Text(verbatim: "\(level.label) \(model.count(level).formatted())")
                         .font(.caption.monospacedDigit())
                 }
                 .toggleStyle(.button)
@@ -460,7 +460,7 @@ struct GatewayLogsPage: View {
             ToolbarItem {
                 Menu {
                     ForEach(GatewayLogLevel.allCases) { level in
-                        Toggle(L("\(level.label) (\(model.count(level).formatted()))"), isOn: self.levelBinding(level))
+                        Toggle("\(level.label) (\(model.count(level).formatted()))", isOn: self.levelBinding(level))
                     }
                 } label: {
                     Label(L("Levels"), systemImage: "line.3.horizontal.decrease.circle")

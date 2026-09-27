@@ -44,7 +44,9 @@ public enum AccessibilityText {
         flat = flat.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         guard limit > 0, flat.count > limit else { return flat }
         let cut = flat.prefix(limit)
-        let head = cut.lastIndex(of: " ").map { cut[..<$0] } ?? cut
+        // Cut mid-word: back up to the last whole word.
+        let endsOnWord = flat[cut.endIndex] == " "
+        let head = endsOnWord ? cut : (cut.lastIndex(of: " ").map { cut[..<$0] } ?? cut)
         return head.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters)) + "…"
     }
 

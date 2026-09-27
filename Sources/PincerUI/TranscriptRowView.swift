@@ -1125,13 +1125,13 @@ final class TranscriptFooterView: TranscriptBaseView {
         }
         self.showCopy()
         self.copyButton.onTap = { [weak self] in self?.copy() }
-        self.replyButton.set(title: "Reply", symbol: "arrowshape.turn.up.left")
+        self.replyButton.set(title: L("Reply"), symbol: "arrowshape.turn.up.left")
         self.replyButton.onTap = { [weak self] in
             guard let self, let id = self.footer?.messageId else { return }
             self.actions?.reply(to: id)
         }
-        self.reactButton.set(title: "React", symbol: "face.smiling")
-        self.reactButton.accessibilityText = "Add Reaction"
+        self.reactButton.set(title: L("React"), symbol: "face.smiling")
+        self.reactButton.accessibilityText = L("Add Reaction")
         self.reactButton.onTap = { [weak self] in
             guard let self, let id = self.footer?.messageId else { return }
             self.actions?.pickReaction(for: id, from: self.reactButton, rect: self.reactButton.bounds)
@@ -1157,14 +1157,14 @@ final class TranscriptFooterView: TranscriptBaseView {
     }
 
     private func showCopy() {
-        self.copyButton.set(title: "Copy", symbol: "doc.on.doc")
-        self.copyButton.accessibilityText = "Copy message"
+        self.copyButton.set(title: L("Copy"), symbol: "doc.on.doc")
+        self.copyButton.accessibilityText = L("Copy message")
     }
 
     private func copy() {
         guard let footer else { return }
         Clipboard.copy(footer.copyText)
-        self.copyButton.set(title: "Copied", symbol: "checkmark")
+        self.copyButton.set(title: L("Copied"), symbol: "checkmark")
         self.copiedToken += 1
         let token = self.copiedToken
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
@@ -1444,7 +1444,7 @@ final class TranscriptToolView: TranscriptBaseView {
         super.init(frame: frame)
         self.addSubview(self.header)
         self.addSubview(self.runButton)
-        self.runButton.set(title: "Open run", symbol: "sparkles")
+        self.runButton.set(title: L("Open run"), symbol: "sparkles")
         self.addSubview(self.copyButton)
         self.addSubview(self.toggleButton)
         self.copyButton.isSubdued = true
@@ -1453,14 +1453,15 @@ final class TranscriptToolView: TranscriptBaseView {
     }
 
     private func showCopy() {
-        self.copyButton.set(title: "Copy", symbol: "doc.on.doc")
-        self.copyButton.accessibilityText = self.part?.edit?.kind == .write ? "Copy file contents" : "Copy diff"
+        self.copyButton.set(title: L("Copy"), symbol: "doc.on.doc")
+        self.copyButton.accessibilityText = self.part?.edit?.kind == .write ? L("Copy file contents") : L("Copy diff")
     }
 
     private func copyDiff() {
         guard let diff = self.part?.diff else { return }
+        // Announces "Copied" through `AccessibilityAnnouncer.announceCopied()`.
         Clipboard.copy(diff.copyText)
-        self.copyButton.set(title: "Copied", symbol: "checkmark")
+        self.copyButton.set(title: L("Copied"), symbol: "checkmark")
         self.copiedToken += 1
         let token = self.copiedToken
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
@@ -1478,11 +1479,16 @@ final class TranscriptToolView: TranscriptBaseView {
         self.header.configure(tool, trailing: tool.run == nil ? 10 : 6)
         self.header.onTap = { [weak actions] in actions?.setExpanded(tool.key, !tool.isExpanded, row: rowId) }
         if let edit = tool.edit {
-            self.header.accessibilityText = edit.accessibilitySummary(isRunning: tool.tool.isRunning) + (tool.tool.isRunning ? ", running" : "")
-                + (tool.tool.isError ? ", failed" : "") + (tool.isExpanded ? ", expanded" : ", collapsed")
+            self.header.accessibilityText = AccessibilityText.join([
+                edit.accessibilitySummary(isRunning: tool.tool.isRunning),
+                tool.tool.isRunning ? L("running") : nil, tool.tool.isError ? L("failed") : nil,
+                tool.isExpanded ? L("expanded") : L("collapsed"),
+            ])
         } else {
-            self.header.accessibilityText = [tool.tool.name, tool.tool.summary].compactMap(\.self).joined(separator: " ")
-                + (tool.isExpanded ? ", expanded" : ", collapsed")
+            self.header.accessibilityText = AccessibilityText.join([
+                [tool.tool.name, tool.tool.summary].compactMap(\.self).joined(separator: " "),
+                tool.isExpanded ? L("expanded") : L("collapsed"),
+            ])
         }
         if !sameTool {
             self.copiedToken += 1
@@ -1660,7 +1666,7 @@ extension TranscriptToolHeaderView {
         var right = chevronX - 8
 
         let badgeFont = style.caption2Medium
-        let badgeText = part.tool.isError ? "Failed" : edit.statusLabel(isRunning: part.tool.isRunning)
+        let badgeText = part.tool.isError ? L("Failed") : edit.statusLabel(isRunning: part.tool.isRunning)
         let badgeColor = part.tool.isError ? TranscriptColors.red : TranscriptColors.secondary
         let badge = singleLine(badgeText, badgeFont, badgeColor)
         let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2

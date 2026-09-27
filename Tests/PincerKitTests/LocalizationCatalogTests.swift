@@ -29,6 +29,14 @@ struct LocalizationCatalogTests {
         #expect(!(try self.strings()).isEmpty, "catalog has strings")
     }
 
+    @Test func coreControlsAreInTheCatalog() throws {
+        let keys = Set(try self.strings().keys)
+        let core = ["Send", "Stop", "Attach files", "Model", "Context window", "Find next", "Find previous",
+                    "Copy", "Reply", "Add Reaction", "Cancel", "Done"]
+        let missing = core.filter { !keys.contains($0) }
+        #expect(missing.isEmpty, "core control keys missing from the catalog: \(missing)")
+    }
+
     @Test func packageDeclaresEnglishDefaultLocalization() throws {
         let manifest = try String(contentsOf: Self.root.appending(path: "Package.swift"), encoding: .utf8)
         #expect(manifest.contains(/defaultLocalization:\s*"en"/), "Package.swift sets defaultLocalization: \"en\"")
@@ -110,6 +118,27 @@ struct LocalizationCatalogTests {
         #expect("Pinned %lld of %@".wholeMatch(of: pattern) != nil)
         #expect("Pinned %1$lld of %2$@".wholeMatch(of: pattern) != nil)
         #expect("Pinned 3 of %@".wholeMatch(of: pattern) == nil)
+    }
+
+    /// Files migrated to the catalog for #58 keep looking their strings up in PincerUI's bundle.
+    /// (Theme.swift is migrated too, but only through `AccessibilityAnnouncer.announceCopied()`.)
+    @Test func migratedFilesUseTheCatalog() throws {
+        let migrated = [
+            "Composer", "SlashCommandMenu", "ModelPicker", "ContextMeter", "TranscriptFind", "SettingsPages",
+            "SettingsFields", "AvatarSettingsSection", "MenuBarSettingsSection", "QuickCaptureSettingsSection",
+            "QuickCaptureView", "LaunchAtLoginSettingsSection", "UsagePage", "UsageComponents", "SessionUsagePage",
+            "ApprovalHistoryPage", "ExecPolicyPage", "GatewayLogsPage", "PairingRequestsPage", "ReactionPicker",
+            "QuestionCardView", "ProgressCardView", "ConnectionViews", "TipsOverlay", "AutomationsView", "SkillsViews",
+            "ToolsInspectorViews", "AgentManagementViews", "MenuBarExtra", "ChatView", "PluginSettings",
+            "ThinkingDisplay", "ImageViews",
+        ]
+        let folder = Self.root.appending(path: "Sources/PincerUI")
+        var unmigrated: [String] = []
+        for name in migrated {
+            let text = try String(contentsOf: folder.appending(path: "\(name).swift"), encoding: .utf8)
+            if try SourceScan.keys(in: text, file: name).isEmpty { unmigrated.append(name) }
+        }
+        #expect(unmigrated.isEmpty, "migrated files with no catalog lookups: \(unmigrated)")
     }
 
     /// Every literal key passed with `bundle: .module` in PincerUI must be in the catalog, or

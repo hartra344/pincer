@@ -771,9 +771,9 @@ struct TranscriptLayoutBuilder {
         if finding {
             toggleTitle = nil
         } else if hidden > 0 {
-            toggleTitle = "Show all \(edit.rows.count) lines"
+            toggleTitle = L("Show all \(edit.rows.count) lines")
         } else if showsAll, edit.isLarge {
-            toggleTitle = "Show fewer lines"
+            toggleTitle = L("Show fewer lines")
         }
         var toggleFrame = CGRect.zero
         if let toggleTitle {

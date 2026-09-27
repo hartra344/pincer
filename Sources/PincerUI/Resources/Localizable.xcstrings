@@ -291,16 +291,6 @@
         }
       }
     },
-    "Add Gateway": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Add Gateway"
-          }
-        }
-      }
-    },
     "Add Item": {
       "localizations": {
         "en": {
@@ -541,16 +531,6 @@
         }
       }
     },
-    "Apply": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apply"
-          }
-        }
-      }
-    },
     "Approval": {
       "localizations": {
         "en": {
@@ -611,26 +591,6 @@
         }
       }
     },
-    "Approve Pincer on your Gateway host": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Approve Pincer on your Gateway host"
-          }
-        }
-      }
-    },
-    "Approve this device on the Gateway host:": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Approve this device on the Gateway host:"
-          }
-        }
-      }
-    },
     "Arguments: %@": {
       "localizations": {
         "en": {
@@ -657,16 +617,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Attach photos"
-          }
-        }
-      }
-    },
-    "Authentication": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Authentication"
           }
         }
       }
@@ -821,16 +771,6 @@
         }
       }
     },
-    "Can’t connect to %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Can’t connect to %@"
-          }
-        }
-      }
-    },
     "Channel": {
       "localizations": {
         "en": {
@@ -857,26 +797,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Check Again"
-          }
-        }
-      }
-    },
-    "Checking every few seconds…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Checking every few seconds…"
-          }
-        }
-      }
-    },
-    "Checking…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Checking…"
           }
         }
       }
@@ -1071,16 +991,6 @@
         }
       }
     },
-    "Connect": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect"
-          }
-        }
-      }
-    },
     "Connect to the gateway to open %@.": {
       "localizations": {
         "en": {
@@ -1217,16 +1127,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connecting…"
-          }
-        }
-      }
-    },
-    "Connection": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connection"
           }
         }
       }
@@ -1377,6 +1277,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Visible Lines"
+          }
+        }
+      }
+    },
+    "Copy diff": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy diff"
+          }
+        }
+      }
+    },
+    "Copy file contents": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy file contents"
           }
         }
       }
@@ -1741,26 +1661,6 @@
         }
       }
     },
-    "Device ID": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Device ID"
-          }
-        }
-      }
-    },
-    "Discard %lld Changes & Reconnect": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Discard %lld Changes & Reconnect"
-          }
-        }
-      }
-    },
     "Discard your changes to the command policy": {
       "localizations": {
         "en": {
@@ -1907,16 +1807,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Edit Automation"
-          }
-        }
-      }
-    },
-    "Edit Connection…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Edit Connection…"
           }
         }
       }
@@ -2261,16 +2151,6 @@
         }
       }
     },
-    "For your security, new devices must be approved on the machine running OpenClaw. Run this there:": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "For your security, new devices must be approved on the machine running OpenClaw. Run this there:"
-          }
-        }
-      }
-    },
     "From": {
       "localizations": {
         "en": {
@@ -2341,16 +2221,6 @@
         }
       }
     },
-    "Gateway URL": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gateway URL"
-          }
-        }
-      }
-    },
     "Gateway default": {
       "localizations": {
         "en": {
@@ -2367,26 +2237,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gateway logs are redacted by the gateway, but they can still contain hostnames, file paths and message content. Review them before sharing."
-          }
-        }
-      }
-    },
-    "Gateway password": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gateway password"
-          }
-        }
-      }
-    },
-    "Gateway token": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gateway token"
           }
         }
       }
@@ -2911,16 +2761,6 @@
         }
       }
     },
-    "Method": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Method"
-          }
-        }
-      }
-    },
     "Metric": {
       "localizations": {
         "en": {
@@ -3147,16 +2987,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "No Channels Use DM Pairing"
-          }
-        }
-      }
-    },
-    "No Gateway yet? Explore Pincer with sample agents and chats. Nothing leaves this device.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No Gateway yet? Explore Pincer with sample agents and chats. Nothing leaves this device."
           }
         }
       }
@@ -3481,6 +3311,16 @@
         }
       }
     },
+    "Open %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open %@"
+          }
+        }
+      }
+    },
     "Open Automation Chat": {
       "localizations": {
         "en": {
@@ -3551,22 +3391,22 @@
         }
       }
     },
+    "Open run": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open run"
+          }
+        }
+      }
+    },
     "Optional": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Optional"
-          }
-        }
-      }
-    },
-    "Optional pin, hex": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Optional pin, hex"
           }
         }
       }
@@ -3707,16 +3547,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pin"
-          }
-        }
-      }
-    },
-    "Pincer connects as an operator only. It never runs a Gateway, never registers as a node, and stores secrets in the Keychain.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pincer connects as an operator only. It never runs a Gateway, never registers as a node, and stores secrets in the Keychain."
           }
         }
       }
@@ -3941,6 +3771,16 @@
         }
       }
     },
+    "React": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "React"
+          }
+        }
+      }
+    },
     "React %@": {
       "localizations": {
         "en": {
@@ -3977,36 +3817,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Recently allowed"
-          }
-        }
-      }
-    },
-    "Reconnect": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reconnect"
-          }
-        }
-      }
-    },
-    "Reconnect and discard unsaved settings?": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reconnect and discard unsaved settings?"
-          }
-        }
-      }
-    },
-    "Reconnecting to the Gateway starts over from its saved settings.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reconnecting to the Gateway starts over from its saved settings."
           }
         }
       }
@@ -4127,16 +3937,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove %@?"
-          }
-        }
-      }
-    },
-    "Remove Gateway…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Remove Gateway…"
           }
         }
       }
@@ -4267,16 +4067,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Required"
-          }
-        }
-      }
-    },
-    "Required for first pairing": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Required for first pairing"
           }
         }
       }
@@ -4471,26 +4261,6 @@
         }
       }
     },
-    "Save the connection on this device and reconnect": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Save the connection on this device and reconnect"
-          }
-        }
-      }
-    },
-    "Saved in Keychain": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Saved in Keychain"
-          }
-        }
-      }
-    },
     "Saved to the Gateway's secret store as %@": {
       "localizations": {
         "en": {
@@ -4597,16 +4367,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Secrets show as %@; leave them as they are to keep them. Saving replaces the whole config, and the Gateway checks it first."
-          }
-        }
-      }
-    },
-    "Security": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Security"
           }
         }
       }
@@ -4807,6 +4567,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show Usage"
+          }
+        }
+      }
+    },
+    "Show all %lld lines": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show all %lld lines"
+          }
+        }
+      }
+    },
+    "Show fewer lines": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show fewer lines"
           }
         }
       }
@@ -5041,26 +4821,6 @@
         }
       }
     },
-    "TLS certificate SHA-256": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "TLS certificate SHA-256"
-          }
-        }
-      }
-    },
-    "Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port."
-          }
-        }
-      }
-    },
     "Task": {
       "localizations": {
         "en": {
@@ -5171,16 +4931,6 @@
         }
       }
     },
-    "The demo runs a simulated Gateway on this device, with sample agents, chats and replies. Nothing is sent anywhere.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The demo runs a simulated Gateway on this device, with sample agents, chats and replies. Nothing is sent anywhere."
-          }
-        }
-      }
-    },
     "The folder on the gateway host with this agent's files.": {
       "localizations": {
         "en": {
@@ -5207,16 +4957,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "The plugin is uninstalled from the Gateway and its settings are removed. This happens right away."
-          }
-        }
-      }
-    },
-    "The saved token and device pairing token are deleted from this device.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The saved token and device pairing token are deleted from this device."
           }
         }
       }
@@ -5601,16 +5341,6 @@
         }
       }
     },
-    "Try the Demo": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Try the Demo"
-          }
-        }
-      }
-    },
     "Turn On": {
       "localizations": {
         "en": {
@@ -5777,16 +5507,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Use Defaults for Everything"
-          }
-        }
-      }
-    },
-    "Use your Tailscale Serve name (wss://…ts.net) or tailnet IP (ws://100.x.y.z:18789). Plain ws:// is only allowed for Tailscale, LAN and loopback addresses.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use your Tailscale Serve name (wss://…ts.net) or tailnet IP (ws://100.x.y.z:18789). Plain ws:// is only allowed for Tailscale, LAN and loopback addresses."
           }
         }
       }
@@ -5981,12 +5701,42 @@
         }
       }
     },
+    "collapsed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "collapsed"
+          }
+        }
+      }
+    },
     "e.g. Morning briefing": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "e.g. Morning briefing"
+          }
+        }
+      }
+    },
+    "expanded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "expanded"
+          }
+        }
+      }
+    },
+    "failed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "failed"
           }
         }
       }
@@ -6001,12 +5751,12 @@
         }
       }
     },
-    "wss://home.tailnet-name.ts.net": {
+    "running": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "wss://home.tailnet-name.ts.net"
+            "value": "running"
           }
         }
       }

@@ -118,6 +118,17 @@ struct AccessibilityLabelTests {
         #expect(short.count <= "Assistant, ".count + 21)
     }
 
+    /// TranscriptRowLayout passes `summaryLimit: 0`: the whole message is spoken, never cut.
+    @Test func messageRowSummaryLimitZeroSpeaksEverything() {
+        let words = (1...600).map { "w\($0)" }.joined(separator: " ")
+        let label = AccessibilityText.messageRow(role: .assistant, author: "Claude", text: "**\(words)**", timestamp: "9:00 AM",
+                                                 summaryLimit: 0)
+        #expect(label == "Claude, \(words), 9:00 AM")
+        #expect(!label.contains("…"))
+        #expect(AccessibilityText.messageRow(role: .user, text: "", summaryLimit: 0) == "You, No text")
+        #expect(AccessibilityText.summary(words, limit: -1) == words, "negative limits don't truncate either")
+    }
+
     @Test func messageRowSpeaksMissingAuthorAsAssistant() {
         #expect(AccessibilityText.messageRow(role: .assistant, author: nil, text: "Hi").hasPrefix("Assistant, "))
         #expect(AccessibilityText.messageRow(role: .assistant, author: "", text: "Hi").hasPrefix("Assistant, "))
@@ -196,6 +207,17 @@ struct AccessibilityLabelTests {
         #expect(AccessibilityText.findStatus(current: 0, total: 5) == "5 results")
         #expect(AccessibilityText.findStatus(current: 2, total: 5) == "Result 2 of 5")
         #expect(AccessibilityText.findStatus(current: 9, total: 5) == "Result 5 of 5", "current clamps to total")
+    }
+
+    @Test func symbolNames() {
+        #expect(AccessibilityText.symbolName("bubble.left.and.bubble.right.fill") == "Bubble left and bubble right")
+        #expect(AccessibilityText.symbolName("paperplane") == "Paperplane")
+        #expect(AccessibilityText.symbolName("paperplane.fill") == "Paperplane")
+        #expect(AccessibilityText.symbolName("person.crop.circle.badge.plus") == "Person crop circle badge plus")
+        #expect(AccessibilityText.symbolName("01.circle.fill") == "01 circle")
+        #expect(AccessibilityText.symbolName("fill.circle") == "Circle")
+        #expect(AccessibilityText.symbolName("") == "")
+        #expect(!AccessibilityText.symbolName("a..b").contains("  "), "empty segments don't double spaces")
     }
 
     @Test func toolCallLabel() {

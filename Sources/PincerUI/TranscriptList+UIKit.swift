@@ -576,6 +576,12 @@ private final class TranscriptCell: UICollectionViewCell {
                 names.insert(control.accessibilityText)
                 actions.append(.init(name: control.accessibilityText) { [weak control] in control?.onTap?() })
             }
+            // Markdown links in the message text, which the single element hides too.
+            for (title, url) in Self.links(in: self.content).prefix(Self.maxLinkActions) {
+                let name = L("Open \(title)")
+                guard names.insert(name).inserted else { continue }
+                actions.append(.init(name: name) { [weak renderer = self.actions] in renderer?.open(url) })
+            }
             return actions.map { action in
                 UIAccessibilityCustomAction(name: action.name) { _ in
                     action.perform()
@@ -584,6 +590,30 @@ private final class TranscriptCell: UICollectionViewCell {
             }
         }
         set {}
+    }
+
+    private static let maxLinkActions = 10
+
+    /// Each distinct link in the row's visible text, with the text it's on, top to bottom.
+    private static func links(in view: UIView) -> [(title: String, url: URL)] {
+        var found: [(title: String, url: URL)] = []
+        var seen: Set<URL> = []
+        for subview in view.subviews where !subview.isHidden {
+            if let text = subview as? UITextView {
+                let storage = text.textStorage
+                storage.enumerateAttribute(.link, in: NSRange(location: 0, length: storage.length)) { value, range, stop in
+                    let url = (value as? URL) ?? (value as? String).flatMap(URL.init(string:))
+                    guard let url, seen.insert(url).inserted else { return }
+                    let title = storage.attributedSubstring(from: range).string.trimmingCharacters(in: .whitespacesAndNewlines)
+                    found.append((title.isEmpty ? url.absoluteString : title, url))
+                    if found.count >= Self.maxLinkActions { stop.pointee = true }
+                }
+            } else {
+                found += Self.links(in: subview).filter { seen.insert($0.url).inserted }
+            }
+            if found.count >= Self.maxLinkActions { break }
+        }
+        return found
     }
 
     private static func tapViews(in view: UIView) -> [TranscriptTapView] {

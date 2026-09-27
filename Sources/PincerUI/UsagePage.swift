@@ -342,7 +342,7 @@ private struct UsageBreakdownChart: View {
                     y: .value("Name", item.id))
                 .foregroundStyle(item.isOther ? Color.secondary.gradient : Color.accentColor.gradient)
                 .accessibilityLabel(item.title)
-                .accessibilityValue(L("\(UsageFormat.cost(item.totals).accessibilityLabel), \(UsageFormat.tokensSpoken(item.totals.totalTokens))"))
+                .accessibilityValue("\(UsageFormat.cost(item.totals).accessibilityLabel), \(UsageFormat.tokensSpoken(item.totals.totalTokens))")
         }
         .chartYAxis {
             AxisMarks { value in
