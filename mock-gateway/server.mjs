@@ -3,6 +3,7 @@ import zlib from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, createApprovalHistoryState, handleApprovalHistoryRequest, recordExecResolution } from './approvals.mjs';
+import { AGENT_MANAGEMENT_METHODS, agentManagementDisabled, createAgentWorkspaces, handleAgentsRequest } from './agents.mjs';
 import { ADMIN_SCOPE, CONFIG_METHODS, createConfigState, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, createCronState, handleCronRequest } from './cron.mjs';
 import { LOGS_METHODS, createLogsState, handleLogsRequest, logsDisabled, noteApprovalForLogs, noteChatForLogs, stopLogs } from './logs.mjs';
@@ -15,6 +16,7 @@ import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const METHODS = [
   'agents.list',
+  ...AGENT_MANAGEMENT_METHODS,
   'sessions.subscribe',
   'sessions.list',
   'sessions.groups.list',
@@ -290,8 +292,9 @@ function createSeedState() {
   const agents = new Map([
     ['main', { id: 'main', name: 'Claw', identity: { name: 'Claw', emoji: '🦞' } }],
     ['research', { id: 'research', name: 'Scout', identity: { name: 'Scout', emoji: '🔭' } }],
-    ['coder', { id: 'coder', name: 'Forge', identity: { name: 'Forge', emoji: '🛠️' } }],
+    ['coder', { id: 'coder', name: 'Forge', identity: { name: 'Forge', emoji: '🛠️' }, model: 'anthropic/claude-sonnet-5' }],
   ]);
+  const agentWorkspaces = createAgentWorkspaces(agents, base);
   const sessions = new Map();
   const transcripts = new Map();
   const artifacts = new Map([
@@ -458,6 +461,7 @@ function createSeedState() {
 
   return {
     agents,
+    agentWorkspaces,
     sessions,
     transcripts,
     artifacts,
@@ -620,6 +624,7 @@ function advertisedMethods() {
   const hidden = [
     ...(approvalHistoryDisabled() ? APPROVAL_HISTORY_METHODS : []),
     ...(execApprovalsDisabled() ? EXEC_APPROVALS_METHODS : []),
+    ...(agentManagementDisabled() ? AGENT_MANAGEMENT_METHODS : []),
     ...(channelPairingDisabled() ? CHANNEL_PAIRING_METHODS : []),
     ...(healthDisabled() ? HEALTH_METHODS : []),
     ...(usageDisabled() ? USAGE_METHODS : []),
@@ -1046,6 +1051,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleLogsRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleExecApprovalsRequest(state, conn, msg, { sendRes, sendErr })) return;
+  if (handleAgentsRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
   if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleHealthRequest(state, conn, msg, { sendRes, sendErr, broadcast, abortRun: finishRunAbort })) return;
@@ -1073,15 +1079,6 @@ function handleAuthedRequest(state, conn, msg) {
       }
       sendRes(conn, id, { card: clone(putProgressCard(state, key, { markdown: params.markdown, steps: params.plan })) });
       return;
-    }
-    case 'agents.list': {
-      sendRes(conn, id, {
-        defaultId: 'main',
-        mainKey: 'main',
-        scope: 'per-sender',
-        agents: [...state.agents.values()].map(clone),
-      });
-      break;
     }
     case 'sessions.subscribe': {
       conn.sessionSubscribed = true;

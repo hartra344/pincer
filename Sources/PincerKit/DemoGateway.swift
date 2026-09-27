@@ -38,11 +38,12 @@ actor DemoGateway {
         "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
-    ] + DemoUsage.methods
+    ] + DemoUsage.methods + DemoGateway.agentMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
-    private let agents: [JSONValue] = [
+    /// The roster (`agents.list`); `agents.create/update/delete` edit it (DemoGateway+Agents.swift).
+    var agents: [JSONValue] = [
         ["id": "main", "name": "Claw", "identity": ["name": "Claw", "emoji": "🦞"]],
         ["id": "research", "name": "Scout", "identity": ["name": "Scout", "emoji": "🔭"]],
         ["id": "coder", "name": "Forge", "identity": ["name": "Forge", "emoji": "🛠️"]],
@@ -61,6 +62,8 @@ actor DemoGateway {
     /// The exec approvals file (`exec.approvals.get/set`). The demo keeps no socket token.
     var execApprovals = DemoGateway.seedExecApprovals()
     var execApprovalsExists = true
+    /// Agent workspace files by workspace path (`agents.files.*`).
+    var agentWorkspaces = DemoGateway.seedAgentWorkspaces()
     /// `ask_user` prompts by id, in the order they were asked.
     private var questions: [String: JSONValue] = [:]
     private var questionOrder: [String] = []
@@ -182,6 +185,7 @@ actor DemoGateway {
     }
 
     func handle(_ method: String, _ params: JSONValue) throws -> JSONValue {
+        if let result = try self.handleAgents(method, params) { return result }
         switch method {
         case "agents.list":
             return ["defaultId": "main", "mainKey": "main", "scope": "per-sender", "agents": .array(self.agents)]
@@ -1362,6 +1366,16 @@ actor DemoGateway {
     private func touch(_ row: inout Row) {
         row["updatedAt"] = Self.now()
         row["lastActivityAt"] = Self.now()
+    }
+
+    /// Drops a deleted agent's chats, telling subscribers like the Gateway does.
+    func removeSessions(ofAgent agentId: String) {
+        let keys = self.sessions.filter { $0.value["agentId"]?.string == agentId || $0.key.hasPrefix("agent:\(agentId):") }.keys
+        for key in keys {
+            self.sessions[key] = nil
+            self.transcripts[key] = nil
+            if self.sessionsSubscribed { self.emit("sessions.changed", ["sessionKey": .string(key), "reason": "delete"]) }
+        }
     }
 
     private func sessionChanged(_ key: String, reason: String) {

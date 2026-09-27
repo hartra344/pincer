@@ -38,6 +38,14 @@ The gateway's command policy (which commands agents may run, and their allowlist
 - **No lost updates:** every save carries the hash of the version it was based on (`baseHash`). If the file changed on the gateway in the meantime, the gateway refuses the save, and Pincer loads the latest version instead of overwriting it.
 - **The socket token is never sent:** the gateway leaves the approval socket's token out of what it sends, and Pincer never includes `socket.token` in a save. The gateway keeps its own.
 
+## Agents and workspace files
+
+Viewing agents and reading their workspace files (`agents.list`, `agent.identity.get`, `agents.files.list`, `agents.files.get`) needs only `operator.read`. Creating, editing and deleting agents (`agents.create`, `agents.update`, `agents.delete`) and saving workspace files (`agents.files.set`) need `operator.admin`, so without **Full Management** these pages are read-only. See [Agents & workspace files](../../guides/agents/).
+
+- **No lost updates:** every file save carries the hash of the version it was based on (`expectedHash`), or `expectedMissing` when creating a file. If the file changed on the gateway in the meantime, the gateway refuses the save and Pincer keeps your edits until you choose to reload or overwrite.
+- **Deleting is explicit:** the gateway would move an agent's workspace, sessions and other data to the Trash unless told otherwise, so Pincer always sends `deleteFiles`, and sets it only when you choose **Delete and Move Files to Trash**. **Delete Agent** keeps them on the gateway host.
+- **Only bootstrap files:** the gateway limits reads and writes to its own list of bootstrap files (such as `AGENTS.md` and `SOUL.md`), each up to 2 MB, inside the agent's workspace. Pincer can't read or write other files there, and checks the size before sending.
+
 ## Device identity
 
 Each install creates its own **Ed25519 device key**, stored in the Keychain and marked *this device only*, so it never syncs to other devices or backups. The gateway must approve each device once.
