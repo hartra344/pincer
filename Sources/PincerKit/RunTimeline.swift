@@ -62,6 +62,8 @@ public struct RunLane: Identifiable, Hashable, Sendable {
     public internal(set) var errorCount = 0
 
     var nextSegmentId = 0
+    /// Highest `agent` event `seq` applied; the Gateway numbers each run's events in order.
+    var lastSeq: Int?
     var openStreamId: Int?
     var openToolIds: [String: Int] = [:]
     var publishedEventAt: Date
@@ -216,6 +218,11 @@ public struct RunTimeline: Sendable, Hashable {
         let cap = self.maxSegmentsPerRun
         guard var lane = self.take(runId, sessionKey: key, at: date, create: !isTerminal) else { return false }
         defer { self.put(lane) }
+        // Replays (e.g. after a reconnect) repeat sequence numbers already applied.
+        if let seq = payload["seq"]?.int {
+            if let last = lane.lastSeq, seq <= last { return false }
+            lane.lastSeq = seq
+        }
         var changed = self.touch(&lane, at: date)
 
         switch stream {
@@ -300,6 +307,27 @@ public struct RunTimeline: Sendable, Hashable {
             break
         }
         return changed
+    }
+
+    /// Settles runs whose end event never arrived (a dropped event, a reconnect): each of
+    /// `sessionKey`'s running lanes that started at or before `asOf` (the session row's latest
+    /// activity) ends at its last event with `status`. Rows older than a run say nothing about it,
+    /// so a run that starts streaming before its row catches up is left alone. `.running` is a no-op.
+    @discardableResult
+    public mutating func settle(sessionKey: String, status: RunLaneStatus, asOf: Date) -> Bool {
+        guard status != .running, let ids = self.bySession[sessionKey] else { return false }
+        var changed = false
+        for id in ids {
+            guard var lane = self.runs[id], lane.isRunning, lane.startedAt <= asOf else { continue }
+            changed = self.finish(&lane, as: status, at: lane.lastEventAt, message: nil) || changed
+            self.runs[id] = lane
+        }
+        return changed
+    }
+
+    /// Sessions with a run still in progress here.
+    public var runningSessionKeys: Set<String> {
+        Set(self.runs.values.lazy.filter(\.isRunning).compactMap(\.sessionKey))
     }
 
     // MARK: Internals

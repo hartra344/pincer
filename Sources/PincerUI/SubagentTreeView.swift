@@ -91,7 +91,7 @@ struct SubagentTreeView: View {
                                        description: Text("When this agent delegates work, its helpers appear here."))
                     .frame(maxHeight: .infinity)
             } else {
-                TimelineView(.animation(minimumInterval: 1, paused: self.tree.runningCount == 0)) { context in
+                TimelineView(.animation(minimumInterval: self.tree.runningCount > 0 ? 1 : 30)) { context in
                     List(selection: self.$selection) {
                         ForEach(visible) { node in
                             SubagentRowView(

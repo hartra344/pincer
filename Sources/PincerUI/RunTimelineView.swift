@@ -31,7 +31,9 @@ struct RunTimelineView: View {
     var body: some View {
         let timeline = self.gateway.runTimeline
         let entries = self.entries(timeline)
-        let live = entries.contains { if case let .lane(lane, _) = $0 { lane.isRunning } else { false } }
+        // Disconnected, a running lane's outcome is unknown: it stops at its last event.
+        let connected = self.gateway.state.isConnected
+        let live = connected && entries.contains { if case let .lane(lane, _) = $0 { lane.isRunning } else { false } }
         let focusId = timeline.latestLane(sessionKey: self.focusedSession).map { "run-\($0.runId)" }
             ?? "node-\(self.focusedSession)"
         if entries.isEmpty {
@@ -39,14 +41,15 @@ struct RunTimelineView: View {
                                    description: Text("Runs appear here as they stream. Only live runs are recorded."))
                 .frame(maxHeight: .infinity)
         } else {
-            TimelineView(.animation(minimumInterval: 1, paused: !live)) { context in
+            TimelineView(.animation(minimumInterval: live ? 1 : 30, paused: !live && !connected)) { context in
                 let now = context.date
-                let axis = Self.axis(entries, now: now)
+                let axis = Self.axis(entries, now: now, connected: connected)
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 14) {
                             ForEach(entries) { entry in
-                                self.row(entry, axis: axis, now: now, isFocused: entry.id == focusId)
+                                self.row(entry, axis: axis, now: now, connected: connected,
+                                         isFocused: entry.id == focusId)
                                     .id(entry.id)
                             }
                         }
@@ -59,11 +62,12 @@ struct RunTimelineView: View {
     }
 
     @ViewBuilder
-    private func row(_ entry: Entry, axis: ClosedRange<Date>, now: Date, isFocused: Bool) -> some View {
+    private func row(_ entry: Entry, axis: ClosedRange<Date>, now: Date, connected: Bool, isFocused: Bool) -> some View {
         switch entry {
         case let .lane(lane, title):
-            RunLaneView(lane: lane, title: title, axis: axis, now: now, isFocused: isFocused,
-                        selection: self.$selectedSpan)
+            RunLaneView(lane: lane, title: title, axis: axis, now: connected || !lane.isRunning ? now : lane.lastEventAt,
+                        isConnected: connected, isFocused: isFocused, selection: self.$selectedSpan,
+                        open: lane.sessionKey.map { key in { self.gateway.selectedKey = key } })
         case let .placeholder(node, title):
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -79,6 +83,7 @@ struct RunTimelineView: View {
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
+            .modifier(OpenRunGestures(open: { self.gateway.selectedKey = node.key }))
         }
     }
 
@@ -99,13 +104,13 @@ struct RunTimelineView: View {
         return entries
     }
 
-    private static func axis(_ entries: [Entry], now: Date) -> ClosedRange<Date> {
+    private static func axis(_ entries: [Entry], now: Date, connected: Bool) -> ClosedRange<Date> {
         var start: Date?
         var end: Date?
         for entry in entries {
             guard case let .lane(lane, _) = entry else { continue }
             start = min(start ?? lane.startedAt, lane.startedAt)
-            let laneEnd = lane.isRunning ? now : (lane.endedAt ?? lane.lastEventAt)
+            let laneEnd = lane.isRunning && connected ? now : (lane.endedAt ?? lane.lastEventAt)
             end = max(end ?? laneEnd, laneEnd)
         }
         guard let start, let end else { return now...now.addingTimeInterval(1) }
@@ -118,11 +123,16 @@ private struct RunLaneView: View {
     let title: String
     let axis: ClosedRange<Date>
     let now: Date
+    let isConnected: Bool
     let isFocused: Bool
     @Binding var selection: RunTimelineView.SpanSelection?
+    /// Opens the run's session; nil when the run's session isn't known.
+    let open: (() -> Void)?
+
+    private var isLive: Bool { self.lane.isRunning && self.isConnected }
 
     var body: some View {
-        let status = SubagentStatus(self.lane.status)
+        let status = self.lane.isRunning && !self.isConnected ? .unknown : SubagentStatus(self.lane.status)
         let duration = RunDuration.format(self.lane.duration(now: self.now))
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
@@ -133,6 +143,7 @@ private struct RunLaneView: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(self.title), \(status.label), \(duration)")
+            .modifier(OpenRunGestures(open: self.open))
             GeometryReader { geometry in
                 let spans = self.lane.spans(axisStart: self.axis.lowerBound, axisEnd: self.axis.upperBound,
                                             width: geometry.size.width, now: self.now)
@@ -141,7 +152,7 @@ private struct RunLaneView: View {
                     ForEach(spans) { span in
                         self.spanView(span, height: geometry.size.height)
                     }
-                    if self.lane.isRunning {
+                    if self.isLive {
                         let x = min(geometry.size.width,
                                     self.now.timeIntervalSince(self.axis.lowerBound)
                                         / self.axis.upperBound.timeIntervalSince(self.axis.lowerBound) * geometry.size.width)
@@ -154,7 +165,7 @@ private struct RunLaneView: View {
             .frame(height: 16)
             .padding(.vertical, 2)
             .background(self.isFocused ? AnyShapeStyle(.tint.opacity(0.08)) : AnyShapeStyle(.clear))
-            if let caption = self.lane.currentActivity {
+            if self.isConnected, let caption = self.lane.currentActivity {
                 Text(LocalizedStringKey(caption)).font(.caption).foregroundStyle(.tint)
             }
             if let detail = self.selectedDetail {
@@ -229,5 +240,28 @@ private struct RunLaneView: View {
         if !kind.isMarker { parts.append(RunDuration.format(end.timeIntervalSince(start))) }
         if let detail { parts.append(detail) }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// Open on a lane header: double-click on macOS, tap on iOS, and an "Open" context item.
+private struct OpenRunGestures: ViewModifier {
+    let open: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let open {
+            content
+                .contentShape(Rectangle())
+                #if os(macOS)
+                .onTapGesture(count: 2, perform: open)
+                #else
+                .onTapGesture(perform: open)
+                #endif
+                .contextMenu {
+                    Button("Open", systemImage: "arrow.up.forward.app", action: open)
+                }
+                .accessibilityAction(named: "Open", open)
+        } else {
+            content
+        }
     }
 }

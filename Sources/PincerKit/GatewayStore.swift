@@ -70,7 +70,10 @@ public final class GatewayStore: Identifiable {
     public private(set) var agents: [AgentSummary] = []
     public private(set) var defaultAgentId = "main"
     public private(set) var sessions: [String: SessionRow] = [:] {
-        didSet { self.subagentTrees = [:] }
+        didSet {
+            self.subagentTrees = [:]
+            self.settleRunTimeline()
+        }
     }
     /// `subagentTree(rootKey:)` per root and connection state, until the rows change.
     @ObservationIgnored var subagentTrees: [String: SubagentTree] = [:]

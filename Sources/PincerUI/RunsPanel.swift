@@ -28,8 +28,19 @@ struct RunsPanelChrome: ViewModifier {
                     .inspectorColumnWidth(min: 320, ideal: 360, max: 420)
             }
             .sheet(isPresented: self.presented(true)) {
-                RunsPanel()
-                    .presentationDetents([.medium, .large])
+                NavigationStack {
+                    RunsPanel()
+                        .navigationTitle("Runs")
+                        #if os(iOS)
+                        .navigationBarTitleDisplayMode(.inline)
+                        #endif
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { self.isPresented = false }
+                            }
+                        }
+                }
+                .presentationDetents([.medium, .large])
             }
     }
 }
@@ -39,7 +50,8 @@ private struct RunsToolbarButton: View {
     @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
-        if let key = self.gateway.selectedKey, self.gateway.hasRuns(sessionKey: key) {
+        // Kept while the panel is open, so it (and ⌥⌘R) can always close it again.
+        if let key = self.gateway.selectedKey, self.isPresented || self.gateway.hasRuns(sessionKey: key) {
             let running = self.gateway.subagentTree(rootKey: key).runningCount
             Button {
                 self.isPresented.toggle()

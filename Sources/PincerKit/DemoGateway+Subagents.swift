@@ -1,25 +1,30 @@
 import Foundation
 
-/// The demo's subagent runs (`sessions_spawn`) and their streamed activity, as
-/// `mock-gateway/subagents.mjs` seeds them: "Release prep" spawned three helpers (one done, one
-/// failed, one still running whose own helper was stopped). Row and event shapes follow upstream:
-/// `spawnedBy`/`parentSessionKey`, `childSessions`, `spawnDepth`, `status`
-/// (`running | done | failed | killed`), `startedAt`/`endedAt`/`runtimeMs`, and `agent` events
-/// `{runId, seq, stream, ts, sessionKey, spawnedBy?, data}`.
+/// The demo's subagent runs (`sessions_spawn`) and their streamed activity: "Research: launch plan"
+/// spawned three helpers: one done (with two helpers of its own, one done and one stopped), one
+/// still running and streaming tool calls, and one failed on a tool error. Row and event shapes
+/// follow upstream (and `mock-gateway/subagents.mjs`): `spawnedBy`/`parentSessionKey`,
+/// `childSessions`, `spawnDepth`, `status` (`running | done | failed | killed`),
+/// `startedAt`/`endedAt`/`runtimeMs`, and `agent` events `{runId, seq, stream, ts, sessionKey, spawnedBy?, data}`.
 extension DemoGateway {
-    static let subagentParentKey = "agent:coder:dashboard:release"
+    static let subagentParentKey = "agent:research:dashboard:launch-plan"
     static let seededSubagents = (
-        done: "agent:coder:subagent:5b0f2c1e-8d4a-4f6e-9a51-2c7d3e1f0a01",
-        failed: "agent:coder:subagent:9e3d7a60-1b2c-4d8e-b7f4-6a5c4d3b2e02",
-        running: "agent:research:subagent:c41a8f93-7e6d-4a2b-8c1f-0d9e8b7a6f03",
-        killed: "agent:research:subagent:e2b19d74-3f5a-4c6b-9d8e-7f1a2b3c4d04"
+        done: "agent:research:subagent:4a7c2e10-9b3d-4f5e-8a61-1c2d3e4f5a01",
+        grandchild: "agent:research:subagent:7d1e5b20-3c4a-4b6d-9e72-2d3e4f5a6b02",
+        aborted: "agent:research:subagent:2f8a6c30-5d4b-4c7e-a083-3e4f5a6b7c03",
+        running: "agent:main:subagent:8b3d7f40-6e5c-4d8f-b194-4f5a6b7c8d04",
+        failed: "agent:research:subagent:5c9e1a50-7f6d-4e9a-c2a5-5a6b7c8d9e05"
     )
-    static let seededRunningSubagentRunId = "run_seed_docs_audit"
-    static let seededParentRunId = "run_seed_release"
+    static let seededRunningSubagentRunId = "run_seed_launch_timeline"
+    static let seededParentRunId = "run_seed_launch_plan"
+    /// The seeded running helper's replayed events end at this `seq`; live steps continue from it.
+    static let seededRunningLastSeq = 10
+    /// How often the running helper streams its next tool call.
+    static let liveSubagentStepInterval: Duration = .milliseconds(2500)
 
     private static let minuteMs = 60_000.0
 
-    /// Adds the release chat and its helpers to the demo's sessions and transcripts.
+    /// Adds the launch-plan chat and its helpers to the demo's sessions and transcripts.
     static func seedSubagents(sessions: inout [String: [String: JSONValue]], transcripts: inout [String: [JSONValue]],
                               now: Double = DemoGateway.now().double ?? 0)
     {
@@ -52,33 +57,39 @@ extension DemoGateway {
         }
 
         sessions[Self.subagentParentKey] = row(
-            Self.subagentParentKey, agent: "coder", title: "Release prep",
-            preview: "Spawned three helpers for the 2.4 release.", minutesAgo: 29,
-            ["category": "Work", "childSessions": JSONValue([kids.done, kids.failed, kids.running]),
+            Self.subagentParentKey, agent: "research", title: "Research: launch plan",
+            preview: "Spawned three helpers for the launch plan.", minutesAgo: 29,
+            ["category": "Work", "childSessions": JSONValue([kids.done, kids.running, kids.failed]),
              "hasActiveSubagentRun": true, "lastRunId": .string(Self.seededParentRunId),
-             "startedAt": at(30), "endedAt": at(29), "runtimeMs": .number(minute), "status": "done"])
+             "startedAt": at(32), "endedAt": at(29), "runtimeMs": .number(3 * minute), "status": "done"])
         sessions[kids.done] = child(
-            kids.done, agent: "coder", title: "Write the changelog", preview: "CHANGELOG.md updated with 14 entries.",
-            minutesAgo: 26, parent: Self.subagentParentKey, depth: 1,
-            ["status": "done", "startedAt": at(29), "endedAt": at(26), "runtimeMs": .number(3 * minute),
-             "lastRunId": "run_seed_changelog"])
-        sessions[kids.failed] = child(
-            kids.failed, agent: "coder", title: "Run the test suite", preview: "2 tests failed in LoginTests.",
-            minutesAgo: 22, parent: Self.subagentParentKey, depth: 1,
-            ["status": "failed", "startedAt": at(29), "endedAt": at(22), "runtimeMs": .number(7 * minute),
-             "lastRunId": "run_seed_tests", "lastRunError": "swift test exited with code 1: 2 failures in LoginTests"])
+            kids.done, agent: "research", title: "Competitor pricing scan", preview: "Five competitors compared.",
+            minutesAgo: 21, parent: Self.subagentParentKey, depth: 1,
+            ["status": "done", "startedAt": at(29.5), "endedAt": at(21), "runtimeMs": .number(8.5 * minute),
+             "lastRunId": "run_seed_pricing", "subagentRole": "orchestrator", "subagentControlScope": "children",
+             "childSessions": JSONValue([kids.grandchild, kids.aborted])])
+        sessions[kids.grandchild] = child(
+            kids.grandchild, agent: "research", title: "Summarize pricing pages", preview: "Tiers and prices in a table.",
+            minutesAgo: 24, parent: kids.done, depth: 2,
+            ["status": "done", "startedAt": at(28), "endedAt": at(24), "runtimeMs": .number(4 * minute),
+             "lastRunId": "run_seed_pricing_pages"])
+        sessions[kids.aborted] = child(
+            kids.aborted, agent: "research", title: "Fetch archived pricing", preview: "Stopped.",
+            minutesAgo: 25.5, parent: kids.done, depth: 2,
+            ["status": "killed", "abortedLastRun": true, "startedAt": at(27.5), "endedAt": at(25.5),
+             "runtimeMs": .number(2 * minute), "lastRunId": "run_seed_archive"])
         sessions[kids.running] = child(
-            kids.running, agent: "research", title: "Audit the docs", preview: "Checking links in docs/setup.md…",
+            kids.running, agent: "main", title: "Draft launch timeline", preview: "Checking the release calendar…",
             minutesAgo: 1, parent: Self.subagentParentKey, depth: 1,
-            ["status": "running", "startedAt": at(4), "hasActiveRun": true,
+            ["status": "running", "startedAt": at(6), "hasActiveRun": true,
              "activeRunIds": [.string(Self.seededRunningSubagentRunId)], "lastRunId": .string(Self.seededRunningSubagentRunId),
-             "subagentRunState": "active", "subagentRole": "orchestrator", "subagentControlScope": "children",
-             "childSessions": [.string(kids.killed)]])
-        sessions[kids.killed] = child(
-            kids.killed, agent: "research", title: "Check external links", preview: "Stopped.",
-            minutesAgo: 2, parent: kids.running, depth: 2,
-            ["status": "killed", "abortedLastRun": true, "startedAt": at(3), "endedAt": at(2),
-             "runtimeMs": .number(minute), "lastRunId": "run_seed_links"])
+             "subagentRunState": "active"])
+        sessions[kids.failed] = child(
+            kids.failed, agent: "research", title: "Check trademark availability", preview: "The trademark search failed.",
+            minutesAgo: 26, parent: Self.subagentParentKey, depth: 1,
+            ["status": "failed", "startedAt": at(29.4), "endedAt": at(26), "runtimeMs": .number(3.4 * minute),
+             "lastRunId": "run_seed_trademark",
+             "lastRunError": "web_fetch failed: 503 Service Unavailable from tmsearch.uspto.gov"])
 
         func message(_ role: String, _ content: [JSONValue], minutesAgo: Double, extra: [String: JSONValue] = [:]) -> JSONValue {
             var message: [String: JSONValue] = [
@@ -101,83 +112,106 @@ extension DemoGateway {
             message("toolResult", [text(output)], minutesAgo: minutesAgo,
                     extra: ["toolCallId": .string(id), "toolName": .string(name), "isError": .bool(isError)])
         }
-        func receipt(_ id: String, _ key: String, _ runId: String) -> JSONValue {
+        func receipt(_ id: String, _ key: String, _ runId: String, minutesAgo: Double) -> JSONValue {
             result(id, "sessions_spawn", #"{"status":"accepted","childSessionKey":"\#(key)","runId":"\#(runId)"}"#,
-                   minutesAgo: 29.4)
+                   minutesAgo: minutesAgo)
         }
 
         transcripts[Self.subagentParentKey] = [
-            message("user", [text("Get the 2.4 release ready: changelog, tests and a docs pass.")], minutesAgo: 30),
+            message("user", [text("Put together a launch plan for Pincer 2.0: pricing, timeline and naming.")], minutesAgo: 32),
             message("assistant", [
-                thinking("Three independent jobs, so I'll run them in parallel as subagents."),
-                call("call_spawn_changelog", "sessions_spawn",
-                     ["task": "Summarize merged PRs since 2.3 into CHANGELOG.md.", "label": "Write the changelog"]),
-                call("call_spawn_tests", "sessions_spawn", ["task": "Run swift test and report failures.", "label": "Run the test suite"]),
-                call("call_spawn_docs", "sessions_spawn",
-                     ["task": "Check docs/ for stale steps and broken links.", "label": "Audit the docs", "agentId": "research"]),
-            ], minutesAgo: 29.5),
-            receipt("call_spawn_changelog", kids.done, "run_seed_changelog"),
-            receipt("call_spawn_tests", kids.failed, "run_seed_tests"),
-            receipt("call_spawn_docs", kids.running, Self.seededRunningSubagentRunId),
-            message("assistant", [text("Spawned three helpers for the 2.4 release. I'll report back when they finish.")],
+                thinking("Gather context first, then split the work into three helpers."),
+                call("call_lp_search", "web_search", ["query": "operator app launch checklist"]),
+            ], minutesAgo: 31.8),
+            result("call_lp_search", "web_search", "8 results", minutesAgo: 31.2),
+            message("assistant", [call("call_lp_fetch", "web_fetch", ["url": "https://example.com/launch-guide"])], minutesAgo: 31.1),
+            result("call_lp_fetch", "web_fetch", "Launch guide (4,210 words)", minutesAgo: 30.6),
+            message("assistant", [call("call_lp_read", "read", ["path": "notes/roadmap.md"])], minutesAgo: 30.5),
+            result("call_lp_read", "read", "# Roadmap\n…", minutesAgo: 30.3),
+            message("assistant", [
+                thinking("Pricing, timeline and trademark are independent; run them in parallel."),
+                call("call_spawn_pricing", "sessions_spawn",
+                     ["task": "Compare competitor pricing.", "label": "Competitor pricing scan"]),
+                call("call_spawn_timeline", "sessions_spawn",
+                     ["task": "Draft a launch timeline.", "label": "Draft launch timeline", "agentId": "main"]),
+                call("call_spawn_trademark", "sessions_spawn",
+                     ["task": "Check that the name is free to trademark.", "label": "Check trademark availability"]),
+            ], minutesAgo: 29.8),
+            receipt("call_spawn_pricing", kids.done, "run_seed_pricing", minutesAgo: 29.5),
+            receipt("call_spawn_timeline", kids.running, Self.seededRunningSubagentRunId, minutesAgo: 29.45),
+            receipt("call_spawn_trademark", kids.failed, "run_seed_trademark", minutesAgo: 29.4),
+            message("assistant", [text("Spawned three helpers for the launch plan. I'll pull their results together when they finish.")],
                     minutesAgo: 29),
         ]
         transcripts[kids.done] = [
-            message("user", [text("Summarize merged PRs since 2.3 into CHANGELOG.md.")], minutesAgo: 29),
-            message("assistant", [thinking("List the merged PRs first."),
-                                  call("call_cl_log", "exec", ["command": "git log --merges v2.3..HEAD --oneline"])], minutesAgo: 28.8),
-            result("call_cl_log", "exec", "14 merge commits", minutesAgo: 28.5),
-            message("assistant", [call("call_cl_edit", "edit", ["path": "CHANGELOG.md"])], minutesAgo: 27),
-            result("call_cl_edit", "edit", "ok", minutesAgo: 26.5),
-            message("assistant", [text("CHANGELOG.md updated with 14 entries.")], minutesAgo: 26),
+            message("user", [text("Compare competitor pricing.")], minutesAgo: 29.5),
+            message("assistant", [thinking("Two helpers: current pricing pages, and archived ones for history."),
+                                  call("call_pr_spawn_pages", "sessions_spawn",
+                                       ["task": "Summarize competitors' pricing pages.", "label": "Summarize pricing pages"]),
+                                  call("call_pr_spawn_archive", "sessions_spawn",
+                                       ["task": "Fetch archived pricing pages.", "label": "Fetch archived pricing"])],
+                    minutesAgo: 28.2),
+            receipt("call_pr_spawn_pages", kids.grandchild, "run_seed_pricing_pages", minutesAgo: 28.1),
+            receipt("call_pr_spawn_archive", kids.aborted, "run_seed_archive", minutesAgo: 28.05),
+            message("assistant", [call("call_pr_write", "write", ["path": "research/pricing.md"])], minutesAgo: 22),
+            result("call_pr_write", "write", "ok", minutesAgo: 21.5),
+            message("assistant", [text("Five competitors compared in research/pricing.md.")], minutesAgo: 21),
         ]
-        transcripts[kids.failed] = [
-            message("user", [text("Run swift test and report failures.")], minutesAgo: 29),
-            message("assistant", [thinking("Build first, then run the tests."),
-                                  call("call_t_build", "exec", ["command": "swift build"])], minutesAgo: 28.8),
-            result("call_t_build", "exec", "Build complete! (41.2s)", minutesAgo: 28),
-            message("assistant", [call("call_t_test", "exec", ["command": "swift test"])], minutesAgo: 27.9),
-            result("call_t_test", "exec", "LoginTests.testTimeout failed\nLoginTests.testRefresh failed\nexit code 1",
-                   minutesAgo: 22.5, isError: true),
-            message("assistant", [text("2 tests failed in LoginTests.")], minutesAgo: 22,
-                    extra: ["stopReason": "error", "errorMessage": "swift test exited with code 1: 2 failures in LoginTests"]),
+        transcripts[kids.grandchild] = [
+            message("user", [text("Summarize competitors' pricing pages.")], minutesAgo: 28),
+            message("assistant", [call("call_pp_fetch", "web_fetch", ["url": "https://example.com/pricing"])], minutesAgo: 27.5),
+            result("call_pp_fetch", "web_fetch", "Pricing page (3 tiers)", minutesAgo: 26.5),
+            message("assistant", [text("Tiers and prices in a table.")], minutesAgo: 24),
+        ]
+        transcripts[kids.aborted] = [
+            message("user", [text("Fetch archived pricing pages.")], minutesAgo: 27.5),
+            message("assistant", [call("call_ar_fetch", "web_fetch", ["url": "https://web.archive.org/web/2024/example.com/pricing"])],
+                    minutesAgo: 27),
         ]
         transcripts[kids.running] = [
-            message("user", [text("Check docs/ for stale steps and broken links.")], minutesAgo: 4),
-            message("assistant", [thinking("Split the external link check out to a helper."),
-                                  call("call_d_spawn", "sessions_spawn",
-                                       ["task": "Check external links in docs/.", "label": "Check external links"])], minutesAgo: 3.5),
-            result("call_d_spawn", "sessions_spawn",
-                   #"{"status":"accepted","childSessionKey":"\#(kids.killed)","runId":"run_seed_links"}"#, minutesAgo: 3.4),
-            message("assistant", [call("call_d_install", "read", ["path": "docs/install.md"])], minutesAgo: 3),
-            result("call_d_install", "read", "# Install\n…", minutesAgo: 2.8),
-            message("assistant", [call("call_d_old", "read", ["path": "docs/legacy/upgrade.md"])], minutesAgo: 2.5),
-            result("call_d_old", "read", "ENOENT: no such file or directory, open 'docs/legacy/upgrade.md'",
-                   minutesAgo: 2.3, isError: true),
-            message("assistant", [thinking("The legacy guide moved; check the setup page next."),
-                                  call("call_d_read", "read", ["path": "docs/setup.md"])], minutesAgo: 1),
+            message("user", [text("Draft a launch timeline.")], minutesAgo: 6),
+            message("assistant", [thinking("Start from the release calendar."),
+                                  call("call_tl_cal", "read", ["path": "notes/release-calendar.md"])], minutesAgo: 5.5),
+            result("call_tl_cal", "read", "# Release calendar\n…", minutesAgo: 5.2),
+            message("assistant", [call("call_tl_search", "web_search", ["query": "app store review times"])], minutesAgo: 4),
+            result("call_tl_search", "web_search", "6 results", minutesAgo: 3.4),
+            message("assistant", [call("call_tl_draft", "write", ["path": "plans/launch-timeline.md"])], minutesAgo: 1),
         ]
-        transcripts[kids.killed] = [
-            message("user", [text("Check external links in docs/.")], minutesAgo: 3),
-            message("assistant", [call("call_l_fetch", "web_fetch", ["url": "https://example.com/guide"])], minutesAgo: 2.5),
+        transcripts[kids.failed] = [
+            message("user", [text("Check that the name is free to trademark.")], minutesAgo: 29.4),
+            message("assistant", [thinking("Search the trademark database for the name."),
+                                  call("call_tm_search", "web_search", ["query": "Pincer trademark"])], minutesAgo: 29.2),
+            result("call_tm_search", "web_search", "4 results", minutesAgo: 28.8),
+            message("assistant", [call("call_tm_fetch", "web_fetch", ["url": "https://tmsearch.uspto.gov/search?q=pincer"])],
+                    minutesAgo: 28.7),
+            result("call_tm_fetch", "web_fetch", "503 Service Unavailable", minutesAgo: 26.5, isError: true),
+            message("assistant", [text("The trademark search failed.")], minutesAgo: 26,
+                    extra: ["stopReason": "error", "errorMessage": "web_fetch failed: 503 Service Unavailable from tmsearch.uspto.gov"]),
         ]
     }
 
+    private static func agentEvent(_ runId: String, _ key: String, spawnedBy: String?, seq: Int, stream: String, ts: Double,
+                                   _ data: JSONValue) -> JSONValue
+    {
+        var payload: [String: JSONValue] = [
+            "runId": .string(runId), "sessionKey": .string(key), "seq": JSONValue(seq),
+            "stream": .string(stream), "ts": .number(ts.rounded()), "data": data,
+        ]
+        if let spawnedBy { payload["spawnedBy"] = .string(spawnedBy) }
+        return .object(payload)
+    }
+
     /// The seeded runs' `agent` events, oldest first, with their original timestamps, so the Runs
-    /// panel has lanes to show: thinking, tool calls (two errors), a failed run, a stopped one and
-    /// one still running inside an open `read`.
+    /// panel has lanes to show: thinking, tool calls (one errored), a failed run, a stopped one and
+    /// one still running inside an open `write`.
     static func seededRunEvents(now: Double = DemoGateway.now().double ?? 0) -> [JSONValue] {
         let kids = Self.seededSubagents
         var events: [(ts: Double, payload: JSONValue)] = []
         func run(_ runId: String, _ key: String, spawnedBy: String?, _ steps: [(minutesAgo: Double, stream: String, data: JSONValue)]) {
             for (index, step) in steps.enumerated() {
-                let ts = (now - step.minutesAgo * Self.minuteMs).rounded()
-                var payload: [String: JSONValue] = [
-                    "runId": .string(runId), "sessionKey": .string(key), "seq": JSONValue(index + 1),
-                    "stream": .string(step.stream), "ts": .number(ts), "data": step.data,
-                ]
-                if let spawnedBy { payload["spawnedBy"] = .string(spawnedBy) }
-                events.append((ts, .object(payload)))
+                let ts = now - step.minutesAgo * Self.minuteMs
+                events.append((ts, Self.agentEvent(runId, key, spawnedBy: spawnedBy, seq: index + 1, stream: step.stream,
+                                                   ts: ts, step.data)))
             }
         }
         func ms(_ minutesAgo: Double) -> JSONValue { .number((now - minutesAgo * Self.minuteMs).rounded()) }
@@ -206,48 +240,88 @@ extension DemoGateway {
         }
 
         run(Self.seededParentRunId, Self.subagentParentKey, spawnedBy: nil, [
-            start(30), thinking(29.9, "Three independent jobs, so I'll run them in parallel as subagents."),
-            tool(29.6, "call_spawn_changelog", "sessions_spawn", ["label": "Write the changelog"]),
-            toolResult(29.5, "call_spawn_changelog", "sessions_spawn", "accepted"),
-            tool(29.5, "call_spawn_tests", "sessions_spawn", ["label": "Run the test suite"]),
-            toolResult(29.45, "call_spawn_tests", "sessions_spawn", "accepted"),
-            tool(29.45, "call_spawn_docs", "sessions_spawn", ["label": "Audit the docs"]),
-            toolResult(29.4, "call_spawn_docs", "sessions_spawn", "accepted"),
-            writing(29.2, "Spawned three helpers for the 2.4 release."), end(29),
+            start(32), thinking(31.9, "Gather context first, then split the work into three helpers."),
+            tool(31.8, "call_lp_search", "web_search", ["query": "operator app launch checklist"]),
+            toolResult(31.2, "call_lp_search", "web_search", "8 results"),
+            tool(31.1, "call_lp_fetch", "web_fetch", ["url": "https://example.com/launch-guide"]),
+            toolResult(30.6, "call_lp_fetch", "web_fetch", "Launch guide (4,210 words)"),
+            tool(30.5, "call_lp_read", "read", ["path": "notes/roadmap.md"]),
+            toolResult(30.3, "call_lp_read", "read", "# Roadmap"),
+            thinking(30.2, "Pricing, timeline and trademark are independent; run them in parallel."),
+            tool(29.8, "call_spawn_pricing", "sessions_spawn", ["label": "Competitor pricing scan"]),
+            toolResult(29.5, "call_spawn_pricing", "sessions_spawn", "accepted"),
+            tool(29.5, "call_spawn_timeline", "sessions_spawn", ["label": "Draft launch timeline"]),
+            toolResult(29.45, "call_spawn_timeline", "sessions_spawn", "accepted"),
+            tool(29.45, "call_spawn_trademark", "sessions_spawn", ["label": "Check trademark availability"]),
+            toolResult(29.4, "call_spawn_trademark", "sessions_spawn", "accepted"),
+            writing(29.2, "Spawned three helpers for the launch plan."), end(29),
         ])
-        run("run_seed_changelog", kids.done, spawnedBy: Self.subagentParentKey, [
-            start(29), thinking(28.9, "List the merged PRs first."),
-            tool(28.8, "call_cl_log", "exec", ["command": "git log --merges v2.3..HEAD --oneline"]),
-            toolResult(28.5, "call_cl_log", "exec", "14 merge commits"),
-            thinking(28.4, "Group them by area."),
-            tool(27, "call_cl_edit", "edit", ["path": "CHANGELOG.md"]), toolResult(26.5, "call_cl_edit", "edit", "ok"),
-            writing(26.2, "CHANGELOG.md updated with 14 entries."), end(26),
+        run("run_seed_pricing", kids.done, spawnedBy: Self.subagentParentKey, [
+            start(29.5), thinking(29.3, "Two helpers: current pricing pages, and archived ones for history."),
+            tool(28.2, "call_pr_spawn_pages", "sessions_spawn", ["label": "Summarize pricing pages"]),
+            toolResult(28.1, "call_pr_spawn_pages", "sessions_spawn", "accepted"),
+            tool(28.1, "call_pr_spawn_archive", "sessions_spawn", ["label": "Fetch archived pricing"]),
+            toolResult(28.05, "call_pr_spawn_archive", "sessions_spawn", "accepted"),
+            thinking(23.5, "Both helpers are back; write it up."),
+            tool(22, "call_pr_write", "write", ["path": "research/pricing.md"]),
+            toolResult(21.5, "call_pr_write", "write", "ok"),
+            writing(21.2, "Five competitors compared."), end(21),
         ])
-        run("run_seed_tests", kids.failed, spawnedBy: Self.subagentParentKey, [
-            start(29), thinking(28.9, "Build first, then run the tests."),
-            tool(28.8, "call_t_build", "exec", ["command": "swift build"]),
-            toolResult(28, "call_t_build", "exec", "Build complete! (41.2s)"),
-            tool(27.9, "call_t_test", "exec", ["command": "swift test"]),
-            toolResult(22.5, "call_t_test", "exec", "LoginTests.testTimeout failed\nLoginTests.testRefresh failed", isError: true),
-            (22, "lifecycle", ["phase": "error", "error": "swift test exited with code 1: 2 failures in LoginTests",
-                               "endedAt": ms(22)]),
+        run("run_seed_pricing_pages", kids.grandchild, spawnedBy: kids.done, [
+            start(28), thinking(27.8, "Fetch each pricing page."),
+            tool(27.5, "call_pp_fetch", "web_fetch", ["url": "https://example.com/pricing"]),
+            toolResult(26.5, "call_pp_fetch", "web_fetch", "Pricing page (3 tiers)"),
+            writing(24.5, "Tiers and prices in a table."), end(24),
+        ])
+        run("run_seed_archive", kids.aborted, spawnedBy: kids.done, [
+            start(27.5),
+            tool(27, "call_ar_fetch", "web_fetch", ["url": "https://web.archive.org/web/2024/example.com/pricing"]),
+            end(25.5, aborted: true),
         ])
         run(Self.seededRunningSubagentRunId, kids.running, spawnedBy: Self.subagentParentKey, [
-            start(4), thinking(3.9, "Split the external link check out to a helper."),
-            tool(3.5, "call_d_spawn", "sessions_spawn", ["label": "Check external links"]),
-            toolResult(3.4, "call_d_spawn", "sessions_spawn", "accepted"),
-            tool(3, "call_d_install", "read", ["path": "docs/install.md"]),
-            toolResult(2.8, "call_d_install", "read", "# Install"),
-            tool(2.5, "call_d_old", "read", ["path": "docs/legacy/upgrade.md"]),
-            toolResult(2.3, "call_d_old", "read", "ENOENT: no such file or directory, open 'docs/legacy/upgrade.md'",
-                       isError: true),
-            thinking(1.2, "The legacy guide moved; check the setup page next."),
-            tool(1, "call_d_read", "read", ["path": "docs/setup.md"]),
+            start(6), thinking(5.8, "Start from the release calendar."),
+            tool(5.5, "call_tl_cal", "read", ["path": "notes/release-calendar.md"]),
+            toolResult(5.2, "call_tl_cal", "read", "# Release calendar"),
+            thinking(4.5, "Check how long app review takes."),
+            tool(4, "call_tl_search", "web_search", ["query": "app store review times"]),
+            toolResult(3.4, "call_tl_search", "web_search", "6 results"),
+            thinking(2, "Draft the plan week by week."),
+            writing(1.5, "Week 1: beta."),
+            tool(1, "call_tl_draft", "write", ["path": "plans/launch-timeline.md"]),
         ])
-        run("run_seed_links", kids.killed, spawnedBy: kids.running, [
-            start(3), tool(2.5, "call_l_fetch", "web_fetch", ["url": "https://example.com/guide"]), end(2, aborted: true),
+        run("run_seed_trademark", kids.failed, spawnedBy: Self.subagentParentKey, [
+            start(29.4), thinking(29.3, "Search the trademark database for the name."),
+            tool(29.2, "call_tm_search", "web_search", ["query": "Pincer trademark"]),
+            toolResult(28.8, "call_tm_search", "web_search", "4 results"),
+            tool(28.7, "call_tm_fetch", "web_fetch", ["url": "https://tmsearch.uspto.gov/search?q=pincer"]),
+            toolResult(26.5, "call_tm_fetch", "web_fetch", "503 Service Unavailable\nRetry-After: 120", isError: true),
+            (26, "lifecycle", ["phase": "error", "error": "web_fetch failed: 503 Service Unavailable from tmsearch.uspto.gov",
+                               "endedAt": ms(26)]),
         ])
         return events.sorted { $0.ts < $1.ts }.map(\.payload)
+    }
+
+    /// The running helper's next live step: the open tool finishes and the next one starts, so the
+    /// lane always shows a tool running. `seq` is the last one sent; returns the events and the new `seq`.
+    static func liveSubagentStep(_ step: Int, seq: Int, now: Double = DemoGateway.now().double ?? 0) -> (events: [JSONValue], seq: Int) {
+        let tools: [(name: String, args: JSONValue)] = [
+            ("web_search", ["query": "launch week checklist"]), ("read", ["path": "notes/marketing.md"]),
+            ("web_fetch", ["url": "https://example.com/press-kit"]), ("edit", ["path": "plans/launch-timeline.md"]),
+        ]
+        let previous = step == 0 ? (id: "call_tl_draft", name: "write") : (id: "call_tl_live_\(step - 1)", name: tools[(step - 1) % tools.count].name)
+        let next = tools[step % tools.count]
+        var seq = seq
+        var events: [JSONValue] = []
+        func add(_ stream: String, _ data: JSONValue) {
+            seq += 1
+            events.append(Self.agentEvent(Self.seededRunningSubagentRunId, Self.seededSubagents.running,
+                                          spawnedBy: Self.subagentParentKey, seq: seq, stream: stream, ts: now, data))
+        }
+        add("tool", ["phase": "result", "name": .string(previous.name), "toolCallId": .string(previous.id),
+                     "isError": false, "result": "ok"])
+        if step % 3 == 2 { add("thinking", ["text": "Next section.", "delta": "Next section."]) }
+        add("tool", ["phase": "start", "name": .string(next.name), "toolCallId": .string("call_tl_live_\(step)"), "args": next.args])
+        return (events, seq)
     }
 
     /// A stopped subagent's row, like the Gateway's registry records it: `killed`, not idle.

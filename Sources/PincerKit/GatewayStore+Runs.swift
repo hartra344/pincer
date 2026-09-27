@@ -37,9 +37,35 @@ extension GatewayStore {
         return row.parentCandidates.first { self.sessions[$0] != nil && $0 != sessionKey }
     }
 
+    /// Ends timeline lanes whose session row no longer runs, in case their end event was missed.
+    func settleRunTimeline() {
+        var changed = false
+        for key in self.runTimelineState.runningSessionKeys {
+            guard let row = self.sessions[key], let status = RunLaneStatus(settled: row.subagentStatus),
+                  let asOf = row.activityDate else { continue }
+            // A row with no run fields says nothing; only an explicit "not running" settles it.
+            if row.subagentStatus == .idle, row.raw["hasActiveRun"]?.bool != false { continue }
+            changed = self.runTimelineState.settle(sessionKey: key, status: status, asOf: asOf) || changed
+        }
+        if changed { self.runTimelineRevision &+= 1 }
+    }
+
     func recordRunActivity(_ event: GatewayEvent, sessionKey: String? = nil) {
         if self.runTimelineState.apply(event: event, receivedAt: Date(), sessionKey: sessionKey) {
             self.runTimelineRevision &+= 1
+        }
+    }
+}
+
+extension RunLaneStatus {
+    /// How a lane ends when its session row reports `status` and it never saw its own end;
+    /// nil while the row still runs (or can't say).
+    public init?(settled status: SubagentStatus) {
+        switch status {
+        case .running, .unknown: return nil
+        case .done, .idle: self = .done
+        case .error: self = .error
+        case .aborted: self = .aborted
         }
     }
 }
