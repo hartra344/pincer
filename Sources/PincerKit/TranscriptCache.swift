@@ -313,6 +313,22 @@ public enum TranscriptCache {
         _ = await Writer.shared.write(snapshot, to: url)
     }
 
+    /// Deletes one chat's cached transcript (it was deleted, rewound or switched branch on the
+    /// Gateway) and drops it from message search. Queued behind saves already under way.
+    public static func remove(gatewayId: UUID, sessionKey: String) async {
+        await self.remove(gatewayId: gatewayId, sessionKey: sessionKey, root: Self.root)
+        if MessageIndex.status(gatewayId: gatewayId) != .unavailable {
+            await MessageIndex.shared(gatewayId: gatewayId)
+                .index(sessionKey: sessionKey, snapshot: Snapshot(items: [], complete: true), fileMtime: Date())
+        }
+    }
+
+    /// Deletes one chat's cached transcript under another cache root (tests).
+    static func remove(gatewayId: UUID, sessionKey: String, root: URL?) async {
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else { return }
+        await Writer.shared.remove(url)
+    }
+
     /// Deletes the Gateway's transcripts and message search index. `permanently`: the Gateway
     /// was removed from the app, so saves still under way don't write them again.
     public static func removeAll(gatewayId: UUID, permanently: Bool = false) {
@@ -378,6 +394,11 @@ public enum TranscriptCache {
     /// Serializes writes so an older snapshot can never land after a newer one.
     private actor Writer {
         static let shared = Writer()
+
+        func remove(_ url: URL) {
+            try? FileManager.default.removeItem(at: url.appendingPathExtension("meta"))
+            try? FileManager.default.removeItem(at: url)
+        }
 
         /// The file's modification date once written, or nil when it couldn't be.
         func write(_ snapshot: Snapshot, to url: URL) -> Date? {

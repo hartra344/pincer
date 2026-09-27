@@ -162,6 +162,13 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var skills = SkillsModel(
         connection: self.connection, hello: { [weak self] in self?.hello },
         allowsWritesWithoutAdmin: self.profile.isDemo)
+    /// Gateway Settings → Sessions: every session with previews, details, bulk archive/delete and
+    /// branch tools. The demo may write without `operator.admin`.
+    @ObservationIgnored public private(set) lazy var sessionManager = SessionManagerModel(
+        connection: self.connection, hello: { [weak self] in self?.hello },
+        allowsWritesWithoutAdmin: self.profile.isDemo,
+        onTranscriptChanged: { [weak self] key, change in await self?.transcriptChanged(key: key, change: change) },
+        onSessionsChanged: { [weak self] in await self?.refreshSessions() })
     /// Token and cost usage; loaded when the Usage page opens.
     @ObservationIgnored public private(set) lazy var usage = UsageModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
@@ -332,6 +339,7 @@ public final class GatewayStore: Identifiable {
         self.execPolicy.handleReconnect()
         self.agentManagement.handleReconnect()
         self.skills.handleReconnect()
+        self.sessionManager.handleReconnect()
     }
 
     private func bootstrap() async {
@@ -622,6 +630,12 @@ public final class GatewayStore: Identifiable {
     }
 
     private func applySessionChange(_ payload: JSONValue) {
+        self.sessionManager.handleSessionsChanged(payload)
+        if let reason = payload["reason"]?.text, SessionManager.transcriptChangingReasons.contains(reason),
+           let key = payload["session"]?["key"]?.text ?? payload["sessionKey"]?.text ?? payload["key"]?.text
+        {
+            Task { await self.transcriptChanged(key: key, change: .changed(editorText: nil)) }
+        }
         if DebugLog.enabled {
             let row = payload["session"]
             let fields = ["pinned", "unread", "color", "category", "label", "archived", "reasoningLevel"]
@@ -650,6 +664,7 @@ public final class GatewayStore: Identifiable {
             let removedId = payload["sessionId"]?.text
             if removedId == nil || self.sessions[key]?.sessionId == removedId {
                 self.sessions.removeValue(forKey: key)
+                Task { await self.transcriptChanged(key: key, change: .deleted) }
                 self.discardDraft(key)
                 if self.selectedKey == key { self.selectedKey = self.defaultSessionKey }
             }
@@ -1238,6 +1253,39 @@ public final class GatewayStore: Identifiable {
     public func advertises(_ method: String) -> Bool {
         self.hello?.methods.contains(method) ?? false
     }
+
+    /// The Sessions page: `sessions.list` is advertised (or the Gateway doesn't list its methods).
+    public var supportsSessionManager: Bool {
+        guard let methods = self.hello?.methods, !methods.isEmpty else { return self.hello != nil }
+        return methods.contains(SessionManager.listMethod)
+    }
+
+    /// A session's history changed on the Gateway (rewind, branch switch, recovery) or it was deleted:
+    /// its cached transcript is dropped, and an open chat reloads from scratch. A rewind's cut message
+    /// goes back into an empty composer. Deduplicated per key while one is under way (the RPC reply
+    /// and its `sessions.changed` both land here).
+    func transcriptChanged(key: String, change: SessionTranscriptChange) async {
+        if case let .changed(text?) = change, !text.isEmpty {
+            if let chat = self.chats[key] {
+                if chat.draft.text.isEmpty { chat.draft.text = text }
+            } else if await DraftStore.load(gatewayId: self.id, sessionKey: key) == nil {
+                await DraftStore.save(ComposerDraft(text: text), gatewayId: self.id, sessionKey: key)
+            }
+        }
+        guard self.invalidatingTranscripts.insert(key).inserted else { return }
+        defer { self.invalidatingTranscripts.remove(key) }
+        if change == .deleted {
+            self.chats.removeValue(forKey: key)?.stopCaching()
+            self.sessions.removeValue(forKey: key)
+            if self.selectedKey == key { self.selectedKey = self.defaultSessionKey }
+            await TranscriptCache.remove(gatewayId: self.id, sessionKey: key)
+        } else {
+            await TranscriptCache.remove(gatewayId: self.id, sessionKey: key)
+            await self.chats[key]?.reloadAfterHistoryChange()
+        }
+    }
+
+    @ObservationIgnored private var invalidatingTranscripts: Set<String> = []
 
     /// The Skills page: `skills.status` is advertised.
     public var supportsSkills: Bool { self.advertises(Skills.statusMethod) }

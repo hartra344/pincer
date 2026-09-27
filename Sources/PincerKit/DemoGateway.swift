@@ -11,7 +11,7 @@ actor DemoGateway {
     /// The demo as an older Gateway that rejects `chat.send`'s `replyToId`, for checks.
     static let noReplyToURL = "demo://pincer?replyTo=off"
 
-    private typealias Row = [String: JSONValue]
+    typealias Row = [String: JSONValue]
 
     private struct Run {
         let sessionKey: String
@@ -39,6 +39,7 @@ actor DemoGateway {
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
     ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.skillMethods
+        + DemoGateway.sessionManagerMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -48,8 +49,10 @@ actor DemoGateway {
         ["id": "research", "name": "Scout", "identity": ["name": "Scout", "emoji": "🔭"]],
         ["id": "coder", "name": "Forge", "identity": ["name": "Forge", "emoji": "🛠️"]],
     ]
-    private var sessions: [String: Row] = [:]
-    private var transcripts: [String: [JSONValue]] = [:]
+    var sessions: [String: Row] = [:]
+    var transcripts: [String: [JSONValue]] = [:]
+    /// Inactive transcript branches by session key, then leaf entry id (DemoGateway+Sessions.swift).
+    var branchTips: [String: [String: [JSONValue]]] = [:]
     private var artifacts: [String: (mimeType: String, data: Data)] = [:]
     private var approvals: [String: JSONValue] = [:]
     private var approvalOrder: [String] = []
@@ -83,7 +86,7 @@ actor DemoGateway {
     private var progressCards: [String: JSONValue] = [:]
     private var idempotency: [String: String] = [:]
     private var runs: [String: Run] = [:]
-    private var sessionsSubscribed = false
+    var sessionsSubscribed = false
     private var messageSubscriptions: Set<String> = []
     private var eventSeq = 0
     private var sink: (@Sendable (GatewayEvent) -> Void)?
@@ -105,7 +108,8 @@ actor DemoGateway {
             "agent:main:main|demo-main-status": "👍",
             "agent:main:main|demo-main-gauge": "🎉",
         ]
-        let seeded = Self.seed()
+        var seeded = Self.seed()
+        self.branchTips = Self.seedSessionManager(sessions: &seeded.sessions, transcripts: &seeded.transcripts)
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
         self.approvalHistory = Self.seedApprovalHistory()
@@ -195,6 +199,7 @@ actor DemoGateway {
     func handle(_ method: String, _ params: JSONValue) async throws -> JSONValue {
         if let result = try self.handleAgents(method, params) { return result }
         if let result = try self.handleSkills(method, params) { return result }
+        if let result = try self.handleSessionManager(method, params) { return result }
         switch method {
         case "agents.list":
             return ["defaultId": "main", "mainKey": "main", "scope": "per-sender", "agents": .array(self.agents)]
@@ -726,7 +731,7 @@ actor DemoGateway {
 
     // MARK: Sessions
 
-    private func knownSession(_ key: JSONValue?) throws -> String {
+    func knownSession(_ key: JSONValue?) throws -> String {
         guard let key = key?.string, self.sessions[key] != nil else {
             throw GatewayError.rpc(code: "INVALID_REQUEST", message: "unknown session", details: nil)
         }
@@ -734,9 +739,14 @@ actor DemoGateway {
     }
 
     private func sessionList(_ params: JSONValue) -> JSONValue {
-        let includeArchived = params["archived"]?.bool == true || params["archived"]?.string == "all"
+        // Like the Gateway: `archived: true` lists only archived sessions, "all" both, false/omitted active ones.
+        let archived = params["archived"]
         let rows = self.sessions.values
-            .filter { includeArchived || $0["archived"]?.bool != true }
+            .filter { row in
+                let isArchived = row["archived"]?.bool == true
+                if archived?.string == "all" { return true }
+                return archived?.bool == true ? isArchived : !isArchived
+            }
             .sorted { lhs, rhs in
                 let (lp, rp) = (lhs["pinned"]?.bool == true, rhs["pinned"]?.bool == true)
                 if lp != rp { return lp }
@@ -1356,7 +1366,7 @@ actor DemoGateway {
         self.emit("health", self.health())
     }
 
-    private func emit(_ name: String, _ payload: JSONValue) {
+    func emit(_ name: String, _ payload: JSONValue) {
         self.eventSeq += 1
         self.sink?(GatewayEvent(name: name, payload: payload, seq: self.eventSeq))
     }
@@ -1400,7 +1410,7 @@ actor DemoGateway {
         self.sessionChanged(key, reason: reason)
     }
 
-    private func touch(_ row: inout Row) {
+    func touch(_ row: inout Row) {
         row["updatedAt"] = Self.now()
         row["lastActivityAt"] = Self.now()
     }
@@ -1415,7 +1425,7 @@ actor DemoGateway {
         }
     }
 
-    private func sessionChanged(_ key: String, reason: String) {
+    func sessionChanged(_ key: String, reason: String) {
         guard self.sessionsSubscribed, let row = self.sessions[key] else { return }
         self.emit("sessions.changed", ["sessionKey": .string(key), "reason": .string(reason), "session": .object(row)])
     }
