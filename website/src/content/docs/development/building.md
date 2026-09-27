@@ -49,19 +49,20 @@ The tests are hermetic:
 
 - They open no sockets and never touch the real Keychain, `UserDefaults.standard` or Application Support.
 - Each test uses its own temporary folder and scratch defaults suite, and cleans them up afterwards.
-- They don't need `PINCER_KEYCHAIN=memory`, and they can run alongside `PincerChecks` without either run affecting the other.
+- Secrets always use an in-memory store: `Keychain` detects the test runner, so no `PINCER_KEYCHAIN=memory` is needed, and a test fails if any real Keychain call happens.
+- They can run alongside `PincerChecks` without either run affecting the other.
 
 ## Self-checks
 
 `PincerChecks` is an executable harness that exercises the stores end to end. It complements the unit tests:
 
 ```sh
-PINCER_KEYCHAIN=memory swift run PincerChecks          # offline checks
-PINCER_KEYCHAIN=memory swift run PincerChecks --demo   # the built-in demo gateway
-PINCER_KEYCHAIN=memory swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
-PINCER_KEYCHAIN=memory swift run -c release PincerChecks --perf   # message search at scale
-PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock started with MOCK_NO_USAGE=1 PORT=18790
-PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token   # mock started with MOCK_NO_REPLY_TO=1 PORT=18791
+swift run PincerChecks          # offline checks
+swift run PincerChecks --demo   # the built-in demo gateway
+swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+swift run -c release PincerChecks --perf   # message search at scale
+swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock started with MOCK_NO_USAGE=1 PORT=18790
+swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token   # mock started with MOCK_NO_REPLY_TO=1 PORT=18791
 ```
 
 | Mode | What it checks |
@@ -73,7 +74,7 @@ PINCER_KEYCHAIN=memory swift run PincerChecks --live-no-reply-to ws://127.0.0.1:
 | `--live-no-usage <url> <token>` | The offline checks, then a run against a gateway without the usage methods (the mock with `MOCK_NO_USAGE=1`), checking that Usage reports them as unsupported. |
 | `--live-no-reply-to <url> <token>` | The offline checks, then a run against a gateway that rejects `chat.send`'s `replyToId` (the mock with `MOCK_NO_REPLY_TO=1`), checking that replies fall back to quoting the original. |
 
-Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaults suite, so concurrent runs don't share storage.
+Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaults suite, so concurrent runs don't share storage. It also keeps every secret in memory, so it never touches or prompts for your real Keychain (no `PINCER_KEYCHAIN=memory` needed), and it fails if any real Keychain call happens.
 
 ## Continuous integration
 
@@ -96,7 +97,7 @@ To reproduce CI locally, run the same commands. For the live step, start the moc
 
 | Variable | Effect |
 | --- | --- |
-| `PINCER_KEYCHAIN=memory` | Keep identities and secrets in memory, so checks and dev runs never touch your real Keychain. |
+| `PINCER_KEYCHAIN=memory` | Keep identities and secrets in memory, so dev runs never touch your real Keychain. `PincerChecks` and `swift test` always do this. |
 | `PINCER_CACHE_DIR` | `off` disables the transcript cache and message search. A path moves both. |
 | `PINCER_DRAFTS_DIR` | `off` disables saved composer drafts. A path moves them. |
 | `PINCER_REQUEST_LOG` | A file path to log every request and the gateway's reply. |
