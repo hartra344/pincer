@@ -5,6 +5,7 @@ import http from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import { startServer } from './server.mjs';
+import * as fileEdits from './file-edits.mjs';
 import { AGENT_MANAGEMENT_METHODS, MAX_WORKSPACE_FILE_BYTES, MOCK_STATE_DIR } from './agents.mjs';
 import { CLAWHUB_REGISTRY, MANAGED_SKILLS_DIR, SKILLS_METHODS, TOOLS_METHODS } from './skills.mjs';
 import { SEEDED_HISTORY_COUNTS } from './approvals.mjs';
@@ -138,6 +139,30 @@ async function connectClient(url, device, token, expectOk = true, scopes = BASE_
   }
 
   return { ws, hello, send, call, waitEvent, emitter };
+}
+
+// Applies a headers-only unified diff (as upstream's `details.patch`) to `text`.
+function applyUnified(text, patch) {
+  const source = text === '' ? [] : text.replace(/\n$/, '').split('\n');
+  const out = [];
+  let cursor = 0;
+  for (const hunk of patch.split(/^(?=@@ )/m).slice(1)) {
+    const [header, ...body] = hunk.replace(/\n$/, '').split('\n');
+    const oldStart = Number(/^@@ -(\d+)/.exec(header)[1]);
+    const start = oldStart === 0 ? 0 : oldStart - 1;
+    out.push(...source.slice(cursor, start));
+    cursor = start;
+    for (const line of body) {
+      if (line[0] === '+') out.push(line.slice(1));
+      else {
+        assert.equal(source[cursor], line.slice(1), `patch context at line ${cursor + 1}`);
+        if (line[0] === ' ') out.push(line.slice(1));
+        cursor++;
+      }
+    }
+  }
+  out.push(...source.slice(cursor));
+  return out.length ? `${out.join('\n')}\n` : '';
 }
 
 async function waitUntil(fn, timeoutMs, label) {
@@ -668,6 +693,53 @@ try {
   assert.ok(final.message.content.some((b) => b.type === 'image' && b.artifactId === 'art-chart-1'));
   assert.ok(deltaCount > 0, 'expected chat deltas');
   assert.equal(sawTool, true, 'expected tool result event');
+
+  // File-mutating tools: upstream-shaped `edit`/`write`/`apply_patch` calls with their `details` receipts.
+  const retryKey = 'agent:coder:dashboard:retry-fix';
+  const retryHistory = (await client.send('chat.history', { sessionKey: retryKey })).messages;
+  const retryCalls = retryHistory.flatMap((m) => m.content.filter((b) => b.type === 'toolCall'));
+  assert.deepEqual(retryCalls.map((c) => c.name), ['edit', 'write', 'apply_patch']);
+  const resultFor = (id) => retryHistory.find((m) => m.role === 'toolResult' && m.toolCallId === id);
+  const [editCall, writeCall, patchCall] = retryCalls;
+  assert.equal(editCall.arguments.path, fileEdits.RETRY_PATH);
+  assert.equal(editCall.arguments.edits.length, 2);
+  const editDetails = resultFor(editCall.id).details;
+  assert.equal(editDetails.changed, true);
+  assert.equal(applyUnified(fileEdits.RETRY_BEFORE, editDetails.patch), fileEdits.RETRY_AFTER, 'edit receipt patch reproduces the edit');
+  assert.equal((editDetails.patch.match(/^@@ /gm) ?? []).length, 2, 'two edits, two hunks');
+  assert.match(editDetails.diff, /^\+ ?\d+ import \{ isRetryable \}/m);
+  assert.equal(editDetails.firstChangedLine, 1);
+  const writeDetails = resultFor(writeCall.id).details;
+  assert.equal(writeDetails.created, true);
+  assert.equal(writeCall.arguments.content, fileEdits.RETRY_TEST);
+  assert.match(writeDetails.patch, /^@@ -0,0 \+1,17 @@$/m);
+  assert.equal(applyUnified('', writeDetails.patch), fileEdits.RETRY_TEST);
+  const patchInput = patchCall.arguments.input;
+  assert.ok(patchInput.startsWith('*** Begin Patch\n') && patchInput.endsWith('\n*** End Patch'));
+  for (const marker of ['*** Update File: src/net/client.ts', '*** Move to: src/net/http-errors.ts', '*** Add File: docs/retry.md', '*** Delete File: src/net/legacy-retry.ts']) {
+    assert.ok(patchInput.includes(marker), marker);
+  }
+  assert.equal((patchInput.match(/^@@/gm) ?? []).length, 4);
+  const patchResult = resultFor(patchCall.id);
+  assert.deepEqual(patchResult.details.summary, fileEdits.CLIENT_PATCH_SUMMARY);
+  assert.match(patchResult.content[0].text, /^Success\. Updated the following files:\nA docs\/retry\.md\nM src\/net\/client\.ts/);
+
+  await client.send('sessions.messages.subscribe', { key: retryKey });
+  const editStart = client.waitEvent('agent', (p) => p.sessionKey === retryKey && p.stream === 'tool' && p.data.phase === 'start' && p.data.name === 'edit');
+  const editDone = client.waitEvent('agent', (p) => p.sessionKey === retryKey && p.stream === 'tool' && p.data.phase === 'result' && p.data.name === 'edit');
+  const editRun = await client.send('chat.send', { sessionKey: retryKey, message: 'show me the config patch', idempotencyKey: `idem_${crypto.randomUUID()}` });
+  const editStarted = await editStart;
+  assert.equal(editStarted.data.args.path, 'config/retry.json');
+  assert.equal(typeof editStarted.data.args.oldText, 'string');
+  assert.equal(typeof editStarted.data.args.newText, 'string');
+  const done = await editDone;
+  assert.equal(done.data.toolCallId, editStarted.data.toolCallId);
+  assert.match(done.data.result.content[0].text, /^Successfully replaced 1 block\(s\) in config\/retry\.json\.$/);
+  assert.match(done.data.result.details.patch, /^@@ -1,4 \+1,4 @@$/m);
+  await client.waitEvent('chat', (p) => p.runId === editRun.runId && p.state === 'final', 10_000);
+  const afterEdit = (await client.send('chat.history', { sessionKey: retryKey })).messages;
+  const liveResult = afterEdit.find((m) => m.role === 'toolResult' && m.toolCallId === done.data.toolCallId);
+  assert.deepEqual(liveResult?.details, done.data.result.details, 'live edit persisted with its receipt');
 
   // Test hooks for failed sends: one refused, one that drops the connection.
   const refused = await client.call('chat.send', {

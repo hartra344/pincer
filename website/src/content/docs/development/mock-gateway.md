@@ -40,6 +40,7 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | --- | --- |
 | `tool`, `disk` | Streams a tool call. |
 | `image` | Streams a tool call and attaches an image. |
+| `patch`, `diff` | Streams an `edit` tool call shaped like upstream's (`file_path`, `old_string`, `new_string`), shown as a [file diff](../../guides/file-diffs/). |
 | `approve` | Raises an exec approval. |
 | `plan` | Walks a three-step progress card. |
 | `[mock:fail-send]` | Refuses the `chat.send` with `UNAVAILABLE`, for testing failed sends. |

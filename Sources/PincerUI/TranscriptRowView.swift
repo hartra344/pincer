@@ -1088,9 +1088,11 @@ final class TranscriptLabelButton: TranscriptTapView {
         self.redraw()
     }
 
-    var buttonSize: CGSize {
+    var buttonSize: CGSize { Self.size(title: self.title) }
+
+    static func size(title: String) -> CGSize {
         let font = TranscriptStyle.shared.caption
-        return CGSize(width: 14 + 4 + singleLine(self.title, font, TranscriptColors.tint).lineWidth,
+        return CGSize(width: 14 + 4 + singleLine(title, font, TranscriptColors.tint).lineWidth,
                       height: max(TranscriptStyle.lineHeight(font), 16))
     }
 
@@ -1434,12 +1436,37 @@ final class TranscriptToolView: TranscriptBaseView {
     private let runButton = TranscriptLabelButton()
     private var sections: [TranscriptToolSectionView] = []
     private var rowId: String?
+    private let copyButton = TranscriptLabelButton()
+    private let toggleButton = TranscriptLabelButton()
+    private var copiedToken = 0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         self.addSubview(self.header)
         self.addSubview(self.runButton)
         self.runButton.set(title: "Open run", symbol: "sparkles")
+        self.addSubview(self.copyButton)
+        self.addSubview(self.toggleButton)
+        self.copyButton.isSubdued = true
+        self.showCopy()
+        self.copyButton.onTap = { [weak self] in self?.copyDiff() }
+    }
+
+    private func showCopy() {
+        self.copyButton.set(title: "Copy", symbol: "doc.on.doc")
+        self.copyButton.accessibilityText = self.part?.edit?.kind == .write ? "Copy file contents" : "Copy diff"
+    }
+
+    private func copyDiff() {
+        guard let diff = self.part?.diff else { return }
+        Clipboard.copy(diff.copyText)
+        self.copyButton.set(title: "Copied", symbol: "checkmark")
+        self.copiedToken += 1
+        let token = self.copiedToken
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, self.copiedToken == token else { return }
+            self.showCopy()
+        }
     }
 
     override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
@@ -1450,8 +1477,32 @@ final class TranscriptToolView: TranscriptBaseView {
         let rowId = row.id
         self.header.configure(tool, trailing: tool.run == nil ? 10 : 6)
         self.header.onTap = { [weak actions] in actions?.setExpanded(tool.key, !tool.isExpanded, row: rowId) }
-        self.header.accessibilityText = [tool.tool.name, tool.tool.summary].compactMap(\.self).joined(separator: " ")
-            + (tool.isExpanded ? ", expanded" : ", collapsed")
+        if let edit = tool.edit {
+            self.header.accessibilityText = edit.accessibilitySummary(isRunning: tool.tool.isRunning) + (tool.tool.isRunning ? ", running" : "")
+                + (tool.tool.isError ? ", failed" : "") + (tool.isExpanded ? ", expanded" : ", collapsed")
+        } else {
+            self.header.accessibilityText = [tool.tool.name, tool.tool.summary].compactMap(\.self).joined(separator: " ")
+                + (tool.isExpanded ? ", expanded" : ", collapsed")
+        }
+        if !sameTool {
+            self.copiedToken += 1
+            self.showCopy()
+        }
+        if let diff = tool.diff {
+            self.copyButton.isHidden = false
+            if let title = diff.toggleTitle {
+                self.toggleButton.isHidden = false
+                self.toggleButton.set(title: title, symbol: diff.isExpanded ? "chevron.up" : "chevron.down")
+                self.toggleButton.onTap = { [weak actions] in actions?.setExpanded(diff.key, !diff.isExpanded, row: rowId) }
+            } else {
+                self.toggleButton.isHidden = true
+                self.toggleButton.onTap = nil
+            }
+        } else {
+            self.copyButton.isHidden = true
+            self.toggleButton.isHidden = true
+            self.toggleButton.onTap = nil
+        }
         if let run = tool.run {
             self.runButton.isHidden = false
             self.runButton.onTap = { [weak actions] in actions?.openRun(run.key) }
@@ -1492,6 +1543,13 @@ final class TranscriptToolView: TranscriptBaseView {
         let headerFrame = CGRect(x: 0, y: 0, width: headerWidth, height: part.headerHeight)
         if self.header.frame != headerFrame { self.header.frame = headerFrame }
         self.header.layoutContent()
+        if let diff = part.diff {
+            // The layout sized Copy for "Copied"; pin it to the card's trailing edge at its own width.
+            let size = self.copyButton.buttonSize
+            let copyFrame = CGRect(x: diff.copyFrame.maxX - size.width, y: diff.copyFrame.minY, width: size.width, height: size.height)
+            if self.copyButton.frame != copyFrame { self.copyButton.frame = copyFrame }
+            if self.toggleButton.frame != diff.toggleFrame { self.toggleButton.frame = diff.toggleFrame }
+        }
         for (index, section) in part.sections.enumerated() where index < self.sections.count {
             let view = self.sections[index]
             if view.frame != section.frame { view.frame = section.frame }
@@ -1537,6 +1595,9 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         self.part = part
         self.trailing = trailing
         self.spinner.setAnimating(part.tool.isRunning)
+        #if os(macOS)
+        self.toolTip = part.edit?.fullPaths
+        #endif
         self.redraw()
     }
 
@@ -1557,14 +1618,18 @@ final class TranscriptToolHeaderView: TranscriptTapView {
             if part.tool.isError {
                 TranscriptSymbols.draw("xmark.octagon.fill", in: iconRect, size: style.callout.pointSize, color: TranscriptColors.red)
             } else {
-                TranscriptSymbols.draw(ToolSymbols.symbol(for: part.tool.name), in: iconRect, size: style.callout.pointSize,
-                                       color: TranscriptColors.secondary)
+                let symbol = part.edit.map(TranscriptDiffText.symbol(for:)) ?? ToolSymbols.symbol(for: part.tool.name)
+                TranscriptSymbols.draw(symbol, in: iconRect, size: style.callout.pointSize, color: TranscriptColors.secondary)
             }
         }
         let chevronX = bounds.width - self.trailing - 10
         TranscriptSymbols.draw(part.isExpanded ? "chevron.down" : "chevron.right",
                                in: CGRect(x: chevronX, y: 0, width: 10, height: bounds.height),
                                size: style.caption2Medium.pointSize, weight: .bold, color: TranscriptColors.tertiary)
+        if let edit = part.edit {
+            self.drawEdit(edit, part: part, chevronX: chevronX)
+            return
+        }
         let nameFont = style.calloutMonoMedium
         let name = singleLine(part.tool.name, nameFont, TranscriptColors.label)
         let nameX: CGFloat = 34
@@ -1579,6 +1644,55 @@ final class TranscriptToolHeaderView: TranscriptTapView {
                 let oneLine = summary.replacingOccurrences(of: "\n", with: " ")
                 singleLine(oneLine, font, TranscriptColors.secondary, truncation: .byTruncatingMiddle)
                     .drawLine(at: CGPoint(x: summaryX, y: nameY + nameFont.ascender - font.ascender), width: width, font: font)
+            }
+        }
+    }
+}
+
+extension TranscriptToolHeaderView {
+    /// File name (directory dimmer), then the +/− counts and a status badge before the chevron.
+    fileprivate func drawEdit(_ edit: ToolFileEdit, part: TranscriptPart.Tool, chevronX: CGFloat) {
+        let style = TranscriptStyle.shared
+        let bounds = self.bounds
+        let nameFont = style.calloutMonoMedium
+        let nameX: CGFloat = 34
+        let nameY = (bounds.height - TranscriptStyle.lineHeight(nameFont)) / 2
+        var right = chevronX - 8
+
+        let badgeFont = style.caption2Medium
+        let badgeText = part.tool.isError ? "Failed" : edit.statusLabel(isRunning: part.tool.isRunning)
+        let badgeColor = part.tool.isError ? TranscriptColors.red : TranscriptColors.secondary
+        let badge = singleLine(badgeText, badgeFont, badgeColor)
+        let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
+        let badgeWidth = badge.lineWidth + 10
+        if right - badgeWidth > nameX + 40 {
+            let rect = CGRect(x: right - badgeWidth, y: (bounds.height - badgeHeight) / 2, width: badgeWidth, height: badgeHeight)
+            (part.tool.isError ? TranscriptColors.red.withAlphaComponent(0.15) : TranscriptColors.strongFill).setFill()
+            PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
+            badge.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: badge.lineWidth, font: badgeFont)
+            right = rect.minX - 8
+        }
+
+        let countFont = style.captionMono
+        let countY = nameY + nameFont.ascender - countFont.ascender
+        let counts = [(edit.deletionsLabel, TranscriptDiffText.deletion), (edit.additionsLabel, TranscriptDiffText.addition)]
+            .compactMap { label, color in label.map { ($0, color) } }
+        for (text, color) in counts {
+            let count = singleLine(text, countFont, color)
+            guard right - count.lineWidth > nameX + 40 else { break }
+            count.drawLine(at: CGPoint(x: right - count.lineWidth, y: countY), width: count.lineWidth, font: countFont)
+            right -= count.lineWidth + 6
+        }
+        if !counts.isEmpty { right -= 2 }
+
+        let name = singleLine(edit.title, nameFont, TranscriptColors.label, truncation: .byTruncatingMiddle)
+        let nameWidth = min(name.lineWidth, max(right - nameX, 0))
+        name.drawLine(at: CGPoint(x: nameX, y: nameY), width: nameWidth, font: nameFont)
+        if let directory = edit.directory {
+            let x = nameX + nameWidth + 8
+            if right - x > 24 {
+                singleLine(directory, countFont, TranscriptColors.tertiary, truncation: .byTruncatingHead)
+                    .drawLine(at: CGPoint(x: x, y: countY), width: right - x, font: countFont)
             }
         }
     }

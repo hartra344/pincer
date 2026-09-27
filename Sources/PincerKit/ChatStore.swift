@@ -704,7 +704,10 @@ public final class ChatStore: Identifiable {
                 if phase == "result" {
                     run.tools[index].isRunning = false
                     run.tools[index].isError = data["isError"]?.bool ?? false
-                    if let result = data["result"] { run.tools[index].result = ContentBlock.prettyJSON(result) }
+                    if let result = data["result"] {
+                        run.tools[index].result = ContentBlock.prettyJSON(result)
+                        run.tools[index].details = ToolActivity.fileEditDetails(result["details"] ?? data["details"])
+                    }
                 }
             } else if phase == "start" {
                 run.tools.append(ToolActivity(
