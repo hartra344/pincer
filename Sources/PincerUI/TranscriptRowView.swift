@@ -668,16 +668,22 @@ final class TranscriptRowView: TranscriptBaseView {
     func messageMenuItems(at point: CGPoint, in view: NSView) -> [NSMenuItem] {
         let rowPoint = self.convert(point, from: view)
         guard let actions, let id = self.layout?.message(at: rowPoint.y) else { return [] }
-        let quick = NSMenuItem()
-        quick.view = QuickReactionsMenuView { [weak actions] emoji in actions?.toggleReaction(emoji, on: id) }
-        return [
-            TranscriptMenuItem("Reply", symbol: "arrowshape.turn.up.left") { [weak actions] in actions?.reply(to: id) },
-            TranscriptMenuItem("Add Reaction…", symbol: "face.smiling") { [weak self, weak actions] in
-                guard let self else { return }
-                actions?.pickReaction(for: id, from: self, rect: CGRect(x: rowPoint.x, y: rowPoint.y, width: 1, height: 1))
-            },
-            quick,
-        ]
+        var items: [NSMenuItem] = [TranscriptMenuItem("Reply", symbol: "arrowshape.turn.up.left") { [weak actions] in
+            actions?.reply(to: id)
+        }]
+        if actions.reactionsEnabled {
+            let quick = NSMenuItem()
+            quick.view = QuickReactionsMenuView { [weak actions] emoji in actions?.toggleReaction(emoji, on: id) }
+            items += [
+                TranscriptMenuItem("Add Reaction…", symbol: "face.smiling") { [weak self, weak actions] in
+                    guard let self else { return }
+                    actions?.pickReaction(for: id, from: self,
+                                          rect: CGRect(x: rowPoint.x, y: rowPoint.y, width: 1, height: 1))
+                },
+                quick,
+            ]
+        }
+        return items
     }
     #else
     /// Reply, Add Reaction… and one-tap reactions for the message at `point` (row coordinates).
@@ -685,24 +691,31 @@ final class TranscriptRowView: TranscriptBaseView {
         guard let actions, let id = self.layout?.message(at: point.y) else { return [] }
         let anchorView: UIView = anchor ?? self
         let anchorRect = anchor.map { $0.bounds } ?? CGRect(origin: point, size: CGSize(width: 1, height: 1))
-        let quick = Reactions.quickBar(recent: Reactions.recent).map { emoji in
-            UIAction(title: emoji) { [weak actions] _ in actions?.toggleReaction(emoji, on: id) }
-        }
-        return [
+        var elements: [UIMenuElement] = [
             UIMenu(options: .displayInline, children: [
                 UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak actions] _ in
                     actions?.reply(to: id)
                 },
-                UIAction(title: "Add Reaction…", image: UIImage(systemName: "face.smiling")) { [weak actions, weak anchorView] _ in
-                    // After the menu has finished dismissing, so the picker can present.
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                        guard let anchorView else { return }
-                        actions?.pickReaction(for: id, from: anchorView, rect: anchorRect)
-                    }
-                },
             ]),
-            UIMenu(options: .displayInline, preferredElementSize: .small, children: quick),
         ]
+        if actions.reactionsEnabled {
+            let quick = Reactions.quickBar(recent: Reactions.recent).map { emoji in
+                UIAction(title: emoji) { [weak actions] _ in actions?.toggleReaction(emoji, on: id) }
+            }
+            elements += [
+                UIMenu(options: .displayInline, children: [
+                    UIAction(title: "Add Reaction…", image: UIImage(systemName: "face.smiling")) { [weak actions, weak anchorView] _ in
+                        // After the menu has finished dismissing, so the picker can present.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            guard let anchorView else { return }
+                            actions?.pickReaction(for: id, from: anchorView, rect: anchorRect)
+                        }
+                    },
+                ]),
+                UIMenu(options: .displayInline, preferredElementSize: .small, children: quick),
+            ]
+        }
+        return elements
     }
     #endif
 }
@@ -1058,7 +1071,7 @@ final class TranscriptFooterView: TranscriptBaseView {
         self.actions = actions
         self.copyButton.isHidden = footer.copyText.isEmpty
         self.replyButton.isHidden = footer.messageId == nil
-        self.reactButton.isHidden = footer.messageId == nil
+        self.reactButton.isHidden = footer.messageId == nil || !actions.reactionsEnabled
         if old?.key != footer.key {
             self.copiedToken += 1
             self.showCopy()

@@ -297,6 +297,15 @@ struct SettingsView: View {
     }
 }
 
+enum ReactionFeature {
+    static let enabledKey = "pincer.reactions.enabled"
+    static let defaultEnabled = false
+
+    static var isEnabled: Bool {
+        UserDefaults.standard.object(forKey: self.enabledKey) as? Bool ?? self.defaultEnabled
+    }
+}
+
 private struct SettingsForm: View {
     enum Section: CaseIterable {
         case you, launch, quickCapture, menuBar, appearance, colors, conversation, sidebar, notifications, device
@@ -317,6 +326,7 @@ private struct SettingsForm: View {
     @Environment(AppModel.self) private var app
     @AppStorage("pincer.ownerName") private var ownerName = ""
     @AppStorage(ThinkingDisplay.storageKey) private var thinkingDisplay = ThinkingDisplay.defaultValue
+    @AppStorage(ReactionFeature.enabledKey) private var reactionsEnabled = ReactionFeature.defaultEnabled
     @AppStorage("pincer.loadWebImages") private var loadWebImages = true
     @AppStorage("pincer.showSubagentRuns") private var showSubagentRuns = false
     @AppStorage("pincer.showMessagePreviews") private var showMessagePreviews = true
@@ -413,6 +423,10 @@ private struct SettingsForm: View {
                 Toggle(isOn: self.$loadWebImages) {
                     Text("Load images the agent links from the web")
                     Text("Like OpenClaw's web UI. The image's website can see your IP address.")
+                }
+                Toggle(isOn: self.$reactionsEnabled) {
+                    Text("Enable experimental reactions")
+                    Text("Off by default. Reactions may not interoperate across channels or Gateways.")
                 }
             }
         case .sidebar:

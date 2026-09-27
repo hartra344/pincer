@@ -74,8 +74,9 @@ struct TranscriptContext {
 
     /// Whether a message has reaction chips (the agent's or yours), for height estimates.
     @MainActor func hasReactions(_ messageId: String) -> Bool {
-        self.chat?.agentReactions[messageId]?.isEmpty == false
+        ReactionFeature.isEnabled && (self.chat?.agentReactions[messageId]?.isEmpty == false
             || !self.gateway.myReactions(sessionKey: self.sessionKey, messageId: messageId).isEmpty
+        )
     }
 }
 
@@ -93,6 +94,7 @@ protocol TranscriptRowActions: AnyObject {
     /// Starts a reply to the message in the composer.
     func reply(to messageId: String)
     /// Adds your reaction, or removes it when it's already there.
+    var reactionsEnabled: Bool { get }
     func toggleReaction(_ emoji: String, on messageId: String)
     /// Opens the emoji picker for a message, anchored to `rect` in `view`.
     func pickReaction(for messageId: String, from view: PView, rect: CGRect)
@@ -458,13 +460,20 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     func toggleReaction(_ emoji: String, on messageId: String) {
+        guard self.settings.reactionsEnabled else { return }
         self.context.chat?.toggleReaction(emoji, on: messageId)
     }
 
     func pickReaction(for messageId: String, from view: PView, rect: CGRect) {
+        guard self.settings.reactionsEnabled else { return }
         guard let chat = self.context.chat else { return }
-        ReactionPicker.present(from: view, rect: rect) { emoji in chat.toggleReaction(emoji, on: messageId) }
+        ReactionPicker.present(from: view, rect: rect) { [weak self] emoji in
+            guard self?.settings.reactionsEnabled == true else { return }
+            chat.toggleReaction(emoji, on: messageId)
+        }
     }
+
+    var reactionsEnabled: Bool { self.settings.reactionsEnabled }
 
     func showOriginal(_ messageId: String) {
         guard let chat = self.context.chat, chat.locatingReplyId == nil else { return }
