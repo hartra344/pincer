@@ -108,8 +108,18 @@ public final class GatewayStore: Identifiable {
         }
     }
 
+    /// Messages written while offline or that failed to send, across this Gateway's chats.
+    public internal(set) var outbox = Outbox() {
+        didSet { if self.outbox != oldValue { self.outboxChanged(from: oldValue) } }
+    }
+    /// Attachment bytes of outbox entries, kept for the current launch only.
+    @ObservationIgnored var outboxAttachments: [String: [OutgoingAttachment]] = [:]
+    @ObservationIgnored var outboxLoaded = false
+    @ObservationIgnored var outboxFlushing = false
+    @ObservationIgnored var outboxSaveTask: Task<Void, Never>?
+
     @ObservationIgnored let connection: GatewayConnection
-    @ObservationIgnored private var chats: [String: ChatStore] = [:]
+    @ObservationIgnored private(set) var chats: [String: ChatStore] = [:]
     @ObservationIgnored private var runSessions: [String: String] = [:]
     @ObservationIgnored private var bootstrapped = false
     @ObservationIgnored private var didPickInitialChat = false
@@ -267,6 +277,7 @@ public final class GatewayStore: Identifiable {
 
     public func start() {
         guard self.pumpTask == nil else { return }
+        Task { await self.loadOutbox() }
         // A single ordered stream keeps chat deltas and state changes in wire order.
         let (stream, continuation) = AsyncStream<Inbound>.makeStream()
         self.pumpTask = Task { [weak self] in
@@ -315,7 +326,10 @@ public final class GatewayStore: Identifiable {
     private func update(state: ConnectionState, hello: GatewayHello?) {
         self.state = state
         if case let .failed(message) = state { self.lastError = message }
-        if !state.isConnected { self.pairingInbox.reset() }
+        if !state.isConnected {
+            self.pairingInbox.reset()
+            self.outbox.connectionLost()
+        }
         guard state == .connected, let hello else {
             self.health.connectionChanged(state, hello: nil)
             return
@@ -381,6 +395,7 @@ public final class GatewayStore: Identifiable {
         }
         self.startPrefetch()
         self.reconcileMessageIndex()
+        await self.flushOutbox()
     }
 
     /// Indexes cached transcripts the message index hasn't seen yet (caches from before it
@@ -651,6 +666,7 @@ public final class GatewayStore: Identifiable {
             if removedId == nil || self.sessions[key]?.sessionId == removedId {
                 self.sessions.removeValue(forKey: key)
                 self.discardDraft(key)
+                self.outbox.removeSession(key)
                 if self.selectedKey == key { self.selectedKey = self.defaultSessionKey }
             }
             return
