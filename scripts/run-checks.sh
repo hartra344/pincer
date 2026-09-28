@@ -68,14 +68,15 @@ lane() {
 
 url() { echo "ws://127.0.0.1:$(($PORT_BASE + $1))"; }
 fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
-# Only the plain run does the slow Shortcuts & Siri offline checks; the others skip them.
+# Only the plain run does the slow Shortcuts & Siri offline checks and enforces the perf smoke
+# budgets; the mode runs skip both (they share the CPU, so their timings are just reported).
 lane unit-tests swift test --skip-build --parallel ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
 lane self-checks "$CHECKS"
-lane demo "${fast[@]}" "$CHECKS" --skip-intent-checks --demo
-lane live-core "${fast[@]}" "$CHECKS" --skip-intent-checks --live-core "$(url 0)" dev-token
-lane live-extras "${fast[@]}" "$CHECKS" --skip-intent-checks --live-extras "$(url 1)" dev-token
-lane live-no-usage "$CHECKS" --skip-intent-checks --live-no-usage "$(url 2)" dev-token
-lane live-no-reply-to "$CHECKS" --skip-intent-checks --live-no-reply-to "$(url 3)" dev-token
+lane demo "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --demo
+lane live-core "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-core "$(url 0)" dev-token
+lane live-extras "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-extras "$(url 1)" dev-token
+lane live-no-usage "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-no-usage "$(url 2)" dev-token
+lane live-no-reply-to "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-no-reply-to "$(url 3)" dev-token
 
 status=0
 summary=()
