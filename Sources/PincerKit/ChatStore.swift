@@ -230,13 +230,14 @@ public final class ChatStore: Identifiable {
         self.cacheChecked = true
         let (snapshot, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: self.gatewayId, sessionKey: self.sessionKey)
         self.cacheOutcome = outcome
-        guard let snapshot, !snapshot.items.isEmpty, self.items.isEmpty else { return }
+        // Unsent messages shown before the cache arrived stay, after it.
+        guard let snapshot, !snapshot.items.isEmpty, self.items.allSatisfy(\.isPending) else { return }
         // Item count never exceeds the raw message count, so this offset can only overlap (deduped
         // by id), never skip; the first older page's `nextOffset` makes it exact again.
         self.olderOffset = snapshot.items.count
         self.hasMoreHistory = !snapshot.complete
         self.hasPagedOlder = true
-        self.items = snapshot.items
+        self.items = snapshot.items + self.items
     }
 
     /// Brings back the draft saved on disk, unless one was started here in the meantime.
@@ -406,6 +407,7 @@ public final class ChatStore: Identifiable {
         // Keep optimistic sends that the transcript hasn't committed yet.
         let committedKeys = Set(parsed.compactMap(\.idempotencyKey))
         let pending = self.items.filter { $0.isPending && !committedKeys.contains($0.idempotencyKey ?? "") }
+        self.gateway?.reconcileOutbox(committedKeys: committedKeys)
         // The latest page replaces the tail; older pages the user scrolled back through stay put.
         // Overlap is found through a transcript id (index-based fallback ids aren't stable across
         // pages); no overlap means the loaded history is stale (e.g. the session was reset).
@@ -509,25 +511,47 @@ public final class ChatStore: Identifiable {
     /// Whether the Gateway accepted a `chat.send`. A run id is optional: accepted sends may not have one.
     public enum SendOutcome: Equatable, Sendable {
         case sent(runId: String?)
+        /// In the outbox: offline, or waiting behind an earlier message of this chat. It goes out
+        /// on its own once the Gateway is back.
+        case queued
+        /// Not sent, and it stays in the transcript marked failed, with Retry and Delete.
+        case failedInline(String)
+        /// Not sent, and nothing was kept: the caller still has the message.
         case failed(String)
     }
 
-    /// Sends and returns the run id, or nil when there's none or the send failed (see `errorMessage`).
+    /// Sends and returns the run id, or nil when there's none or the send didn't go out.
     @discardableResult
-    public func send(_ text: String, attachments: [OutgoingAttachment] = [], replyTo: ReplyTarget? = nil) async -> String? {
-        if case let .sent(runId) = await self.sendMessage(text, attachments: attachments, replyTo: replyTo) { return runId }
+    public func send(_ text: String, attachments: [OutgoingAttachment] = [], replyTo: ReplyTarget? = nil,
+                     requiresConnection: Bool = false) async -> String?
+    {
+        let outcome = await self.sendMessage(text, attachments: attachments, replyTo: replyTo, requiresConnection: requiresConnection)
+        if case let .sent(runId) = outcome { return runId }
         return nil
     }
 
-    /// Sends, telling an accepted send apart from a failed one. With `replyTo`, the message replies
-    /// to that one (`replyToId`), or quotes it on Gateways that don't take `replyToId`; an accepted
-    /// reply clears `replyTarget`.
+    /// Sends through the outbox, telling an accepted send apart from a queued or failed one. With
+    /// `replyTo`, the message replies to that one (`replyToId`), or quotes it on Gateways that
+    /// don't take `replyToId`; an accepted or queued reply clears `replyTarget`.
+    ///
+    /// Text messages written offline are queued and sent in order on reconnect; a failed send
+    /// stays in the transcript with Retry. Sends with attachments need a connection. With
+    /// `requiresConnection` (Quick Capture, setup's test message, commands) nothing is queued or
+    /// kept: offline or failed sends come back as `.failed` with `errorMessage` set.
     @discardableResult
-    public func sendMessage(_ text: String, attachments: [OutgoingAttachment] = [], replyTo: ReplyTarget? = nil) async -> SendOutcome {
+    public func sendMessage(_ text: String, attachments: [OutgoingAttachment] = [], replyTo: ReplyTarget? = nil,
+                            requiresConnection: Bool = false) async -> SendOutcome
+    {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty else { return .failed("Couldn’t send: the message is empty.") }
         guard let gateway else { return .failed("Couldn’t send: the Gateway is gone.") }
-        var idempotencyKey = UUID().uuidString.lowercased()
+        let connected = gateway.state.isConnected
+        if !connected, requiresConnection || !attachments.isEmpty {
+            let message = "Couldn’t send: \(GatewayError.notConnected.localizedDescription)"
+            self.errorMessage = message
+            return .failed(message)
+        }
+        let idempotencyKey = UUID().uuidString.lowercased()
         var blocks: [ContentBlock] = trimmed.isEmpty ? [] : [.text(trimmed)]
         for attachment in attachments {
             if attachment.isImage {
@@ -538,37 +562,88 @@ public final class ChatStore: Identifiable {
                 blocks.append(.file(FileRef(name: attachment.fileName, mimeType: attachment.mimeType)))
             }
         }
-        var pending = ChatItem(role: .user, blocks: blocks, idempotencyKey: idempotencyKey, isPending: true)
+        let createdAt = Date()
+        var pending = ChatItem(role: .user, blocks: blocks, timestamp: createdAt, idempotencyKey: idempotencyKey, isPending: true)
+        pending.outboxState = .queued
+        var entry = OutboxEntry(id: idempotencyKey, sessionKey: self.sessionKey, agentId: self.agentId, text: trimmed,
+                                createdAt: createdAt, hasAttachments: !attachments.isEmpty)
         if let replyTo {
+            let preview = ReplyPreview(text: Replies.previewLine(replyTo.preview), senderLabel: replyTo.senderLabel)
             pending.replyToId = replyTo.messageId
-            pending.replyToPreview = ReplyPreview(text: Replies.previewLine(replyTo.preview), senderLabel: replyTo.senderLabel)
+            pending.replyToPreview = preview
+            entry.replyToId = replyTo.messageId
+            entry.replyPreview = preview
         }
+        if !attachments.isEmpty { gateway.outboxAttachments[idempotencyKey] = attachments }
         self.items.append(pending)
+        gateway.outbox.enqueue(entry)
+        guard connected, gateway.outbox.isHead(id: idempotencyKey) else {
+            if requiresConnection || !attachments.isEmpty {
+                // Behind an earlier message of this chat: this send can't wait in the queue.
+                self.discardUnsent(idempotencyKey)
+                let message = "Couldn’t send: an earlier message in this chat hasn’t gone out yet."
+                self.errorMessage = message
+                return .failed(message)
+            }
+            if let replyTo, self.replyTarget == replyTo { self.replyTarget = nil }
+            if connected { Task { await gateway.flushOutbox() } }
+            return .queued
+        }
+        let outcome = await self.deliver(entry, keepFailure: !requiresConnection)
+        if case .failed = outcome { return outcome }
+        if let replyTo, self.replyTarget == replyTo { self.replyTarget = nil }
+        return outcome
+    }
+
+    /// Sends one outbox entry now, reusing its idempotency key. On success the entry leaves the
+    /// outbox and the message waits for the transcript; on failure it's marked by kind (see
+    /// `Outbox.markFailed`), or with `keepFailure` off, dropped along with its row.
+    @discardableResult
+    func deliver(_ entry: OutboxEntry, keepFailure: Bool = true) async -> SendOutcome {
+        guard let gateway else { return .failed("Couldn’t send: the Gateway is gone.") }
+        var key = entry.id
+        let attachments = gateway.outboxAttachments[key] ?? []
+        if entry.hasAttachments, attachments.isEmpty {
+            let message = "Couldn’t send: the attachments are no longer available. Delete this message and attach them again."
+            gateway.outbox.markFailed(id: key, kind: .rejected(message), message: message)
+            return .failedInline(message)
+        }
+        gateway.outbox.markSending(id: key)
         self.isSending = true
         defer { self.isSending = false }
 
-        let quoted = replyTo.map { Replies.quotedFallback(sender: $0.senderLabel, preview: $0.preview, text: trimmed) }
+        let quoted = entry.replyToId.map { _ in
+            Replies.quotedFallback(sender: entry.replyPreview?.senderLabel ?? "", preview: entry.replyPreview?.text ?? "",
+                                   text: entry.text)
+        }
         func params(replying: Bool) -> [String: JSONValue] {
             ChatSendRequest.params(
-                sessionKey: self.sessionKey, agentId: self.agentId, message: replying ? trimmed : (quoted ?? trimmed),
-                idempotencyKey: idempotencyKey, attachments: attachments, replyToId: replying ? replyTo?.messageId : nil)
+                sessionKey: self.sessionKey, agentId: entry.agentId ?? self.agentId, message: replying ? entry.text : (quoted ?? entry.text),
+                idempotencyKey: key, attachments: attachments, replyToId: replying ? entry.replyToId : nil)
         }
-        let replying = replyTo != nil && !gateway.replyToUnsupported
+        let replying = entry.replyToId != nil && !gateway.replyToUnsupported
         do {
             let result: JSONValue
             do {
                 result = try await gateway.connection.request("chat.send", .object(params(replying: replying)), timeout: 60)
             } catch where replying && Replies.isReplyToRejection(error) {
                 // An older Gateway: quote the original in the text instead, for this connection.
+                // Other params need another key; retries of this message reuse the new one.
                 gateway.replyToUnsupported = true
                 let retryKey = UUID().uuidString.lowercased()
-                if let index = self.items.firstIndex(where: { $0.isPending && $0.idempotencyKey == idempotencyKey }) {
+                if let index = self.items.firstIndex(where: { $0.isPending && $0.idempotencyKey == key }) {
                     self.items[index].idempotencyKey = retryKey
                 }
-                idempotencyKey = retryKey
+                gateway.outboxAttachments[retryKey] = gateway.outboxAttachments.removeValue(forKey: key)
+                gateway.outbox.rekey(id: key, to: retryKey)
+                key = retryKey
                 result = try await gateway.connection.request("chat.send", .object(params(replying: false)), timeout: 60)
             }
-            if let replyTo, self.replyTarget == replyTo { self.replyTarget = nil }
+            // Accepted: the row stays pending until the transcript commits it.
+            if let index = self.items.firstIndex(where: { $0.isPending && $0.idempotencyKey == key }) {
+                self.items[index].outboxState = nil
+            }
+            gateway.outbox.markSent(id: key)
             let runId = result["runId"]?.text
             if let runId {
                 gateway.track(runId: runId, sessionKey: self.sessionKey)
@@ -577,10 +652,92 @@ public final class ChatStore: Identifiable {
             self.errorMessage = nil
             return .sent(runId: runId)
         } catch {
-            self.items.removeAll { $0.idempotencyKey == idempotencyKey && $0.isPending }
             let message = "Couldn’t send: \(error.localizedDescription)"
-            self.errorMessage = message
-            return .failed(message)
+            guard keepFailure else {
+                self.discardUnsent(key)
+                self.errorMessage = message
+                return .failed(message)
+            }
+            let connected = gateway.state.isConnected && !SendFailure.isDisconnect(error)
+            gateway.outbox.markFailed(id: key, kind: SendFailure.classify(error), isConnected: connected,
+                                      message: SendFailure.message(for: error))
+            return gateway.outbox.entry(id: key)?.state == .queued ? .queued : .failedInline(message)
+        }
+    }
+
+    /// Queues a failed message again; it goes out with its original idempotency key as soon as
+    /// the Gateway is connected (reconnecting now if it isn't). One with attachments is sent right
+    /// away if it's first in its chat; offline, it stays failed while the Gateway reconnects.
+    public func retry(outboxId: String) {
+        guard let gateway, let entry = gateway.outbox.entry(id: outboxId), entry.isFailed else { return }
+        if entry.hasAttachments {
+            guard gateway.state.isConnected else { return gateway.reconnectIfNeeded() }
+            guard gateway.outbox.isHead(id: outboxId) else { return }
+            gateway.outbox.retry(id: outboxId)
+            Task {
+                await self.deliver(entry)
+                await gateway.flushOutbox()
+            }
+            return
+        }
+        gateway.outbox.retry(id: outboxId)
+        if gateway.state.isConnected {
+            Task { await gateway.flushOutbox() }
+        } else {
+            gateway.reconnectIfNeeded()
+        }
+    }
+
+    /// Deletes a queued or failed message; one being sent right now can't be.
+    public func deleteQueued(outboxId: String) {
+        guard let gateway, let entry = gateway.outbox.entry(id: outboxId), entry.state != .sending else { return }
+        gateway.outbox.delete(id: outboxId)
+    }
+
+    /// This chat's unsent messages, oldest first.
+    public var unsentEntries: [OutboxEntry] {
+        self.gateway?.outbox.entries(for: self.sessionKey) ?? []
+    }
+
+    private func discardUnsent(_ key: String) {
+        self.gateway?.outbox.delete(id: key)
+        self.items.removeAll { $0.isPending && $0.idempotencyKey == key }
+    }
+
+    /// Brings the transcript's unsent rows in line with the outbox: states change in place,
+    /// deleted entries' rows go, and entries without a row (restored after a relaunch, or seeded)
+    /// get one at the end.
+    func syncOutbox(_ entries: [OutboxEntry]) {
+        guard !self.headless else { return }
+        let byId = Dictionary(entries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var items = self.items
+        items.removeAll { item in
+            guard item.outboxState != nil, let key = item.idempotencyKey else { return false }
+            return byId[key] == nil
+        }
+        var seen: Set<String> = []
+        var committed: Set<String> = []
+        for index in items.indices {
+            guard let key = items[index].idempotencyKey, let entry = byId[key] else { continue }
+            seen.insert(key)
+            guard items[index].isPending else {
+                committed.insert(key)
+                continue
+            }
+            if items[index].outboxState != entry.state { items[index].outboxState = entry.state }
+        }
+        for entry in entries where !seen.contains(entry.id) {
+            var item = ChatItem(id: "outbox:\(entry.id)", role: .user, blocks: entry.text.isEmpty ? [] : [.text(entry.text)],
+                                timestamp: entry.createdAt, idempotencyKey: entry.id, isPending: true)
+            item.outboxState = entry.state
+            item.replyToId = entry.replyToId
+            item.replyToPreview = entry.replyPreview
+            items.append(item)
+        }
+        if items != self.items { self.items = items }
+        if !committed.isEmpty {
+            // After this outbox change has settled; the transcript already has these.
+            Task { [weak gateway] in gateway?.reconcileOutbox(committedKeys: committed) }
         }
     }
 
@@ -593,7 +750,7 @@ public final class ChatStore: Identifiable {
         let instructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
         self.compaction = .running(before: before)
         guard instructions.isEmpty, gateway.canCompactDirectly else {
-            let runId = await self.send(instructions.isEmpty ? "/compact" : "/compact \(instructions)")
+            let runId = await self.send(instructions.isEmpty ? "/compact" : "/compact \(instructions)", requiresConnection: true)
             if let runId {
                 self.compactionRunId = runId
             } else {
@@ -767,13 +924,14 @@ public final class ChatStore: Identifiable {
         {
             self.items[index] = item
         } else if item.role == .user,
-                  let index = self.items.firstIndex(where: { $0.isPending && $0.plainText == item.plainText })
+                  let index = self.items.firstIndex(where: { $0.isAwaitingDelivery && $0.plainText == item.plainText })
         {
             self.items[index] = item
         } else {
             self.items.append(item)
         }
         self.recoverCappedMessages()
+        if let key = item.idempotencyKey { self.gateway?.reconcileOutbox(committedKeys: [key]) }
         if item.thinkingText != nil { self.sawThinking = true }
         if var run = self.live, item.role == .assistant || item.role == .toolResult {
             // Committed output supersedes the streamed preview of the same step.

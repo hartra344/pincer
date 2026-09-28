@@ -104,6 +104,10 @@ protocol TranscriptRowActions: AnyObject {
     func showOriginal(_ messageId: String)
     /// Animates the latest reply's avatar.
     var liveAvatar: TranscriptLiveAvatar? { get }
+    /// Sends an unsent (failed) message again, with its original idempotency key.
+    func retrySend(_ id: String)
+    /// Deletes a queued or failed message.
+    func deleteSend(_ id: String)
 }
 
 /// Lays out rows for the AppKit and UIKit lists and tells them when a row's layout is stale:
@@ -486,6 +490,14 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     var reactionsEnabled: Bool { self.settings.reactionsEnabled }
 
+    func retrySend(_ id: String) {
+        self.context.chat?.retry(outboxId: id)
+    }
+
+    func deleteSend(_ id: String) {
+        self.context.chat?.deleteQueued(outboxId: id)
+    }
+
     func showOriginal(_ messageId: String) { self.showOriginal(messageId, missingNotice: nil) }
 
     /// Scrolls to and flashes a message, paging in older history if needed. `missingNotice`
@@ -540,7 +552,7 @@ enum TranscriptLayout {
             let images = item.blocks.filter { if case .image = $0 { true } else { false } }.count
             let files = item.blocks.filter { if case .file = $0 { true } else { false } }.count
             return scaffold + lines(item.plainText) * 18 + (images > 0 ? 240 : 0) + CGFloat(files) * 36
-                + (item.plainText.isEmpty ? 0 : footer) + (item.replyToId != nil ? 50 : 0)
+                + (item.plainText.isEmpty && item.outboxState == nil ? 0 : footer) + (item.replyToId != nil ? 50 : 0)
                 + (item.isReplyable && item.transcriptId.map(hasReactions) == true ? chips : 0)
         case let .entry(.assistant(turn)):
             var height = scaffold
