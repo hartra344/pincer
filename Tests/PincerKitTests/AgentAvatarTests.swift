@@ -410,3 +410,44 @@ struct ChatAvatarSignalsTests {
         #expect(self.state(chat, at: chat.avatarSignals.outcomeAt ?? Date()) == .thinking)
     }
 }
+
+@Suite("Synced avatar choices")
+struct AvatarPreferencesTests {
+    func scratch() -> UserDefaults {
+        let name = "AvatarPreferencesTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return defaults
+    }
+
+    @Test func localCollectsThisDevicesChoices() {
+        let defaults = self.scratch()
+        defaults.set("cat", forKey: AvatarPreferences.creatureKey(for: "main"))
+        defaults.set("", forKey: AvatarPreferences.creatureKey(for: "blank"))
+        defaults.set("plush", forKey: AvatarPreferences.renderStyleKey)
+        defaults.set(true, forKey: AvatarPreferences.animatedKey)
+        #expect(AvatarPreferences.local(in: defaults) == ["main": "cat", AvatarPreferences.renderStyleEntry: "plush"])
+    }
+
+    @Test func applyWritesOnlyWhatChanged() {
+        let defaults = self.scratch()
+        defaults.set("owl", forKey: AvatarPreferences.creatureKey(for: "untouched"))
+        defaults.set("rock", forKey: AvatarPreferences.creatureKey(for: "dropped"))
+        let previous = ["untouched": "blob", "dropped": "rock"]
+        let map = ["untouched": "blob", "new": "frog", AvatarPreferences.renderStyleEntry: "plush"]
+        AvatarPreferences.apply(map, previous: previous, to: defaults)
+        // Unchanged entries keep whatever this device (or another Gateway) set since.
+        #expect(defaults.string(forKey: AvatarPreferences.creatureKey(for: "untouched")) == "owl")
+        #expect(defaults.string(forKey: AvatarPreferences.creatureKey(for: "new")) == "frog")
+        #expect(defaults.object(forKey: AvatarPreferences.creatureKey(for: "dropped")) == nil)
+        #expect(defaults.string(forKey: AvatarPreferences.renderStyleKey) == "plush")
+    }
+
+    @Test func syncedNamesRoundTrip() {
+        for creature in AvatarCreature.allCases {
+            #expect(AvatarCreature(rawValue: creature.rawValue) == creature)
+        }
+        #expect(AvatarRenderStyle(rawValue: AvatarRenderStyle.plush.rawValue) == .plush)
+        #expect(AvatarCreature(rawValue: AvatarPreferences.renderStyleEntry) == nil)
+    }
+}

@@ -129,14 +129,14 @@ enum AvatarArt {
         context.translateBy(x: self.origin.x, y: self.origin.y)
         context.saveGState()
         // Squash and stretch about the feet; tilt (plush only) about the middle of the body.
-        // A plain blob has nothing on top to twitch, so it wiggles instead.
-        let plainBlob = style.creature == .blob && style.accessory != .hat && style.accessory != .antenna
-        let sway = pose.sway + (plainBlob ? pose.twitch : 0)
+        // A creature with nothing to twitch (a plain blob, a ghost) wiggles instead.
+        let spec = Spec.for(style.creature)
+        let wiggles = !spec.twitches && style.accessory != .hat && style.accessory != .antenna
+        let sway = pose.sway + (wiggles ? pose.twitch : 0)
         context.translateBy(x: 8 + CGFloat(sway), y: 15 + CGFloat(pose.bob))
         if style.renderStyle == .plush, pose.tilt != 0 { context.rotate(by: pose.tilt * .pi / 180) }
         if pose.squash != 1 { context.scaleBy(x: pose.squash, y: 1 / pose.squash) }
         context.translateBy(x: -8, y: -15)
-        let spec = Spec.for(style.creature)
         switch style.renderStyle {
         case .pixel:
             context.setShouldAntialias(false)
@@ -165,6 +165,7 @@ enum AvatarArt {
             case .peach: (0xF4B3A0, 0xFFE8DE)
             case .lilac: (0xC7B2E6, 0xF3ECFB)
             case .sky: (0xA6CDEB, 0xE7F3FC)
+            case .lemon: (0xF5D77A, 0xFFF6D8)
             }
             self.body = Self.rgb(body)
             self.bodyLight = Self.rgb(Self.mix(body, 0xFFFFFF, 0.35))
@@ -225,12 +226,15 @@ enum AvatarArt {
 
     enum Role: UInt8, Sendable {
         case body, shade, face, belly, beak, leaf, stem, hat, trim, bow, knot, petal, pollen, antenna, bobble
+        /// Inner ears, noses, snouts and gills, in the blush pink; `nose` is a dark button nose.
+        case pink, nose
 
         var fillsOutline: Bool { self == .body || self == .shade || self == .face || self == .belly }
     }
 
     /// One creature's pixel layout. Rows are 16 characters: `b` body, `s` shade, `f` face plate,
-    /// `l` belly, `y` beak or talons, `.` empty. Outlines are added around whatever is filled.
+    /// `l` belly, `y` beak or talons, `g` leaf, `t` stem, `h` cap, `r` spots, `n` pink, `e` dark
+    /// nose, `.` empty. Outlines are added around whatever is filled.
     struct Spec: Sendable {
         let creature: AvatarCreature
         let body: [P: Role]
@@ -241,8 +245,11 @@ enum AvatarArt {
         let leftArm: Int, rightArm: Int, armRow: Int
         /// Top row of the head, for hats.
         let headTop: Int
-        /// Tufts, leaves or stones on top; they twitch while a tool runs.
+        /// Tufts, leaves or stones on top (or ears, gills, tentacle tips); they twitch while a tool runs.
         let top: @Sendable (Int) -> [P: Role]
+
+        /// Whether anything moves on a twitch; if not, the creature wiggles instead.
+        var twitches: Bool { self.top(0) != self.top(1) }
 
         static func `for`(_ creature: AvatarCreature) -> Spec {
             switch creature {
@@ -250,6 +257,21 @@ enum AvatarArt {
             case .owl: self.owl
             case .rock: self.rock
             case .sprout: self.sprout
+            case .cat: self.cat
+            case .bunny: self.bunny
+            case .bear: self.bear
+            case .frog: self.frog
+            case .fox: self.fox
+            case .mouse: self.mouse
+            case .penguin: self.penguin
+            case .chick: self.chick
+            case .pig: self.pig
+            case .ghost: self.ghost
+            case .mushroom: self.mushroom
+            case .cloud: self.cloud
+            case .axolotl: self.axolotl
+            case .hedgehog: self.hedgehog
+            case .octopus: self.octopus
             }
         }
 
@@ -265,6 +287,10 @@ enum AvatarArt {
                     case "y": .beak
                     case "g": .leaf
                     case "t": .stem
+                    case "h": .hat
+                    case "r": .trim
+                    case "n": .pink
+                    case "e": .nose
                     default: nil
                     }
                     if let role { cells[P(x, y)] = role }
@@ -502,12 +528,14 @@ private enum PixelArt {
         case .pollen: c.pollen
         case .antenna: c.outline
         case .bobble: c.hat
+        case .pink: c.blush
+        case .nose: c.eye
         }
     }
 
     static func outlineColor(_ role: Role, _ c: AvatarArt.Colors) -> CGColor {
         switch role {
-        case .body, .shade, .face, .belly, .antenna: c.outline
+        case .body, .shade, .face, .belly, .antenna, .pink, .nose: c.outline
         case .beak: c.beakDark
         case .leaf, .stem: c.leafDark
         case .hat, .trim, .bobble: c.hatDark
@@ -524,7 +552,7 @@ private enum PixelArt {
 
 // MARK: - Plush
 
-private enum PlushArt {
+enum PlushArt {
     typealias P = AvatarArt.P
 
     static func draw(_ spec: AvatarArt.Spec, style: AvatarStyle, pose: AvatarPose, colors: AvatarArt.Colors,
@@ -580,9 +608,14 @@ private enum PlushArt {
         }
         arm(pose.leftArm, x: spec.leftArm, side: -1)
         arm(pose.rightArm, x: spec.rightArm, side: 1)
-        let footColor: (AvatarArt.Colors) -> CGColor = spec.creature == .owl ? { $0.beak } : { $0.shade }
-        let footOutline: (AvatarArt.Colors) -> CGColor = spec.creature == .owl ? { $0.beakDark } : { $0.outline }
-        let feet: [CGFloat] = spec.creature == .sprout ? [6, 10] : [5, 11]
+        let talons = [.owl, .penguin, .chick].contains(spec.creature)
+        let footColor: (AvatarArt.Colors) -> CGColor = talons ? { $0.beak } : { $0.shade }
+        let footOutline: (AvatarArt.Colors) -> CGColor = talons ? { $0.beakDark } : { $0.outline }
+        let feet: [CGFloat] = switch spec.creature {
+        case .sprout: [6, 10]
+        case .ghost, .cloud, .octopus: []
+        default: [5, 11]
+        }
         for x in feet {
             parts.append(Part(path: CGPath(ellipseIn: CGRect(x: x - 1.3, y: 13.4, width: 2.6, height: 1.9), transform: nil),
                               fill: footColor, light: { _ in nil }, outline: footOutline))
@@ -621,6 +654,8 @@ private enum PlushArt {
             }
             body(CGPath(roundedRect: CGRect(x: 4.6, y: 10, width: 6.8, height: 4.2), cornerWidth: 1.8, cornerHeight: 1.8, transform: nil))
             body(CGPath(roundedRect: CGRect(x: 2, y: 4, width: 12, height: 7.2), cornerWidth: 2.8, cornerHeight: 2.8, transform: nil))
+        default:
+            parts += self.critterParts(spec.creature, twitch: twitch)
         }
         return parts
     }
@@ -652,6 +687,8 @@ private enum PlushArt {
         case .sprout:
             self.fillSoft(CGPath(roundedRect: CGRect(x: 3.1, y: 5.6, width: 9.8, height: 4.8), cornerWidth: 1.9, cornerHeight: 1.9, transform: nil),
                           colors.face, light: nil, in: context)
+        default:
+            self.critterFace(spec.creature, twitch: CGFloat(pose.twitch), colors: colors, in: context)
         }
         // Blush.
         context.setFillColor(colors.blush.copy(alpha: 0.85) ?? colors.blush)

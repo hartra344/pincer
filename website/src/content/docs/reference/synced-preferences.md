@@ -29,6 +29,7 @@ These are Pincer extras that OpenClaw's session data can't hold:
 | `pincer.groups` | Groups, on gateways without the group catalog |
 | `pincer.reactions` | Your [reactions](../../guides/transcript/#reactions), keyed by `<session key>\|<message id>`, with that message's emoji in the order you added them, separated by spaces |
 | `pincer.healthDismissals` | Gateway Health issues you dismissed or always ignore |
+| `pincer.avatars` | [Avatar](../../guides/agent-avatars/#settings) characters picked for each agent, keyed by agent id, and the **Style** (Pixel or Plush) under `@style` |
 
 :::note
 If the gateway has no durable identity for your connection, these preferences stay on the current device instead of syncing.
@@ -39,6 +40,7 @@ Removing a gateway from Pincer clears this device's copy of `pincer.healthDismis
 ## Kept on each device
 
 - Appearance (light/dark, theme and color overrides)
+- Whether avatars are animated (**Animated avatars**)
 - Thinking Steps (None, Live Only, All)
 - Your display name
 - Whether to load images the agent links from the web

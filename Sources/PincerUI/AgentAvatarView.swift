@@ -235,13 +235,14 @@ struct ChatHeaderAvatar: View {
     }
 }
 
-/// Where the avatar preferences live. Local to this device for now.
+/// Where the avatar preferences live: this device's defaults, which Gateways keep in sync through
+/// `users.prefs` (see `AvatarPreferences`). Animated on or off stays per device.
 enum AvatarSettings {
-    static let animatedKey = "pincer.animatedAvatars"
-    static let renderStyleKey = "pincer.avatarRenderStyle"
+    static let animatedKey = AvatarPreferences.animatedKey
+    static let renderStyleKey = AvatarPreferences.renderStyleKey
 
     /// Per-agent creature override; empty means seeded from the agent.
-    static func creatureKey(for agentId: String) -> String { "pincer.avatarCreature.\(agentId)" }
+    static func creatureKey(for agentId: String) -> String { AvatarPreferences.creatureKey(for: agentId) }
 
     static var isEnabled: Bool { UserDefaults.standard.object(forKey: self.animatedKey) as? Bool ?? true }
 

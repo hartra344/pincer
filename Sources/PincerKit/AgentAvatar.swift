@@ -176,6 +176,7 @@ public enum AvatarStateMachine {
 /// Which companion creature the avatar is.
 public enum AvatarCreature: String, Sendable, Hashable, CaseIterable, Codable {
     case blob, owl, rock, sprout
+    case cat, bunny, bear, frog, fox, mouse, penguin, chick, pig, ghost, mushroom, cloud, axolotl, hedgehog, octopus
 }
 
 /// Something the creature wears.
@@ -183,21 +184,26 @@ public enum AvatarAccessory: String, Sendable, Hashable, CaseIterable, Codable {
     /// `leaf` is a little flower clip; `hat` a beanie; `antenna` a nub with a bobble.
     case none, hat, glasses, leaf, bow, antenna
 
-    /// Accessories that suit a creature: glasses only on the owl and blob, nothing that fights a
-    /// sprout's stem or an owl's tufts.
+    /// Accessories that suit a creature: nothing that fights its ears, tufts, stem, spikes or cap.
     public static func allowed(for creature: AvatarCreature) -> [AvatarAccessory] {
         switch creature {
-        case .blob: [.none, .hat, .glasses, .leaf, .bow, .antenna]
+        case .blob, .ghost, .cloud, .octopus: [.none, .hat, .glasses, .leaf, .bow, .antenna]
         case .owl: [.none, .glasses, .leaf, .bow]
         case .rock: [.none, .hat, .leaf, .bow, .antenna]
         case .sprout: [.none, .bow]
+        case .cat, .bunny, .fox, .chick: [.none, .glasses, .leaf, .bow]
+        case .bear, .penguin, .axolotl: [.none, .hat, .glasses, .leaf, .bow]
+        case .mouse, .pig: [.none, .hat, .glasses, .leaf]
+        case .frog: [.none, .hat, .glasses]
+        case .hedgehog: [.none, .glasses, .leaf]
+        case .mushroom: [.none, .glasses]
         }
     }
 }
 
 /// Soft, warm colour set for the creature's body.
 public enum AvatarPalette: String, Sendable, Hashable, CaseIterable, Codable {
-    case cream, apricot, moss, stone, peach, lilac, sky
+    case cream, apricot, moss, stone, peach, lilac, sky, lemon
 }
 
 /// How the creature is drawn.
@@ -262,5 +268,46 @@ public struct AvatarStyle: Hashable, Sendable, Codable {
             hash = hash &* 0x0000_0100_0000_01B3
         }
         return hash
+    }
+}
+
+// MARK: Preferences
+
+/// Where avatar choices live: this device's `UserDefaults`, which the views read, mirrored to each
+/// Gateway's `users.prefs` (`pincer.avatars`) so every device signed in as you shows the same pets.
+public enum AvatarPreferences {
+    /// The `users.prefs` key: agent ids to creature names, plus `renderStyleEntry`.
+    public static let prefKey = "pincer.avatars"
+    /// The entry holding Pixel or Plush. Agent ids can't contain `@`.
+    public static let renderStyleEntry = "@style"
+    public static let animatedKey = "pincer.animatedAvatars"
+    public static let renderStyleKey = "pincer.avatarRenderStyle"
+    static let creaturePrefix = "pincer.avatarCreature."
+
+    /// Per-agent creature override on this device; missing means seeded from the agent.
+    public static func creatureKey(for agentId: String) -> String { self.creaturePrefix + agentId }
+
+    /// The choices already made on this device, as a synced map, for a Gateway's first sync.
+    static func local(in defaults: UserDefaults) -> [String: String] {
+        var map: [String: String] = [:]
+        for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix(self.creaturePrefix) {
+            if let name = value as? String, !name.isEmpty { map[String(key.dropFirst(self.creaturePrefix.count))] = name }
+        }
+        if let style = defaults.string(forKey: self.renderStyleKey), !style.isEmpty { map[self.renderStyleEntry] = style }
+        return map
+    }
+
+    /// Writes a Gateway's changes onto this device's settings: entries it set or changed are
+    /// written and entries it dropped are cleared. Unchanged entries are left alone, so another
+    /// Gateway's newer choice isn't undone.
+    static func apply(_ map: [String: String], previous: [String: String], to defaults: UserDefaults) {
+        for entry in Set(map.keys).union(previous.keys) where map[entry] != previous[entry] {
+            let key = entry == self.renderStyleEntry ? self.renderStyleKey : self.creatureKey(for: entry)
+            if let value = map[entry] {
+                if defaults.string(forKey: key) != value { defaults.set(value, forKey: key) }
+            } else if defaults.object(forKey: key) != nil {
+                defaults.removeObject(forKey: key)
+            }
+        }
     }
 }
