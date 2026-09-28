@@ -273,6 +273,8 @@ struct ChatView: View {
 /// of its buttons flash, the sidebar's included.
 struct ChatChrome: ViewModifier {
     @Environment(GatewayStore.self) private var gateway
+    /// Per window, and kept across chat switches.
+    @State private var showRuns = false
     /// The "Tools & Policy…" sheet. Held here, not on the toolbar menu, so a menu re-render or the
     /// session row briefly going away (refresh, reconnect) doesn't dismiss it.
     @State private var toolsInspector: ChatToolsInspection?
@@ -295,11 +297,12 @@ struct ChatChrome: ViewModifier {
                 ToolbarItem(placement: .topBarLeading) { ChatHeaderAvatar() }
                 #endif
                 ToolbarItem(placement: .primaryAction) { ChatModelItem() }
-                ToolbarItem(placement: .primaryAction) { ChatSessionMenu(toolsInspector: self.$toolsInspector) }
+                ToolbarItem(placement: .primaryAction) { ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector) }
             }
             .sheet(item: self.$toolsInspector) { inspection in
                 ChatToolsInspectorSheet(model: inspection.model, scopeTitle: inspection.scopeTitle, gateway: self.gateway)
             }
+            .modifier(RunsPanelChrome(isPresented: self.$showRuns))
     }
 
     private var subtitle: String {
@@ -326,6 +329,7 @@ private struct ChatModelItem: View {
 }
 
 private struct ChatSessionMenu: View {
+    @Binding var showRuns: Bool
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @FocusedValue(\.transcriptFind) private var find
@@ -341,6 +345,7 @@ private struct ChatSessionMenu: View {
                 }
                 ThinkingDisplayPicker()
                 ReasoningMenu(row: row)
+                ShowRunsButton(isPresented: self.$showRuns)
                 Divider()
                 Button("Reload", systemImage: "arrow.clockwise") {
                     Task { await self.gateway.chat(for: key).load(force: true) }
