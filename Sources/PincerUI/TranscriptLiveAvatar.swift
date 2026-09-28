@@ -112,7 +112,8 @@ final class TranscriptLiveAvatar {
         }
         self.observing = true
         let (rowId, signals) = withObservationTracking {
-            (chat.entries.last { if case .assistant = $0 { true } else { false } }?.id, chat.avatarSignals)
+            // Not a message another agent sent here: that one isn't this chat's agent working.
+            (chat.entries.last { if case let .assistant(turn) = $0 { turn.sender == nil } else { false } }?.id, chat.avatarSignals)
         } onChange: { [weak self, weak chat] in
             Task { @MainActor in
                 guard let self, let chat, chat === self.chat else { return }

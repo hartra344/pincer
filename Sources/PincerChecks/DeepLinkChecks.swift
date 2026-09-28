@@ -83,7 +83,7 @@ func runDemoDeepLinks() async {
     app.updateVisible()
     let approvalsBefore = demo.approvals.map(\.id)
     let activityBefore = demo.sessions.mapValues(\.activityMs)
-    // The demo's seeded subagent is already running.
+    // The demo seeds runs already in flight (a running subagent, and the Sessions page's run duration); only new runs count.
     let runningBefore = Set(demo.sessions.values.filter(\.hasActiveRun).map(\.key))
 
     // A link that also carries would-be actions: only the navigation part may happen.

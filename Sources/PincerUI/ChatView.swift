@@ -121,7 +121,7 @@ struct ChatView: View {
         case .none:
             return
         case .success:
-            let reply = self.chat.entries.last { if case .assistant = $0 { true } else { false } }
+            let reply = self.chat.entries.last { if case let .assistant(turn) = $0 { turn.sender == nil } else { false } }
             guard case let .assistant(turn) = reply else { return }
             AccessibilityAnnouncer.announce(AccessibilityText.replyFinishedAnnouncement(author: self.agent.name, text: turn.body))
         case .error:
@@ -375,6 +375,11 @@ private struct ChatSessionMenu: View {
                 CopyChatLinkButton(sessionKey: row.key)
                 Button(L("Session Usage…"), systemImage: "chart.bar") {
                     self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
+                }
+                if self.gateway.supportsSessionManager {
+                    Button("Manage Session…", systemImage: "rectangle.stack") {
+                        self.openGatewaySettings(self.gateway, at: .sessions, routes: [.sessionDetail(row.key)])
+                    }
                 }
                 if self.gateway.supportsToolsEffective {
                     Button(L("Tools & Policy…"), systemImage: "wrench.and.screwdriver") {

@@ -9,7 +9,8 @@ import overview from '../../../assets/screenshots/transcript.png';
 
 Pincer has a built-in demo, so you can look around before you set up a gateway. It runs a simulated Gateway on your device. **Nothing leaves your device.** It includes:
 
-- three agents: **Claw** 🦞, **Scout** 🔭 and **Forge** 🛠️;
+- four agents: **Claw** 🦞, **Scout** 🔭, **Forge** 🛠️ and **Kiko** 🌕;
+- a [message from another agent](../../guides/transcript/#messages-from-other-agents): in Claw's *Main*, Kiko, a finance agent, introduces herself to Claw;
 - chats sorted into groups, with three of them pinned;
 - a long transcript (*Japan trip*) to scroll, page through and search;
 - streamed replies with thinking and tool cards, plus an inline chart;
@@ -17,6 +18,7 @@ Pincer has a built-in demo, so you can look around before you set up a gateway. 
 - `ask_user` question cards and a task progress card;
 - a context meter on each chat, and compaction;
 - an editable command policy, sample pairing requests, and devices to approve, rename or revoke, and nodes;
+- sample sessions to archive, delete, branch, rewind and recover;
 - 90 days of sample usage and cost data;
 - a live gateway log that keeps growing.
 
@@ -63,6 +65,7 @@ On iOS, Pincer is suspended in the background, so `approve later` can't reach yo
 - **Drafts:** start typing in one chat, switch to another, and come back. Each chat keeps its own draft.
 - **Context ring:** the ring by the composer shows how full a chat's context is. *Main* is orange; *Japan trip* is red, so open the ring and choose **Compact Now**.
 - **Usage & Cost:** open it from the gateway menu or command palette to explore sample usage, model costs and rate limits. A chat's **Session Usage…** opens its usage history.
+- **[Sessions](../../guides/sessions/):** open **Gateway Settings → Sessions** (or ⌘K → **Manage Sessions…**). Switch the filter to **Archived** or **All**, watch *Refactor auth module*'s run time count up until it finishes, select a few sessions to archive or delete, switch *Garden planner* to another branch or rewind it, and recover *Photo import*, which a simulated restart interrupted.
 - **Command Policy:** open **Gateway Settings → Command Policy** (or ⌘K → **Command Policy…**) to inspect and change the demo's allowed commands and tools.
 - The **layout** menu at the top of the sidebar, to switch between *By server*, *By agent*, *By group* and *Recent* (see [Organizing chats](../../guides/organizing-chats/)).
 - Typing `/` in the composer to see [slash commands](../../guides/composer/#slash-commands).
@@ -75,7 +78,7 @@ On iOS, Pincer is suspended in the background, so `approve later` can't reach yo
 - **Replies:** in *Main*, "Can you sketch that as a little gauge?" is a reply that quotes the disk status. Click the quote to jump to it, or click **Reply** under any message (or press <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>R</kbd>) to reply yourself.
 - **Reactions:** in *Main*, Claw reacted ✅ to your disk usage question, and you've reacted 👍 and 🎉 to its replies. Click **React** under a message, or click a chip to add or remove yours. In *home-lab*, Claw reacted 👀 to the sensor message, and your reactions there are also sent to the (simulated) Discord.
 - **Working on it:** send a message and watch for a faint 👀 on it while the agent's reply streams in.
-- **[Menu bar](../../guides/menu-bar/)** (macOS): turn it on in **Settings → General → Menu Bar**. The demo's pending approval, `git push origin fix/login-timeout`, is listed under **Needs You**, and *home-lab* and *Paper digest* under **Unread**. Say **approve** in a chat to add another, and send any message to see the chat under **Running** while the reply streams. The demo's status reads **Degraded** until you restart it, because of Telegram.
+- **[Menu bar](../../guides/menu-bar/)** (macOS): turn it on in **Settings → General → Menu Bar**. The demo's pending approval, `git push origin fix/login-timeout`, is listed under **Needs You**, and *home-lab* and *Paper digest* under **Unread**. Say **approve** in a chat to add another, and send any message to see the chat under **Running** while the reply streams. For about the first 90 seconds, *Refactor auth module* is listed under **Running** too, until its sample run finishes. The demo's status reads **Degraded** until you restart it, because of Telegram.
 
 See [Keyboard shortcuts](../../reference/keyboard-shortcuts/) for the rest.
 
@@ -84,7 +87,7 @@ See [Keyboard shortcuts](../../reference/keyboard-shortcuts/) for the rest.
 - **It doesn't remember.** Everything lives in memory and resets each time Pincer launches. If you answer a notification left over from a previous launch, you'll see "That approval expired. Nothing was run."
 - **No push notifications.** There's no push relay, and the demo never registers for push. Notifications come from Pincer itself while it's running.
 - **The Share extension has its own demo.** It runs in a separate process with its own demo instance, so it lists the demo chats and sends successfully, but the shared message won't appear in the app's demo.
-- **Limited administration.** The demo simulates command policy, pairing requests, devices and nodes, and gateway logs, not general Gateway Settings, automations or plugins. For broader administration workflows, use the [mock gateway](../../development/mock-gateway/).
+- **Limited administration.** The demo simulates command policy, pairing requests, devices and nodes, sessions and gateway logs, not general Gateway Settings, automations or plugins. For broader administration workflows, use the [mock gateway](../../development/mock-gateway/).
 
 ### Search the demo's messages
 
@@ -117,7 +120,7 @@ Actions always use the app's own demo, and start it if it isn't running yet, eve
 
 The demo comes with 90 days of made-up usage, busiest in the last month, so the [Usage](../../guides/usage-and-cost/) page has something to show. Open it with **Usage & Cost…** in the gateway's menu or the command palette.
 
-- **Dashboard:** daily spend that varies from day to day and drops on weekends, across three agents (Claw, Scout and Forge) and five models from Anthropic, OpenAI, Google and a local Ollama model. Each chat's usage is billed to the model shown in its toolbar. `gpt-5.6-sol` has some unpriced requests every few days, so its cost is marked partial (*). The Ollama model has no pricing at all, so its session's cost shows as **—**.
+- **Dashboard:** daily spend that varies from day to day and drops on weekends, across four agents (Claw, Scout, Forge and Kiko) and five models from Anthropic, OpenAI, Google and a local Ollama model. Each chat's usage is billed to the model shown in its toolbar. `gpt-5.6-sol` has some unpriced requests every few days, so its cost is marked partial (*). The Ollama model has no pricing at all, so its session's cost shows as **—**.
 - **Rate limits:** Claude's 5-hour window is at 92% (red) and resets within the hour, next to weekly windows. OpenAI has a daily request window, a credit balance and a monthly budget that matches the demo's OpenAI spend. Gemini shows a sign-in error, and Ollama says local models aren't metered.
 - **Session drill-down:** choose **Session Usage…** from a demo chat's ⋯ menu, or double-click (macOS) or tap (iOS) a session on the dashboard, for its totals, a usage-over-time chart and a log of user, assistant, tool call and tool result entries that follows that chat's conversation.
 

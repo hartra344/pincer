@@ -58,6 +58,10 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 
 `chat.send` takes `replyToId`, and the sent message keeps `replyToId` and a `replyToPreview` (the original's text and who wrote it), like the gateway. The **home-lab** Discord chat has a message with its Discord message id, which the agent reacted 👀 to with its `message` tool. `message.action` reacts to Discord messages (`action: "react"`) and refuses other channels and actions.
 
+## Messages from other agents
+
+Claw's main chat (`agent:main:main`) has a *Morning briefing* automation run and Kiko introducing herself to Claw with `sessions_send`, as `chat.history` shows them: assistant messages with `senderSession`, `senderLabel` and their `provenance`, without the model-facing prompt prefix or a model. Kiko's own main chat (`agent:kiko:main`) has the matching `sessions_send` tool calls. See [Messages from other agents](../../guides/transcript/#messages-from-other-agents).
+
 ## Config and plugins
 
 The mock serves a small config and plugin catalog for Gateway Settings. It supports `config.get`, `config.schema`, `config.patch`, `config.set` and `config.apply`, with redacted secrets, validation issues and restart hints, plus the `plugins.*` methods. Writes need the `operator.admin` scope, so set **Access** to **Full Management**.
@@ -72,6 +76,10 @@ The file is called `/tmp/openclaw/openclaw-YYYY-MM-DD.log` (nothing is written t
 The mock serves 30 days of deterministic usage for its seeded chats, for the [Usage](../../guides/usage-and-cost/) page. It supports `usage.status`, `usage.cost`, `sessions.usage`, `sessions.usage.timeseries` and `sessions.usage.logs`, with the gateway's validation: `startDate` and `endDate` must come together, `agentScope: "all"` can't be combined with a `key`, and a missing or unknown `key` fails with `INVALID_REQUEST`.
 
 The data covers the cases the page handles: one model with some unpriced requests (partial cost), one session with no pricing at all (unknown cost), a rate limit window above 90% that resets within the hour, a provider with an error, and, for ranges starting more than 31 days ago, a session that's still being counted.
+
+## Sessions
+
+For the [Session manager](../../guides/sessions/), the mock seeds archived sessions, a run in progress, a failed run, a session interrupted by a restart and a session with three branches. It supports `sessions.preview`, `sessions.describe`, `sessions.branches.list`, `sessions.branches.switch`, `sessions.rewind`, `sessions.recover`, `sessions.delete` and `sessions.patchMany` with the gateway's scopes: switching branches and rewinding need `operator.admin`, and deleting needs it unless the session is archived and the request has `archivedOnly: true`. Every change broadcasts `sessions.changed`. `MOCK_NO_SESSION_MANAGER=1` hides all of these methods; `MOCK_NO_SESSIONS_RECOVER=1` and `MOCK_NO_PATCH_MANY=1` hide just `sessions.recover` or `sessions.patchMany`, like a gateway older than 2026.8.
 
 ## Channel pairing
 

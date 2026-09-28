@@ -44,6 +44,7 @@ export default defineConfig({
 					label: 'Using Pincer',
 					items: [
 						{ slug: 'guides/organizing-chats' },
+						{ slug: 'guides/sessions' },
 						{ slug: 'guides/command-palette-and-navigation' },
 						{ slug: 'guides/transcript' },
 						{ slug: 'guides/subagents-and-runs' },

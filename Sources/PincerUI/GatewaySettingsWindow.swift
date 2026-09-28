@@ -110,6 +110,7 @@ private struct GatewaySettingsRoot: View {
                         case let .skill(key): SkillDetailPage(skillKey: key)
                         case .clawHub: ClawHubSearchPage()
                         case let .agentTools(id): AgentToolsPage(agentId: id)
+                        case let .sessionDetail(key): SessionDetailPage(sessionKey: key)
                         case let .sessionUsage(key, agentId): SessionUsagePage(sessionKey: key, agentId: agentId)
                         }
                     }
@@ -243,6 +244,7 @@ private struct GatewaySettingsRoot: View {
         case .logs: GatewayLogsPage()
         case .execPolicy: ExecPolicyPage()
         case .skills: SkillsPage()
+        case .sessions: SessionsPage()
         case .usage: UsagePage()
         case .pairing: PairingRequestsPage()
         case .channelStatus: ChannelStatusPage()
@@ -372,6 +374,9 @@ private struct SettingsSidebar: View {
                     if self.gateway.supportsSkills {
                         self.row("Skills", symbol: "wand.and.stars", .skills)
                     }
+                    if self.gateway.supportsSessionManager {
+                        self.row("Sessions", symbol: "rectangle.stack", .sessions)
+                    }
                     self.row("Usage", symbol: "chart.bar.xaxis", .usage)
                     self.row("Pairing Requests", symbol: "person.badge.key", .pairing,
                              badge: self.gateway.state.isConnected ? self.gateway.pairingInbox.pendingCount(at: self.now) : 0)
@@ -453,6 +458,7 @@ private struct SearchResults: View {
         let results = self.results
         let pages = SettingsCatalog.destinations(matching: self.query)
             .filter { $0.destination != .skills || self.gateway.supportsSkills }
+            .filter { $0.destination != .sessions || self.gateway.supportsSessionManager }
         if results.isEmpty, pages.isEmpty {
             Text("No settings match “\(self.query)”.").foregroundStyle(.secondary)
         }

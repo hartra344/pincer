@@ -57,7 +57,7 @@ struct CommandPaletteView: View {
 
     private enum Command: String {
         case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, skills, usage, sessionUsage,
-             gatewayLogs, devices, setupGateway
+             gatewayLogs, devices, setupGateway, sessions, manageSession
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -424,8 +424,16 @@ struct CommandPaletteView: View {
                 items.append(item(.skills, "Skills…", "wand.and.stars",
                                   keywords: ["skills", "clawhub", "install", "plugins", "requirements"]))
             }
+            if self.gateway?.supportsSessionManager == true {
+                items.append(item(.sessions, "Manage Sessions…", "rectangle.stack",
+                                  keywords: ["sessions", "archive", "archived", "delete", "branches", "rewind", "recover"]))
+            }
             if row != nil {
                 items.append(item(.sessionUsage, "Session Usage…", "chart.bar", keywords: ["usage", "cost", "tokens", "session"]))
+                if self.gateway?.supportsSessionManager == true {
+                    items.append(item(.manageSession, "Manage Session…", "rectangle.stack.badge.person.crop",
+                                      keywords: ["session", "details", "branches", "rewind", "archive", "delete"]))
+                }
             }
         }
         return items
@@ -576,6 +584,10 @@ struct CommandPaletteView: View {
             if let gateway { self.openGatewaySettings(gateway, at: .devices) }
         case .sessionUsage:
             if let gateway, let row { self.openGatewaySettings.sessionUsage(gateway, key: row.key, agentId: row.agentId) }
+        case .sessions:
+            if let gateway { self.openGatewaySettings(gateway, at: .sessions) }
+        case .manageSession:
+            if let gateway, let row { self.openGatewaySettings(gateway, at: .sessions, routes: [.sessionDetail(row.key)]) }
         case .setupGateway:
             gateway?.setup.present()
         }

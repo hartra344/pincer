@@ -13,7 +13,7 @@ public enum TranscriptCache {
         /// Session activity when saved; an unchanged session needs no background refresh.
         public var activityMs: Double?
 
-        public static let currentVersion = 6
+        public static let currentVersion = 7
 
         public init(version: Int = Self.currentVersion, items: [ChatItem], complete: Bool, activityMs: Double? = nil) {
             self.version = version
@@ -91,6 +91,12 @@ public enum TranscriptCache {
     //    `migrations[5]` marks tool results lacking them with `unknownToolDetails`: the card
     //    then says "Written" with nothing claimed about what was removed. Tool results that have
     //    details (cached after #154) keep them, and nothing is refetched.
+    //  - v7 (#207, agent-to-agent messages) added `ChatItem.sender`. The provenance that names a
+    //    sender isn't cached, but an unprojected inter-session message was cached as your turn
+    //    with the Gateway's `[Inter-session message] sourceSession=…` header still in its text;
+    //    `migrations[6]` (`forwardedSenderMigration`) reads the sender from that header, strips
+    //    it, and shows the message as the sender's. Messages the Gateway had already projected
+    //    decode without a sender until the newest page is refetched over them on open.
 
     /// Upgrades a snapshot's JSON object from the version it's keyed by to the next one.
     typealias Migration = @Sendable (inout [String: Any]) throws -> Void
@@ -113,7 +119,33 @@ public enum TranscriptCache {
             }
             json["items"] = items
         },
+        6: forwardedSenderMigration,
     ]
+
+    /// v6 → v7 (#207): cached inter-session turns become the sending agent's.
+    static let forwardedSenderMigration: Migration = { json in
+        guard var items = json["items"] as? [Any] else { return }
+        for index in items.indices {
+            guard let object = items[index] as? [String: Any], object["role"] as? String == ChatRole.user.rawValue,
+                  let data = try? JSONSerialization.data(withJSONObject: object),
+                  var item = try? JSONDecoder().decode(ChatItem.self, from: data),
+                  item.sender == nil, let sender = MessageSender.fromPromptHeader(item.plainText)
+            else { continue }
+            item.sender = sender
+            item.role = .assistant
+            item.via = nil
+            item.blocks = item.blocks.compactMap { block in
+                guard case let .text(text) = block else { return block }
+                let stripped = MessageSender.stripInterSessionPrefix(text)
+                return stripped.isEmpty ? nil : .text(stripped)
+            }
+            guard let encoded = try? JSONEncoder().encode(item),
+                  let migrated = try? JSONSerialization.jsonObject(with: encoded)
+            else { continue }
+            items[index] = migrated
+        }
+        json["items"] = items
+    }
 
     /// Older transcripts are discarded rather than migrated.
     static let oldestMigratableVersion = 5

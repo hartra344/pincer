@@ -136,6 +136,28 @@ To stop Pincer from loading images from the web, turn off **Load images the agen
 
 Messages from you appear under **your own name**, even when you sent them through Discord. A small **via Discord** tag shows where they came from. Set your name in Settings. It defaults to your macOS full name.
 
+## Messages from other agents
+
+Agents can message each other's chats (OpenClaw's `sessions_send`). When another agent writes in this chat, its message appears under **that agent's** avatar and name, not grouped with the replies of the agent you're chatting with. Each change of speaker starts a new group.
+
+A small marker under the name says where the message came from:
+
+| Marker | Meaning |
+| --- | --- |
+| **from Kiko’s chat** | Sent from another agent's chat. |
+| **from another chat** | Sent from another chat of the same agent. |
+| **from another agent** | The Gateway didn't say which agent sent it. The sender is shown as **Another agent**. |
+
+Click or tap the marker to open the chat it came from. It's also in the message's context menu and in the VoiceOver actions, as **Open Kiko’s Chat**.
+
+Messages started by an automation (a cron run) are shown under the automation's name (or **Automation**) with a clock symbol, and messages from a [helper](../subagents-and-runs/) under **Helper** with a sparkles symbol. These can't be opened from the marker.
+
+Pincer hides the headers the Gateway adds for the model, such as `[Inter-session message]` and cron prompt prefixes. The footer of a message from another agent has no model, since no model in this chat wrote it. [Search results](../search/) and reply quotes name the actual sender.
+
+Chats cached by an older Pincer are updated to show the sender, and the message search index is rebuilt once.
+
+In the [demo](../../getting-started/try-the-demo/), open **Claw → Main** and scroll up to see Kiko, a finance agent, introduce herself to Claw.
+
 ## Models
 
 The chat toolbar shows the session's model. Pick another from the list the gateway offers, or go back to the agent's default, and new messages use it.
