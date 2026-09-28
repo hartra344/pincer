@@ -218,6 +218,7 @@ struct QuickCaptureView: View {
                 maxLines: 8,
                 isEditable: !self.model.isSending,
                 onSubmit: { self.controller.send(reveal: false) },
+                onCommandSubmit: { self.controller.send(reveal: true) },
                 onMedia: { self.ingest.ingest($0) })
                 .frame(minHeight: 22)
         }
@@ -236,6 +237,7 @@ struct QuickCaptureView: View {
                 ProgressView().controlSize(.small)
             }
             Button("Send & Open") { self.controller.send(reveal: true) }
+                .keyboardShortcut(.return, modifiers: .command)
                 .controlSize(.small)
                 .glassButton()
                 .disabled(!self.model.canSend)
