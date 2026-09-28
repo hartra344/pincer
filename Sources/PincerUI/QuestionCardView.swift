@@ -50,7 +50,7 @@ struct QuestionCardView: View {
         .onKeyPress(phases: .down) { press in self.handleKey(press) }
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Question from the agent")
+        .accessibilityLabel(L("Question from the agent"))
     }
 
     // MARK: Header
@@ -69,7 +69,7 @@ struct QuestionCardView: View {
                     .truncationMode(.tail)
                 Spacer(minLength: 8)
                 if self.queued > 0 {
-                    Text("+\(self.queued) more")
+                    Text("+\(self.queued) more", bundle: .module)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
@@ -111,7 +111,7 @@ struct QuestionCardView: View {
                 }
             }
             if let store = self.question.secretStoreName {
-                Label("Saved to the Gateway's secret store as \(store)", systemImage: "key.fill")
+                Label(L("Saved to the Gateway's secret store as \(store)"), systemImage: "key.fill")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -180,9 +180,9 @@ struct QuestionCardView: View {
                 .foregroundStyle(hasText ? self.theme.accent : .secondary)
             Group {
                 if self.question.isSecret {
-                    SecureField("Type your answer", text: text)
+                    SecureField(L("Type your answer"), text: text)
                 } else {
-                    TextField(self.question.options.isEmpty ? "Type your answer" : "Type your own answer here",
+                    TextField(self.question.options.isEmpty ? L("Type your answer") : L("Type your own answer here"),
                               text: text, axis: .vertical)
                         .lineLimit(1...5)
                 }
@@ -232,16 +232,16 @@ struct QuestionCardView: View {
                 Text(expiresAt, style: .relative)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.tertiary)
-                    .help("Time left to answer")
+                    .help(L("Time left to answer"))
             }
             Spacer()
-            Button("Skip") { self.skip() }
+            Button(L("Skip")) { self.skip() }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
                 .disabled(self.isSending)
-                .help("Tell the agent you'd rather not answer")
+                .help(L("Tell the agent you'd rather not answer"))
             if self.page > 0 {
-                Button("Back") { self.page -= 1 }
+                Button(L("Back")) { self.page -= 1 }
                     .glassButton()
                     .disabled(self.isSending)
             }
@@ -251,7 +251,7 @@ struct QuestionCardView: View {
                 if self.isSending {
                     ProgressView().controlSize(.small)
                 } else {
-                    Text(self.isLastPage ? "Submit" : "Next")
+                    Text(self.isLastPage ? L("Submit") : L("Next"))
                 }
             }
             .glassProminentButton()
@@ -354,10 +354,10 @@ struct QuestionAccessHint: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("The agent is waiting for your answer", systemImage: "questionmark.bubble.fill")
+            Label(L("The agent is waiting for your answer"), systemImage: "questionmark.bubble.fill")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(self.theme.accent)
-            Text("This device isn't allowed to answer questions yet. Approve its request on the Gateway host, then try again. You can also answer in the Control UI or the channel the chat came from.")
+            Text("This device isn't allowed to answer questions yet. Approve its request on the Gateway host, then try again. You can also answer in the Control UI or the channel the chat came from.", bundle: .module)
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -371,7 +371,7 @@ struct QuestionAccessHint: View {
                     .padding(.vertical, 4)
                     .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 Spacer(minLength: 8)
-                Button("Try Again") { self.gateway.retryQuestionAccess() }
+                Button(L("Try Again")) { self.gateway.retryQuestionAccess() }
                     .glassButton()
                     .controlSize(.small)
             }

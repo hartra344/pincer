@@ -14,6 +14,8 @@ import UserNotifications
 // Self-checks that run without XCTest (unavailable with Command Line Tools only).
 //   swift run PincerChecks                  → unit checks
 //   swift run PincerChecks --live URL TOKEN → end-to-end against a (mock) Gateway
+//     (--live-core / --live-extras run its two halves separately, each against a fresh mock)
+//   add --skip-intent-checks to leave out the slow Shortcuts & Siri offline checks
 //   swift run -c release PincerChecks --perf → message index at 20 chats × 20k messages
 //   swift run PincerChecks --live-no-usage URL TOKEN → a Gateway without usage (mock with MOCK_NO_USAGE=1)
 //   swift run PincerChecks --live-no-reply-to URL TOKEN → a Gateway without replyToId (mock with MOCK_NO_REPLY_TO=1)
@@ -2403,23 +2405,37 @@ do {
 print("Share extension")
 await runShareChecks()
 
-print("Shortcuts & Siri")
-await runIntentChecks()
+// The slowest offline section (real reply timeouts). CI skips it in the demo and live runs,
+// since its plain run already covers it.
+if !CommandLine.arguments.contains("--skip-intent-checks") {
+    print("Shortcuts & Siri")
+    await runIntentChecks()
+}
 
 print("Deep links & Handoff")
 runDeepLinkChecks()
 
+runLocalizationChecks()
 checkToolDiffs()
+checkSidebarWorking()
 
 print("First-run wizard")
 await runFirstRunChecks()
 
 let arguments = CommandLine.arguments
-if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
-    let url = arguments[index + 1]
-    let token = arguments[index + 2]
+func liveTarget(_ flag: String) -> (url: String, token: String)? {
+    guard let index = arguments.firstIndex(of: flag), arguments.count > index + 2 else { return nil }
+    return (arguments[index + 1], arguments[index + 2])
+}
+// `--live` runs both halves in order. CI runs `--live-core` and `--live-extras` side by side,
+// each against its own mock, to shorten the longest check run.
+let liveCore = liveTarget("--live") ?? liveTarget("--live-core")
+let liveExtras = liveTarget("--live") ?? liveTarget("--live-extras")
+if let (url, token) = liveCore {
     print("Live against \(url)")
     await runLive(url: url, token: token)
+}
+if let (url, token) = liveExtras {
     print("Quick Capture (live)")
     await runQuickCaptureLive(url: url, token: token)
     print("Replies & reactions (live)")
@@ -2470,6 +2486,8 @@ if arguments.contains("--demo") {
     await runDemoReactionsReply()
     print("Menu bar (demo)")
     await runMenuBarDemo()
+    print("Sidebar automations & slash commands (demo)")
+    await runDemoSidebarVisibility()
     print("Setup wizard (demo)")
     await runDemoSetup()
     print("Deep links (demo)")
@@ -2482,6 +2500,10 @@ if arguments.contains("--demo") {
     await runDemoAvatars()
     print("First-run wizard (demo)")
     await runDemoFirstRun()
+    print("Accessibility labels (demo)")
+    await runDemoAccessibility()
+    print("Sidebar working avatar (demo)")
+    await runDemoSidebarWorking()
 }
 
 print("Keychain isolation")
@@ -3705,7 +3727,9 @@ func runMenuBarDemo() async {
     check(Set(inbox.unread.map(\.target.sessionKey)) == [homeLab, papers] && inbox.unreadCount == 3
           && inbox.unread.map(\.title) == ["🦞 home-lab · Claw", "🔭 Paper digest · Scout"],
           "unread lists home-lab and Paper digest (\(inbox.unread.map(\.title)), \(inbox.unreadCount) unread)")
-    check(inbox.running.isEmpty && !inbox.isCaughtUp && inbox.badgeText == "4", "nothing running; the icon shows 4 (\(inbox.badgeText ?? "none"))")
+    // Forge's "Fix retry backoff" opens mid-run; running chats don't add to the badge.
+    check(inbox.running.map(\.title) == ["🛠️ Fix retry backoff · Forge"] && !inbox.isCaughtUp && inbox.badgeText == "4",
+          "only the seeded run is running; the icon shows 4 (\(inbox.running.map(\.title)), \(inbox.badgeText ?? "none"))")
     // #9: the menu takes `now` from a tick, not body. Past its 30 minutes the seeded approval drops out.
     let expired = MenuBarInbox(app: app, now: Date().addingTimeInterval(31 * 60))
     check(expired.needsYou.isEmpty && expired.needsYouCount == 0 && expired.badgeText == "3" && !expired.accessibilityLabel.contains("need"),
@@ -3779,6 +3803,7 @@ func runMenuBarDemo() async {
         let recorded = await waitFor("seeded approval in history", timeout: 5) { history.items.first?.id == pending.id }
         check(recorded && history.items.first?.sessionKey == coderKey, "the resolved seeded approval shows in Approval History")
         for row in gateway.sessions.values where row.isUnread { await gateway.markRead(row.key) }
+        await gateway.chat(for: "agent:coder:dashboard:retry-fix").abort()
         let caughtUp = await waitFor("caught up") { MenuBarInbox(app: app).isCaughtUp }
         check(caughtUp && MenuBarInbox(app: app).badgeText == nil, "with nothing left the menu is all caught up")
     } else {
@@ -4117,6 +4142,9 @@ func runLive(url: String, token: String) async {
     check(!trip.hasMoreHistory && trip.items.count == 302, "reaches the start (\(trip.items.count))")
     check(trip.items.first?.plainText == "Idea for day 1?", "oldest message first")
     await checkLiveMessageSearch(gateway)
+    // Not before the paging checks: they must load the trip before the background prefetch caches all of it.
+    await checkSidebarVisibility(gateway, automations: ["agent:main:cron:morning-briefing", "agent:main:cron:disk-check"],
+                                 slashKey: "agent:main:discord:slash:418235907214753792", label: "live")
 
     let research = gateway.chat(for: "agent:research:main")
     await research.load()
@@ -4334,7 +4362,9 @@ func runLive(url: String, token: String) async {
         }
 
         // Arrange chats within a group by hand.
-        let workKeys = gateway.sessions.values.filter { !$0.isSubagent && !$0.isArchived }.map(\.key).sorted().prefix(3)
+        // Sidebar-listed chats only: automations and slash commands are hidden by default (#174).
+        let workKeys = gateway.sessions.values.filter { !$0.isSubagent && !$0.isArchived && !gateway.isHiddenInSidebar($0) }
+            .map(\.key).sorted().prefix(3)
         for key in workKeys where gateway.sessions[key]?.category != "Work" {
             await gateway.moveChat(key, toGroup: "Work", before: nil)
         }

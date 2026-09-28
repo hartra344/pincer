@@ -25,7 +25,7 @@ struct AgentManagementSection: View {
             }
             AgentReadOnlyNotice(model: model)
             if agents.isEmpty {
-                Text(connected ? "No agents." : "Connect to the gateway to see its agents.")
+                Text(connected ? L("No agents.") : L("Connect to the gateway to see its agents."))
                     .foregroundStyle(.secondary)
             }
             ForEach(agents) { agent in
@@ -35,24 +35,24 @@ struct AgentManagementSection: View {
                                       || model.dirtyEditors.contains { $0.agentId == agent.id })
                 }
                 .contextMenu {
-                    Button("Duplicate…", systemImage: "plus.square.on.square") {
+                    Button(L("Duplicate…"), systemImage: "plus.square.on.square") {
                         self.sheet = .duplicate(agent)
                     }
                     .disabled(!model.canManageAgents || !connected)
-                    Button("Delete…", systemImage: "trash", role: .destructive) { self.deleting = agent }
+                    Button(L("Delete…"), systemImage: "trash", role: .destructive) { self.deleting = agent }
                         .disabled(!model.canManageAgents || !connected)
                 }
             }
             Button {
                 self.sheet = .create
             } label: {
-                Label("New Agent", systemImage: "plus")
+                Label(L("New Agent"), systemImage: "plus")
             }
             .disabled(!model.canManageAgents || !connected)
         } header: {
-            Text("Agents")
+            Text("Agents", bundle: .module)
         } footer: {
-            Text("Each agent has its own identity, model and workspace.")
+            Text("Each agent has its own identity, model and workspace.", bundle: .module)
         }
         .sheet(item: self.$sheet) { mode in
             AgentEditorSheet(mode: mode) { agentId in
@@ -84,7 +84,7 @@ private struct AgentRowLabel: View {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 7))
                     .foregroundStyle(.tint)
-                    .accessibilityLabel("Unsaved changes")
+                    .accessibilityLabel(L("Unsaved changes"))
             }
         }
     }
@@ -104,22 +104,22 @@ private struct AgentDeletionReportView: View {
     var body: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Label("Deleted “\(self.report.agentName)”. \(self.report.result.summary)", systemImage: "checkmark.circle.fill")
+                Label(L("Deleted “\(self.report.agentName)”. \(self.report.result.summary)"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                 ForEach(self.report.result.failed, id: \.self) { failure in
-                    Text("Couldn't remove \(failure.path): \(failure.reason)")
+                    Text("Couldn't remove \(failure.path): \(failure.reason)", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
                 if self.report.result.purgeFailed {
-                    Text("The gateway couldn't finish removing the agent's data. Deleting again retries it.")
+                    Text("The gateway couldn't finish removing the agent's data. Deleting again retries it.", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
             }
             Spacer()
-            Button("Dismiss", systemImage: "xmark", action: self.dismiss)
+            Button(L("Dismiss"), systemImage: "xmark", action: self.dismiss)
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
         }
@@ -135,7 +135,7 @@ struct AgentReadOnlyNotice: View {
         if !self.model.managementSupported {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Agent Management Isn't Available").font(.callout.weight(.medium))
+                    Text("Agent Management Isn't Available", bundle: .module).font(.callout.weight(.medium))
                     Text(AgentManagement.unsupportedMessage).font(.caption).foregroundStyle(.secondary)
                 }
             } icon: {
@@ -143,12 +143,12 @@ struct AgentReadOnlyNotice: View {
             }
         } else if !self.model.hasAdmin {
             VStack(alignment: .leading, spacing: 6) {
-                Label("Editing agents needs Full Management", systemImage: "lock.shield")
+                Label(L("Editing agents needs Full Management"), systemImage: "lock.shield")
                     .font(.callout.weight(.medium))
-                Text("You can view agents and their files. Turn on Full Management under Connection, then approve this device on the Gateway host.")
+                Text("You can view agents and their files. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button("Open Connection") { self.navigator.destination = .connection }
+                Button(L("Open Connection")) { self.navigator.destination = .connection }
             }
         }
     }
@@ -165,12 +165,12 @@ private struct AgentFilesReadOnlyNotice: View {
                 Label(reason, systemImage: "lock").foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("Editing agents needs Full Management", systemImage: "lock.shield")
+                    Label(L("Editing agents needs Full Management"), systemImage: "lock.shield")
                         .font(.callout.weight(.medium))
-                    Text("You can read this file. Turn on Full Management under Connection, then approve this device on the Gateway host.")
+                    Text("You can read this file. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("Open Connection") { self.navigator.destination = .connection }
+                    Button(L("Open Connection")) { self.navigator.destination = .connection }
                 }
             }
         }
@@ -206,11 +206,11 @@ struct AgentPage: View {
             if let agent = self.agent {
                 self.form(agent)
             } else if !self.gateway.state.isConnected {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see this agent."))
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Connect to the gateway to see this agent.", bundle: .module))
             } else {
-                ContentUnavailableView("Agent Not Found", systemImage: "person.crop.circle.badge.questionmark",
-                                       description: Text("“\(self.agentId)” isn't an agent on this gateway anymore."))
+                ContentUnavailableView(L("Agent Not Found"), systemImage: "person.crop.circle.badge.questionmark",
+                                       description: Text("“\(self.agentId)” isn't an agent on this gateway anymore.", bundle: .module))
             }
         }
         .navigationTitle(self.agent?.title ?? self.agentId)
@@ -261,7 +261,7 @@ struct AgentPage: View {
             Section {
                 AgentReadOnlyNotice(model: self.model)
                 if self.needsAdminAtSave, self.model.hasAdmin == false {
-                    Text("Your edits are kept.").font(.caption).foregroundStyle(.secondary)
+                    Text("Your edits are kept.", bundle: .module).font(.caption).foregroundStyle(.secondary)
                 }
                 if let error = self.saveState.error {
                     Label(error, systemImage: "exclamationmark.octagon.fill")
@@ -277,10 +277,10 @@ struct AgentPage: View {
             if self.gateway.supportsToolsCatalog {
                 Section {
                     NavigationLink(value: SettingsRoute.agentTools(agent.id)) {
-                        Label("Tools", systemImage: "wrench.and.screwdriver")
+                        Label(L("Tools"), systemImage: "wrench.and.screwdriver")
                     }
                 } footer: {
-                    Text("The tools this agent can use, and the policy that allows or denies each.")
+                    Text("The tools this agent can use, and the policy that allows or denies each.", bundle: .module)
                 }
             }
             self.danger(agent)
@@ -305,7 +305,7 @@ struct AgentPage: View {
         }
         .overlay(alignment: .bottom) {
             if self.toast != nil {
-                Label("Agent saved", systemImage: "checkmark.circle.fill")
+                Label(L("Agent saved"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.callout)
                     .padding(.horizontal, 16)
@@ -319,17 +319,17 @@ struct AgentPage: View {
 
     private func identity(_ agent: AgentSummary) -> some View {
         Section {
-            TextField("Name", text: self.binding(\.name))
-            TextField("Emoji", text: self.emojiBinding, prompt: Text("None"))
-            TextField("Avatar", text: self.binding(\.avatar), prompt: Text("URL, data URI or workspace path"))
+            TextField(L("Name"), text: self.binding(\.name))
+            TextField(L("Emoji"), text: self.emojiBinding, prompt: Text("None", bundle: .module))
+            TextField(L("Avatar"), text: self.binding(\.avatar), prompt: Text("URL, data URI or workspace path", bundle: .module))
                 .agentPlainTextInput()
-            LabeledContent("ID") {
+            LabeledContent(L("ID")) {
                 Text(agent.id).font(.body.monospaced()).textSelection(.enabled)
             }
         } header: {
-            Text("Identity")
+            Text("Identity", bundle: .module)
         } footer: {
-            Text("Also written to the agent's IDENTITY.md.")
+            Text("Also written to the agent's IDENTITY.md.", bundle: .module)
         }
         .disabled(!self.canEdit)
     }
@@ -340,7 +340,7 @@ struct AgentPage: View {
     }
 
     private func modelSection(_ edit: AgentManagementModel.AgentEdit) -> some View {
-        Section("Model") {
+        Section(L("Model")) {
             AgentModelPicker(selection: self.binding(\.model), agentId: self.agentId)
                 .disabled(!self.canEdit)
         }
@@ -348,18 +348,18 @@ struct AgentPage: View {
 
     private func workspace(_ agent: AgentSummary, edit: AgentManagementModel.AgentEdit) -> some View {
         Section {
-            TextField("Folder", text: self.binding(\.workspace), prompt: Text(agent.workspace ?? "Gateway default"))
+            TextField(L("Folder"), text: self.binding(\.workspace), prompt: Text(agent.workspace ?? "Gateway default"))
                 .font(.body.monospaced())
                 .agentPlainTextInput()
                 .disabled(!self.canEdit)
         } header: {
-            Text("Workspace")
+            Text("Workspace", bundle: .module)
         } footer: {
             if edit.draft.changesWorkspace(from: edit.original) {
                 Label(AgentManagement.workspaceChangeWarning, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
             } else {
-                Text("The folder on the gateway host with this agent's files.")
+                Text("The folder on the gateway host with this agent's files.", bundle: .module)
             }
         }
     }
@@ -370,7 +370,7 @@ struct AgentPage: View {
             if settings.hasLoaded {
                 let bindings = AgentManagement.bindings(for: agent.id, in: settings.config)
                 if bindings.isEmpty {
-                    Text("No bindings. Messages reach this agent only when it's the default or chosen directly.")
+                    Text("No bindings. Messages reach this agent only when it's the default or chosen directly.", bundle: .module)
                         .foregroundStyle(.secondary)
                 }
                 ForEach(bindings) { binding in
@@ -380,16 +380,16 @@ struct AgentPage: View {
                 ProgressView()
             }
         } header: {
-            Text("Bindings")
+            Text("Bindings", bundle: .module)
         } footer: {
-            Text("Which channels and chats route to this agent. Bindings are managed in the config.")
+            Text("Which channels and chats route to this agent. Bindings are managed in the config.", bundle: .module)
         }
     }
 
     @ViewBuilder private func filesSection(_ agent: AgentSummary) -> some View {
         Section {
             if !self.model.filesSupported {
-                Text("This gateway can't share workspace files. Update OpenClaw to edit them here.")
+                Text("This gateway can't share workspace files. Update OpenClaw to edit them here.", bundle: .module)
                     .foregroundStyle(.secondary)
             } else if let files {
                 ForEach(files.files) { file in
@@ -402,13 +402,13 @@ struct AgentPage: View {
             } else if let error = self.filesState.error {
                 VStack(alignment: .leading, spacing: 6) {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-                    Button("Try Again") { Task { await self.loadFiles() } }
+                    Button(L("Try Again")) { Task { await self.loadFiles() } }
                 }
             } else {
                 ProgressView()
             }
         } header: {
-            Text("Workspace Files")
+            Text("Workspace Files", bundle: .module)
         } footer: {
             if let workspace = files?.workspace, !workspace.isEmpty {
                 Text(workspace).font(.caption.monospaced()).textSelection(.enabled)
@@ -418,9 +418,9 @@ struct AgentPage: View {
 
     private func danger(_ agent: AgentSummary) -> some View {
         Section {
-            Button("Duplicate…", systemImage: "plus.square.on.square") { self.duplicating = agent }
+            Button(L("Duplicate…"), systemImage: "plus.square.on.square") { self.duplicating = agent }
                 .disabled(!self.canEdit)
-            Button("Delete Agent…", systemImage: "trash", role: .destructive) { self.deleting = agent }
+            Button(L("Delete Agent…"), systemImage: "trash", role: .destructive) { self.deleting = agent }
                 .disabled(!self.canEdit)
         }
     }
@@ -429,9 +429,9 @@ struct AgentPage: View {
         let canSave = edit.isDirty && self.canEdit && !edit.draft.trimmedName.isEmpty
         #if os(macOS)
         ToolbarItemGroup(placement: .primaryAction) {
-            Button("Revert") { self.model.discardDraft(agentId: self.agentId) }
+            Button(L("Revert")) { self.model.discardDraft(agentId: self.agentId) }
                 .disabled(!edit.isDirty || self.saveState.isRunning)
-            Button("Save") { Task { await self.save() } }
+            Button(L("Save")) { Task { await self.save() } }
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(!canSave)
         }
@@ -440,12 +440,12 @@ struct AgentPage: View {
             if self.saveState.isRunning {
                 ProgressView()
             } else {
-                Button("Save") { Task { await self.save() } }.disabled(!canSave)
+                Button(L("Save")) { Task { await self.save() } }.disabled(!canSave)
             }
         }
         if edit.isDirty {
             ToolbarItemGroup(placement: .bottomBar) {
-                Button("Revert", role: .destructive) { self.model.discardDraft(agentId: self.agentId) }
+                Button(L("Revert"), role: .destructive) { self.model.discardDraft(agentId: self.agentId) }
                     .disabled(self.saveState.isRunning)
                 Spacer()
             }
@@ -504,10 +504,10 @@ private struct AgentFileRow: View {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 7))
                     .foregroundStyle(.tint)
-                    .accessibilityLabel("Unsaved changes")
+                    .accessibilityLabel(L("Unsaved changes"))
             }
             if self.file.missing {
-                Text(self.file.expectedAbsent ? "Not Created" : "Missing")
+                Text(self.file.expectedAbsent ? L("Not Created") : L("Missing"))
                     .font(.caption2.weight(.medium))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
@@ -537,8 +537,8 @@ private struct AgentModelPicker: View {
     var body: some View {
         let catalogAgent = self.agentId ?? self.gateway.defaultAgentId
         let choices = self.gateway.modelCatalogs[catalogAgent] ?? []
-        Picker("Model", selection: self.$selection) {
-            Text("Gateway default").tag("")
+        Picker(L("Model"), selection: self.$selection) {
+            Text("Gateway default", bundle: .module).tag("")
             if !self.selection.isEmpty, !choices.contains(where: { $0.ref == self.selection }) {
                 Text(self.selection).tag(self.selection)
             }
@@ -585,39 +585,39 @@ struct AgentEditorSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Name", text: self.$draft.name, prompt: Text("Required"))
+                    TextField(L("Name"), text: self.$draft.name, prompt: Text("Required", bundle: .module))
                     if let id = self.draft.derivedId {
-                        LabeledContent("ID") { Text(id).font(.body.monospaced()) }
+                        LabeledContent(L("ID")) { Text(id).font(.body.monospaced()) }
                     }
-                    TextField("Emoji", text: Binding(get: { self.draft.emoji },
+                    TextField(L("Emoji"), text: Binding(get: { self.draft.emoji },
                                                      set: { self.draft.emoji = Self.singleEmoji($0) }),
-                              prompt: Text("Optional"))
-                    TextField("Avatar", text: self.$draft.avatar, prompt: Text("URL, data URI or workspace path"))
+                              prompt: Text("Optional", bundle: .module))
+                    TextField(L("Avatar"), text: self.$draft.avatar, prompt: Text("URL, data URI or workspace path", bundle: .module))
                         .agentPlainTextInput()
                 } header: {
-                    Text("Identity")
+                    Text("Identity", bundle: .module)
                 } footer: {
                     if let error = self.draft.validationError(existing: self.gateway.agents), !self.draft.name.isEmpty {
                         Text(error).foregroundStyle(.red)
                     }
                 }
-                Section("Model") {
+                Section(L("Model")) {
                     AgentModelPicker(selection: self.$draft.model, agentId: nil)
                 }
                 Section {
-                    TextField("Folder", text: self.$draft.workspace, prompt: Text("Default (created by gateway)"))
+                    TextField(L("Folder"), text: self.$draft.workspace, prompt: Text("Default (created by gateway)", bundle: .module))
                         .font(.body.monospaced())
                         .agentPlainTextInput()
                 } header: {
-                    Text("Workspace")
+                    Text("Workspace", bundle: .module)
                 } footer: {
-                    Text("Leave empty to let the gateway create a new workspace for this agent.")
+                    Text("Leave empty to let the gateway create a new workspace for this agent.", bundle: .module)
                 }
                 if case let .duplicate(source) = self.mode {
                     Section {
-                        Toggle("Copy workspace files", isOn: self.$copyFiles)
+                        Toggle(L("Copy workspace files"), isOn: self.$copyFiles)
                     } footer: {
-                        Text("Copies \(source.name)'s workspace files (AGENTS.md, SOUL.md…) into the new workspace. \(AgentManagement.bindingsNotCopiedNote)")
+                        Text("Copies \(source.name)'s workspace files (AGENTS.md, SOUL.md…) into the new workspace. \(AgentManagement.bindingsNotCopiedNote)", bundle: .module)
                     }
                 }
                 if let error = self.state.error {
@@ -636,22 +636,22 @@ struct AgentEditorSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { self.dismiss() }.disabled(self.state.isRunning)
+                    Button(L("Cancel")) { self.dismiss() }.disabled(self.state.isRunning)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     if self.state.isRunning {
                         ProgressView()
                     } else {
-                        Button(self.isDuplicate ? "Duplicate" : "Create") { Task { await self.submit() } }
+                        Button(self.isDuplicate ? L("Duplicate") : L("Create")) { Task { await self.submit() } }
                             .disabled(self.draft.validationError(existing: self.gateway.agents) != nil
                                 || !self.gateway.state.isConnected || !self.model.canManageAgents)
                     }
                 }
             }
-            .alert("Some Files Weren't Copied", isPresented: Binding(
+            .alert(L("Some Files Weren't Copied"), isPresented: Binding(
                 get: { self.copyFailures != nil }, set: { if !$0 { self.finish() } }
             )) {
-                Button("OK") { self.finish() }
+                Button(L("OK")) { self.finish() }
             } message: {
                 Text((self.copyFailures?.lines ?? []).joined(separator: "\n"))
             }
@@ -755,16 +755,16 @@ private struct AgentDeleteConfirmation: ViewModifier {
             .confirmationDialog("Delete “\(target?.name ?? "")”?", isPresented: Binding(
                 get: { self.agent != nil }, set: { if !$0 { self.agent = nil } }
             ), titleVisibility: .visible, presenting: target) { agent in
-                Button("Delete Agent", role: .destructive) { self.delete(agent, deleteFiles: false) }
-                Button("Delete and Move Files to Trash", role: .destructive) { self.delete(agent, deleteFiles: true) }
-                Button("Cancel", role: .cancel) {}
+                Button(L("Delete Agent"), role: .destructive) { self.delete(agent, deleteFiles: false) }
+                Button(L("Delete and Move Files to Trash"), role: .destructive) { self.delete(agent, deleteFiles: true) }
+                Button(L("Cancel"), role: .cancel) {}
             } message: { _ in
                 Text(AgentManagement.deleteMessage(agentName: target?.name ?? "", bindingCount: bindingCount ?? nil))
             }
-            .alert("Couldn't Delete Agent", isPresented: Binding(
+            .alert(L("Couldn't Delete Agent"), isPresented: Binding(
                 get: { self.error != nil }, set: { if !$0 { self.error = nil } }
             )) {
-                Button("OK", role: .cancel) { self.error = nil }
+                Button(L("OK"), role: .cancel) { self.error = nil }
             } message: {
                 Text(self.error ?? "")
             }
@@ -812,16 +812,16 @@ struct AgentFileEditorPage: View {
                 self.content(editor)
             } else if let error = editor.loadState.error {
                 ContentUnavailableView {
-                    Label("Couldn't Open \(self.name)", systemImage: "exclamationmark.triangle")
+                    Label(L("Couldn't Open \(self.name)"), systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(error)
                 } actions: {
-                    Button("Try Again") { Task { await editor.load() } }
+                    Button(L("Try Again")) { Task { await editor.load() } }
                         .disabled(!self.gateway.state.isConnected)
                 }
             } else if !self.gateway.state.isConnected {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to open \(self.name)."))
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Connect to the gateway to open \(self.name).", bundle: .module))
             } else {
                 ProgressView()
             }
@@ -835,12 +835,12 @@ struct AgentFileEditorPage: View {
         }
         .onDisappear { self.model.closeEditor(editor) }
         .onChange(of: editor.lastSave) { self.showToast() }
-        .confirmationDialog("Overwrite \(self.name) on the gateway?", isPresented: self.$confirmOverwrite,
+        .confirmationDialog(L("Overwrite \(self.name) on the gateway?"), isPresented: self.$confirmOverwrite,
                             titleVisibility: .visible) {
-            Button("Overwrite with Mine", role: .destructive) { Task { await editor.resolveConflictOverwrite() } }
-            Button("Cancel", role: .cancel) {}
+            Button(L("Overwrite with Mine"), role: .destructive) { Task { await editor.resolveConflictOverwrite() } }
+            Button(L("Cancel"), role: .cancel) {}
         } message: {
-            Text("The changes made on the gateway since you opened it will be replaced by yours.")
+            Text("The changes made on the gateway since you opened it will be replaced by yours.", bundle: .module)
         }
         .sheet(isPresented: self.$comparing) {
             if let conflict = editor.conflict {
@@ -857,11 +857,11 @@ struct AgentFileEditorPage: View {
                     self.conflictBanner(conflict, editor: editor)
                 }
                 if editor.loadedTooLarge {
-                    Label("This file is larger than the \(AgentManagement.formatBytes(AgentManagement.maxFileBytes)) limit, so it can't be edited here.",
+                    Label(L("This file is larger than the \(AgentManagement.formatBytes(AgentManagement.maxFileBytes)) limit, so it can't be edited here."),
                           systemImage: "doc.badge.ellipsis")
                         .foregroundStyle(.orange)
                 } else if editor.isNew {
-                    Label("\(self.name) doesn't exist yet. Saving creates it.", systemImage: "doc.badge.plus")
+                    Label(L("\(self.name) doesn't exist yet. Saving creates it."), systemImage: "doc.badge.plus")
                         .foregroundStyle(.secondary)
                 }
                 if let error = editor.error, editor.conflict == nil {
@@ -870,9 +870,9 @@ struct AgentFileEditorPage: View {
                         .textSelection(.enabled)
                 }
                 HStack {
-                    Picker("Mode", selection: self.$preview) {
-                        Text("Edit").tag(false)
-                        Text("Preview").tag(true)
+                    Picker(L("Mode"), selection: self.$preview) {
+                        Text("Edit", bundle: .module).tag(false)
+                        Text("Preview", bundle: .module).tag(true)
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -916,7 +916,7 @@ struct AgentFileEditorPage: View {
         }
         .overlay(alignment: .bottom) {
             if self.toast != nil {
-                Label("\(self.name) saved", systemImage: "checkmark.circle.fill")
+                Label(L("\(self.name) saved"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.callout)
                     .padding(.horizontal, 16)
@@ -935,14 +935,14 @@ struct AgentFileEditorPage: View {
                 : "\(self.name) changed on the gateway since you opened it.",
                 systemImage: "arrow.triangle.2.circlepath")
                 .foregroundStyle(.orange)
-            Text("Your edits are kept until you choose.")
+            Text("Your edits are kept until you choose.", bundle: .module)
                 .font(.caption)
                 .foregroundStyle(.secondary)
             HStack {
-                Button("Reload Theirs") { Task { await editor.resolveConflictKeepTheirs() } }
-                Button("Overwrite with Mine") { self.confirmOverwrite = true }
+                Button(L("Reload Theirs")) { Task { await editor.resolveConflictKeepTheirs() } }
+                Button(L("Overwrite with Mine")) { self.confirmOverwrite = true }
                     .disabled(!editor.canEdit || editor.exceedsLimit)
-                Button("Compare") { self.comparing = true }
+                Button(L("Compare")) { self.comparing = true }
             }
             .buttonStyle(.bordered)
             .disabled(!self.gateway.state.isConnected || editor.isSaving)
@@ -961,7 +961,7 @@ struct AgentFileEditorPage: View {
         let label = editor.isNew ? "Create" : "Save"
         #if os(macOS)
         ToolbarItemGroup(placement: .primaryAction) {
-            Button("Revert") { editor.revert() }
+            Button(L("Revert")) { editor.revert() }
                 .disabled(!editor.isDirty || editor.isSaving)
             Button(label) { Task { await editor.save() } }
                 .keyboardShortcut("s", modifiers: .command)
@@ -977,7 +977,7 @@ struct AgentFileEditorPage: View {
         }
         if editor.isDirty {
             ToolbarItemGroup(placement: .bottomBar) {
-                Button("Revert", role: .destructive) { editor.revert() }
+                Button(L("Revert"), role: .destructive) { editor.revert() }
                     .disabled(editor.isSaving)
                 Spacer()
             }
@@ -1017,12 +1017,12 @@ private struct AgentFileCompareSheet: View {
                 }
                 #endif
             }
-            .navigationTitle("Compare \(self.conflict.name)")
+            .navigationTitle(L("Compare \(self.conflict.name)"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { self.dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.dismiss() } }
             }
         }
         #if os(macOS)
@@ -1054,7 +1054,7 @@ private struct AgentMarkdownPreview: View {
         let blocks = MarkdownBlock.parse(self.text)
         VStack(alignment: .leading, spacing: 10) {
             if blocks.isEmpty {
-                Text("Nothing to preview.").foregroundStyle(.secondary)
+                Text("Nothing to preview.", bundle: .module).foregroundStyle(.secondary)
             }
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 self.view(block)
@@ -1142,23 +1142,23 @@ private struct AgentUnsavedGuard: ViewModifier {
                         Button {
                             self.asking = true
                         } label: {
-                            Label("Back", systemImage: "chevron.backward")
+                            Label(L("Back"), systemImage: "chevron.backward")
                         }
-                        .help("Back")
+                        .help(L("Back"))
                     }
                 }
             }
-            .confirmationDialog("Save changes to \(self.title)?", isPresented: self.$asking, titleVisibility: .visible) {
-                Button("Save") {
+            .confirmationDialog(L("Save changes to \(self.title)?"), isPresented: self.$asking, titleVisibility: .visible) {
+                Button(L("Save")) {
                     Task { if await self.save() { self.pop() } }
                 }
-                Button("Don't Save", role: .destructive) {
+                Button(L("Don't Save"), role: .destructive) {
                     self.discard()
                     self.pop()
                 }
-                Button("Cancel", role: .cancel) {}
+                Button(L("Cancel"), role: .cancel) {}
             } message: {
-                Text("Your changes will be lost if you don't save them.")
+                Text("Your changes will be lost if you don't save them.", bundle: .module)
             }
     }
 

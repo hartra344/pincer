@@ -668,14 +668,14 @@ final class TranscriptRowView: TranscriptBaseView {
     func messageMenuItems(at point: CGPoint, in view: NSView) -> [NSMenuItem] {
         let rowPoint = self.convert(point, from: view)
         guard let actions, let id = self.layout?.message(at: rowPoint.y) else { return [] }
-        var items: [NSMenuItem] = [TranscriptMenuItem("Reply", symbol: "arrowshape.turn.up.left") { [weak actions] in
+        var items: [NSMenuItem] = [TranscriptMenuItem(L("Reply"), symbol: "arrowshape.turn.up.left") { [weak actions] in
             actions?.reply(to: id)
         }]
         if actions.reactionsEnabled {
             let quick = NSMenuItem()
             quick.view = QuickReactionsMenuView { [weak actions] emoji in actions?.toggleReaction(emoji, on: id) }
             items += [
-                TranscriptMenuItem("Add Reaction…", symbol: "face.smiling") { [weak self, weak actions] in
+                TranscriptMenuItem(L("Add Reaction…"), symbol: "face.smiling") { [weak self, weak actions] in
                     guard let self else { return }
                     actions?.pickReaction(for: id, from: self,
                                           rect: CGRect(x: rowPoint.x, y: rowPoint.y, width: 1, height: 1))
@@ -693,7 +693,7 @@ final class TranscriptRowView: TranscriptBaseView {
         let anchorRect = anchor.map { $0.bounds } ?? CGRect(origin: point, size: CGSize(width: 1, height: 1))
         var elements: [UIMenuElement] = [
             UIMenu(options: .displayInline, children: [
-                UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak actions] _ in
+                UIAction(title: L("Reply"), image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak actions] _ in
                     actions?.reply(to: id)
                 },
             ]),
@@ -704,7 +704,7 @@ final class TranscriptRowView: TranscriptBaseView {
             }
             elements += [
                 UIMenu(options: .displayInline, children: [
-                    UIAction(title: "Add Reaction…", image: UIImage(systemName: "face.smiling")) { [weak actions, weak anchorView] _ in
+                    UIAction(title: L("Add Reaction…"), image: UIImage(systemName: "face.smiling")) { [weak actions, weak anchorView] _ in
                         // After the menu has finished dismissing, so the picker can present.
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                             guard let anchorView else { return }
@@ -1125,13 +1125,13 @@ final class TranscriptFooterView: TranscriptBaseView {
         }
         self.showCopy()
         self.copyButton.onTap = { [weak self] in self?.copy() }
-        self.replyButton.set(title: "Reply", symbol: "arrowshape.turn.up.left")
+        self.replyButton.set(title: L("Reply"), symbol: "arrowshape.turn.up.left")
         self.replyButton.onTap = { [weak self] in
             guard let self, let id = self.footer?.messageId else { return }
             self.actions?.reply(to: id)
         }
-        self.reactButton.set(title: "React", symbol: "face.smiling")
-        self.reactButton.accessibilityText = "Add Reaction"
+        self.reactButton.set(title: L("React"), symbol: "face.smiling")
+        self.reactButton.accessibilityText = L("Add Reaction")
         self.reactButton.onTap = { [weak self] in
             guard let self, let id = self.footer?.messageId else { return }
             self.actions?.pickReaction(for: id, from: self.reactButton, rect: self.reactButton.bounds)
@@ -1157,14 +1157,14 @@ final class TranscriptFooterView: TranscriptBaseView {
     }
 
     private func showCopy() {
-        self.copyButton.set(title: "Copy", symbol: "doc.on.doc")
-        self.copyButton.accessibilityText = "Copy message"
+        self.copyButton.set(title: L("Copy"), symbol: "doc.on.doc")
+        self.copyButton.accessibilityText = L("Copy message")
     }
 
     private func copy() {
         guard let footer else { return }
         Clipboard.copy(footer.copyText)
-        self.copyButton.set(title: "Copied", symbol: "checkmark")
+        self.copyButton.set(title: L("Copied"), symbol: "checkmark")
         self.copiedToken += 1
         let token = self.copiedToken
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
@@ -1444,7 +1444,7 @@ final class TranscriptToolView: TranscriptBaseView {
         super.init(frame: frame)
         self.addSubview(self.header)
         self.addSubview(self.runButton)
-        self.runButton.set(title: "Open run", symbol: "sparkles")
+        self.runButton.set(title: L("Open run"), symbol: "sparkles")
         self.addSubview(self.copyButton)
         self.addSubview(self.toggleButton)
         self.copyButton.isSubdued = true
@@ -1453,14 +1453,15 @@ final class TranscriptToolView: TranscriptBaseView {
     }
 
     private func showCopy() {
-        self.copyButton.set(title: "Copy", symbol: "doc.on.doc")
-        self.copyButton.accessibilityText = self.part?.edit?.kind == .write ? "Copy file contents" : "Copy diff"
+        self.copyButton.set(title: L("Copy"), symbol: "doc.on.doc")
+        self.copyButton.accessibilityText = self.part?.edit?.kind == .write ? L("Copy file contents") : L("Copy diff")
     }
 
     private func copyDiff() {
         guard let diff = self.part?.diff else { return }
+        // Announces "Copied" through `AccessibilityAnnouncer.announceCopied()`.
         Clipboard.copy(diff.copyText)
-        self.copyButton.set(title: "Copied", symbol: "checkmark")
+        self.copyButton.set(title: L("Copied"), symbol: "checkmark")
         self.copiedToken += 1
         let token = self.copiedToken
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
@@ -1478,11 +1479,16 @@ final class TranscriptToolView: TranscriptBaseView {
         self.header.configure(tool, trailing: tool.run == nil ? 10 : 6)
         self.header.onTap = { [weak actions] in actions?.setExpanded(tool.key, !tool.isExpanded, row: rowId) }
         if let edit = tool.edit {
-            self.header.accessibilityText = edit.accessibilitySummary(isRunning: tool.tool.isRunning) + (tool.tool.isRunning ? ", running" : "")
-                + (tool.tool.isError ? ", failed" : "") + (tool.isExpanded ? ", expanded" : ", collapsed")
+            self.header.accessibilityText = AccessibilityText.join([
+                edit.accessibilitySummary(isRunning: tool.tool.isRunning),
+                tool.tool.isRunning ? L("running") : nil, tool.tool.isError ? L("failed") : nil,
+                tool.isExpanded ? L("expanded") : L("collapsed"),
+            ])
         } else {
-            self.header.accessibilityText = [tool.tool.name, tool.tool.summary].compactMap(\.self).joined(separator: " ")
-                + (tool.isExpanded ? ", expanded" : ", collapsed")
+            self.header.accessibilityText = AccessibilityText.join([
+                [tool.tool.name, tool.tool.summary].compactMap(\.self).joined(separator: " "),
+                tool.isExpanded ? L("expanded") : L("collapsed"),
+            ])
         }
         if !sameTool {
             self.copiedToken += 1
@@ -1660,7 +1666,7 @@ extension TranscriptToolHeaderView {
         var right = chevronX - 8
 
         let badgeFont = style.caption2Medium
-        let badgeText = part.tool.isError ? "Failed" : edit.statusLabel(isRunning: part.tool.isRunning)
+        let badgeText = part.tool.isError ? L("Failed") : edit.statusLabel(isRunning: part.tool.isRunning)
         let badgeColor = part.tool.isError ? TranscriptColors.red : TranscriptColors.secondary
         let badge = singleLine(badgeText, badgeFont, badgeColor)
         let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
@@ -2286,9 +2292,9 @@ final class TranscriptReactionChipView: TranscriptTapView {
 final class TranscriptAddReactionView: TranscriptTapView {
     override init(frame: CGRect) {
         super.init(frame: frame)
-        self.accessibilityText = "Add Reaction"
+        self.accessibilityText = L("Add Reaction")
         #if os(macOS)
-        self.toolTip = "Add Reaction"
+        self.toolTip = L("Add Reaction")
         #endif
     }
 

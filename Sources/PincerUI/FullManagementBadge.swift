@@ -13,7 +13,7 @@ struct FullManagementBadge: View {
             Text(SetupWizardModel.fullManagementMessage)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Button("Open Connection…", action: self.openConnection)
+            Button(L("Open Connection…"), action: self.openConnection)
                 .buttonStyle(.borderless)
                 .font(.callout)
         }

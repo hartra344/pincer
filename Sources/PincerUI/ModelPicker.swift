@@ -27,6 +27,8 @@ struct ModelPicker: View {
         .fixedSize()
         .disabled(self.row.isModelSelectionLocked)
         .help(self.help)
+        .accessibilityLabel(L("Model"))
+        .accessibilityValue(self.currentRef.map(ModelRef.shortName) ?? L("Default"))
         .task(id: self.row.agentId) { await self.gateway.loadModels(agentId: self.row.agentId) }
     }
 
@@ -62,10 +64,10 @@ struct ModelPicker: View {
                 }
             }
         } else {
-            Text(self.isLoading ? "Loading models…" : "No models available")
+            Text(self.isLoading ? L("Loading models…") : L("No models available"))
         }
         Divider()
-        Button("Refresh Models", systemImage: "arrow.clockwise") {
+        Button(L("Refresh Models"), systemImage: "arrow.clockwise") {
             Task { await self.gateway.loadModels(agentId: self.row.agentId, refresh: true) }
         }
     }

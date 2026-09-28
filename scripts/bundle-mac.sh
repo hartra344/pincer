@@ -10,6 +10,10 @@ APP="build/Pincer.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Pincer"
+# SwiftPM resource bundles (e.g. PincerUI's String Catalog); `Bundle.module` looks in Contents/Resources.
+for bundle in "$(dirname "$BIN")"/*.bundle; do
+  [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/Resources/"
+done
 # SwiftPM records the deployment target as the SDK version, so macOS would run the app in its
 # pre-26 compatibility look (no Liquid Glass). Stamp the SDK it was actually built with.
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"

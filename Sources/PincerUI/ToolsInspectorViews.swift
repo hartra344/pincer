@@ -39,17 +39,17 @@ struct ToolsInspectorView: View {
             }
             if let inspection = model.inspection {
                 Section {
-                    Picker("Show", selection: self.$filter) {
+                    Picker(L("Show"), selection: self.$filter) {
                         ForEach(ToolFilter.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
-                    TextField("Filter tools", text: self.$search)
+                    TextField(L("Filter tools"), text: self.$search)
                         .textFieldStyle(.roundedBorder)
                 }
                 let groups = inspection.filtered(self.filter, search: self.search)
                 if groups.isEmpty {
                     Section {
-                        Text(inspection.totalCount == 0 ? "No tools." : "No tools match.").foregroundStyle(.secondary)
+                        Text(inspection.totalCount == 0 ? L("No tools.") : L("No tools match.")).foregroundStyle(.secondary)
                     }
                 }
                 ForEach(groups) { group in
@@ -61,7 +61,7 @@ struct ToolsInspectorView: View {
                 Section {
                     VStack(alignment: .leading, spacing: 6) {
                         Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled)
-                        Button("Retry") { Task { await model.load() } }
+                        Button(L("Retry")) { Task { await model.load() } }
                     }
                 }
             } else {
@@ -78,7 +78,7 @@ struct ToolsInspectorView: View {
         .formStyle(.grouped)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Refresh", systemImage: "arrow.clockwise") { Task { await model.load() } }
+                Button(L("Refresh"), systemImage: "arrow.clockwise") { Task { await model.load() } }
                     .disabled(model.isLoading)
             }
         }
@@ -111,7 +111,7 @@ private struct ToolInspectorRow: View {
                 }
             }
             Spacer()
-            Text(self.tool.isAllowed ? "Allowed" : "Denied")
+            Text(self.tool.isAllowed ? L("Allowed") : L("Denied"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(self.tool.isAllowed ? Color.green : Color.red)
         }
@@ -136,12 +136,12 @@ struct ChatToolsInspectorSheet: View {
                 self.dismiss()
                 self.openGatewaySettings(self.gateway, at: destination)
             }
-            .navigationTitle("Tools & Policy")
+            .navigationTitle(L("Tools & Policy"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { self.dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.dismiss() } }
             }
         }
         #if os(macOS)
@@ -163,8 +163,8 @@ struct AgentToolsPage: View {
         let agent = self.gateway.agents.first { $0.id == self.agentId }
         Group {
             if !self.gateway.state.isConnected {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see this agent's tools."))
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Connect to the gateway to see this agent's tools.", bundle: .module))
             } else if let model {
                 ToolsInspectorView(model: model, scopeTitle: "Agent: \(agent?.title ?? self.agentId)",
                                    scopeDetail: model.effective == nil ? nil : self.liveChatTitle(model).map(ToolsPolicy.livePolicyNote),
@@ -175,7 +175,7 @@ struct AgentToolsPage: View {
                 ProgressView()
             }
         }
-        .navigationTitle("Tools")
+        .navigationTitle(L("Tools"))
         .task(id: self.gateway.state.isConnected) {
             guard self.gateway.state.isConnected else { return }
             if self.model == nil { self.model = self.gateway.toolsInspector(agentId: self.agentId) }

@@ -45,9 +45,10 @@ The first time you open Pincer, a short setup walks you from launch to your firs
 ## Features
 
 - **Layout:**
-  - by default, a **"By server"** layout: each Discord server gets a section with its `#channels`, automations get their own section, and everything else is grouped under its agent. You can also group by agent, by group, or by recency;
+  - by default, a **"By server"** layout: each Discord server gets a section with its `#channels`, automations get their own section when shown, and everything else is grouped under its agent. You can also group by agent, by group, or by recency;
   - server names come from the gateway's Discord config (`channels.discord.guilds.<id>.slug`) when it's set; otherwise the section is just called "Discord". Discord categories aren't sent at all. To name a server yourself, right-click its header and choose **Rename Server…**. Names you set sync to your other devices through the gateway's user preferences (`users.prefs`, key `pincer.serverNames`); if the gateway has no durable identity for your connection, they stay on this device. To recreate categories, choose **New Group…** from the Organize menu (or a group header's menu), or right-click a channel and choose **Move to Group → New Group…**. Groups sync through the gateway;
   - subagent (helper) runs stay out of the sidebar, like Discord: open one from the **Open run** button on the tool call that started it or from the chat's **Runs** panel, and a spinner on the parent shows helpers are working. Settings → Sidebar can list them under their parent (behind a ✨ count chip) instead. They never add to unread counts or notifications;
+  - automation (cron) and slash-command chats are hidden by default. **Show Automations** and **Show Slash Commands** in the Organize menu (next to **Show Archived**) list them in every layout; the choice is saved per gateway. While hidden they don't add to unread counts or section badges, but the open chat stays listed, typing in "Find a chat" matches them, and Search Messages, ⌘K, links and **Organize → Automations…** still open them;
   - custom chat icons: right-click a chat and choose **Change Icon…** to pick an SF Symbol (tinted with the chat's color), or **Reset Icon** to go back to the default. Icons sync to your other devices through `users.prefs` (key `pincer.chatIcons`), since the gateway's session `icon` only takes emoji, named glyphs or SVG. Named glyphs set by other OpenClaw clients are shown too;
   - pinned chats. New chats you start are listed on their own, like in the Control UI; only forks and branches nest under their parent;
   - compaction doesn't start a new chat. It shows up inline as a "Compacting context…" line while it runs, then as a divider in the same thread;
@@ -89,6 +90,7 @@ The first time you open Pincer, a short setup walks you from launch to your firs
   - the demo gateway's research chat has spawned helpers that are finished (one with a nested helper), still running, failed, and stopped.
 - **Appearance:** Settings → Appearance picks Light, Dark or System and a theme: Default (your system accent), Lobster, Ocean, Forest, Grape, Sunset, Graphite or Midnight. Themes color the accent, links, both avatars, and the chat, sidebar and code backgrounds, with separate shades for light and dark mode. Any of those colors can be overridden with your own pick, and reset back to the theme's.
 - **Animated avatars:** each agent gets a small companion pet (a blob, owl, rock or sprout, drawn in pixel art or as a soft plush) that reacts to what the agent is doing: it blinks when idle, wiggles while thinking, sways while replying, shows a tool badge while a tool runs, raises a paw for approvals, hops when a run finishes, wobbles on errors and dozes while compacting. The look is picked from the agent's identity, so each agent is different. Settings → Appearance turns them off, switches Pixel and Plush, and lets you pick a character per agent. Reduce Motion gives still poses. The website's Agent avatars guide has the details.
+- **Accessibility:** VoiceOver reads each message as one item, with Copy, Reply and Add Reaction in the actions rotor, and announces when the agent finishes replying in the open chat. Sidebar rows, the composer's controls and Settings have spoken labels. The transcript, sidebar and composer follow Dynamic Type on iOS, and the keyboard reaches the sidebar, command palette, composer and find bar. The website's Accessibility guide has the details.
 - **Owner attribution:** messages from you appear under your own name (set in Settings, default is your macOS full name), even when they came in through Discord. A small "via Discord" tag shows where they came from.
 - **Models:** the chat toolbar shows the session's model; pick another (from the Gateway's `models.list`) or go back to the agent's default, and new messages use it. Each reply's footer shows the model the Gateway recorded for it, so earlier replies keep their original model after a switch.
 - **Composer:** Return sends and ⇧/⌥-Return adds a new line. You can paste, drag in or pick images and files; they are downscaled to fit the gateway's limits. Stop a run with ⌘.
@@ -176,6 +178,10 @@ To produce signed macOS and iOS apps, generate the Xcode project with [XcodeGen]
 xcodegen generate
 open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pincer-iOS
 ```
+
+### Localization
+
+UI strings live in `Sources/PincerUI/Resources/Localizable.xcstrings`, which SwiftPM bundles with PincerUI (not the app's main bundle). Look strings up with `Text("key", bundle: .module)` or `String(localized: "key", bundle: .module)`, or the `Text(l:)` / `L()` shorthands in `Localization.swift`. A bare `Text("key")` misses the catalog. After changing UI strings, run `scripts/sync-strings.sh` to regenerate the catalog. Moving strings into the catalog is ongoing. The website's Localization page explains how to add a language.
 
 ### Tests on CI
 

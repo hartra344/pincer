@@ -1396,7 +1396,22 @@ actor DemoGateway {
             self.emit("chat", ["runId": .string(id), "sessionKey": .string(run.sessionKey),
                                "seq": JSONValue(run.seq + 2), "state": "aborted"])
         }
+        // The runs seeded as already going have no task behind them; stopping one just ends it.
+        guard matching.isEmpty, let sessionKey, let row = self.sessions[sessionKey], row["hasActiveRun"]?.bool == true,
+              let seeded = row["activeRunIds"]?.array?.first?.string, runId == nil || runId == seeded,
+              [Self.seededRunId, Self.seededHelperRunId].contains(seeded)
+        else { return }
+        self.updateRow(sessionKey, reason: "abort") { row in
+            row["hasActiveRun"] = false
+            row["activeRunIds"] = []
+            row["status"] = "idle"
+        }
+        self.emit("chat", ["runId": .string(seeded), "sessionKey": .string(sessionKey), "seq": JSONValue(1), "state": "aborted"])
     }
+
+    /// Runs the demo opens with already going: Forge's "Fix retry backoff" chat and Scout's helper run.
+    static let seededRunId = "run_demo_seeded_retry"
+    static let seededHelperRunId = "run_demo_seeded_helper"
 
     // MARK: Events
 
@@ -1817,12 +1832,15 @@ actor DemoGateway {
         add("agent:research:subagent:abc", agent: "research", title: "Summarize arXiv 2401.x",
             preview: "Subagent found the main contribution.", age: 180_000,
             ["label": "Summarize arXiv 2401.x", "parentSessionKey": "agent:research:dashboard:papers",
-             "spawnedBy": "agent:research:dashboard:papers"],
+             "spawnedBy": "agent:research:dashboard:papers", "hasActiveRun": true, "status": "running",
+             "activeRunIds": [.string(Self.seededHelperRunId)]],
             messages: [
                 said("assistant", "The paper mainly improves how retrieval-augmented summaries are evaluated.", ago: 3 * minute),
             ])
+        // Forge is still at work here, so the sidebar shows a working chat at launch.
         add(Self.fileEditsKey, agent: "coder", title: "Fix retry backoff", preview: Self.fileEditsPreview,
-            age: 5 * hour * 1000, messages: Self.seedFileEditsTranscript())
+            age: 5 * hour * 1000, ["hasActiveRun": true, "status": "running", "activeRunIds": [.string(Self.seededRunId)]],
+            messages: Self.seedFileEditsTranscript())
         add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
             ["isMain": true, "unread": true], messages: [
                 said("assistant", "Forge can edit code, run builds, and report back briefly.", ago: 14 * day),
@@ -1846,6 +1864,44 @@ actor DemoGateway {
                 Raised the login timeout to 30 s and the tests pass. I've asked to run \
                 `git push origin fix/login-timeout`; approve it and I'll push.
                 """, ago: 45),
+            ])
+        // Chats of the demo's cron jobs (the log's morning-briefing and disk-check), hidden from the
+        // sidebar until Organize ▸ Show Automations is on.
+        let cron: Row = ["channel": "cron", "totalTokens": 6_400, "inputTokens": 6_400, "outputTokens": 420]
+        let briefingPrompt = "Write my morning briefing: weather, calendar and anything urgent in my inbox."
+        add("agent:main:cron:morning-briefing", agent: "main", title: "Morning briefing",
+            preview: "Sunny, 22°C. Two meetings and one flagged email.", age: 2 * hour * 1000,
+            cron.merging(["label": "Automation: Morning briefing", "unread": true]) { _, new in new }, messages: [
+                said("user", briefingPrompt, ago: day + 2 * hour),
+                said("assistant", """
+                **Good morning.** Light rain until 10, then clearing to 19°C. You have a 1:1 with Priya at 10:00 \
+                and nothing else before lunch. No urgent mail overnight.
+                """, ago: day + 2 * hour - minute),
+                said("user", briefingPrompt, ago: 2 * hour),
+                said("assistant", """
+                **Good morning.** Sunny and 22°C all day.
+
+                - 09:30 Design review
+                - 14:00 Dentist (Harbor St.)
+
+                One flagged email: the landlord needs the lease renewal signed **by Friday**.
+                """, ago: 2 * hour - minute),
+            ])
+        add("agent:main:cron:disk-check", agent: "main", title: "Check disk space",
+            preview: "The external drive isn't mounted.", age: 3 * hour * 1000,
+            cron.merging(["label": "Automation: Check disk space"]) { _, new in new }, messages: [
+                said("user", "Check free space on every volume and warn me under 10%.", ago: 3 * hour),
+                said("assistant", """
+                The root volume is at 46% and fine. The external drive isn't mounted, so I couldn't check it \
+                (`df` exited with code 1).
+                """, ago: 3 * hour - minute),
+            ])
+        // Native Discord slash commands run in their own `…:discord:slash:<userId>` session.
+        add("agent:main:discord:slash:418235907214753792", agent: "main", title: "Slash commands",
+            preview: "Status: online, 3 agents, 1 pending approval.", age: 4 * hour * 1000,
+            ["channel": "discord", "totalTokens": 1_200, "inputTokens": 1_200, "outputTokens": 80], messages: [
+                said("user", "/status", ago: 4 * hour, extra: discord),
+                said("assistant", "Status: online, 3 agents, 1 pending approval.", ago: 4 * hour - 2),
             ])
         return (sessions, transcripts)
     }

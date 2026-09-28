@@ -68,6 +68,9 @@ public struct SessionRow: Identifiable, Hashable, Sendable {
     public var channel: String? { self.raw["channel"]?.text }
     public var chatType: String? { self.raw["chatType"]?.text }
     public var isMain: Bool { self.raw["isMain"]?.bool ?? SessionKey.isMain(self.key) }
+    /// An agent's home chat the Gateway hasn't stored yet (no messages), listed so the agent shows.
+    public var isPlaceholder: Bool { self.raw[Self.placeholderField]?.bool ?? false }
+    static let placeholderField = "pincerPlaceholder"
     public var isPinned: Bool { self.raw["pinned"]?.bool ?? false }
     public var isUnread: Bool { self.raw["unread"]?.bool ?? false }
     public var isArchived: Bool { self.raw["archived"]?.bool ?? (self.raw["archivedAt"]?.double != nil) }

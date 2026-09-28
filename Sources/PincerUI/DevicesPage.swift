@@ -21,10 +21,10 @@ struct DevicesPage: View {
         let gatewayName = self.gateway.profile.name
         Group {
             if !connected {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
                                        description: Text(DeviceManagementModel.disconnectedMessage))
             } else if !model.supported {
-                ContentUnavailableView("Devices Aren't Available", systemImage: "laptopcomputer.and.iphone",
+                ContentUnavailableView(L("Devices Aren't Available"), systemImage: "laptopcomputer.and.iphone",
                                        description: Text(DeviceManagementModel.unsupportedMessage))
             } else if model.needsAccess {
                 List { DeviceAccessNeeded() }
@@ -32,13 +32,13 @@ struct DevicesPage: View {
                 self.list(model)
             }
         }
-        .navigationTitle("Devices")
+        .navigationTitle(L("Devices"))
         .toolbar {
             if connected, model.supported, !model.needsAccess {
                 ToolbarItem {
-                    Button { Task { await model.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    Button { Task { await model.refresh() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
                         .disabled(model.loadState.isRunning)
-                        .help("Refresh")
+                        .help(L("Refresh"))
                 }
             }
         }
@@ -48,26 +48,26 @@ struct DevicesPage: View {
         .confirmationDialog(self.revoking.map { model.isSelf($0) ? "Revoke this device?" : "Revoke “\($0.title)”?" } ?? "",
                             isPresented: Binding(get: { self.revoking != nil }, set: { if !$0 { self.revoking = nil } }),
                             titleVisibility: .visible, presenting: self.revoking) { device in
-            Button(model.isSelf(device) ? "Revoke and Disconnect" : "Revoke", role: .destructive) {
+            Button(model.isSelf(device) ? L("Revoke and Disconnect") : L("Revoke"), role: .destructive) {
                 Task { await model.remove(device) }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L("Cancel"), role: .cancel) {}
         } message: { device in
             Text(model.isSelf(device) ? DeviceManagementModel.selfRevokeWarning(gateway: gatewayName)
                 : DeviceManagementModel.revokeMessage)
         }
-        .alert("Rename Device", isPresented: Binding(
+        .alert(L("Rename Device"), isPresented: Binding(
             get: { self.renaming != nil }, set: { if !$0 { self.renaming = nil } }
         ), presenting: self.renaming) { device in
-            TextField("Name", text: self.$renameText)
-            Button("Save") {
+            TextField(L("Name"), text: self.$renameText)
+            Button(L("Save")) {
                 let label = self.renameText
                 Task { await model.rename(device, to: label) }
             }
             .disabled(self.renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Button("Cancel", role: .cancel) {}
+            Button(L("Cancel"), role: .cancel) {}
         } message: { _ in
-            Text("The name is shown to every operator of this gateway (up to \(DeviceManagementModel.maxLabelLength) characters).")
+            Text("The name is shown to every operator of this gateway (up to \(DeviceManagementModel.maxLabelLength) characters).", bundle: .module)
         }
         .overlay(alignment: .bottom) { DeviceNotice(model: model) }
     }
@@ -80,7 +80,7 @@ struct DevicesPage: View {
             if let error = model.loadState.error, model.hasLoaded {
                 Section {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
-                    Button("Try Again") { Task { await model.refresh() } }
+                    Button(L("Try Again")) { Task { await model.refresh() } }
                 }
             }
             if model.hasLoaded || !model.pending.isEmpty || !model.paired.isEmpty {
@@ -92,13 +92,13 @@ struct DevicesPage: View {
                         PendingDeviceRow(request: request, model: model)
                     }
                 } header: {
-                    Text("Pending Requests")
+                    Text("Pending Requests", bundle: .module)
                 } footer: {
                     if !model.pending.isEmpty {
-                        Text("Only approve devices you recognize. Compare the fingerprint with the one the device shows while it waits.")
+                        Text("Only approve devices you recognize. Compare the fingerprint with the one the device shows while it waits.", bundle: .module)
                     }
                 }
-                Section("Paired Devices") {
+                Section(L("Paired Devices")) {
                     ForEach(model.paired) { device in
                         PairedDeviceRow(device: device, model: model,
                                         rename: {
@@ -145,7 +145,7 @@ private struct PendingDeviceRow: View {
             }
             if let requestedAt = self.request.requestedAt {
                 TimelineView(.periodic(from: .now, by: 30)) { context in
-                    Text("Requested \(DeviceFingerprint.ago(requestedAt, now: context.date))")
+                    Text("Requested \(DeviceFingerprint.ago(requestedAt, now: context.date))", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .help(requestedAt.formatted(date: .abbreviated, time: .shortened))
@@ -154,15 +154,15 @@ private struct PendingDeviceRow: View {
             FingerprintText(deviceId: self.request.deviceId)
             AccessChips(roles: self.request.roles, scopes: self.request.scopes)
             if self.request.requestsNodeRole {
-                Label("Asks to run commands for agents (node role).", systemImage: "exclamationmark.shield")
+                Label(L("Asks to run commands for agents (node role)."), systemImage: "exclamationmark.shield")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            DisclosureGroup("Details") {
+            DisclosureGroup(L("Details")) {
                 DeviceDetails(deviceId: self.request.deviceId, clientId: self.request.clientId,
                               clientMode: self.request.clientMode, origin: self.request.browserOrigin,
                               scopes: self.request.scopes, requestId: self.request.requestId)
-                if let ip = self.request.remoteIp { LabeledContent("Address", value: ip).font(.caption) }
+                if let ip = self.request.remoteIp { LabeledContent(L("Address"), value: ip).font(.caption) }
             }
             .font(.caption)
             if let error = operation.error {
@@ -178,22 +178,22 @@ private struct PendingDeviceRow: View {
         }
         .padding(.vertical, 4)
         .contextMenu {
-            Button("Copy Device ID", systemImage: "doc.on.doc") { Clipboard.copy(self.request.deviceId) }
-            Button("Copy Request ID", systemImage: "number") { Clipboard.copy(self.request.requestId) }
+            Button(L("Copy Device ID"), systemImage: "doc.on.doc") { Clipboard.copy(self.request.deviceId) }
+            Button(L("Copy Request ID"), systemImage: "number") { Clipboard.copy(self.request.requestId) }
         }
     }
 
     @ViewBuilder private func buttons(busy: Bool) -> some View {
         if busy { ProgressView().controlSize(.small) }
         if self.model.canManage {
-            Button("Reject", role: .destructive) { Task { await self.model.reject(self.request) } }
+            Button(L("Reject"), role: .destructive) { Task { await self.model.reject(self.request) } }
                 .buttonStyle(.bordered)
                 .disabled(busy)
-                .accessibilityLabel("Reject \(self.request.title)")
-            Button("Approve") { Task { await self.model.approve(self.request) } }
+                .accessibilityLabel(L("Reject \(self.request.title)"))
+            Button(L("Approve")) { Task { await self.model.approve(self.request) } }
                 .buttonStyle(.borderedProminent)
                 .disabled(busy)
-                .accessibilityLabel("Approve \(self.request.title)")
+                .accessibilityLabel(L("Approve \(self.request.title)"))
         }
     }
 }
@@ -222,20 +222,20 @@ private struct PairedDeviceRow: View {
             DevicePresence(connected: self.device.connected, lastSeen: self.device.lastActive)
             FingerprintText(deviceId: self.device.deviceId)
             AccessChips(roles: self.device.roles, scopes: self.device.effectiveScopes)
-            DisclosureGroup("Details") {
+            DisclosureGroup(L("Details")) {
                 DeviceDetails(deviceId: self.device.deviceId, clientId: self.device.clientId,
                               clientMode: self.device.clientMode, origin: nil,
                               scopes: self.device.effectiveScopes, requestId: nil)
                 if let label = self.device.operatorLabel, let name = self.device.displayName, label != name {
-                    LabeledContent("Device name", value: name).font(.caption)
+                    LabeledContent(L("Device name"), value: name).font(.caption)
                 }
-                if let ip = self.device.remoteIp { LabeledContent("Address", value: ip).font(.caption) }
-                if let via = self.device.approvedViaLabel { LabeledContent("Approval", value: via).font(.caption) }
+                if let ip = self.device.remoteIp { LabeledContent(L("Address"), value: ip).font(.caption) }
+                if let via = self.device.approvedViaLabel { LabeledContent(L("Approval"), value: via).font(.caption) }
                 if let approvedAt = self.device.approvedAt {
-                    LabeledContent("Approved", value: approvedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption)
+                    LabeledContent(L("Approved"), value: approvedAt.formatted(date: .abbreviated, time: .shortened)).font(.caption)
                 }
                 ForEach(self.device.tokens, id: \.role) { token in
-                    LabeledContent("\(token.role.capitalized) token", value: DevicesUI.tokenLine(token)).font(.caption)
+                    LabeledContent(L("\(token.role.capitalized) token"), value: DevicesUI.tokenLine(token)).font(.caption)
                 }
             }
             .font(.caption)
@@ -248,11 +248,11 @@ private struct PairedDeviceRow: View {
     }
 
     @ViewBuilder private func actions(isSelf: Bool) -> some View {
-        Button("Copy Device ID", systemImage: "doc.on.doc") { Clipboard.copy(self.device.deviceId) }
+        Button(L("Copy Device ID"), systemImage: "doc.on.doc") { Clipboard.copy(self.device.deviceId) }
         if self.model.canManage {
-            if self.model.canRename { Button("Rename…", systemImage: "pencil", action: self.rename) }
+            if self.model.canRename { Button(L("Rename…"), systemImage: "pencil", action: self.rename) }
             Divider()
-            Button(isSelf ? "Revoke This Device…" : "Revoke…", systemImage: "xmark.shield", role: .destructive, action: self.revoke)
+            Button(isSelf ? L("Revoke This Device…") : L("Revoke…"), systemImage: "xmark.shield", role: .destructive, action: self.revoke)
         }
     }
 
@@ -260,13 +260,13 @@ private struct PairedDeviceRow: View {
         Menu {
             self.actions(isSelf: isSelf)
         } label: {
-            Label("Actions", systemImage: "ellipsis.circle").labelStyle(.iconOnly)
+            Label(L("Actions"), systemImage: "ellipsis.circle").labelStyle(.iconOnly)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
         .disabled(busy)
-        .accessibilityLabel("Actions for \(self.device.title)")
+        .accessibilityLabel(L("Actions for \(self.device.title)"))
     }
 }
 
@@ -299,8 +299,8 @@ private struct FingerprintText: View {
             Image(systemName: "touchid").font(.caption)
         }
         .foregroundStyle(.secondary)
-        .help("Fingerprint (SHA-256 of the device's public key): \(self.deviceId)")
-        .accessibilityLabel("Fingerprint \(DeviceFingerprint.compact(self.deviceId))")
+        .help(L("Fingerprint (SHA-256 of the device's public key): \(self.deviceId)"))
+        .accessibilityLabel(L("Fingerprint \(DeviceFingerprint.compact(self.deviceId))"))
     }
 }
 
@@ -312,7 +312,7 @@ private struct DevicePresence: View {
     var body: some View {
         if self.connected {
             Label {
-                Text("Connected")
+                Text("Connected", bundle: .module)
             } icon: {
                 Circle().fill(Color.green).frame(width: 7, height: 7)
             }
@@ -320,13 +320,13 @@ private struct DevicePresence: View {
             .foregroundStyle(.secondary)
         } else if let lastSeen = self.lastSeen {
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                Text("Last seen \(DeviceFingerprint.ago(lastSeen, now: context.date))")
+                Text("Last seen \(DeviceFingerprint.ago(lastSeen, now: context.date))", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .help(lastSeen.formatted(date: .abbreviated, time: .shortened))
             }
         } else {
-            Text("Not connected").font(.caption).foregroundStyle(.secondary)
+            Text("Not connected", bundle: .module).font(.caption).foregroundStyle(.secondary)
         }
     }
 }
@@ -420,20 +420,20 @@ private struct DeviceDetails: View {
     let requestId: String?
 
     var body: some View {
-        LabeledContent("Device ID") {
+        LabeledContent(L("Device ID")) {
             Text(self.deviceId).font(.caption.monospaced()).textSelection(.enabled)
         }
         .font(.caption)
-        if let clientId { LabeledContent("Client", value: [clientId, self.clientMode].compactMap(\.self).joined(separator: " · ")).font(.caption) }
-        if let origin { LabeledContent("Origin", value: origin).font(.caption) }
+        if let clientId { LabeledContent(L("Client"), value: [clientId, self.clientMode].compactMap(\.self).joined(separator: " · ")).font(.caption) }
+        if let origin { LabeledContent(L("Origin"), value: origin).font(.caption) }
         if !self.scopes.isEmpty {
-            LabeledContent("Scopes") {
+            LabeledContent(L("Scopes")) {
                 Text(self.scopes.joined(separator: "\n")).font(.caption.monospaced()).textSelection(.enabled)
             }
             .font(.caption)
         }
         if let requestId {
-            LabeledContent("Request ID") { Text(requestId).font(.caption.monospaced()).textSelection(.enabled) }
+            LabeledContent(L("Request ID")) { Text(requestId).font(.caption.monospaced()).textSelection(.enabled) }
                 .font(.caption)
         }
     }
@@ -477,13 +477,13 @@ private struct DeviceAccessNeeded: View {
                     .font(.callout.weight(.medium))
                 Text(self.message).font(.caption).foregroundStyle(.secondary)
                 if self.gateway.profile.access == .admin, !self.gateway.settings.canEdit {
-                    Text("The Gateway hasn't granted Full Management to this device yet.")
+                    Text("The Gateway hasn't granted Full Management to this device yet.", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.orange)
                     ApprovalInstructions(requestId: nil)
                         .frame(maxWidth: 420, alignment: .leading)
                 }
-                Button("Open Connection") { self.navigator.destination = .connection }
+                Button(L("Open Connection")) { self.navigator.destination = .connection }
             }
             .padding(.vertical, 4)
         }
@@ -524,38 +524,38 @@ struct NodesPage: View {
         let connected = self.gateway.state.isConnected
         Group {
             if !connected {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to a Gateway to see its nodes."))
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Connect to a Gateway to see its nodes.", bundle: .module))
             } else if !model.nodesSupported {
-                ContentUnavailableView("Nodes Aren't Available", systemImage: "cpu",
-                                       description: Text("This Gateway can't list nodes."))
+                ContentUnavailableView(L("Nodes Aren't Available"), systemImage: "cpu",
+                                       description: Text("This Gateway can't list nodes.", bundle: .module))
             } else {
                 self.list(model)
             }
         }
-        .navigationTitle("Nodes")
+        .navigationTitle(L("Nodes"))
         .toolbar {
             if connected, model.nodesSupported {
                 ToolbarItem {
-                    Button { Task { await model.loadNodes() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    Button { Task { await model.loadNodes() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
                         .disabled(model.nodesLoadState.isRunning)
-                        .help("Refresh")
+                        .help(L("Refresh"))
                 }
             }
         }
         .task(id: connected) {
             if connected { await model.loadNodes() }
         }
-        .alert("Rename Node", isPresented: Binding(
+        .alert(L("Rename Node"), isPresented: Binding(
             get: { self.renaming != nil }, set: { if !$0 { self.renaming = nil } }
         ), presenting: self.renaming) { node in
-            TextField("Name", text: self.$renameText)
-            Button("Save") {
+            TextField(L("Name"), text: self.$renameText)
+            Button(L("Save")) {
                 let name = self.renameText
                 Task { await model.renameNode(node, to: name) }
             }
             .disabled(self.renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Button("Cancel", role: .cancel) {}
+            Button(L("Cancel"), role: .cancel) {}
         }
         .overlay(alignment: .bottom) { DeviceNotice(model: model) }
     }
@@ -565,7 +565,7 @@ struct NodesPage: View {
             if let error = model.nodesLoadState.error, model.nodesLoaded {
                 Section {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
-                    Button("Try Again") { Task { await model.loadNodes() } }
+                    Button(L("Try Again")) { Task { await model.loadNodes() } }
                 }
             }
             if !model.nodes.isEmpty {
@@ -578,9 +578,9 @@ struct NodesPage: View {
                     }
                 } footer: {
                     if model.canRenameNodes {
-                        Text("Approve new nodes on the Devices page.")
+                        Text("Approve new nodes on the Devices page.", bundle: .module)
                     } else {
-                        Text("Renaming nodes needs Full Management.")
+                        Text("Renaming nodes needs Full Management.", bundle: .module)
                     }
                 }
             }
@@ -593,8 +593,8 @@ struct NodesPage: View {
                 if !model.nodesLoaded {
                     ProgressView()
                 } else if model.nodesLoadState.error == nil {
-                    ContentUnavailableView("No paired nodes", systemImage: "cpu",
-                                           description: Text("Nodes such as the OpenClaw Mac, iOS or Android apps show up here after they pair."))
+                    ContentUnavailableView(L("No paired nodes"), systemImage: "cpu",
+                                           description: Text("Nodes such as the OpenClaw Mac, iOS or Android apps show up here after they pair.", bundle: .module))
                 }
             }
         }
@@ -617,10 +617,10 @@ private struct NodeRow: View {
                 Spacer(minLength: 8)
                 if operation.isRunning { ProgressView().controlSize(.small) }
                 if self.model.canRenameNodes {
-                    Button("Rename…", action: self.rename)
+                    Button(L("Rename…"), action: self.rename)
                         .buttonStyle(.borderless)
                         .disabled(operation.isRunning)
-                        .accessibilityLabel("Rename \(self.node.title)")
+                        .accessibilityLabel(L("Rename \(self.node.title)"))
                 }
             }
             if !self.node.subtitle.isEmpty {
@@ -638,8 +638,8 @@ private struct NodeRow: View {
         }
         .padding(.vertical, 4)
         .contextMenu {
-            Button("Copy Node ID", systemImage: "doc.on.doc") { Clipboard.copy(self.node.nodeId) }
-            if self.model.canRenameNodes { Button("Rename…", systemImage: "pencil", action: self.rename) }
+            Button(L("Copy Node ID"), systemImage: "doc.on.doc") { Clipboard.copy(self.node.nodeId) }
+            if self.model.canRenameNodes { Button(L("Rename…"), systemImage: "pencil", action: self.rename) }
         }
     }
 

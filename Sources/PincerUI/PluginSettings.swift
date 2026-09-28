@@ -10,25 +10,25 @@ struct PluginsPage: View {
         GatewaySettingsForm {
             Section {
                 if !settings.pluginsSupported {
-                    Text("This Gateway doesn't support managing plugins remotely. Update OpenClaw to manage plugins here.")
+                    Text("This Gateway doesn't support managing plugins remotely. Update OpenClaw to manage plugins here.", bundle: .module)
                         .foregroundStyle(.secondary)
                 } else if settings.plugins.isEmpty {
-                    Text("No plugins installed.").foregroundStyle(.secondary)
+                    Text("No plugins installed.", bundle: .module).foregroundStyle(.secondary)
                 }
                 ForEach(settings.plugins) { plugin in
                     NavigationLink(value: SettingsRoute.plugin(plugin.id)) { PluginRow(plugin: plugin) }
                 }
             } footer: {
-                Text("Plugins run on your Gateway host. Turning one on or off, installing or removing it happens right away.")
+                Text("Plugins run on your Gateway host. Turning one on or off, installing or removing it happens right away.", bundle: .module)
             }
         }
-        .navigationTitle("Plugins")
+        .navigationTitle(L("Plugins"))
         .toolbar {
             if settings.pluginsSupported {
                 ToolbarItem {
-                    Button { self.adding = true } label: { Label("Add Plugin", systemImage: "plus") }
+                    Button { self.adding = true } label: { Label(L("Add Plugin"), systemImage: "plus") }
                         .disabled(!settings.canEdit)
-                        .help("Install a plugin on the Gateway")
+                        .help(L("Install a plugin on the Gateway"))
                 }
             }
         }
@@ -78,7 +78,7 @@ struct PluginPage: View {
                 Section {
                     if let description = plugin.description { Text(description) }
                     HStack {
-                        Toggle("Enabled", isOn: Binding(
+                        Toggle(L("Enabled"), isOn: Binding(
                             get: { plugin.enabled },
                             set: { value in Task { await settings.setEnabled(plugin, value) } }))
                         if operation.isRunning { ProgressView().controlSize(.small) }
@@ -87,16 +87,16 @@ struct PluginPage: View {
                     if let error = operation.error {
                         Label(error, systemImage: "exclamationmark.octagon.fill").foregroundStyle(.red)
                     }
-                    LabeledContent("Status", value: plugin.statusLabel)
-                    if let version = plugin.version { LabeledContent("Version", value: version) }
+                    LabeledContent(L("Status"), value: plugin.statusLabel)
+                    if let version = plugin.version { LabeledContent(L("Version"), value: version) }
                     if let origin = plugin.origin {
-                        LabeledContent("Source", value: plugin.packageName.map { "\(origin) · \($0)" } ?? origin)
+                        LabeledContent(L("Source"), value: plugin.packageName.map { "\(origin) · \($0)" } ?? origin)
                     }
                     if let error = plugin.error {
                         Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
                     }
                     if plugin.needsSetup {
-                        Label("Fill in the required settings below, then save, to finish setting up this plugin.",
+                        Label(L("Fill in the required settings below, then save, to finish setting up this plugin."),
                               systemImage: "wrench.and.screwdriver")
                             .foregroundStyle(.orange)
                     }
@@ -107,7 +107,7 @@ struct PluginPage: View {
                 }
                 if plugin.removable {
                     Section {
-                        Button("Remove Plugin…", role: .destructive) { self.confirmRemove = true }
+                        Button(L("Remove Plugin…"), role: .destructive) { self.confirmRemove = true }
                             .disabled(!settings.canEdit || operation.isRunning)
                     }
                 }
@@ -115,8 +115,8 @@ struct PluginPage: View {
             .navigationTitle(plugin.name)
             .task { await settings.loadCredentials(for: plugin) }
             .onDisappear { settings.clearOperation(plugin.id) }
-            .confirmationDialog("Remove \(plugin.name)?", isPresented: self.$confirmRemove) {
-                Button("Remove", role: .destructive) {
+            .confirmationDialog(L("Remove \(plugin.name)?"), isPresented: self.$confirmRemove) {
+                Button(L("Remove"), role: .destructive) {
                     Task {
                         if await settings.uninstall(plugin), self.navigator.path.last == .plugin(plugin.id) {
                             self.navigator.path.removeLast()
@@ -124,10 +124,10 @@ struct PluginPage: View {
                     }
                 }
             } message: {
-                Text("The plugin is uninstalled from the Gateway and its settings are removed. This happens right away.")
+                Text("The plugin is uninstalled from the Gateway and its settings are removed. This happens right away.", bundle: .module)
             }
         } else {
-            ContentUnavailableView("Plugin Removed", systemImage: "puzzlepiece.extension")
+            ContentUnavailableView(L("Plugin Removed"), systemImage: "puzzlepiece.extension")
         }
     }
 }
@@ -146,18 +146,18 @@ struct AddPluginSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    Picker("Source", selection: self.$source) {
+                    Picker(L("Source"), selection: self.$source) {
                         ForEach(PluginSource.allCases) { Text($0.label).tag($0) }
                     }
-                    TextField("Plugin", text: self.$spec, prompt: Text(self.source.prompt))
+                    TextField(L("Plugin"), text: self.$spec, prompt: Text(self.source.prompt))
                         .autocorrectionDisabled()
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
                         #endif
                         .onSubmit(self.install)
-                    Toggle("Turn on after installing", isOn: self.$enable)
+                    Toggle(L("Turn on after installing"), isOn: self.$enable)
                 } footer: {
-                    Text("The Gateway downloads and installs the plugin itself. Only install plugins you trust: they run on your Gateway host.")
+                    Text("The Gateway downloads and installs the plugin itself. Only install plugins you trust: they run on your Gateway host.", bundle: .module)
                 }
                 if operation.isRunning {
                     Section { ProgressView("Installing…") }
@@ -167,11 +167,11 @@ struct AddPluginSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Add Plugin")
+            .navigationTitle(L("Add Plugin"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { self.dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Install", action: self.install)
+                    Button(L("Install"), action: self.install)
                         .disabled(self.spec.nilIfBlank == nil || operation.isRunning)
                 }
             }
@@ -199,9 +199,9 @@ extension View {
         let binding = Binding(
             get: { isActive && settings.pendingConfirmation != nil },
             set: { if !$0 { settings.pendingConfirmation = nil } })
-        return self.alert("Confirm Plugin Change", isPresented: binding, presenting: settings.pendingConfirmation) { confirmation in
-            Button("Cancel", role: .cancel) { settings.pendingConfirmation = nil }
-            Button("Allow") {
+        return self.alert(L("Confirm Plugin Change"), isPresented: binding, presenting: settings.pendingConfirmation) { confirmation in
+            Button(L("Cancel"), role: .cancel) { settings.pendingConfirmation = nil }
+            Button(L("Allow")) {
                 Task { onConfirmed(await settings.confirm(confirmation)) }
             }
         } message: { confirmation in
