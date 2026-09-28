@@ -61,6 +61,7 @@ final class MemorySampler: Sendable {
             while self.state.withLock({ $0.running }) {
                 let usage = memoryUsage()
                 self.state.withLock { $0.peakResident = max($0.peakResident, usage.resident); $0.peakFootprint = max($0.peakFootprint, usage.footprint) }
+                // Sampling cadence of the background thread, not a wait for anything.
                 usleep(10000)
             }
         }
@@ -89,13 +90,13 @@ func directorySize(_ url: URL, _ include: (String) -> Bool) -> Int64 {
 /// Always on: 2 chats × 5k messages build in ≤ 3 s; a selective query ≤ 100 ms (budgets relaxed
 /// to clearly-broken limits with --skip-perf-budgets).
 @MainActor
-func checkMessageIndexPerfSmoke() async {
+func checkMessageIndexPerfSmoke(root: URL?) async {
     let gatewayId = UUID()
     let chats = (0..<2).map { Synthetic.items(chat: $0, count: 5000) }
     let clock = ContinuousClock()
     let build = await clock.measure {
         for (chat, items) in chats.enumerated() {
-            await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "perf\(chat)")
+            await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "perf\(chat)", root: root)
         }
     }
     checkBudget(build, .seconds(3), hardLimit: .seconds(10), "perf smoke: 2 × 5k messages saved and indexed in \(build.formatted(.units(allowed: [.milliseconds])))")
@@ -103,17 +104,18 @@ func checkMessageIndexPerfSmoke() async {
     var worst = Duration.zero
     var groups: [MessageSearch.ChatGroup] = []
     for _ in 0..<5 {
-        let elapsed = await clock.measure { groups = await indexResults(gatewayId, "lantern glow", keys: keys) }
+        let elapsed = await clock.measure { groups = await indexResults(gatewayId, "lantern glow", keys: keys, root: root) }
         worst = max(worst, elapsed)
     }
     check(groups.count == 2 && groups.allSatisfy { $0.hits.count == 3 && $0.hasMore } && groups.first?.sessionKey == "perf1",
           "perf smoke: selective query results")
     checkBudget(worst, .milliseconds(100), hardLimit: .seconds(1), "perf smoke: selective query, slowest of 5: \(worst.formatted(.units(allowed: [.milliseconds])))")
     // Cancelling one search mustn't stop another that wasn't cancelled (e.g. a second window's).
-    let index = MessageIndex.shared(gatewayId: gatewayId)
+    let index = MessageIndex.shared(gatewayId: gatewayId, root: root)
     var bystanderOK = 0
     for delay in [0, 250, 500, 1000, 2000] {
         let bystander = Task { @MainActor in try await index.search("the", candidateLimit: 1_000_000) }
+        // Deliberate: varies how far the bystander search has got when the other is cancelled.
         if delay == 0 { await Task.yield() } else { try? await Task.sleep(for: .microseconds(delay)) }
         let cancelled = Task { @MainActor in
             try await withTaskCancellationHandler { try await index.search("lantern") } onCancel: { index.interrupt() }
@@ -126,18 +128,18 @@ func checkMessageIndexPerfSmoke() async {
     var appended = chats[0]
     appended.append(messageItem("new", .user, "freshly appended pelican", at: 1_800_000_000))
     let incremental = await clock.measure {
-        await TranscriptCache.save(TranscriptCache.Snapshot(items: appended, complete: true), gatewayId: gatewayId, sessionKey: "perf0")
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: appended, complete: true), gatewayId: gatewayId, sessionKey: "perf0", root: root)
     }
-    await checkAsync({ await indexHits(gatewayId, "pelican").count == 1 }, "perf smoke: appended message indexed")
+    await checkAsync({ await indexHits(gatewayId, "pelican", root: root).count == 1 }, "perf smoke: appended message indexed")
     checkBudget(incremental, .milliseconds(1000), hardLimit: .seconds(5),
                 "perf smoke: append to a 5k chat saved and indexed in \(incremental.formatted(.units(allowed: [.milliseconds])))")
-    TranscriptCache.removeAll(gatewayId: gatewayId)
+    TranscriptCache.removeAll(gatewayId: gatewayId, root: root)
 }
 
 /// `--perf`: 20 chats × 20k messages against the §4 targets.
 @MainActor
 func runMessageIndexPerf() async {
-    await withScratchCache { _ in
+    await withScratchCache { root in
         let gatewayId = UUID()
         let chatCount = 20
         let perChat = 20_000
@@ -146,14 +148,14 @@ func runMessageIndexPerf() async {
         let generation = clock.measure {
             for chat in 0..<chatCount {
                 _ = writeCacheFile(TranscriptCache.Snapshot(items: Synthetic.items(chat: chat, count: perChat), complete: true),
-                                   gatewayId: gatewayId, sessionKey: keys[chat])
+                                   gatewayId: gatewayId, sessionKey: keys[chat], root: root)
             }
         }
         print("  · wrote \(chatCount) × \(perChat) synthetic transcripts in \(generation.formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 1))))")
-        let directory = TranscriptCache.directory(gatewayId: gatewayId)!
+        let directory = TranscriptCache.directory(gatewayId: gatewayId, root: root)!
         let jsonSize = directorySize(directory) { $0.hasSuffix(".json") }
 
-        let index = MessageIndex.shared(gatewayId: gatewayId)
+        let index = MessageIndex.shared(gatewayId: gatewayId, root: root)
         let baseline = memoryUsage()
         let sampler = MemorySampler()
         let log = StatusLog()
@@ -174,21 +176,21 @@ func runMessageIndexPerf() async {
 
         let indexSize = directorySize(directory) { $0.hasPrefix("search-index.sqlite") }
         let walSize = directorySize(directory) { $0 == "search-index.sqlite-wal" }
-        let pages = sqliteInts(MessageIndex.url(gatewayId: gatewayId), "PRAGMA page_count")
-        let freePages = sqliteInts(MessageIndex.url(gatewayId: gatewayId), "PRAGMA freelist_count")
+        let pages = sqliteInts(MessageIndex.url(gatewayId: gatewayId, root: root), "PRAGMA page_count")
+        let freePages = sqliteInts(MessageIndex.url(gatewayId: gatewayId, root: root), "PRAGMA freelist_count")
         print("  · index files: main \(mb(indexSize - walSize)), WAL \(mb(walSize)); pages \(pages.first ?? 0), free \(freePages.first ?? 0)")
         print("  · index \(mb(indexSize)) vs transcript JSON \(mb(jsonSize)) (\(String(format: "%.0f", Double(indexSize) / Double(jsonSize) * 100))%)")
         check(indexSize <= jsonSize, "perf: index size ≤ transcript JSON size")
 
         var appended = Synthetic.items(chat: 0, count: perChat)
         appended.append(messageItem("perf-new", .user, "incremental ibex arrives", at: 1_900_000_000))
-        await TranscriptCache.save(TranscriptCache.Snapshot(items: appended, complete: true), gatewayId: gatewayId, sessionKey: keys[0])
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: appended, complete: true), gatewayId: gatewayId, sessionKey: keys[0], root: root)
         appended.append(messageItem("perf-new2", .user, "second ibex", at: 1_900_000_100))
         let snapshot = TranscriptCache.Snapshot(items: appended, complete: true)
         let incremental = await clock.measure { await index.index(sessionKey: keys[0], snapshot: snapshot, fileMtime: Date()) }
         let unchanged = await clock.measure { await index.index(sessionKey: keys[0], snapshot: snapshot, fileMtime: Date()) }
         print("  · incremental update of a 20k chat: \(incremental.formatted(.units(allowed: [.milliseconds]))), unchanged: \(unchanged.formatted(.units(allowed: [.milliseconds])))")
-        await checkAsync({ await allTrue(indexHits(gatewayId, "ibex").count == 2, incremental <= .milliseconds(300)) }, "perf: incremental update ≤ 300 ms")
+        await checkAsync({ await allTrue(indexHits(gatewayId, "ibex", root: root).count == 2, incremental <= .milliseconds(300)) }, "perf: incremental update ≤ 300 ms")
 
         let allowed = Set(keys)
         let queries: [(kind: String, text: String)] =
@@ -238,6 +240,7 @@ func runMessageIndexPerf() async {
             } onCancel: { index.interrupt() }
         }
         let cancelStart = clock.now
+        // Deliberate: the search must be well under way (20 ms) when cancelled; the check measures the stop time.
         try? await Task.sleep(for: .milliseconds(20))
         big.cancel()
         let bigOutcome = await big.result
@@ -246,6 +249,6 @@ func runMessageIndexPerf() async {
         if case let .failure(error) = bigOutcome { wasCancelled = error is CancellationError }
         print("  · unlimited \"the\": \(ms(uncancelled)); cancelled after 20 ms: stopped at \(ms(cancelled)) (cancelled: \(wasCancelled))")
         check(cancelled <= .milliseconds(200) || !wasCancelled, "perf: a huge search stops soon after cancelling")
-        TranscriptCache.removeAll(gatewayId: gatewayId)
+        TranscriptCache.removeAll(gatewayId: gatewayId, root: root)
     }
 }

@@ -11,8 +11,8 @@ private func cacheData(version: Int = TranscriptCache.Snapshot.currentVersion, i
 
 /// Writes raw bytes as the chat's transcript plus a valid `.meta`, under the current cache root.
 @discardableResult
-private func writeRawCache(_ data: Data, gatewayId: UUID, sessionKey: String) -> URL? {
-    guard let url = TranscriptCache.file(gatewayId: gatewayId, sessionKey: sessionKey),
+private func writeRawCache(_ data: Data, gatewayId: UUID, sessionKey: String, root: URL?) -> URL? {
+    guard let url = TranscriptCache.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root),
           (try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)) != nil,
           (try? data.write(to: url)) != nil,
           (try? Data(#"{"complete":true,"activityMs":5}"#.utf8).write(to: url.appendingPathExtension("meta"))) != nil
@@ -20,8 +20,8 @@ private func writeRawCache(_ data: Data, gatewayId: UUID, sessionKey: String) ->
     return url
 }
 
-private func quarantineCount(_ gatewayId: UUID) -> Int {
-    guard let directory = TranscriptCache.quarantineDirectory(gatewayId: gatewayId) else { return 0 }
+private func quarantineCount(_ gatewayId: UUID, root: URL?) -> Int {
+    guard let directory = TranscriptCache.quarantineDirectory(gatewayId: gatewayId, root: root) else { return 0 }
     return ((try? FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false))) ?? []).count
 }
 
@@ -47,9 +47,9 @@ private let legacyV5FileEdit = #"""
 /// An offline chat over that legacy cache: its edit card says "Written", never "New file", and the
 /// file is saved back at the current version.
 @MainActor
-private func checkLegacyV5FileEditChat(_ store: GatewayStore) async {
+private func checkLegacyV5FileEditChat(_ store: GatewayStore, root: URL?) async {
     let key = "agent:main:legacy-edit"
-    let url = writeRawCache(Data(legacyV5FileEdit.utf8), gatewayId: store.id, sessionKey: key)
+    let url = writeRawCache(Data(legacyV5FileEdit.utf8), gatewayId: store.id, sessionKey: key, root: root)
     let chat = store.chat(for: key)
     await chat.load()
     let edits = chat.entries.flatMap { entry -> [ToolActivity] in
@@ -67,47 +67,47 @@ private func checkLegacyV5FileEditChat(_ store: GatewayStore) async {
 /// Removing one chat (a deleted or rewound session, #38) drops its transcript, sidecar and search
 /// hits, and leaves the Gateway's other chats cached and searchable.
 @MainActor
-private func checkRemoveOneChat() async {
+private func checkRemoveOneChat(root: URL?) async {
     let gatewayId = UUID()
     let gone = "agent:main:rewound", kept = "agent:main:kept"
     await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("g1", .user, "narwhal rewound", at: 1)], complete: true),
-                               gatewayId: gatewayId, sessionKey: gone)
+                               gatewayId: gatewayId, sessionKey: gone, root: root)
     await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("k1", .user, "narwhal kept", at: 1)], complete: true),
-                               gatewayId: gatewayId, sessionKey: kept)
-    let before = Set(await indexHits(gatewayId, "narwhal").map(\.sessionKey))
+                               gatewayId: gatewayId, sessionKey: kept, root: root)
+    let before = Set(await indexHits(gatewayId, "narwhal", root: root).map(\.sessionKey))
     check(before == [gone, kept], "both chats indexed before removing one (\(before.sorted()))")
-    let url = TranscriptCache.file(gatewayId: gatewayId, sessionKey: gone)
-    await TranscriptCache.remove(gatewayId: gatewayId, sessionKey: gone)
+    let url = TranscriptCache.file(gatewayId: gatewayId, sessionKey: gone, root: root)
+    await TranscriptCache.remove(gatewayId: gatewayId, sessionKey: gone, root: root)
     check(!fileExists(url) && !fileExists(url?.appendingPathExtension("meta")), "remove deletes the chat's transcript and .meta")
-    let (_, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: gone)
-    let indexed = await MessageIndex.shared(gatewayId: gatewayId).isIndexed(sessionKey: gone)
-    let after = Set(await indexHits(gatewayId, "narwhal").map(\.sessionKey))
+    let (_, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: gone, root: root)
+    let indexed = await MessageIndex.shared(gatewayId: gatewayId, root: root).isIndexed(sessionKey: gone)
+    let after = Set(await indexHits(gatewayId, "narwhal", root: root).map(\.sessionKey))
     check(outcome == .missing && !indexed && after == [kept], "removed chat is gone from cache and search, the other stays (\(after.sorted()))")
-    let (other, otherOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: kept)
+    let (other, otherOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: kept, root: root)
     check(otherOutcome == .loaded && other?.items.map(\.id) == ["k1"], "other chat still cached after removing one")
-    await TranscriptCache.remove(gatewayId: gatewayId, sessionKey: "agent:main:never")
-    let stillKept = Set(await indexHits(gatewayId, "narwhal").map(\.sessionKey))
+    await TranscriptCache.remove(gatewayId: gatewayId, sessionKey: "agent:main:never", root: root)
+    let stillKept = Set(await indexHits(gatewayId, "narwhal", root: root).map(\.sessionKey))
     check(stillKept == [kept], "removing an uncached chat is a no-op")
-    TranscriptCache.removeAll(gatewayId: gatewayId)
+    TranscriptCache.removeAll(gatewayId: gatewayId, root: root)
 }
 
 /// The search index heals when its file is deleted from under it (system cache purge), and
 /// saves racing Clear Cache don't leave it dead (#153).
 @MainActor
-private func checkIndexSurvivesDeletedFiles() async {
+private func checkIndexSurvivesDeletedFiles(root: URL?) async {
     let gatewayId = UUID(), key = "agent:main:purged"
     let snapshot = TranscriptCache.Snapshot(items: [messageItem("p1", .user, "quokka survives", at: 1)], complete: true)
-    await TranscriptCache.save(snapshot, gatewayId: gatewayId, sessionKey: key)
-    let indexed = await indexHits(gatewayId, "quokka").count
+    await TranscriptCache.save(snapshot, gatewayId: gatewayId, sessionKey: key, root: root)
+    let indexed = await indexHits(gatewayId, "quokka", root: root).count
     check(indexed == 1, "indexed before its file is purged (\(indexed))")
-    if let url = MessageIndex.url(gatewayId: gatewayId) {
+    if let url = MessageIndex.url(gatewayId: gatewayId, root: root) {
         for suffix in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: url.path(percentEncoded: false) + suffix) }
     }
     // The open connection now fails (SQLITE_IOERR_VNODE); that resets the index, and the next save
     // or reconcile rebuilds it instead of every search failing until relaunch.
-    for _ in 0..<3 { _ = try? await MessageIndex.shared(gatewayId: gatewayId).search("quokka") }
-    await MessageIndex.shared(gatewayId: gatewayId).reconcile(sessionKeys: [key])
-    let healed = await indexHits(gatewayId, "quokka").count
+    for _ in 0..<3 { _ = try? await MessageIndex.shared(gatewayId: gatewayId, root: root).search("quokka") }
+    await MessageIndex.shared(gatewayId: gatewayId, root: root).reconcile(sessionKeys: [key])
+    let healed = await indexHits(gatewayId, "quokka", root: root).count
     check(healed == 1, "index rebuilt after its file was deleted while open (\(healed))")
 
     // Saves racing Clear Cache: afterwards a save is indexed and found.
@@ -115,53 +115,53 @@ private func checkIndexSurvivesDeletedFiles() async {
         let saves = Task {
             for n in 0..<20 {
                 await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("r\(n)", .user, "racing \(round)", at: 1)],
-                                                                    complete: true), gatewayId: gatewayId, sessionKey: "agent:main:race")
+                                                                    complete: true), gatewayId: gatewayId, sessionKey: "agent:main:race", root: root)
             }
         }
         // Deliberate: lets some saves start so Clear Cache lands mid-stream (the race under test).
         try? await Task.sleep(for: .milliseconds(2))
-        TranscriptCache.removeEverything()
+        TranscriptCache.removeEverything(root: root)
         await saves.value
     }
     await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("after", .user, "platypus after racing", at: 1)],
-                                                        complete: true), gatewayId: gatewayId, sessionKey: key)
-    let afterRace = await indexHits(gatewayId, "platypus").count
+                                                        complete: true), gatewayId: gatewayId, sessionKey: key, root: root)
+    let afterRace = await indexHits(gatewayId, "platypus", root: root).count
     check(afterRace == 1, "saves racing Clear Cache leave a working index (\(afterRace) hits)")
-    TranscriptCache.removeAll(gatewayId: gatewayId)
+    TranscriptCache.removeAll(gatewayId: gatewayId, root: root)
 }
 
 @MainActor
 func checkTranscriptCacheVersioning() async {
     print("Transcript cache versioning")
-    await withScratchCache { _ in
+    await withScratchCache { root in
         let gatewayId = UUID()
         let current = TranscriptCache.Snapshot.currentVersion
 
-        let (none, missing) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "missing")
+        let (none, missing) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "missing", root: root)
         check(none == nil && missing == .missing && !missing.discarded, "no file → missing")
 
         await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("a", .user, "hello", at: 1)], complete: true),
-                                   gatewayId: gatewayId, sessionKey: "ok")
-        let (loaded, loadedOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "ok")
+                                   gatewayId: gatewayId, sessionKey: "ok", root: root)
+        let (loaded, loadedOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "ok", root: root)
         check(loadedOutcome == .loaded && loaded?.items.map(\.id) == ["a"], "current version round-trips")
 
-        let old = writeRawCache(cacheData(version: current - 1, ids: ["o"]), gatewayId: gatewayId, sessionKey: "old")
-        let (_, oldOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "old")
+        let old = writeRawCache(cacheData(version: current - 1, ids: ["o"]), gatewayId: gatewayId, sessionKey: "old", root: root)
+        let (_, oldOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "old", root: root)
         let oldExpected: Bool = if case .migrated(from: current - 1) = oldOutcome { true } else { oldOutcome == .outdated(version: current - 1) }
         check(oldExpected, "v\(current - 1) file → migrated or outdated (\(oldOutcome))")
         if case .outdated = oldOutcome {
             check(!fileExists(old) && !fileExists(old?.appendingPathExtension("meta")), "outdated file and .meta deleted")
         }
-        let ancient = writeRawCache(cacheData(version: 1, ids: ["x"]), gatewayId: gatewayId, sessionKey: "ancient")
-        let (_, ancientOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "ancient")
+        let ancient = writeRawCache(cacheData(version: 1, ids: ["x"]), gatewayId: gatewayId, sessionKey: "ancient", root: root)
+        let (_, ancientOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "ancient", root: root)
         check(ancientOutcome == .outdated(version: 1) && !fileExists(ancient), "v1 file → outdated, deleted")
 
-        let future = writeRawCache(cacheData(version: current + 1, ids: ["f"]), gatewayId: gatewayId, sessionKey: "future")
-        let (futureSnapshot, futureOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "future")
+        let future = writeRawCache(cacheData(version: current + 1, ids: ["f"]), gatewayId: gatewayId, sessionKey: "future", root: root)
+        let (futureSnapshot, futureOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "future", root: root)
         check(futureSnapshot == nil && futureOutcome == .future(version: current + 1) && futureOutcome.discarded,
               "newer file → future (\(futureOutcome))")
         check(!fileExists(future) && !fileExists(future?.appendingPathExtension("meta")), "future file and .meta discarded")
-        check(quarantineCount(gatewayId) == 0, "outdated and future files deleted, not quarantined")
+        check(quarantineCount(gatewayId, root: root) == 0, "outdated and future files deleted, not quarantined")
 
         let corruptCases: [(String, Data)] = [
             ("garbage", Data("🦞 not json".utf8)),
@@ -171,93 +171,94 @@ func checkTranscriptCacheVersioning() async {
         ]
         for (index, (label, data)) in corruptCases.enumerated() {
             let key = "corrupt-\(index)"
-            let url = writeRawCache(data, gatewayId: gatewayId, sessionKey: key)
-            let (snapshot, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: key)
+            let url = writeRawCache(data, gatewayId: gatewayId, sessionKey: key, root: root)
+            let (snapshot, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: key, root: root)
             check(snapshot == nil && isCorrupt(outcome) && outcome.discarded, "\(label) → corrupt (\(outcome))")
             check(!fileExists(url) && !fileExists(url?.appendingPathExtension("meta")), "\(label) moved out, .meta removed")
-            check(quarantineCount(gatewayId) == index + 1, "\(label) quarantined (\(quarantineCount(gatewayId)))")
+            check(quarantineCount(gatewayId, root: root) == index + 1, "\(label) quarantined (\(quarantineCount(gatewayId, root: root)))")
         }
         await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("n", .user, "new", at: 1)], complete: true),
-                                   gatewayId: gatewayId, sessionKey: "corrupt-0")
-        let (again, againOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "corrupt-0")
+                                   gatewayId: gatewayId, sessionKey: "corrupt-0", root: root)
+        let (again, againOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "corrupt-0", root: root)
         check(againOutcome == .loaded && again?.items.map(\.id) == ["n"], "save + load work after corruption")
 
         for index in 0..<10 {
-            writeRawCache(Data("junk \(index)".utf8), gatewayId: gatewayId, sessionKey: "bulk-\(index)")
-            _ = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "bulk-\(index)")
+            writeRawCache(Data("junk \(index)".utf8), gatewayId: gatewayId, sessionKey: "bulk-\(index)", root: root)
+            _ = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "bulk-\(index)", root: root)
         }
-        check(quarantineCount(gatewayId) <= 5 && quarantineCount(gatewayId) > 0, "quarantine is bounded (\(quarantineCount(gatewayId)))")
+        check(quarantineCount(gatewayId, root: root) <= 5 && quarantineCount(gatewayId, root: root) > 0, "quarantine is bounded (\(quarantineCount(gatewayId, root: root)))")
 
         // The message index skips a corrupt transcript and still indexes the healthy ones.
         let indexed = UUID()
-        writeRawCache(Data("junk".utf8), gatewayId: indexed, sessionKey: "bad")
+        writeRawCache(Data("junk".utf8), gatewayId: indexed, sessionKey: "bad", root: root)
         _ = writeCacheFile(TranscriptCache.Snapshot(items: [messageItem("w1", .user, "wombat survives", at: 1)], complete: true),
-                           gatewayId: indexed, sessionKey: "good")
-        await MessageIndex.shared(gatewayId: indexed).reconcile(sessionKeys: ["bad", "good"])
-        await checkAsync({ await indexHits(indexed, "wombat").count == 1 }, "index reconcile skips a corrupt transcript")
+                           gatewayId: indexed, sessionKey: "good", root: root)
+        await MessageIndex.shared(gatewayId: indexed, root: root).reconcile(sessionKeys: ["bad", "good"])
+        await checkAsync({ await indexHits(indexed, "wombat", root: root).count == 1 }, "index reconcile skips a corrupt transcript")
         // A decodable transcript sitting in Quarantine is never read back or indexed.
-        if let quarantine = TranscriptCache.quarantineDirectory(gatewayId: indexed) {
+        if let quarantine = TranscriptCache.quarantineDirectory(gatewayId: indexed, root: root) {
             try? cacheData(ids: ["q"]).write(to: quarantine.appending(path: "stray-1.json"))
         }
-        await MessageIndex.shared(gatewayId: indexed).reconcile(sessionKeys: ["good"])
-        let strayHits = await indexHits(indexed, "cached")
+        await MessageIndex.shared(gatewayId: indexed, root: root).reconcile(sessionKeys: ["good"])
+        let strayHits = await indexHits(indexed, "cached", root: root)
         check(strayHits.isEmpty, "Quarantine is never indexed (\(strayHits.count) hits)")
-        TranscriptCache.removeAll(gatewayId: indexed)
+        TranscriptCache.removeAll(gatewayId: indexed, root: root)
 
         // A chat over a corrupt cache, offline: nothing shown, and it isn't marked loaded. (Not
         // agent:main:main: an offline store's chat on that key upsets the later live checks.)
-        let profile = GatewayProfile(name: "Offline cache", url: "ws://127.0.0.1:1", authMode: .none)
-        let store = GatewayStore(profile: profile)
-        writeRawCache(Data("{\"version\":\(current),\"items\":[".utf8), gatewayId: store.id, sessionKey: "agent:main:broken")
-        let broken = store.chat(for: "agent:main:broken")
-        await broken.load()
-        check(broken.items.isEmpty && !broken.hasLoaded, "offline chat over a corrupt cache shows nothing, not loaded")
-        check(quarantineCount(store.id) == 1, "offline chat quarantined its corrupt cache")
-        _ = writeCacheFile(TranscriptCache.Snapshot(items: [messageItem("c1", .user, "cached hi", at: 1)], complete: true),
-                           gatewayId: store.id, sessionKey: "agent:main:other")
-        let healthy = store.chat(for: "agent:main:other")
-        await healthy.load()
-        check(healthy.items.map(\.id) == ["c1"], "offline chat over a healthy cache restores it")
-        await checkLegacyV5FileEditChat(store)
-        TranscriptCache.removeAll(gatewayId: store.id)
+        // GatewayStore reads TranscriptCache.root itself and takes no root, so this part points
+        // PINCER_CACHE_DIR at the scratch root.
+        await withCacheEnvironment(root.path(percentEncoded: false)) {
+            let profile = GatewayProfile(name: "Offline cache", url: "ws://127.0.0.1:1", authMode: .none)
+            let store = GatewayStore(profile: profile)
+            writeRawCache(Data("{\"version\":\(current),\"items\":[".utf8), gatewayId: store.id, sessionKey: "agent:main:broken", root: root)
+            let broken = store.chat(for: "agent:main:broken")
+            await broken.load()
+            check(broken.items.isEmpty && !broken.hasLoaded, "offline chat over a corrupt cache shows nothing, not loaded")
+            check(quarantineCount(store.id, root: root) == 1, "offline chat quarantined its corrupt cache")
+            _ = writeCacheFile(TranscriptCache.Snapshot(items: [messageItem("c1", .user, "cached hi", at: 1)], complete: true),
+                               gatewayId: store.id, sessionKey: "agent:main:other", root: root)
+            let healthy = store.chat(for: "agent:main:other")
+            await healthy.load()
+            check(healthy.items.map(\.id) == ["c1"], "offline chat over a healthy cache restores it")
+            await checkLegacyV5FileEditChat(store, root: root)
+            TranscriptCache.removeAll(gatewayId: store.id, root: root)
+        }
 
         // Clear cache.
         await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("u", .user, String(repeating: "x", count: 4096), at: 1)],
-                                                            complete: true), gatewayId: gatewayId, sessionKey: "usage")
-        let usage = await TranscriptCache.diskUsage()
+                                                            complete: true), gatewayId: gatewayId, sessionKey: "usage", root: root)
+        let usage = await TranscriptCache.diskUsage(root: root)
         check(usage >= 4096, "diskUsage counts the cache (\(usage) bytes)")
-        TranscriptCache.removeEverything()
-        let cleared = await TranscriptCache.diskUsage()
-        let gone = await TranscriptCache.load(gatewayId: gatewayId, sessionKey: "usage")
+        TranscriptCache.removeEverything(root: root)
+        let cleared = await TranscriptCache.diskUsage(root: root)
+        let gone = await TranscriptCache.load(gatewayId: gatewayId, sessionKey: "usage", root: root)
         check(cleared == 0 && gone == nil, "removeEverything empties the cache (\(cleared) bytes left)")
         await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("z", .user, "zebra after clear", at: 1)], complete: true),
-                                   gatewayId: gatewayId, sessionKey: "after")
-        let (_, afterOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "after")
+                                   gatewayId: gatewayId, sessionKey: "after", root: root)
+        let (_, afterOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "after", root: root)
         check(afterOutcome == .loaded, "cache usable after removeEverything")
         // Awaited flush, then a bounded poll: a live store in this process may be reopening its own
         // index under the same root right after the clear (seen once in CI, #206).
-        await TranscriptCache.flush(gatewayId: gatewayId)
-        var zebraHits = await indexHits(gatewayId, "zebra").count
+        await TranscriptCache.flush(gatewayId: gatewayId, root: root)
+        var zebraHits = await indexHits(gatewayId, "zebra", root: root).count
         let deadline = Date().addingTimeInterval(5)
         while zebraHits != 1, Date() < deadline {
             try? await Task.sleep(for: .milliseconds(100))
-            zebraHits = await indexHits(gatewayId, "zebra").count
+            zebraHits = await indexHits(gatewayId, "zebra", root: root).count
         }
-        check(zebraHits == 1, "search index rebuilt after removeEverything (\(zebraHits) hits, \(await MessageIndex.shared(gatewayId: gatewayId).status))")
-        await checkRemoveOneChat()
-        await checkIndexSurvivesDeletedFiles()
-        TranscriptCache.removeAll(gatewayId: gatewayId)
+        check(zebraHits == 1, "search index rebuilt after removeEverything (\(zebraHits) hits, \(await MessageIndex.shared(gatewayId: gatewayId, root: root).status))")
+        await checkRemoveOneChat(root: root)
+        await checkIndexSurvivesDeletedFiles(root: root)
+        TranscriptCache.removeAll(gatewayId: gatewayId, root: root)
     }
 
-    // PINCER_CACHE_DIR=off: nothing to measure, clear, load or quarantine.
-    let previous = ProcessInfo.processInfo.environment["PINCER_CACHE_DIR"]
-    setenv("PINCER_CACHE_DIR", "off", 1)
-    let offUsage = await TranscriptCache.diskUsage()
-    TranscriptCache.removeEverything()
-    let (offSnapshot, offOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: UUID(), sessionKey: "k")
+    // Cache off (a nil root): nothing to measure, clear, load or quarantine.
+    let offUsage = await TranscriptCache.diskUsage(root: nil)
+    TranscriptCache.removeEverything(root: nil)
+    let (offSnapshot, offOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: UUID(), sessionKey: "k", root: nil)
     check(offUsage == 0 && offSnapshot == nil && offOutcome == .missing
-          && TranscriptCache.quarantineDirectory(gatewayId: UUID()) == nil, "cache off: usage 0, clear no-op, no quarantine")
-    if let previous { setenv("PINCER_CACHE_DIR", previous, 1) } else { unsetenv("PINCER_CACHE_DIR") }
+          && TranscriptCache.quarantineDirectory(gatewayId: UUID(), root: nil) == nil, "cache off: usage 0, clear no-op, no quarantine")
 }
 
 /// Live: a chat whose cache file was corrupted between launches still loads its history.
@@ -285,7 +286,7 @@ func runLiveCacheRecovery(url: String, token: String) async {
     guard let file = TranscriptCache.file(gatewayId: profile.id, sessionKey: key),
           let data = try? Data(contentsOf: file), (try? data.prefix(data.count / 2).write(to: file)) != nil
     else { return check(false, "corrupted the cache file") }
-    let before = quarantineCount(profile.id)
+    let before = quarantineCount(profile.id, root: TranscriptCache.root)
 
     let second = GatewayStore(profile: profile)
     second.start()
@@ -301,7 +302,7 @@ func runLiveCacheRecovery(url: String, token: String) async {
     let recovered = await waitFor("history after corruption") { reopened.hasLoaded && !reopened.items.isEmpty }
     check(recovered, "corrupt cache → history still loads from the Gateway (\(reopened.items.count) items)")
     check(Set(expected).isSubset(of: Set(reopened.items.map(\.id))), "same transcript as before the corruption")
-    check(quarantineCount(profile.id) == before + 1, "corrupt cache file quarantined")
+    check(quarantineCount(profile.id, root: TranscriptCache.root) == before + 1, "corrupt cache file quarantined")
     let rewritten = await waitFor("cache rewritten", timeout: 10) {
         (try? Data(contentsOf: file)).map { !$0.isEmpty && $0.count >= data.count / 2 + 1 } ?? false
     }

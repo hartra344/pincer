@@ -323,6 +323,8 @@ func checkDemoSeededSearchTerms(_ gateway: GatewayStore, trip: ChatStore) async 
 /// Demo with the transcript cache off: the index lives in memory, so search still works.
 @MainActor
 func checkDemoSearchWithoutCache() async {
+    // The demo GatewayStore (and its prefetch and search) resolves TranscriptCache.root on its own
+    // and takes no root, so the cache is switched off through the environment for this check.
     let previous = ProcessInfo.processInfo.environment["PINCER_CACHE_DIR"]
     setenv("PINCER_CACHE_DIR", "off", 1)
     defer {
@@ -383,20 +385,20 @@ func checkLiveMessageSearch(_ gateway: GatewayStore) async {
 /// A quick end-to-end pass over the message index: save a transcript, search it, jump data.
 @MainActor
 func checkMessageSearchSmoke() async {
-    let previous = ProcessInfo.processInfo.environment["PINCER_CACHE_DIR"]
-    let root = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-index-\(UUID().uuidString)")
-    setenv("PINCER_CACHE_DIR", root.path(percentEncoded: false), 1)
-    defer {
-        if let previous { setenv("PINCER_CACHE_DIR", previous, 1) } else { unsetenv("PINCER_CACHE_DIR") }
-        try? FileManager.default.removeItem(at: root)
+    await withScratchCache { root in
+        await checkMessageSearchSmoke(root: root)
     }
+}
+
+@MainActor
+private func checkMessageSearchSmoke(root: URL) async {
     let gatewayId = UUID()
     let items = [
         ChatItem(json(#"{"role":"user","content":"Planning the **Japan** trip to Tōkyō","__openclaw":{"id":"u1"}}"#), fallbackIndex: 0)!,
         ChatItem(json(#"{"role":"assistant","content":[{"type":"thinking","thinking":"secret zebra"},{"type":"text","text":"Try the café in [Kyoto](https://zebra.example)"}],"__openclaw":{"id":"a1"}}"#), fallbackIndex: 1)!,
     ]
-    await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "chat-1")
-    let index = MessageIndex.shared(gatewayId: gatewayId)
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "chat-1", root: root)
+    let index = MessageIndex.shared(gatewayId: gatewayId, root: root)
     let hits = (try? await index.search("tokyo")) ?? []
     check(hits.count == 1 && hits.first?.entryId == "u-u1", "saved transcript is searchable (accents folded)")
     let cafe = (try? await index.search("CAFE")) ?? []
@@ -406,11 +408,11 @@ func checkMessageSearchSmoke() async {
     let groups = MessageSearch.collect((try? await index.search("kyoto")) ?? [], query: "kyoto", allowed: ["chat-1"])
     check(groups.first?.hits.first?.match == TranscriptSearch.Match(entryId: "a-a1", section: .message(0), occurrence: 0),
           "a verified hit is the match Find reports")
-    check(MessageIndex.url(gatewayId: gatewayId).map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } == true,
+    check(MessageIndex.url(gatewayId: gatewayId, root: root).map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } == true,
           "index file sits next to the transcripts")
-    TranscriptCache.removeAll(gatewayId: gatewayId)
-    check(MessageIndex.url(gatewayId: gatewayId).map { !FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } == true,
+    TranscriptCache.removeAll(gatewayId: gatewayId, root: root)
+    check(MessageIndex.url(gatewayId: gatewayId, root: root).map { !FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } == true,
           "removing the gateway deletes its index")
-    let removed = (try? await MessageIndex.shared(gatewayId: gatewayId).search("tokyo")) ?? []
+    let removed = (try? await MessageIndex.shared(gatewayId: gatewayId, root: root).search("tokyo")) ?? []
     check(removed.isEmpty, "search after removal is empty")
 }

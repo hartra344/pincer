@@ -449,11 +449,7 @@ public enum TranscriptCache {
     }
 
     /// Bytes the transcript cache takes on disk, search indexes and quarantined files included.
-    public static func diskUsage() async -> Int64 {
-        await self.diskUsage(root: Self.root)
-    }
-
-    static func diskUsage(root: URL?) async -> Int64 {
+    public static func diskUsage(root: URL? = Self.root) async -> Int64 {
         guard let root else { return 0 }
         return await Task.detached(priority: .utility) { Self.measure(root) }.value
     }
