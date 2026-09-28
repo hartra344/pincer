@@ -277,6 +277,9 @@ public final class GatewayStore: Identifiable {
         self.chatPositions = defaults.dictionary(forKey: "pincer.chatOrder.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.reactions = defaults.dictionary(forKey: "pincer.reactions.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.healthDismissals = defaults.dictionary(forKey: "pincer.healthDismissals.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        // Before this Gateway's first sync, start from the choices already made on this device.
+        self.avatarChoices = defaults.dictionary(forKey: "pincer.avatars.\(profile.id.uuidString)") as? [String: String]
+            ?? AvatarPreferences.local(in: defaults)
         self.selectedKey = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)")
         self.connectedBeforeSetup = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)") != nil
         self.sectionCollapse = defaults.dictionary(forKey: "pincer.collapsed.\(profile.id.uuidString)") as? [String: Bool] ?? [:]
@@ -424,6 +427,7 @@ public final class GatewayStore: Identifiable {
         Task { await self.pull(self.syncedMap(Self.groupIconsPref)) }
         Task { await self.pull(self.syncedMap(Reactions.prefKey)) }
         Task { await self.pull(self.syncedMap(Self.healthDismissalsPref)) }
+        Task { await self.pullAvatarChoices() }
         Task { await self.loadGroups() }
         // Only pick a chat on the first connect: on iPhone, going back to the sidebar clears the
         // selection, and re-selecting on every reconnect would push a chat the user left.
@@ -1206,6 +1210,8 @@ public final class GatewayStore: Identifiable {
                       syncedDefaultsKey: "pincer.reactionsSynced.\(self.id.uuidString)"),
             SyncedMap(pref: Self.healthDismissalsPref, local: \.healthDismissals,
                       syncedDefaultsKey: "pincer.healthDismissalsSynced.\(self.id.uuidString)"),
+            SyncedMap(pref: AvatarPreferences.prefKey, local: \.avatarChoices,
+                      syncedDefaultsKey: "pincer.avatarsSynced.\(self.id.uuidString)"),
         ]
     }
 
@@ -1466,6 +1472,52 @@ public final class GatewayStore: Identifiable {
     func forgetLocalHealthDismissals() {
         self.defaults.removeObject(forKey: "pincer.healthDismissals.\(self.id.uuidString)")
         self.defaults.removeObject(forKey: "pincer.healthDismissalsSynced.\(self.id.uuidString)")
+    }
+
+    // MARK: Avatars
+
+    /// Avatar characters by agent id, plus Pixel or Plush under `AvatarPreferences.renderStyleEntry`,
+    /// synced through `users.prefs` (`pincer.avatars`). Changes from the Gateway are written onto
+    /// this device's avatar settings, which the views read.
+    public internal(set) var avatarChoices: [String: String] {
+        didSet {
+            guard self.avatarChoices != oldValue else { return }
+            self.defaults.set(self.avatarChoices, forKey: "pincer.avatars.\(self.id.uuidString)")
+            AvatarPreferences.apply(self.avatarChoices, previous: oldValue, to: self.defaults)
+        }
+    }
+
+    /// Sets (or with `nil`, clears back to Auto) an agent's character on every device.
+    public func setAvatarCreature(_ creature: AvatarCreature?, for agentId: String) {
+        self.setAvatarChoice(creature?.rawValue, for: agentId)
+    }
+
+    /// Sets Pixel or Plush on every device.
+    public func setAvatarRenderStyle(_ style: AvatarRenderStyle) {
+        self.setAvatarChoice(style.rawValue, for: AvatarPreferences.renderStyleEntry)
+    }
+
+    /// Choices made while this Gateway was unreachable. Its map is left alone until it reconnects,
+    /// so pulling its older map can't undo them on this device; they're pushed after that pull.
+    private var queuedAvatarChoices: [String: String?] = [:]
+
+    private func setAvatarChoice(_ value: String?, for entry: String) {
+        guard self.state.isConnected else {
+            self.queuedAvatarChoices[entry] = .some(value)
+            return
+        }
+        // A choice made now beats one queued while offline and not yet replayed.
+        self.queuedAvatarChoices.removeValue(forKey: entry)
+        guard self.avatarChoices[entry] != value else { return }
+        self.avatarChoices[entry] = value
+        Task { await self.push(self.syncedMap(AvatarPreferences.prefKey), entry, value) }
+    }
+
+    private func pullAvatarChoices() async {
+        await self.pull(self.syncedMap(AvatarPreferences.prefKey))
+        let queued = self.queuedAvatarChoices
+        self.queuedAvatarChoices = [:]
+        for (entry, value) in queued { self.setAvatarChoice(value, for: entry) }
     }
 
     // MARK: Chat icons
