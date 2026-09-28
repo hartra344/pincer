@@ -30,13 +30,13 @@ struct RunsPanelChrome: ViewModifier {
             .sheet(isPresented: self.presented(true)) {
                 NavigationStack {
                     RunsPanel()
-                        .navigationTitle("Runs")
+                        .navigationTitle(L("Runs"))
                         #if os(iOS)
                         .navigationBarTitleDisplayMode(.inline)
                         #endif
                         .toolbar {
                             ToolbarItem(placement: .confirmationAction) {
-                                Button("Done") { self.isPresented = false }
+                                Button(L("Done")) { self.isPresented = false }
                             }
                         }
                 }
@@ -56,13 +56,13 @@ private struct RunsToolbarButton: View {
             Button {
                 self.isPresented.toggle()
             } label: {
-                Label("Runs", systemImage: "point.3.connected.trianglepath.dotted")
+                Label(L("Runs"), systemImage: "point.3.connected.trianglepath.dotted")
                     .foregroundStyle(running > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                     .symbolEffect(.pulse, isActive: running > 0)
             }
             .keyboardShortcut("r", modifiers: [.command, .option])
-            .help(running > 0 ? "Runs — \(running) helper\(running == 1 ? "" : "s") running" : "Runs")
-            .accessibilityValue(running > 0 ? "\(running) running" : "")
+            .help(running == 0 ? L("Runs") : running == 1 ? L("Runs — 1 helper running") : L("Runs — \(running) helpers running"))
+            .accessibilityValue(running > 0 ? L("\(running) running") : "")
         }
     }
 }
@@ -72,7 +72,7 @@ struct ShowRunsButton: View {
     @Binding var isPresented: Bool
 
     var body: some View {
-        Button(self.isPresented ? "Hide Runs" : "Show Runs", systemImage: "point.3.connected.trianglepath.dotted") {
+        Button(self.isPresented ? L("Hide Runs") : L("Show Runs"), systemImage: "point.3.connected.trianglepath.dotted") {
             self.isPresented.toggle()
         }
     }
@@ -83,6 +83,7 @@ struct RunsPanel: View {
     enum Tab: String, CaseIterable, Identifiable {
         case tree = "Tree", timeline = "Timeline"
         var id: String { self.rawValue }
+        var title: String { self == .tree ? L("Tree") : L("Timeline") }
     }
 
     @Environment(GatewayStore.self) private var gateway
@@ -92,8 +93,8 @@ struct RunsPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("View", selection: self.$tab) {
-                ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
+            Picker(L("View"), selection: self.$tab) {
+                ForEach(Tab.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -111,7 +112,7 @@ struct RunsPanel: View {
                     RunTimelineView(rootKey: key, tree: tree, focusedSession: self.focusedSession ?? key)
                 }
             } else {
-                ContentUnavailableView("No chat selected", systemImage: "bubble.left.and.bubble.right")
+                ContentUnavailableView(L("No chat selected"), systemImage: "bubble.left.and.bubble.right")
             }
         }
         .onChange(of: self.gateway.selectedKey) { self.focusedSession = nil }

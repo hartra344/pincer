@@ -11,6 +11,16 @@
         }
       }
     },
+    "%@ + %lld more": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ + %2$lld more"
+          }
+        }
+      }
+    },
     "%@ Secrets are write-only: Pincer shows whether they're set, never their values.": {
       "localizations": {
         "en": {
@@ -191,6 +201,16 @@
         }
       }
     },
+    "%lld earlier steps not shown": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld earlier steps not shown"
+          }
+        }
+      }
+    },
     "%lld more…": {
       "localizations": {
         "en": {
@@ -247,6 +267,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld reconnect attempts"
+          }
+        }
+      }
+    },
+    "%lld running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld running"
           }
         }
       }
@@ -357,6 +387,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Active %@ ago"
+          }
+        }
+      }
+    },
+    "Activity not captured — only live runs are recorded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activity not captured — only live runs are recorded"
           }
         }
       }
@@ -1101,6 +1141,16 @@
         }
       }
     },
+    "Collapse": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapse"
+          }
+        }
+      }
+    },
     "Collapse question": {
       "localizations": {
         "en": {
@@ -1167,6 +1217,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Compact Now"
+          }
+        }
+      }
+    },
+    "Compaction": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compaction"
           }
         }
       }
@@ -2251,6 +2311,16 @@
         }
       }
     },
+    "Error": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error"
+          }
+        }
+      }
+    },
     "Errors": {
       "localizations": {
         "en": {
@@ -2297,6 +2367,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Every setting the Gateway's schema describes. The other pages show the common ones."
+          }
+        }
+      }
+    },
+    "Expand": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand"
           }
         }
       }
@@ -2697,6 +2777,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Health"
+          }
+        }
+      }
+    },
+    "Hide Runs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Runs"
           }
         }
       }
@@ -3631,6 +3721,16 @@
         }
       }
     },
+    "No chat selected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No chat selected"
+          }
+        }
+      }
+    },
     "No clients reported.": {
       "localizations": {
         "en": {
@@ -3657,6 +3757,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No heartbeat yet"
+          }
+        }
+      }
+    },
+    "No helper runs yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No helper runs yet"
           }
         }
       }
@@ -3727,6 +3837,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No results"
+          }
+        }
+      }
+    },
+    "No runs captured yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No runs captured yet"
           }
         }
       }
@@ -4001,6 +4121,16 @@
         }
       }
     },
+    "Open": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
+          }
+        }
+      }
+    },
     "Open %@": {
       "localizations": {
         "en": {
@@ -4237,6 +4367,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pairing Requests Aren't Available"
+          }
+        }
+      }
+    },
+    "Parent: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parent: %@"
           }
         }
       }
@@ -5371,12 +5511,42 @@
         }
       }
     },
+    "Runs appear here as they stream. Only live runs are recorded.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runs appear here as they stream. Only live runs are recorded."
+          }
+        }
+      }
+    },
     "Runs in": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Runs in"
+          }
+        }
+      }
+    },
+    "Runs — %lld helpers running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runs — %lld helpers running"
+          }
+        }
+      }
+    },
+    "Runs — 1 helper running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runs — 1 helper running"
           }
         }
       }
@@ -5731,6 +5901,26 @@
         }
       }
     },
+    "Show Runs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Runs"
+          }
+        }
+      }
+    },
+    "Show Timeline": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Timeline"
+          }
+        }
+      }
+    },
     "Show Tips Again": {
       "localizations": {
         "en": {
@@ -6011,6 +6201,16 @@
         }
       }
     },
+    "Stopped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stopped"
+          }
+        }
+      }
+    },
     "Stopping…": {
       "localizations": {
         "en": {
@@ -6267,6 +6467,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "They'll be able to DM the agent on this account. To revoke access later, edit the channel's allowlist on the Gateway."
+          }
+        }
+      }
+    },
+    "Thinking": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking"
           }
         }
       }
@@ -6561,6 +6771,16 @@
         }
       }
     },
+    "Timeline": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timeline"
+          }
+        }
+      }
+    },
     "Times": {
       "localizations": {
         "en": {
@@ -6667,6 +6887,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Totals"
+          }
+        }
+      }
+    },
+    "Tree": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tree"
           }
         }
       }
@@ -6911,6 +7141,16 @@
         }
       }
     },
+    "View": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View"
+          }
+        }
+      }
+    },
     "Wait for the current run to finish.": {
       "localizations": {
         "en": {
@@ -6961,6 +7201,16 @@
         }
       }
     },
+    "When this agent delegates work, its helpers appear here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When this agent delegates work, its helpers appear here."
+          }
+        }
+      }
+    },
     "Which channels and chats route to this agent. Bindings are managed in the config.": {
       "localizations": {
         "en": {
@@ -7007,6 +7257,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Workspace Files"
+          }
+        }
+      }
+    },
+    "Writing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Writing"
           }
         }
       }
@@ -7071,6 +7331,26 @@
         }
       }
     },
+    "active %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "active %@"
+          }
+        }
+      }
+    },
+    "at +%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "at +%@"
+          }
+        }
+      }
+    },
     "chat": {
       "localizations": {
         "en": {
@@ -7117,6 +7397,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "failed"
+          }
+        }
+      }
+    },
+    "just now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "just now"
+          }
+        }
+      }
+    },
+    "last active %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "last active %@"
           }
         }
       }

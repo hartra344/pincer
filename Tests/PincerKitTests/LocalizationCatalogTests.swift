@@ -131,7 +131,8 @@ struct LocalizationCatalogTests {
             "ApprovalHistoryPage", "ExecPolicyPage", "GatewayLogsPage", "PairingRequestsPage", "ReactionPicker",
             "QuestionCardView", "ProgressCardView", "TipsOverlay", "AutomationsView", "SkillsViews",
             "ToolsInspectorViews", "AgentManagementViews", "MenuBarExtra", "ChatView", "PluginSettings",
-            "ThinkingDisplay", "ImageViews", "DevicesPage",
+            "ThinkingDisplay", "ImageViews", "DevicesPage", "ChannelStatusPage", "ChannelQRLoginView",
+            "FullManagementBadge", "GatewayHealthPage",
         ]
         let folder = Self.root.appending(path: "Sources/PincerUI")
         var unmigrated: [String] = []

@@ -37,8 +37,8 @@ struct RunTimelineView: View {
         let focusId = timeline.latestLane(sessionKey: self.focusedSession).map { "run-\($0.runId)" }
             ?? "node-\(self.focusedSession)"
         if entries.isEmpty {
-            ContentUnavailableView("No runs captured yet", systemImage: "chart.bar.xaxis",
-                                   description: Text("Runs appear here as they stream. Only live runs are recorded."))
+            ContentUnavailableView(L("No runs captured yet"), systemImage: "chart.bar.xaxis",
+                                   description: Text("Runs appear here as they stream. Only live runs are recorded.", bundle: .module))
                 .frame(maxHeight: .infinity)
         } else {
             TimelineView(.animation(minimumInterval: live ? 1 : 30, paused: !live && !connected)) { context in
@@ -78,7 +78,7 @@ struct RunTimelineView: View {
                         Text(RunDuration.format(duration)).monospacedDigit().foregroundStyle(.secondary)
                     }
                 }
-                Text("Activity not captured — only live runs are recorded")
+                Text("Activity not captured — only live runs are recorded", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -172,7 +172,7 @@ private struct RunLaneView: View {
                 Text(detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
             if self.lane.droppedSegments > 0 {
-                Text("\(self.lane.droppedSegments) earlier steps not shown").font(.caption2).foregroundStyle(.tertiary)
+                Text("\(self.lane.droppedSegments) earlier steps not shown", bundle: .module).font(.caption2).foregroundStyle(.tertiary)
             }
         }
     }
@@ -228,15 +228,15 @@ private struct RunLaneView: View {
                          merged: Int) -> String
     {
         let name = switch kind {
-        case .thinking: "Thinking"
-        case .writing: "Writing"
+        case .thinking: L("Thinking")
+        case .writing: L("Writing")
         case let .tool(name): name
-        case .compaction: "Compaction"
-        case .error: "Error"
-        case .abort: "Stopped"
+        case .compaction: L("Compaction")
+        case .error: L("Error")
+        case .abort: L("Stopped")
         }
-        var parts = [merged > 1 ? "\(name) + \(merged - 1) more" : name,
-                     "at +\(RunDuration.format(start.timeIntervalSince(laneStart)))"]
+        var parts = [merged > 1 ? L("\(name) + \(merged - 1) more") : name,
+                     L("at +\(RunDuration.format(start.timeIntervalSince(laneStart)))")]
         if !kind.isMarker { parts.append(RunDuration.format(end.timeIntervalSince(start))) }
         if let detail { parts.append(detail) }
         return parts.joined(separator: " · ")
@@ -257,9 +257,9 @@ private struct OpenRunGestures: ViewModifier {
                 .onTapGesture(perform: open)
                 #endif
                 .contextMenu {
-                    Button("Open", systemImage: "arrow.up.forward.app", action: open)
+                    Button(L("Open"), systemImage: "arrow.up.forward.app", action: open)
                 }
-                .accessibilityAction(named: "Open", open)
+                .accessibilityAction(named: L("Open"), open)
         } else {
             content
         }
