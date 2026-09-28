@@ -102,6 +102,20 @@ enum TranscriptPart {
         var messageId: String?
     }
 
+    /// Where an unsent message is: queued, or failed with Retry and Delete.
+    struct SendStatus: Equatable {
+        /// The outbox entry (the message's idempotency key).
+        let id: String
+        let text: String
+        let isFailed: Bool
+        let canRetry: Bool
+        let canDelete: Bool
+        /// Full reason, for the tooltip.
+        var detail: String?
+        /// For VoiceOver: "Not sent yet, queued.", "Sending." or "Failed to send: reason."
+        var spoken: String = ""
+    }
+
     /// The message a reply quotes, above its text. Tapping it jumps to the original.
     struct ReplyQuote {
         let targetId: String
@@ -171,12 +185,13 @@ enum TranscriptPart {
     case loading
     case replyQuote(ReplyQuote)
     case reactions(Reactions)
+    case sendStatus(SendStatus)
     /// A brief tint over the message a quote jumped to.
     case flash
 
     enum Kind: Hashable {
         case avatar, header, text, quote, thinkingBody, rule, code, table, thinkingHeader, tool, image,
-             imageLink, file, typing, footer, marker, loading, replyQuote, reactions, flash
+             imageLink, file, typing, footer, marker, loading, replyQuote, reactions, sendStatus, flash
     }
 
     var kind: Kind {
@@ -200,6 +215,7 @@ enum TranscriptPart {
         case .loading: .loading
         case .replyQuote: .replyQuote
         case .reactions: .reactions
+        case .sendStatus: .sendStatus
         case .flash: .flash
         }
     }
@@ -242,6 +258,8 @@ struct TranscriptRowLayout {
     var matchY: CGFloat?
     /// The row's messages that replies and reactions can target, top to bottom.
     var messages: [MessageSpan] = []
+    /// An unsent message's status, for the row's context menu and accessibility actions.
+    var sendStatus: TranscriptPart.SendStatus?
     /// Reply and reaction state this layout was built with, to tell when it's stale.
     var decoration = TranscriptDecoration()
     /// Distinct for every layout built, so a view can tell it already shows this one.
@@ -385,19 +403,22 @@ struct TranscriptLayoutBuilder {
 
     private func user(_ item: ChatItem, into layout: inout TranscriptRowLayout) {
         let header = TranscriptPart.Header(name: Owner.displayName, badge: item.via.map { "via \($0)" },
-                                           time: item.timestamp?.chatTimestamp, isPending: item.isPending)
+                                           time: item.timestamp?.chatTimestamp, isPending: item.isAwaitingDelivery)
         let text = item.plainText
         let messageId = item.isReplyable ? item.transcriptId : nil
         let contentWidth = max(layout.width - TranscriptMetrics.contentX - TranscriptMetrics.sidePadding, 40)
         let quote = layout.decoration.quote.map {
             self.replyQuote($0, isLocating: layout.decoration.isLocating, width: min(contentWidth, TranscriptMetrics.maxCardWidth))
         }
-        layout.alpha = item.isPending ? 0.7 : 1
+        let sendStatus = Self.sendStatus(item)
+        layout.sendStatus = sendStatus
+        layout.alpha = item.isPending && sendStatus?.isFailed != true ? 0.7 : 1
         layout.copyItems = [.init(title: "Copy Text", text: text)]
         let attachments = item.blocks.filter { if case .image = $0 { true } else if case .file = $0 { true } else { false } }.count
         layout.accessibilityLabel = AccessibilityText.messageRow(
             role: .user, text: text, timestamp: header.time, attachmentCount: attachments,
-            isPending: item.isPending, via: item.via, summaryLimit: 0)
+            isPending: item.isPending && sendStatus == nil, via: item.via, summaryLimit: 0)
+        if let sendStatus { layout.accessibilityLabel += ". \(sendStatus.spoken)" }
         if let quote {
             layout.accessibilityLabel = "In reply to \(quote.sender ?? "a message"): \(quote.preview.string). " + layout.accessibilityLabel
         }
@@ -416,12 +437,34 @@ struct TranscriptLayoutBuilder {
                 if case let .file(file) = block { self.file(file, into: &stack, layout: &layout) }
             }
             if let messageId { self.reactions(on: messageId, into: &stack, layout: layout) }
+            if let sendStatus {
+                stack.add(.sendStatus(sendStatus), height: max(TranscriptStyle.lineHeight(self.style.caption), 16),
+                          spacing: TranscriptMetrics.footerSpacing)
+            }
             if !item.isPending, !text.isEmpty || messageId != nil {
                 self.footer(key: "\(item.id):0", copy: text, time: item.timestamp, model: nil, messageId: messageId, into: &stack)
             }
             if let messageId {
                 layout.messages.append(.init(id: messageId, minY: TranscriptMetrics.verticalPadding, maxY: stack.y))
             }
+        }
+    }
+
+    /// The status line of a queued or failed message; nil while sending and once accepted.
+    static func sendStatus(_ item: ChatItem) -> TranscriptPart.SendStatus? {
+        guard item.isPending, let state = item.outboxState, let id = item.idempotencyKey else { return nil }
+        switch state {
+        case .queued:
+            return .init(id: id, text: "Queued", isFailed: false, canRetry: false, canDelete: true, spoken: "Not sent yet, queued.")
+        case .sending:
+            return .init(id: id, text: "Sending…", isFailed: false, canRetry: false, canDelete: false, spoken: "Sending.")
+        case let .failed(failure):
+            let prefix = "Couldn’t send: "
+            let reason = failure.message.hasPrefix(prefix) ? String(failure.message.dropFirst(prefix.count)) : failure.message
+            let sentence = reason.hasSuffix(".") ? reason : reason + "."
+            return .init(id: id, text: reason.isEmpty ? "Failed" : "Failed — \(reason)", isFailed: true,
+                         canRetry: failure.retryable, canDelete: true, detail: failure.message,
+                         spoken: reason.isEmpty ? "Failed to send." : "Failed to send: \(sentence)")
         }
     }
 

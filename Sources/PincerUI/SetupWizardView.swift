@@ -509,7 +509,11 @@ private struct SetupTestMessageStep: View {
         Task {
             let result = await self.gateway.sendSetupTestMessage(text)
             self.sending = false
-            if case let .failed(message) = result.outcome { self.error = message }
+            switch result.outcome {
+            case .sent: break
+            case let .failed(message), let .failedInline(message): self.error = message
+            case .queued: self.error = "Couldn’t send: not connected to the Gateway."
+            }
         }
     }
 }

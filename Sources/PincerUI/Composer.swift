@@ -32,6 +32,12 @@ struct Composer: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
+            if let offlineNote = self.offlineNote {
+                Label(offlineNote, systemImage: "icloud.slash")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .combine)
+            }
             if let target = self.chat.replyTarget {
                 ReplyChip(target: target) { self.chat.replyTarget = nil }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -82,8 +88,9 @@ struct Composer: View {
                 .buttonStyle(.plain)
                 .composerControl()
                 .disabled(!self.canSend)
-                .help(self.chat.isRunning ? L("Queue a follow-up") : L("Send"))
-                .accessibilityLabel(self.chat.isRunning ? L("Queue a follow-up") : L("Send"))
+                .help(self.sendLabel)
+                .accessibilityLabel(self.sendLabel)
+                .accessibilityHint(self.gateway.state.isConnected ? "" : Self.offlineHint)
             }
             .padding(.leading, 10)
             .padding(.trailing, 7)
@@ -179,15 +186,19 @@ struct Composer: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .composerControl()
-        .help(Text("Attach files", bundle: .module))
+        .disabled(!self.gateway.state.isConnected)
+        .help(self.gateway.state.isConnected ? L("Attach files") : Self.attachmentsNeedConnection)
         .accessibilityLabel(Text("Attach files", bundle: .module))
+        .accessibilityHint(self.gateway.state.isConnected ? "" : Self.attachmentsNeedConnection)
         .overlay(alignment: .trailing) {
             #if os(iOS)
             PhotosPicker(selection: self.$photoItems, maxSelectionCount: 6, matching: .images) {
                 Image(systemName: "photo").font(.title3)
             }
-            .help(Text("Attach photos", bundle: .module))
+            .disabled(!self.gateway.state.isConnected)
+            .help(self.gateway.state.isConnected ? L("Attach photos") : Self.attachmentsNeedConnection)
             .accessibilityLabel(Text("Attach photos", bundle: .module))
+            .accessibilityHint(self.gateway.state.isConnected ? "" : Self.attachmentsNeedConnection)
             .offset(x: 30)
             #endif
         }
@@ -207,8 +218,31 @@ struct Composer: View {
     }
 
     private var canSend: Bool {
-        self.gateway.state.isConnected
-            && (!self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty)
+        guard !self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty else { return false }
+        // Offline, plain messages queue in the outbox; attachments and commands need the Gateway.
+        return self.gateway.state.isConnected || (self.attachments.isEmpty && !self.isTypingCommand)
+    }
+
+    private static var offlineHint: String { L("Offline — messages send when you reconnect") }
+    private static var attachmentsNeedConnection: String { L("Attachments need a connection") }
+
+    private var sendLabel: String {
+        if !self.gateway.state.isConnected { return L("Queue Message") }
+        return self.chat.isRunning ? L("Queue a follow-up") : L("Send")
+    }
+
+    /// Offline: what happens to what's typed, and how many messages are waiting.
+    private var offlineNote: String? {
+        guard !self.gateway.state.isConnected else { return nil }
+        let queued = self.chat.unsentEntries.filter { $0.state == .queued }.count
+        let waiting = queued == 0 ? nil : L("\(queued) messages queued")
+        if !self.attachments.isEmpty {
+            return [waiting, Self.attachmentsNeedConnection].compactMap(\.self).joined(separator: " · ")
+        }
+        if self.isTypingCommand {
+            return [waiting, L("Connect to run commands")].compactMap(\.self).joined(separator: " · ")
+        }
+        return [waiting, Self.offlineHint].compactMap(\.self).joined(separator: " · ")
     }
 
     private func submit() {
