@@ -619,6 +619,7 @@ struct GatewayHealthDismissalMoreTests {
         app.remove(store.id)
         #expect(scratch.defaults.object(forKey: "pincer.healthDismissals.\(id)") == nil)
         #expect(scratch.defaults.object(forKey: "pincer.healthDismissalsSynced.\(id)") == nil)
+        // Negative window: nothing async may re-save the dismissals after removal, so give it time to (wrongly) happen.
         try? await Task.sleep(for: .milliseconds(100))
         #expect(scratch.defaults.object(forKey: "pincer.healthDismissals.\(id)") == nil)
     }

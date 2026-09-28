@@ -416,7 +416,9 @@ struct GatewayLogsModelEdgeCaseTests {
     final class Script {
         var results: [Result<JSONValue, Error>]
         var params: [JSONValue] = []
-        var delay: Duration?
+        let started = Gate()
+        let release = Gate()
+        var holds = false
         init(_ results: [Result<JSONValue, Error>]) { self.results = results }
     }
 
@@ -435,7 +437,10 @@ struct GatewayLogsModelEdgeCaseTests {
     private func model(_ script: Script, methods: Set<String>? = nil) -> GatewayLogsModel {
         GatewayLogsModel(methods: { methods }) { _, params in
             script.params.append(params)
-            if let delay = script.delay { try await Task.sleep(for: delay) }
+            if script.holds {
+                await script.started.open()
+                await script.release.wait()
+            }
             return try script.results.removeFirst().get()
         }
     }
@@ -454,11 +459,12 @@ struct GatewayLogsModelEdgeCaseTests {
 
     @Test func singleInFlight() async {
         let script = Script([.success(self.page(cursor: 1, lines: [self.info("a")]))])
-        script.delay = .milliseconds(100)
+        script.holds = true
         let model = self.model(script)
         async let first: Void = model.poll()
-        try? await Task.sleep(for: .milliseconds(10))
+        await script.started.wait()
         await model.poll()
+        await script.release.open()
         await first
         #expect(script.params.count == 1 && model.entries.count == 1)
     }

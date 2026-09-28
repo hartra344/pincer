@@ -791,11 +791,7 @@ struct FirstRunModelTests {
     }
 
     static func settle(_ condition: @MainActor () -> Bool) async -> Bool {
-        for _ in 0..<300 {
-            if condition() { return true }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        return condition()
+        await eventually(timeout: .seconds(5), condition)
     }
 
     /// Welcome → Sign in at `address`, through the model.

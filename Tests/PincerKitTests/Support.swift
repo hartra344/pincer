@@ -85,3 +85,32 @@ enum PerfBudget {
         self.isStrict ? budget : budget * self.sharedCPUFactor
     }
 }
+
+/// Polls `condition` on the main actor until it holds or `timeout` passes. The short sleep is
+/// only the poll interval; the wait ends as soon as the condition is true.
+@MainActor
+func eventually(timeout: Duration = .seconds(3), _ condition: () -> Bool) async -> Bool {
+    let deadline = ContinuousClock.now + timeout
+    while !condition() {
+        if ContinuousClock.now >= deadline { return false }
+        try? await Task.sleep(for: .milliseconds(5))
+    }
+    return true
+}
+
+/// One-shot latch: `wait()` suspends until `open()`; later waits return at once.
+actor Gate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        if self.isOpen { return }
+        await withCheckedContinuation { self.waiters.append($0) }
+    }
+
+    func open() {
+        self.isOpen = true
+        for waiter in self.waiters { waiter.resume() }
+        self.waiters = []
+    }
+}

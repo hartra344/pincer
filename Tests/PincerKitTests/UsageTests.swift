@@ -584,16 +584,22 @@ struct UsageModelTests {
 
     @Test func staleSessionTotalsDropped() async throws {
         let key = "agent:main:main"
+        let slowStarted = Gate()
+        let release = Gate()
         let model = UsageModel { method, params in
             guard method == "sessions.usage" else { return Self.fixtures[method] ?? [:] }
             let today = params["startDate"] == params["endDate"]
-            if !today { try await Task.sleep(for: .milliseconds(300)) }
+            if !today {
+                await slowStarted.open()
+                await release.wait()
+            }
             return ["sessions": [["key": .string(key), "usage": ["totalTokens": today ? 1 : 30]]]]
         }
         model.prepareSession(key)
         let slow = Task { await model.loadSessionTotals(key) }
-        try await Task.sleep(for: .milliseconds(50))
+        await slowStarted.wait()
         await model.setSessionSelection(key, UsageRangeSelection(preset: .today))
+        await release.open()
         await slow.value
         #expect(model.detail(key)?.row?.usage?.totals.totalTokens == 1 && model.detail(key)?.totals.loadState == .idle)
     }

@@ -516,12 +516,8 @@ struct DemoDeviceSeedTests {
     }
 }
 
-/// Polls `condition` on the main actor for up to two seconds.
+/// Polls `condition` on the main actor for up to five seconds.
 @MainActor
 private func devicesEventually(_ condition: () -> Bool) async -> Bool {
-    for _ in 0..<200 {
-        if condition() { return true }
-        try? await Task.sleep(for: .milliseconds(10))
-    }
-    return condition()
+    await eventually(timeout: .seconds(5), condition)
 }

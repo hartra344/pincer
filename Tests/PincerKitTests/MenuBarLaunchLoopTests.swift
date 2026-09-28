@@ -154,6 +154,7 @@ struct MenuBarLaunchLoopTests {
         _ = MenuBarInbox(app: app, now: Self.now)
         _ = MenuBarInbox(app: app)
         await Task.yield()
+        // Negative window: queued work must not touch state the menu reads.
         try? await Task.sleep(for: .milliseconds(50))
         #expect(!watched.fired)
         for gateway in app.gateways {
@@ -329,13 +330,12 @@ struct MenuBarLaunchLoopTests {
         clock.start(interval: .milliseconds(20))
         #expect(clock.isRunning && clock.now > .distantPast, "start ticks at once")
         let first = clock.now
-        for _ in 0..<50 where clock.now == first {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await eventually(timeout: .seconds(5)) { clock.now != first }
         #expect(clock.now > first, "the ticker moves now forward")
         clock.stop()
         #expect(!clock.isRunning)
         let stopped = clock.now
+        // Negative window: several 20ms intervals must pass without a tick.
         try? await Task.sleep(for: .milliseconds(100))
         #expect(clock.now == stopped, "no ticks after stop")
     }

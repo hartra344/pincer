@@ -482,9 +482,7 @@ final class FakeChannelsGateway {
         await model.load()
         #expect(model.canLogIn(ChannelFixtures.whatsapp))
         model.startQRLogin(ChannelFixtures.whatsapp)
-        for _ in 0..<100 where !(model.state(of: ChannelFixtures.whatsapp) == .connected && changed > 0) {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
+        _ = await eventually(timeout: .seconds(5)) { model.state(of: ChannelFixtures.whatsapp) == .connected && changed > 0 }
         #expect(gateway.methods.contains("web.login.start") && gateway.methods.contains("web.login.wait"))
         #expect(model.state(of: ChannelFixtures.whatsapp) == .connected && changed == 1, "linking reloads status and tells the store")
         if case .connected = model.qr.state(channel: "whatsapp", accountId: "default") {} else {
