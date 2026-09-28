@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import os
+import PincerPush
 import Synchronization
 
 /// On-disk copy of each chat's committed transcript. Reopening a chat is instant (even offline) and
@@ -220,7 +221,7 @@ public enum TranscriptCache {
             return override == "off" ? nil : URL(filePath: override, directoryHint: .isDirectory)
         }
         return FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
-            .appending(path: "Pincer/Transcripts", directoryHint: .isDirectory)
+            .appending(path: "\(DevNamespace.folderName("Pincer"))/Transcripts", directoryHint: .isDirectory)
     }
 
     public static func directory(gatewayId: UUID, root: URL? = Self.root) -> URL? {
