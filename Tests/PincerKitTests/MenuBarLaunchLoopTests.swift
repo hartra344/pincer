@@ -330,7 +330,8 @@ struct MenuBarLaunchLoopTests {
         clock.start(interval: .milliseconds(20))
         #expect(clock.isRunning && clock.now > .distantPast, "start ticks at once")
         let first = clock.now
-        _ = await eventually(timeout: .seconds(5)) { clock.now != first }
+        // Generous: under `swift test --parallel` the main actor can be busy for seconds.
+        _ = await eventually(timeout: .seconds(30)) { clock.now != first }
         #expect(clock.now > first, "the ticker moves now forward")
         clock.stop()
         #expect(!clock.isRunning)

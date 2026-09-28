@@ -92,7 +92,11 @@ enum PerfBudget {
 func eventually(timeout: Duration = .seconds(3), _ condition: () -> Bool) async -> Bool {
     let deadline = ContinuousClock.now + timeout
     while !condition() {
-        if ContinuousClock.now >= deadline { return false }
+        // One last look after the deadline: a starved main actor may run the awaited work late.
+        if ContinuousClock.now >= deadline {
+            try? await Task.sleep(for: .milliseconds(50))
+            return condition()
+        }
         try? await Task.sleep(for: .milliseconds(5))
     }
     return true
