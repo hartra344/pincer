@@ -9,8 +9,10 @@ description: How Pincer's macOS and iOS builds are signed and uploaded to TestFl
 
 Either:
 
-- go to **Actions → TestFlight → Run workflow** and pick a platform, or
-- push a `v*` tag.
+- go to **Actions → TestFlight → Run workflow** and pick a platform, or run `gh workflow run testflight.yml -f platform=both` (or `ios`, `macos`), or
+- push a `v*` tag, which uploads both.
+
+Only the selected platforms start a runner.
 
 Each build number is `<run number>.<attempt>`.
 

@@ -27,31 +27,22 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      # Only the selected platforms get a runner (a tag push has no inputs, so it builds both).
       matrix:
-        platform: [ios, macos]
+        platform: ${{ fromJSON(inputs.platform == 'ios' && '["ios"]' || inputs.platform == 'macos' && '["macos"]' || '["ios", "macos"]') }}
     steps:
-      - name: Skip unselected platform
-        id: gate
-        run: |
-          selected="${{ github.event.inputs.platform || 'both' }}"
-          if [ "$selected" = both ] || [ "$selected" = "${{ matrix.platform }}" ]; then echo "run=true" >> "$GITHUB_OUTPUT"; fi
-
       - uses: actions/checkout@v5
-        if: steps.gate.outputs.run
 
       - name: Select newest Xcode
-        if: steps.gate.outputs.run
         run: |
           XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
           sudo xcode-select -s "$XCODE"
           xcodebuild -version
 
       - name: Install XcodeGen
-        if: steps.gate.outputs.run
         run: brew install xcodegen
 
       - name: Install signing certificates and profiles
-        if: steps.gate.outputs.run
         env:
           DISTRIBUTION_P12: ${{ secrets.DISTRIBUTION_P12 }}
           MAC_INSTALLER_P12: ${{ secrets.MAC_INSTALLER_P12 }}
@@ -103,7 +94,6 @@ jobs:
           rm -f "$RUNNER_TEMP"/*.p12 "$RUNNER_TEMP/profile"
 
       - name: Archive and upload to TestFlight
-        if: steps.gate.outputs.run
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -111,7 +101,7 @@ jobs:
         run: ASC_KEY_PATH="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8" scripts/testflight.sh ${{ matrix.platform }}
 
       - name: Upload build logs
-        if: failure() && steps.gate.outputs.run
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: testflight-logs-${{ matrix.platform }}
@@ -119,5 +109,5 @@ jobs:
           if-no-files-found: ignore
 
       - name: Clean up keychain
-        if: always() && steps.gate.outputs.run
+        if: always()
         run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
