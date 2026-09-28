@@ -5,6 +5,9 @@ import Testing
 /// Issue #58: VoiceOver labels composed by `AccessibilityText`.
 @Suite("Accessibility labels")
 struct AccessibilityLabelTests {
+    static let repo = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent()
+
     // MARK: join / count
 
     @Test func joinDropsNilEmptyAndWhitespaceParts() {
@@ -228,6 +231,50 @@ struct AccessibilityLabelTests {
         #expect(AccessibilityText.toolCall(name: "exec", isRunning: true, isError: true) == "Tool exec, running",
                 "running wins over a stale error")
         #expect(AccessibilityText.toolCall(name: "exec", summary: "", isRunning: false, isError: false) == "Tool exec, finished")
+    }
+
+    @Test func linkActionsCollapseDuplicateURLsInReadingOrder() throws {
+        let a = try #require(URL(string: "https://example.com/a"))
+        let b = try #require(URL(string: "https://example.com/b"))
+        let actions = AccessibilityText.linkActions([(text: "Docs", url: a), (text: "Blog", url: b), (text: "Docs again", url: a)])
+        #expect(actions.map(\.title) == ["Docs", "Blog"], "first run for a URL wins")
+        #expect(actions.map(\.url) == [a, b])
+    }
+
+    @Test func linkActionsFallBackToTheURLForAnEmptyTitle() throws {
+        let url = try #require(URL(string: "https://example.com/x?y=1"))
+        let actions = AccessibilityText.linkActions([(text: "", url: url), (text: " \n ", url: try #require(URL(string: "https://e.org")))])
+        #expect(actions.map(\.title) == ["https://example.com/x?y=1", "https://e.org"])
+        #expect(AccessibilityText.linkActions([(text: "  Docs \n", url: url)]).first?.title == "Docs", "titles are trimmed")
+        #expect(AccessibilityText.linkActions([]).isEmpty)
+    }
+
+    @Test func linkActionsAreCappedAtTheLimit() throws {
+        let runs = try (1...15).map { (text: "Link \($0)", url: try #require(URL(string: "https://example.com/\($0)"))) }
+        let actions = AccessibilityText.linkActions(runs)
+        #expect(AccessibilityText.maxLinkActions == 10)
+        #expect(actions.count == 10)
+        #expect(actions.map(\.title) == (1...10).map { "Link \($0)" }, "the first links in reading order are kept")
+        #expect(AccessibilityText.linkActions(runs, limit: 3).count == 3)
+        #expect(AccessibilityText.linkActions(runs, limit: 0).isEmpty)
+        // Duplicates don't use up the cap.
+        let dupes = Array(repeating: runs[0], count: 5) + runs
+        #expect(AccessibilityText.linkActions(dupes).map(\.title) == (1...10).map { "Link \($0)" })
+    }
+
+    /// The row's custom actions are named `L("Open \(title)")` in PincerUI, so the helper returns bare
+    /// titles (no "Open Open …") and the catalog must carry the `Open %@` key.
+    @Test func linkActionTitlesArePrefixedOpenByTheCatalogKey() throws {
+        let url = try #require(URL(string: "https://example.com"))
+        let title = try #require(AccessibilityText.linkActions([(text: "Docs", url: url)]).first?.title)
+        #expect(!title.hasPrefix("Open"))
+        let catalogURL = Self.repo.appending(path: "Sources/PincerUI/Resources/Localizable.xcstrings")
+        let catalog = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: catalogURL)) as? [String: Any])
+        let strings = try #require(catalog["strings"] as? [String: Any])
+        #expect(strings["Open %@"] != nil, "catalog key for the \"Open <title>\" link action")
+        #expect(String(format: "Open %@", title) == "Open Docs")
+        let source = try String(contentsOf: Self.repo.appending(path: "Sources/PincerUI/TranscriptList+UIKit.swift"), encoding: .utf8)
+        #expect(source.contains("L(\"Open \\(title)\")"), "link actions are named through the Open %@ key")
     }
 
     /// Labels are speech, not layout: no raw newlines, Markdown markers or doubled separators.
