@@ -72,3 +72,16 @@ struct ScratchDefaults {
 func absent(_ value: JSONValue?) -> Bool {
     if case .none = value { true } else { false }
 }
+
+/// Wall-clock budgets for perf tests. `swift test --parallel` shares the CPU with the other check
+/// lanes, so there only a generous ceiling applies (it still catches a quadratic blow-up); the
+/// budget itself is enforced when `PINCER_STRICT_PERF=1`, as in the solo `perf-tests` lane of
+/// `scripts/run-checks.sh`.
+enum PerfBudget {
+    static let isStrict = ProcessInfo.processInfo.environment["PINCER_STRICT_PERF"] == "1"
+    static let sharedCPUFactor = 5
+
+    static func limit(_ budget: Duration) -> Duration {
+        self.isStrict ? budget : budget * self.sharedCPUFactor
+    }
+}

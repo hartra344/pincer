@@ -112,7 +112,7 @@ scripts/check-launch-cpu.sh --menu-bar on --demo
      - `PincerChecks --live-no-usage` against a mock started with `MOCK_NO_USAGE=1`
      - `PincerChecks --live-no-reply-to` against a mock started with `MOCK_NO_REPLY_TO=1`
 
-     Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. Because they share the CPU (CI runners have 3 cores), they all pass `--skip-perf-budgets`. After they finish, `PincerChecks --perf-smoke` runs alone and enforces the perf smoke budgets. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
+     Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. Because they share the CPU (CI runners have 3 cores), they all pass `--skip-perf-budgets`. After they finish, `PincerChecks --perf-smoke` runs alone and enforces the perf smoke budgets. Then the unit tests with wall-clock budgets run alone with `PINCER_STRICT_PERF=1`; in the parallel `swift test` lane they're only held to five times their budget. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
 
 CI passes `-Xswiftc -enable-incremental-file-hashing` to every `swift` command. Checkout gives every file a new modification time, so without it the restored build would recompile everything.
 

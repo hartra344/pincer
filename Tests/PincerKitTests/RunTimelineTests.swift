@@ -469,7 +469,7 @@ struct RunTimelineTests {
         }
         #expect(feed.timeline.count == RunTimeline.defaultMaxRuns)
         #expect(feed.timeline.runIds.count == RunTimeline.defaultMaxRuns)
-        #expect(elapsed < .seconds(3), "85k events took \(elapsed)")
+        #expect(elapsed < PerfBudget.limit(.seconds(3)), "85k events took \(elapsed)")
     }
 
     // MARK: Rendering helpers
