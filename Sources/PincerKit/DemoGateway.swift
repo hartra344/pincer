@@ -90,6 +90,13 @@ actor DemoGateway {
     private var idempotency: [String: String] = [:]
     private var runs: [String: Run] = [:]
     private var sessionsSubscribed = false
+    /// The seeded runs' activity streams once per demo connection (DemoGateway+Subagents.swift).
+    private var replayedSeededRuns = false
+    /// The seeded running subagent's run: stoppable, but not an active run that defers a restart.
+    private var seededRunningRuns = [DemoGateway.seededRunningSubagentRunId: DemoGateway.seededSubagents.running]
+    /// The last `agent` seq the seeded running helper sent; it keeps streaming tool calls until stopped.
+    private var seededRunningSeq = DemoGateway.seededRunningLastSeq
+    private var seededStreamTask: Task<Void, Never>?
     private var messageSubscriptions: Set<String> = []
     private var eventSeq = 0
     private var sink: (@Sendable (GatewayEvent) -> Void)?
@@ -114,6 +121,7 @@ actor DemoGateway {
         let seeded = Self.seed()
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
+        Self.seedSubagents(sessions: &self.sessions, transcripts: &self.transcripts)
         self.approvalHistory = Self.seedApprovalHistory()
         let pending = Self.seedPendingApproval()
         if let id = pending["id"]?.string {
@@ -211,6 +219,14 @@ actor DemoGateway {
             return ["defaultId": "main", "mainKey": "main", "scope": "per-sender", "agents": .array(self.agents)]
         case "sessions.subscribe":
             self.sessionsSubscribed = true
+            if !self.replayedSeededRuns {
+                self.replayedSeededRuns = true
+                // After the list lands, so the rows can't settle a lane halfway through its replay.
+                Task { [weak self] in
+                    try? await Task.sleep(for: .milliseconds(50))
+                    await self?.replaySeededRuns()
+                }
+            }
             return ["subscribed": true, "list": self.sessionList(params)]
         case "sessions.list":
             return self.sessionList(params)
@@ -1350,7 +1366,12 @@ actor DemoGateway {
     }
 
     private func abort(sessionKey: String?, runId: String?) {
-        let matching = self.runs.filter { id, run in runId.map { $0 == id } ?? (run.sessionKey == sessionKey) }
+        var matching = self.runs.filter { id, run in runId.map { $0 == id } ?? (run.sessionKey == sessionKey) }
+        for (id, key) in self.seededRunningRuns where runId.map({ $0 == id }) ?? (key == sessionKey) {
+            self.seededRunningRuns[id] = nil
+            matching[id] = Run(sessionKey: key, text: "", seq: self.seededRunningSeq)
+            self.seededStreamTask?.cancel()
+        }
         for (id, run) in matching {
             run.task?.cancel()
             self.runs[id] = nil
@@ -1358,9 +1379,22 @@ actor DemoGateway {
                 row["hasActiveRun"] = false
                 row["activeRunIds"] = []
                 row["status"] = "idle"
+                Self.markSubagentAborted(&row)
             }
+            // Like the Gateway: a terminal lifecycle end marked aborted, then the chat state.
+            var lifecycle: [String: JSONValue] = [
+                "runId": .string(id), "sessionKey": .string(run.sessionKey), "seq": JSONValue(run.seq + 1),
+                "stream": "lifecycle", "ts": Self.now(),
+                "data": ["phase": "end", "status": "cancelled", "aborted": true, "stopReason": "user", "endedAt": Self.now()],
+            ]
+            if let parent = self.sessions[run.sessionKey]?["spawnedBy"]?.string {
+                lifecycle["spawnedBy"] = .string(parent)
+                let running = Self.hasRunningChild(parent, in: self.sessions)
+                self.updateRow(parent, reason: "subagent") { $0["hasActiveSubagentRun"] = .bool(running) }
+            }
+            self.emit("agent", .object(lifecycle))
             self.emit("chat", ["runId": .string(id), "sessionKey": .string(run.sessionKey),
-                               "seq": JSONValue(run.seq + 1), "state": "aborted"])
+                               "seq": JSONValue(run.seq + 2), "state": "aborted"])
         }
     }
 
@@ -1368,6 +1402,26 @@ actor DemoGateway {
 
     func emitHealth() {
         self.emit("health", self.health())
+    }
+
+    private func replaySeededRuns() {
+        for event in Self.seededRunEvents() { self.emit("agent", event) }
+        self.seededStreamTask = Task { [weak self] in
+            var step = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.liveSubagentStepInterval)
+                guard let self, await self.streamSeededStep(step) else { return }
+                step += 1
+            }
+        }
+    }
+
+    private func streamSeededStep(_ step: Int) -> Bool {
+        guard !Task.isCancelled, self.seededRunningRuns[Self.seededRunningSubagentRunId] != nil else { return false }
+        let next = Self.liveSubagentStep(step, seq: self.seededRunningSeq)
+        self.seededRunningSeq = next.seq
+        for event in next.events { self.emit("agent", event) }
+        return true
     }
 
     func emit(_ name: String, _ payload: JSONValue) {

@@ -69,7 +69,17 @@ public final class GatewayStore: Identifiable {
     public private(set) var hello: GatewayHello?
     public private(set) var agents: [AgentSummary] = []
     public private(set) var defaultAgentId = "main"
-    public private(set) var sessions: [String: SessionRow] = [:]
+    public private(set) var sessions: [String: SessionRow] = [:] {
+        didSet {
+            self.subagentTrees = [:]
+            self.settleRunTimeline()
+        }
+    }
+    /// `subagentTree(rootKey:)` per root and connection state, until the rows change.
+    @ObservationIgnored var subagentTrees: [String: SubagentTree] = [:]
+    /// Streamed run activity, read through `runTimeline`; bumping the revision publishes it.
+    @ObservationIgnored var runTimelineState = RunTimeline()
+    var runTimelineRevision = 0
     public private(set) var approvals: [ExecApproval] = []
     /// Pending agent questions (`ask_user`), oldest first.
     public private(set) var questions: [QuestionPrompt] = []
@@ -593,6 +603,7 @@ public final class GatewayStore: Identifiable {
         case "chat":
             guard let key = payload["sessionKey"]?.text else { return }
             if let runId = payload["runId"]?.text { self.runSessions[runId] = key }
+            self.recordRunActivity(event)
             self.chats[key]?.handleChat(payload)
             if payload["state"]?.string == "final" {
                 self.notifyReply(sessionKey: key, runId: payload["runId"]?.text, snapshot: payload["message"])
@@ -600,6 +611,7 @@ public final class GatewayStore: Identifiable {
         case "agent":
             guard let runId = payload["runId"]?.text else { return }
             let key = payload["sessionKey"]?.text ?? self.runSessions[runId]
+            self.recordRunActivity(event, sessionKey: key)
             if let key { self.chats[key]?.handleAgent(payload) }
         case "session.message":
             let key = payload["sessionKey"]?.text ?? payload["session"]?["key"]?.text

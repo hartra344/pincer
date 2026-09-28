@@ -738,7 +738,9 @@ public final class ChatStore: Identifiable {
         case "lifecycle":
             let phase = data["phase"]?.string
             if phase == "end" || phase == "error" {
-                self.noteOutcome(runId, phase == "end" ? .success : .error)
+                // The Gateway ends a stopped run with `phase: end, aborted: true`: neither outcome.
+                let outcome: AvatarOutcome = phase == "error" ? .error : data["aborted"]?.bool == true ? .none : .success
+                self.noteOutcome(runId, outcome)
                 self.finishRun(runId)
             }
         case "plan":
