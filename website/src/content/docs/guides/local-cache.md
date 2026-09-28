@@ -21,6 +21,8 @@ Each gateway gets its own folder, with one file per chat:
 - **`search-index.sqlite`** (plus `-wal` and `-shm`): the [message search](../search/) index, built from the transcripts.
 - **`Quarantine/`**: damaged cache files set aside for troubleshooting (see [below](#damaged-cache-files)). Usually absent.
 
+Messages you haven't sent yet aren't part of the cache: the [outbox](../offline-outbox/#where-the-outbox-is-stored) is stored separately, so the system never clears it and **Clear Cache…** leaves it alone.
+
 Files use complete file protection. Removing a gateway deletes its whole folder. Because it's in the system's Caches folder, macOS and iOS may also clear it when storage runs low; Pincer just refetches.
 
 To turn the cache off, set `PINCER_CACHE_DIR=off`. Nothing is written, and message search is off too (except in the demo, which keeps its index in memory). To use another folder, set it to a path. See [Security & privacy](../../reference/security/#local-cache).

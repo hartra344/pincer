@@ -549,7 +549,7 @@ public final class QuickCaptureModel {
             self.target = QuickCaptureTarget(gatewayId: gateway.id, target: .chat(created))
         }
         let text = SlashCommand.outgoingText(self.text, commands: gateway.slashCommands(for: key))
-        let outcome = await gateway.chat(for: key).sendMessage(text, attachments: self.attachments)
+        let outcome = await gateway.chat(for: key).sendMessage(text, attachments: self.attachments, requiresConnection: true)
         if case let .failed(message) = outcome {
             self.error = message
             return false

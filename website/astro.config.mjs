@@ -51,6 +51,7 @@ export default defineConfig({
 						{ slug: 'guides/search' },
 						{ slug: 'guides/local-cache' },
 						{ slug: 'guides/composer' },
+						{ slug: 'guides/offline-outbox' },
 						{ slug: 'guides/quick-capture' },
 						{ slug: 'guides/menu-bar' },
 						{ slug: 'guides/shortcuts-and-siri' },

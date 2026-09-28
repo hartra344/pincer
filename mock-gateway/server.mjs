@@ -529,6 +529,8 @@ function createSeedState() {
     // Gateway-owned custom group catalog: names in display order, kept even when empty.
     groups: ['Home', 'Personal', 'Work'],
     idempotency: new Map(),
+    // chat.send attempts per idempotencyKey, for the `-once` failure hooks.
+    sendAttempts: new Map(),
     messageActions: new Map(),
     reactionLog: [],
     activeRuns: new Map(),
@@ -1316,15 +1318,34 @@ function handleAuthedRequest(state, conn, msg) {
       }
       if (!params.idempotencyKey) return sendErr(conn, id, 'INVALID_REQUEST', 'idempotencyKey is required');
       if (!state.sessions.has(key)) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown session');
-      // Test hooks: `[mock:fail-send]` in the message refuses it; `[mock:drop]` drops this connection.
+      // Test hooks (see README): `[mock:fail-send]` / `[mock:reject-send]` always refuse; `[mock:drop]`
+      // always drops this connection; the `-once` hooks only hit the first attempt for an idempotencyKey,
+      // so a retry with the same key goes through.
       const message = String(params.message ?? '');
+      const attempt = (state.sendAttempts.get(params.idempotencyKey) ?? 0) + 1;
+      state.sendAttempts.set(params.idempotencyKey, attempt);
       if (message.includes('[mock:fail-send]')) return sendErr(conn, id, 'UNAVAILABLE', 'mock send failure');
+      if (message.includes('[mock:reject-send]')) {
+        return sendErr(conn, id, 'INVALID_REQUEST', 'invalid chat.send params: mock rejection');
+      }
       if (message.includes('[mock:drop]')) return conn.ws.close(1012, 'mock drop');
+      if (attempt === 1 && message.includes('[mock:unavailable-once]')) {
+        return sendJson(conn.ws, {
+          type: 'res', id, ok: false,
+          error: { code: 'UNAVAILABLE', message: 'Previous run is still shutting down. Please try again in a moment.', retryable: true, retryAfterMs: 250 },
+        });
+      }
+      if (attempt === 1 && message.includes('[mock:drop-once]')) return conn.ws.close(1012, 'mock drop');
+      // Like upstream's dedupe cache: a repeated key starts nothing new and answers `in_flight` while the
+      // run is going, then the cached terminal `ok`.
       if (state.idempotency.has(params.idempotencyKey)) {
-        return sendRes(conn, id, { runId: state.idempotency.get(params.idempotencyKey), status: 'started' });
+        const runId = state.idempotency.get(params.idempotencyKey);
+        return sendRes(conn, id, { runId, status: state.activeRuns.has(runId) ? 'in_flight' : 'ok' });
       }
       const runId = shortId('run_');
       state.idempotency.set(params.idempotencyKey, runId);
+      // The ambiguous failure: the Gateway accepts the send, then the socket drops before the ack.
+      const dropAfterAccept = attempt === 1 && message.includes('[mock:drop-after-accept]');
       noteChatForLogs(state, key, message, runId);
       const run = {
         runId,
@@ -1337,8 +1358,9 @@ function handleAuthedRequest(state, conn, msg) {
         waiters: new Set(),
       };
       state.activeRuns.set(runId, run);
-      sendRes(conn, id, { runId, status: 'started' });
       const reply = replyFacts(state, key, params.replyToId, conn);
+      if (dropAfterAccept) conn.ws.close(1012, 'mock drop');
+      else sendRes(conn, id, { runId, status: 'started' });
       setImmediate(() => simulateRun(state, run, params, reply));
       break;
     }

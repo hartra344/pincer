@@ -555,7 +555,11 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     public var via: String?
     public var markerKind: String?
     public var idempotencyKey: String?
+    /// Not committed to the transcript yet: an optimistic send, including queued and failed ones.
     public var isPending: Bool = false
+    /// Where an unsent message is in the outbox; nil for committed items and for sends the
+    /// Gateway accepted that the transcript hasn't caught up with yet.
+    public var outboxState: OutboxState?
     /// Model that generated this message, as recorded by the Gateway (assistant messages only).
     public var model: String?
     public var provider: String?
@@ -572,6 +576,21 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     public var transportChannel: String?
     /// Conversation it arrived in (`__openclaw.transport.conversationRef`), e.g. `channel:123`.
     public var conversationRef: String?
+
+    /// An optimistic send on its way: in flight, or accepted and waiting for the transcript. Not
+    /// a queued or failed one.
+    public var isAwaitingDelivery: Bool {
+        guard self.isPending else { return false }
+        return self.outboxState == nil || self.outboxState == .sending
+    }
+
+    /// A queued or failed message that hasn't gone out.
+    public var isUnsent: Bool {
+        switch self.outboxState {
+        case .queued?, .failed?: true
+        default: false
+        }
+    }
 
     /// A committed message that replies and reactions can point at.
     public var isReplyable: Bool {

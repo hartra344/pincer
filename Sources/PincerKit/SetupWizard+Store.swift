@@ -66,7 +66,7 @@ extension GatewayStore {
         guard let key = await self.setupTestSessionKey() else {
             return (nil, .failed(self.lastError ?? "Couldn't start a chat."))
         }
-        let outcome = await self.chat(for: key).sendMessage(text)
+        let outcome = await self.chat(for: key).sendMessage(text, requiresConnection: true)
         if case .sent = outcome { self.setup.markTestMessageSent() }
         return (key, outcome)
     }

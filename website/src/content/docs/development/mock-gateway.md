@@ -45,6 +45,10 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `plan` | Walks a three-step progress card. |
 | `[mock:fail-send]` | Refuses the `chat.send` with `UNAVAILABLE`, for testing failed sends. |
 | `[mock:drop]` | Closes the connection. The client reconnects after its backoff. |
+| `[mock:reject-send]` | Always refuses the `chat.send` with a non-retryable `INVALID_REQUEST`. The message shows **Failed** with Delete only. |
+| `[mock:unavailable-once]` | Refuses the first attempt for an idempotency key with a retryable `UNAVAILABLE` ("Previous run is still shutting down…"). Retry goes through. |
+| `[mock:drop-once]` | Closes the connection before accepting the first attempt. The message stays **Queued** and is sent on reconnect. |
+| `[mock:drop-after-accept]` | Accepts the first attempt, then closes the connection without answering. The message lands once, even though Pincer sends it again. |
 | `[mock:rotate-logs]` | Switches the log to the next day's file. Gateway Logs shows "Now reading …". |
 | `[mock:truncate-logs]` | Empties the log file. Gateway Logs shows "Log file was rotated or truncated." |
 | `[mock:log-burst]` | Writes 6,000 log lines at once. Gateway Logs skips ahead and says how much it skipped. |
