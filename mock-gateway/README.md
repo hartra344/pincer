@@ -42,6 +42,13 @@ Config and plugins (`config.mjs`):
 - `weather` needs an `apiKey` (at least 8 characters); `browser` asks for capability consent before enabling; bundled plugins can't be removed.
 - Install specs containing `missing` fail as not found; specs containing `unverified` require acknowledging the install policy warning.
 
+Subagents (`subagents.mjs`):
+
+- Seeded: `Release prep` (`agent:coder:dashboard:release`) spawned three subagents (`agent:<agent>:subagent:<uuid>`, `createdVia: "spawn"`, `spawnedBy`/`parentSessionKey`, `spawnDepth`, `startedAt`/`endedAt`/`runtimeMs`): one `done`, one `failed` (`lastRunError`, an `isError` tool result) and one `running` orchestrator whose own child (depth 2) was `killed`. The parent lists them in `childSessions` and has `hasActiveSubagentRun`.
+- `sessions.list` takes `spawnedBy` to list one session's direct children.
+- A chat message containing `spawn` runs `sessions_spawn` (tool start, then result `{status: "accepted", childSessionKey, runId}`), creates the child row (`sessions.changed` reason `create`) and streams the child's run as `agent` events with `spawnedBy`: `lifecycle` start (`startedAt`), `thinking` (`{text, delta}`), `tool` start/update/result, `assistant` and `lifecycle` end (`endedAt`). `spawn fail` makes the tool error and the run end with `lifecycle` error (`error`), leaving the row `failed`.
+- Every run opens with `lifecycle` start, and every `agent` event carries `ts`. `chat.abort` ends a run with `lifecycle` end `{status: "cancelled", aborted: true}` (as upstream `chat-abort.ts`); a stopped subagent becomes `killed` with `abortedLastRun`. The seeded running subagent (`run_seed_docs_audit`) can be stopped this way.
+
 Automations (`cron.mjs`):
 
 - `cron.status`, `cron.list` (paging, `includeDisabled`, sorting), `cron.get`, `cron.runs`, `cron.add`, `cron.update`, `cron.remove` and `cron.run`. Writes need the `operator.admin` scope, and `cron.update` rejects a stale `expectedConfigRevision`.
