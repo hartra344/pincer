@@ -8,7 +8,36 @@ struct ForwardedSenderMigrationTests {
     static let header = "[Inter-session message] sourceSession=agent:kiko:main sourceChannel=internal sourceTool=sessions_send isUser=false"
 
     func v5File(_ items: [ChatItem]) throws -> Data {
-        try JSONEncoder().encode(TranscriptCache.Snapshot(version: 5, items: items, complete: true))
+        try self.file(version: 5, items)
+    }
+
+    func file(version: Int, _ items: [ChatItem]) throws -> Data {
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(
+            TranscriptCache.Snapshot(items: items, complete: true))) as? [String: Any])
+        json["version"] = version
+        return try JSONSerialization.data(withJSONObject: json)
+    }
+
+    func forwarded() -> ChatItem {
+        ChatItem(id: "f1", role: .user, blocks: [.text("\(Self.header)\n\(MessageSender.interSessionPromptExplanation)\nHi Lumi!")])
+    }
+
+    @Test func v6FileGetsOnlyTheSenderStep() throws {
+        let tool = ChatItem(id: "t1", role: .toolResult, blocks: [.text("ok")])
+        let (snapshot, outcome) = TranscriptCache.decode(try self.file(version: 6, [self.forwarded(), tool]))
+        #expect(outcome == .migrated(from: 6))
+        let items = try #require(snapshot?.items)
+        #expect(items[0].sender?.agentId == "kiko" && items[0].plainText == "Hi Lumi!")
+        #expect(items[1].toolDetails == nil, "v6 tool results were already marked; they aren't touched again")
+    }
+
+    @Test func v5ChainsThroughV6ToV7() throws {
+        let tool = ChatItem(id: "t1", role: .toolResult, blocks: [.text("ok")])
+        let (snapshot, outcome) = TranscriptCache.decode(try self.v5File([self.forwarded(), tool]))
+        #expect(outcome == .migrated(from: 5) && snapshot?.version == 7)
+        let items = try #require(snapshot?.items)
+        #expect(items[0].role == .assistant && items[0].sender?.agentId == "kiko" && items[0].plainText == "Hi Lumi!")
+        #expect(items[1].toolDetails == TranscriptCache.unknownToolDetails, "the v5 → v6 step still runs first")
     }
 
     @Test func interSessionTurnBecomesTheSendersMessage() throws {

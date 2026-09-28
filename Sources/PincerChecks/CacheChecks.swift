@@ -29,6 +29,106 @@ private func isCorrupt(_ outcome: TranscriptCache.LoadOutcome) -> Bool {
     if case .corrupt = outcome { true } else { false }
 }
 
+/// A literal v5 transcript saved before #154 recorded `toolDetails`: `write` overwrote README.md
+/// and its result has no details (#168).
+private let legacyV5FileEdit = #"""
+{"version":5,"complete":true,"activityMs":5,"items":[
+ {"id":"lu1","transcriptId":"lu1","role":"user","blocks":[{"text":{"_0":"Tighten the README intro"}}],
+  "timestamp":780000000,"isError":false,"isPending":false,"isCapped":false},
+ {"id":"la1","transcriptId":"la1","role":"assistant",
+  "blocks":[{"toolCall":{"id":"call_w1","name":"write","arguments":"{\"path\":\"README.md\",\"content\":\"# Pincer\\nNative client.\\n\"}"}}],
+  "timestamp":780000001,"isError":false,"isPending":false,"isCapped":false},
+ {"id":"lr1","transcriptId":"lr1","role":"toolResult","toolCallId":"call_w1","toolName":"write",
+  "blocks":[{"text":{"_0":"Successfully wrote 25 bytes to README.md"}}],"timestamp":780000002,
+  "isError":false,"isPending":false,"isCapped":false}
+]}
+"""#
+
+/// An offline chat over that legacy cache: its edit card says "Written", never "New file", and the
+/// file is saved back at the current version.
+@MainActor
+private func checkLegacyV5FileEditChat(_ store: GatewayStore) async {
+    let key = "agent:main:legacy-edit"
+    let url = writeRawCache(Data(legacyV5FileEdit.utf8), gatewayId: store.id, sessionKey: key)
+    let chat = store.chat(for: key)
+    await chat.load()
+    let edits = chat.entries.flatMap { entry -> [ToolActivity] in
+        if case let .assistant(turn) = entry { return turn.tools }
+        return []
+    }.compactMap(\.fileEdit)
+    let edit = edits.first
+    check(chat.items.map(\.id) == ["lu1", "la1", "lr1"] && edits.count == 1, "legacy v5 chat with a write restores (\(chat.items.count) items)")
+    check(edit?.statusLabel == "Written" && edit?.files.first?.operation == .update && edit?.deletionsLabel == nil,
+          "legacy v5 overwrite isn't \"New file\" (\(edit?.statusLabel ?? "nil"), \(edit?.accessibilitySummary ?? ""))")
+    let saved = url.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    check(saved?["version"] as? Int == TranscriptCache.Snapshot.currentVersion, "legacy v5 file saved back at v\(TranscriptCache.Snapshot.currentVersion)")
+}
+
+/// Removing one chat (a deleted or rewound session, #38) drops its transcript, sidecar and search
+/// hits, and leaves the Gateway's other chats cached and searchable.
+@MainActor
+private func checkRemoveOneChat() async {
+    let gatewayId = UUID()
+    let gone = "agent:main:rewound", kept = "agent:main:kept"
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("g1", .user, "narwhal rewound", at: 1)], complete: true),
+                               gatewayId: gatewayId, sessionKey: gone)
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("k1", .user, "narwhal kept", at: 1)], complete: true),
+                               gatewayId: gatewayId, sessionKey: kept)
+    let before = Set(await indexHits(gatewayId, "narwhal").map(\.sessionKey))
+    check(before == [gone, kept], "both chats indexed before removing one (\(before.sorted()))")
+    let url = TranscriptCache.file(gatewayId: gatewayId, sessionKey: gone)
+    await TranscriptCache.remove(gatewayId: gatewayId, sessionKey: gone)
+    check(!fileExists(url) && !fileExists(url?.appendingPathExtension("meta")), "remove deletes the chat's transcript and .meta")
+    let (_, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: gone)
+    let indexed = await MessageIndex.shared(gatewayId: gatewayId).isIndexed(sessionKey: gone)
+    let after = Set(await indexHits(gatewayId, "narwhal").map(\.sessionKey))
+    check(outcome == .missing && !indexed && after == [kept], "removed chat is gone from cache and search, the other stays (\(after.sorted()))")
+    let (other, otherOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: kept)
+    check(otherOutcome == .loaded && other?.items.map(\.id) == ["k1"], "other chat still cached after removing one")
+    await TranscriptCache.remove(gatewayId: gatewayId, sessionKey: "agent:main:never")
+    let stillKept = Set(await indexHits(gatewayId, "narwhal").map(\.sessionKey))
+    check(stillKept == [kept], "removing an uncached chat is a no-op")
+    TranscriptCache.removeAll(gatewayId: gatewayId)
+}
+
+/// The search index heals when its file is deleted from under it (system cache purge), and
+/// saves racing Clear Cache don't leave it dead (#153).
+@MainActor
+private func checkIndexSurvivesDeletedFiles() async {
+    let gatewayId = UUID(), key = "agent:main:purged"
+    let snapshot = TranscriptCache.Snapshot(items: [messageItem("p1", .user, "quokka survives", at: 1)], complete: true)
+    await TranscriptCache.save(snapshot, gatewayId: gatewayId, sessionKey: key)
+    let indexed = await indexHits(gatewayId, "quokka").count
+    check(indexed == 1, "indexed before its file is purged (\(indexed))")
+    if let url = MessageIndex.url(gatewayId: gatewayId) {
+        for suffix in ["", "-wal", "-shm"] { try? FileManager.default.removeItem(atPath: url.path(percentEncoded: false) + suffix) }
+    }
+    // The open connection now fails (SQLITE_IOERR_VNODE); that resets the index, and the next save
+    // or reconcile rebuilds it instead of every search failing until relaunch.
+    for _ in 0..<3 { _ = try? await MessageIndex.shared(gatewayId: gatewayId).search("quokka") }
+    await MessageIndex.shared(gatewayId: gatewayId).reconcile(sessionKeys: [key])
+    let healed = await indexHits(gatewayId, "quokka").count
+    check(healed == 1, "index rebuilt after its file was deleted while open (\(healed))")
+
+    // Saves racing Clear Cache: afterwards a save is indexed and found.
+    for round in 0..<5 {
+        let saves = Task {
+            for n in 0..<20 {
+                await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("r\(n)", .user, "racing \(round)", at: 1)],
+                                                                    complete: true), gatewayId: gatewayId, sessionKey: "agent:main:race")
+            }
+        }
+        try? await Task.sleep(for: .milliseconds(2))
+        TranscriptCache.removeEverything()
+        await saves.value
+    }
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("after", .user, "platypus after racing", at: 1)],
+                                                        complete: true), gatewayId: gatewayId, sessionKey: key)
+    let afterRace = await indexHits(gatewayId, "platypus").count
+    check(afterRace == 1, "saves racing Clear Cache leave a working index (\(afterRace) hits)")
+    TranscriptCache.removeAll(gatewayId: gatewayId)
+}
+
 @MainActor
 func checkTranscriptCacheVersioning() async {
     print("Transcript cache versioning")
@@ -118,6 +218,7 @@ func checkTranscriptCacheVersioning() async {
         let healthy = store.chat(for: "agent:main:other")
         await healthy.load()
         check(healthy.items.map(\.id) == ["c1"], "offline chat over a healthy cache restores it")
+        await checkLegacyV5FileEditChat(store)
         TranscriptCache.removeAll(gatewayId: store.id)
 
         // Clear cache.
@@ -134,6 +235,8 @@ func checkTranscriptCacheVersioning() async {
         let (_, afterOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "after")
         check(afterOutcome == .loaded, "cache usable after removeEverything")
         await checkAsync({ await indexHits(gatewayId, "zebra").count == 1 }, "search index rebuilt after removeEverything")
+        await checkRemoveOneChat()
+        await checkIndexSurvivesDeletedFiles()
         TranscriptCache.removeAll(gatewayId: gatewayId)
     }
 
@@ -230,6 +333,9 @@ func runLiveCacheRefill(url: String, token: String) async {
     check(chat.items.map(\.id) == shown, "open chat keeps its transcript after Clear Cache")
     let (reSaved, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: gateway.id, sessionKey: key)
     check(outcome == .loaded && reSaved?.items.map(\.id) == shown, "open chat saved again right after clearing (\(outcome))")
+    // Clearing returns once the open chat is saved again and indexed (#153).
+    let reIndexed = await gateway.messageIndex.isIndexed(sessionKey: key)
+    check(reIndexed, "open chat indexed again right after clearing")
     let usageAfter = await TranscriptCache.diskUsage()
     check(usageAfter < before, "Clear Cache freed space (\(before) → \(usageAfter) bytes)")
     let quarantine = TranscriptCache.quarantineDirectory(gatewayId: gateway.id)
