@@ -668,14 +668,14 @@ final class TranscriptRowView: TranscriptBaseView {
     func messageMenuItems(at point: CGPoint, in view: NSView) -> [NSMenuItem] {
         let rowPoint = self.convert(point, from: view)
         guard let actions, let id = self.layout?.message(at: rowPoint.y) else { return [] }
-        var items: [NSMenuItem] = [TranscriptMenuItem("Reply", symbol: "arrowshape.turn.up.left") { [weak actions] in
+        var items: [NSMenuItem] = [TranscriptMenuItem(L("Reply"), symbol: "arrowshape.turn.up.left") { [weak actions] in
             actions?.reply(to: id)
         }]
         if actions.reactionsEnabled {
             let quick = NSMenuItem()
             quick.view = QuickReactionsMenuView { [weak actions] emoji in actions?.toggleReaction(emoji, on: id) }
             items += [
-                TranscriptMenuItem("Add Reaction…", symbol: "face.smiling") { [weak self, weak actions] in
+                TranscriptMenuItem(L("Add Reaction…"), symbol: "face.smiling") { [weak self, weak actions] in
                     guard let self else { return }
                     actions?.pickReaction(for: id, from: self,
                                           rect: CGRect(x: rowPoint.x, y: rowPoint.y, width: 1, height: 1))
@@ -693,7 +693,7 @@ final class TranscriptRowView: TranscriptBaseView {
         let anchorRect = anchor.map { $0.bounds } ?? CGRect(origin: point, size: CGSize(width: 1, height: 1))
         var elements: [UIMenuElement] = [
             UIMenu(options: .displayInline, children: [
-                UIAction(title: "Reply", image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak actions] _ in
+                UIAction(title: L("Reply"), image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak actions] _ in
                     actions?.reply(to: id)
                 },
             ]),
@@ -704,7 +704,7 @@ final class TranscriptRowView: TranscriptBaseView {
             }
             elements += [
                 UIMenu(options: .displayInline, children: [
-                    UIAction(title: "Add Reaction…", image: UIImage(systemName: "face.smiling")) { [weak actions, weak anchorView] _ in
+                    UIAction(title: L("Add Reaction…"), image: UIImage(systemName: "face.smiling")) { [weak actions, weak anchorView] _ in
                         // After the menu has finished dismissing, so the picker can present.
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                             guard let anchorView else { return }
@@ -2292,9 +2292,9 @@ final class TranscriptReactionChipView: TranscriptTapView {
 final class TranscriptAddReactionView: TranscriptTapView {
     override init(frame: CGRect) {
         super.init(frame: frame)
-        self.accessibilityText = "Add Reaction"
+        self.accessibilityText = L("Add Reaction")
         #if os(macOS)
-        self.toolTip = "Add Reaction"
+        self.toolTip = L("Add Reaction")
         #endif
     }
 

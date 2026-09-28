@@ -11,10 +11,10 @@ Pincer uses native controls throughout, so the system's accessibility features w
 
 - Each message reads as one item: who wrote it, then the message, for example "Nova: Here's the summary…". Replies start with the message they reply to.
 - **Actions rotor:** on a message, swipe up or down (iOS) or press <kbd>VO</kbd> <kbd>⌘</kbd> <kbd>Space</kbd> (macOS) for **Copy message**, **Reply** and **Add Reaction**. **Add Reaction** only appears when reactions are turned on. Agent replies with thinking also offer **Copy Thinking**.
-- **On iPhone and iPad**, one swipe moves one whole message. The message's other buttons, such as showing thinking or a tool call's details, opening an image or toggling a reaction, are in the same actions rotor.
+- **On iPhone and iPad**, one swipe moves one whole message. The message's other buttons, such as showing thinking or a tool call's details, opening an image or toggling a reaction, are in the same actions rotor. So are its links, as **Open** followed by the link text, for up to 10 links.
 - **On the Mac**, each message is a group. Press <kbd>VO</kbd> <kbd>⇧</kbd> <kbd>↓</kbd> to step inside it and reach its text, the **Copy**, **Reply** and **React** buttons, reaction chips, thinking and tool call headers, images and attachments.
 - A reaction chip you've added reads as selected. The typing indicator reads as "Working".
-- File edit cards read what changed, for example "Edited Sources/App.swift, 12 added, 3 removed, collapsed". Their copy button reads as **Copy diff**, or **Copy file contents** for a new file.
+- [File edit cards](../file-diffs/#voiceover) have a header button that reads what changed, for example "Edited foo.swift, 3 added, 1 removed, collapsed". Their copy button reads as **Copy diff**, or **Copy file contents** for a new file, and long diffs have **Show all N lines** and **Show fewer lines** buttons.
 - Pincer says "Copied" when you copy a message, a code block or a diff, or use any other copy command.
 
 ### Announcements

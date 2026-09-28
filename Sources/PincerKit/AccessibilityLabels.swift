@@ -176,6 +176,22 @@ public enum AccessibilityText {
         return text
     }
 
+    /// Most "Open …" link actions offered on one transcript row.
+    public static let maxLinkActions = 10
+
+    /// The links a transcript row offers as "Open …" actions, from its text's link runs in reading
+    /// order: one per URL (first run wins), trimmed text or else the URL as the title, capped at `limit`.
+    public static func linkActions(_ runs: [(text: String, url: URL)],
+                                   limit: Int = maxLinkActions) -> [(title: String, url: URL)] {
+        var seen: Set<URL> = []
+        var result: [(title: String, url: URL)] = []
+        for run in runs where result.count < limit && seen.insert(run.url).inserted {
+            let text = run.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            result.append((text.isEmpty ? run.url.absoluteString : text, run.url))
+        }
+        return result
+    }
+
     /// A tool-call card, e.g. `Tool exec, running, ls -la` or `Tool read, failed`.
     public static func toolCall(name: String, summary: String? = nil, isRunning: Bool, isError: Bool) -> String {
         Self.join([

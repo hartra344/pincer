@@ -29,26 +29,26 @@ struct ChannelStatusPage: View {
             if connected, model.hasLoaded, !model.supported {
                 self.unsupported
             } else if !connected, model.snapshot == nil {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Not connected to the Gateway."))
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Not connected to the Gateway.", bundle: .module))
             } else {
                 self.list(model, connected: connected)
             }
         }
-        .navigationTitle("Channel Status")
+        .navigationTitle(L("Channel Status"))
         .toolbar {
             if connected, model.supported {
                 ToolbarItem {
                     Button { Task { await model.probe() } } label: {
-                        Label(model.isProbing ? "Probing…" : "Probe", systemImage: "antenna.radiowaves.left.and.right")
+                        Label(model.isProbing ? L("Probing…") : L("Probe"), systemImage: "antenna.radiowaves.left.and.right")
                     }
                     .disabled(model.loadState.isRunning)
-                    .help("Probe: ask each channel to check its connection now")
+                    .help(L("Probe: ask each channel to check its connection now"))
                 }
                 ToolbarItem {
-                    Button { Task { await model.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    Button { Task { await model.refresh() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
                         .disabled(model.loadState.isRunning)
-                        .help("Refresh")
+                        .help(L("Refresh"))
                 }
             }
         }
@@ -71,10 +71,10 @@ struct ChannelStatusPage: View {
             get: { self.confirming != nil },
             set: { if !$0 { self.confirming = nil } }
         ), titleVisibility: .visible, presenting: self.confirming) { pending in
-            Button(pending.action == .logout ? "Log Out" : pending.action.title, role: .destructive) {
+            Button(pending.action == .logout ? L("Log Out") : pending.action.title, role: .destructive) {
                 Task { await model.perform(pending.action, on: pending.key) }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L("Cancel"), role: .cancel) {}
         } message: { pending in
             Text(Self.confirmMessage(pending))
         }
@@ -87,17 +87,17 @@ struct ChannelStatusPage: View {
     /// "Stop Telegram (default)?" / "Log out of WhatsApp (default)?"
     static func confirmTitle(_ pending: PendingAction) -> String {
         let name = "\(pending.label) (\(pending.accountName))"
-        return pending.action == .logout ? "Log out of \(name)?" : "\(pending.action.title) \(name)?"
+        return pending.action == .logout ? L("Log out of \(name)?") : "\(pending.action.title) \(name)?"
     }
 
     static func confirmMessage(_ pending: PendingAction) -> String {
         switch pending.action {
         case .logout:
             ChannelRules.supportsQRLogin(pending.key.channel)
-                ? "This removes the saved login. You'll need to scan a QR code again to reconnect."
-                : "This removes the saved login. You'll need to set it up again to reconnect."
+                ? L("This removes the saved login. You'll need to scan a QR code again to reconnect.")
+                : L("This removes the saved login. You'll need to set it up again to reconnect.")
         default:
-            "Pincer stops this account until you start it again or the Gateway restarts. Messages to it won't be answered."
+            L("Pincer stops this account until you start it again or the Gateway restarts. Messages to it won't be answered.")
         }
     }
 
@@ -108,7 +108,7 @@ struct ChannelStatusPage: View {
             Form {
                 if !connected {
                     Section {
-                        Label("Not connected to the Gateway", systemImage: "bolt.horizontal.circle")
+                        Label(L("Not connected to the Gateway"), systemImage: "bolt.horizontal.circle")
                             .foregroundStyle(.secondary)
                     }
                 } else if !model.canManage {
@@ -119,7 +119,7 @@ struct ChannelStatusPage: View {
                         HStack {
                             Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                             Spacer()
-                            Button("Retry") { Task { await model.refresh() } }
+                            Button(L("Retry")) { Task { await model.refresh() } }
                         }
                     }
                 }
@@ -148,11 +148,11 @@ struct ChannelStatusPage: View {
 
     private var noChannels: some View {
         ContentUnavailableView {
-            Label("No Channels", systemImage: "bubble.left.and.bubble.right")
+            Label(L("No Channels"), systemImage: "bubble.left.and.bubble.right")
         } description: {
-            Text("This Gateway has no channel accounts. Pincer talks to your agents directly, so you don't need any.")
+            Text("This Gateway has no channel accounts. Pincer talks to your agents directly, so you don't need any.", bundle: .module)
         } actions: {
-            Button("Open Channels Settings") { self.navigator.destination = .page("channels") }
+            Button(L("Open Channels Settings")) { self.navigator.destination = .page("channels") }
         }
     }
 
@@ -162,10 +162,10 @@ struct ChannelStatusPage: View {
             let snapshot = ChannelsStatusSnapshot(health: health)
             Form {
                 Section {
-                    Label("Unavailable on this Gateway", systemImage: "antenna.radiowaves.left.and.right")
+                    Label(L("Unavailable on this Gateway"), systemImage: "antenna.radiowaves.left.and.right")
                         .foregroundStyle(.secondary)
                 } footer: {
-                    Text("This Gateway doesn't report channel status, so these are the channels from Health, read-only.")
+                    Text("This Gateway doesn't report channel status, so these are the channels from Health, read-only.", bundle: .module)
                 }
                 ForEach(snapshot.channels) { channel in
                     self.channelSection(channel, snapshot: snapshot, model: self.model, readOnly: true)
@@ -173,8 +173,8 @@ struct ChannelStatusPage: View {
             }
             .formStyle(.grouped)
         } else {
-            ContentUnavailableView("Unavailable on this Gateway", systemImage: "antenna.radiowaves.left.and.right",
-                                   description: Text("This Gateway doesn't report channel status. Update OpenClaw to see it here."))
+            ContentUnavailableView(L("Unavailable on this Gateway"), systemImage: "antenna.radiowaves.left.and.right",
+                                   description: Text("This Gateway doesn't report channel status. Update OpenClaw to see it here.", bundle: .module))
         }
     }
 
@@ -212,12 +212,12 @@ struct ChannelStatusPage: View {
             if model.isProbing {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Probing channels…").foregroundStyle(.secondary)
+                    Text("Probing channels…", bundle: .module).foregroundStyle(.secondary)
                 }
             }
             if snapshot.partial {
                 VStack(alignment: .leading, spacing: 2) {
-                    Label("Some channels didn't answer in time.", systemImage: "clock.badge.exclamationmark")
+                    Label(L("Some channels didn't answer in time."), systemImage: "clock.badge.exclamationmark")
                         .foregroundStyle(.orange)
                     ForEach(snapshot.warnings.prefix(5), id: \.self) { warning in
                         Text(warning).font(.caption).foregroundStyle(.secondary)
@@ -225,13 +225,13 @@ struct ChannelStatusPage: View {
                 }
             }
             if let checked = snapshot.checkedAt {
-                Text("Checked \(Text(checked, style: .relative)) ago").font(.caption).foregroundStyle(.secondary)
+                Text("Checked \(Text(checked, style: .relative)) ago", bundle: .module).font(.caption).foregroundStyle(.secondary)
             }
-            Button("Approving new senders? See Pairing Requests.") { self.navigator.destination = .pairing }
+            Button(L("Approving new senders? See Pairing Requests.")) { self.navigator.destination = .pairing }
                 .buttonStyle(.borderless)
                 .font(.callout)
         } footer: {
-            Text("Probe asks each channel to check its connection now. Reconnect stops the account, then starts it again.")
+            Text("Probe asks each channel to check its connection now. Reconnect stops the account, then starts it again.", bundle: .module)
         }
     }
 
@@ -274,7 +274,7 @@ struct ChannelStateBadge: View {
         Label(self.state.label, systemImage: self.state.symbol)
             .font(.callout)
             .foregroundStyle(ChannelStatusPage.color(self.state))
-            .accessibilityLabel("Status: \(self.state.label)")
+            .accessibilityLabel(L("Status: \(self.state.label)"))
     }
 }
 
@@ -292,7 +292,7 @@ private struct ChannelAccountRow: View {
     @State private var errorExpanded = false
 
     static func displayName(_ key: ChannelAccountKey, _ account: GatewayChannelAccountHealth) -> String {
-        key.accountId == "default" ? "Default" : account.name ?? key.accountId
+        key.accountId == "default" ? L("Default") : account.name ?? key.accountId
     }
 
     private var name: String { Self.displayName(self.key, self.account) }
@@ -336,10 +336,10 @@ private struct ChannelAccountRow: View {
             }
             self.times(state)
             if let operation, let failure = operation.state.error {
-                Text("Couldn't \(operation.action.verbText): \(failure)").font(.caption).foregroundStyle(.red)
+                Text("Couldn't \(operation.action.verbText): \(failure)", bundle: .module).font(.caption).foregroundStyle(.red)
             }
             if managing, self.needsLogIn(state) {
-                Button(action: self.logIn) { Label("Link with QR Code…", systemImage: "qrcode") }
+                Button(action: self.logIn) { Label(L("Link with QR Code…"), systemImage: "qrcode") }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(!self.model.canLogIn(self.key) || self.model.isBusy(self.key))
@@ -352,12 +352,12 @@ private struct ChannelAccountRow: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if managing {
                 if self.model.offers(.stop, on: self.key) {
-                    Button("Stop…", systemImage: ChannelsModel.Action.stop.symbol) { self.confirm(.stop) }
+                    Button(L("Stop…"), systemImage: ChannelsModel.Action.stop.symbol) { self.confirm(.stop) }
                         .tint(.gray)
                         .disabled(!self.model.canPerform(.stop, on: self.key))
                 }
                 if self.model.offers(.reconnect, on: self.key) {
-                    Button("Reconnect", systemImage: ChannelsModel.Action.reconnect.symbol) { self.run(.reconnect) }
+                    Button(L("Reconnect"), systemImage: ChannelsModel.Action.reconnect.symbol) { self.run(.reconnect) }
                         .tint(.blue)
                         .disabled(!self.model.canPerform(.reconnect, on: self.key))
                 }
@@ -374,31 +374,31 @@ private struct ChannelAccountRow: View {
 
     static func progressText(_ action: ChannelsModel.Action) -> String {
         switch action {
-        case .start: "Starting…"
-        case .stop: "Stopping…"
-        case .logout: "Logging out…"
-        case .reconnect: "Reconnecting…"
+        case .start: L("Starting…")
+        case .stop: L("Stopping…")
+        case .logout: L("Logging out…")
+        case .reconnect: L("Reconnecting…")
         }
     }
 
     @ViewBuilder private func times(_ state: ChannelAccountState) -> some View {
         HStack(spacing: 10) {
             if let activity = self.account.lastActivityAt {
-                Text("Last message \(Text(activity, style: .relative)) ago")
+                Text("Last message \(Text(activity, style: .relative)) ago", bundle: .module)
             } else if state != .disabled, state != .notConfigured {
-                Text("No activity yet")
+                Text("No activity yet", bundle: .module)
             }
             if state == .connected, let since = self.account.lastConnectedAt {
-                Text("Connected since \(since.formatted(.dateTime.month(.abbreviated).day().hour().minute()))")
+                Text("Connected since \(since.formatted(.dateTime.month(.abbreviated).day().hour().minute()))", bundle: .module)
             }
             if let probed = self.account.lastProbeAt {
-                Text("Probed \(Text(probed, style: .relative)) ago")
+                Text("Probed \(Text(probed, style: .relative)) ago", bundle: .module)
             }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
         if let attempts = self.account.reconnectAttempts, attempts > 0 {
-            Text("\(attempts) reconnect attempt\(attempts == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary)
+            Text(attempts == 1 ? L("1 reconnect attempt") : L("\(attempts) reconnect attempts")).font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -407,7 +407,7 @@ private struct ChannelAccountRow: View {
         return Menu {
             self.menuItems(state)
         } label: {
-            Label("Actions", systemImage: "ellipsis.circle")
+            Label(L("Actions"), systemImage: "ellipsis.circle")
                 .labelStyle(.iconOnly)
         }
         .menuStyle(.borderlessButton)
@@ -415,7 +415,8 @@ private struct ChannelAccountRow: View {
         .menuIndicator(.hidden)
         .fixedSize()
         #endif
-        .help("Actions for \(self.model.label(for: self.key))")
+        .help(L("Actions for \(self.model.label(for: self.key))"))
+        .accessibilityLabel(L("Actions for \(self.model.label(for: self.key))"))
     }
 
     private var hasAnyAction: Bool {
@@ -438,8 +439,8 @@ private struct ChannelAccountRow: View {
 
     private static func menuTitle(_ action: ChannelsModel.Action) -> String {
         switch action {
-        case .stop: "Stop…"
-        case .logout: "Log Out…"
+        case .stop: L("Stop…")
+        case .logout: L("Log Out…")
         default: action.title
         }
     }
@@ -453,12 +454,12 @@ private struct ChannelAccountRow: View {
         }
         if self.model.offersQRLogin(self.key) {
             let linked = !self.needsLogIn(state)
-            Button(linked ? "Relink with QR Code…" : "Link with QR Code…", systemImage: "qrcode", action: self.logIn)
+            Button(linked ? L("Relink with QR Code…") : L("Link with QR Code…"), systemImage: "qrcode", action: self.logIn)
                 .disabled(!self.model.canLogIn(self.key) || self.model.isBusy(self.key))
         }
         if self.model.offers(.logout, on: self.key) {
             Divider()
-            Button("Log Out…", systemImage: ChannelsModel.Action.logout.symbol, role: .destructive) { self.confirm(.logout) }
+            Button(L("Log Out…"), systemImage: ChannelsModel.Action.logout.symbol, role: .destructive) { self.confirm(.logout) }
                 .disabled(!self.model.canPerform(.logout, on: self.key))
         }
     }
@@ -470,7 +471,7 @@ private struct ChannelAccountRow: View {
             }
         }
         if self.model.canLogIn(self.key), !self.model.isBusy(self.key) {
-            Button(self.needsLogIn(state) ? "Link with QR Code…" : "Relink with QR Code…", action: self.logIn)
+            Button(self.needsLogIn(state) ? L("Link with QR Code…") : L("Relink with QR Code…"), action: self.logIn)
         }
     }
 }
@@ -500,13 +501,13 @@ struct ChannelQRLoginSheet: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .navigationTitle("Link \(self.channelLabel)")
+            .navigationTitle(L("Link \(self.channelLabel)"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(state.isConnected ? "Done" : "Cancel") { self.dismiss() }
+                    Button(state.isConnected ? L("Done") : L("Cancel")) { self.dismiss() }
                 }
             }
         }
@@ -542,10 +543,10 @@ private extension ChannelsModel.Action {
     /// "Couldn't reconnect: …"
     var verbText: String {
         switch self {
-        case .start: "start"
-        case .stop: "stop"
-        case .logout: "log out"
-        case .reconnect: "reconnect"
+        case .start: L("start")
+        case .stop: L("stop")
+        case .logout: L("log out")
+        case .reconnect: L("reconnect")
         }
     }
 }

@@ -160,7 +160,7 @@ open Pincer.xcodeproj            # set your team, then run Pincer-macOS or Pince
 
 ### Localization
 
-UI strings live in `Sources/PincerUI/Resources/Localizable.xcstrings`, which SwiftPM bundles with PincerUI (not the app's main bundle). Look strings up with `Text("key", bundle: .module)` or `String(localized: "key", bundle: .module)`, or the `Text(l:)` / `L()` shorthands in `Localization.swift`. A bare `Text("key")` misses the catalog. Moving strings into the catalog is ongoing. The website's Localization page explains how to add a language.
+UI strings live in `Sources/PincerUI/Resources/Localizable.xcstrings`, which SwiftPM bundles with PincerUI (not the app's main bundle). Look strings up with `Text("key", bundle: .module)` or `String(localized: "key", bundle: .module)`, or the `Text(l:)` / `L()` shorthands in `Localization.swift`. A bare `Text("key")` misses the catalog. After changing UI strings, run `scripts/sync-strings.sh` to regenerate the catalog. Moving strings into the catalog is ongoing. The website's Localization page explains how to add a language.
 
 ### Tests on CI
 

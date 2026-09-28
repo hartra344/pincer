@@ -7,6 +7,8 @@
 # that looks strings up in its own bundle (`bundle: .module` or `L("…")`) into the catalog with
 # `xcstringstool sync`. Each key gets an English value equal to the key, and keys with no letters
 # (pure format strings such as "%@ %@") are dropped since there's nothing to translate.
+# Syncs into the existing catalog, so translations and comments are kept; keys no longer in the code
+# (marked stale by xcstringstool) are removed.
 # --skip-build reuses the extraction output of a previous run in build/strings.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -31,7 +33,6 @@ if [[ ${#args[@]} -eq 0 ]]; then
   exit 1
 fi
 
-echo '{"sourceLanguage":"en","strings":{},"version":"1.0"}' > "$CATALOG"
 xcrun xcstringstool sync "$CATALOG" "${args[@]}"
 
 python3 - "$CATALOG" <<'PY'
@@ -41,6 +42,8 @@ catalog = json.load(open(path))
 strings = {}
 for key, entry in sorted(catalog["strings"].items(), key=lambda item: item[0].lower()):
     if not re.search(r"[A-Za-z]", re.sub(r"%(\d+\$)?(lld|ld|d|@|lf|f)", "", key)):
+        continue
+    if entry.get("extractionState") == "stale":
         continue
     entry.pop("extractionState", None)
     english = entry.setdefault("localizations", {}).setdefault("en", {"stringUnit": {"value": key}})

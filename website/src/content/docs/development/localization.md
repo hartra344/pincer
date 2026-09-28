@@ -43,15 +43,24 @@ Some tips:
 
 ## Adding or updating strings
 
-1. Use the string in code with `bundle: .module` (or `L()` / `Text(l:)`).
-2. Open the Xcode project (`xcodegen generate`, then `open Pincer.xcodeproj`) and build. Xcode adds new keys to `Localizable.xcstrings`.
-3. Open the catalog and add a **comment** for any key whose meaning isn't obvious, like where it appears or what a placeholder holds.
+1. Use the string in code with `bundle: .module`, or `L()` / `Text(l:)`.
+2. Regenerate the catalog:
+
+   ```sh
+   scripts/sync-strings.sh              # builds PincerUI for macOS and the iOS Simulator, then syncs
+   scripts/sync-strings.sh --skip-build # reuses the last run's extraction output in build/strings
+   ```
+
+   The script builds the `PincerUI` scheme with the compiler's string extraction turned on, then runs `xcstringstool sync` over every PincerUI file that uses `bundle: .module` or `L("…")`. Each key's English value is the key itself. Keys with no letters, such as `"%@ %@"`, are left out because there's nothing to translate. It needs Xcode, and the full run takes a few minutes.
+3. Commit `Localizable.xcstrings` along with your code change.
+
+Don't add keys by hand or by building the app in Xcode. The catalog's entries have no extraction state, so let the script keep it in step with the code.
 
 ## Adding a language
 
 1. Open `Sources/PincerUI/Resources/Localizable.xcstrings` in Xcode.
 2. Click **+** at the bottom of the language list and choose the language.
-3. Translate each key. Use **Vary by Plural** for strings with counts.
+3. Translate each key. Use **Vary by Plural** for strings with counts, and add a **comment** to any key whose meaning isn't obvious, like where it appears or what a placeholder holds.
 4. Build and run with the new language. In Xcode, edit the scheme and set **Run → Options → App Language**, or change your system language.
 5. Check that nothing is truncated or overlapping, especially in the sidebar, the composer and Settings.
 
