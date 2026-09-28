@@ -1071,7 +1071,10 @@ async function sessionManagerSelftest() {
     const recoveredHistory = (await writer.send('chat.history', { sessionKey: recovered.key })).messages;
     assert.match(recoveredHistory.at(-1).content[0].text, /^Recovered after a Gateway restart/);
     assert.equal(recoveredHistory.length, 3, 'the successor carries the transcript');
+    const replayEvent = writer.waitEvent('sessions.changed', (p) => p.reason === 'recovery' && p.sessionKey === recovered.key);
     assert.equal((await writer.send('sessions.recover', { key: photo })).key, recovered.key, 'recovering again returns the same successor');
+    await replayEvent;
+    assert.match((await writer.call('sessions.recover', { sessionKey: photo })).error.message, /invalid sessions\.recover params/, 'recover takes key, not sessionKey (closed object)');
 
     admin.ws.close();
     writer.ws.close();
