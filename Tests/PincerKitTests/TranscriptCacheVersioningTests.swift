@@ -70,8 +70,8 @@ struct TranscriptCacheVersioningTests {
         ("array", Data("[1,2,3]".utf8)),
         ("no version", Data(#"{"items":[],"complete":true}"#.utf8)),
         ("string version", Data(#"{"version":"5","items":[],"complete":true}"#.utf8)),
-        ("wrong shape", Data(#"{"version":5,"items":{"a":1},"complete":true}"#.utf8)),
-        ("missing items", Data(#"{"version":5,"complete":true}"#.utf8)),
+        ("wrong shape", Data(#"{"version":\#(Self.current),"items":{"a":1},"complete":true}"#.utf8)),
+        ("missing items", Data(#"{"version":\#(Self.current),"complete":true}"#.utf8)),
     ])
     func decodeCorrupt(_ label: String, _ data: Data) {
         let (snapshot, outcome) = Cache.decode(data)
@@ -84,6 +84,166 @@ struct TranscriptCacheVersioningTests {
             let (snapshot, outcome) = Cache.decode(data.prefix(cut))
             #expect(snapshot == nil && self.isCorrupt(outcome), "cut at \(cut) of \(data.count): \(outcome)")
         }
+    }
+
+    // MARK: v5 → v6 (#168): tool results cached before `toolDetails` (#154)
+
+    /// A literal v5 transcript as saved before #154: an agent overwrote README.md with `write` and
+    /// the tool result has no `toolDetails` key. Also an `edit`, a result that already has details
+    /// (cached after #154), one with `toolDetails: null`, and an orphan write result.
+    static let legacyV5 = #"""
+    {"version":5,"complete":true,"activityMs":1790000000000,"items":[
+     {"id":"u1","transcriptId":"u1","role":"user","blocks":[{"text":{"_0":"Tighten the README intro"}}],
+      "timestamp":780000000,"isError":false,"isPending":false,"isCapped":false},
+     {"id":"a1","transcriptId":"a1","role":"assistant","runId":"run1",
+      "blocks":[{"toolCall":{"id":"call_w1","name":"write","arguments":"{\"path\":\"README.md\",\"content\":\"# Pincer\\nNative client.\\n\"}"}},
+                {"toolCall":{"id":"call_e1","name":"edit","arguments":"{\"path\":\"src/app.ts\",\"oldText\":\"a\",\"newText\":\"b\"}"}},
+                {"toolCall":{"id":"call_w2","name":"write","arguments":"{\"path\":\"NOTES.md\",\"content\":\"x\\n\"}"}},
+                {"toolCall":{"id":"call_w3","name":"write_file","arguments":"{\"path\":\"CHANGELOG.md\",\"content\":\"y\\n\"}"}}],
+      "timestamp":780000001,"isError":false,"isPending":false,"isCapped":false,"model":"gpt-5","provider":"openai"},
+     {"id":"r1","transcriptId":"r1","role":"toolResult","toolCallId":"call_w1","toolName":"write",
+      "blocks":[{"text":{"_0":"Successfully wrote 25 bytes to README.md"}}],"timestamp":780000002,
+      "isError":false,"isPending":false,"isCapped":false},
+     {"id":"r2","transcriptId":"r2","role":"toolResult","toolCallId":"call_e1","toolName":"edit",
+      "blocks":[{"text":{"_0":"Successfully replaced text in src/app.ts"}}],"timestamp":780000003,
+      "isError":false,"isPending":false,"isCapped":false},
+     {"id":"r3","transcriptId":"r3","role":"toolResult","toolCallId":"call_w2","toolName":"write",
+      "toolDetails":{"changed":true,"created":true,"diff":"+ 1 x"},
+      "blocks":[{"text":{"_0":"Successfully wrote 2 bytes to NOTES.md"}}],"timestamp":780000004,
+      "isError":false,"isPending":false,"isCapped":false},
+     {"id":"r4","transcriptId":"r4","role":"toolResult","toolCallId":"call_w3","toolName":"write_file","toolDetails":null,
+      "blocks":[{"text":{"_0":"Successfully wrote 2 bytes to CHANGELOG.md"}}],"timestamp":780000005,
+      "isError":false,"isPending":false,"isCapped":false},
+     {"id":"a2","transcriptId":"a2","role":"assistant","blocks":[{"text":{"_0":"Done."}}],"timestamp":780000006,
+      "isError":false,"isPending":false,"isCapped":false}
+    ]}
+    """#
+
+    static func tools(_ items: [ChatItem]) -> [ToolActivity] {
+        TranscriptBuilder.build(items).flatMap { entry -> [ToolActivity] in
+            if case let .assistant(turn) = entry { return turn.tools }
+            return []
+        }
+    }
+
+    @Test func legacyV5WriteIsMigratedNotNewFile() throws {
+        let (snapshot, outcome) = Cache.decode(Data(Self.legacyV5.utf8))
+        #expect(outcome == .migrated(from: 5) && !outcome.discarded)
+        let loaded = try #require(snapshot)
+        #expect(loaded.version == Self.current && Self.current == 6)
+        #expect(loaded.items.map(\.id) == ["u1", "a1", "r1", "r2", "r3", "r4", "a2"] && loaded.complete && loaded.activityMs == 1_790_000_000_000)
+        let byId = Dictionary(uniqueKeysWithValues: loaded.items.map { ($0.id, $0) })
+        #expect(byId["r1"]?.toolDetails == Cache.unknownToolDetails, "pre-#154 write result marked unknown")
+        #expect(byId["r2"]?.toolDetails == Cache.unknownToolDetails, "pre-#154 edit result marked unknown")
+        #expect(byId["r4"]?.toolDetails == Cache.unknownToolDetails, "null toolDetails marked unknown")
+        #expect(byId["r3"]?.toolDetails == .object(["changed": true, "created": true, "diff": "+ 1 x"]), "recorded details kept")
+        for id in ["u1", "a1", "a2"] { #expect(byId[id]?.toolDetails == nil, "\(id) isn't a tool result") }
+
+        let tools = Self.tools(loaded.items)
+        #expect(tools.map(\.id) == ["call_w1", "call_e1", "call_w2", "call_w3"])
+        let readme = try #require(tools[0].fileEdit)
+        #expect(readme.statusLabel == "Written" && readme.statusLabel != "New file", "overwrite isn't a new file: \(readme.statusLabel)")
+        #expect(readme.files.first?.operation == .update && readme.title == "README.md")
+        #expect(readme.deletionsBound == .unknown && readme.deletionsLabel == nil, "nothing claimed about what was removed")
+        #expect(readme.accessibilitySummary.hasPrefix("Wrote README.md") && !readme.accessibilitySummary.hasPrefix("Created"))
+        let edit = try #require(tools[1].fileEdit)
+        #expect(edit.statusLabel == "Edited")
+        let orphan = try #require(tools[3].fileEdit)
+        #expect(orphan.statusLabel == "Written" && orphan.files.first?.operation == .update)
+        // The one the Gateway said it created still says so.
+        #expect(tools[2].fileEdit?.statusLabel == "New file")
+        #expect(tools.filter { $0.id != "call_w2" }.allSatisfy { $0.fileEdit?.statusLabel != "New file" })
+    }
+
+    @Test func legacyV5MigrationIsIdempotentAndResaves() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let file = try self.writeRaw(Data(Self.legacyV5.utf8), root: temp.url)
+        let (first, outcome) = await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(outcome == .migrated(from: 5))
+        // Saved back at the current version: the next load reads it as-is, with the same items.
+        let saved = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        #expect(saved["version"] as? Int == Self.current)
+        let (second, again) = await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(again == .loaded && second?.items == first?.items)
+        #expect(Self.tools(second?.items ?? []).first?.fileEdit?.statusLabel == "Written")
+    }
+
+    @Test func v5MigrationLeavesNonTranscriptsForDecodingToReject() {
+        // A v5 file that isn't a transcript is discarded (as an old file that can't be upgraded).
+        for bad in [#"{"version":5,"items":{"a":1},"complete":true}"#, #"{"version":5,"complete":true}"#,
+                    #"{"version":5,"items":[{"role":"toolResult"}],"complete":true}"#, #"{"version":5,"items":[7],"complete":true}"#] {
+            let (snapshot, outcome) = Cache.decode(Data(bad.utf8))
+            #expect(snapshot == nil && outcome == .outdated(version: 5) && outcome.discarded, "\(bad): \(outcome)")
+        }
+        let empty = Cache.decode(Data(#"{"version":5,"items":[],"complete":false}"#.utf8))
+        #expect(empty.outcome == .migrated(from: 5) && empty.snapshot?.items.isEmpty == true)
+    }
+
+    // MARK: Removing one chat (#38 session manager)
+
+    @Test func removeDeletesOneChatAndItsSidecar() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let other = "agent:main:other"
+        await Cache.save(Cache.Snapshot(items: [item("a")], complete: true, activityMs: 1), gatewayId: self.gateway,
+                         sessionKey: self.key, root: temp.url)
+        await Cache.save(Cache.Snapshot(items: [item("b")], complete: true, activityMs: 2), gatewayId: self.gateway,
+                         sessionKey: other, root: temp.url)
+        let file = try #require(Cache.file(gatewayId: self.gateway, sessionKey: self.key, root: temp.url))
+        #expect(temp.exists(file) && temp.exists(file.appendingPathExtension("meta")))
+
+        await Cache.remove(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(!temp.exists(file) && !temp.exists(file.appendingPathExtension("meta")))
+        #expect(await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url).outcome == .missing)
+        #expect(await Cache.meta(gatewayId: self.gateway, sessionKey: self.key, root: temp.url) == nil)
+        let (kept, keptOutcome) = await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: other, root: temp.url)
+        #expect(keptOutcome == .loaded && kept?.items.map(\.id) == ["b"], "other chats are left alone")
+
+        // Removing again, or a chat that was never cached, is a no-op.
+        await Cache.remove(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        await Cache.remove(gatewayId: UUID(), sessionKey: "agent:main:never", root: temp.url)
+        #expect(await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: other, root: temp.url).outcome == .loaded)
+        // The chat can be cached again afterwards.
+        await Cache.save(Cache.Snapshot(items: [item("c")], complete: false), gatewayId: self.gateway,
+                         sessionKey: self.key, root: temp.url)
+        #expect(await Cache.load(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)?.items.map(\.id) == ["c"])
+    }
+
+    @Test func removeClearsMigratedToolDetails() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let file = try self.writeRaw(Data(Self.legacyV5.utf8), root: temp.url)
+        #expect(await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url).outcome == .migrated(from: 5))
+        await Cache.remove(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(!temp.exists(file) && !temp.exists(file.appendingPathExtension("meta")))
+        // Nothing of the migrated chat is left: its folder holds no other file for it.
+        let digest = file.deletingPathExtension().lastPathComponent
+        #expect(!temp.contents(of: file.deletingLastPathComponent()).contains { $0.hasPrefix(digest) })
+    }
+
+    @Test func removeKeepsQuarantinedCopies() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        try self.writeRaw(Data("junk".utf8), root: temp.url)
+        _ = await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(try self.quarantined(temp).count == 1)
+        await Cache.remove(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(try self.quarantined(temp).count == 1, "quarantined copies are kept for diagnosis")
+    }
+
+    @Test func removeLandsAfterAQueuedSave() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let big = Cache.Snapshot(items: (0..<2000).map { item("m\($0)") }, complete: true)
+        async let saved: Void = Cache.save(big, gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        try await Task.sleep(for: .milliseconds(1))
+        await Cache.remove(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        await saved
+        // Either the save ran first and was removed, or the removal ran first and the save
+        // wrote afterwards; never a transcript without its sidecar or the reverse.
+        let file = try #require(Cache.file(gatewayId: self.gateway, sessionKey: self.key, root: temp.url))
+        #expect(temp.exists(file) == temp.exists(file.appendingPathExtension("meta")))
     }
 
     // MARK: Migration machinery (injected chain)

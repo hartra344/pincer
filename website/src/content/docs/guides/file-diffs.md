@@ -12,7 +12,7 @@ Pincer recognizes the OpenClaw Gateway's file tools and the usual aliases:
 | Tool | Names | What the card shows |
 | --- | --- | --- |
 | Edit | `edit`, `edit_file`, `multiedit`, `multi_edit`, `notebook_edit` | The replaced text as removed lines and the new text as added lines, with a few lines of context. An edit with several replacements gets one hunk for each. |
-| Write | `write`, `write_file`, `create_file` | The whole file as added lines, labelled **New file**. |
+| Write | `write`, `write_file`, `create_file` | The whole file as added lines, labelled **New file**, or **Written** when the gateway reports that it replaced an existing file. |
 | Patch | `apply_patch`, `patch` | Every file in the patch, in order, each with its own header. Files that were added, deleted or moved are labelled. |
 | Text editor | `str_replace_editor`, `str_replace_based_edit_tool` | `create` shows as a write, and `str_replace` or `insert` as an edit. |
 
@@ -52,7 +52,7 @@ The card's header is a button that reads what changed and whether it's expanded,
 
 ## Chats cached by earlier versions
 
-Chats that Pincer cached before it showed file diffs don't have the gateway's result details. Their cards show a diff worked out from the arguments instead, so a write that overwrote a file shows as **New file**. To get the gateway's details for those chats, clear the cache under **Settings → Storage** (see [Local cache](../local-cache/#clearing-the-cache)), and they reload from the gateway.
+Chats that Pincer cached before it showed file diffs don't have the gateway's result details, so Pincer can't tell whether a write created its file or replaced one. After updating, those writes are labelled **Written**, never **New file**, and show only the added lines, the same as any overwrite. Edits and patches in those chats show a diff worked out from the arguments. The upgrade happens once, on your device, without downloading the chats again. To get the gateway's own diffs for those chats, clear the cache under **Settings → Storage** (see [Local cache](../local-cache/#clearing-the-cache)), and they reload from the gateway.
 
 ## Try it in the demo
 
