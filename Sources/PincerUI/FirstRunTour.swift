@@ -15,6 +15,9 @@ import UIKit
 /// Removes the gateway it added when done.
 @MainActor
 public enum FirstRunTour {
+    /// Toggles Find's Advanced… sheet.
+    static let showAdvanced = Notification.Name("FirstRunTour.showAdvanced")
+
     /// iOS: starts the tour if the app was launched with `PINCER_FIRST_RUN_TOUR`.
     public static func startIfRequested() {
         guard let url = ProcessInfo.processInfo.environment["PINCER_FIRST_RUN_TOUR"] else { return }
@@ -37,10 +40,18 @@ public enum FirstRunTour {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         #if os(macOS)
         self.mainWindow?.setContentSize(NSSize(width: 920, height: 660))
+        // Key and active, so prominent buttons draw in the accent color as they do in use.
+        self.activate()
         #endif
         var number = 0
         func snap(_ name: String) async {
             try? await Task.sleep(for: .milliseconds(700))
+            #if os(macOS)
+            if let window = self.mainWindow, !window.isKeyWindow, window.attachedSheet == nil {
+                self.activate()
+                try? await Task.sleep(for: .milliseconds(400))
+            }
+            #endif
             number += 1
             self.write(String(format: "%02d-%@.png", number, name), to: directory)
         }
@@ -55,6 +66,10 @@ public enum FirstRunTour {
         model.send(.setLocation(.tailscale))
         model.send(.setAddress("my-mac.tail1234.ts.net"))
         await snap("find-tailscale")
+        NotificationCenter.default.post(name: self.showAdvanced, object: nil)
+        await snap("find-advanced")
+        NotificationCenter.default.post(name: self.showAdvanced, object: nil)
+        try? await Task.sleep(for: .milliseconds(600))
         model.send(.setLocation(.sameNetwork))
         model.send(.setAddress("ws://203.0.113.9:18789"))
         model.send(.checkAddress)
@@ -86,7 +101,7 @@ public enum FirstRunTour {
         model.send(.continueToSetup)
         guard let gateway = model.gateway else { return self.fail("The gateway wasn't added.") }
         let setup = gateway.setup
-        _ = await self.until(15) { gateway.state.isConnected && !setup.loadState.isRunning && setup.skills != nil }
+        _ = await self.until(45) { gateway.state.isConnected && !setup.loadState.isRunning && setup.skills != nil }
         setup.currentStep = .agent
         await snap("setup-agent")
         setup.currentStep = .skills
@@ -121,6 +136,13 @@ public enum FirstRunTour {
     #if os(macOS)
     private static var hasWindow: Bool { self.mainWindow != nil }
 
+    /// A tour launched from a script starts in the background; `activate()` alone is only a request.
+    @available(macOS, deprecated: 14)
+    private static func activate() {
+        NSApp.activate(ignoringOtherApps: true)
+        self.mainWindow?.makeKeyAndOrderFront(nil)
+    }
+
     private static var mainWindow: NSWindow? {
         let visible = NSApp.windows.filter { $0.isVisible && $0.frame.width > 400 }
         return visible.first { $0.identifier?.rawValue.hasPrefix("main") == true } ?? visible.first
@@ -138,7 +160,23 @@ public enum FirstRunTour {
         menu.performActionForItem(at: index)
     }
 
+    /// The window as it's composited on screen (with its sheet, if any) via `screencapture`, which
+    /// also draws the transcript's text views; `cacheDisplay` when that's not allowed.
     private static func write(_ name: String, to directory: URL) {
+        let url = directory.appending(path: name)
+        if let window = self.mainWindow {
+            let target = window.attachedSheet ?? window
+            let process = Process()
+            process.executableURL = URL(filePath: "/usr/sbin/screencapture")
+            process.arguments = ["-x", "-o", "-l", String(target.windowNumber), url.path]
+            if (try? process.run()) != nil {
+                process.waitUntilExit()
+                if process.terminationStatus == 0, FileManager.default.fileExists(atPath: url.path) {
+                    print("Wrote \(name)")
+                    return
+                }
+            }
+        }
         guard let view = self.mainWindow?.contentView,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)

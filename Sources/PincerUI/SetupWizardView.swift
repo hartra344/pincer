@@ -79,14 +79,14 @@ struct SetupWizardView: View {
             SetupStepList(setup: self.setup)
                 .frame(width: 210)
             Divider()
-            SetupStepDetail(setup: self.setup, openSettings: self.openSettings)
+            SetupStepDetail(setup: self.setup, openSettings: self.openSettings, embedded: self.embedded)
         }
         #else
         if self.embedded {
             VStack(spacing: 0) {
                 SetupStepStrip(setup: self.setup)
                 Divider()
-                SetupStepDetail(setup: self.setup, openSettings: self.openSettings)
+                SetupStepDetail(setup: self.setup, openSettings: self.openSettings, embedded: true)
             }
         } else {
             self.navigationSteps
@@ -154,18 +154,29 @@ private struct SetupIntroView: View {
 
 private struct SetupStatusIcon: View {
     let status: SetupStepStatus
+    let step: SetupStep
 
     var body: some View {
-        Image(systemName: self.status.symbol)
-            .foregroundStyle(Self.color(self.status))
-            .accessibilityLabel(self.status.label)
+        Image(systemName: Self.isOptional(self.status, self.step) ? "info.circle" : self.status.symbol)
+            .foregroundStyle(Self.color(self.status, self.step))
+            .accessibilityLabel(Self.label(self.status, self.step))
     }
 
-    static func color(_ status: SetupStepStatus) -> Color {
+    /// Skills are informational: once checked they read "Optional", never Done or a demand.
+    static func isOptional(_ status: SetupStepStatus, _ step: SetupStep) -> Bool {
+        step == .skills && status.isDone
+    }
+
+    static func label(_ status: SetupStepStatus, _ step: SetupStep) -> String {
+        self.isOptional(status, step) ? "Optional" : status.label
+    }
+
+    static func color(_ status: SetupStepStatus, _ step: SetupStep) -> Color {
+        if self.isOptional(status, step) { return .secondary }
         switch status {
-        case .done: .green
-        case .needsAttention: .orange
-        case .skipped, .notChecked: .secondary
+        case .done: return .green
+        case .needsAttention: return .orange
+        case .skipped, .notChecked: return .secondary
         }
     }
 }
@@ -186,10 +197,10 @@ private struct SetupStepList: View {
                                                          set: { if let step = $0 { self.setup.currentStep = step } })) { step in
                 let status = self.setup.status(of: step)
                 HStack(spacing: 8) {
-                    SetupStatusIcon(status: status)
+                    SetupStatusIcon(status: status, step: step)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(step.title)
-                        Text(status.label).font(.caption).foregroundStyle(.secondary)
+                        Text(SetupStatusIcon.label(status, step)).font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 .padding(.vertical, 2)
@@ -214,7 +225,7 @@ private struct SetupStepStrip: View {
                     let status = self.setup.status(of: step)
                     Button { self.setup.currentStep = step } label: {
                         HStack(spacing: 4) {
-                            SetupStatusIcon(status: status)
+                            SetupStatusIcon(status: status, step: step)
                             Text(step.title)
                         }
                         .font(.subheadline)
@@ -223,7 +234,7 @@ private struct SetupStepStrip: View {
                         .background(Capsule().fill(step == self.setup.currentStep ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.1)))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(step.title), \(status.label)")
+                    .accessibilityLabel("\(step.title), \(SetupStatusIcon.label(status, step))")
                 }
             }
             .padding(.horizontal)
@@ -238,6 +249,8 @@ private struct SetupStepStrip: View {
 private struct SetupStepDetail: View {
     let setup: SetupWizardModel
     let openSettings: (SettingsDestination) -> Void
+    /// In first run: no Close or Check Again, so there are fewer ways out (product review r1).
+    var embedded = false
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
 
@@ -252,12 +265,13 @@ private struct SetupStepDetail: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(step.heading).font(.title3.bold()).accessibilityAddTraits(.isHeader)
                             HStack(spacing: 4) {
-                                SetupStatusIcon(status: status)
-                                Text(status.label).foregroundStyle(SetupStatusIcon.color(status))
+                                SetupStatusIcon(status: status, step: step)
+                                Text(SetupStatusIcon.label(status, step)).foregroundStyle(SetupStatusIcon.color(status, step))
                             }
                             .font(.callout)
                             Text(step.summary).font(.callout).foregroundStyle(.secondary)
-                            if let detail = status.detail ?? self.setup.evaluated(step).detail {
+                            // Test Message says where it's at next to the reply instead.
+                            if step != .testMessage, let detail = status.detail ?? self.setup.evaluated(step).detail {
                                 Text(detail).font(.callout).foregroundStyle(.secondary)
                             }
                         }
@@ -291,7 +305,7 @@ private struct SetupStepDetail: View {
                 .disabled(self.setup.previousStep == nil)
             if self.setup.loadState.isRunning {
                 ProgressView().controlSize(.small).padding(.leading, 4)
-            } else {
+            } else if !self.embedded {
                 Button { Task { await self.setup.load() } } label: { Label("Check Again", systemImage: "arrow.clockwise") }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
@@ -300,8 +314,10 @@ private struct SetupStepDetail: View {
             }
             Spacer()
             #if os(macOS)
-            Button("Close") { self.setup.close() }
-                .keyboardShortcut(.cancelAction)
+            if !self.embedded {
+                Button("Close") { self.setup.close() }
+                    .keyboardShortcut(.cancelAction)
+            }
             #endif
             if status.isSkipped {
                 Button("Unskip") { self.setup.unskip(step) }
@@ -327,6 +343,7 @@ private struct SetupLink: View {
             Label(self.title, systemImage: self.symbol)
         }
         .buttonStyle(.borderless)
+        .foregroundStyle(.tint)
     }
 }
 
@@ -468,11 +485,16 @@ private struct SetupTestMessageStep: View {
             }
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
             if let chat = self.chat {
-                // Finish opens this chat (no separate Open Chat, #175).
                 SetupTestReply(chat: chat)
             }
-        } footer: {
-            Text("Starts a new chat with \(self.gateway.agent(self.gateway.defaultAgentId).name) in Pincer.")
+            // Finish opens this chat (no separate Open Chat, #175).
+            Text(self.chat.map(SetupTestReply.replied) == true
+                ? "Finish opens this chat."
+                : "Pincer starts a chat called \(GatewayStore.setupTestLabel) with \(self.gateway.agent(self.gateway.defaultAgentId).name).")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .task(id: self.setup.testChatKey) {
             self.chat = self.setup.testChatKey.map { self.gateway.chat(for: $0) }
@@ -504,7 +526,7 @@ private struct SetupTestReply: View {
         } else if let reply, !reply.body.isEmpty, !reply.isStreaming {
             VStack(alignment: .leading, spacing: 4) {
                 Label("Your agent replied.", systemImage: "checkmark.bubble.fill").foregroundStyle(.green)
-                Text(reply.body).lineLimit(6).foregroundStyle(.secondary).textSelection(.enabled)
+                Text(Self.inline(reply.body)).lineLimit(4).foregroundStyle(.secondary).textSelection(.enabled)
             }
             .accessibilityElement(children: .combine)
         } else if self.chat.errorMessage != nil {
@@ -513,11 +535,32 @@ private struct SetupTestReply: View {
         } else {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
-                Text(self.chat.live?.text.isEmpty == false ? self.chat.live?.text ?? "" : "Waiting for a reply…")
-                    .lineLimit(3)
+                Text("Sent. Waiting for your agent…")
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// The agent's answer arrived (not an error, done streaming).
+    static func replied(_ chat: ChatStore) -> Bool {
+        guard let reply = self.reply(in: chat) else { return false }
+        return !reply.isError && !reply.body.isEmpty && !reply.isStreaming
+    }
+
+    /// A preview of the reply: inline Markdown (bold, code, links) on plain lines, with heading
+    /// marks, code fences and blank lines dropped and list markers as bullets.
+    static func inline(_ markdown: String) -> AttributedString {
+        let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).compactMap { raw -> String? in
+            var line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty || line.hasPrefix("```") || line.hasPrefix("~~~") { return nil }
+            if line.hasPrefix("#") { line = String(line.drop { $0 == "#" }).trimmingCharacters(in: .whitespaces) }
+            if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") { line = "• " + line.dropFirst(2) }
+            if line.hasPrefix(">") { line = String(line.dropFirst()).trimmingCharacters(in: .whitespaces) }
+            return line
+        }
+        let text = lines.joined(separator: "\n")
+        return (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+            ?? AttributedString(text)
     }
 
     /// The agent answered with an error, or the send failed after it was accepted.

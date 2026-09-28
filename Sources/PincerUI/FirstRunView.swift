@@ -92,6 +92,11 @@ private struct FirstRunScreens: View {
         .onChange(of: state.step) { _, step in
             FirstRunAnnouncer.announce(step: step, state: self.model.state)
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: FirstRunTour.showAdvanced)) { _ in
+            self.advanced = self.advanced == nil && state.step == .findGateway ? AdvancedRequest(state: self.model.state) : nil
+        }
+        #endif
     }
 
     /// A settings link inside the embedded setup: leave for the chat list, then open it.
@@ -153,7 +158,7 @@ private struct FirstRunHeader: View {
             if self.canClose {
                 Button(state.step == .gatewaySetup ? "Skip to Chats" : "Close") { self.model.send(.cancel) }
                     .keyboardShortcut(".", modifiers: .command)
-                    .buttonStyle(.borderless)
+                    .firstRunLink()
             }
         }
         .padding(.horizontal, 20)
@@ -184,27 +189,36 @@ private struct FirstRunProgress: View {
     }
 }
 
-/// One screen: a scrolling column (so large Dynamic Type never clips) and a button bar.
-private struct FirstRunPage<Content: View, Buttons: View>: View {
+/// One screen: a scrolling column (so large Dynamic Type never clips) and a button bar pinned to the
+/// bottom: secondary buttons on the left and the primary on the right, or, when that doesn't fit,
+/// the primary full width on top with the others in a row under it.
+private struct FirstRunPage<Content: View, Secondary: View, Primary: View>: View {
     let symbol: String?
     var symbolColor: Color?
     let title: String
     let message: String?
     /// Centered in the window while it fits (Welcome).
     var centered = false
+    /// Welcome keeps its buttons in the content, so it has no button bar.
+    var showsFooter = true
     @ViewBuilder let content: Content
-    @ViewBuilder let buttons: Buttons
+    @ViewBuilder let secondary: Secondary
+    @ViewBuilder let primary: Primary
 
     init(symbol: String? = nil, symbolColor: Color? = nil, title: String, message: String? = nil, centered: Bool = false,
-         @ViewBuilder content: () -> Content, @ViewBuilder buttons: () -> Buttons)
+         showsFooter: Bool = true,
+         @ViewBuilder content: () -> Content, @ViewBuilder secondary: () -> Secondary,
+         @ViewBuilder primary: () -> Primary = { EmptyView() })
     {
         self.centered = centered
+        self.showsFooter = showsFooter
         self.symbol = symbol
         self.symbolColor = symbolColor
         self.title = title
         self.message = message
         self.content = content()
-        self.buttons = buttons()
+        self.secondary = secondary()
+        self.primary = primary()
     }
 
     var body: some View {
@@ -234,17 +248,71 @@ private struct FirstRunPage<Content: View, Buttons: View>: View {
                 .padding(.vertical, 20)
             }
             .defaultScrollAnchor(self.centered ? .center : .top, for: .alignment)
-            Divider()
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) { self.buttons }
-                VStack(spacing: 10) { self.buttons }
-            }
-            .controlSize(.large)
-            .frame(maxWidth: 560)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 14)
+            .frame(maxHeight: .infinity)
+            if self.showsFooter { self.footer }
         }
+    }
+
+    @ViewBuilder private var footer: some View {
+        Divider()
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                self.secondary
+                Spacer(minLength: 12)
+                self.primary
+            }
+            VStack(spacing: 12) {
+                self.primary.environment(\.firstRunWideButtons, true)
+                HStack(spacing: 20) { self.secondary }
+            }
+        }
+        .controlSize(.large)
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+    }
+}
+
+extension EnvironmentValues {
+    /// The footer stacked: primary buttons fill the width.
+    @Entry var firstRunWideButtons = false
+}
+
+/// The screen's main action: prominent, Return, full width when the footer is stacked.
+private struct PrimaryButton<Label: View>: View {
+    let action: () -> Void
+    @ViewBuilder let label: Label
+    @Environment(\.firstRunWideButtons) private var wide
+
+    init(action: @escaping () -> Void, @ViewBuilder label: () -> Label) {
+        self.action = action
+        self.label = label()
+    }
+
+    var body: some View {
+        Button(action: self.action) {
+            self.label.frame(maxWidth: self.wide ? .infinity : nil)
+        }
+        .keyboardShortcut(.defaultAction)
+        .buttonStyle(.borderedProminent)
+    }
+}
+
+extension PrimaryButton where Label == Text {
+    init(_ title: String, action: @escaping () -> Void) {
+        self.init(action: action) { Text(title) }
+    }
+}
+
+extension View {
+    /// A text button that reads as a link: the accent color, like `Link` (macOS borderless is gray).
+    func firstRunLink() -> some View {
+        #if os(macOS)
+        self.buttonStyle(.link)
+        #else
+        self.buttonStyle(.borderless)
+        #endif
     }
 }
 
@@ -323,15 +391,36 @@ private struct FirstRunWelcome: View {
     let model: FirstRunModel
 
     var body: some View {
+        // The demo is one tap from the very first screen, in the content and never a footer extra:
+        // it's how App Review and Apple developers get in (#175).
         FirstRunPage(symbol: "bubble.left.and.text.bubble.right", title: "Welcome to Pincer",
-                     message: "Chat with your OpenClaw agents from your Mac, iPhone, and iPad.", centered: true) {
-            EmptyView()
-        } buttons: {
-            Button("Try the Demo") { self.model.send(.tryDemo) }
-            Spacer(minLength: 0)
-            Button("Get Started") { self.model.send(.getStarted) }
+                     message: "Chat with your OpenClaw agents from your Mac, iPhone, and iPad.", centered: true,
+                     showsFooter: false) {
+            VStack(alignment: .leading, spacing: 12) {
+                Button { self.model.send(.getStarted) } label: {
+                    Text("Get Started").frame(maxWidth: .infinity)
+                }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("firstRun.getStarted")
+                Button { self.model.send(.tryDemo) } label: {
+                    Text("Try the Demo").frame(maxWidth: .infinity)
+                }
+                .keyboardShortcut("d", modifiers: .command)
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("firstRun.tryDemo")
+                .accessibilityHint(FirstRunCopy.demoCaption)
+                Text(FirstRunCopy.demoCaption)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityHidden(true)
+            }
+            .controlSize(.large)
+            .frame(maxWidth: 360, alignment: .leading)
+            .padding(.top, 6)
+        } secondary: {
+            EmptyView()
         }
     }
 }
@@ -349,9 +438,8 @@ private struct FirstRunHaveGateway: View {
                     .keyboardShortcut(.defaultAction)
                 self.choice("No, help me set one up", symbol: "questionmark.circle", yes: false)
             }
-        } buttons: {
+        } secondary: {
             BackButton(model: self.model)
-            Spacer(minLength: 0)
         }
     }
 
@@ -383,13 +471,11 @@ private struct FirstRunInstall: View {
             self.step(2, "Keep it running", command: FirstRunCopy.keepRunningCommand)
             self.step(3, "Check it's working", command: FirstRunCopy.statusCommand)
             Link("Full install guide", destination: FirstRunCopy.installGuideURL)
-        } buttons: {
+        } secondary: {
             BackButton(model: self.model)
             Button("Try the Demo") { self.model.send(.tryDemo) }
-            Spacer(minLength: 0)
-            Button("My Gateway Is Running") { self.model.send(.installed) }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+        } primary: {
+            PrimaryButton("My Gateway Is Running") { self.model.send(.installed) }
         }
     }
 
@@ -431,27 +517,26 @@ private struct FirstRunFind: View {
             }
             self.addressField(state)
             HStack(spacing: 16) {
-                Button("Advanced…", action: self.advanced).buttonStyle(.borderless)
+                Button("Advanced…", action: self.advanced).firstRunLink()
                 Link("Help me choose", destination: FirstRunCopy.chooseHelpURL)
             }
             .font(.callout)
-        } buttons: {
+        } secondary: {
             BackButton(model: self.model)
-            Spacer(minLength: 0)
+            // Only after a failed reachability check of a valid, secure address (never for invalid or insecure ones).
             if state.canSkip {
                 Button("Continue Anyway") { self.model.send(.skip) }
             }
-            Button {
+        } primary: {
+            PrimaryButton {
                 self.model.send(.checkAddress)
             } label: {
                 if state.reachability.isChecking {
                     HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Checking…") }
                 } else {
-                    Text("Continue")
+                    Text(state.canSkip ? "Try Again" : "Continue")
                 }
             }
-            .keyboardShortcut(.defaultAction)
-            .buttonStyle(.borderedProminent)
             .disabled(!state.canCheckAddress)
         }
         #if os(macOS)
@@ -582,23 +667,21 @@ private struct FirstRunSignInScreen: View {
             Button(isToken ? "Use a password instead" : "Use a token instead") {
                 self.model.send(.setAuthMode(isToken ? .password : .token))
             }
-            .buttonStyle(.borderless)
+            .firstRunLink()
             .disabled(state.signInStatus.isBusy)
             Text("Signing in to \(state.normalizedAddress)")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        } buttons: {
+        } secondary: {
             BackButton(model: self.model)
-            Spacer(minLength: 0)
-            Button(action: self.signIn) {
+        } primary: {
+            PrimaryButton(action: self.signIn) {
                 if state.signInStatus == .connecting {
                     HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Signing in…") }
                 } else {
                     Text("Sign In")
                 }
             }
-            .keyboardShortcut(.defaultAction)
-            .buttonStyle(.borderedProminent)
             .disabled(state.signInStatus.isBusy || self.model.secret.isEmpty)
         }
         .onAppear { self.secretFocused = true }
@@ -648,6 +731,10 @@ private struct FirstRunPairing: View {
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
+            Text(FirstRunCopy.approveElsewhere)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             DisclosureGroup("Didn't work?", isExpanded: self.$showsHelp) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("If you changed settings, the request ID may have changed. Run openclaw devices list to see the latest one.")
@@ -657,9 +744,8 @@ private struct FirstRunPairing: View {
                 }
                 .padding(.top, 6)
             }
-        } buttons: {
+        } secondary: {
             BackButton(model: self.model)
-            Spacer(minLength: 0)
         }
         .onAppear { FirstRunAnnouncer.announce("Waiting for approval…") }
         .onChange(of: self.model.state.pairingRequestChanged) { _, changed in
@@ -706,23 +792,21 @@ private struct FirstRunVerify: View {
                         CommandBox(command: FirstRunCopy.approveCommand(requestId: id))
                     }
                 }
-                if let problem = verified.healthProblem {
+                if verified.healthProblem != nil {
                     // Information only: it never blocks Continue Setup (spec §2.8).
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        InlineMessage(text: "Your Gateway reported a problem: \(problem)", isError: false)
+                        InlineMessage(text: FirstRunCopy.healthReported, isError: false)
                         Button("Details", action: self.openHealth)
-                            .buttonStyle(.borderless)
+                            .firstRunLink()
                             .accessibilityHint("Saves this Gateway and opens its Health page.")
                     }
                 }
             }
-        } buttons: {
+        } secondary: {
             BackButton(model: self.model)
-            Spacer(minLength: 0)
             Button("Skip to Chats") { self.model.send(.skip) }
-            Button("Continue Setup") { self.model.send(.continueToSetup) }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+        } primary: {
+            PrimaryButton("Continue Setup") { self.model.send(.continueToSetup) }
         }
     }
 }
@@ -766,11 +850,10 @@ private struct FirstRunDone: View {
     var body: some View {
         FirstRunPage(symbol: "checkmark.seal", title: "You're all set", message: "Start a chat with your agent any time.") {
             EmptyView()
-        } buttons: {
-            Spacer(minLength: 0)
-            Button("Go to Chats") { self.model.send(.finish) }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
+        } secondary: {
+            EmptyView()
+        } primary: {
+            PrimaryButton("Go to Chats") { self.model.send(.finish) }
         }
     }
 }

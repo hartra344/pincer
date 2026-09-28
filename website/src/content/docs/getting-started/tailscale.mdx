@@ -19,7 +19,7 @@ import { Steps, Aside } from '@astrojs/starlight/components';
 
 2. **Make sure your device is on the same tailnet.** Install Tailscale on your Mac or iPhone and sign in to the same account.
 
-3. **Add the gateway in Pincer.** On first launch choose **Get Started** (or click **+** in the rail for **Add Gateway…**). On **Find your gateway**, choose **Tailscale** and enter the address:
+3. **Add the gateway in Pincer.** On first launch choose **Get Started** (or choose **Add Gateway…** from the sidebar's **Organize** menu or <kbd>⌘</kbd> <kbd>K</kbd>). On **Find your gateway**, choose **Tailscale** and enter the address:
 
    - **With Tailscale Serve:** `wss://<host>.<tailnet>.ts.net`, for example `wss://my-mac.tail1234.ts.net`. Serve uses HTTPS on port 443, so leave off the port. You can type just the host name.
    - **Directly by tailnet IP:** `ws://100.x.y.z:18789`, if the gateway is bound to its tailnet IP (`gateway.bind: "tailnet"`) instead of using Serve.

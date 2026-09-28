@@ -16,8 +16,9 @@ public enum FirstRunStep: String, CaseIterable, Codable, Hashable, Sendable {
 
     public var stage: FirstRunStage {
         switch self {
-        case .welcome: .welcome
-        case .haveGateway, .install, .findGateway: .find
+        // "Do you have a Gateway?" and "Set up OpenClaw" are still getting started (product review r1).
+        case .welcome, .haveGateway, .install: .welcome
+        case .findGateway: .find
         case .signIn: .signIn
         case .verify: .verify
         case .gatewaySetup: .setUp

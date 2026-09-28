@@ -218,14 +218,14 @@ public final class AppModel {
         return store
     }
 
-    /// Selects the built-in demo, adding it the first time.
-    /// Offers its setup wizard on this connection (now, if it's already connected).
+    /// Selects the built-in demo, adding it the first time. Try the Demo lands straight in its chat
+    /// list: its setup wizard is never offered on its own, only from the gateway menu and ⌘K (#175).
     public func openDemo() {
         if let existing = self.gateways.first(where: { $0.profile.isDemo }) {
             self.selectedGatewayId = existing.id
-            existing.setup.requestOffer(connected: existing.hasConnected && existing.state.isConnected)
+            existing.setup.withdrawOffer()
         } else {
-            self.add(.demo(), secret: nil).setup.requestOffer(connected: false)
+            self.add(.demo(), secret: nil).setup.withdrawOffer()
         }
     }
 

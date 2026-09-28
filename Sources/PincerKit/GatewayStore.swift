@@ -212,7 +212,7 @@ public final class GatewayStore: Identifiable {
             })
         let model = SetupWizardModel(gatewayId: self.id, isDemo: self.profile.isDemo, defaults: self.defaults,
                                      connectedBefore: self.connectedBeforeSetup, environment: environment)
-        // The demo is offered only right after "Try the Demo" (`AppModel.openDemo`).
+        // The demo never offers setup on its own; Try the Demo lands in the chat list (`AppModel.openDemo`).
         model.autoOffers = !self.profile.isDemo
         return model
     }()

@@ -175,7 +175,7 @@ public enum SetupRules {
 
     /// Done once a send was accepted (the reply isn't awaited).
     public static func testMessage(sent: Bool) -> SetupStepStatus {
-        sent ? .done("A test message was sent.") : .notChecked("Say hello to your agent.")
+        sent ? .done("Your test message was sent.") : .notChecked(nil)
     }
 
     /// A step the user skipped shows Skipped unless it has become done since.
@@ -229,7 +229,7 @@ public struct SetupProgress: Codable, Hashable, Sendable {
 
     /// Whether to offer the wizard now that the gateway connected. Gateways connected before the
     /// wizard existed (`connectedBefore`) aren't offered it; the demo (never persisted) always is, but only
-    /// right after "Try the Demo" (see `SetupWizardModel.autoOffers`).
+    /// when something asks for it with `requestOffer` (see `SetupWizardModel.autoOffers`).
     public static func shouldOffer(_ progress: SetupProgress?, connectedBefore: Bool, isDemo: Bool) -> Bool {
         if let progress { return !progress.offered && !progress.completed }
         return isDemo || !connectedBefore
@@ -423,8 +423,8 @@ public final class SetupWizardModel {
         self.isPresented || self.wouldOffer
     }
 
-    /// Whether a connection offers the wizard on its own. The store turns this off for the demo, which
-    /// is offered only right after "Try the Demo" (`requestOffer()`); it's always resumable.
+    /// Whether a connection offers the wizard on its own. The store turns this off for the demo: Try the
+    /// Demo lands in the chat list, and its setup is reachable from the gateway menu and ⌘K.
     public var autoOffers = true
 
     private var wouldOffer: Bool {
@@ -432,7 +432,8 @@ public final class SetupWizardModel {
                                                      connectedBefore: self.connectedBefore, isDemo: self.isDemo)
     }
 
-    /// "Try the Demo": offer on this connection (now, if already connected), then stop auto-offering.
+    /// Offer on this connection (now, if already connected), then stop auto-offering. The app no longer
+    /// calls this for Try the Demo (#175); kept for an explicit one-off offer.
     public func requestOffer(connected: Bool) {
         self.autoOffers = true
         if self.isDemo { self.progress.offered = false }
@@ -596,14 +597,24 @@ public final class SetupWizardModel {
 
     /// Runs the skill check (health and agents are kept current by the store).
     public func load() async {
-        guard !self.loadState.isRunning else { return }
-        self.loadState = .running
-        async let skills: Void = self.loadSkills()
-        let refresh = self.environment.refresh
-        async let store: Void = refresh()
-        _ = await (skills, store)
+        // A load asked for mid-load (e.g. the connection came up while one started offline) runs
+        // once more after it, so a stale "Not connected" doesn't stick.
+        guard !self.loadState.isRunning else {
+            self.reloadRequested = true
+            return
+        }
+        repeat {
+            self.reloadRequested = false
+            self.loadState = .running
+            async let skills: Void = self.loadSkills()
+            let refresh = self.environment.refresh
+            async let store: Void = refresh()
+            _ = await (skills, store)
+        } while self.reloadRequested
         self.loadState = .idle
     }
+
+    @ObservationIgnored private var reloadRequested = false
 
     private func loadSkills() async {
         guard self.isAdvertised("skills.status") else {

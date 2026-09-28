@@ -99,6 +99,14 @@ public enum FirstRunCopy {
     }
 
     /// One line from the hello snapshot's health, when it reports a problem (channels aren't setup's concern).
+    /// Under Welcome's Try the Demo.
+    public static let demoCaption = "No gateway needed. Explore sample agents and chats. Nothing leaves this device."
+
+    /// Verify's health line: plain words, with Details for the specifics (product review r1).
+    public static let healthReported = "Your Gateway reported a problem. You can keep going and check it later."
+    public static let approveElsewhere =
+        "Already use Pincer on another device with Full Management? You can approve this one there, in Gateway Settings → Devices."
+
     public static func healthProblem(_ health: GatewayHealthSummary?) -> String? {
         guard let health else { return nil }
         if let plugin = health.pluginErrors.first { return "The \(plugin.id) plugin failed to load." }

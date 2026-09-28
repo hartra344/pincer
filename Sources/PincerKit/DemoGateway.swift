@@ -345,6 +345,8 @@ actor DemoGateway {
             return .array(self.presence())
         case "gateway.restart.request":
             return self.requestRestart(params)
+        case _ where Self.setupMethods.contains(method) || Self.webLoginMethods.contains(method):
+            return try await self.handleSetup(method, params) ?? .null
         default:
             throw GatewayError.rpc(code: "UNKNOWN_METHOD", message: "The demo doesn't support \(method).", details: nil)
         }
