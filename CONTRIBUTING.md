@@ -10,14 +10,14 @@ Pincer is laid out so parallel branches rarely touch the same file. Add new work
 
 ## Mock gateway (`mock-gateway/`)
 
-- A handler lives in a domain module, `mock-gateway/<domain>.mjs`. It exports its handler and, if it seeds data, a `seed(state)`.
-- Register the handler in the handler list in `server.mjs`. Seeded data is set up through `seed.mjs`.
+- A handler lives in a domain module, `mock-gateway/<domain>.mjs`. It exports its handler and, if it seeds data, a seed function (`seed<Domain>` / `seed(state)`).
+- Register the handler in the `REQUEST_HANDLERS` list in `server.mjs`. Seeded data is set up through `seed.mjs` (`createSeedState` calls each domain's seed function).
 - Selftests go in `mock-gateway/selftest/<domain>.mjs`, exporting `run(ctx)`.
 - Payloads follow upstream OpenClaw ([openclaw/openclaw](https://github.com/openclaw/openclaw)). Never invent methods or fields.
 
 ## Demo gateway (`Sources/PincerKit`)
 
-- Put demo handling in `Sources/PincerKit/DemoGateway+<Domain>.swift` with a `handle<Domain>` handler, and register it in DemoGateway's handler list.
+- Put demo handling in `Sources/PincerKit/DemoGateway+<Domain>.swift` with a `handle<Domain>` handler, and register it in the handler chain in `DemoGateway.handle`.
 - Showcase data goes in `DemoGateway+Showcase.swift`.
 
 ## Documentation
