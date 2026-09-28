@@ -43,3 +43,27 @@ struct DevNamespaceTests {
         }
     }
 }
+
+@Suite("Dev namespace storage")
+struct DevNamespaceStorageTests {
+    @Test @MainActor func namespacedStorageDoesNotPullProfilesFromStandard() {
+        let ns = "test-\(UUID().uuidString.prefix(8).lowercased())"
+        let suiteName = SharedContainer.devSuiteName(namespace: ns)!
+        defer { UserDefaults().removePersistentDomain(forName: suiteName) }
+
+        let storage = AppModel.storage(appGroupId: nil, namespace: ns)
+        #expect(storage.shared === storage.local)
+        #expect(storage.shared !== UserDefaults.standard)
+
+        let legacy = UserDefaults(suiteName: "chat.pincer.legacy-\(ns)")!
+        defer { UserDefaults().removePersistentDomain(forName: "chat.pincer.legacy-\(ns)") }
+        GatewayProfileStore.save([GatewayProfile(name: "prod", url: "ws://127.0.0.1:1", authMode: .token)], to: legacy)
+        #expect(GatewayProfileStore.load(from: storage.shared, legacy: storage.local).isEmpty)
+    }
+
+    @Test func productionStorageKeepsStandardLocalDefaults() {
+        let storage = AppModel.storage(appGroupId: nil, namespace: nil)
+        #expect(storage.shared === UserDefaults.standard)
+        #expect(storage.local === UserDefaults.standard)
+    }
+}

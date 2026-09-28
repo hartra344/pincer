@@ -168,5 +168,5 @@ PINCER_DEV_NAMESPACE=feature-x swift run PincerMacDev       # own Keychain servi
 xcodebuild -scheme Pincer-macOS PINCER_DEV_SUFFIX=.dev-feature-x   # bundle ids, App Group and Keychain group get the suffix
 ```
 
-With the suffix, `chat.pincer.mac` becomes `chat.pincer.mac.dev-feature-x`, the Keychain service `chat.pincer.gateway.dev-feature-x`, and storage folders `Pincer-feature-x`. Use the same name for both variables. On iOS the suffixed App Group and bundle ids need provisioning, so set the suffix there only when you want an isolated install. `PINCER_CACHE_DIR`, `PINCER_DRAFTS_DIR` and `PINCER_OUTBOX_DIR` still override folders explicitly.
+With the suffix, `chat.pincer.mac` becomes `chat.pincer.mac.dev-feature-x`, the Keychain service `chat.pincer.gateway.dev-feature-x`, and storage folders `Pincer-feature-x`. Use the same name for both variables. On iOS the suffixed App Group and bundle ids need provisioning, so set the suffix there only when you want an isolated install. The push relay rejects the suffixed iOS topic (`chat.pincer.ios.dev-x`) unless you add it to its `APNS_TOPICS`, and it needs the aps capability provisioned. Both builds register the same `pincer://` URL scheme and Handoff type, so links and Handoff may open the other build. `PINCER_CACHE_DIR`, `PINCER_DRAFTS_DIR` and `PINCER_OUTBOX_DIR` still override folders explicitly.
 

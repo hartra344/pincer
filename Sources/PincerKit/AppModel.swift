@@ -1,4 +1,5 @@
 import Foundation
+import PincerPush
 import Observation
 
 /// Top-level state: saved Gateways ("servers" in the rail) and which one is selected.
@@ -56,7 +57,17 @@ public final class AppModel {
     @ObservationIgnored public let firstRun: FirstRunModel
 
     public convenience init() {
-        self.init(sharedDefaults: SharedContainer.defaults, localDefaults: .standard)
+        let storage = Self.storage(appGroupId: SharedContainer.appGroupId, namespace: DevNamespace.current)
+        self.init(sharedDefaults: storage.shared, localDefaults: storage.local)
+    }
+
+    /// Where saved gateways and per-gateway preferences live. A namespaced build without an App Group
+    /// keeps both in one dev suite, so it never reads (or copies profiles from) the shared `.standard`.
+    nonisolated static func storage(appGroupId: String?, namespace: String?) -> (shared: UserDefaults, local: UserDefaults) {
+        if appGroupId == nil, let suite = SharedContainer.devSuiteName(namespace: namespace).flatMap(UserDefaults.init(suiteName:)) {
+            return (suite, suite)
+        }
+        return (appGroupId.flatMap(UserDefaults.init(suiteName:)) ?? .standard, .standard)
     }
 
     /// Keeps every preference in `defaults`, e.g. a scratch suite for checks.
