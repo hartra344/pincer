@@ -47,7 +47,7 @@ struct ThinkingDisplayPicker: View {
                 Text(mode.label).tag(mode)
             }
         } label: {
-            Label("Thinking Steps", systemImage: "brain.head.profile")
+            Label(L("Thinking Steps"), systemImage: "brain.head.profile")
         }
         .pickerStyle(.menu)
     }

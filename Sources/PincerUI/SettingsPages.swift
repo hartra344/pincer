@@ -38,10 +38,10 @@ struct ObjectSections: View {
         Section {
             ForEach(common) { FieldRow(field: $0) }
             if common.isEmpty, advanced.isEmpty {
-                Text(isMap ? "Nothing here yet." : "No settings.").foregroundStyle(.secondary)
+                Text(isMap ? L("Nothing here yet.") : L("No settings.")).foregroundStyle(.secondary)
             }
             if isMap, self.settings.canEdit {
-                Button("Add Entry…", systemImage: "plus") { self.addingEntry = true }
+                Button(L("Add Entry…"), systemImage: "plus") { self.addingEntry = true }
             }
         } header: {
             if let title = self.title { Text(title) }
@@ -53,7 +53,7 @@ struct ObjectSections: View {
                 DisclosureGroup(isExpanded: self.$showAdvanced) {
                     ForEach(advanced) { FieldRow(field: $0) }
                 } label: {
-                    Text("Advanced (\(advanced.count))")
+                    Text("Advanced (\(advanced.count))", bundle: .module)
                 }
             } footer: {
                 if let footer = self.footer { Text(footer) }
@@ -86,14 +86,14 @@ private struct NewEntryPrompt: ViewModifier {
     @State private var key = ""
 
     func body(content: Content) -> some View {
-        content.alert("Add Entry", isPresented: self.$isPresented) {
-            TextField("Name", text: self.$key)
+        content.alert(L("Add Entry"), isPresented: self.$isPresented) {
+            TextField(L("Name"), text: self.$key)
                 .autocorrectionDisabled()
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
                 #endif
-            Button("Cancel", role: .cancel) { self.key = "" }
-            Button("Add") {
+            Button(L("Cancel"), role: .cancel) { self.key = "" }
+            Button(L("Add")) {
                 let key = self.key.trimmingCharacters(in: .whitespaces)
                 self.key = ""
                 let settings = self.gateway.settings
@@ -102,7 +102,7 @@ private struct NewEntryPrompt: ViewModifier {
                 self.navigator.path.append(.object(self.path + [key]))
             }
         } message: {
-            Text("It's added to your unsaved changes, and saved with them.")
+            Text("It's added to your unsaved changes, and saved with them.", bundle: .module)
         }
     }
 }
@@ -129,10 +129,10 @@ struct EntriesSection: View {
                 .id(entry.id)
             }
             if entries.isEmpty {
-                Text("None yet.").foregroundStyle(.secondary)
+                Text("None yet.", bundle: .module).foregroundStyle(.secondary)
             }
             if isMap, settings.canEdit {
-                Button("Add…", systemImage: "plus") { self.addingEntry = true }
+                Button(L("Add…"), systemImage: "plus") { self.addingEntry = true }
             }
         } header: {
             if let title { Text(title) }
@@ -170,9 +170,9 @@ private struct EntryRow: View {
             Spacer()
             if issues > 0 {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
-                    .accessibilityLabel("\(issues) problems")
+                    .accessibilityLabel(L("\(issues) problems"))
             } else if changes > 0 {
-                Text("Edited").font(.caption).foregroundStyle(.tint)
+                Text("Edited", bundle: .module).font(.caption).foregroundStyle(.tint)
             }
             Text(FieldRow.summary(value)).foregroundStyle(.secondary)
         }
@@ -244,12 +244,12 @@ struct ConfigObjectPage: View {
         }
         .navigationTitle(field?.label ?? ConfigPath.string(self.path))
         .confirmationDialog("Remove \(field?.label ?? "this entry")?", isPresented: self.$confirmRemove) {
-            Button("Remove", role: .destructive) {
+            Button(L("Remove"), role: .destructive) {
                 settings.set(self.path, nil)
                 if self.navigator.path.last == .object(self.path) { self.navigator.path.removeLast() }
             }
         } message: {
-            Text("It's removed from the config when you save.")
+            Text("It's removed from the config when you save.", bundle: .module)
         }
     }
 }
@@ -268,7 +268,7 @@ struct StringListPage: View {
             Section {
                 ForEach(items.indices, id: \.self) { index in
                     HStack {
-                        TextField("Item", text: Binding(
+                        TextField(L("Item"), text: Binding(
                             get: { items.indices.contains(index) ? items[index] : "" },
                             set: { text in
                                 var updated = items
@@ -286,7 +286,8 @@ struct StringListPage: View {
                             Image(systemName: "minus.circle.fill").foregroundStyle(.red)
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel("Remove")
+                        .accessibilityLabel(items[index].isEmpty ? L("Remove item \(index + 1)") : L("Remove \(items[index])"))
+                        .help(L("Remove"))
                         #endif
                     }
                 }
@@ -296,7 +297,7 @@ struct StringListPage: View {
                     updated.move(fromOffsets: from, toOffset: to)
                     self.save(updated)
                 }
-                Button("Add Item", systemImage: "plus") {
+                Button(L("Add Item"), systemImage: "plus") {
                     self.save(items + [""])
                     self.focused = items.count
                 }
@@ -344,14 +345,14 @@ struct AllSettingsPage: View {
                     .id(field.id)
                 }
             } footer: {
-                Text("Every setting the Gateway's schema describes. The other pages show the common ones.")
+                Text("Every setting the Gateway's schema describes. The other pages show the common ones.", bundle: .module)
             }
             let leaves = fields.filter { $0.kind != .object }
             if !leaves.isEmpty {
-                Section("Other") { ForEach(leaves) { FieldRow(field: $0) } }
+                Section(L("Other")) { ForEach(leaves) { FieldRow(field: $0) } }
             }
         }
-        .navigationTitle("All Settings")
+        .navigationTitle(L("All Settings"))
     }
 }
 
@@ -418,15 +419,15 @@ struct SettingsLoadingSection: View {
         Section {
             if let error = settings.loadState.error {
                 Label(error, systemImage: "exclamationmark.octagon.fill").foregroundStyle(.red)
-                Button("Try Again") { Task { await settings.load() } }
+                Button(L("Try Again")) { Task { await settings.load() } }
             } else if !settings.configSupported {
-                Text("This Gateway doesn't share its settings with Pincer.").foregroundStyle(.secondary)
+                Text("This Gateway doesn't share its settings with Pincer.", bundle: .module).foregroundStyle(.secondary)
             } else if !self.gateway.state.isConnected {
-                Text("Settings load once \(self.gateway.profile.name) is connected.").foregroundStyle(.secondary)
+                Text("Settings load once \(self.gateway.profile.name) is connected.", bundle: .module).foregroundStyle(.secondary)
             } else {
                 HStack {
                     ProgressView().controlSize(.small)
-                    Text("Loading settings…").foregroundStyle(.secondary)
+                    Text("Loading settings…", bundle: .module).foregroundStyle(.secondary)
                 }
             }
         }
@@ -444,9 +445,9 @@ struct OverviewPage: View {
         let profile = self.gateway.profile
         Form {
             Section {
-                LabeledContent("Gateway", value: profile.name)
-                LabeledContent("Status") { ConnectionStateText(state: self.gateway.state) }
-                LabeledContent("Health") {
+                LabeledContent(L("Gateway"), value: profile.name)
+                LabeledContent(L("Status")) { ConnectionStateText(state: self.gateway.state) }
+                LabeledContent(L("Health")) {
                     let level = self.gateway.health.level
                     Button { self.navigator.destination = .health } label: {
                         Label(level.label, systemImage: level.symbol)
@@ -454,8 +455,8 @@ struct OverviewPage: View {
                     }
                     .buttonStyle(.borderless)
                 }
-                if let version = self.gateway.hello?.serverVersion { LabeledContent("Version", value: version) }
-                LabeledContent("Access") {
+                if let version = self.gateway.hello?.serverVersion { LabeledContent(L("Version"), value: version) }
+                LabeledContent(L("Access")) {
                     Button(settings.canEdit || profile.access == .standard ? profile.access.label : "Waiting for approval") {
                         self.navigator.destination = .connection
                     }
@@ -464,16 +465,16 @@ struct OverviewPage: View {
             }
             SetupGatewaySection()
             if let snapshot = settings.snapshot {
-                Section("Config") {
+                Section(L("Config")) {
                     if let path = snapshot.path {
-                        LabeledContent("File") {
+                        LabeledContent(L("File")) {
                             Text(path).font(.caption.monospaced()).textSelection(.enabled)
                         }
                     }
                     if snapshot.isValid {
-                        Label("Config is valid", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+                        Label(L("Config is valid"), systemImage: "checkmark.seal.fill").foregroundStyle(.green)
                     } else {
-                        Label("Config has problems", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                        Label(L("Config has problems"), systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
                     }
                     ForEach(snapshot.issues) { issue in
                         Button { self.navigator.go(to: ConfigPath.parse(issue.path)) } label: {
@@ -490,28 +491,29 @@ struct OverviewPage: View {
                         Button {
                             self.navigator.destination = .plugins
                         } label: {
-                            Label("\(settings.pluginsNeedingAttention) plugin\(settings.pluginsNeedingAttention == 1 ? " needs" : "s need") attention",
+                            Label(settings.pluginsNeedingAttention == 1 ? L("1 plugin needs attention")
+                                    : L("\(settings.pluginsNeedingAttention) plugins need attention"),
                                   systemImage: "puzzlepiece.extension")
                         }
                     }
                 }
                 if let last = settings.lastSave {
-                    Section("Last Change") { SaveOutcomeLabel(outcome: last.outcome) }
+                    Section(L("Last Change")) { SaveOutcomeLabel(outcome: last.outcome) }
                 }
             } else {
                 SettingsLoadingSection()
             }
             Section {
-                Button("Reload from Gateway", systemImage: "arrow.clockwise") { Task { await settings.load() } }
+                Button(L("Reload from Gateway"), systemImage: "arrow.clockwise") { Task { await settings.load() } }
                     .disabled(settings.loadState.isRunning || !self.gateway.state.isConnected)
             } footer: {
                 if settings.hasChanges {
-                    Text("Reloading keeps your unsaved changes.")
+                    Text("Reloading keeps your unsaved changes.", bundle: .module)
                 }
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Overview")
+        .navigationTitle(L("Overview"))
         .settingsChrome()
     }
 }
@@ -521,10 +523,10 @@ struct ConnectionStateText: View {
 
     var body: some View {
         switch self.state {
-        case .connected: Label("Connected", systemImage: "circle.fill").foregroundStyle(.green)
-        case .connecting, .idle: Text("Connecting…").foregroundStyle(.secondary)
-        case .reconnecting: Text("Reconnecting…").foregroundStyle(.orange)
-        case .awaitingPairing: Text("Waiting for approval").foregroundStyle(.orange)
+        case .connected: Label(L("Connected"), systemImage: "circle.fill").foregroundStyle(.green)
+        case .connecting, .idle: Text("Connecting…", bundle: .module).foregroundStyle(.secondary)
+        case .reconnecting: Text("Reconnecting…", bundle: .module).foregroundStyle(.orange)
+        case .awaitingPairing: Text("Waiting for approval", bundle: .module).foregroundStyle(.orange)
         case let .failed(message): Text(message).foregroundStyle(.red).lineLimit(2)
         }
     }
@@ -560,7 +562,7 @@ struct RawConfigPage: View {
         Form {
             if raw == nil {
                 Section {
-                    Text(settings.hasLoaded ? "The Gateway didn't send the raw config file." : "Loading…")
+                    Text(settings.hasLoaded ? L("The Gateway didn't send the raw config file.") : L("Loading…"))
                         .foregroundStyle(.secondary)
                 }
             } else {
@@ -579,22 +581,22 @@ struct RawConfigPage: View {
                             Label(parseError, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
                         }
                         if settings.hasChanges {
-                            Text("Save or discard your other unsaved changes before editing the raw file.")
+                            Text("Save or discard your other unsaved changes before editing the raw file.", bundle: .module)
                                 .foregroundStyle(.orange)
                         }
-                        Text("Secrets show as \(JSONValue.redactedSentinel); leave them as they are to keep them. Saving replaces the whole config, and the Gateway checks it first.")
+                        Text("Secrets show as \(JSONValue.redactedSentinel); leave them as they are to keep them. Saving replaces the whole config, and the Gateway checks it first.", bundle: .module)
                     }
                 }
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Raw Config")
+        .navigationTitle(L("Raw Config"))
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if edited {
-                    Button("Revert") { self.text = raw ?? "" }
+                    Button(L("Revert")) { self.text = raw ?? "" }
                 }
-                Button("Save") {
+                Button(L("Save")) {
                     Task { if await settings.saveRaw(self.text) { self.text = settings.snapshot?.raw ?? "" } }
                 }
                 .keyboardShortcut("s", modifiers: .command)

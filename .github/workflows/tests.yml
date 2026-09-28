@@ -69,55 +69,16 @@ jobs:
       - name: Build all targets and tests
         run: swift build --build-tests -Xswiftc -enable-incremental-file-hashing
 
-      - name: Unit tests
-        run: swift test --skip-build --parallel -Xswiftc -enable-incremental-file-hashing
-
-      - name: Self-checks
-        run: |
-          BIN="$(swift build --show-bin-path -Xswiftc -enable-incremental-file-hashing)"
-          echo "BIN=$BIN" >> "$GITHUB_ENV"
-          "$BIN/PincerChecks"
-
-      # Demo and live checks only wait on timers and sockets, so they run side by side.
-      - name: Demo and live checks
+      # Unit tests and every check run side by side, each live run against its own mock.
+      - name: Unit tests and checks
         env:
-          PINCER_DEMO_DELAY_SCALE: "0.2"
-        run: |
-          # Start the mock just before the checks: some of its seeded data expires minutes after launch.
-          node mock-gateway/server.mjs > "$RUNNER_TEMP/mock-gateway.log" 2>&1 &
-          for _ in $(seq 1 30); do nc -z 127.0.0.1 18789 && break; sleep 1; done
-          "$BIN/PincerChecks" --demo > "$RUNNER_TEMP/demo.log" 2>&1 & demo=$!
-          "$BIN/PincerChecks" --live ws://127.0.0.1:18789 dev-token > "$RUNNER_TEMP/live.log" 2>&1 & live=$!
-          status=0
-          wait $demo || status=1
-          echo "::group::Demo checks"; cat "$RUNNER_TEMP/demo.log"; echo "::endgroup::"
-          wait $live || status=1
-          echo "::group::Live checks"; cat "$RUNNER_TEMP/live.log"; echo "::endgroup::"
-          grep -h "✗\|timed out" "$RUNNER_TEMP/demo.log" "$RUNNER_TEMP/live.log" || true
-          tail -n 1 "$RUNNER_TEMP/demo.log" "$RUNNER_TEMP/live.log"
-          exit $status
-
-      - name: Live checks against a gateway without usage
-        run: |
-          MOCK_NO_USAGE=1 PORT=18790 node mock-gateway/server.mjs > "$RUNNER_TEMP/mock-gateway-no-usage.log" 2>&1 &
-          for _ in $(seq 1 30); do nc -z 127.0.0.1 18790 && break; sleep 1; done
-          "$BIN/PincerChecks" --live-no-usage ws://127.0.0.1:18790 dev-token
-
-      - name: Live checks against a gateway without replyToId
-        run: |
-          MOCK_NO_REPLY_TO=1 PORT=18791 node mock-gateway/server.mjs > "$RUNNER_TEMP/mock-gateway-no-reply-to.log" 2>&1 &
-          for _ in $(seq 1 30); do nc -z 127.0.0.1 18791 && break; sleep 1; done
-          "$BIN/PincerChecks" --live-no-reply-to ws://127.0.0.1:18791 dev-token
+          CHECKS_LOG_DIR: ${{ runner.temp }}/checks
+        run: scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
 
       - name: Upload check logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: check-logs
-          path: |
-            ${{ runner.temp }}/mock-gateway.log
-            ${{ runner.temp }}/demo.log
-            ${{ runner.temp }}/live.log
-            ${{ runner.temp }}/mock-gateway-no-usage.log
-            ${{ runner.temp }}/mock-gateway-no-reply-to.log
+          path: ${{ runner.temp }}/checks
           if-no-files-found: ignore

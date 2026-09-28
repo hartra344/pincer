@@ -126,10 +126,12 @@ public struct MenuBarInbox: Equatable, Sendable {
         public var approvals: [ExecApproval]
         public var questions: [QuestionPrompt]
         public var agents: [AgentSummary]
+        /// Chats the sidebar hides (automations, slash commands); they stay out of Unread like the badge.
+        public var hiddenKeys: Set<String>
 
         public init(id: UUID = UUID(), name: String, state: ConnectionState, healthLevel: GatewayHealthLevel = .healthy,
                     sessions: [SessionRow] = [], approvals: [ExecApproval] = [], questions: [QuestionPrompt] = [],
-                    agents: [AgentSummary] = [])
+                    agents: [AgentSummary] = [], hiddenKeys: Set<String> = [])
         {
             self.id = id
             self.name = name
@@ -139,6 +141,7 @@ public struct MenuBarInbox: Equatable, Sendable {
             self.approvals = approvals
             self.questions = questions
             self.agents = agents
+            self.hiddenKeys = hiddenKeys
         }
 
         /// Same fallback as `GatewayStore.agent(_:)`.
@@ -273,7 +276,7 @@ public struct MenuBarInbox: Equatable, Sendable {
 
         let running = newestFirst(chats.filter { $0.row.hasActiveRun && !claimed.contains(key($0)) })
         claimed.formUnion(running.map(key))
-        let unreadRows = chats.filter(\.row.isUnread)
+        let unreadRows = chats.filter { $0.row.isUnread && !$0.input.hiddenKeys.contains($0.row.key) }
         inbox.unreadCount = unreadRows.count
         let unread = newestFirst(unreadRows.filter { !claimed.contains(key($0)) })
 
@@ -326,7 +329,8 @@ extension MenuBarInbox {
         self = Self.build(app.gateways.map { gateway in
             GatewayInput(id: gateway.id, name: gateway.profile.name, state: gateway.state, healthLevel: gateway.health.level(now: now),
                          sessions: Array(gateway.sessions.values), approvals: gateway.approvals, questions: gateway.questions,
-                         agents: gateway.agents)
+                         agents: gateway.agents,
+                         hiddenKeys: Set(gateway.sessions.values.filter(gateway.isHiddenInSidebar).map(\.key)))
         }, now: now)
     }
 }

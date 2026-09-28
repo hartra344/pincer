@@ -106,6 +106,7 @@ struct CopyChatLinkButton: View {
 }
 
 extension Clipboard {
+    @MainActor
     static func copy(url: URL) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
@@ -114,6 +115,7 @@ extension Clipboard {
         #else
         UIPasteboard.general.url = url
         #endif
+        AccessibilityAnnouncer.announceCopied()
     }
 }
 

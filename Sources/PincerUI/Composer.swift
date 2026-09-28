@@ -19,6 +19,7 @@ struct Composer: View {
     @State private var dismissedMenuText: String?
     @State private var caretAtEnd = true
     @State private var focusRequest = 0
+    @ScaledMetric(relativeTo: .body) private var attachIconSize: CGFloat = 14
 
     private static let corner: CGFloat = 22
     /// Height of a single-line field, which the side controls match.
@@ -76,9 +77,9 @@ struct Composer: View {
                     }
                     .buttonStyle(.plain)
                     .composerControl()
-                    .help("Stop the current run")
+                    .help(Text("Stop the current run", bundle: .module))
                     .keyboardShortcut(".", modifiers: .command)
-                    .accessibilityLabel("Stop")
+                    .accessibilityLabel(Text("Stop", bundle: .module))
                     .transition(.scale.combined(with: .opacity))
                 }
                 Button(action: self.submit) {
@@ -157,22 +158,24 @@ struct Composer: View {
 
     private var attachMenu: some View {
         Menu {
-            Button("Choose File…", systemImage: "doc") { self.importing = true }
+            Button { self.importing = true } label: { Label { Text("Choose File…", bundle: .module) } icon: { Image(systemName: "doc") } }
             #if os(iOS)
-            Button("Paste Image", systemImage: "doc.on.clipboard") {
+            Button {
                 let items = MediaPasteboard.items(from: .general)
                 if !items.isEmpty {
                     self.ingest(items)
                 } else if let image = UIPasteboard.general.image, let data = image.pngData() {
                     self.addImage(data, name: "Pasted Image.png")
                 } else {
-                    self.attachmentError = "There’s no image or file on the clipboard."
+                    self.attachmentError = L("There’s no image or file on the clipboard.")
                 }
+            } label: {
+                Label { Text("Paste Image", bundle: .module) } icon: { Image(systemName: "doc.on.clipboard") }
             }
             #endif
         } label: {
             Image(systemName: "plus")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: min(self.attachIconSize, 22), weight: .semibold))
                 .foregroundStyle(.secondary)
                 .frame(width: 26, height: 26)
                 .contentShape(Circle())
@@ -184,8 +187,8 @@ struct Composer: View {
         .fixedSize()
         .composerControl()
         .disabled(!self.gateway.state.isConnected)
-        .help(self.gateway.state.isConnected ? "Attach" : Self.attachmentsNeedConnection)
-        .accessibilityLabel("Attach")
+        .help(self.gateway.state.isConnected ? L("Attach files") : Self.attachmentsNeedConnection)
+        .accessibilityLabel(Text("Attach files", bundle: .module))
         .accessibilityHint(self.gateway.state.isConnected ? "" : Self.attachmentsNeedConnection)
         .overlay(alignment: .trailing) {
             #if os(iOS)
@@ -193,6 +196,8 @@ struct Composer: View {
                 Image(systemName: "photo").font(.title3)
             }
             .disabled(!self.gateway.state.isConnected)
+            .help(self.gateway.state.isConnected ? L("Attach photos") : Self.attachmentsNeedConnection)
+            .accessibilityLabel(Text("Attach photos", bundle: .module))
             .accessibilityHint(self.gateway.state.isConnected ? "" : Self.attachmentsNeedConnection)
             .offset(x: 30)
             #endif
@@ -218,24 +223,24 @@ struct Composer: View {
         return self.gateway.state.isConnected || (self.attachments.isEmpty && !self.isTypingCommand)
     }
 
-    private static let offlineHint = "Offline — messages send when you reconnect"
-    private static let attachmentsNeedConnection = "Attachments need a connection"
+    private static var offlineHint: String { L("Offline — messages send when you reconnect") }
+    private static var attachmentsNeedConnection: String { L("Attachments need a connection") }
 
     private var sendLabel: String {
-        if !self.gateway.state.isConnected { return "Queue Message" }
-        return self.chat.isRunning ? "Queue a follow-up" : "Send"
+        if !self.gateway.state.isConnected { return L("Queue Message") }
+        return self.chat.isRunning ? L("Queue a follow-up") : L("Send")
     }
 
     /// Offline: what happens to what's typed, and how many messages are waiting.
     private var offlineNote: String? {
         guard !self.gateway.state.isConnected else { return nil }
         let queued = self.chat.unsentEntries.filter { $0.state == .queued }.count
-        let waiting = queued == 0 ? nil : queued == 1 ? "1 message queued" : "\(queued) messages queued"
+        let waiting = queued == 0 ? nil : L("\(queued) messages queued")
         if !self.attachments.isEmpty {
             return [waiting, Self.attachmentsNeedConnection].compactMap(\.self).joined(separator: " · ")
         }
         if self.isTypingCommand {
-            return [waiting, "Connect to run commands"].compactMap(\.self).joined(separator: " · ")
+            return [waiting, L("Connect to run commands")].compactMap(\.self).joined(separator: " · ")
         }
         return [waiting, Self.offlineHint].compactMap(\.self).joined(separator: " · ")
     }
@@ -345,10 +350,11 @@ private struct ComposerActionLabel: View {
     let systemImage: String
     let tint: Color
     let active: Bool
+    @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 14
 
     var body: some View {
         let icon = Image(systemName: self.systemImage)
-            .font(.system(size: 14, weight: .bold))
+            .font(.system(size: min(self.iconSize, 22), weight: .bold))
             .frame(width: 30, height: 30)
             .contentShape(Circle())
         if #available(macOS 26, iOS 26, *) {
@@ -386,7 +392,7 @@ private struct ReplyChip: View {
             Image(systemName: "arrowshape.turn.up.left")
                 .foregroundStyle(self.theme.accent)
             VStack(alignment: .leading, spacing: 1) {
-                Text("Replying to **\(self.target.senderLabel)**")
+                Text("Replying to **\(self.target.senderLabel)**", bundle: .module)
                     .font(.caption)
                 Text(Replies.previewLine(self.target.preview))
                     .font(.caption)
@@ -400,8 +406,8 @@ private struct ReplyChip: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Cancel reply")
-            .accessibilityLabel("Cancel reply")
+            .help(Text("Cancel reply", bundle: .module))
+            .accessibilityLabel(Text("Cancel reply", bundle: .module))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)

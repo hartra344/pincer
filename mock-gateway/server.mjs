@@ -424,6 +424,17 @@ function createSeedState() {
     makeMessage('user', [textBlock('Check free space on every volume and warn me under 10%.')]),
     makeMessage('assistant', [textBlock('df: /Volumes/Backup: No such file or directory')]),
   );
+  // Native Discord slash commands run in their own session (`agent:<agent>:discord:slash:<userId>`).
+  row('agent:main:discord:slash:418235907214753792', {
+    agentId: 'main',
+    channel: 'discord',
+    age: 4 * 3_600_000,
+    lastMessagePreview: 'Status: online, 3 agents.',
+  });
+  transcripts.get('agent:main:discord:slash:418235907214753792').push(
+    makeMessage('user', [textBlock('/status')]),
+    makeMessage('assistant', [textBlock('Status: online, 3 agents.')]),
+  );
 
   const dfCall = 'call_seed_df';
   transcripts.get('agent:main:main').push(

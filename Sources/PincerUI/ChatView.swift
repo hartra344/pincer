@@ -7,6 +7,7 @@ struct ChatView: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
     @AppStorage("pincer.reasoningHintDismissed") private var hintDismissed = false
+    @AppStorage(AvatarSettings.animatedKey) private var avatarAnnouncesErrors = true
     @State private var disclosure = TranscriptDisclosure()
     @State private var previewing: ImageRef?
     @State private var exporting: ExportedFile?
@@ -47,7 +48,7 @@ struct ChatView: View {
                         ProgressCardView(chat: self.chat, card: card)
                     }
                     PendingQuestionCard(chat: self.chat)
-                    Composer(chat: self.chat, placeholder: "Message #\(self.row?.title ?? "chat")",
+                    Composer(chat: self.chat, placeholder: L("Message #\(self.row?.title ?? L("chat"))"),
                              autoFocus: { [find = self.find, app = self.app, gateway = self.gateway, chat = self.chat] in
                                  // Opening on a message search result: the Find field keeps focus.
                                  !find.isPresented && !Self.hasFindRequest(app: app, gateway: gateway, chat: chat)
@@ -86,17 +87,20 @@ struct ChatView: View {
         .onChange(of: self.app.findRequest, initial: true) { self.takeFindRequest() }
         .onChange(of: self.app.messageJump, initial: true) { self.takeMessageJump() }
         .onChange(of: self.chat.hasLoaded) { self.takeMessageJump() }
+        .onChange(of: self.chat.lastOutcomeAt) { _, finished in
+            if finished != nil { self.announceOutcome() }
+        }
         .modifier(ChatHandoff(sessionKey: self.chat.sessionKey))
         #if os(iOS)
         // Menu commands are macOS-only; on iOS a hardware keyboard reaches these instead.
         .background {
             Group {
-                Button("Find in Chat") { self.find.present() }.keyboardShortcut("f", modifiers: .command)
+                Button(L("Find in Chat")) { self.find.present() }.keyboardShortcut("f", modifiers: .command)
                 if !self.find.isPresented {
-                    Button("Find Next") { self.find.next() }.keyboardShortcut("g", modifiers: .command)
-                    Button("Find Previous") { self.find.previous() }.keyboardShortcut("g", modifiers: [.command, .shift])
+                    Button(L("Find Next")) { self.find.next() }.keyboardShortcut("g", modifiers: .command)
+                    Button(L("Find Previous")) { self.find.previous() }.keyboardShortcut("g", modifiers: [.command, .shift])
                 }
-                Button("Reply to Last Message") { ReplyToLast(chat: self.chat, agentName: self.agent.name).perform() }
+                Button(L("Reply to Last Message")) { ReplyToLast(chat: self.chat, agentName: self.agent.name).perform() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                     .disabled(self.chat.latestReplyableId == nil)
             }
@@ -108,6 +112,23 @@ struct ChatView: View {
     }
 
     private var reasoningOff: Bool { self.row?.reasoningLevel == "off" }
+
+    /// Tells VoiceOver the visible chat's run ended, once per run. The chat header's animated avatar
+    /// already announces failures, so a failure is only spoken here when that avatar is off.
+    private func announceOutcome() {
+        guard AccessibilityAnnouncer.isVoiceOverRunning else { return }
+        switch self.chat.lastOutcome {
+        case .none:
+            return
+        case .success:
+            let reply = self.chat.entries.last { if case .assistant = $0 { true } else { false } }
+            guard case let .assistant(turn) = reply else { return }
+            AccessibilityAnnouncer.announce(AccessibilityText.replyFinishedAnnouncement(author: self.agent.name, text: turn.body))
+        case .error:
+            guard !self.avatarAnnouncesErrors else { return }
+            AccessibilityAnnouncer.announce(AccessibilityText.replyFailedAnnouncement(author: self.agent.name))
+        }
+    }
 
     /// A message search result is waiting to open Find in this chat.
     private static func hasFindRequest(app: AppModel, gateway: GatewayStore, chat: ChatStore) -> Bool {
@@ -140,7 +161,7 @@ struct ChatView: View {
                     .font(.callout)
                     .foregroundStyle(.orange)
                 Spacer(minLength: 8)
-                Button("Retry") { Task { await self.chat.load(force: true) } }
+                Button(L("Retry")) { Task { await self.chat.load(force: true) } }
                     .glassButton()
                     .controlSize(.small)
             }
@@ -169,7 +190,7 @@ struct ChatView: View {
                 }
                 .buttonStyle(.borderless)
                 .controlSize(.small)
-                .accessibilityLabel("Dismiss")
+                .accessibilityLabel(L("Dismiss"))
             }
             .padding(.leading, 14)
             .padding(.trailing, 10)
@@ -188,15 +209,15 @@ struct ChatView: View {
             VStack(spacing: 8) {
                 ProgressView()
                 if !self.gateway.state.isConnected {
-                    Text("Connecting…").font(.callout).foregroundStyle(.secondary)
+                    Text("Connecting…", bundle: .module).font(.callout).foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if self.chat.entries.isEmpty {
             ContentUnavailableView {
-                Label("Say hello to \(self.agent.name)", systemImage: "bubble.left.and.bubble.right")
+                Label(L("Say hello to \(self.agent.name)"), systemImage: "bubble.left.and.bubble.right")
             } description: {
-                Text("Messages you send here go straight to your Gateway as the owner.")
+                Text("Messages you send here go straight to your Gateway as the owner.", bundle: .module)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -236,14 +257,14 @@ struct ChatView: View {
         {
             HStack(spacing: 8) {
                 Image(systemName: "brain").foregroundStyle(.purple)
-                Text("Thinking isn’t being saved for this session.")
+                Text("Thinking isn’t being saved for this session.", bundle: .module)
                     .font(.callout)
-                Button("Turn On") {
+                Button(L("Turn On")) {
                     Task { await self.gateway.patch(self.chat.sessionKey, ["reasoningLevel": "on"]) }
                 }
                 .glassButton()
                 .controlSize(.small)
-                Text("or send `/reasoning on`").font(.callout).foregroundStyle(.secondary)
+                Text("or send `/reasoning on`", bundle: .module).font(.callout).foregroundStyle(.secondary)
                 Spacer(minLength: 8)
                 Button {
                     withAnimation(.snappy) { self.hintDismissed = true }
@@ -255,7 +276,7 @@ struct ChatView: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Dismiss")
+                .accessibilityLabel(L("Dismiss"))
             }
             .padding(.leading, 14)
             .padding(.trailing, 6)
@@ -338,31 +359,31 @@ private struct ChatSessionMenu: View {
     var body: some View {
         if let key = self.gateway.selectedKey, let row = self.gateway.sessions[key] {
             Menu {
-                Button("Find in Chat", systemImage: "magnifyingglass") { self.find?.present() }
+                Button(L("Find in Chat"), systemImage: "magnifyingglass") { self.find?.present() }
                 Divider()
-                Button(row.isPinned ? "Unpin" : "Pin", systemImage: row.isPinned ? "pin.slash" : "pin") {
+                Button(row.isPinned ? L("Unpin") : L("Pin"), systemImage: row.isPinned ? "pin.slash" : "pin") {
                     Task { await self.gateway.patch(row.key, ["pinned": .bool(!row.isPinned)]) }
                 }
                 ThinkingDisplayPicker()
                 ReasoningMenu(row: row)
                 ShowRunsButton(isPresented: self.$showRuns)
                 Divider()
-                Button("Reload", systemImage: "arrow.clockwise") {
+                Button(L("Reload"), systemImage: "arrow.clockwise") {
                     Task { await self.gateway.chat(for: key).load(force: true) }
                 }
-                Button("Copy Session Key", systemImage: "key") { Clipboard.copy(row.key) }
+                Button(L("Copy Session Key"), systemImage: "key") { Clipboard.copy(row.key) }
                 CopyChatLinkButton(sessionKey: row.key)
-                Button("Session Usage…", systemImage: "chart.bar") {
+                Button(L("Session Usage…"), systemImage: "chart.bar") {
                     self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
                 }
                 if self.gateway.supportsToolsEffective {
-                    Button("Tools & Policy…", systemImage: "wrench.and.screwdriver") {
+                    Button(L("Tools & Policy…"), systemImage: "wrench.and.screwdriver") {
                         self.toolsInspector = ChatToolsInspection(model: self.gateway.toolsInspector(sessionKey: row.key),
                                                                   scopeTitle: "Session: \(row.title)")
                     }
                 }
             } label: {
-                Label("Session", systemImage: Theme.moreSymbol)
+                Label(L("Session"), systemImage: Theme.moreSymbol)
             }
         }
     }
@@ -383,7 +404,7 @@ struct ReasoningMenu: View {
     @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
-        Menu("Gateway Reasoning", systemImage: "brain") {
+        Menu(L("Gateway Reasoning"), systemImage: "brain") {
             ForEach([("on", "Save & Stream"), ("stream", "Stream Only"), ("off", "Off")], id: \.0) { value, label in
                 Button {
                     Task { await self.gateway.patch(self.row.key, ["reasoningLevel": .string(value)]) }
@@ -432,14 +453,14 @@ struct ApprovalsBanner: View {
                             }
                         }
                         HStack {
-                            Button("Deny", role: .destructive) {
+                            Button(L("Deny"), role: .destructive) {
                                 Task { await self.gateway.resolveApproval(approval, decision: "deny") }
                             }
                             .glassButton()
-                            Menu("Allow") {
-                                Button("Allow Once") { Task { await self.gateway.resolveApproval(approval, decision: "allow-once") } }
+                            Menu(L("Allow")) {
+                                Button(L("Allow Once")) { Task { await self.gateway.resolveApproval(approval, decision: "allow-once") } }
                                 if approval.allowsAlways {
-                                    Button("Always Allow") { Task { await self.gateway.resolveApproval(approval, decision: "allow-always") } }
+                                    Button(L("Always Allow")) { Task { await self.gateway.resolveApproval(approval, decision: "allow-always") } }
                                 }
                             } primaryAction: {
                                 Task { await self.gateway.resolveApproval(approval, decision: "allow-once") }

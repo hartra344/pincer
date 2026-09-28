@@ -52,7 +52,7 @@ struct ImagePreview: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { self.dismiss() }
+                    Button(L("Done")) { self.dismiss() }
                 }
                 if let exportData {
                     ToolbarItem(placement: .primaryAction) {

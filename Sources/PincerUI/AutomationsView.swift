@@ -36,11 +36,11 @@ struct AutomationsWindow: View {
             AutomationsRoot(close: self.close)
                 .environment(gateway)
         } else {
-            ContentUnavailableView("Gateway Removed", systemImage: "server.rack",
-                                   description: Text("This Gateway is no longer in Pincer."))
+            ContentUnavailableView(L("Gateway Removed"), systemImage: "server.rack",
+                                   description: Text("This Gateway is no longer in Pincer.", bundle: .module))
                 .toolbar {
                     if let close = self.close {
-                        ToolbarItem(placement: .confirmationAction) { Button("Done", action: close) }
+                        ToolbarItem(placement: .confirmationAction) { Button(L("Done"), action: close) }
                     }
                 }
         }
@@ -65,9 +65,9 @@ private struct AutomationsRoot: View {
         Group {
             if !model.supported {
                 ContentUnavailableView {
-                    Label("Automations Aren't Available", systemImage: "clock.badge.xmark")
+                    Label(L("Automations Aren't Available"), systemImage: "clock.badge.xmark")
                 } description: {
-                    Text("This Gateway doesn't offer cron jobs to Pincer (`cron.*`). Update OpenClaw to manage automations here.")
+                    Text("This Gateway doesn't offer cron jobs to Pincer (`cron.*`). Update OpenClaw to manage automations here.", bundle: .module)
                 }
                 .toolbar { self.doneButton }
             } else {
@@ -88,7 +88,7 @@ private struct AutomationsRoot: View {
                 }
             }
         }
-        .navigationTitle("Automations")
+        .navigationTitle(L("Automations"))
         #if os(macOS)
         .navigationSubtitle(self.gateway.profile.name)
         #endif
@@ -99,14 +99,14 @@ private struct AutomationsRoot: View {
         .confirmationDialog("Delete “\(self.deleting?.name ?? "")”?", isPresented: Binding(
             get: { self.deleting != nil }, set: { if !$0 { self.deleting = nil } }
         ), titleVisibility: .visible, presenting: self.deleting) { job in
-            Button("Delete Automation", role: .destructive) {
+            Button(L("Delete Automation"), role: .destructive) {
                 Task {
                     if await model.remove(job), self.selection == job.id { self.selection = nil }
                 }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L("Cancel"), role: .cancel) {}
         } message: { _ in
-            Text("It stops running and its run history is removed from the Gateway. Its chats stay.")
+            Text("It stops running and its run history is removed from the Gateway. Its chats stay.", bundle: .module)
         }
         .task(id: self.gateway.state.isConnected) {
             if self.gateway.state.isConnected { await model.load() }
@@ -115,7 +115,7 @@ private struct AutomationsRoot: View {
 
     @ToolbarContentBuilder private var doneButton: some ToolbarContent {
         if let close = self.close {
-            ToolbarItem(placement: .cancellationAction) { Button("Done", action: close) }
+            ToolbarItem(placement: .cancellationAction) { Button(L("Done"), action: close) }
         }
     }
 
@@ -123,7 +123,7 @@ private struct AutomationsRoot: View {
         let model = self.model
         return List(selection: self.$selection) {
             if let scheduler = model.scheduler, !scheduler.enabled {
-                Label("The Gateway's scheduler is off, so automations only run when you start them.",
+                Label(L("The Gateway's scheduler is off, so automations only run when you start them."),
                       systemImage: "pause.circle")
                     .font(.callout)
                     .foregroundStyle(.orange)
@@ -139,60 +139,60 @@ private struct AutomationsRoot: View {
                 ProgressView()
             } else if let error = model.loadState.error, model.jobs.isEmpty {
                 ContentUnavailableView {
-                    Label("Couldn't Load Automations", systemImage: "exclamationmark.triangle")
+                    Label(L("Couldn't Load Automations"), systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(error)
                 } actions: {
-                    Button("Try Again") { Task { await model.load() } }
+                    Button(L("Try Again")) { Task { await model.load() } }
                 }
             } else if model.jobs.isEmpty {
                 ContentUnavailableView {
-                    Label("No Automations", systemImage: "clock.arrow.circlepath")
+                    Label(L("No Automations"), systemImage: "clock.arrow.circlepath")
                 } description: {
-                    Text("Automations run an agent on a schedule, like a morning briefing or a nightly check.")
+                    Text("Automations run an agent on a schedule, like a morning briefing or a nightly check.", bundle: .module)
                 } actions: {
-                    if model.canEdit { Button("New Automation…", action: self.create) }
+                    if model.canEdit { Button(L("New Automation…"), action: self.create) }
                 }
             }
         }
         .refreshable { await model.load() }
         .toolbar {
             ToolbarItem {
-                Button { Task { await model.load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                Button { Task { await model.load() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
                     .disabled(!self.gateway.state.isConnected || model.loadState.isRunning)
             }
             ToolbarItem {
-                Button(action: self.create) { Label("New Automation", systemImage: "plus") }
+                Button(action: self.create) { Label(L("New Automation"), systemImage: "plus") }
                     .disabled(!self.gateway.state.isConnected || !model.canEdit)
-                    .help(model.canEdit ? "New Automation" : "Needs Full Management access")
+                    .help(model.canEdit ? L("New Automation") : L("Needs Full Management access"))
             }
         }
     }
 
     @ViewBuilder private func menu(_ job: CronJob) -> some View {
         let model = self.model
-        Button("Run Now", systemImage: "play") { Task { await model.runNow(job) } }
+        Button(L("Run Now"), systemImage: "play") { Task { await model.runNow(job) } }
             .disabled(!model.canEdit)
-        Button(job.enabled ? "Pause" : "Resume", systemImage: job.enabled ? "pause" : "playpause") {
+        Button(job.enabled ? L("Pause") : L("Resume"), systemImage: job.enabled ? "pause" : "playpause") {
             Task { await model.setEnabled(job, !job.enabled) }
         }
         .disabled(!model.canEdit)
-        Button("Edit…", systemImage: "pencil") { self.edit(job) }
+        Button(L("Edit…"), systemImage: "pencil") { self.edit(job) }
             .disabled(!model.canEdit)
         Divider()
-        Button("Delete…", systemImage: "trash", role: .destructive) { self.deleting = job }
+        Button(L("Delete…"), systemImage: "trash", role: .destructive) { self.deleting = job }
             .disabled(!model.canEdit)
     }
 
     private var placeholder: some View {
         let model = self.model
         return ContentUnavailableView {
-            Label("Pick an Automation", systemImage: "clock.arrow.circlepath")
+            Label(L("Pick an Automation"), systemImage: "clock.arrow.circlepath")
         } description: {
             if let next = model.scheduler?.nextWakeAt, model.scheduler?.enabled != false {
                 Text("\(model.jobs.count) automation\(model.jobs.count == 1 ? "" : "s"). The next one runs \(next.formatted(.relative(presentation: .named))).")
             } else {
-                Text("See when each one runs next, how its last runs went, and open the chats they ran in.")
+                Text("See when each one runs next, how its last runs went, and open the chats they ran in.", bundle: .module)
             }
         }
     }
@@ -306,10 +306,10 @@ private struct RunOutcomeIcon: View {
 
     var body: some View {
         switch self.status {
-        case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Succeeded")
-        case .error: Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red).accessibilityLabel("Failed")
-        case .skipped: Image(systemName: "forward.circle.fill").foregroundStyle(.secondary).accessibilityLabel("Skipped")
-        case nil: Image(systemName: "circle").foregroundStyle(.secondary).accessibilityLabel("Unknown")
+        case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel(L("Succeeded"))
+        case .error: Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red).accessibilityLabel(L("Failed"))
+        case .skipped: Image(systemName: "forward.circle.fill").foregroundStyle(.secondary).accessibilityLabel(L("Skipped"))
+        case nil: Image(systemName: "circle").foregroundStyle(.secondary).accessibilityLabel(L("Unknown"))
         }
     }
 }
@@ -345,35 +345,35 @@ private struct AutomationDetail: View {
                 if let error = operation.error {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
                 } else if !model.canEdit {
-                    Text("Running, pausing and editing automations needs Full Management access (Gateway Settings → Connection).")
+                    Text("Running, pausing and editing automations needs Full Management access (Gateway Settings → Connection).", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("Schedule") {
-                LabeledContent("Runs", value: job.schedule.summary)
-                LabeledContent("Next run") {
+            Section(L("Schedule")) {
+                LabeledContent(L("Runs"), value: job.schedule.summary)
+                LabeledContent(L("Next run")) {
                     if !job.enabled {
-                        Text("Paused")
+                        Text("Paused", bundle: .module)
                     } else if let next = job.nextRunAt {
                         DateText(date: next)
                     } else {
-                        Text("Not scheduled")
+                        Text("Not scheduled", bundle: .module)
                     }
                 }
-                LabeledContent("Last run") {
+                LabeledContent(L("Last run")) {
                     if let running = job.runningSince {
-                        Text("Running since \(running.formatted(date: .omitted, time: .shortened))")
+                        Text("Running since \(running.formatted(date: .omitted, time: .shortened))", bundle: .module)
                     } else if let last = job.lastRunAt {
                         DateText(date: last, duration: job.lastDurationMs)
                     } else {
-                        Text("Never")
+                        Text("Never", bundle: .module)
                     }
                 }
                 if let error = job.lastError, job.lastStatus == .error {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(job.consecutiveErrors > 1 ? "Failed \(job.consecutiveErrors) times in a row" : "Last error")
+                        Text(job.consecutiveErrors > 1 ? L("Failed \(job.consecutiveErrors) times in a row") : L("Last error"))
                             .font(.callout.weight(.medium))
                         Text(error)
                             .font(.callout)
@@ -383,9 +383,9 @@ private struct AutomationDetail: View {
                 }
             }
 
-            Section("Task") {
-                LabeledContent("Agent", value: self.agentName)
-                LabeledContent("Runs in", value: self.target)
+            Section(L("Task")) {
+                LabeledContent(L("Agent"), value: self.agentName)
+                LabeledContent(L("Runs in"), value: self.target)
                 if let text = job.payloadText {
                     Text(text)
                         .font(.callout)
@@ -393,11 +393,11 @@ private struct AutomationDetail: View {
                         .lineLimit(8)
                 }
                 if let delivery = self.delivery {
-                    LabeledContent("Results", value: delivery)
+                    LabeledContent(L("Results"), value: delivery)
                 }
                 let chatKey = job.chatKey(defaultAgentId: self.gateway.defaultAgentId)
                 if self.gateway.sessions[chatKey] != nil {
-                    Button("Open Automation Chat", systemImage: "bubble.left.and.text.bubble.right") { self.openChat(chatKey) }
+                    Button(L("Open Automation Chat"), systemImage: "bubble.left.and.text.bubble.right") { self.openChat(chatKey) }
                 }
             }
 
@@ -405,7 +405,7 @@ private struct AutomationDetail: View {
                 self.history
             } header: {
                 HStack {
-                    Text("Run History")
+                    Text("Run History", bundle: .module)
                     Spacer()
                     if model.runsState[job.id]?.isRunning == true { ProgressView().controlSize(.small) }
                 }
@@ -429,20 +429,20 @@ private struct AutomationDetail: View {
         let job = self.job
         let disabled = !model.canEdit || operation.isRunning || !self.gateway.state.isConnected
         HStack {
-            Button("Run Now", systemImage: "play.fill") { Task { await model.runNow(job) } }
+            Button(L("Run Now"), systemImage: "play.fill") { Task { await model.runNow(job) } }
                 .glassProminentButton()
-            Button(job.enabled ? "Pause" : "Resume", systemImage: job.enabled ? "pause.fill" : "playpause.fill") {
+            Button(job.enabled ? L("Pause") : L("Resume"), systemImage: job.enabled ? "pause.fill" : "playpause.fill") {
                 Task { await model.setEnabled(job, !job.enabled) }
             }
             .glassButton()
-            Button("Edit…", systemImage: "pencil", action: self.edit)
+            Button(L("Edit…"), systemImage: "pencil", action: self.edit)
                 .glassButton()
             Spacer()
             if operation.isRunning { ProgressView().controlSize(.small) }
-            Button("Delete…", systemImage: "trash", role: .destructive, action: self.delete)
+            Button(L("Delete…"), systemImage: "trash", role: .destructive, action: self.delete)
                 .labelStyle(.iconOnly)
                 .glassButton()
-                .help("Delete Automation")
+                .help(L("Delete Automation"))
         }
         .disabled(disabled)
         .buttonStyle(.borderless)
@@ -453,9 +453,9 @@ private struct AutomationDetail: View {
         let runs = model.runs[self.job.id] ?? []
         if let error = model.runsState[self.job.id]?.error, runs.isEmpty {
             Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
-            Button("Try Again") { Task { await model.loadRuns(for: self.job.id) } }
+            Button(L("Try Again")) { Task { await model.loadRuns(for: self.job.id) } }
         } else if runs.isEmpty {
-            Text(model.runs[self.job.id] == nil ? "Loading…" : "No runs yet.")
+            Text(model.runs[self.job.id] == nil ? L("Loading…") : L("No runs yet."))
                 .foregroundStyle(.secondary)
         } else {
             ForEach(runs) { run in
@@ -531,9 +531,9 @@ private struct RunRow: View {
             }
             Spacer()
             if let key = self.run.sessionKey {
-                Button("Open Chat") { self.openChat(key) }
+                Button(L("Open Chat")) { self.openChat(key) }
                     .buttonStyle(.borderless)
-                    .help("Show the chat this run happened in")
+                    .help(L("Show the chat this run happened in"))
             }
         }
     }
@@ -559,9 +559,9 @@ private struct AutomationEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Name", text: self.$draft.name, prompt: Text("e.g. Morning briefing"))
-                    TextField("Description", text: self.$draft.description, prompt: Text("Optional"))
-                    Picker("Agent", selection: self.$draft.agentId) {
+                    TextField(L("Name"), text: self.$draft.name, prompt: Text("e.g. Morning briefing", bundle: .module))
+                    TextField(L("Description"), text: self.$draft.description, prompt: Text("Optional", bundle: .module))
+                    Picker(L("Agent"), selection: self.$draft.agentId) {
                         ForEach(self.gateway.agents) { agent in
                             Text("\(agent.emoji.map { "\($0) " } ?? "")\(agent.name)").tag(agent.id)
                         }
@@ -569,7 +569,7 @@ private struct AutomationEditor: View {
                             Text(self.draft.agentId).tag(self.draft.agentId)
                         }
                     }
-                    Toggle("Enabled", isOn: self.$draft.enabled)
+                    Toggle(L("Enabled"), isOn: self.$draft.enabled)
                 }
                 self.scheduleSection
                 self.taskSection
@@ -583,13 +583,13 @@ private struct AutomationEditor: View {
             .navigationTitle(self.draft.isNew ? "New Automation" : "Edit Automation")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button(L("Cancel")) {
                         self.model.clearError(for: self.operationKey)
                         self.dismiss()
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(self.draft.isNew ? "Create" : "Save", action: self.save)
+                    Button(self.draft.isNew ? L("Create") : L("Save"), action: self.save)
                         .disabled(self.saving || self.draft.problem != nil || !self.draft.hasChanges)
                         .help(self.draft.problem ?? "")
                 }
@@ -604,7 +604,7 @@ private struct AutomationEditor: View {
     @ViewBuilder private var scheduleSection: some View {
         if self.draft.isScheduleEditable {
             Section {
-                Picker("Schedule", selection: self.$draft.scheduleKind) {
+                Picker(L("Schedule"), selection: self.$draft.scheduleKind) {
                     ForEach(CronJobDraft.ScheduleKind.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -612,39 +612,39 @@ private struct AutomationEditor: View {
                 case .every:
                     HStack {
                         Stepper(value: self.$draft.everyAmount, in: 1...10_000) {
-                            LabeledContent("Every") {
-                                TextField("Every", value: self.$draft.everyAmount, format: .number)
+                            LabeledContent(L("Every")) {
+                                TextField(L("Every"), value: self.$draft.everyAmount, format: .number)
                                     .labelsHidden()
                                     .multilineTextAlignment(.trailing)
                                     .frame(maxWidth: 80)
                             }
                         }
-                        Picker("Unit", selection: self.$draft.everyUnit) {
+                        Picker(L("Unit"), selection: self.$draft.everyUnit) {
                             ForEach(CronJobDraft.Unit.allCases) { Text($0.label).tag($0) }
                         }
                         .labelsHidden()
                         .fixedSize()
                     }
                 case .cron:
-                    TextField("Expression", text: self.$draft.cronExpr, prompt: Text("0 7 * * *"))
+                    TextField(L("Expression"), text: self.$draft.cronExpr, prompt: Text("0 7 * * *"))
                         .font(.body.monospaced())
                         .autocorrectionDisabled()
-                    TextField("Time zone", text: self.$draft.timeZone, prompt: Text(TimeZone.current.identifier))
+                    TextField(L("Time zone"), text: self.$draft.timeZone, prompt: Text(TimeZone.current.identifier))
                         .autocorrectionDisabled()
                 case .at:
                     DatePicker("Run at", selection: self.$draft.runAt)
                 }
             } header: {
-                Text("Schedule")
+                Text("Schedule", bundle: .module)
             } footer: {
                 if self.draft.scheduleKind == .cron {
-                    Text("Minute, hour, day of month, month and day of week. Leave the time zone empty to use the Gateway's.")
+                    Text("Minute, hour, day of month, month and day of week. Leave the time zone empty to use the Gateway's.", bundle: .module)
                 }
             }
         } else {
-            Section("Schedule") {
-                LabeledContent("Runs", value: self.draft.original?.schedule.summary ?? "")
-                Text("This schedule can only be changed in the Control UI or the config.")
+            Section(L("Schedule")) {
+                LabeledContent(L("Runs"), value: self.draft.original?.schedule.summary ?? "")
+                Text("This schedule can only be changed in the Control UI or the config.", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -654,28 +654,28 @@ private struct AutomationEditor: View {
     @ViewBuilder private var taskSection: some View {
         if self.draft.isTaskEditable {
             Section {
-                Picker("Runs in", selection: self.$draft.target) {
+                Picker(L("Runs in"), selection: self.$draft.target) {
                     ForEach(CronJobDraft.Target.allCases) { Text($0.label).tag($0) }
                 }
-                TextField(self.draft.target == .main ? "Event" : "Instructions", text: self.$draft.message,
-                          prompt: Text(self.draft.target == .main ? "Text posted to the main chat" : "What should the agent do?"),
+                TextField(self.draft.target == .main ? L("Event") : L("Instructions"), text: self.$draft.message,
+                          prompt: Text(self.draft.target == .main ? L("Text posted to the main chat") : L("What should the agent do?")),
                           axis: .vertical)
                     .lineLimit(3...10)
                 if self.draft.target == .isolated {
                     Toggle(isOn: self.$draft.announce) {
-                        Text("Post the result")
+                        Text("Post the result", bundle: .module)
                         Text(self.announceDetail)
                     }
                 }
             } header: {
-                Text("Task")
+                Text("Task", bundle: .module)
             } footer: {
                 Text(self.draft.target == .main
                     ? "The text arrives in the agent's main chat as a system event."
                     : "Each run starts a fresh chat under Automations in the sidebar.")
             }
         } else {
-            Section("Task") {
+            Section(L("Task")) {
                 Text("This automation runs a \(self.draft.original?.payloadKind ?? "custom") task, which can only be changed in the Control UI or the config.")
                     .font(.callout)
                     .foregroundStyle(.secondary)

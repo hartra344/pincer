@@ -10,8 +10,8 @@ struct ChannelQRLoginView: View {
     let linked: Bool
     /// Full Management and a channel that supports QR login.
     let canStart: Bool
-    var linkTitle = "Link with QR Code…"
-    var relinkTitle = "Relink with QR Code…"
+    var linkTitle = L("Link with QR Code…")
+    var relinkTitle = L("Relink with QR Code…")
     /// Offer Relink after linking (the sheet on Channel Status closes instead).
     var offersRelinkWhenLinked = true
     let start: (_ force: Bool) -> Void
@@ -23,7 +23,7 @@ struct ChannelQRLoginView: View {
             if case let .failed(message) = self.state {
                 Text(message).font(.caption).foregroundStyle(.red)
                 Button { self.start(self.linked) } label: {
-                    Label("Try Again", systemImage: "arrow.clockwise")
+                    Label(L("Try Again"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.borderless)
                 .disabled(!self.canStart)
@@ -35,16 +35,16 @@ struct ChannelQRLoginView: View {
                 .disabled(!self.canStart)
             }
         case .starting:
-            ProgressView("Getting a QR code…").controlSize(.small)
+            ProgressView(L("Getting a QR code…")).controlSize(.small)
         case let .showing(qr, message):
             VStack(alignment: .leading, spacing: 6) {
-                QRCodeImage(data: qr, label: "QR code for \(self.channelLabel)")
+                QRCodeImage(data: qr, label: L("QR code for \(self.channelLabel)"))
                     .equatable()
                     .frame(width: 200, height: 200)
-                Text(message ?? "Scan this with \(self.channelLabel) on your phone to link it.")
+                Text(message ?? L("Scan this with \(self.channelLabel) on your phone to link it."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button("Cancel", action: self.cancel)
+                Button(L("Cancel"), action: self.cancel)
                     .buttonStyle(.borderless)
             }
         case let .connected(message):

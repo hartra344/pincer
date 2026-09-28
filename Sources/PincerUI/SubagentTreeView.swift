@@ -54,7 +54,7 @@ enum RunsFormat {
     }()
 
     static func relative(_ date: Date, now: Date) -> String {
-        now.timeIntervalSince(date) < 5 ? "just now" : self.relative.localizedString(for: date, relativeTo: now)
+        now.timeIntervalSince(date) < 5 ? L("just now") : self.relative.localizedString(for: date, relativeTo: now)
     }
 }
 
@@ -77,7 +77,7 @@ struct SubagentTreeView: View {
                 Button {
                     self.open(parent)
                 } label: {
-                    Label("Parent: \(self.gateway.runTitle(parent))",
+                    Label(L("Parent: \(self.gateway.runTitle(parent))"),
                           systemImage: "arrow.up")
                         .lineLimit(1)
                 }
@@ -87,8 +87,8 @@ struct SubagentTreeView: View {
                 Divider()
             }
             if self.tree.isEmpty {
-                ContentUnavailableView("No helper runs yet", systemImage: "point.3.connected.trianglepath.dotted",
-                                       description: Text("When this agent delegates work, its helpers appear here."))
+                ContentUnavailableView(L("No helper runs yet"), systemImage: "point.3.connected.trianglepath.dotted",
+                                       description: Text("When this agent delegates work, its helpers appear here.", bundle: .module))
                     .frame(maxHeight: .infinity)
             } else {
                 TimelineView(.animation(minimumInterval: self.tree.runningCount > 0 ? 1 : 30)) { context in
@@ -110,9 +110,9 @@ struct SubagentTreeView: View {
                 }
                 .contextMenu(forSelectionType: String.self) { keys in
                     if let key = keys.first, let node = self.tree.node(key) {
-                        Button("Open", systemImage: "arrow.up.forward.app") { self.open(key) }
-                        Button("Show Timeline", systemImage: "chart.bar.xaxis") { self.showTimeline(node) }
-                        Button("Copy Session Key", systemImage: "key") { Clipboard.copy(key) }
+                        Button(L("Open"), systemImage: "arrow.up.forward.app") { self.open(key) }
+                        Button(L("Show Timeline"), systemImage: "chart.bar.xaxis") { self.showTimeline(node) }
+                        Button(L("Copy Session Key"), systemImage: "key") { Clipboard.copy(key) }
                     }
                 } primaryAction: { keys in
                     if let key = keys.first { self.open(key) }
@@ -172,7 +172,7 @@ private struct SubagentRowView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(self.isCollapsed ? "Expand" : "Collapse")
+                    .accessibilityLabel(self.isCollapsed ? L("Expand") : L("Collapse"))
                 }
             }
             .frame(width: 12, height: 16)
@@ -183,7 +183,7 @@ private struct SubagentRowView: View {
                     Spacer(minLength: 4)
                     if let duration { Text(duration).monospacedDigit().foregroundStyle(.secondary) }
                 }
-                Text([self.agentName, self.node.status.label, lastActive.map { "active \($0)" }]
+                Text([self.agentName, self.node.status.label, lastActive.map { L("active \($0)") }]
                     .compactMap { $0 }.joined(separator: " · "))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -199,10 +199,10 @@ private struct SubagentRowView: View {
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
         .accessibilityLabel([self.title, self.agentName, self.node.status.label, duration,
-                             lastActive.map { "last active \($0)" }].compactMap { $0 }.joined(separator: ", "))
+                             lastActive.map { L("last active \($0)") }].compactMap { $0 }.joined(separator: ", "))
         .accessibilityActions {
             if !self.node.children.isEmpty {
-                Button(self.isCollapsed ? "Expand" : "Collapse", action: self.toggle)
+                Button(self.isCollapsed ? L("Expand") : L("Collapse"), action: self.toggle)
             }
         }
     }

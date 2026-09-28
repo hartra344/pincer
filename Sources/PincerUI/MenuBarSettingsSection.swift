@@ -9,11 +9,11 @@ struct MenuBarSettingsSection: View {
     var body: some View {
         Section {
             Toggle(isOn: self.$enabled) {
-                Text("Show Pincer in the menu bar")
-                Text("Quick Capture, unread chats, approvals and gateway status, one click away.")
+                Text("Show Pincer in the menu bar", bundle: .module)
+                Text("Quick Capture, unread chats, approvals and gateway status, one click away.", bundle: .module)
             }
         } header: {
-            Text("Menu Bar")
+            Text("Menu Bar", bundle: .module)
         }
     }
 }

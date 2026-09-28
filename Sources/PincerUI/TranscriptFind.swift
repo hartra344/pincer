@@ -62,8 +62,15 @@ final class TranscriptFind {
     /// "3 of 12", "No results", or nothing before a query is typed.
     var status: String {
         guard !TranscriptSearch.normalized(self.query).isEmpty else { return "" }
-        if self.matches.isEmpty { return self.isSearching ? "" : "No results" }
-        return "\((self.current ?? 0) + 1) of \(self.matches.count)"
+        if self.matches.isEmpty { return self.isSearching ? "" : L("No results") }
+        return L("\((self.current ?? 0) + 1) of \(self.matches.count)")
+    }
+
+    /// The status as VoiceOver speaks it: "Result 3 of 12".
+    var accessibilityStatus: String {
+        guard !TranscriptSearch.normalized(self.query).isEmpty, !self.isSearching || !self.matches.isEmpty else { return "" }
+        return AccessibilityText.findStatus(current: self.matches.isEmpty ? nil : (self.current ?? 0) + 1,
+                                            total: self.matches.count)
     }
 
     /// What the transcript highlights. Only meaningful while the find bar is open.
@@ -264,7 +271,8 @@ struct TranscriptFindBar: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Find in Chat", text: self.$find.query)
+                .accessibilityHidden(true)
+            TextField(L("Find in Chat"), text: self.$find.query)
                 .textFieldStyle(.plain)
                 .focused(self.$focused)
                 .onSubmit { self.find.next() }
@@ -283,18 +291,20 @@ struct TranscriptFindBar: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .fixedSize()
+                .accessibilityLabel(self.find.accessibilityStatus)
                 .accessibilityIdentifier("find-status")
+                .onChange(of: self.find.accessibilityStatus) { _, status in AccessibilityAnnouncer.announce(status) }
             Menu {
-                Toggle("Include Thinking", systemImage: "brain", isOn: self.$find.includeThinking)
+                Toggle(L("Include Thinking"), systemImage: "brain", isOn: self.$find.includeThinking)
                     .disabled(self.reasoningOff)
-                Toggle("Include Tool Output", systemImage: "wrench.and.screwdriver", isOn: self.$find.includeTools)
+                Toggle(L("Include Tool Output"), systemImage: "wrench.and.screwdriver", isOn: self.$find.includeTools)
             } label: {
                 Image(systemName: "line.3.horizontal.decrease.circle" + (self.filtered ? ".fill" : ""))
             }
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Search options")
-            .accessibilityLabel("Search Options")
+            .help(L("Search options"))
+            .accessibilityLabel(L("Search Options"))
             #if os(iOS)
             // iOS draws a ControlGroup here as a segmented control whose buttons stay disabled
             // when the bar opens before matches arrive, so taps never reach them.
@@ -318,7 +328,7 @@ struct TranscriptFindBar: View {
             .disabled(self.find.matches.isEmpty)
             .fixedSize()
             #endif
-            Button("Done") { self.find.dismiss() }
+            Button(L("Done")) { self.find.dismiss() }
                 .glassButton()
                 .controlSize(.small)
         }
@@ -341,16 +351,16 @@ struct TranscriptFindBar: View {
     }
 
     private var previousButton: some View {
-        Button { self.find.previous() } label: { self.stepLabel("Previous", systemImage: "chevron.up") }
+        Button { self.find.previous() } label: { self.stepLabel(L("Find previous"), systemImage: "chevron.up") }
             .keyboardShortcut("g", modifiers: [.command, .shift])
-            .help("Previous match (⇧⌘G)")
+            .help(L("Previous match (⇧⌘G)"))
             .accessibilityIdentifier("find-previous")
     }
 
     private var nextButton: some View {
-        Button { self.find.next() } label: { self.stepLabel("Next", systemImage: "chevron.down") }
+        Button { self.find.next() } label: { self.stepLabel(L("Find next"), systemImage: "chevron.down") }
             .keyboardShortcut("g", modifiers: .command)
-            .help("Next match (⌘G)")
+            .help(L("Next match (⌘G)"))
             .accessibilityIdentifier("find-next")
     }
 
@@ -372,19 +382,19 @@ struct TranscriptFindCommands: Commands {
 
     var body: some Commands {
         CommandGroup(after: .textEditing) {
-            Button(self.find == nil && self.logsSearch != nil ? "Find in Logs…" : "Find in Chat…") {
+            Button(self.find == nil && self.logsSearch != nil ? L("Find in Logs…") : L("Find in Chat…")) {
                 if let find = self.find { find.present() } else { self.logsSearch?.wrappedValue = true }
             }
                 .keyboardShortcut("f", modifiers: .command)
                 .disabled(self.find == nil && self.logsSearch == nil)
-            Button("Find Next") { self.find?.next() }
+            Button(L("Find Next")) { self.find?.next() }
                 .keyboardShortcut("g", modifiers: .command)
                 .disabled(self.find == nil)
-            Button("Find Previous") { self.find?.previous() }
+            Button(L("Find Previous")) { self.find?.previous() }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 .disabled(self.find == nil)
             Divider()
-            Button("Reply to Last Message") { self.replyToLast?.perform() }
+            Button(L("Reply to Last Message")) { self.replyToLast?.perform() }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
                 .disabled(self.replyToLast?.isAvailable != true)
         }

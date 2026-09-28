@@ -320,10 +320,10 @@ public enum TranscriptCache {
     /// Deletes the Gateway's transcripts and message search index. `permanently`: the Gateway
     /// was removed from the app, so saves still under way don't write them again.
     public static func removeAll(gatewayId: UUID, permanently: Bool = false) {
-        MessageIndex.discard(gatewayId: gatewayId, permanently: permanently)
-        self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
-        // A save that landed meanwhile opened a new index on the files just deleted: drop it too.
-        MessageIndex.discard(gatewayId: gatewayId, permanently: permanently)
+        MessageIndex.whileDeleting {
+            MessageIndex.discard(gatewayId: gatewayId, permanently: permanently)
+            self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
+        }
     }
 
     /// Deletes the Gateway's transcripts under another cache root (tests).
@@ -337,13 +337,13 @@ public enum TranscriptCache {
     /// follows a written transcript) or writes a fresh, valid file.
     public static func removeEverything() {
         guard let root = Self.root else { return }
-        let entries = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
-        let ids = entries.compactMap { UUID(uuidString: $0.lastPathComponent) }
-        for id in ids { MessageIndex.discard(gatewayId: id) }
-        self.removeEverything(root: root)
-        // A save that landed meanwhile (background prefetch) opened a new index on the files just
-        // deleted, and it would fail every search: drop those too, so the next use starts fresh.
-        for id in ids { MessageIndex.discard(gatewayId: id) }
+        MessageIndex.whileDeleting {
+            let entries = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+            for entry in entries {
+                if let id = UUID(uuidString: entry.lastPathComponent) { MessageIndex.discard(gatewayId: id) }
+            }
+            self.removeEverything(root: root)
+        }
         logger.notice("Cleared the transcript cache")
     }
 

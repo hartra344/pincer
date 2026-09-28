@@ -39,7 +39,7 @@ struct SlashCommandMenu: View {
         .glassSurface(in: RoundedRectangle(cornerRadius: Self.corner, style: .continuous))
         .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Command suggestions")
+        .accessibilityLabel(L("Command suggestions"))
     }
 
     private var rows: some View {

@@ -170,6 +170,7 @@ Check that **Load images the agent links from the web** is on in Settings. Image
 - **"Indexing chats…":** after updating Pincer, the search index is built in the background from chats you already had cached, once Pincer connects. Results are shown while it works and fill in when it's done.
 - **Older messages don't show up:** search only covers cached history, up to the latest 20,000 messages of each chat, and only on the selected gateway. Chats cache in the background after connecting.
 - **Archived chats don't show up:** turn on **Show Archived** in the sidebar's Organize menu.
+- **Automation or slash-command chats don't show up:** they're hidden by default. Turn on **Show Automations** or **Show Slash Commands** in the sidebar's Organize menu.
 - **Nothing matches:** each word has to match from its start (`tok` finds "Tokyo", `kyo` doesn't), and several words have to appear together. Thinking and tool output aren't searched; use Find in Chat's options for those.
 - **"Message search needs the transcript cache":** `PINCER_CACHE_DIR=off` is set. Search needs the cache.
 

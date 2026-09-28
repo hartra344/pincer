@@ -31,19 +31,19 @@ struct SkillsPage: View {
         Form {
             Section {
                 if agents.count > 1 {
-                    Picker("Agent", selection: Binding(
+                    Picker(L("Agent"), selection: Binding(
                         get: { self.selectedAgent },
                         set: { if $0 != self.selectedAgent { self.agentId = $0 } }
                     )) {
                         ForEach(agents) { agent in Text(agent.title).tag(agent.id) }
                     }
                 }
-                TextField("Filter skills", text: self.$filter)
+                TextField(L("Filter skills"), text: self.$filter)
                     .textFieldStyle(.roundedBorder)
                     .disabled(model.skills.isEmpty)
                 if model.supportsSearch {
                     NavigationLink(value: SettingsRoute.clawHub) {
-                        Label("Browse ClawHub", systemImage: "magnifyingglass")
+                        Label(L("Browse ClawHub"), systemImage: "magnifyingglass")
                     }
                     .disabled(!connected)
                 }
@@ -57,10 +57,10 @@ struct SkillsPage: View {
             self.content(model, connected: connected)
         }
         .formStyle(.grouped)
-        .navigationTitle("Skills")
+        .navigationTitle(L("Skills"))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button("Refresh", systemImage: "arrow.clockwise") {
+                Button(L("Refresh"), systemImage: "arrow.clockwise") {
                     Task { await model.load(agentId: self.requestAgent) }
                 }
                 .disabled(!connected || model.isLoading)
@@ -75,12 +75,12 @@ struct SkillsPage: View {
 
     @ViewBuilder private func content(_ model: SkillsModel, connected: Bool) -> some View {
         if !connected {
-            Section { Text("Connect to the gateway to see skills.").foregroundStyle(.secondary) }
+            Section { Text("Connect to the gateway to see skills.", bundle: .module).foregroundStyle(.secondary) }
         } else if model.report == nil, let error = model.loadError {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled)
-                    Button("Retry") { Task { await model.load(agentId: self.requestAgent) } }
+                    Button(L("Retry")) { Task { await model.load(agentId: self.requestAgent) } }
                 }
             }
         } else if model.report == nil {
@@ -88,15 +88,15 @@ struct SkillsPage: View {
         } else if model.skills.isEmpty {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("No skills found").font(.callout.weight(.medium))
-                    Text(model.supportsSearch ? "Browse ClawHub to find skills to install." : "Add skills to the agent's workspace on the gateway host.")
+                    Text("No skills found", bundle: .module).font(.callout.weight(.medium))
+                    Text(model.supportsSearch ? L("Browse ClawHub to find skills to install.") : L("Add skills to the agent's workspace on the gateway host."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
         } else {
             let sections = model.sections(filter: self.filter)
             if sections.isEmpty {
-                Section { Text("No skills match “\(self.filter)”.").foregroundStyle(.secondary) }
+                Section { Text("No skills match “\(self.filter)”.", bundle: .module).foregroundStyle(.secondary) }
             }
             ForEach(sections) { section in
                 Section {
@@ -121,12 +121,12 @@ struct SkillsReadOnlyNotice: View {
     var body: some View {
         if !self.model.hasAdmin, self.model.supportsInstall || self.model.supportsUpdate {
             VStack(alignment: .leading, spacing: 6) {
-                Label("Managing skills needs Full Management", systemImage: "lock.shield")
+                Label(L("Managing skills needs Full Management"), systemImage: "lock.shield")
                     .font(.callout.weight(.medium))
                 Text(Skills.needsAdminMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button("Open Connection") { self.navigator.destination = .connection }
+                Button(L("Open Connection")) { self.navigator.destination = .connection }
             }
         }
     }
@@ -233,13 +233,13 @@ struct SkillDetailPage: View {
             if let skill = self.model.skill(key: self.skillKey) {
                 self.form(skill)
             } else if !self.gateway.state.isConnected {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see skills."))
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Connect to the gateway to see skills.", bundle: .module))
             } else if self.model.isLoading {
                 ProgressView()
             } else {
-                ContentUnavailableView("Skill Not Found", systemImage: "wand.and.stars",
-                                       description: Text("“\(self.skillKey)” isn't a skill on this gateway anymore."))
+                ContentUnavailableView(L("Skill Not Found"), systemImage: "wand.and.stars",
+                                       description: Text("“\(self.skillKey)” isn't a skill on this gateway anymore.", bundle: .module))
             }
         }
         .navigationTitle(self.model.skill(key: self.skillKey)?.name ?? self.skillKey)
@@ -265,7 +265,7 @@ struct SkillDetailPage: View {
                         }
                     }
                 }
-                LabeledContent("State") {
+                LabeledContent(L("State")) {
                     Text(skill.state.title).foregroundStyle(skill.state == .ready ? Color.green : Color.orange)
                 }
                 ForEach(skill.reasons, id: \.self) { reason in
@@ -274,26 +274,26 @@ struct SkillDetailPage: View {
                 SkillsReadOnlyNotice(model: self.model)
                 SkillsMessages(model: self.model)
             }
-            Section("Details") {
-                LabeledContent("Source", value: skill.sourceKind.label)
+            Section(L("Details")) {
+                LabeledContent(L("Source"), value: skill.sourceKind.label)
                 if let version = skill.clawhub?.installedVersion {
-                    LabeledContent("Version", value: version)
+                    LabeledContent(L("Version"), value: version)
                 }
                 if let owner = skill.clawhub?.ownerHandle {
-                    LabeledContent("Publisher", value: "@\(owner)")
+                    LabeledContent(L("Publisher"), value: "@\(owner)")
                 }
                 if let path = skill.filePath ?? skill.baseDir {
-                    LabeledContent("Path") {
+                    LabeledContent(L("Path")) {
                         Text(path).font(.caption.monospaced()).textSelection(.enabled).multilineTextAlignment(.trailing)
                     }
                 }
                 if let homepage = skill.homepage, let url = URL(string: homepage) {
-                    Link(destination: url) { Label("Homepage", systemImage: "safari") }
+                    Link(destination: url) { Label(L("Homepage"), systemImage: "safari") }
                 }
             }
             let checks = skill.requirementChecks
             if !checks.isEmpty {
-                Section("Requirements") {
+                Section(L("Requirements")) {
                     ForEach(checks) { check in
                         Label {
                             Text(check.label)
@@ -301,7 +301,7 @@ struct SkillDetailPage: View {
                             Image(systemName: check.satisfied ? "checkmark.circle.fill" : "xmark.circle.fill")
                                 .foregroundStyle(check.satisfied ? .green : .red)
                         }
-                        .accessibilityValue(check.satisfied ? "Met" : "Missing")
+                        .accessibilityValue(check.satisfied ? L("Met") : L("Missing"))
                     }
                 }
             }
@@ -319,17 +319,17 @@ struct SkillDetailPage: View {
                         .disabled(!self.model.canInstall || !self.gateway.state.isConnected || self.model.busy.contains(skill.skillKey))
                     }
                 } header: {
-                    Text("Installers")
+                    Text("Installers", bundle: .module)
                 } footer: {
-                    Text("Installers run on the gateway host to add what the skill needs.")
+                    Text("Installers run on the gateway host to add what the skill needs.", bundle: .module)
                 }
             }
             if skill.isClawHubTracked, self.model.supportsUpdate {
                 Section {
-                    Button("Update from ClawHub…", systemImage: "arrow.down.circle") { self.confirmUpdate = true }
+                    Button(L("Update from ClawHub…"), systemImage: "arrow.down.circle") { self.confirmUpdate = true }
                         .disabled(!self.canChange)
                 } footer: {
-                    Text("Replaces the installed copy with ClawHub's latest version.")
+                    Text("Replaces the installed copy with ClawHub's latest version.", bundle: .module)
                 }
             }
             if self.model.busy.contains(skill.skillKey) {
@@ -340,28 +340,28 @@ struct SkillDetailPage: View {
         .confirmationDialog(self.installer.map(Skills.installerTitle) ?? "", isPresented: Binding(
             get: { self.installer != nil }, set: { if !$0 { self.installer = nil } }
         ), titleVisibility: .visible, presenting: self.installer) { option in
-            Button("Run Installer") {
+            Button(L("Run Installer")) {
                 Task { _ = await self.model.runInstaller(skill: skill, option: option) }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L("Cancel"), role: .cancel) {}
         } message: { _ in
-            Text("It runs with the gateway's permissions.")
+            Text("It runs with the gateway's permissions.", bundle: .module)
         }
         .confirmationDialog(Skills.updateTitle(skill.name), isPresented: self.$confirmUpdate, titleVisibility: .visible) {
-            Button("Update") { Task { await self.update(skill, force: false) } }
-            Button("Cancel", role: .cancel) {}
+            Button(L("Update")) { Task { await self.update(skill, force: false) } }
+            Button(L("Cancel"), role: .cancel) {}
         } message: {
-            Text("This downloads the latest version from ClawHub onto the gateway host.")
+            Text("This downloads the latest version from ClawHub onto the gateway host.", bundle: .module)
         }
         .confirmationDialog(Skills.forceReplaceMessage(skill.name), isPresented: self.$confirmForce, titleVisibility: .visible) {
-            Button("Replace", role: .destructive) { Task { await self.update(skill, force: true) } }
-            Button("Cancel", role: .cancel) {}
+            Button(L("Replace"), role: .destructive) { Task { await self.update(skill, force: true) } }
+            Button(L("Cancel"), role: .cancel) {}
         }
     }
 
     @ViewBuilder private func settings(_ skill: SkillStatusEntry) -> some View {
         Section {
-            Toggle("Enabled", isOn: Binding(
+            Toggle(L("Enabled"), isOn: Binding(
                 get: { !skill.disabled },
                 set: { enabled in
                     guard enabled == skill.disabled else { return }
@@ -370,12 +370,12 @@ struct SkillDetailPage: View {
             ))
             .disabled(!self.canChange)
             if let env = skill.apiKeyEnv {
-                LabeledContent("API Key (\(env))", value: skill.apiKeyIsSet ? "Set" : "Not set")
+                LabeledContent(L("API Key (\(env))"), value: skill.apiKeyIsSet ? "Set" : "Not set")
                 HStack {
-                    SecureField("New API key", text: self.$apiKey)
+                    SecureField(L("New API key"), text: self.$apiKey)
                         .textContentType(.password)
                         .onSubmit { self.saveApiKey(skill) }
-                    Button("Save") { self.saveApiKey(skill) }
+                    Button(L("Save")) { self.saveApiKey(skill) }
                         .disabled(!self.canChange || self.apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
                 .disabled(!self.canChange)
@@ -386,15 +386,15 @@ struct SkillDetailPage: View {
             }
             if !otherEnv.isEmpty {
                 HStack {
-                    Picker("Variable", selection: Binding(
+                    Picker(L("Variable"), selection: Binding(
                         get: { self.envName.isEmpty ? (otherEnv.first ?? "") : self.envName },
                         set: { if $0 != self.envName { self.envName = $0 } }
                     )) {
                         ForEach(otherEnv, id: \.self) { Text($0).tag($0) }
                     }
                     .labelsHidden()
-                    SecureField("Value", text: self.$envValue)
-                    Button("Save") {
+                    SecureField(L("Value"), text: self.$envValue)
+                    Button(L("Save")) {
                         let name = self.envName.isEmpty ? (otherEnv.first ?? "") : self.envName
                         let value = self.envValue
                         self.envValue = ""
@@ -405,9 +405,9 @@ struct SkillDetailPage: View {
                 .disabled(!self.canChange)
             }
         } header: {
-            Text("Settings")
+            Text("Settings", bundle: .module)
         } footer: {
-            Text("\(Skills.settingsScopeFooter) Secrets are write-only: Pincer shows whether they're set, never their values.")
+            Text("\(Skills.settingsScopeFooter) Secrets are write-only: Pincer shows whether they're set, never their values.", bundle: .module)
         }
     }
 
@@ -440,18 +440,18 @@ struct ClawHubSearchPage: View {
         let model = self.model
         Form {
             Section {
-                TextField("Search ClawHub", text: self.$query)
+                TextField(L("Search ClawHub"), text: self.$query)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await model.search(self.query) } }
                 SkillsReadOnlyNotice(model: model)
                 SkillsMessages(model: model)
             } footer: {
-                Text("Skills install into \(self.agentName)'s workspace on the gateway host.")
+                Text("Skills install into \(self.agentName)'s workspace on the gateway host.", bundle: .module)
             }
             self.results(model)
         }
         .formStyle(.grouped)
-        .navigationTitle("Browse ClawHub")
+        .navigationTitle(L("Browse ClawHub"))
         .onAppear { model.clearMessages() }
         // Debounced: runs once typing pauses, not on every keystroke.
         .task(id: self.query) {
@@ -479,14 +479,14 @@ struct ClawHubSearchPage: View {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled)
-                    Button("Retry") { Task { await model.search(self.query) } }
+                    Button(L("Retry")) { Task { await model.search(self.query) } }
                 }
             }
         } else if let searched = model.searchedQuery {
             if model.searchResults.isEmpty {
-                Section { Text("No skills match “\(searched)”.").foregroundStyle(.secondary) }
+                Section { Text("No skills match “\(searched)”.", bundle: .module).foregroundStyle(.secondary) }
             } else {
-                Section("Results") {
+                Section(L("Results")) {
                     ForEach(model.searchResults) { result in
                         Button {
                             self.selected = result
@@ -499,7 +499,7 @@ struct ClawHubSearchPage: View {
                 }
             }
         } else {
-            Section { Text("Search ClawHub for skills by name or topic.").foregroundStyle(.secondary) }
+            Section { Text("Search ClawHub for skills by name or topic.", bundle: .module).foregroundStyle(.secondary) }
         }
     }
 }
@@ -574,24 +574,24 @@ private struct ClawHubSkillSheet: View {
                         }
                     }
                     if let owner = self.detail?.ownerName ?? self.result.ownerHandle.map({ "@\($0)" }) {
-                        LabeledContent("Publisher", value: owner + (self.detail?.isOfficial == true ? " (official)" : ""))
+                        LabeledContent(L("Publisher"), value: owner + (self.detail?.isOfficial == true ? " (official)" : ""))
                     }
                     if let version = self.detail?.latestVersion ?? self.result.version {
-                        LabeledContent("Latest Version", value: version)
+                        LabeledContent(L("Latest Version"), value: version)
                     }
                     if let label = self.state.label {
-                        LabeledContent("Status", value: self.statusText ?? label)
+                        LabeledContent(L("Status"), value: self.statusText ?? label)
                     }
                     if let os = self.detail?.os, !os.isEmpty {
-                        LabeledContent("Platforms", value: os.map(Skills.osName).joined(separator: ", "))
+                        LabeledContent(L("Platforms"), value: os.map(Skills.osName).joined(separator: ", "))
                     }
                     if self.result.isUnscanned {
-                        Label("ClawHub hasn't scanned this skill's source.", systemImage: "exclamationmark.shield")
+                        Label(L("ClawHub hasn't scanned this skill's source."), systemImage: "exclamationmark.shield")
                             .foregroundStyle(.orange)
                     }
                 }
                 if let changelog = self.detail?.changelog, !changelog.isEmpty {
-                    Section("What's New") { Text(changelog).textSelection(.enabled) }
+                    Section(L("What's New")) { Text(changelog).textSelection(.enabled) }
                 }
                 if let error = self.detailError {
                     Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary) }
@@ -615,7 +615,7 @@ private struct ClawHubSkillSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { self.dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.dismiss() } }
             }
             .task {
                 guard !self.result.installOnly, self.model.supportsDetail, self.detail == nil else { return }
@@ -625,33 +625,33 @@ private struct ClawHubSkillSheet: View {
             }
             .confirmationDialog(Skills.clawHubInstallTitle(self.result.displayName), isPresented: self.$confirmInstall,
                                 titleVisibility: .visible) {
-                Button("Install") { Task { await self.install(force: false) } }
-                Button("Cancel", role: .cancel) {}
+                Button(L("Install")) { Task { await self.install(force: false) } }
+                Button(L("Cancel"), role: .cancel) {}
             } message: {
                 Text(Skills.installMessage(agentName: self.isDefaultAgent ? nil : self.agentName))
             }
             .confirmationDialog(Skills.updateTitle(self.result.displayName), isPresented: self.$confirmUpdate,
                                 titleVisibility: .visible) {
-                Button("Update") { Task { await self.update(force: false) } }
-                Button("Cancel", role: .cancel) {}
+                Button(L("Update")) { Task { await self.update(force: false) } }
+                Button(L("Cancel"), role: .cancel) {}
             } message: {
-                Text("This downloads the latest version from ClawHub onto the gateway host.")
+                Text("This downloads the latest version from ClawHub onto the gateway host.", bundle: .module)
             }
             .confirmationDialog(Skills.reinstallTitle(self.result.displayName), isPresented: self.$confirmReinstall,
                                 titleVisibility: .visible) {
-                Button("Reinstall", role: .destructive) { Task { await self.install(force: true) } }
-                Button("Cancel", role: .cancel) {}
+                Button(L("Reinstall"), role: .destructive) { Task { await self.install(force: true) } }
+                Button(L("Cancel"), role: .cancel) {}
             } message: {
                 Text(Skills.reinstallMessage(self.result.displayName))
             }
             .confirmationDialog(Skills.forceReplaceMessage(self.result.displayName), isPresented: self.$confirmForce,
                                 titleVisibility: .visible) {
-                Button("Replace", role: .destructive) {
+                Button(L("Replace"), role: .destructive) {
                     Task {
                         if self.forceIsUpdate { await self.update(force: true) } else { await self.install(force: true) }
                     }
                 }
-                Button("Cancel", role: .cancel) {}
+                Button(L("Cancel"), role: .cancel) {}
             }
         }
         #if os(macOS)

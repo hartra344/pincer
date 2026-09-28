@@ -197,12 +197,15 @@ extension Image {
 }
 
 enum Clipboard {
-    static func copy(_ text: String) {
+    /// Copies `text`, and tells VoiceOver it did (the button's "Copied" flip isn't spoken).
+    @MainActor
+    static func copy(_ text: String, announce: Bool = true) {
         #if os(macOS)
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         #else
         UIPasteboard.general.string = text
         #endif
+        if announce { AccessibilityAnnouncer.announceCopied() }
     }
 }

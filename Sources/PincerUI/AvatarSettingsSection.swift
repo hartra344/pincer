@@ -17,13 +17,13 @@ struct AvatarSettingsSection: View {
     var body: some View {
         SwiftUI.Section {
             Toggle(isOn: self.$enabled) {
-                Text("Animated avatars")
-                Text("Each agent gets a little companion that shows what it's doing. Off keeps the initial or emoji.")
+                Text("Animated avatars", bundle: .module)
+                Text("Each agent gets a little companion that shows what it's doing. Off keeps the initial or emoji.", bundle: .module)
             }
             if self.enabled {
-                Picker("Style", selection: self.$renderStyle) {
-                    Text("Pixel").tag(AvatarRenderStyle.pixel.rawValue)
-                    Text("Plush").tag(AvatarRenderStyle.plush.rawValue)
+                Picker(L("Style"), selection: self.$renderStyle) {
+                    Text("Pixel", bundle: .module).tag(AvatarRenderStyle.pixel.rawValue)
+                    Text("Plush", bundle: .module).tag(AvatarRenderStyle.plush.rawValue)
                 }
                 .pickerStyle(.segmented)
                 ForEach(self.agents) { agent in
@@ -31,10 +31,10 @@ struct AvatarSettingsSection: View {
                 }
             }
         } header: {
-            Text("Avatars")
+            Text("Avatars", bundle: .module)
         } footer: {
             if self.enabled {
-                Text("Auto picks a character from the agent's identity. Reduce Motion keeps them still.")
+                Text("Auto picks a character from the agent's identity. Reduce Motion keeps them still.", bundle: .module)
             }
         }
     }
@@ -54,7 +54,7 @@ private struct AvatarCharacterRow: View {
     var body: some View {
         let style = AvatarSettings.style(for: self.agent, creature: self.creature, renderStyle: self.renderStyle)
         Picker(selection: self.$creature) {
-            Text("Auto").tag("")
+            Text("Auto", bundle: .module).tag("")
             ForEach(AvatarCreature.allCases, id: \.self) { creature in
                 Text(creature.rawValue.capitalized).tag(creature.rawValue)
             }
@@ -65,6 +65,6 @@ private struct AvatarCharacterRow: View {
                 Text(self.agent.name)
             }
         }
-        .accessibilityLabel("\(self.agent.name) character")
+        .accessibilityLabel(L("\(self.agent.name) character"))
     }
 }
