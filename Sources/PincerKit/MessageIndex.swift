@@ -36,21 +36,40 @@ public actor MessageIndex {
     static var userVersion: Int32 { self.schemaVersion * 1000 + Int32(TranscriptCache.Snapshot.currentVersion) }
 
     public nonisolated let gatewayId: UUID
+    /// The transcript cache root this index lives under; nil when the cache is off.
+    public nonisolated let root: URL?
     private var db: OpaquePointer?
     private var openLocation: Location?
     /// The open index file's device and inode, to notice it was deleted or replaced.
     private var openFileID: FileID?
     private nonisolated let removed: Mutex<Bool>
     private nonisolated let interrupter = Interrupter()
+    private nonisolated let inFlight = InFlight()
+
+    /// An index is per (cache root, Gateway): the same Gateway under two roots (tests, checks)
+    /// gets two independent indexes.
+    private struct Key: Hashable {
+        var root: String?
+        var gatewayId: UUID
+    }
+
+    private static func rootKey(_ root: URL?) -> String? {
+        root?.standardizedFileURL.path(percentEncoded: false)
+    }
 
     private struct Registry {
-        var indexes: [UUID: MessageIndex] = [:]
-        /// Gateways removed from the app: their indexes are never recreated.
+        var indexes: [Key: MessageIndex] = [:]
+        /// Gateways removed from the app: their indexes are never recreated. Not per root: a
+        /// Gateway removed from the app is gone wherever it was cached.
         var removed: Set<UUID> = []
         /// Gateways whose index is kept in memory while the transcript cache is off (the demo).
+        /// Only consulted for a nil root, so it never affects an index under a real root.
         var inMemory: Set<UUID> = []
-        /// Cache folders being deleted (`whileDeleting`).
-        var deleting = 0
+        /// Cache folders being deleted (`whileDeleting`), per root, so deleting one root doesn't
+        /// stall indexes under another.
+        var deleting: [String?: Int] = [:]
+        /// Closes started by `discard` and not finished yet, per root.
+        var closing: [UUID: (root: String?, task: Task<Void, Never>)] = [:]
     }
 
     /// Where an index lives: next to the transcript cache, or in memory.
@@ -61,38 +80,62 @@ public actor MessageIndex {
 
     private static let registry = Mutex(Registry())
 
-    /// The index for a Gateway. One per Gateway, shared by everything that reads or writes it.
-    public static func shared(gatewayId: UUID) -> MessageIndex {
-        self.registry.withLock { registry in
-            if let index = registry.indexes[gatewayId] { return index }
+    /// The index for a Gateway under a cache root. One per (root, Gateway), shared by everything
+    /// that reads or writes it.
+    public static func shared(gatewayId: UUID, root: URL? = TranscriptCache.root) -> MessageIndex {
+        let key = Key(root: self.rootKey(root), gatewayId: gatewayId)
+        return self.registry.withLock { registry in
+            if let index = registry.indexes[key] { return index }
             // A file opened now would be deleted under its connection, leaving search broken
             // until relaunch. Until the deletion is done, hand out an inert index instead.
-            if registry.deleting > 0 { return MessageIndex(gatewayId: gatewayId, removed: true) }
-            let index = MessageIndex(gatewayId: gatewayId, removed: registry.removed.contains(gatewayId))
-            registry.indexes[gatewayId] = index
+            if registry.deleting[key.root, default: 0] > 0 { return MessageIndex(gatewayId: gatewayId, root: root, removed: true) }
+            let index = MessageIndex(gatewayId: gatewayId, root: root, removed: registry.removed.contains(gatewayId))
+            registry.indexes[key] = index
             return index
         }
     }
 
-    /// Forgets the Gateway's index (its files are deleted with the transcript cache). Anything
-    /// still running on the old instance can't recreate the file. `permanently` (the Gateway was
-    /// removed from the app): no later instance can either.
-    static func discard(gatewayId: UUID, permanently: Bool = false) {
-        let index = self.registry.withLock { registry in
-            if permanently { registry.removed.insert(gatewayId) }
-            return registry.indexes.removeValue(forKey: gatewayId)
+    /// Forgets the Gateway's index under `root` (its files are deleted with the transcript
+    /// cache). Anything still running on the old instance can't recreate the file. `permanently`
+    /// (the Gateway was removed from the app): no later instance can either, under any root, and
+    /// indexes it has under other roots are retired too.
+    static func discard(gatewayId: UUID, root: URL? = TranscriptCache.root, permanently: Bool = false) {
+        let key = Key(root: self.rootKey(root), gatewayId: gatewayId)
+        let retired: [(Key, MessageIndex)] = self.registry.withLock { registry in
+            var retired: [(Key, MessageIndex)] = []
+            if permanently {
+                registry.removed.insert(gatewayId)
+                for (other, index) in registry.indexes where other.gatewayId == gatewayId { retired.append((other, index)) }
+            } else if let index = registry.indexes[key] {
+                retired.append((key, index))
+            }
+            for (other, _) in retired { registry.indexes.removeValue(forKey: other) }
+            return retired
         }
-        guard let index else { return }
-        index.removed.withLock { $0 = true }
-        index.interrupter.interruptAny()
-        Task { await index.close() }
+        for (retiredKey, index) in retired {
+            index.removed.withLock { $0 = true }
+            index.interrupter.interruptAny()
+            let id = UUID()
+            let task = Task {
+                await index.close()
+                self.registry.withLock { _ = $0.closing.removeValue(forKey: id) }
+            }
+            self.registry.withLock { $0.closing[id] = (retiredKey.root, task) }
+        }
     }
 
-    /// Runs `body`, which discards indexes and deletes their folders, without creating an index
-    /// meanwhile. Writes in that window are dropped, like the transcripts they index.
-    static func whileDeleting(_ body: () -> Void) {
-        self.registry.withLock { $0.deleting += 1 }
-        defer { self.registry.withLock { $0.deleting -= 1 } }
+    /// Runs `body`, which discards indexes and deletes their folders under `root`, without
+    /// creating an index there meanwhile. Writes in that window are dropped, like the
+    /// transcripts they index.
+    static func whileDeleting(root: URL? = TranscriptCache.root, _ body: () -> Void) {
+        let key = self.rootKey(root)
+        self.registry.withLock { $0.deleting[key, default: 0] += 1 }
+        defer {
+            self.registry.withLock { registry in
+                registry.deleting[key, default: 1] -= 1
+                if registry.deleting[key] == 0 { registry.deleting.removeValue(forKey: key) }
+            }
+        }
         body()
     }
 
@@ -101,14 +144,49 @@ public actor MessageIndex {
         self.registry.withLock { $0.removed.contains(gatewayId) }
     }
 
-    init(gatewayId: UUID, removed: Bool = false) {
+    /// Waits until the index's pending work (saves being indexed, a reconcile, a close started by
+    /// `discard`) for the Gateway under `root` is done. Replaces sleeping for it to settle.
+    public static func flush(gatewayId: UUID, root: URL? = TranscriptCache.root) async {
+        let key = Key(root: self.rootKey(root), gatewayId: gatewayId)
+        let index = self.registry.withLock { $0.indexes[key] }
+        await index?.inFlight.idle()
+        await index?.settle()
+        await self.awaitClosing(root: key.root)
+    }
+
+    /// Waits for pending work, then closes and forgets every index under `root`. A later
+    /// `shared` opens a fresh one. Anything still holding an old instance reopens it on use.
+    public static func shutdown(root: URL? = TranscriptCache.root) async {
+        let key = self.rootKey(root)
+        let indexes = self.registry.withLock { registry in
+            let matching = registry.indexes.filter { $0.key.root == key }
+            for entry in matching { registry.indexes.removeValue(forKey: entry.key) }
+            return Array(matching.values)
+        }
+        for index in indexes {
+            await index.inFlight.idle()
+            await index.close()
+        }
+        await self.awaitClosing(root: key)
+    }
+
+    private static func awaitClosing(root: String?) async {
+        let tasks = self.registry.withLock { $0.closing.values.filter { $0.root == root }.map(\.task) }
+        for task in tasks { await task.value }
+    }
+
+    /// Runs after everything queued on the actor.
+    private func settle() {}
+
+    init(gatewayId: UUID, root: URL? = TranscriptCache.root, removed: Bool = false) {
         self.gatewayId = gatewayId
+        self.root = root
         self.removed = Mutex(removed)
     }
 
     /// `search-index.sqlite` in the Gateway's transcript cache folder; nil when the cache is off.
-    public static func url(gatewayId: UUID) -> URL? {
-        TranscriptCache.directory(gatewayId: gatewayId)?.appending(path: "search-index.sqlite")
+    public static func url(gatewayId: UUID, root: URL? = TranscriptCache.root) -> URL? {
+        TranscriptCache.directory(gatewayId: gatewayId, root: root)?.appending(path: "search-index.sqlite")
     }
 
     /// Keeps the Gateway's index in memory while the transcript cache is off, so search still
@@ -118,19 +196,52 @@ public actor MessageIndex {
     }
 
     /// The index file when the transcript cache is on; memory when it's off and allowed; else nil.
-    public static func location(gatewayId: UUID) -> Location? {
-        if let url = self.url(gatewayId: gatewayId) { return .file(url) }
+    public static func location(gatewayId: UUID, root: URL? = TranscriptCache.root) -> Location? {
+        if let url = self.url(gatewayId: gatewayId, root: root) { return .file(url) }
         return self.registry.withLock { $0.inMemory.contains(gatewayId) } ? .memory : nil
     }
 
     /// Ready, or unavailable when there's nowhere to keep the index.
-    public static func status(gatewayId: UUID) -> Status {
-        self.location(gatewayId: gatewayId) == nil ? .unavailable : .ready
+    public static func status(gatewayId: UUID, root: URL? = TranscriptCache.root) -> Status {
+        self.location(gatewayId: gatewayId, root: root) == nil ? .unavailable : .ready
     }
 
-    public var status: Status { Self.status(gatewayId: self.gatewayId) }
+    public var status: Status { Self.status(gatewayId: self.gatewayId, root: self.root) }
 
-    private nonisolated var location: Location? { Self.location(gatewayId: self.gatewayId) }
+    private nonisolated var location: Location? { Self.location(gatewayId: self.gatewayId, root: self.root) }
+
+    /// Counts operations under way so `flush` can wait for them.
+    private final class InFlight: Sendable {
+        private struct State {
+            var count = 0
+            var waiters: [CheckedContinuation<Void, Never>] = []
+        }
+
+        private let state = Mutex(State())
+
+        func begin() { self.state.withLock { $0.count += 1 } }
+
+        func end() {
+            let waiters: [CheckedContinuation<Void, Never>] = self.state.withLock { state in
+                state.count -= 1
+                guard state.count == 0 else { return [] }
+                defer { state.waiters = [] }
+                return state.waiters
+            }
+            for waiter in waiters { waiter.resume() }
+        }
+
+        func idle() async {
+            await withCheckedContinuation { continuation in
+                let ready = self.state.withLock { state -> Bool in
+                    if state.count == 0 { return true }
+                    state.waiters.append(continuation)
+                    return false
+                }
+                if ready { continuation.resume() }
+            }
+        }
+    }
 
     // MARK: Writing
 
@@ -158,6 +269,8 @@ public actor MessageIndex {
     /// Indexes a chat's saved transcript. Does nothing when its messages haven't changed, and
     /// ignores a snapshot older than the one already indexed.
     public nonisolated func index(sessionKey: String, snapshot: TranscriptCache.Snapshot, fileMtime: Date) async {
+        self.inFlight.begin()
+        defer { self.inFlight.end() }
         let items = snapshot.items
         // Hashing what the messages are built from is much cheaper than building them, so an
         // unchanged chat costs little.
@@ -180,7 +293,7 @@ public actor MessageIndex {
         // A save indexes after writing its transcript; if the chat was removed from the cache
         // since, its file is gone and indexing it would bring it back into search.
         if case .file = self.location,
-           let file = TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: sessionKey),
+           let file = TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: sessionKey, root: self.root),
            !FileManager.default.fileExists(atPath: file.path)
         { return .done }
         return self.withRecovery { db -> WriteResult in
@@ -296,13 +409,15 @@ public actor MessageIndex {
     /// Indexes every cached transcript of `sessionKeys` written since it was last indexed, one
     /// chat at a time, reporting progress. Transcripts are read and decoded off the actor.
     public nonisolated func reconcile(sessionKeys: [String], progress: (@Sendable (Status) async -> Void)? = nil) async {
+        self.inFlight.begin()
+        defer { self.inFlight.end() }
         guard self.location != nil else {
             await progress?(.unavailable)
             return
         }
         var files: [(key: String, url: URL, mtime: Date)] = []
         for key in Set(sessionKeys).sorted() {
-            guard let url = TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: key),
+            guard let url = TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: key, root: self.root),
                   let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
             else { continue }
             files.append((key, url, mtime))
@@ -320,7 +435,7 @@ public actor MessageIndex {
             await progress?(.building(done: done, total: stale.count))
             // Read as opening the chat would: migrated transcripts are indexed (and saved back),
             // unusable ones quarantined or deleted.
-            let (snapshot, outcome) = await TranscriptCache.read(chat.url, gatewayId: self.gatewayId, priority: .utility)
+            let (snapshot, outcome) = await TranscriptCache.read(chat.url, gatewayId: self.gatewayId, root: self.root, priority: .utility)
             guard let snapshot else { continue }
             var rewritten = chat.url
             rewritten.removeAllCachedResourceValues()

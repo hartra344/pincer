@@ -237,7 +237,6 @@ struct TranscriptCacheVersioningTests {
         defer { temp.remove() }
         let big = Cache.Snapshot(items: (0..<2000).map { item("m\($0)") }, complete: true)
         async let saved: Void = Cache.save(big, gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
-        try await Task.sleep(for: .milliseconds(1))
         await Cache.remove(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
         await saved
         // Either the save ran first and was removed, or the removal ran first and the save
@@ -397,8 +396,6 @@ struct TranscriptCacheVersioningTests {
             try self.writeRaw(Data("junk \(index)".utf8), root: temp.url, key: "agent:main:chat\(index)")
             let outcome = await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: "agent:main:chat\(index)", root: temp.url).outcome
             #expect(self.isCorrupt(outcome))
-            // Distinct timestamps in the names.
-            try await Task.sleep(for: .milliseconds(3))
         }
         let quarantine = try #require(Cache.quarantineDirectory(gatewayId: self.gateway, root: temp.url))
         let names = try self.quarantined(temp)

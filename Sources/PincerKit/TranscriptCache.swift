@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import os
+import Synchronization
 
 /// On-disk copy of each chat's committed transcript. Reopening a chat is instant (even offline) and
 /// older history — which doesn't change — never has to be refetched; only the newest page is.
@@ -316,8 +317,8 @@ public enum TranscriptCache {
         }
         do {
             try fileManager.createDirectory(at: quarantine, withIntermediateDirectories: true)
-            let stamp = Int(Date().timeIntervalSince1970 * 1000)
-            let target = quarantine.appending(path: "\(url.deletingPathExtension().lastPathComponent)-\(stamp).json")
+            let target = quarantine.appending(
+                path: "\(url.deletingPathExtension().lastPathComponent)-\(Self.nextQuarantineStamp()).json")
             try? fileManager.removeItem(at: target)
             try fileManager.moveItem(at: url, to: target)
             self.logger.error(
@@ -330,43 +331,67 @@ public enum TranscriptCache {
         }
     }
 
-    private static func trimQuarantine(_ directory: URL) {
+    private static let quarantineSequence = Atomic<Int>(0)
+
+    /// `<ms since 1970, 15 digits>-<process-wide sequence, 8 digits>`: sorts lexically in creation
+    /// order even for several files in the same millisecond, or a clock that steps back.
+    static func nextQuarantineStamp(now: Date = Date()) -> String {
+        let ms = max(0, Int(now.timeIntervalSince1970 * 1000))
+        let sequence = self.quarantineSequence.add(1, ordering: .relaxed).newValue
+        return String(format: "%015ld-%08ld", ms, sequence)
+    }
+
+    /// The `<ms>-<sequence>` a quarantined file's name ends with; nil for older `<ms>` names.
+    static func quarantineOrder(_ name: String) -> (ms: Int, sequence: Int)? {
+        let base = name.hasSuffix(".json") ? String(name.dropLast(5)) : name
+        let parts = base.split(separator: "-")
+        guard parts.count >= 2, let sequence = Int(parts[parts.count - 1]), let ms = Int(parts[parts.count - 2]),
+              parts[parts.count - 1].count == 8 else { return nil }
+        return (ms, sequence)
+    }
+
+    /// Keeps the newest `maxQuarantined` files: by stamped name, then (older names) by date.
+    static func trimQuarantine(_ directory: URL) {
         let fileManager = FileManager.default
         let files = (try? fileManager.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
         guard files.count > self.maxQuarantined else { return }
+        func date(_ url: URL) -> Date {
+            (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+        }
         let sorted = files.sorted { a, b in
-            let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-            let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-            return da == db ? a.lastPathComponent > b.lastPathComponent : da > db
+            switch (self.quarantineOrder(a.lastPathComponent), self.quarantineOrder(b.lastPathComponent)) {
+            case let (x?, y?): return (x.ms, x.sequence) > (y.ms, y.sequence)
+            case (_?, nil): return true
+            case (nil, _?): return false
+            case (nil, nil):
+                let da = date(a), db = date(b)
+                return da == db ? a.lastPathComponent > b.lastPathComponent : da > db
+            }
         }
         for file in sorted.dropFirst(self.maxQuarantined) { try? fileManager.removeItem(at: file) }
     }
 
-    /// Writes the transcript, then brings the Gateway's message search index up to date with it.
-    /// Nothing is written for a Gateway removed from the app, even by a save already under way.
-    /// With the cache off, an index kept in memory (the demo) is still updated.
-    public static func save(_ snapshot: Snapshot, gatewayId: UUID, sessionKey: String) async {
+    /// Writes the transcript, then brings the Gateway's message search index (under the same
+    /// `root`) up to date with it. Nothing is written for a Gateway removed from the app, even by
+    /// a save already under way. With the cache off, an index kept in memory (the demo) is still
+    /// updated.
+    public static func save(_ snapshot: Snapshot, gatewayId: UUID, sessionKey: String, root: URL? = Self.root) async {
         guard !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId) else { return }
-        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey) else {
-            if MessageIndex.location(gatewayId: gatewayId) == .memory {
-                await MessageIndex.shared(gatewayId: gatewayId).index(sessionKey: sessionKey, snapshot: snapshot, fileMtime: Date())
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else {
+            if MessageIndex.location(gatewayId: gatewayId, root: root) == .memory {
+                await MessageIndex.shared(gatewayId: gatewayId, root: root)
+                    .index(sessionKey: sessionKey, snapshot: snapshot, fileMtime: Date())
             }
             return
         }
         guard let written = await Writer.shared.write(snapshot, to: url) else { return }
         guard !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId) else {
-            self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
+            self.deleteDirectory(gatewayId: gatewayId, root: root)
             return
         }
-        await MessageIndex.shared(gatewayId: gatewayId).index(sessionKey: sessionKey, snapshot: snapshot, fileMtime: written)
-    }
-
-    /// Writes the transcript under another cache root (tests). The message search index, which
-    /// lives under the default root, isn't touched.
-    static func save(_ snapshot: Snapshot, gatewayId: UUID, sessionKey: String, root: URL?) async {
-        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else { return }
-        _ = await Writer.shared.write(snapshot, to: url)
+        await MessageIndex.shared(gatewayId: gatewayId, root: root)
+            .index(sessionKey: sessionKey, snapshot: snapshot, fileMtime: written)
     }
 
     /// Deletes one chat's cached transcript (its stored tool details included), its sidecar and
@@ -374,32 +399,22 @@ public enum TranscriptCache {
     /// quarantined copy is left for diagnosis. The files go through the same writer as saves, so a
     /// save already queued lands before the removal, and the index skips a chat whose file is gone,
     /// so that save can't make it searchable again.
-    public static func remove(gatewayId: UUID, sessionKey: String) async {
-        await self.remove(gatewayId: gatewayId, sessionKey: sessionKey, root: Self.root)
-        if Self.root != nil || MessageIndex.location(gatewayId: gatewayId) == .memory {
-            await MessageIndex.shared(gatewayId: gatewayId).remove(sessionKey: sessionKey)
+    public static func remove(gatewayId: UUID, sessionKey: String, root: URL? = Self.root) async {
+        if let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) {
+            await Writer.shared.remove(url)
         }
-    }
-
-    /// Deletes one chat's transcript and sidecar under another cache root (tests); the message
-    /// search index, which lives under the default root, isn't touched.
-    static func remove(gatewayId: UUID, sessionKey: String, root: URL?) async {
-        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else { return }
-        await Writer.shared.remove(url)
+        if root != nil || MessageIndex.location(gatewayId: gatewayId, root: root) == .memory {
+            await MessageIndex.shared(gatewayId: gatewayId, root: root).remove(sessionKey: sessionKey)
+        }
     }
 
     /// Deletes the Gateway's transcripts and message search index. `permanently`: the Gateway
     /// was removed from the app, so saves still under way don't write them again.
-    public static func removeAll(gatewayId: UUID, permanently: Bool = false) {
-        MessageIndex.whileDeleting {
-            MessageIndex.discard(gatewayId: gatewayId, permanently: permanently)
-            self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
+    public static func removeAll(gatewayId: UUID, permanently: Bool = false, root: URL? = Self.root) {
+        MessageIndex.whileDeleting(root: root) {
+            MessageIndex.discard(gatewayId: gatewayId, root: root, permanently: permanently)
+            self.deleteDirectory(gatewayId: gatewayId, root: root)
         }
-    }
-
-    /// Deletes the Gateway's transcripts under another cache root (tests).
-    static func removeAll(gatewayId: UUID, root: URL?) {
-        self.deleteDirectory(gatewayId: gatewayId, root: root)
     }
 
     /// Deletes every Gateway's cached transcripts, search indexes and quarantined files (Settings'
@@ -407,25 +422,29 @@ public enum TranscriptCache {
     /// under way when this runs either fails harmlessly (writes are atomic, and the sidecar only
     /// follows a written transcript) or writes a fresh, valid file. Such a save isn't indexed
     /// (no index opens while the files are deleted); it's indexed when it next saves or reconciles.
-    public static func removeEverything() {
-        guard let root = Self.root else { return }
-        MessageIndex.whileDeleting {
-            let entries = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
-            for entry in entries {
-                if let id = UUID(uuidString: entry.lastPathComponent) { MessageIndex.discard(gatewayId: id) }
+    public static func removeEverything(root: URL? = Self.root) {
+        guard let root else { return }
+        MessageIndex.whileDeleting(root: root) {
+            let fileManager = FileManager.default
+            for entry in (try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? [] {
+                if let id = UUID(uuidString: entry.lastPathComponent) { MessageIndex.discard(gatewayId: id, root: root) }
+                try? fileManager.removeItem(at: entry)
             }
-            self.removeEverything(root: root)
         }
         logger.notice("Cleared the transcript cache")
     }
 
-    /// Deletes everything under another cache root (tests); search indexes in memory aren't touched.
-    static func removeEverything(root: URL?) {
-        guard let root else { return }
-        let fileManager = FileManager.default
-        for entry in (try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? [] {
-            try? fileManager.removeItem(at: entry)
-        }
+    /// Waits until every write and removal queued so far has landed and the Gateway's search
+    /// index under `root` has finished its pending work. Replaces sleeping for the cache to settle.
+    public static func flush(gatewayId: UUID, root: URL? = Self.root) async {
+        await Writer.shared.drain()
+        await MessageIndex.flush(gatewayId: gatewayId, root: root)
+    }
+
+    /// Waits for queued writes, then closes and forgets every search index under `root`.
+    public static func shutdown(root: URL? = Self.root) async {
+        await Writer.shared.drain()
+        await MessageIndex.shutdown(root: root)
     }
 
     /// Bytes the transcript cache takes on disk, search indexes and quarantined files included.
@@ -458,6 +477,9 @@ public enum TranscriptCache {
     /// Serializes writes so an older snapshot can never land after a newer one.
     private actor Writer {
         static let shared = Writer()
+
+        /// Returns once every write and removal queued before it has finished.
+        func drain() {}
 
         func remove(_ url: URL) {
             try? FileManager.default.removeItem(at: url.appendingPathExtension("meta"))
