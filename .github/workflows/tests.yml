@@ -38,20 +38,20 @@ jobs:
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
         run: |
-          # Lists the changed files, or fails (and so runs everything) when it can't tell.
+          # Lists the changed files (and a rename's old path), or fails (and so runs everything) when it can't tell.
           changed_files() {
             case "$EVENT" in
-              pull_request) gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename' ;;
+              pull_request) gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)' ;;
               push)
                 case "$BEFORE" in ''|0000000000000000000000000000000000000000) return 1 ;; esac
                 # Compare lists at most 300 files; a force push isn't "ahead".
                 gh api "repos/$REPO/compare/$BEFORE...$AFTER" \
-                  --jq 'if .status == "ahead" and (.files | length) < 300 then .files[].filename else error("full run") end' ;;
+                  --jq 'if .status == "ahead" and (.files | length) < 300 then .files[] | .filename, (.previous_filename // empty) else error("full run") end' ;;
               *) return 1 ;;
             esac
           }
           # Docs only: the website, docs/ and top-level Markdown or LICENSE files.
-          docs='^(website/|docs/|[^/]+\.md$|LICENSE)'
+          docs='^(website/|docs/|[^/]+\.md$|LICENSE$)'
           if files="$(changed_files)" && [ -n "$files" ]; then
             printf 'Changed files:\n%s\n' "$files"
             if grep -qvE "$docs" <<<"$files"; then code=true; else code=false; fi
