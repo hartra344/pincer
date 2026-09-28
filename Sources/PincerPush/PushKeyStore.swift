@@ -4,7 +4,7 @@ import Security
 /// Per-gateway Web Push keys in the Keychain. When `PincerKeychainGroup` is set in Info.plist,
 /// they go into that shared access group so the Notification Service Extension can decrypt.
 public enum PushKeyStore {
-    static let service = "chat.pincer.push"
+    static let service = DevNamespace.identifier("chat.pincer.push")
 
     /// Process-local store used in `KeychainMode` memory mode (checks, tests, `PINCER_KEYCHAIN=memory`).
     private static let memoryStore = MemoryStore()

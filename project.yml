@@ -19,6 +19,9 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: E4Y97NXBXG
+    # Development namespace for parallel worktrees: empty in production. `PINCER_DEV_SUFFIX=.dev-foo`
+    # suffixes every bundle id, the App Group, the Keychain group and (via Info.plist) storage names.
+    PINCER_DEV_SUFFIX: ""
 targets:
   Pincer-macOS:
     type: application
@@ -34,10 +37,10 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Pincer
-        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.mac
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.mac$(PINCER_DEV_SUFFIX)
         CODE_SIGN_ENTITLEMENTS: Apps/macOS/Pincer.entitlements
         INFOPLIST_FILE: Apps/Shared/Info.plist
-        PINCER_APP_GROUP: $(TeamIdentifierPrefix)chat.pincer
+        PINCER_APP_GROUP: $(TeamIdentifierPrefix)chat.pincer$(PINCER_DEV_SUFFIX)
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Pincer
@@ -60,10 +63,10 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Pincer
-        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios$(PINCER_DEV_SUFFIX)
         CODE_SIGN_ENTITLEMENTS: Apps/iOS/Pincer.entitlements
         INFOPLIST_FILE: Apps/Shared/Info.plist
-        PINCER_APP_GROUP: group.chat.pincer
+        PINCER_APP_GROUP: group.chat.pincer$(PINCER_DEV_SUFFIX)
         PINCER_APS_ENVIRONMENT: development
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Pincer
@@ -86,14 +89,14 @@ targets:
     settings:
       base:
         PRODUCT_NAME: PincerShare
-        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.mac.share
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.mac$(PINCER_DEV_SUFFIX).share
         CODE_SIGN_ENTITLEMENTS: Apps/ShareExtension/macOS/PincerShare.entitlements
         ENABLE_HARDENED_RUNTIME: YES
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: Apps/ShareExtension/macOS/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Pincer
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
-        PINCER_APP_GROUP: $(TeamIdentifierPrefix)chat.pincer
+        PINCER_APP_GROUP: $(TeamIdentifierPrefix)chat.pincer$(PINCER_DEV_SUFFIX)
   PincerShare-iOS:
     type: app-extension
     platform: iOS
@@ -104,9 +107,9 @@ targets:
     settings:
       base:
         PRODUCT_NAME: PincerShare
-        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios.share
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios$(PINCER_DEV_SUFFIX).share
         CODE_SIGN_ENTITLEMENTS: Apps/ShareExtension/iOS/PincerShare.entitlements
-        PINCER_APP_GROUP: group.chat.pincer
+        PINCER_APP_GROUP: group.chat.pincer$(PINCER_DEV_SUFFIX)
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: Apps/ShareExtension/iOS/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Pincer
@@ -123,7 +126,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: PincerNotifications
-        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios.notifications
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios$(PINCER_DEV_SUFFIX).notifications
         CODE_SIGN_ENTITLEMENTS: Apps/iOSNotificationService/PincerNotifications.entitlements
         INFOPLIST_FILE: Apps/iOSNotificationService/Info.plist
         GENERATE_INFOPLIST_FILE: YES

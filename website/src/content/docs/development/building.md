@@ -158,3 +158,15 @@ open --env PINCER_REQUEST_LOG=/tmp/pincer.log build/Pincer.app
 
 - iOS runs in the simulator (connect, sidebar, history) but hasn't been tried on a real device yet.
 - Gateway Settings has been tested against the mock only.
+
+## Parallel dev worktrees
+
+Builds from different git worktrees would otherwise share profiles, Keychain items, drafts, outboxes and caches. Give each worktree a development namespace; production builds have none and keep their exact identifiers.
+
+```sh
+PINCER_DEV_NAMESPACE=feature-x swift run PincerMacDev       # own Keychain service, UserDefaults suite, Drafts/Outbox folders
+xcodebuild -scheme Pincer-macOS PINCER_DEV_SUFFIX=.dev-feature-x   # bundle ids, App Group and Keychain group get the suffix
+```
+
+With the suffix, `chat.pincer.mac` becomes `chat.pincer.mac.dev-feature-x`, the Keychain service `chat.pincer.gateway.dev-feature-x`, and storage folders `Pincer-feature-x`. Use the same name for both variables. On iOS the suffixed App Group and bundle ids need provisioning, so set the suffix there only when you want an isolated install. `PINCER_CACHE_DIR`, `PINCER_DRAFTS_DIR` and `PINCER_OUTBOX_DIR` still override folders explicitly.
+

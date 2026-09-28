@@ -9,7 +9,7 @@
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
-		<string>$(AppIdentifierPrefix)chat.pincer.shared</string>
+		<string>$(AppIdentifierPrefix)chat.pincer.shared$(PINCER_DEV_SUFFIX)</string>
 	</array>
 </dict>
 </plist>

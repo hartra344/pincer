@@ -1,4 +1,5 @@
 import Foundation
+import PincerPush
 import Testing
 @testable import PincerKit
 
@@ -21,5 +22,10 @@ struct KeychainIsolationTests {
         #expect(profile.deviceToken == nil)
         #expect(DeviceIdentity.loadOrCreate().deviceId == DeviceIdentity.loadOrCreate().deviceId)
         #expect(Keychain.realKeychainCalls == 0)
+    }
+
+    @Test func serviceFollowsTheDevNamespace() {
+        #expect(DevNamespace.identifier("chat.pincer.gateway", namespace: nil) == "chat.pincer.gateway")
+        #expect(DevNamespace.identifier("chat.pincer.gateway", namespace: "a") != DevNamespace.identifier("chat.pincer.gateway", namespace: "b"))
     }
 }

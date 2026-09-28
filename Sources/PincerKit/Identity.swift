@@ -6,7 +6,7 @@ import Security
 /// Minimal generic-password Keychain wrapper. Secrets (device key, gateway token/password,
 /// paired device tokens) never touch UserDefaults or disk outside the Keychain.
 public enum Keychain {
-    static let service = "chat.pincer.gateway"
+    static let service = DevNamespace.identifier("chat.pincer.gateway")
 
     /// Process-local store used in `KeychainMode` memory mode (`PINCER_KEYCHAIN=memory`, test
     /// runners, or `useInMemoryStore()`), so checks and tests never touch or prompt for the real Keychain.

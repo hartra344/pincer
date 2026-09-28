@@ -1,5 +1,6 @@
 import Foundation
 import os
+import PincerPush
 
 /// On-disk outboxes, one versioned JSON file per Gateway. Unsent messages are user content, so
 /// they live in Application Support (like drafts), not in Caches.
@@ -27,7 +28,7 @@ public enum OutboxStore {
             return override == "off" ? nil : URL(filePath: override, directoryHint: .isDirectory)
         }
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appending(path: "Pincer/Outbox", directoryHint: .isDirectory)
+            .appending(path: "\(DevNamespace.folderName("Pincer"))/Outbox", directoryHint: .isDirectory)
     }
 
     public static func file(gatewayId: UUID, root: URL? = Self.root) -> URL? {

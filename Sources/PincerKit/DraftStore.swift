@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import PincerPush
 
 /// Unsent composer contents for one chat.
 public struct ComposerDraft: Hashable, Sendable {
@@ -40,7 +41,7 @@ enum DraftStore {
             return override == "off" ? nil : URL(filePath: override, directoryHint: .isDirectory)
         }
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appending(path: "Pincer/Drafts", directoryHint: .isDirectory)
+            .appending(path: "\(DevNamespace.folderName("Pincer"))/Drafts", directoryHint: .isDirectory)
     }
 
     static func directory(gatewayId: UUID, root: URL? = Self.root) -> URL? {

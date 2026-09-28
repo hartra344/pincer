@@ -1,4 +1,5 @@
 import Foundation
+import PincerPush
 
 /// Storage the app shares with its Share extension: the App Group's UserDefaults (saved
 /// gateways, last share target) and a Keychain access group (device key, secrets, device tokens).
@@ -14,7 +15,16 @@ public enum SharedContainer {
 
     /// UserDefaults shared with extensions, or `.standard` when there's no App Group.
     public static var defaults: UserDefaults {
-        appGroupId.flatMap(UserDefaults.init(suiteName:)) ?? .standard
+        appGroupId.flatMap(UserDefaults.init(suiteName:)) ?? devSuite ?? .standard
+    }
+
+    /// Namespaced SwiftPM runs keep their own defaults instead of sharing `.standard`.
+    static func devSuiteName(namespace: String?) -> String? {
+        namespace.map { DevNamespace.identifier("chat.pincer", namespace: $0) }
+    }
+
+    private static var devSuite: UserDefaults? {
+        devSuiteName(namespace: DevNamespace.current).flatMap(UserDefaults.init(suiteName:))
     }
 
     /// Records which Keychain group existing items were copied into, so it runs once per group.
