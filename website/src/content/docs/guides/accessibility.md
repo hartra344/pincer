@@ -28,7 +28,7 @@ Pincer doesn't read replies token by token while they stream.
 
 ### Sidebar
 
-Each chat reads its title, then whether it's pinned, working or unread, then its preview. The subagent runs button reads as "Show 3 subagent runs" or "Hide subagent runs".
+Each chat reads its title, then whether it's pinned or unread, then its preview. While a chat is running, it also says what the agent is doing, for example "Moki is working" or "Moki: 2 helper runs working". The subagent runs button reads as "Show 3 subagent runs" or "Hide subagent runs".
 
 ### Composer
 

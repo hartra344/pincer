@@ -126,7 +126,7 @@ public enum AccessibilityText {
             agentName,
             isPinned ? "Pinned" : nil,
             isArchived ? "Archived" : nil,
-            isRunning ? (workingLabel.flatMap { $0.isEmpty ? nil : $0 } ?? "Working") : nil,
+            isRunning ? (workingLabel.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } ?? "Working") : nil,
             hasError ? "Last run failed" : nil,
             unread,
             preview.map { Self.summary($0, limit: previewLimit) },

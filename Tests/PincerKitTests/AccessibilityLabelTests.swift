@@ -145,6 +145,32 @@ struct AccessibilityLabelTests {
         #expect(label == "Research, Claude, Pinned, Working, 3 unread")
     }
 
+    /// #183: the sidebar's dancing avatar speaks its own working label while a run is going.
+    @Test func sessionRowSpeaksTheWorkingLabelWhileRunning() {
+        #expect(AccessibilityText.sessionRow(title: "Research", agentName: "Moki", unreadCount: 2, isPinned: true,
+                                             isRunning: true, workingLabel: "Moki is working")
+            == "Research, Moki, Pinned, Moki is working, 2 unread", "replaces Working in the same position")
+        #expect(AccessibilityText.sessionRow(title: "A", isRunning: true, workingLabel: "Moki is working", hasError: true)
+            == "A, Moki is working, Last run failed")
+        #expect(AccessibilityText.sessionRow(title: "A", isRunning: true, workingLabel: "Moki is working")
+            .components(separatedBy: "orking").count == 2, "not spoken alongside Working")
+    }
+
+    @Test func sessionRowWorkingLabelFallsBackToWorking() {
+        #expect(AccessibilityText.sessionRow(title: "A", isRunning: true, workingLabel: nil) == "A, Working")
+        #expect(AccessibilityText.sessionRow(title: "A", isRunning: true, workingLabel: "") == "A, Working")
+        #expect(AccessibilityText.sessionRow(title: "A", isRunning: true) == "A, Working")
+    }
+
+    @Test func sessionRowIgnoresTheWorkingLabelWhenIdle() {
+        #expect(AccessibilityText.sessionRow(title: "A", isRunning: false, workingLabel: "Moki is working") == "A")
+        #expect(AccessibilityText.sessionRow(title: "A", isRunning: false, workingLabel: "") == "A")
+    }
+
+    @Test func sessionRowWhitespaceWorkingLabelStillSaysWorking() {
+        #expect(AccessibilityText.sessionRow(title: "A", isRunning: true, workingLabel: "  \n") == "A, Working")
+    }
+
     @Test func sessionRowUnreadCounts() {
         #expect(AccessibilityText.sessionRow(title: "A") == "A")
         #expect(AccessibilityText.sessionRow(title: "A", unreadCount: 0, isUnread: false) == "A")
