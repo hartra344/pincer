@@ -84,7 +84,7 @@ struct MessageIndexFileTests {
         // The open connection now points at a deleted file. The next operations notice, reset,
         // and succeed rather than failing every call after it.
         await TranscriptCache.save(Self.snapshot("v2", "vicuna two"), gatewayId: self.gateway, sessionKey: "two")
-        _ = try? await self.index.search("vicuna")
+        #expect(try await self.hits("vicuna") == ["two"])
         await self.index.reconcile(sessionKeys: ["one", "two"])
         #expect(try await self.hits("vicuna") == ["one", "two"])
         let one = await self.index.isIndexed(sessionKey: "one"), two = await self.index.isIndexed(sessionKey: "two")
@@ -99,9 +99,9 @@ struct MessageIndexFileTests {
         await TranscriptCache.save(Self.snapshot("w1", "wombat"), gatewayId: self.gateway, sessionKey: "w")
         #expect(try await self.hits("wombat") == ["w"])
         for file in try self.indexFiles() { try? FileManager.default.removeItem(at: file) }
-        // At most the first call after the deletion fails; the next one works on a fresh index.
-        _ = try? await self.index.search("wombat")
-        _ = try? await self.index.search("wombat")
+        // The very next call notices the file is gone and works on a fresh, empty index rather
+        // than serving the deleted file until SQLite's own vnode notice arrives (#240).
+        #expect(try await self.index.search("wombat").isEmpty)
         #expect(try await self.index.search("wombat").isEmpty)
         await self.index.reconcile(sessionKeys: ["w"])
         #expect(try await self.hits("wombat") == ["w"])

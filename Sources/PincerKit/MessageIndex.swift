@@ -38,6 +38,8 @@ public actor MessageIndex {
     public nonisolated let gatewayId: UUID
     private var db: OpaquePointer?
     private var openLocation: Location?
+    /// The open index file's device and inode, to notice it was deleted or replaced.
+    private var openFileID: FileID?
     private nonisolated let removed: Mutex<Bool>
     private nonisolated let interrupter = Interrupter()
 
@@ -427,6 +429,7 @@ public actor MessageIndex {
         if let db { sqlite3_close_v2(db) }
         self.db = nil
         self.openLocation = nil
+        self.openFileID = nil
     }
 
     // MARK: Database
@@ -456,7 +459,13 @@ public actor MessageIndex {
 
     private func open() throws -> OpaquePointer {
         guard !self.isRemoved, let location = self.location else { throw IndexError.unavailable }
-        if let db, self.openLocation == location { return db }
+        if let db, self.openLocation == location {
+            // Apple's SQLite reports a deleted file (`vanished`) only once a vnode event has
+            // arrived, which can take a while under load; until then the connection keeps
+            // serving the deleted file. Checking the path itself notices at once.
+            guard case let .file(url) = location, Self.fileID(url) != self.openFileID else { return db }
+            self.reset()
+        }
         self.close()
         do {
             return try self.connect(location)
@@ -518,6 +527,7 @@ public actor MessageIndex {
         } else {
             try self.exec(handle, "PRAGMA journal_mode = WAL")
         }
+        if case let .file(url) = location { self.openFileID = Self.fileID(url) }
         return handle
     }
 
@@ -525,6 +535,18 @@ public actor MessageIndex {
     private func reset() {
         self.close()
         if case let .file(url) = self.location, !self.isRemoved { Self.deleteFiles(url) }
+    }
+
+    private struct FileID: Equatable {
+        var device: dev_t
+        var inode: ino_t
+    }
+
+    /// Which file is at `url` now; nil when there's none.
+    private static func fileID(_ url: URL) -> FileID? {
+        var info = stat()
+        guard stat(url.path(percentEncoded: false), &info) == 0 else { return nil }
+        return FileID(device: info.st_dev, inode: info.st_ino)
     }
 
     private static func deleteFiles(_ url: URL) {
