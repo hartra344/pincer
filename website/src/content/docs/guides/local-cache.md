@@ -35,6 +35,8 @@ Every transcript file records the cache format version it was written with. When
 - **Older version Pincer can upgrade:** it's converted to the current format in place, once, and shows as usual.
 - **Older version Pincer can't upgrade**, or **newer version** (for example after going back to an earlier Pincer build): the file is deleted. The chat shows its usual loading state, then the full history from the gateway, and the cache is written again in the current format.
 
+For example, updating from a build before cache format 6 upgrades every cached chat in place: chats cached before [file diffs](../file-diffs/#chats-cached-by-earlier-versions) arrived keep their history, and their file writes are labelled **Written** instead of guessing **New file**. Nothing is downloaded again, but the search index is rebuilt once.
+
 You don't see an error for any of this. The first launch after an update that changes the format may take a little longer to fill in history while chats reload in the background.
 
 ## Damaged cache files
@@ -62,7 +64,7 @@ To free the space or start fresh, open **Settings** (**General** tab on macOS) a
 - **Cached transcripts** shows how much space the cache uses, for all gateways (or **Off** when `PINCER_CACHE_DIR=off`).
 - **Clear Cache…** asks **Clear cached transcripts?** and, when you confirm with **Clear Cache**, deletes every gateway's cached transcripts, search indexes and quarantined files.
 
-Nothing on your gateways is deleted. Chats you have open stay on screen and are saved again right away. While you're connected, Pincer downloads the other chats again in the background, and message search fills back in as they're cached, without a relaunch.
+Nothing on your gateways is deleted. Chats you have open stay on screen and are saved again right away, and you can search them again as soon as Clear Cache finishes. While you're connected, Pincer downloads the other chats again in the background, and message search fills back in as they're cached, without a relaunch.
 
 ## Search index
 

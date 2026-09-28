@@ -31,7 +31,7 @@ struct TranscriptCacheTests {
     @Test func versionMismatchIsIgnored() async {
         let temp = TempDir()
         defer { temp.remove() }
-        let old = TranscriptCache.Snapshot(version: TranscriptCache.Snapshot.currentVersion - 1, items: [item("a")], complete: true)
+        let old = TranscriptCache.Snapshot(version: TranscriptCache.oldestMigratableVersion - 1, items: [item("a")], complete: true)
         await TranscriptCache.save(old, gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
         #expect(await TranscriptCache.load(gatewayId: self.gateway, sessionKey: self.key, root: temp.url) == nil)
     }

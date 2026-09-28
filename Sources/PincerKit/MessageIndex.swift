@@ -26,6 +26,9 @@ public actor MessageIndex {
         case sqlite(String)
         /// Not a readable index of this version; it's deleted and rebuilt.
         case corrupt(String)
+        /// The file was deleted or replaced while open (the cache folder was cleared, or the
+        /// system purged it); it's deleted and rebuilt like a corrupt one.
+        case vanished(String)
     }
 
     /// Bump when the schema or what's indexed changes; the old index is then rebuilt.
@@ -172,7 +175,13 @@ public actor MessageIndex {
     /// messages too, which needs `documents`.
     @discardableResult
     private func write(sessionKey: String, chat: ChatState, documents: [Prepared]?) -> WriteResult {
-        self.withRecovery { db -> WriteResult in
+        // A save indexes after writing its transcript; if the chat was removed from the cache
+        // since, its file is gone and indexing it would bring it back into search.
+        if case .file = self.location,
+           let file = TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: sessionKey),
+           !FileManager.default.fileExists(atPath: file.path)
+        { return .done }
+        return self.withRecovery { db -> WriteResult in
             let existing = try self.chatRow(sessionKey, db: db)
             if let existing, existing.mtime > chat.mtime { return .done }
             let unchanged = existing?.digest == chat.digest
@@ -260,6 +269,23 @@ public actor MessageIndex {
                 ], db: db)
                 let id = sqlite3_last_insert_rowid(db)
                 try self.step(index, [.int(Int(id)), .text(prepared.folded)], db: db)
+            }
+        }
+    }
+
+    /// Drops a chat's messages from the index. Call after deleting its transcript file, so a save
+    /// still indexing it afterwards finds the file gone and doesn't add it back.
+    public func remove(sessionKey: String) {
+        guard !self.isRemoved else { return }
+        self.withRecovery { db in
+            try self.exec(db, "BEGIN IMMEDIATE")
+            do {
+                try self.replace(sessionKey: sessionKey, with: [], db: db)
+                try self.run(db, "DELETE FROM chats WHERE session_key = ?", [.text(sessionKey)])
+                try self.exec(db, "COMMIT")
+            } catch {
+                try? self.exec(db, "ROLLBACK")
+                throw error
             }
         }
     }
@@ -418,10 +444,12 @@ public actor MessageIndex {
         }
     }
 
-    /// Deletes the index after an error showing it's unreadable; anything else leaves it be.
+    /// Deletes the index after an error showing it's unreadable or gone; anything else leaves it be.
     private func recover(from error: Error) {
-        guard case IndexError.corrupt = error else { return }
-        self.reset()
+        switch error {
+        case IndexError.corrupt, IndexError.vanished: self.reset()
+        default: break
+        }
     }
 
     private func open() throws -> OpaquePointer {
@@ -611,11 +639,17 @@ public actor MessageIndex {
         Self.error(code: sqlite3_extended_errcode(db), message: String(cString: sqlite3_errmsg(db)))
     }
 
-    /// Only a file that isn't a database, or a damaged one, counts as corrupt. Busy, full, I/O,
-    /// can't-open and auth errors (a file-protected index while the device is locked) may pass.
+    /// Only a file that isn't a database, or a damaged one, counts as corrupt, and one deleted
+    /// while open as vanished. Busy, full, other I/O, can't-open and auth errors (a
+    /// file-protected index while the device is locked) may pass.
+    /// Apple's SQLite `SQLITE_IOERR_VNODE`: the file was unlinked or replaced while open. It stays
+    /// so until reopened.
+    private static let ioerrVnode: Int32 = SQLITE_IOERR | (27 << 8)
+
     private static func error(code: Int32, message: String) -> IndexError {
         switch code & 0xFF {
         case SQLITE_CORRUPT, SQLITE_NOTADB: .corrupt(message)
+        case SQLITE_IOERR where code == Self.ioerrVnode: .vanished(message)
         default: .sqlite("\(message) (\(code))")
         }
     }

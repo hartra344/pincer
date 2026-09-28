@@ -13,7 +13,7 @@ public enum TranscriptCache {
         /// Session activity when saved; an unchanged session needs no background refresh.
         public var activityMs: Double?
 
-        public static let currentVersion = 5
+        public static let currentVersion = 6
 
         public init(version: Int = Self.currentVersion, items: [ChatItem], complete: Bool, activityMs: Double? = nil) {
             self.version = version
@@ -84,16 +84,36 @@ public enum TranscriptCache {
     //    optional) but its messages would silently lack reply quotes and the channel ids agent
     //    reactions point at, and older history is never refetched once cached. So v4 isn't
     //    migratable: it's discarded and refetched, and `oldestMigratableVersion` is 5.
-    //  - Still v5 (#37, file edit diffs) added the optional `ChatItem.toolDetails`. No bump: a v5
-    //    file without it decodes, and its edit cards fall back to diffing the tool's arguments
-    //    (a `write` shows as a new file rather than an overwrite). That degrades gracefully,
-    //    unlike v4's missing reply ids, so it isn't worth refetching every cached transcript.
+    //  - v6 (#168) follows #154 (file edit diffs), which added the optional `ChatItem.toolDetails`
+    //    without a bump. A v5 file cached before #154 has tool results without it, and a `write`
+    //    without details reads as creating the file, so an overwrite showed as "New file". Only
+    //    the Gateway knows the real details and older history is never refetched, so
+    //    `migrations[5]` marks tool results lacking them with `unknownToolDetails`: the card
+    //    then says "Written" with nothing claimed about what was removed. Tool results that have
+    //    details (cached after #154) keep them, and nothing is refetched.
 
     /// Upgrades a snapshot's JSON object from the version it's keyed by to the next one.
     typealias Migration = @Sendable (inout [String: Any]) throws -> Void
 
+    /// `toolDetails` of a tool result cached before they were recorded: the Gateway's details
+    /// are unknown, so a file edit card claims neither a new file nor what was removed.
+    public static let unknownToolDetails: JSONValue = .object(["provenance": .string("unknown")])
+
     /// Keyed by source version: `migrations[n]` turns a version-n snapshot into version n + 1.
-    static let migrations: [Int: Migration] = [:]
+    static let migrations: [Int: Migration] = [
+        5: { json in
+            // A file that isn't a transcript is left for decoding to reject.
+            guard var items = json["items"] as? [Any] else { return }
+            for index in items.indices {
+                guard var item = items[index] as? [String: Any], item["role"] as? String == ChatRole.toolResult.rawValue,
+                      item["toolDetails"] == nil || item["toolDetails"] is NSNull
+                else { continue }
+                item["toolDetails"] = ["provenance": "unknown"]
+                items[index] = item
+            }
+            json["items"] = items
+        },
+    ]
 
     /// Older transcripts are discarded rather than migrated.
     static let oldestMigratableVersion = 5
@@ -317,6 +337,25 @@ public enum TranscriptCache {
         _ = await Writer.shared.write(snapshot, to: url)
     }
 
+    /// Deletes one chat's cached transcript (its stored tool details included), its sidecar and
+    /// its rows in the message search index, e.g. when the session is deleted or rewound. A
+    /// quarantined copy is left for diagnosis. The files go through the same writer as saves, so a
+    /// save already queued lands before the removal, and the index skips a chat whose file is gone,
+    /// so that save can't make it searchable again.
+    public static func remove(gatewayId: UUID, sessionKey: String) async {
+        await self.remove(gatewayId: gatewayId, sessionKey: sessionKey, root: Self.root)
+        if Self.root != nil || MessageIndex.location(gatewayId: gatewayId) == .memory {
+            await MessageIndex.shared(gatewayId: gatewayId).remove(sessionKey: sessionKey)
+        }
+    }
+
+    /// Deletes one chat's transcript and sidecar under another cache root (tests); the message
+    /// search index, which lives under the default root, isn't touched.
+    static func remove(gatewayId: UUID, sessionKey: String, root: URL?) async {
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else { return }
+        await Writer.shared.remove(url)
+    }
+
     /// Deletes the Gateway's transcripts and message search index. `permanently`: the Gateway
     /// was removed from the app, so saves still under way don't write them again.
     public static func removeAll(gatewayId: UUID, permanently: Bool = false) {
@@ -334,7 +373,8 @@ public enum TranscriptCache {
     /// Deletes every Gateway's cached transcripts, search indexes and quarantined files (Settings'
     /// Clear Cache). Open chats keep what they show and save again on their next change. A save
     /// under way when this runs either fails harmlessly (writes are atomic, and the sidecar only
-    /// follows a written transcript) or writes a fresh, valid file.
+    /// follows a written transcript) or writes a fresh, valid file. Such a save isn't indexed
+    /// (no index opens while the files are deleted); it's indexed when it next saves or reconciles.
     public static func removeEverything() {
         guard let root = Self.root else { return }
         MessageIndex.whileDeleting {
@@ -386,6 +426,11 @@ public enum TranscriptCache {
     /// Serializes writes so an older snapshot can never land after a newer one.
     private actor Writer {
         static let shared = Writer()
+
+        func remove(_ url: URL) {
+            try? FileManager.default.removeItem(at: url.appendingPathExtension("meta"))
+            try? FileManager.default.removeItem(at: url)
+        }
 
         /// The file's modification date once written, or nil when it couldn't be.
         func write(_ snapshot: Snapshot, to url: URL) -> Date? {
