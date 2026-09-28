@@ -5,6 +5,7 @@
 	<!-- Read by SharedContainer; must match the entitlements. The rest of Info.plist is generated. -->
 	<key>PincerAppGroup</key>
 	<string>$(PINCER_APP_GROUP)</string>
+	<!-- Development namespace suffix (".dev-<name>"); empty in production. -->
 	<key>PincerDevSuffix</key>
 	<string>$(PINCER_DEV_SUFFIX)</string>
 	<key>PincerKeychainGroup</key>

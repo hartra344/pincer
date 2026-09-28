@@ -55,10 +55,19 @@ struct DevNamespaceStorageTests {
         #expect(storage.shared === storage.local)
         #expect(storage.shared !== UserDefaults.standard)
 
-        let legacy = UserDefaults(suiteName: "chat.pincer.legacy-\(ns)")!
-        defer { UserDefaults().removePersistentDomain(forName: "chat.pincer.legacy-\(ns)") }
+        let legacyName = "chat.pincer.legacy-\(ns)"
+        let legacy = UserDefaults(suiteName: legacyName)!
+        defer { UserDefaults().removePersistentDomain(forName: legacyName) }
         GatewayProfileStore.save([GatewayProfile(name: "prod", url: "ws://127.0.0.1:1", authMode: .token)], to: legacy)
+
+        // Control: a separate legacy store would be copied, which is what production storage does.
+        let control = UserDefaults(suiteName: "\(legacyName)-control")!
+        defer { UserDefaults().removePersistentDomain(forName: "\(legacyName)-control") }
+        #expect(GatewayProfileStore.load(from: control, legacy: legacy).count == 1)
+
+        // The namespaced pair uses the dev suite as both, so the seeded legacy profiles are never read.
         #expect(GatewayProfileStore.load(from: storage.shared, legacy: storage.local).isEmpty)
+        #expect(storage.shared.data(forKey: GatewayProfileStore.key) == nil)
     }
 
     @Test func productionStorageKeepsStandardLocalDefaults() {
