@@ -454,7 +454,10 @@ private struct FirstRunFind: View {
             .buttonStyle(.borderedProminent)
             .disabled(!state.canCheckAddress)
         }
+        #if os(macOS)
+        // iOS leaves the keyboard down so the help and commands above the field stay visible.
         .onAppear { if state.trimmedAddress.isEmpty || state.location != .thisMac { self.addressFocused = true } }
+        #endif
         .onChange(of: state.reachability.isChecking) { _, checking in
             if checking { FirstRunAnnouncer.announce("Checking…") }
         }

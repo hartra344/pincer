@@ -75,7 +75,7 @@ struct MenuBarContent: View {
             }
             // #134: finish setting up the selected gateway from here too.
             if let gateway = self.app.selectedGateway, !gateway.profile.isDemo, !gateway.setup.progress.completed {
-                Button("Set Up \(gateway.profile.name)…") {
+                Button("Set Up Gateway…") {
                     gateway.setup.present()
                     self.showMainWindow()
                 }
