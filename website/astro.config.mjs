@@ -63,6 +63,7 @@ export default defineConfig({
 						{ slug: 'guides/devices' },
 						{ slug: 'guides/skills-and-tools' },
 						{ slug: 'guides/gateway-health' },
+						{ slug: 'guides/channel-status' },
 						{ slug: 'guides/gateway-logs' },
 						{ slug: 'guides/command-policy' },
 						{ slug: 'guides/usage-and-cost' },

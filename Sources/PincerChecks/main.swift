@@ -509,6 +509,7 @@ await checkGatewayLogsModel()
 await checkExecPolicy()
 await checkAgentManagement()
 checkSubagents()
+await checkChannelStatus()
 await checkDeviceManagement()
 await checkSkillsTools()
 print("Pairing requests")
@@ -2467,6 +2468,8 @@ if arguments.contains("--demo") {
     await runDemoSetup()
     print("Deep links (demo)")
     await runDemoDeepLinks()
+    print("Channel status (demo)")
+    await runDemoChannels()
     print("Tool diffs (demo)")
     await runDemoToolDiffs()
     print("Agent avatars (demo)")
@@ -3562,6 +3565,27 @@ func runQuickCaptureDemo() async {
     check(revealed && gateway.selectedKey == "agent:main:dashboard:trip" && app.openRequests == opens + 1,
           "Send & Open reveals the chat")
 
+    // ⌘↩ in Quick Capture is Send & Open; plain ↩ just sends. The main composer keeps ⌘↩ as Send.
+    let commandReturn = ComposerReturnAction.resolve(shift: false, option: false, command: true, supportsSendAndOpen: true)
+    check(commandReturn == .sendAndOpen, "⌘↩ in Quick Capture resolves to Send & Open")
+    gateway.selectedKey = "agent:main:main"
+    let opensForCommand = app.openRequests
+    model.target = QuickCaptureTarget(gatewayId: gateway.id, target: .chat("agent:main:dashboard:trip"))
+    model.text = "command return"
+    let commandSent = await model.send(reveal: commandReturn == .sendAndOpen)
+    check(commandSent && gateway.selectedKey == "agent:main:dashboard:trip" && app.openRequests == opensForCommand + 1,
+          "⌘↩ in Quick Capture sends and reveals the chat")
+    gateway.selectedKey = "agent:main:main"
+    let plainReturn = ComposerReturnAction.resolve(shift: false, option: false, command: false, supportsSendAndOpen: true)
+    let opensForPlain = app.openRequests
+    model.target = QuickCaptureTarget(gatewayId: gateway.id, target: .chat("agent:main:dashboard:trip"))
+    model.text = "plain return"
+    let plainSent = await model.send(reveal: plainReturn == .sendAndOpen)
+    check(plainReturn == .send && plainSent && gateway.selectedKey == "agent:main:main" && app.openRequests == opensForPlain,
+          "↩ in Quick Capture sends without revealing")
+    check(ComposerReturnAction.resolve(shift: false, option: false, command: true, supportsSendAndOpen: false) == .send,
+          "⌘↩ in the main composer still just sends")
+
     // Open in Pincer keeps the draft.
     gateway.selectedKey = "agent:main:main"
     model.prepare()
@@ -4627,6 +4651,8 @@ func runLive(url: String, token: String) async {
     await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
     await runLiveAgents(profile: profile, gateway: gateway, admin: admin)
     await runLiveSubagents(gateway: admin)
+    // Before Health: reconnects the mock's degraded Telegram so only the failed delivery is left.
+    await runLiveChannels(profile: profile, admin: admin)
     await runLiveDevices(profile: profile, gateway: gateway, admin: admin)
     await runLiveSkills(profile: profile, admin: admin)
 
