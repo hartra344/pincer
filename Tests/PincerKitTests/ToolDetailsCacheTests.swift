@@ -60,7 +60,8 @@ struct ToolDetailsCacheTests {
         for index in rows.indices { rows[index].removeValue(forKey: "toolDetails") }
         json["items"] = rows
         let (snapshot, outcome) = TranscriptCache.decode(try JSONSerialization.data(withJSONObject: json))
-        #expect(outcome == .loaded && !outcome.discarded, "no version bump: v5 without the field still loads")
+        // v5 is migrated for #207 (forwarded senders), which leaves tool results as they are.
+        #expect(outcome == .migrated(from: 5) && !outcome.discarded, "v5 without the field still loads")
         let loaded = try #require(snapshot?.items)
         #expect(loaded[1].toolDetails == nil)
         let edit = try #require(Self.tool(loaded)?.fileEdit)
