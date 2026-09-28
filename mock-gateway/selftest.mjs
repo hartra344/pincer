@@ -202,7 +202,7 @@ async function agentManagementSelftest() {
     }
     const list = await reader.send('agents.list', {});
     assert.equal(list.defaultId, 'main');
-    assert.deepEqual(list.agents.map((a) => a.id), ['main', 'research', 'coder']);
+    assert.deepEqual(list.agents.map((a) => a.id), ['main', 'research', 'coder', 'kiko']);
     assert.equal(list.agents[0].workspace, `${MOCK_STATE_DIR}/workspace`);
     assert.equal(list.agents[1].workspace, `${MOCK_STATE_DIR}/workspace-research`);
     assert.deepEqual(list.agents[2].model, { primary: 'anthropic/claude-sonnet-5' });
@@ -357,7 +357,7 @@ async function agentManagementSelftest() {
     const kept = await admin.send('agents.delete', { agentId: 'owl-twin', deleteFiles: false });
     assert.deepEqual(kept.removed, [], 'deleteFiles:false leaves files alone');
     assert.equal((await admin.send('agents.delete', { agentId: 'night-owl' })).removed[0].method, 'trash');
-    for (const agentId of ['coder', dupe.agentId]) await admin.send('agents.delete', { agentId });
+    for (const agentId of ['coder', 'kiko', dupe.agentId]) await admin.send('agents.delete', { agentId });
     assert.equal((await admin.call('agents.delete', { agentId: 'main' })).error.message, 'Agent "main" is the only configured agent and cannot be deleted.');
     assert.match((await admin.call('agents.delete', { agentId: 'main', force: true })).error.message, /unexpected property 'force'/);
     admin.ws.close();
@@ -376,7 +376,7 @@ async function agentManagementSelftest() {
       assert.ok(!legacy.hello.features.methods.includes(method));
       assert.equal((await legacy.call(method, { agentId: 'main' })).error.code, 'UNKNOWN_METHOD');
     }
-    assert.equal((await legacy.send('agents.list', {})).agents.length, 3);
+    assert.equal((await legacy.send('agents.list', {})).agents.length, 4);
     legacy.ws.close();
   } finally {
     delete process.env.MOCK_NO_AGENT_MANAGEMENT;
@@ -1019,6 +1019,18 @@ try {
   assert.ok(blocks.some((b) => b.type === 'thinking'));
   assert.ok(blocks.some((b) => b.type === 'toolCall'));
   assert.ok(blocks.some((b) => b.type === 'image' && b.artifactId === 'art-chart-1'));
+  // Kiko's sessions_send messages and the morning briefing, projected as upstream's chat.history does.
+  const forwarded = history.messages.filter((m) => m.senderSession);
+  assert.deepEqual(forwarded.map((m) => [m.role, m.senderSession.agentId, m.provenance.kind, m.provenance.sourceTool]), [
+    ['assistant', 'main', 'internal_system', 'cron'],
+    ['assistant', 'kiko', 'inter_session', 'sessions_send'],
+    ['assistant', 'kiko', 'inter_session', 'sessions_send'],
+  ]);
+  assert.equal(forwarded[0].senderSession.label, 'Morning briefing');
+  assert.equal(forwarded[1].senderLabel, 'Forwarded from kiko');
+  assert.ok(forwarded.every((m) => !m.content[0].text.startsWith('[') && m.model === undefined), 'prompt prefixes stripped, no model');
+  const kikoRun = history.messages.filter((m) => m.__openclaw.runId === forwarded[1].__openclaw.runId);
+  assert.deepEqual(kikoRun.map((m) => m.senderSession?.agentId ?? m.role), ['kiko', 'assistant'], "Claw's reply shares Kiko's run");
 
   const artifact = await client.send('artifacts.download', { sessionKey: 'agent:main:main', artifactId: 'art-chart-1' });
   const png = Buffer.from(artifact.data, 'base64');

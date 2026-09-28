@@ -2434,6 +2434,8 @@ if let (url, token) = liveCore {
     await runLive(url: url, token: token)
 }
 if let (url, token) = liveExtras {
+    print("Messages from other agents (live)")
+    await runLiveForwarded(url: url, token: token)
     print("Quick Capture (live)")
     await runQuickCaptureLive(url: url, token: token)
     print("Replies & reactions (live)")
@@ -2479,6 +2481,8 @@ if arguments.contains("--demo") {
     await runQuickCaptureDemo()
     print("Replies & reactions (demo)")
     await runDemoReactionsReply()
+    print("Messages from other agents (demo)")
+    await runDemoForwarded()
     print("Menu bar (demo)")
     await runMenuBarDemo()
     print("Sidebar automations & slash commands (demo)")

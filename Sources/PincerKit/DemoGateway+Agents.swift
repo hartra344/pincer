@@ -135,6 +135,21 @@ extension DemoGateway {
                 "IDENTITY.md": Self.identityMarkdown(name: "Forge", emoji: "🛠️", avatar: nil),
                 "BOOTSTRAP.md": Self.bootstrapTemplate,
             ], at: now - 1 * hour, setupCompleted: false),
+            Self.defaultWorkspace("kiko"): workspace([
+                "AGENTS.md": """
+                # AGENTS.md - Kiko's Workspace
+
+                You keep Travis's budget: bills, subscriptions and renewals. Ask the other agents for the costs they know about.
+
+                """,
+                "SOUL.md": """
+                # SOUL.md
+
+                You're **Kiko** 🌕: calm, exact with numbers and never pushy about money.
+
+                """,
+                "IDENTITY.md": Self.identityMarkdown(name: "Kiko", emoji: "🌕", avatar: nil),
+            ], at: now - 30 * hour),
         ]
     }
 

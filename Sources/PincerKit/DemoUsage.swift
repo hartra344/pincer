@@ -49,6 +49,8 @@ enum DemoUsage {
                 models: [(local, 1)], dailyTokens: 300_000, activeDays: 2..<12, log: subagentLog),
         Session(key: "agent:coder:main", agentId: "coder", label: nil, channel: "webchat",
                 models: [(sol, 0.6), (opus, 0.4)], dailyTokens: 1_200_000, activeDays: 0..<90, log: coderLog),
+        Session(key: "agent:kiko:main", agentId: "kiko", label: nil, channel: "webchat",
+                models: [(sonnet, 1)], dailyTokens: 80_000, activeDays: 1..<3, log: kikoLog),
     ]
 
     /// The model a demo chat mainly runs on, so its row and replies match its usage.
@@ -502,6 +504,13 @@ enum DemoUsage {
         ("tool", "mail.send_email: To travel@example.com, family@example.com, Subject: Kyoto day plan"),
         ("toolResult", "Sent to 2 recipients."),
         ("assistant", "Sent the Kyoto day plan to travel@example.com and family@example.com."),
+    ]
+
+    private static let kikoLog: [(role: String, content: String)] = [
+        ("user", "Introduce yourself to Claw and find out what the home lab costs each month."),
+        ("tool", "sessions_send: agent:main:main"),
+        ("toolResult", "Claw: Backblaze B2 about $6 a month, Tailscale free, the domain $12 a year."),
+        ("assistant", "Claw sent the list. I've added the home-lab bills to your budget."),
     ]
 
     private static let researchLog: [(role: String, content: String)] = [

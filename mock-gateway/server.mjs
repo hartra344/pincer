@@ -19,6 +19,7 @@ import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './
 import { isSpawnedBy, markSubagentAborted, seedRunningSubagentRun, seedSubagents, simulateSpawn } from './subagents.mjs';
 import { DEVICE_PAIRING_EVENTS, DEVICE_PAIRING_METHODS, NODE_METHODS, approvePendingDevice, createDevicePairingState, devicePairingDisabled, handleDevicesRequest, noteDeviceConnected, nodesDisabled, openPairingRequest } from './devices.mjs';
 import { liveFileEditCall, seededFileEditCalls } from './file-edits.mjs';
+import { seedForwardedMessages } from './forwarded.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const METHODS = [
@@ -307,6 +308,7 @@ function createSeedState() {
     ['main', { id: 'main', name: 'Claw', identity: { name: 'Claw', emoji: '🦞' } }],
     ['research', { id: 'research', name: 'Scout', identity: { name: 'Scout', emoji: '🔭' } }],
     ['coder', { id: 'coder', name: 'Forge', identity: { name: 'Forge', emoji: '🛠️' }, model: 'anthropic/claude-sonnet-5' }],
+    ['kiko', { id: 'kiko', name: 'Kiko', identity: { name: 'Kiko', emoji: '🌕' } }],
   ]);
   const agentWorkspaces = createAgentWorkspaces(agents, base);
   const sessions = new Map();
@@ -392,6 +394,13 @@ function createSeedState() {
     totalTokens: 190_000,
     contextTokens: 200_000,
   });
+  row('agent:kiko:main', {
+    agentId: 'kiko',
+    isMain: true,
+    derivedTitle: 'Main',
+    age: 300_000,
+    lastMessagePreview: 'Claw sent the list of home-lab bills.',
+  });
   // Upstream-shaped `edit`, `write` and `apply_patch` calls (see file-edits.mjs).
   row('agent:coder:dashboard:retry-fix', {
     agentId: 'coder',
@@ -436,6 +445,7 @@ function createSeedState() {
     makeMessage('assistant', [textBlock('Status: online, 3 agents.')]),
   );
 
+  seedForwardedMessages({ transcripts, makeMessage, textBlock, toolCallBlock });
   const dfCall = 'call_seed_df';
   transcripts.get('agent:main:main').push(
     makeMessage('user', [textBlock('Can you check disk usage and show me a quick status?')]),
