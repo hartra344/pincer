@@ -249,8 +249,7 @@ func runLiveOutbox(url: String, token: String) async {
     await chat.load(force: true)
     check(committedCopies(chat, ambiguous) == 1 && !chat.items.contains { $0.plainText == ambiguous && $0.isPending },
           "Pincer's own view shows one copy, nothing pending (\(committedCopies(chat, ambiguous)))")
-    gateway.stop()
-    try? await Task.sleep(for: .milliseconds(300))
+    await gateway.stopAndFlushCache()
 
     await runLiveOutboxRelaunch(url: url, token: token, key: key)
 }

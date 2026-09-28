@@ -229,12 +229,17 @@ func checkUsage() async {
     check(calls.sorted() == ["sessions.usage", "usage.cost", "usage.status"], "Refresh retries everything")
 
     // Stale responses: the older range never lands over the newer one.
+    var slowStarted = false
     let slow = UsageModel { method, params in
-        if params["startDate"] == UsageRequests.cost(.last(7))["startDate"] { try await Task.sleep(for: .milliseconds(300)) }
+        if params["startDate"] == UsageRequests.cost(.last(7))["startDate"] {
+            slowStarted = true
+            // Simulated slow server: the 7-day response lands after the 30-day one.
+            try await Task.sleep(for: .milliseconds(300))
+        }
         return method == "sessions.usage" ? ["startDate": params["startDate"] ?? .null, "endDate": params["endDate"] ?? .null, "sessions": []] : [:]
     }
     let first = Task { await slow.load() }
-    try? await Task.sleep(for: .milliseconds(50))
+    _ = await waitFor("slow usage request started", timeout: 5) { slowStarted }
     await slow.setPreset(.month)
     await first.value
     check(slow.sessions.value?.startDate == UsageDateRange.last(30).startKey && slow.selection.preset == .month

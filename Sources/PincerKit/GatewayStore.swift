@@ -352,10 +352,11 @@ public final class GatewayStore: Identifiable {
         Task { await connection.stop() }
     }
 
-    /// `stop()` for a store that won't be started again, returning once its chats' last cache
-    /// writes and search indexing have landed and nothing more will be written.
+    /// `stop()` for a store that won't be started again, returning once the connection is torn
+    /// down and its chats' last cache writes and search indexing have landed.
     public func stopAndFlushCache() async {
         self.stop()
+        await self.connection.stop()
         for chat in self.chats.values { await chat.finishCaching() }
         await TranscriptCache.flush(gatewayId: self.id)
     }
