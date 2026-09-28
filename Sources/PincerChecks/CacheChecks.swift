@@ -234,7 +234,16 @@ func checkTranscriptCacheVersioning() async {
                                    gatewayId: gatewayId, sessionKey: "after")
         let (_, afterOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "after")
         check(afterOutcome == .loaded, "cache usable after removeEverything")
-        await checkAsync({ await indexHits(gatewayId, "zebra").count == 1 }, "search index rebuilt after removeEverything")
+        // Awaited flush, then a bounded poll: a live store in this process may be reopening its own
+        // index under the same root right after the clear (seen once in CI, #206).
+        await TranscriptCache.flush(gatewayId: gatewayId)
+        var zebraHits = await indexHits(gatewayId, "zebra").count
+        let deadline = Date().addingTimeInterval(5)
+        while zebraHits != 1, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(100))
+            zebraHits = await indexHits(gatewayId, "zebra").count
+        }
+        check(zebraHits == 1, "search index rebuilt after removeEverything (\(zebraHits) hits, \(await MessageIndex.shared(gatewayId: gatewayId).status))")
         await checkRemoveOneChat()
         await checkIndexSurvivesDeletedFiles()
         TranscriptCache.removeAll(gatewayId: gatewayId)
