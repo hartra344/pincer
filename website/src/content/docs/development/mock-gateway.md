@@ -58,6 +58,10 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 
 `chat.send` takes `replyToId`, and the sent message keeps `replyToId` and a `replyToPreview` (the original's text and who wrote it), like the gateway. The **home-lab** Discord chat has a message with its Discord message id, which the agent reacted 👀 to with its `message` tool. `message.action` reacts to Discord messages (`action: "react"`) and refuses other channels and actions.
 
+## Messages from other agents
+
+Claw's main chat (`agent:main:main`) has a *Morning briefing* automation run and Kiko introducing herself to Claw with `sessions_send`, as `chat.history` shows them: assistant messages with `senderSession`, `senderLabel` and their `provenance`, without the model-facing prompt prefix or a model. Kiko's own main chat (`agent:kiko:main`) has the matching `sessions_send` tool calls. See [Messages from other agents](../../guides/transcript/#messages-from-other-agents).
+
 ## Config and plugins
 
 The mock serves a small config and plugin catalog for Gateway Settings. It supports `config.get`, `config.schema`, `config.patch`, `config.set` and `config.apply`, with redacted secrets, validation issues and restart hints, plus the `plugins.*` methods. Writes need the `operator.admin` scope, so set **Access** to **Full Management**.
