@@ -479,6 +479,7 @@ private final class TranscriptCell: NSView {
 
     private let content = TranscriptRowView()
     private var serial: Int?
+    private weak var actions: TranscriptRowActions?
 
     init() {
         super.init(frame: .zero)
@@ -498,9 +499,24 @@ private final class TranscriptCell: NSView {
         if self.content.frame != frame { self.content.frame = frame }
         guard layout.serial != self.serial else { return }
         self.serial = layout.serial
+        self.actions = actions
         self.content.apply(layout, actions: actions)
-        self.setAccessibilityElement(false)
-        self.content.setAccessibilityLabel(layout.accessibilityLabel)
+    }
+
+    // One labelled group per message; its buttons and text stay reachable inside it.
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { self.content.layout?.accessibilityLabel }
+
+    override func accessibilityCustomActions() -> [NSAccessibilityCustomAction]? {
+        guard let layout = self.content.layout else { return nil }
+        let actions = TranscriptRowAccessibilityAction.actions(for: layout, actions: self.actions, anchor: self.content)
+        return actions.map { action in
+            NSAccessibilityCustomAction(name: action.name) {
+                action.perform()
+                return true
+            }
+        }
     }
 }
 #endif

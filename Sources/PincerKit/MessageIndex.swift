@@ -44,6 +44,8 @@ public actor MessageIndex {
         var removed: Set<UUID> = []
         /// Gateways whose index is kept in memory while the transcript cache is off (the demo).
         var inMemory: Set<UUID> = []
+        /// Cache folders being deleted (`whileDeleting`).
+        var deleting = 0
     }
 
     /// Where an index lives: next to the transcript cache, or in memory.
@@ -58,6 +60,9 @@ public actor MessageIndex {
     public static func shared(gatewayId: UUID) -> MessageIndex {
         self.registry.withLock { registry in
             if let index = registry.indexes[gatewayId] { return index }
+            // A file opened now would be deleted under its connection, leaving search broken
+            // until relaunch. Until the deletion is done, hand out an inert index instead.
+            if registry.deleting > 0 { return MessageIndex(gatewayId: gatewayId, removed: true) }
             let index = MessageIndex(gatewayId: gatewayId, removed: registry.removed.contains(gatewayId))
             registry.indexes[gatewayId] = index
             return index
@@ -76,6 +81,14 @@ public actor MessageIndex {
         index.removed.withLock { $0 = true }
         index.interrupter.interruptAny()
         Task { await index.close() }
+    }
+
+    /// Runs `body`, which discards indexes and deletes their folders, without creating an index
+    /// meanwhile. Writes in that window are dropped, like the transcripts they index.
+    static func whileDeleting(_ body: () -> Void) {
+        self.registry.withLock { $0.deleting += 1 }
+        defer { self.registry.withLock { $0.deleting -= 1 } }
+        body()
     }
 
     /// The Gateway was removed from the app, so nothing may be cached for it again.

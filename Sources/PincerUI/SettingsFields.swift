@@ -54,7 +54,7 @@ struct FieldRow: View {
                 Text(help).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             if let url = self.field.signupURL {
-                Link("Get a key", destination: url).font(.caption)
+                Link(L("Get a key"), destination: url).font(.caption)
             }
             if let problem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill")
@@ -63,8 +63,8 @@ struct FieldRow: View {
             }
             if changed {
                 HStack(spacing: 6) {
-                    Text("Edited").foregroundStyle(self.theme.accent)
-                    Button("Revert") { self.settings.revert(self.field.path) }
+                    Text("Edited", bundle: .module).foregroundStyle(self.theme.accent)
+                    Button(L("Revert")) { self.settings.revert(self.field.path) }
                         .buttonStyle(.borderless)
                 }
                 .font(.caption)
@@ -107,7 +107,7 @@ struct FieldRow: View {
         case .json:
             VStack(alignment: .leading, spacing: 4) {
                 Text(self.label)
-                TextField("JSON", text: self.textBinding, axis: .vertical)
+                TextField(L("JSON"), text: self.textBinding, axis: .vertical)
                     .font(.body.monospaced())
                     .lineLimit(2...12)
                     .labelsHidden()
@@ -153,14 +153,14 @@ struct FieldMenu: View {
     var body: some View {
         let settings = self.gateway.settings
         if settings.isChanged(self.field.path) {
-            Button("Revert to Saved", systemImage: "arrow.uturn.backward") { settings.revert(self.field.path) }
+            Button(L("Revert to Saved"), systemImage: "arrow.uturn.backward") { settings.revert(self.field.path) }
         }
         if settings.value(at: self.field.path) != nil, !self.field.isRequired, settings.canEdit {
-            Button(self.field.defaultValue == nil ? "Remove Value" : "Reset to Default", systemImage: "eraser") {
+            Button(self.field.defaultValue == nil ? L("Remove Value") : L("Reset to Default"), systemImage: "eraser") {
                 settings.set(self.field.path, nil)
             }
         }
-        Button("Copy Setting Path", systemImage: "doc.on.doc") { Clipboard.copy(self.field.id) }
+        Button(L("Copy Setting Path"), systemImage: "doc.on.doc") { Clipboard.copy(self.field.id) }
     }
 }
 
@@ -185,7 +185,7 @@ private struct SecretFieldRow: View {
                 Picker(self.label, selection: Binding(
                     get: { reference.map { Source.reference($0.source) } ?? .value },
                     set: { self.choose($0, current: reference) })) {
-                    Text("Stored Value").tag(Source.value)
+                    Text("Stored Value", bundle: .module).tag(Source.value)
                     ForEach(SecretRef.Source.allCases) { Text($0.label).tag(Source.reference($0)) }
                 }
             }
@@ -217,9 +217,9 @@ private struct SecretFieldRow: View {
                         prompt: Text(cleared ? "Will be removed" : saved ? "Saved on Gateway — type to replace" : self.field.placeholder ?? "Not Set"))
                 .disabled(cleared)
             if cleared {
-                Button("Undo") { settings.revert(self.field.path) }.buttonStyle(.borderless)
+                Button(L("Undo")) { settings.revert(self.field.path) }.buttonStyle(.borderless)
             } else if saved, settings.text(for: self.field).isEmpty, !self.field.isRequired {
-                Button("Clear", role: .destructive) { settings.set(self.field.path, nil) }.buttonStyle(.borderless)
+                Button(L("Clear"), role: .destructive) { settings.set(self.field.path, nil) }.buttonStyle(.borderless)
             }
         }
     }

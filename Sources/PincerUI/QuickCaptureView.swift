@@ -61,7 +61,7 @@ struct QuickCaptureView: View {
 
     private var targetRow: some View {
         HStack(spacing: 8) {
-            Text("To:")
+            Text("To:", bundle: .module)
                 .foregroundStyle(.secondary)
             Button {
                 self.model.togglePicker()
@@ -85,8 +85,8 @@ struct QuickCaptureView: View {
                 .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-            .help("Choose a chat (⌘J or Tab)")
-            .accessibilityLabel("Send to \(self.model.targetTitle)")
+            .help(L("Choose a chat (⌘J or Tab)"))
+            .accessibilityLabel(L("Send to \(self.model.targetTitle)"))
             Spacer(minLength: 8)
             if let shortcut = self.controller.displayShortcut {
                 Text(shortcut)
@@ -106,15 +106,15 @@ struct QuickCaptureView: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("Search chats and agents…", text: self.$model.query)
+                TextField(L("Search chats and agents…"), text: self.$model.query)
                     .textFieldStyle(.plain)
                     .focused(self.$searchFocused)
-                    .accessibilityLabel("Search chats and agents")
+                    .accessibilityLabel(L("Search chats and agents"))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             if items.isEmpty {
-                Text("No matches")
+                Text("No matches", bundle: .module)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
@@ -229,19 +229,19 @@ struct QuickCaptureView: View {
 
     private var footer: some View {
         HStack(spacing: 10) {
-            Text("↩ Send · ⌘↩ Send & Open · esc Close")
+            Text("↩ Send · ⌘↩ Send & Open · esc Close", bundle: .module)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             Spacer(minLength: 8)
             if self.model.isSending {
                 ProgressView().controlSize(.small)
             }
-            Button("Send & Open") { self.controller.send(reveal: true) }
+            Button(L("Send & Open")) { self.controller.send(reveal: true) }
                 .keyboardShortcut(.return, modifiers: .command)
                 .controlSize(.small)
                 .glassButton()
                 .disabled(!self.model.canSend)
-            Button("Send") { self.controller.send(reveal: false) }
+            Button(L("Send")) { self.controller.send(reveal: false) }
                 .controlSize(.small)
                 .glassProminentButton()
                 .disabled(!self.model.canSend)
@@ -255,9 +255,9 @@ struct QuickCaptureView: View {
             Image(systemName: "server.rack")
                 .font(.title)
                 .foregroundStyle(.secondary)
-            Text("Add a Gateway in Pincer to use Quick Capture")
+            Text("Add a Gateway in Pincer to use Quick Capture", bundle: .module)
                 .font(.headline)
-            Button("Open Pincer") {
+            Button(L("Open Pincer")) {
                 self.controller.showMainWindow()
                 self.controller.hide()
             }

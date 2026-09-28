@@ -74,8 +74,8 @@ struct ProgressCardView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(self.isDismissing)
-                .help("Dismiss progress card")
-                .accessibilityLabel("Dismiss progress card")
+                .help(L("Dismiss progress card"))
+                .accessibilityLabel(L("Dismiss progress card"))
             }
         }
         .padding(.horizontal, 14)

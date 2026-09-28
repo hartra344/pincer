@@ -64,13 +64,13 @@ struct GatewayLogsPage: View {
                                   levels: self.levelsRaw, query: self.appliedQuery)
         Group {
             if !model.supported {
-                ContentUnavailableView("Gateway Logs Aren't Available", systemImage: "doc.text.magnifyingglass",
-                                       description: Text("This gateway doesn't offer logs.tail. Update OpenClaw to view its logs here."))
+                ContentUnavailableView(L("Gateway Logs Aren't Available"), systemImage: "doc.text.magnifyingglass",
+                                       description: Text("This gateway doesn't offer logs.tail. Update OpenClaw to view its logs here.", bundle: .module))
             } else {
                 self.content(model, visible: visible, connected: connected)
             }
         }
-        .navigationTitle("Gateway Logs")
+        .navigationTitle(L("Gateway Logs"))
         .onChange(of: filterKey, initial: true) { self.refresh() }
         #if os(macOS)
         .focusedSceneValue(\.gatewayLogsSearch, model.supported ? self.$searchRequest : nil)
@@ -96,14 +96,14 @@ struct GatewayLogsPage: View {
         }
         .confirmationDialog("Export \(self.exportLines.count.formatted()) line\(self.exportLines.count == 1 ? "" : "s")?",
                             isPresented: self.$confirmExport, titleVisibility: .visible) {
-            Button("Export") {
+            Button(L("Export")) {
                 let data = Data(GatewayLogs.rawText(self.exportLines).utf8)
                 self.exportDocument = ExportedFile(name: GatewayLogs.exportFilename(gatewayName: self.gateway.profile.name),
                                                    data: data)
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L("Cancel"), role: .cancel) {}
         } message: {
-            Text("Gateway logs are redacted by the gateway, but they can still contain hostnames, file paths and message content. Review them before sharing.")
+            Text("Gateway logs are redacted by the gateway, but they can still contain hostnames, file paths and message content. Review them before sharing.", bundle: .module)
         }
         .fileExporter(
             isPresented: Binding(get: { self.exportDocument != nil }, set: { if !$0 { self.exportDocument = nil } }),
@@ -125,11 +125,11 @@ struct GatewayLogsPage: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if self.matches == 0, model.lineCount > 0 {
                 ContentUnavailableView {
-                    Label("No lines match", systemImage: "line.3.horizontal.decrease.circle")
+                    Label(L("No lines match"), systemImage: "line.3.horizontal.decrease.circle")
                 } description: {
-                    Text("\(model.lineCount.formatted()) lines are hidden by the level toggles or search.")
+                    Text("\(model.lineCount.formatted()) lines are hidden by the level toggles or search.", bundle: .module)
                 } actions: {
-                    Button("Clear Filters") { self.clearFilters() }
+                    Button(L("Clear Filters")) { self.clearFilters() }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -153,10 +153,10 @@ struct GatewayLogsPage: View {
                         #endif
                         .contextMenu {
                             if !entry.isMarker {
-                                Button("Copy", systemImage: "doc.on.doc") {
+                                Button(L("Copy"), systemImage: "doc.on.doc") {
                                     Clipboard.copy(GatewayLogs.copyText(self.targets(entry, in: visible)))
                                 }
-                                Button("Copy Raw", systemImage: "curlybraces") {
+                                Button(L("Copy Raw"), systemImage: "curlybraces") {
                                     Clipboard.copy(GatewayLogs.rawText(self.targets(entry, in: visible)))
                                 }
                             }
@@ -312,7 +312,7 @@ struct GatewayLogsPage: View {
                 Label(failure.message, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                 Spacer(minLength: 8)
-                Button("Try Again") { model.retry() }
+                Button(L("Try Again")) { model.retry() }
                     .disabled(!connected)
             }
             .font(.callout)
@@ -324,26 +324,26 @@ struct GatewayLogsPage: View {
 
     @ViewBuilder private func emptyState(_ model: GatewayLogsModel, connected: Bool) -> some View {
         if !connected {
-            ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                   description: Text("Connect to the gateway to see its logs."))
+            ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                   description: Text("Connect to the gateway to see its logs.", bundle: .module))
         } else if let failure = model.failure, !failure.isUnavailable {
             ContentUnavailableView {
-                Label("Couldn't Load Logs", systemImage: "exclamationmark.triangle")
+                Label(L("Couldn't Load Logs"), systemImage: "exclamationmark.triangle")
             } description: {
                 Text(failure.message)
             } actions: {
-                Button("Try Again") { model.retry() }
+                Button(L("Try Again")) { model.retry() }
             }
         } else if !model.hasLoaded {
             ProgressView()
         } else {
             ContentUnavailableView {
-                Label("No log output yet", systemImage: "doc.text.magnifyingglass")
+                Label(L("No log output yet"), systemImage: "doc.text.magnifyingglass")
             } description: {
                 if let file = model.file {
-                    Text("New lines written to \(file) appear here.")
+                    Text("New lines written to \(file) appear here.", bundle: .module)
                 } else {
-                    Text("New lines appear here as the gateway writes them.")
+                    Text("New lines appear here as the gateway writes them.", bundle: .module)
                 }
             }
         }
@@ -356,7 +356,7 @@ struct GatewayLogsPage: View {
         HStack(spacing: 8) {
             HStack(spacing: 4) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search Logs", text: self.$query)
+                TextField(L("Search Logs"), text: self.$query)
                     .textFieldStyle(.plain)
                     .focused(self.$searchFocused)
                     .onSubmit { self.appliedQuery = self.query }
@@ -364,7 +364,7 @@ struct GatewayLogsPage: View {
                     Button { self.query = "" } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)
-                        .help("Clear Search")
+                        .help(L("Clear Search"))
                 }
             }
             .padding(.horizontal, 6)
@@ -373,12 +373,12 @@ struct GatewayLogsPage: View {
             .frame(minWidth: 160, maxWidth: 260)
             ForEach(GatewayLogLevel.allCases) { level in
                 Toggle(isOn: self.levelBinding(level)) {
-                    Text("\(level.label) \(model.count(level).formatted())")
+                    Text(verbatim: "\(level.label) \(model.count(level).formatted())")
                         .font(.caption.monospacedDigit())
                 }
                 .toggleStyle(.button)
                 .controlSize(.small)
-                .help("Show \(level.rawValue) lines")
+                .help(L("Show \(level.rawValue) lines"))
             }
             Spacer(minLength: 0)
         }
@@ -410,8 +410,8 @@ struct GatewayLogsPage: View {
                     .help(file)
                 Button { Clipboard.copy(file) } label: { Image(systemName: "doc.on.doc") }
                     .buttonStyle(.borderless)
-                    .help("Copy Log File Path")
-                    .accessibilityLabel("Copy Log File Path")
+                    .help(L("Copy Log File Path"))
+                    .accessibilityLabel(L("Copy Log File Path"))
             }
         }
         .font(.caption)
@@ -436,25 +436,25 @@ struct GatewayLogsPage: View {
                 Button {
                     model.isPaused.toggle()
                 } label: {
-                    Label(model.isPaused ? "Resume" : "Pause", systemImage: model.isPaused ? "play.fill" : "pause.fill")
+                    Label(model.isPaused ? L("Resume") : L("Pause"), systemImage: model.isPaused ? "play.fill" : "pause.fill")
                 }
                 .disabled(!connected)
-                .help(model.isPaused ? "Resume" : "Pause")
+                .help(model.isPaused ? L("Resume") : L("Pause"))
             }
             #if os(macOS)
             ToolbarItem {
-                Toggle(isOn: self.$showRaw) { Label("Show Raw", systemImage: "curlybraces") }
-                    .help("Show Raw Lines")
+                Toggle(isOn: self.$showRaw) { Label(L("Show Raw"), systemImage: "curlybraces") }
+                    .help(L("Show Raw Lines"))
             }
             ToolbarItem {
-                Button { self.clear(model) } label: { Label("Clear", systemImage: "trash") }
+                Button { self.clear(model) } label: { Label(L("Clear"), systemImage: "trash") }
                     .disabled(model.entries.isEmpty)
-                    .help("Clear")
+                    .help(L("Clear"))
             }
             ToolbarItem {
-                Button { self.export(visible) } label: { Label("Export…", systemImage: "square.and.arrow.up") }
+                Button { self.export(visible) } label: { Label(L("Export…"), systemImage: "square.and.arrow.up") }
                     .disabled(self.matches == 0)
-                    .help("Export…")
+                    .help(L("Export…"))
             }
             #else
             ToolbarItem {
@@ -463,22 +463,22 @@ struct GatewayLogsPage: View {
                         Toggle("\(level.label) (\(model.count(level).formatted()))", isOn: self.levelBinding(level))
                     }
                 } label: {
-                    Label("Levels", systemImage: "line.3.horizontal.decrease.circle")
+                    Label(L("Levels"), systemImage: "line.3.horizontal.decrease.circle")
                 }
             }
             ToolbarItem {
                 Menu {
-                    Toggle(isOn: self.$showRaw) { Label("Show Raw", systemImage: "curlybraces") }
-                    Button("Copy Visible Lines", systemImage: "doc.on.doc") {
+                    Toggle(isOn: self.$showRaw) { Label(L("Show Raw"), systemImage: "curlybraces") }
+                    Button(L("Copy Visible Lines"), systemImage: "doc.on.doc") {
                         Clipboard.copy(GatewayLogs.copyText(visible))
                     }
                     .disabled(self.matches == 0)
-                    Button("Export…", systemImage: "square.and.arrow.up") { self.export(visible) }
+                    Button(L("Export…"), systemImage: "square.and.arrow.up") { self.export(visible) }
                         .disabled(self.matches == 0)
-                    Button("Clear", systemImage: "trash", role: .destructive) { self.clear(model) }
+                    Button(L("Clear"), systemImage: "trash", role: .destructive) { self.clear(model) }
                         .disabled(model.entries.isEmpty)
                 } label: {
-                    Label("More", systemImage: "ellipsis.circle")
+                    Label(L("More"), systemImage: "ellipsis.circle")
                 }
             }
             #endif

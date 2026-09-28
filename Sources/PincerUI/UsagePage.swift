@@ -16,30 +16,30 @@ struct UsagePage: View {
         Group {
             if model.isUnavailable {
                 ContentUnavailableView {
-                    Label("Usage Isn't Available", systemImage: "chart.bar.xaxis")
+                    Label(L("Usage Isn't Available"), systemImage: "chart.bar.xaxis")
                 } description: {
-                    Text("This gateway doesn't report usage or cost. Update OpenClaw to see tokens, spend and rate limits.")
+                    Text("This gateway doesn't report usage or cost. Update OpenClaw to see tokens, spend and rate limits.", bundle: .module)
                 } actions: {
-                    Button("Check Again") { Task { await model.refresh() } }
+                    Button(L("Check Again")) { Task { await model.refresh() } }
                         .disabled(!connected || model.isLoading)
                 }
             } else if !connected, !model.hasData, !model.isLoading {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see its usage and cost."))
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Connect to the gateway to see its usage and cost.", bundle: .module))
             } else {
                 self.form(model, connected: connected)
             }
         }
-        .navigationTitle("Usage")
+        .navigationTitle(L("Usage"))
         .toolbar {
             // Stays available when usage is unsupported, so an updated gateway can be picked up.
             ToolbarItem {
                 if model.isLoading, model.hasData {
                     ProgressView().controlSize(.small)
                 } else {
-                    Button { Task { await model.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    Button { Task { await model.refresh() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
                         .disabled(!connected || model.isLoading)
-                        .help("Refresh")
+                        .help(L("Refresh"))
                 }
             }
         }
@@ -64,7 +64,7 @@ struct UsagePage: View {
             UsageSessionsSection(model: model)
             UsageRateLimitsSection(model: model)
             if !connected {
-                Section { } footer: { Text("Not connected.") }
+                Section { } footer: { Text("Not connected.", bundle: .module) }
             }
         }
         .formStyle(.grouped)
@@ -132,7 +132,7 @@ private struct UsageDailySection: View {
         Section {
             UsageSectionBody(status: status, unsupported: "This gateway doesn't report daily usage.",
                              isEmpty: days.allSatisfy(\.totals.isEmpty), height: 200) {
-                Picker("Metric", selection: Binding(get: { metric }, set: { self.metric = $0 })) {
+                Picker(L("Metric"), selection: Binding(get: { metric }, set: { self.metric = $0 })) {
                     ForEach(UsageMetric.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -140,7 +140,7 @@ private struct UsageDailySection: View {
                 UsageDailyChart(days: days, metric: metric, selectedDay: self.$selectedDay)
             }
         } header: {
-            Text("Daily")
+            Text("Daily", bundle: .module)
         } footer: {
             if model.cost.isForbidden, model.cost.value == nil, let error = model.cost.loadState.error, status.hasValue {
                 Label(error, systemImage: "lock")
@@ -244,7 +244,7 @@ struct UsageDailyChart: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(UsageFormat.day(day.date)).font(.caption.weight(.semibold))
             Text(UsageFormat.cost(day.totals).text).font(.caption.monospacedDigit())
-            Text("\(UsageFormat.tokens(day.totals.totalTokens)) tokens").font(.caption.monospacedDigit())
+            Text("\(UsageFormat.tokens(day.totals.totalTokens)) tokens", bundle: .module).font(.caption.monospacedDigit())
             if day.hasCategories, self.metric == .tokens {
                 ForEach(UsageCategory.allCases) { category in
                     Text("\(category.label) \(UsageFormat.tokens(category.tokens(day.totals)))")
@@ -289,7 +289,7 @@ private struct UsageBreakdownSection: View {
         Section {
             UsageSectionBody(status: status, unsupported: "This gateway doesn't break usage down by model or agent.",
                              isEmpty: items.allSatisfy(\.totals.isEmpty), height: 160) {
-                Picker("Group By", selection: self.$kind) {
+                Picker(L("Group By"), selection: self.$kind) {
                     ForEach(UsageBreakdownKind.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -302,7 +302,7 @@ private struct UsageBreakdownSection: View {
                 }
             }
         } header: {
-            Text("Breakdown")
+            Text("Breakdown", bundle: .module)
         }
     }
 
@@ -390,7 +390,7 @@ private struct UsageBreakdownRow: View {
                     }
                     UsageCostText(totals: self.item.totals)
                 }
-                Text("\(UsageFormat.tokens(self.item.totals.totalTokens)) tokens · \(self.share.formatted(.percent.precision(.fractionLength(0))))")
+                Text("\(UsageFormat.tokens(self.item.totals.totalTokens)) tokens · \(self.share.formatted(.percent.precision(.fractionLength(0))))", bundle: .module)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -437,10 +437,10 @@ private struct UsageSessionsSection: View {
             }
         } header: {
             HStack {
-                Text("Sessions")
+                Text("Sessions", bundle: .module)
                 #if os(iOS)
                 Spacer()
-                Picker("Sort By", selection: self.$sort) {
+                Picker(L("Sort By"), selection: self.$sort) {
                     ForEach(UsageSessionSort.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.menu)
@@ -450,11 +450,11 @@ private struct UsageSessionsSection: View {
         } footer: {
             VStack(alignment: .leading, spacing: 2) {
                 if let result, result.sessionCount > result.sessions.count {
-                    Text("Showing top \(result.sessions.count) of \(result.sessionCount) sessions.")
+                    Text("Showing top \(result.sessions.count) of \(result.sessionCount) sessions.", bundle: .module)
                 }
                 #if os(macOS)
                 if !rows.isEmpty {
-                    Text("Double-click a session for details.")
+                    Text("Double-click a session for details.", bundle: .module)
                 }
                 #endif
             }
@@ -510,8 +510,8 @@ private struct UsageSessionsSection: View {
         }
         .contextMenu(forSelectionType: String.self) { keys in
             if let key = keys.first, let row = rows.first(where: { $0.key == key }) {
-                Button("Show Usage") { self.open(row) }
-                Button("Copy Session Key") { Clipboard.copy(key) }
+                Button(L("Show Usage")) { self.open(row) }
+                Button(L("Copy Session Key")) { Clipboard.copy(key) }
             }
         } primaryAction: { keys in
             if let key = keys.first, let row = rows.first(where: { $0.key == key }) { self.open(row) }
@@ -523,7 +523,7 @@ private struct UsageSessionsSection: View {
         if let totals = item.row.usage?.totals {
             content(totals)
         } else {
-            Text("Calculating…").foregroundStyle(.secondary)
+            Text("Calculating…", bundle: .module).foregroundStyle(.secondary)
         }
     }
     #else
@@ -542,11 +542,11 @@ private struct UsageSessionsSection: View {
                     VStack(alignment: .trailing, spacing: 2) {
                         if let totals = item.row.usage?.totals {
                             UsageCostText(totals: totals)
-                            Text("\(UsageFormat.tokens(totals.totalTokens)) tokens")
+                            Text("\(UsageFormat.tokens(totals.totalTokens)) tokens", bundle: .module)
                                 .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text("Calculating…").foregroundStyle(.secondary)
+                            Text("Calculating…", bundle: .module).foregroundStyle(.secondary)
                         }
                     }
                     Image(systemName: "chevron.forward")
@@ -581,13 +581,13 @@ private struct UsageRateLimitsSection: View {
                 if providers.isEmpty {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
-                        Text("Refreshing…").foregroundStyle(.secondary)
+                        Text("Refreshing…", bundle: .module).foregroundStyle(.secondary)
                     }
                 }
                 ForEach(providers) { UsageProviderView(provider: $0) }
             }
         } header: {
-            Text("Rate Limits")
+            Text("Rate Limits", bundle: .module)
         }
     }
 }
@@ -649,7 +649,7 @@ private struct UsageWindowView: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(self.provider) \(self.window.title) window")
+        .accessibilityLabel(L("\(self.provider) \(self.window.title) window"))
         .accessibilityValue(self.spokenValue)
     }
 
@@ -682,7 +682,7 @@ private struct UsageBillingView: View {
                 let percent = used / limit * 100
                 ProgressView(value: UsageFormat.fraction(percent))
                     .tint(UsageWindowView.color(UsageLevel(usedPercent: percent)))
-                    .accessibilityLabel("\(billing.title) used")
+                    .accessibilityLabel(L("\(billing.title) used"))
                     .accessibilityValue(UsageFormat.percent(percent).replacingOccurrences(of: "%", with: " percent"))
             }
             if let reset = billing.resetAt {

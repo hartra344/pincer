@@ -488,6 +488,8 @@ private final class SidebarChatCell: NSTableCellView {
         self.pin.image = NSImage(systemSymbolName: "pin.fill", accessibilityDescription: "Pinned")
         self.pin.symbolConfiguration = .init(pointSize: 9, weight: .regular)
         self.pin.contentTintColor = .tertiaryLabelColor
+        // The row's label already says pinned and unread.
+        self.pin.setAccessibilityElement(false)
         self.preview.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         self.preview.textColor = .secondaryLabelColor
         self.preview.lineBreakMode = .byTruncatingTail
@@ -505,6 +507,7 @@ private final class SidebarChatCell: NSTableCellView {
         self.unreadDot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Unread")
         self.unreadDot.symbolConfiguration = .init(pointSize: 7, weight: .regular)
         self.unreadDot.contentTintColor = .labelColor
+        self.unreadDot.setAccessibilityElement(false)
         self.date.font = .systemFont(ofSize: NSFont.systemFontSize(for: .mini))
         self.date.textColor = .tertiaryLabelColor
         for view in [self.chip, self.workingAvatar, self.unreadDot, self.date] as [NSView] {
@@ -564,6 +567,7 @@ private final class SidebarChatCell: NSTableCellView {
             self.chip.title = "\(entry.subagentCount) \(entry.threadsExpanded ? "▴" : "▾")"
             self.chip.contentTintColor = entry.hiddenUnreadThreads > 0 ? TranscriptColors.tint : .secondaryLabelColor
             self.chip.toolTip = entry.threadsExpanded ? "Hide subagent runs" : "Show \(entry.subagentCount) subagent runs"
+            self.chip.setAccessibilityLabel(self.chip.toolTip)
             let key = row.key
             self.onToggleThreads = { actions.toggleThreads(key) }
         }
@@ -580,10 +584,9 @@ private final class SidebarChatCell: NSTableCellView {
         self.date.isHidden = activity == nil
         self.date.stringValue = activity.map(ChannelRowStyle.relativeDate) ?? ""
 
-        var label = row.title
-        if row.isUnread, !row.isSubagent { label += ", unread" }
-        if let indicator = entry.working { label += ", \(indicator.label)" }
-        self.setAccessibilityLabel(label)
+        self.setAccessibilityLabel(AccessibilityText.sessionRow(
+            title: row.title, isUnread: row.isUnread && !row.isSubagent, isPinned: !self.pin.isHidden,
+            isRunning: working, workingLabel: entry.working?.label, preview: entry.preview))
     }
 
     override var backgroundStyle: NSView.BackgroundStyle {

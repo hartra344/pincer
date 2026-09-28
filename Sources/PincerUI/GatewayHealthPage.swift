@@ -26,12 +26,12 @@ struct GatewayHealthPage: View {
             self.restartSection(model)
         }
         .formStyle(.grouped)
-        .navigationTitle("Health")
+        .navigationTitle(L("Health"))
         .toolbar {
             ToolbarItem {
-                Button { Task { await model.load() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                Button { Task { await model.load() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
                     .disabled(!connected || model.loadState.isRunning)
-                    .help("Refresh")
+                    .help(L("Refresh"))
             }
         }
         #if os(iOS)
@@ -46,23 +46,23 @@ struct GatewayHealthPage: View {
                 await model.refresh()
             }
         }
-        .confirmationDialog("Restart Gateway?", isPresented: self.$confirmRestart, titleVisibility: .visible) {
-            Button("Restart Gateway", role: .destructive) { Task { await model.restart() } }
-            Button("Cancel", role: .cancel) {}
+        .confirmationDialog(L("Restart Gateway?"), isPresented: self.$confirmRestart, titleVisibility: .visible) {
+            Button(L("Restart Gateway"), role: .destructive) { Task { await model.restart() } }
+            Button(L("Cancel"), role: .cancel) {}
         } message: {
-            Text("Running replies and tasks finish first. Connected clients disconnect briefly.")
+            Text("Running replies and tasks finish first. Connected clients disconnect briefly.", bundle: .module)
         }
-        .confirmationDialog("Restart now anyway?", isPresented: self.$confirmForce, titleVisibility: .visible) {
-            Button("Restart Now", role: .destructive) { Task { await model.restart(skipDeferral: true) } }
-            Button("Keep Waiting", role: .cancel) {}
+        .confirmationDialog(L("Restart now anyway?"), isPresented: self.$confirmForce, titleVisibility: .visible) {
+            Button(L("Restart Now"), role: .destructive) { Task { await model.restart(skipDeferral: true) } }
+            Button(L("Keep Waiting"), role: .cancel) {}
         } message: {
-            Text("Replies and tasks that are still running are interrupted. Connected clients disconnect briefly.")
+            Text("Replies and tasks that are still running are interrupted. Connected clients disconnect briefly.", bundle: .module)
         }
     }
 
     // MARK: Sections
 
-    private static let dismissFooter = "Dismissed issues come back if they get worse, or clear up and happen again."
+    private static let dismissFooter = L("Dismissed issues come back if they get worse, or clear up and happen again.")
 
     @ViewBuilder private func issues(_ model: GatewayHealthModel) -> some View {
         let active = model.activeIssues
@@ -74,14 +74,14 @@ struct GatewayHealthPage: View {
                     GatewayHealthIssueRow(issue: issue, model: model) { self.confirmRestart = true }
                 }
             } header: {
-                Text("Issues")
+                Text("Issues", bundle: .module)
             } footer: {
                 Text(Self.dismissFooter)
             }
         }
         if !dismissed.isEmpty {
             Section {
-                DisclosureGroup("Dismissed (\(dismissed.count))", isExpanded: self.$showDismissed) {
+                DisclosureGroup(L("Dismissed (\(dismissed.count))"), isExpanded: self.$showDismissed) {
                     ForEach(dismissed) { issue in
                         GatewayHealthIssueRow(issue: issue, model: model,
                                               dismissedCaption: Self.dismissedCaption(issue, model: model,
@@ -97,8 +97,8 @@ struct GatewayHealthPage: View {
     }
 
     static func dismissedCaption(_ issue: GatewayHealthIssue, model: GatewayHealthModel, absent: Bool) -> String {
-        if absent { return "Always ignored · Not reported right now" }
-        return model.dismissal(for: issue.id) == .always ? "Always ignored" : "Dismissed until it changes"
+        if absent { return L("Always ignored · Not reported right now") }
+        return model.dismissal(for: issue.id) == .always ? L("Always ignored") : L("Dismissed until it changes")
     }
 
     static func showsRestartBanner(_ model: GatewayHealthModel) -> Bool {
@@ -109,11 +109,11 @@ struct GatewayHealthPage: View {
         Section {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Restart needed to apply changes")
+                    Text("Restart needed to apply changes", bundle: .module)
                     if let reason = model.restartRequiredReason {
                         Text(reason).font(.caption).foregroundStyle(.secondary)
                     } else {
-                        Text("A channel is waiting for a Gateway restart.").font(.caption).foregroundStyle(.secondary)
+                        Text("A channel is waiting for a Gateway restart.", bundle: .module).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             } icon: {
@@ -126,26 +126,26 @@ struct GatewayHealthPage: View {
     private func summary(_ model: GatewayHealthModel, connected: Bool) -> some View {
         let level = model.level
         return Section {
-            LabeledContent("Status") {
+            LabeledContent(L("Status")) {
                 Label(level.label, systemImage: level.symbol).foregroundStyle(Self.color(level))
             }
             if level == .healthy, case let count = model.dismissedIssues.count, count > 0 {
-                Text("\(count) dismissed issue\(count == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary)
+                Text(count == 1 ? L("1 dismissed issue") : L("\(count) dismissed issues")).font(.caption).foregroundStyle(.secondary)
             }
             if let failure = model.healthFailure {
                 Text(failure).font(.caption).foregroundStyle(.secondary)
             }
             if let version = model.serverVersion ?? self.gateway.hello?.serverVersion {
-                LabeledContent("Version", value: version)
+                LabeledContent(L("Version"), value: version)
             }
-            LabeledContent("Uptime") {
+            LabeledContent(L("Uptime")) {
                 if connected, let started = model.startedAt {
                     Text(started, style: .relative)
                 } else {
                     Text("—").foregroundStyle(.secondary)
                 }
             }
-            LabeledContent("Last heartbeat") { self.heartbeat(model) }
+            LabeledContent(L("Last heartbeat")) { self.heartbeat(model) }
             if let error = model.loadState.error {
                 Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
             }
@@ -161,19 +161,19 @@ struct GatewayHealthPage: View {
                 Text(beat.status.label).foregroundStyle(beat.isFailure ? .red : .primary)
             }
         } else if !model.isAvailable(.heartbeat) {
-            Text("Unavailable on this Gateway").foregroundStyle(.secondary)
+            Text("Unavailable on this Gateway", bundle: .module).foregroundStyle(.secondary)
         } else if model.heartbeatLoaded {
-            Text("No heartbeat yet").foregroundStyle(.secondary)
+            Text("No heartbeat yet", bundle: .module).foregroundStyle(.secondary)
         } else {
             Text("—").foregroundStyle(.secondary)
         }
     }
 
     private func channels(_ model: GatewayHealthModel) -> some View {
-        Section("Channels") {
+        Section(L("Channels")) {
             if let health = model.health {
                 if health.channels.isEmpty {
-                    Text("No channels are set up.").foregroundStyle(.secondary)
+                    Text("No channels are set up.", bundle: .module).foregroundStyle(.secondary)
                 }
                 ForEach(health.channels) { channel in
                     HStack(alignment: .firstTextBaseline) {
@@ -188,24 +188,24 @@ struct GatewayHealthPage: View {
                         ChannelStateBadge(state: ChannelRules.summaryState(of: channel))
                     }
                     .contextMenu {
-                        Button("Show in Channel Status", systemImage: "antenna.radiowaves.left.and.right") {
+                        Button(L("Show in Channel Status"), systemImage: "antenna.radiowaves.left.and.right") {
                             self.showInChannelStatus(channel)
                         }
                     }
                 }
             } else if !model.isAvailable(.health) {
-                Text("Unavailable on this Gateway").foregroundStyle(.secondary)
+                Text("Unavailable on this Gateway", bundle: .module).foregroundStyle(.secondary)
             } else {
-                Text(model.hasLoaded ? "No channel details yet." : "Loading…").foregroundStyle(.secondary)
+                Text(model.hasLoaded ? L("No channel details yet.") : L("Loading…")).foregroundStyle(.secondary)
             }
         }
     }
 
     private func clients(_ model: GatewayHealthModel) -> some View {
-        Section("Connected Clients") {
+        Section(L("Connected Clients")) {
             let entries = model.sortedPresence
             if entries.isEmpty {
-                Text(model.isAvailable(.presence) ? "No clients reported." : "Unavailable on this Gateway")
+                Text(model.isAvailable(.presence) ? L("No clients reported.") : L("Unavailable on this Gateway"))
                     .foregroundStyle(.secondary)
             }
             ForEach(entries) { entry in
@@ -213,7 +213,7 @@ struct GatewayHealthPage: View {
                     HStack(spacing: 6) {
                         Text(entry.displayName)
                         if model.isThisDevice(entry) {
-                            Text("This device")
+                            Text("This device", bundle: .module)
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 1)
@@ -226,9 +226,9 @@ struct GatewayHealthPage: View {
                         Text(details.joined(separator: " · ")).font(.caption).foregroundStyle(.secondary)
                     }
                     if let activity = entry.lastActivityAt {
-                        Text("Active \(Text(activity, style: .relative)) ago").font(.caption).foregroundStyle(.secondary)
+                        Text("Active \(Text(activity, style: .relative)) ago", bundle: .module).font(.caption).foregroundStyle(.secondary)
                     } else if let since = entry.onlineSince {
-                        Text("Online for \(Text(since, style: .relative))").font(.caption).foregroundStyle(.secondary)
+                        Text("Online for \(Text(since, style: .relative))", bundle: .module).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -246,7 +246,7 @@ struct GatewayHealthPage: View {
                     Spacer()
                     switch model.restartState {
                     case .restarted, .failed:
-                        Button("Dismiss") { model.dismissRestartStatus() }.buttonStyle(.borderless)
+                        Button(L("Dismiss")) { model.dismissRestartStatus() }.buttonStyle(.borderless)
                     default:
                         EmptyView()
                     }
@@ -257,12 +257,12 @@ struct GatewayHealthPage: View {
                 self.restartButton(model)
             }
             if model.canForceRestart {
-                Button("Restart Now Anyway…", role: .destructive) { self.confirmForce = true }
+                Button(L("Restart Now Anyway…"), role: .destructive) { self.confirmForce = true }
             }
         } header: {
-            Text("Restart")
+            Text("Restart", bundle: .module)
         } footer: {
-            Text("The Gateway waits for running replies and tasks to finish, then restarts. Pincer reconnects on its own.")
+            Text("The Gateway waits for running replies and tasks to finish, then restarts. Pincer reconnects on its own.", bundle: .module)
         }
     }
 
@@ -272,7 +272,7 @@ struct GatewayHealthPage: View {
             VStack(alignment: .leading, spacing: 2) {
                 Label(message, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 if let started = model.startedAt {
-                    Text("Up for \(Text(started, style: .relative))").font(.caption).foregroundStyle(.secondary)
+                    Text("Up for \(Text(started, style: .relative))", bundle: .module).font(.caption).foregroundStyle(.secondary)
                 }
             }
         case .failed:
@@ -286,16 +286,16 @@ struct GatewayHealthPage: View {
 
     @ViewBuilder private func restartButton(_ model: GatewayHealthModel) -> some View {
         if !model.isAvailable(.restart) {
-            Text("Restarting is unavailable on this Gateway.").foregroundStyle(.secondary)
+            Text("Restarting is unavailable on this Gateway.", bundle: .module).foregroundStyle(.secondary)
         } else if !model.hasAdmin {
             Button {
                 self.navigator.destination = .connection
             } label: {
-                Label("Restarting needs Full Management access", systemImage: "lock")
+                Label(L("Restarting needs Full Management access"), systemImage: "lock")
             }
-            .help("Open Connection to turn on Full Management.")
+            .help(L("Open Connection to turn on Full Management."))
         } else {
-            Button("Restart Gateway…", systemImage: "arrow.clockwise") { self.confirmRestart = true }
+            Button(L("Restart Gateway…"), systemImage: "arrow.clockwise") { self.confirmRestart = true }
                 .disabled(!model.canRestart)
         }
     }
@@ -354,7 +354,7 @@ private struct GatewayHealthIssueRow: View {
     private var isDismissed: Bool { self.dismissedCaption != nil }
 
     private var alwaysIgnoreTitle: String {
-        self.issue.kind == .channel ? "Always Ignore This Account" : "Always Ignore This Plugin"
+        self.issue.kind == .channel ? L("Always Ignore This Account") : L("Always Ignore This Plugin")
     }
 
     var body: some View {
@@ -369,10 +369,10 @@ private struct GatewayHealthIssueRow: View {
                     }
                     if let key = self.issue.channelAccount, let operation = self.channels.operation(for: key) {
                         if operation.state.isRunning {
-                            Text("\(operation.action == .reconnect ? "Reconnecting" : "Working")…")
+                            Text(operation.action == .reconnect ? L("Reconnecting…") : L("Working…"))
                                 .font(.caption).foregroundStyle(.secondary)
                         } else if let failure = operation.state.error {
-                            Text("Couldn't \(operation.action == .logout ? "log out" : operation.action.title.lowercased()): \(failure)").font(.caption).foregroundStyle(.red)
+                            Text("Couldn't \(operation.action == .logout ? L("log out") : operation.action.title.lowercased()): \(failure)", bundle: .module).font(.caption).foregroundStyle(.red)
                         }
                     }
                 }
@@ -396,11 +396,11 @@ private struct GatewayHealthIssueRow: View {
         .swipeActions(edge: .leading) {
             if !self.isDismissed, let key = self.issue.channelAccount, self.channels.canManage {
                 if self.needsQRLogin(key) {
-                    Button("Link with QR Code…", systemImage: "qrcode") { self.qrAccount = key }
+                    Button(L("Link with QR Code…"), systemImage: "qrcode") { self.qrAccount = key }
                         .tint(.blue)
                         .disabled(self.channels.isBusy(key) || !self.gateway.state.isConnected)
                 } else if let reconnect = self.reconnectAction {
-                    Button("Reconnect Account", systemImage: ChannelsModel.Action.reconnect.symbol, action: reconnect)
+                    Button(L("Reconnect Account"), systemImage: ChannelsModel.Action.reconnect.symbol, action: reconnect)
                         .tint(.blue)
                         .disabled(self.channels.isBusy(key) || !self.gateway.state.isConnected)
                 }
@@ -408,10 +408,10 @@ private struct GatewayHealthIssueRow: View {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             if self.isDismissed {
-                Button("Restore", systemImage: "arrow.uturn.backward") { self.model.restore(id: self.issue.id) }
+                Button(L("Restore"), systemImage: "arrow.uturn.backward") { self.model.restore(id: self.issue.id) }
                     .tint(.blue)
             } else {
-                Button("Dismiss", systemImage: "eye.slash") { self.model.dismiss(self.issue) }
+                Button(L("Dismiss"), systemImage: "eye.slash") { self.model.dismiss(self.issue) }
                     .tint(.gray)
             }
         }
@@ -427,9 +427,9 @@ private struct GatewayHealthIssueRow: View {
 
     @ViewBuilder private var menu: some View {
         if self.isDismissed {
-            Button("Restore", systemImage: "arrow.uturn.backward") { self.model.restore(id: self.issue.id) }
+            Button(L("Restore"), systemImage: "arrow.uturn.backward") { self.model.restore(id: self.issue.id) }
         } else {
-            Button("Dismiss", systemImage: "eye.slash") { self.model.dismiss(self.issue) }
+            Button(L("Dismiss"), systemImage: "eye.slash") { self.model.dismiss(self.issue) }
             if self.issue.canAlwaysIgnore {
                 Button(self.alwaysIgnoreTitle, systemImage: "eye.slash.circle") { self.model.dismiss(self.issue, always: true) }
             }
@@ -439,7 +439,7 @@ private struct GatewayHealthIssueRow: View {
             }
             if self.issue.offersRestart, self.model.canRestart {
                 Divider()
-                Button("Restart Gateway…", systemImage: "arrow.clockwise") { self.onRestart() }
+                Button(L("Restart Gateway…"), systemImage: "arrow.clockwise") { self.onRestart() }
             }
         }
     }
@@ -450,24 +450,24 @@ private struct GatewayHealthIssueRow: View {
         let channels = self.channels
         if self.needsQRLogin(key) {
             if channels.canManage {
-                Button("Link with QR Code…", systemImage: "qrcode") { self.qrAccount = key }
+                Button(L("Link with QR Code…"), systemImage: "qrcode") { self.qrAccount = key }
                     .disabled(channels.isBusy(key) || !self.gateway.state.isConnected)
             } else {
-                Button("Link with QR Code (\(SetupWizardModel.fullManagementTitle))", systemImage: "lock") {}
+                Button(L("Link with QR Code (\(SetupWizardModel.fullManagementTitle))"), systemImage: "lock") {}
                     .disabled(true)
             }
         } else if channels.supports(.reconnect) {
             if channels.canManage {
-                Button("Reconnect Account", systemImage: ChannelsModel.Action.reconnect.symbol) {
+                Button(L("Reconnect Account"), systemImage: ChannelsModel.Action.reconnect.symbol) {
                     Task { await channels.reconnect(key) }
                 }
                 .disabled(channels.isBusy(key) || !self.gateway.state.isConnected)
             } else {
-                Button("Reconnect Account (\(SetupWizardModel.fullManagementTitle))", systemImage: "lock") {}
+                Button(L("Reconnect Account (\(SetupWizardModel.fullManagementTitle))"), systemImage: "lock") {}
                     .disabled(true)
             }
         }
-        Button("Show in Channel Status", systemImage: "antenna.radiowaves.left.and.right") {
+        Button(L("Show in Channel Status"), systemImage: "antenna.radiowaves.left.and.right") {
             channels.focusedAccount = key
             self.navigator.destination = .channelStatus
         }
@@ -476,13 +476,13 @@ private struct GatewayHealthIssueRow: View {
     #if os(macOS)
     @ViewBuilder private var hoverButton: some View {
         if self.isDismissed {
-            Button("Restore") { self.model.restore(id: self.issue.id) }
+            Button(L("Restore")) { self.model.restore(id: self.issue.id) }
                 .buttonStyle(.borderless)
-                .help("Show this issue again")
+                .help(L("Show this issue again"))
         } else {
-            Button("Dismiss") { self.model.dismiss(self.issue) }
+            Button(L("Dismiss")) { self.model.dismiss(self.issue) }
                 .buttonStyle(.borderless)
-                .help("Dismiss until it changes")
+                .help(L("Dismiss until it changes"))
         }
     }
     #endif
@@ -511,9 +511,9 @@ private struct ReconnectAccessibilityAction: ViewModifier {
 
     func body(content: Content) -> some View {
         if let linkWithQR = self.linkWithQR {
-            content.accessibilityAction(named: "Link with QR Code", linkWithQR)
+            content.accessibilityAction(named: L("Link with QR Code"), linkWithQR)
         } else if let reconnect = self.reconnect {
-            content.accessibilityAction(named: "Reconnect Account", reconnect)
+            content.accessibilityAction(named: L("Reconnect Account"), reconnect)
         } else {
             content
         }
@@ -528,13 +528,13 @@ private struct IssueAccessibilityActions: ViewModifier {
 
     func body(content: Content) -> some View {
         if self.isDismissed {
-            content.accessibilityAction(named: "Restore") { self.model.restore(id: self.issue.id) }
+            content.accessibilityAction(named: L("Restore")) { self.model.restore(id: self.issue.id) }
         } else if self.issue.canAlwaysIgnore {
             content
-                .accessibilityAction(named: "Dismiss") { self.model.dismiss(self.issue) }
+                .accessibilityAction(named: L("Dismiss")) { self.model.dismiss(self.issue) }
                 .accessibilityAction(named: self.alwaysIgnoreTitle) { self.model.dismiss(self.issue, always: true) }
         } else {
-            content.accessibilityAction(named: "Dismiss") { self.model.dismiss(self.issue) }
+            content.accessibilityAction(named: L("Dismiss")) { self.model.dismiss(self.issue) }
         }
     }
 }
@@ -554,7 +554,7 @@ struct GatewayHealthIndicatorRow: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Open Gateway Health")
+        .help(L("Open Gateway Health"))
     }
 
     private var symbol: String {

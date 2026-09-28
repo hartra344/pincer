@@ -70,6 +70,7 @@ export default defineConfig({
 						{ slug: 'guides/usage-and-cost' },
 						{ slug: 'guides/appearance' },
 						{ slug: 'guides/agent-avatars' },
+						{ slug: 'guides/accessibility' },
 					],
 				},
 				{
@@ -88,6 +89,7 @@ export default defineConfig({
 						{ slug: 'development/building' },
 						{ slug: 'development/mock-gateway' },
 						{ slug: 'development/testflight' },
+						{ slug: 'development/localization' },
 					],
 				},
 			],
