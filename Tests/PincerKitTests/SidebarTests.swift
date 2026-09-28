@@ -72,6 +72,42 @@ struct SidebarTests {
         #expect(sections[0].kind == .agent("main"))
     }
 
+    /// Agents without a stored chat still get a section, holding their home chat.
+    @Test func agentsWithoutChats() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        store.organization = .agent
+        store.applyAgents(Fixtures.json(#"""
+        {"defaultId":"main","mainKey":"main","agents":[
+          {"id":"main","name":"Moki"},{"id":"research","name":"Research"},
+          {"id":"pip","identity":{"name":"Pip","emoji":"🐣"}},{"id":"openclaw","kind":"system"}
+        ]}
+        """#))
+        var sections = store.sections()
+        #expect(sections.map(\.id) == ["agent:main", "agent:research", "agent:pip"])
+        #expect(sections[1].channels.map(\.id) == ["agent:research:main", "agent:research:dashboard:papers"])
+        #expect(sections[2].channels.map(\.id) == ["agent:pip:main"] && sections[2].title == "Pip")
+        #expect(store.sessions["agent:pip:main"]?.isPlaceholder == true)
+        #expect(store.sessions["agent:main:main"]?.isPlaceholder == false)
+        #expect(store.sessions["agent:openclaw:main"] == nil)
+
+        // A snapshot that lists the home chat replaces the placeholder; others are kept.
+        store.applySnapshot(Fixtures.json(#"{"sessions":[{"key":"agent:main:main"},{"key":"agent:pip:main","label":"Hi","updatedAt":9}]}"#))
+        #expect(store.sessions["agent:pip:main"]?.isPlaceholder == false && store.sessions["agent:pip:main"]?.title == "Hi")
+        #expect(store.sessions["agent:research:main"]?.isPlaceholder == true)
+
+        // A deleted agent's placeholder goes with it.
+        store.applyAgents(Fixtures.json(#"{"defaultId":"main","agents":[{"id":"main"},{"id":"pip"}]}"#))
+        #expect(store.sessions["agent:research:main"] == nil && store.sessions["agent:pip:main"] != nil)
+        sections = store.sections()
+        #expect(sections.map(\.id) == ["agent:main", "agent:pip"])
+
+        // With one global session there are no per-agent home chats.
+        let global = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        global.applyAgents(Fixtures.json(#"{"defaultId":"main","scope":"global","agents":[{"id":"main"},{"id":"pip"}]}"#))
+        #expect(global.sessions.isEmpty)
+    }
+
     @Test func byGroup() {
         defer { self.scratch.remove() }
         let store = self.store()

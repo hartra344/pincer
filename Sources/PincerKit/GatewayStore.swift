@@ -511,7 +511,8 @@ public final class GatewayStore: Identifiable {
         self.prefetchTask?.cancel()
         self.prefetchTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
-            guard let rows = self?.sessions.values.filter({ !$0.isSubagent }).sorted(by: { $0.activityMs > $1.activityMs })
+            guard let rows = self?.sessions.values.filter({ !$0.isSubagent && !$0.isPlaceholder })
+                .sorted(by: { $0.activityMs > $1.activityMs })
             else { return }
             for row in rows {
                 guard !Task.isCancelled, let self, self.state.isConnected else { return }
@@ -543,6 +544,7 @@ public final class GatewayStore: Identifiable {
         for row in list["sessions"]?.array?.compactMap(SessionRow.init) ?? [] {
             next[row.key] = row
         }
+        self.addAgentHomes(to: &next)
         self.sessions = next
         if let defaults = list["defaults"], let model = defaults["model"]?.text {
             self.defaultModelRef = ModelRef.qualified(model, provider: defaults["modelProvider"]?.text)
@@ -571,10 +573,43 @@ public final class GatewayStore: Identifiable {
     /// Called after any Gateway's agent list loads, e.g. so the app can refresh Siri's App Shortcut phrases.
     public static var agentsDidLoad: (@MainActor () -> Void)?
 
-    private func applyAgents(_ result: JSONValue) {
+    func applyAgents(_ result: JSONValue) {
         self.agents = result["agents"]?.array?.compactMap(AgentSummary.init) ?? []
         self.defaultAgentId = result["defaultId"]?.text ?? self.agents.first?.id ?? "main"
+        self.agentMainKey = result["mainKey"]?.text ?? "main"
+        self.agentScope = result["scope"]?.text
+        var next = self.sessions
+        self.addAgentHomes(to: &next)
+        if next != self.sessions { self.sessions = next }
         Self.agentsDidLoad?()
+    }
+
+    /// `agents.list` `mainKey`: each agent's home chat is `agent:<id>:<mainKey>`.
+    @ObservationIgnored private var agentMainKey = "main"
+    /// `agents.list` `scope`; `global` shares one session instead of per-agent home chats.
+    @ObservationIgnored private var agentScope: String?
+
+    /// The Gateway only lists sessions it has stored, and an agent's home chat isn't stored until
+    /// its first message, so a new agent would have no chats and no sidebar section. Like the
+    /// Control UI, list each agent's home chat anyway; it opens empty and the first send creates
+    /// it. Placeholders for agents that are gone are dropped.
+    private func addAgentHomes(to rows: inout [String: SessionRow]) {
+        let agentIds = Set(self.agents.filter { !$0.isSystem }.map(\.id))
+        for (key, row) in rows where row.isPlaceholder && !agentIds.contains(row.agentId) {
+            rows.removeValue(forKey: key)
+        }
+        guard self.agentScope != "global" else { return }
+        let mainAgents = Set(rows.values.filter { $0.isMain && !$0.isPlaceholder }.map(\.agentId))
+        for agent in self.agents where !agent.isSystem && !mainAgents.contains(agent.id) {
+            let key = "agent:\(agent.id):\(self.agentMainKey)"
+            guard rows[key] == nil,
+                  let row = SessionRow(.object([
+                      "key": .string(key), "agentId": .string(agent.id), "isMain": true, "kind": "direct",
+                      SessionRow.placeholderField: true,
+                  ]))
+            else { continue }
+            rows[key] = row
+        }
     }
 
     /// Re-fetches `agents.list` so the sidebar and pickers show created, renamed and deleted agents.
