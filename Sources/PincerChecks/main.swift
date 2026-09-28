@@ -3045,9 +3045,6 @@ func runDemo() async {
     let connected = await waitFor("demo connection") { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(connected, "demo connected and bootstrapped")
     guard connected else { return }
-    // Open the paged chat before the background prefetch (2 s after connecting) caches its full
-    // history, which would make its first load restore all of it instead of the latest page.
-    let trip = gateway.chat(for: "agent:main:dashboard:trip")
     check(gateway.agents.count >= 3, "agents (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions (\(gateway.sessions.count))")
     check(gateway.approvals.map(\.id) == ["approval_demo_push"] && gateway.approvals.first?.isExpired() == false
@@ -3064,6 +3061,10 @@ func runDemo() async {
     let loaded = await waitFor("history") { chat.hasLoaded }
     check(loaded && !chat.entries.isEmpty, "welcome history loaded")
 
+    let trip = gateway.chat(for: "agent:main:dashboard:trip")
+    // Background prefetch may already have cached trip's whole history (it skips chats open here
+    // from now on): drop that so this checks paging from the Gateway.
+    await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: "agent:main:dashboard:trip")
     await trip.load()
     check(trip.hasMoreHistory && trip.items.count == 120, "trip latest page (\(trip.items.count))")
     // Find in Chat only searches what's loaded, so the latest page must have something to find.
@@ -4115,9 +4116,6 @@ func runLive(url: String, token: String) async {
     check(connected, "connected and bootstrapped (pairing seen: \(sawPairing))")
     check(!sawReconnecting, "first connect never reports reconnecting")
     guard connected else { return }
-    // Open the paged chat before the background prefetch (2 s after connecting) caches its full
-    // history, which would make its first load restore all of it instead of the latest page.
-    let trip = gateway.chat(for: "agent:main:dashboard:trip")
     await runLiveShare(profile: profile, gateway: gateway)
     check(gateway.agents.count >= 3, "agents.list (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions.subscribe (\(gateway.sessions.count) rows)")
@@ -4151,6 +4149,10 @@ func runLive(url: String, token: String) async {
         check(false, "history includes an image")
     }
 
+    let trip = gateway.chat(for: "agent:main:dashboard:trip")
+    // Background prefetch may already have cached trip's whole history (it skips chats open here
+    // from now on): drop that so this checks paging from the Gateway.
+    await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: "agent:main:dashboard:trip")
     await trip.load()
     let firstPage = trip.items.map(\.id)
     check(trip.hasMoreHistory && firstPage.count == 120, "latest page only (\(firstPage.count))")
