@@ -1388,6 +1388,7 @@ public final class GatewayStore: Identifiable {
         if change == .deleted {
             self.chats.removeValue(forKey: key)?.stopCaching()
             self.sessions.removeValue(forKey: key)
+            self.outbox.removeSession(key)
             if self.selectedKey == key { self.selectedKey = self.defaultSessionKey }
             await self.forgetTranscript(key)
         } else if let chat = self.chats[key] {
