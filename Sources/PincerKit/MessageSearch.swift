@@ -19,13 +19,16 @@ public enum MessageSearch {
         public var role: ChatRole
         /// e.g. "Discord" when a user message arrived through another channel.
         public var via: String?
+        /// Another agent, automation or helper that wrote it.
+        public var sender: MessageSender?
         public var timestamp: Date?
         /// Markdown source.
         public var text: String
 
         public init(sessionKey: String, entryId: String, section: Int, role: ChatRole, via: String? = nil,
-                    timestamp: Date? = nil, text: String)
+                    timestamp: Date? = nil, text: String, sender: MessageSender? = nil)
         {
+            self.sender = sender
             self.sessionKey = sessionKey
             self.entryId = entryId
             self.section = section
@@ -141,7 +144,7 @@ public enum MessageSearch {
                 for (index, text) in turn.text.enumerated() where !text.isEmpty {
                     let timestamp = index < turn.textTimestamps.count ? turn.textTimestamps[index] : turn.timestamp
                     documents.append(Document(sessionKey: sessionKey, entryId: entry.id, section: index, role: .assistant,
-                                              timestamp: timestamp ?? turn.timestamp, text: text))
+                                              timestamp: timestamp ?? turn.timestamp, text: text, sender: turn.sender))
                 }
             case .marker:
                 continue

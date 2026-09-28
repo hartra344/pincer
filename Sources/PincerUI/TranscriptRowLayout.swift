@@ -11,6 +11,8 @@ enum TranscriptPart {
         let text: String
         let emoji: String?
         let color: PColor
+        /// An SF Symbol drawn instead of the initial, for senders that aren't agents.
+        var symbol: String?
         /// The agent's companion, drawn instead of the initial when animated avatars are on.
         var creature: AvatarStyle?
         var state = AvatarState.idle
@@ -25,6 +27,8 @@ enum TranscriptPart {
         let badge: String?
         let time: String?
         let isPending: Bool
+        /// Chat the badge opens when clicked, e.g. the one a forwarded message came from.
+        var link: TranscriptRowLayout.SourceChat?
     }
 
     struct Code {
@@ -240,6 +244,13 @@ struct TranscriptRowLayout {
         let maxY: CGFloat
     }
 
+    /// The chat a forwarded message came from, which the row can open.
+    struct SourceChat: Equatable {
+        let sessionKey: String
+        /// "Open Kiko’s Chat", for the badge, menus and VoiceOver.
+        let title: String
+    }
+
     let id: String
     let width: CGFloat
     var parts: [Placed] = []
@@ -253,6 +264,7 @@ struct TranscriptRowLayout {
     /// Subagent runs this row links to, so it can update when the run shows up.
     var runs: [String: TranscriptPart.Tool.Run] = [:]
     var hasSpawns = false
+    var sourceChat: SourceChat?
     var accessibilityLabel = ""
     /// Where Find's selected match is, in row coordinates (the bottom of its line), when this row has it.
     var matchY: CGFloat?
@@ -293,14 +305,20 @@ struct TranscriptSettings: Equatable {
     var theme = AppTheme()
     /// The agent's companion, when animated avatars are on.
     var avatarStyle: AvatarStyle?
+    /// Every agent's companion by id, for messages other agents sent here.
+    var agentStyles: [String: AvatarStyle] = [:]
 
     @MainActor static func current(for context: TranscriptContext) -> TranscriptSettings {
-        TranscriptSettings(
+        let animated = AvatarSettings.isEnabled
+        return TranscriptSettings(
             thinking: ThinkingDisplay.current,
             reactionsEnabled: ReactionFeature.isEnabled,
             reasoningOff: context.gateway.sessions[context.sessionKey]?.reasoningLevel == "off",
             theme: AppTheme.current,
-            avatarStyle: AvatarSettings.isEnabled ? AvatarSettings.style(for: context.agent) : nil)
+            avatarStyle: animated ? AvatarSettings.style(for: context.agent) : nil,
+            agentStyles: animated
+                ? Dictionary(context.gateway.agents.map { ($0.id, AvatarSettings.style(for: $0)) }) { first, _ in first }
+                : [:])
     }
 }
 
@@ -372,7 +390,7 @@ struct TranscriptLayoutBuilder {
     func decoration(for row: TranscriptRow) -> TranscriptDecoration {
         var decoration = TranscriptDecoration()
         guard case let .entry(entry) = row, let chat = self.context.chat else { return decoration }
-        let agent = self.context.agent.name
+        var agent = self.context.agent.name
         var ids: [String] = []
         switch entry {
         case let .user(item):
@@ -386,6 +404,7 @@ struct TranscriptLayoutBuilder {
             }
         case let .assistant(turn):
             ids = turn.textIds.compactMap(\.self)
+            if let sender = turn.sender { agent = sender.displayName(agents: self.context.gateway.agents) }
         case .marker:
             break
         }
@@ -470,12 +489,16 @@ struct TranscriptLayoutBuilder {
 
     private func assistant(_ turn: AssistantTurn, into layout: inout TranscriptRowLayout) {
         let agent = self.context.agent
-        let header = TranscriptPart.Header(name: agent.name, badge: nil, time: turn.timestamp?.chatTimestamp, isPending: false)
+        let from = turn.sender.map { self.sender($0) }
+        layout.sourceChat = from?.source
+        var header = TranscriptPart.Header(name: from?.name ?? agent.name, badge: from?.marker,
+                                           time: turn.timestamp?.chatTimestamp, isPending: false)
+        header.link = from?.source
         let thinking = turn.thinking.joined(separator: "\n\n")
         layout.copyItems = [.init(title: "Copy Reply", text: turn.body)]
         if !thinking.isEmpty { layout.copyItems.append(.init(title: "Copy Thinking", text: thinking)) }
         layout.accessibilityLabel = AccessibilityText.messageRow(
-            role: .assistant, author: agent.name, text: turn.body, timestamp: header.time,
+            role: .assistant, author: AccessibilityText.join([header.name, from?.marker]), text: turn.body, timestamp: header.time,
             toolCount: turn.tools.count, attachmentCount: turn.images.count + turn.files.count,
             isStreaming: turn.isStreaming, isError: turn.isError, summaryLimit: 0)
         let reasoning = self.settings.reasoningOff ? "" : thinking
@@ -491,9 +514,10 @@ struct TranscriptLayoutBuilder {
         // A finished turn with nothing else to show keeps its steps, folded, so it isn't blank.
         case .live: hasReply ? .hidden : .grouped
         }
-        let avatar = TranscriptPart.Avatar(text: String(agent.name.prefix(1)).uppercased(), emoji: agent.emoji,
-                                           color: TranscriptColors.agentAvatar, creature: self.settings.avatarStyle,
-                                           state: turn.isStreaming ? .streaming : .idle, isAgent: true, seed: agent.id)
+        let avatar = from?.avatar ?? TranscriptPart.Avatar(
+            text: String(agent.name.prefix(1)).uppercased(), emoji: agent.emoji,
+            color: TranscriptColors.agentAvatar, creature: self.settings.avatarStyle,
+            state: turn.isStreaming ? .streaming : .idle, isAgent: true, seed: agent.id)
         self.scaffold(avatar: avatar,
                       header: header, into: &layout) { stack, layout in
             switch steps {
@@ -540,6 +564,29 @@ struct TranscriptLayoutBuilder {
     }
 
     private enum ThinkingSteps { case hidden, live, grouped }
+
+    /// How a message another agent, an automation or a helper sent here is shown: as theirs.
+    private func sender(_ sender: MessageSender) -> (name: String, marker: String, avatar: TranscriptPart.Avatar,
+                                                     source: TranscriptRowLayout.SourceChat?)
+    {
+        let agents = self.context.gateway.agents
+        let name = sender.displayName(agents: agents)
+        let marker = sender.marker(agents: agents, receivingAgentId: self.context.agent.id)
+        let agent = sender.agent(in: agents)
+        // Never live: the companion on the latest reply shows what this chat's agent is doing.
+        var avatar = TranscriptPart.Avatar(text: String(name.prefix(1)).uppercased(), emoji: agent?.emoji,
+                                           color: TranscriptColors.agentAvatar, seed: sender.agentId ?? name)
+        switch sender.kind {
+        case .agent: avatar.creature = agent.flatMap { self.settings.agentStyles[$0.id] }
+        case .automation: avatar.symbol = "clock.arrow.circlepath"
+        case .helper: avatar.symbol = "sparkles"
+        }
+        let source = sender.sessionKey.flatMap { key in
+            sender.canOpenSource && key != self.context.sessionKey
+                ? TranscriptRowLayout.SourceChat(sessionKey: key, title: L("Open \(name)’s Chat")) : nil
+        }
+        return (name, marker, avatar, source)
+    }
 
     /// Avatar on the left, name line on top, content stacked below it.
     private func scaffold(avatar: TranscriptPart.Avatar, header: TranscriptPart.Header,
@@ -974,6 +1021,8 @@ extension TranscriptLayoutBuilder {
 
     /// Model that wrote a message, falling back to the turn's when the message didn't record one.
     fileprivate func model(of turn: AssistantTurn, message index: Int) -> String? {
+        // Someone else's model, which this chat doesn't know.
+        guard turn.sender == nil else { return nil }
         let own = turn.textModelNames.indices.contains(index) ? turn.textModelNames[index] : nil
         return own ?? turn.modelName
     }

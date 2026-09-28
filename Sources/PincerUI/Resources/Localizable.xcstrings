@@ -4193,6 +4193,16 @@
         }
       }
     },
+    "Open %@’s Chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open %@’s Chat"
+          }
+        }
+      }
+    },
     "Open Automation Chat": {
       "localizations": {
         "en": {

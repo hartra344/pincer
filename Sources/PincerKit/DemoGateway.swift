@@ -48,6 +48,7 @@ actor DemoGateway {
         ["id": "main", "name": "Claw", "identity": ["name": "Claw", "emoji": "🦞"]],
         ["id": "research", "name": "Scout", "identity": ["name": "Scout", "emoji": "🔭"]],
         ["id": "coder", "name": "Forge", "identity": ["name": "Forge", "emoji": "🛠️"]],
+        ["id": "kiko", "name": "Kiko", "identity": ["name": "Kiko", "emoji": "🌕"]],
     ]
     var sessions: [String: Row] = [:]
     var transcripts: [String: [JSONValue]] = [:]
@@ -1686,7 +1687,9 @@ actor DemoGateway {
                 row["model"] = .string(model.model)
                 row["modelProvider"] = .string(model.provider)
                 messages = messages.map { message in
-                    guard case var .object(fields) = message, fields["role"]?.string == "assistant" else { return message }
+                    // Messages forwarded from another agent keep that agent's own model, not this chat's.
+                    guard case var .object(fields) = message, fields["role"]?.string == "assistant",
+                          fields["senderSession"] == nil else { return message }
                     fields["provider"] = .string(model.provider)
                     fields["model"] = .string(model.model)
                     return .object(fields)
@@ -1728,6 +1731,7 @@ actor DemoGateway {
                 said("user", "confirm", ago: 3 * day - 5 * minute),
                 said("assistant", "Confirmed: Café Lumière, Friday at 8:15 pm, two people. It's in your calendar with the address.",
                      ago: 3 * day - 6 * minute),
+            ] + Self.seedKikoIntroInClaw() + [
                 Self.message("user", [Self.text("Can you check disk usage and show me a quick status?")], id: "demo-main-ask",
                              ago: 20 * minute),
                 Self.message("assistant", [
@@ -1780,6 +1784,8 @@ actor DemoGateway {
                 or send */compact*.
                 """)], ago: 10),
             ])
+        add(Self.kikoKey, agent: "kiko", title: "Main", preview: "Claw sent the list of home-lab bills.", age: 86_400_000,
+            ["isMain": true], messages: Self.seedKikoChat())
         let discord: Row = ["provenance": ["sourceChannel": "discord"]]
         add("agent:main:discord:channel:123", agent: "main", title: "home-lab", preview: "Discord bridge is online.",
             age: 20_000, ["label": "home-lab", "category": "Home", "channel": "discord", "pinned": true, "unread": true],

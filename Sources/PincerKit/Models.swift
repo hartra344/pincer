@@ -576,6 +576,9 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     public var transportChannel: String?
     /// Conversation it arrived in (`__openclaw.transport.conversationRef`), e.g. `channel:123`.
     public var conversationRef: String?
+    /// Set when another agent, an automation or a helper wrote this message (it's shown as
+    /// theirs, not as yours or this chat's agent's).
+    public var sender: MessageSender?
 
     /// An optimistic send on its way: in flight, or accepted and waiting for the transcript. Not
     /// a queued or failed one.
@@ -627,6 +630,11 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         // Stable across reloads and older pages, so rows keep their identity and scroll position.
         self.id = baseId
         self.role = self.markerKind != nil ? .marker : ChatRole(json["role"]?.string)
+        if self.role != .marker, let sender = MessageSender.parse(json) {
+            self.sender = sender
+            // Another agent's message is shown as theirs, never as yours (upstream projects it the same way).
+            self.role = .assistant
+        }
         self.toolCallId = json["toolCallId"]?.text ?? json["tool_call_id"]?.text
         self.toolName = json["toolName"]?.text ?? json["tool_name"]?.text
         if self.role == .toolResult { self.toolDetails = ToolActivity.fileEditDetails(json["details"]) }
@@ -638,8 +646,8 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
             self.timestamp = nil
         }
         let provenance = json["provenance"]
-        self.via = provenance?["sourceChannel"]?.text.map { $0.capitalized }
-        if self.role == .assistant, let model = json["model"]?.text, !Self.syntheticModels.contains(model) {
+        self.via = self.sender == nil ? provenance?["sourceChannel"]?.text.map { $0.capitalized } : nil
+        if self.role == .assistant, self.sender == nil, let model = json["model"]?.text, !Self.syntheticModels.contains(model) {
             self.model = model
             self.provider = json["provider"]?.text
         }
@@ -660,6 +668,12 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
             self.blocks = text.isEmpty ? [] : [.text(text)]
         } else {
             self.blocks = (json["content"]?.array ?? []).compactMap(ContentBlock.parse)
+        }
+        if self.sender != nil || provenance?["kind"]?.text == "inter_session" {
+            self.blocks = self.blocks.map { block in
+                guard case let .text(text) = block else { return block }
+                return .text(MessageSender.displayText(text, provenance: provenance))
+            }.filter { if case let .text(text) = $0 { !text.isEmpty } else { true } }
         }
         self.blocks += Self.mediaFactBlocks(meta?["media"], existing: self.blocks)
         if self.blocks.isEmpty, self.role == .assistant, let errorMessage {
@@ -812,6 +826,8 @@ public struct AssistantTurn: Identifiable, Hashable, Sendable {
     /// change when the session's model does. Nil when the Gateway didn't record one.
     public var model: String?
     public var provider: String?
+    /// Who wrote the turn when it isn't this chat's agent: another agent, an automation or a helper.
+    public var sender: MessageSender?
 
     public var body: String { self.text.joined(separator: "\n\n") }
     /// `provider/model`, e.g. `anthropic/claude-opus-4-8`.
@@ -854,8 +870,10 @@ public enum TranscriptBuilder {
             case .assistant:
                 // A reply from another run (a cron job, a follow-up) is its own row, not part of this one.
                 if let runId = item.runId, let currentRunId, runId != currentRunId { flush() }
+                // So is a message from someone else: a new speaker always starts a new group.
+                if let turn = current, turn.sender != item.sender { flush() }
                 if let runId = item.runId { currentRunId = runId }
-                var turn = current ?? AssistantTurn(id: item.id, timestamp: item.timestamp)
+                var turn = current ?? AssistantTurn(id: item.id, timestamp: item.timestamp, sender: item.sender)
                 turn.timestamp = item.timestamp ?? turn.timestamp
                 turn.isError = turn.isError || item.isError
                 if let model = item.model {
@@ -886,6 +904,8 @@ public enum TranscriptBuilder {
                 }
                 current = turn
             case .toolResult:
+                // Tool output belongs to the chat's agent, not to a forwarded message before it.
+                if current?.sender != nil { flush() }
                 var turn = current ?? AssistantTurn(id: item.id, timestamp: item.timestamp)
                 let resultText = item.plainText
                 if let callId = item.toolCallId, let index = toolIndex[callId] {

@@ -1138,7 +1138,7 @@ public final class ChatStore: Identifiable {
         guard let item = self.message(withId: messageId) else { return nil }
         let text = MediaDirectives.extract(from: item.plainText).text.trimmingCharacters(in: .whitespacesAndNewlines)
         let preview = text.isEmpty ? (item.blocks.contains { if case .image = $0 { true } else { false } } ? "Image" : "Attachment") : text
-        return ReplyTarget(messageId: messageId, senderLabel: item.role == .user ? you : agent,
+        return ReplyTarget(messageId: messageId, senderLabel: item.senderName(you: you, agent: agent, agents: self.gateway?.agents ?? []),
                            preview: preview, isAssistant: item.role == .assistant)
     }
 
@@ -1154,7 +1154,12 @@ public final class ChatStore: Identifiable {
         guard let targetId = item.replyToId else { return nil }
         if let target = self.message(withId: targetId) {
             let line = Replies.previewLine(MediaDirectives.extract(from: target.plainText).text)
-            return ReplyQuote(targetId: targetId, sender: target.role == .user ? .you : .agent,
+            let sender: ReplyQuote.Sender = if let from = target.sender {
+                .label(from.displayName(agents: self.gateway?.agents ?? []))
+            } else {
+                target.role == .user ? .you : .agent
+            }
+            return ReplyQuote(targetId: targetId, sender: sender,
                               text: line.isEmpty ? item.replyToPreview?.text : line)
         }
         if let preview = item.replyToPreview {

@@ -32,7 +32,7 @@ public actor MessageIndex {
     }
 
     /// Bump when the schema or what's indexed changes; the old index is then rebuilt.
-    static let schemaVersion: Int32 = 2
+    static let schemaVersion: Int32 = 3
     static var userVersion: Int32 { self.schemaVersion * 1000 + Int32(TranscriptCache.Snapshot.currentVersion) }
 
     public nonisolated let gatewayId: UUID
@@ -255,7 +255,7 @@ public actor MessageIndex {
         }
         if !added.isEmpty {
             let insert = try self.prepare(db, """
-                INSERT INTO docs (session_key, entry_id, section, role, via, ts, hash, body) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO docs (session_key, entry_id, section, role, via, sender, ts, hash, body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)
             defer { sqlite3_finalize(insert) }
             let index = try self.prepare(db, "INSERT INTO messages (rowid, body) VALUES (?, ?)")
@@ -264,7 +264,8 @@ public actor MessageIndex {
                 let document = prepared.document
                 try self.step(insert, [
                     .text(sessionKey), .text(document.entryId), .int(document.section), .text(document.role.rawValue),
-                    .text(document.via), .double(document.timestamp?.timeIntervalSinceReferenceDate), .text(prepared.hash),
+                    .text(document.via), .text(Self.encodedSender(document.sender)),
+                    .double(document.timestamp?.timeIntervalSinceReferenceDate), .text(prepared.hash),
                     .blob(Self.packed(document.text)),
                 ], db: db)
                 let id = sqlite3_last_insert_rowid(db)
@@ -376,7 +377,7 @@ public actor MessageIndex {
         guard !Task.isCancelled else { throw CancellationError() }
         do {
             let statement = try self.prepare(db, """
-                SELECT d.session_key, d.entry_id, d.section, d.role, d.via, d.ts, d.body
+                SELECT d.session_key, d.entry_id, d.section, d.role, d.via, d.ts, d.body, d.sender
                 FROM messages JOIN docs d ON d.id = messages.rowid
                 WHERE messages MATCH ? ORDER BY d.ts DESC LIMIT ?
                 """)
@@ -396,7 +397,8 @@ public actor MessageIndex {
                     via: Self.text(statement, 4),
                     timestamp: sqlite3_column_type(statement, 5) == SQLITE_NULL ? nil
                         : Date(timeIntervalSinceReferenceDate: sqlite3_column_double(statement, 5)),
-                    text: Self.unpacked(statement, 6) ?? ""))
+                    text: Self.unpacked(statement, 6) ?? "",
+                    sender: Self.decodedSender(Self.text(statement, 7))))
             }
             return hits
         } catch is CancellationError {
@@ -505,7 +507,7 @@ public actor MessageIndex {
             try self.exec(handle, """
                 CREATE TABLE docs (
                     id INTEGER PRIMARY KEY, session_key TEXT NOT NULL, entry_id TEXT NOT NULL, section INTEGER NOT NULL,
-                    role TEXT, via TEXT, ts REAL, hash TEXT, body BLOB);
+                    role TEXT, via TEXT, sender TEXT, ts REAL, hash TEXT, body BLOB);
                 CREATE INDEX docs_session ON docs (session_key);
                 CREATE VIRTUAL TABLE messages USING fts5(
                     body, content = '', tokenize = 'unicode61 remove_diacritics 2');
@@ -562,6 +564,7 @@ public actor MessageIndex {
             hasher.add(item.role.rawValue)
             hasher.add(item.runId ?? "")
             hasher.add(item.via ?? "")
+            hasher.add(Self.encodedSender(item.sender) ?? "")
             hasher.add(item.isPending ? "p" : "")
             hasher.add(item.timestamp.map { String($0.timeIntervalSinceReferenceDate) } ?? "")
             for block in item.blocks {
@@ -576,6 +579,14 @@ public actor MessageIndex {
         var hasher = StableHasher()
         hasher.add(document)
         return String(hasher.value, radix: 36)
+    }
+
+    static func encodedSender(_ sender: MessageSender?) -> String? {
+        sender.flatMap { try? JSONEncoder().encode($0) }.map { String(decoding: $0, as: UTF8.self) }
+    }
+
+    static func decodedSender(_ text: String?) -> MessageSender? {
+        text.flatMap { try? JSONDecoder().decode(MessageSender.self, from: Data($0.utf8)) }
     }
 
     // MARK: SQLite helpers
@@ -765,6 +776,7 @@ private struct StableHasher {
     mutating func add(_ document: MessageSearch.Document) {
         self.add(document.role.rawValue)
         self.add(document.via ?? "")
+        if let sender = document.sender { self.add("\(sender.kind.rawValue):\(sender.sessionKey ?? ""):\(sender.label ?? "")") }
         self.add(document.timestamp.map { String($0.timeIntervalSinceReferenceDate) } ?? "")
         self.add(document.text)
     }

@@ -85,6 +85,8 @@ struct TranscriptContext {
 protocol TranscriptRowActions: AnyObject {
     func setExpanded(_ key: String, _ expanded: Bool, row: String)
     func openRun(_ sessionKey: String)
+    /// Opens another chat, e.g. the one a forwarded message came from.
+    func openChat(_ sessionKey: String)
     func preview(_ ref: ImageRef)
     func open(_ url: URL)
     func loadImage(_ ref: ImageRef)
@@ -434,6 +436,11 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     func openRun(_ sessionKey: String) {
         self.context.gateway.selectedKey = sessionKey
+    }
+
+    func openChat(_ sessionKey: String) {
+        let gateway = self.context.gateway
+        gateway.selectedKey = gateway.resolveSessionKey(sessionKey)
     }
 
     func preview(_ ref: ImageRef) {
