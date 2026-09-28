@@ -16,6 +16,9 @@ import UserNotifications
 //   swift run PincerChecks --live URL TOKEN → end-to-end against a (mock) Gateway
 //     (--live-core / --live-extras run its two halves separately, each against a fresh mock)
 //   add --skip-intent-checks to leave out the slow Shortcuts & Siri offline checks
+//   add --skip-perf-budgets to only report the perf smoke timings, failing just on clearly broken
+//     ones (scripts/run-checks.sh passes it to every run it starts side by side, since they share the CPU)
+//   swift run PincerChecks --perf-smoke     → only the perf smoke, budgets enforced (run it alone)
 //   swift run -c release PincerChecks --perf → message index at 20 chats × 20k messages
 //   swift run PincerChecks --live-no-usage URL TOKEN → a Gateway without usage (mock with MOCK_NO_USAGE=1)
 //   swift run PincerChecks --live-no-reply-to URL TOKEN → a Gateway without replyToId (mock with MOCK_NO_REPLY_TO=1)
@@ -49,6 +52,29 @@ func check(_ condition: @autoclosure () -> Bool, _ label: String, line: UInt = #
         failures += 1
         print("  ✗ \(label)  (line \(line))")
     }
+}
+
+let skipPerfBudgets = CommandLine.arguments.contains("--skip-perf-budgets")
+
+/// A wall-clock budget. With --skip-perf-budgets, only going over `hardLimit` fails; over the
+/// budget is just reported.
+@MainActor
+func checkBudget(_ elapsed: Duration, _ budget: Duration, hardLimit: Duration, _ label: String, line: UInt = #line) {
+    if skipPerfBudgets, elapsed > budget, elapsed <= hardLimit {
+        print("  · \(label) (over the \(budget.formatted(.units(allowed: [.milliseconds]))) budget, not enforced with --skip-perf-budgets)")
+        return
+    }
+    check(elapsed <= (skipPerfBudgets ? hardLimit : budget), label, line: line)
+}
+
+if CommandLine.arguments.contains("--perf-smoke") {
+    print("Message index perf smoke")
+    await withScratchCache { _ in await checkMessageIndexPerfSmoke() }
+    print("\n\(passes) passed, \(failures) failed")
+    try? FileManager.default.removeItem(at: draftsRoot)
+    try? FileManager.default.removeItem(at: cacheRoot)
+    try? FileManager.default.removeItem(at: outboxRoot)
+    exit(failures == 0 ? 0 : 1)
 }
 
 func json(_ text: String) -> JSONValue {
@@ -1660,7 +1686,8 @@ func directorySize(_ url: URL, _ include: (String) -> Bool) -> Int64 {
     }
 }
 
-/// Always on: 2 chats × 5k messages build in ≤ 3 s; a selective query ≤ 100 ms.
+/// Always on: 2 chats × 5k messages build in ≤ 3 s; a selective query ≤ 100 ms (budgets relaxed
+/// to clearly-broken limits with --skip-perf-budgets).
 @MainActor
 func checkMessageIndexPerfSmoke() async {
     let gatewayId = UUID()
@@ -1671,7 +1698,7 @@ func checkMessageIndexPerfSmoke() async {
             await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "perf\(chat)")
         }
     }
-    check(build <= .seconds(3), "perf smoke: 2 × 5k messages saved and indexed in \(build.formatted(.units(allowed: [.milliseconds])))")
+    checkBudget(build, .seconds(3), hardLimit: .seconds(10), "perf smoke: 2 × 5k messages saved and indexed in \(build.formatted(.units(allowed: [.milliseconds])))")
     let keys: Set<String> = ["perf0", "perf1"]
     var worst = Duration.zero
     var groups: [MessageSearch.ChatGroup] = []
@@ -1681,7 +1708,7 @@ func checkMessageIndexPerfSmoke() async {
     }
     check(groups.count == 2 && groups.allSatisfy { $0.hits.count == 3 && $0.hasMore } && groups.first?.sessionKey == "perf1",
           "perf smoke: selective query results")
-    check(worst <= .milliseconds(100), "perf smoke: selective query, slowest of 5: \(worst.formatted(.units(allowed: [.milliseconds])))")
+    checkBudget(worst, .milliseconds(100), hardLimit: .seconds(1), "perf smoke: selective query, slowest of 5: \(worst.formatted(.units(allowed: [.milliseconds])))")
     // Cancelling one search mustn't stop another that wasn't cancelled (e.g. a second window's).
     let index = MessageIndex.shared(gatewayId: gatewayId)
     var bystanderOK = 0
@@ -1701,8 +1728,9 @@ func checkMessageIndexPerfSmoke() async {
     let incremental = await clock.measure {
         await TranscriptCache.save(TranscriptCache.Snapshot(items: appended, complete: true), gatewayId: gatewayId, sessionKey: "perf0")
     }
-    await checkAsync({ await allTrue(indexHits(gatewayId, "pelican").count == 1, incremental <= .milliseconds(1000)) },
-          "perf smoke: append to a 5k chat saved and indexed in \(incremental.formatted(.units(allowed: [.milliseconds])))")
+    await checkAsync({ await indexHits(gatewayId, "pelican").count == 1 }, "perf smoke: appended message indexed")
+    checkBudget(incremental, .milliseconds(1000), hardLimit: .seconds(5),
+                "perf smoke: append to a 5k chat saved and indexed in \(incremental.formatted(.units(allowed: [.milliseconds])))")
     TranscriptCache.removeAll(gatewayId: gatewayId)
 }
 
@@ -5181,7 +5209,10 @@ func checkLiveApprovals(profile: GatewayProfile, gateway: GatewayStore, chat: Ch
     cold.start()
     let started = Date()
     let outcome = await cold.resolveApproval(id: pending.id, decision: "deny")
-    check(outcome == .resolved && Date().timeIntervalSince(started) < 25, "cold store resolves by id within the budget (\(outcome))")
+    let coldElapsed = Duration.seconds(Date().timeIntervalSince(started))
+    check(outcome == .resolved, "cold store resolves by id (\(outcome))")
+    checkBudget(coldElapsed, .seconds(25), hardLimit: .seconds(60),
+                "cold store resolves within the budget (\(coldElapsed.formatted(.units(allowed: [.milliseconds]))))")
     let cleared = await waitFor("exec.approval.resolved from another client") { !gateway.approvals.contains { $0.id == pending.id } }
     check(cleared, "resolved by another client → removed from this store")
     check(cold.approvals.isEmpty, "cold store keeps no approval")
