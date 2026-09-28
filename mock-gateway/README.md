@@ -43,6 +43,8 @@ npm test --if-present
 npm run selftest
 ```
 
+The selftest runs one section per domain from `selftest/<domain>.mjs`, each exporting `run(ctx)`, in the order listed in `selftest.mjs`. To add a domain, put its handler in `<domain>.mjs` (register it in the `REQUEST_HANDLERS` list in `server.mjs`; seed its data through `seed.mjs`) and its selftest in `selftest/<domain>.mjs`. Payloads follow upstream OpenClaw; don't invent methods. See [CONTRIBUTING.md](../CONTRIBUTING.md).
+
 Web Push (`webpush.mjs`):
 
 - `push.web.vapidPublicKey`, `push.web.subscribe`, `push.web.unsubscribe` and `push.web.test`, which need `operator.write`. Subscriptions are bound to the device and upserted by endpoint. Loopback `http://` endpoints are allowed for testing.

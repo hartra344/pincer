@@ -95,13 +95,13 @@ The mock serves `health`, `status`, `last-heartbeat` and `system-presence` for t
 
 ## Selftest and live checks
 
-The mock has its own selftest, and it is the target for Pincer's live end-to-end checks. CI runs both.
+The mock has its own selftest, one section per domain in `mock-gateway/selftest/<domain>.mjs`, and it is the target for Pincer's live end-to-end checks. CI runs both. See [Contributing](../contributing/) for adding handlers and selftests.
 
 ```sh
 cd mock-gateway && npm ci && npm run selftest
 
 # in another terminal, with the mock running:
-swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+swift run PincerChecks --live-core ws://127.0.0.1:18789 dev-token   # and --live-extras, each against a fresh mock
 
 # a gateway without usage, on another port:
 MOCK_NO_USAGE=1 PORT=18790 npm start

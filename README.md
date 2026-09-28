@@ -84,7 +84,7 @@ The iOS app and Share extension profiles need the App Groups capability with `gr
 | `Apps/ShareExtension` | Share extensions for iOS and macOS: a view controller per platform plus the shared SwiftUI sheet. The logic (`ShareModel`, `SharedContent`) lives in PincerKit. |
 | `Design/AppIcon` | Flattened reference artwork for the app icon (`Pincer.svg`). The shipped icon is `Apps/Shared/AppIcon.icon`, a layered Icon Composer file (gradient background + glass speech-bubble layer) with Default, Dark, Clear and Tinted appearances; edit it in Icon Composer (Xcode ▸ Open Developer Tool). Xcode renders flat fallbacks for iOS 18 / macOS 15. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |
-| `Sources/PincerChecks` | Self-checks, with an optional live end-to-end run. |
+| `Sources/PincerChecks` | Self-checks: per-domain `*Checks.swift` files, and `Registry.swift` listing which run in each mode. |
 | `Tests/PincerKitTests` | Swift Testing unit tests for PincerKit's pure logic (framing, signing, URL/TLS policy, caches, sidebar, slash commands, approvals). |
 | `Sources/PincerPush` | Web Push decryption (RFC 8291), per-gateway push keys and payload parsing, shared by the app and its notification service extension. |
 | `Apps/iOSNotificationService` | iOS notification service extension that decrypts relayed pushes. |
