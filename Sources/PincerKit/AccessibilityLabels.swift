@@ -20,6 +20,11 @@ public enum AccessibilityText {
             .joined(separator: ", ")
     }
 
+    /// Label for a sidebar section's show/hide chevron: `Collapse Moki`, `Expand Moki`.
+    public static func sectionToggle(title: String, isCollapsed: Bool) -> String {
+        "\(isCollapsed ? "Expand" : "Collapse") \(title)"
+    }
+
     /// `1 tool call`, `3 tool calls`. Returns nil for zero so it drops out of a `join`.
     public static func count(_ value: Int, singular: String, plural: String) -> String? {
         guard value > 0 else { return nil }

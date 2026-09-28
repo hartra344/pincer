@@ -45,6 +45,9 @@ struct SidebarList: NSViewRepresentable {
         private var roots: [Node] = []
         private var selectedKey: String?
         private var isProgrammatic = false
+        /// NSOutlineView won't expand or collapse a row without an outline cell, so headers
+        /// report one only while we change their expansion.
+        private var allowsHeaderOutlineCell = false
         private var theme = AppTheme()
         private var timer: Timer?
         private weak var outline: NSOutlineView?
@@ -162,7 +165,7 @@ struct SidebarList: NSViewRepresentable {
                 guard row >= 0 else { continue }
                 if let header = self.headers[id], header != oldHeaders[id] {
                     (outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarHeaderCell)?
-                        .configure(header, actions: self.actions)
+                        .configure(header, actions: self.actions) { [weak self] in self?.toggle(id) }
                 } else if let entry = self.entries[id], let previous = oldEntries[id], entry != previous {
                     (outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarChatCell)?
                         .configure(entry, actions: self.actions)
@@ -190,6 +193,8 @@ struct SidebarList: NSViewRepresentable {
 
         private func applyExpansion() {
             guard let outline else { return }
+            self.allowsHeaderOutlineCell = true
+            defer { self.allowsHeaderOutlineCell = false }
             for root in self.roots {
                 guard let header = self.headers[root.id] else { continue }
                 if header.isCollapsed, outline.isItemExpanded(root) {
@@ -257,7 +262,8 @@ struct SidebarList: NSViewRepresentable {
             if let header = self.headers[node.id] {
                 let cell = outlineView.makeView(withIdentifier: SidebarHeaderCell.reuseIdentifier, owner: nil) as? SidebarHeaderCell
                     ?? SidebarHeaderCell()
-                cell.configure(header, actions: self.actions)
+                let id = node.id
+                cell.configure(header, actions: self.actions) { [weak self] in self?.toggle(id) }
                 return cell
             }
             guard let entry = self.entries[node.id] else { return nil }
@@ -276,8 +282,22 @@ struct SidebarList: NSViewRepresentable {
             return self.entries[node.id] != nil
         }
 
+        /// Headers draw their own always-visible chevron (#239). The native one only appears on
+        /// hover and pushes the + button aside when it does.
         func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool {
-            true
+            guard let node = item as? Node else { return true }
+            return self.allowsHeaderOutlineCell || self.headers[node.id] == nil
+        }
+
+        private func toggle(_ id: String) {
+            guard let outline, let node = self.nodes[id] else { return }
+            self.allowsHeaderOutlineCell = true
+            defer { self.allowsHeaderOutlineCell = false }
+            if outline.isItemExpanded(node) {
+                outline.collapseItem(node)
+            } else {
+                outline.expandItem(node)
+            }
         }
 
         func outlineViewSelectionDidChange(_ notification: Notification) {
@@ -612,7 +632,12 @@ private final class SidebarHeaderCell: NSTableCellView {
     private let title = NSTextField(labelWithString: "")
     private let badge = NSTextField(labelWithString: "")
     private let add = NSButton()
+    private let chevron = NSButton()
     private var onAdd: (() -> Void)?
+    private var onToggle: (() -> Void)?
+    /// Width of each trailing button slot. Every header keeps both slots, so + and the chevron
+    /// line up across sections and never move.
+    static let buttonSlot: CGFloat = 22
     private var avatar: (style: AvatarStyle, state: AvatarState)?
 
     init() {
@@ -641,23 +666,33 @@ private final class SidebarHeaderCell: NSTableCellView {
         self.add.toolTip = "New chat"
         self.add.target = self
         self.add.action = #selector(self.addChat)
+        self.chevron.bezelStyle = .accessoryBarAction
+        self.chevron.isBordered = false
+        self.chevron.symbolConfiguration = .init(pointSize: 11, weight: .semibold)
+        self.chevron.contentTintColor = .secondaryLabelColor
+        self.chevron.target = self
+        self.chevron.action = #selector(self.toggleSection)
+        for button in [self.add, self.chevron] {
+            button.imagePosition = .imageOnly
+            button.widthAnchor.constraint(equalToConstant: Self.buttonSlot).isActive = true
+            button.heightAnchor.constraint(equalToConstant: Self.buttonSlot).isActive = true
+        }
         self.creature.imageScaling = .scaleNone
         self.creature.widthAnchor.constraint(equalToConstant: SidebarAvatar.side).isActive = true
         self.creature.heightAnchor.constraint(equalToConstant: SidebarAvatar.side).isActive = true
-        for view in [self.emoji, self.creature, self.icon, self.badge, self.add] as [NSView] {
+        for view in [self.emoji, self.creature, self.icon, self.badge, self.add, self.chevron] as [NSView] {
             view.setContentHuggingPriority(.required, for: .horizontal)
         }
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let row = NSStackView(views: [self.emoji, self.creature, self.icon, self.title, self.badge, spacer, self.add])
+        let row = NSStackView(views: [self.emoji, self.creature, self.icon, self.title, self.badge, spacer, self.add, self.chevron])
         row.spacing = 5
         row.alignment = .centerY
         row.translatesAutoresizingMaskIntoConstraints = false
         self.addSubview(row)
         NSLayoutConstraint.activate([
             row.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 2),
-            // Leaves room for the section's show/hide chevron.
-            row.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -22),
+            row.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -2),
             row.centerYAnchor.constraint(equalTo: self.centerYAnchor),
         ])
         self.textField = self.title
@@ -667,8 +702,9 @@ private final class SidebarHeaderCell: NSTableCellView {
     required init?(coder: NSCoder) { fatalError() }
 
     @MainActor
-    func configure(_ header: SidebarModel.Header, actions: SidebarActions) {
+    func configure(_ header: SidebarModel.Header, actions: SidebarActions, toggle: @escaping () -> Void) {
         let section = header.section
+        self.onToggle = toggle
         self.avatar = header.avatar.map { ($0, header.avatarState) }
         self.drawAvatar()
         self.emoji.stringValue = section.emoji ?? ""
@@ -680,14 +716,25 @@ private final class SidebarHeaderCell: NSTableCellView {
         let unread = header.isCollapsed ? section.unreadCount : 0
         self.badge.stringValue = " \(unread) "
         self.badge.isHidden = unread == 0
-        self.add.isHidden = header.newChatAgent == nil
-        if let agent = header.newChatAgent {
-            self.onAdd = { actions.newChat(agent) }
-        }
+        // A section without + keeps an empty slot, so the chevron stays in line.
+        let canAdd = header.newChatAgent != nil
+        self.add.alphaValue = canAdd ? 1 : 0
+        self.add.isEnabled = canAdd
+        self.add.setAccessibilityElement(canAdd)
+        self.onAdd = header.newChatAgent.map { agent in { actions.newChat(agent) } }
+        let label = AccessibilityText.sectionToggle(title: section.title, isCollapsed: header.isCollapsed)
+        self.chevron.image = NSImage(systemSymbolName: header.isCollapsed ? "chevron.right" : "chevron.down",
+                                     accessibilityDescription: label)
+        self.chevron.toolTip = header.isCollapsed ? "Show" : "Hide"
+        self.chevron.setAccessibilityLabel(label)
     }
 
     @objc private func addChat() {
         self.onAdd?()
+    }
+
+    @objc private func toggleSection() {
+        self.onToggle?()
     }
 
     override func viewDidChangeEffectiveAppearance() {

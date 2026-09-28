@@ -16,6 +16,11 @@ struct AccessibilityLabelTests {
         #expect(AccessibilityText.join([nil, " "]) == "")
     }
 
+    @Test func sectionToggleNamesTheAction() {
+        #expect(AccessibilityText.sectionToggle(title: "Moki", isCollapsed: false) == "Collapse Moki")
+        #expect(AccessibilityText.sectionToggle(title: "Moki", isCollapsed: true) == "Expand Moki")
+    }
+
     @Test func countPluralizesAndDropsZero() {
         #expect(AccessibilityText.count(0, singular: "tool call", plural: "tool calls") == nil)
         #expect(AccessibilityText.count(-2, singular: "tool call", plural: "tool calls") == nil)
