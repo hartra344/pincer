@@ -83,6 +83,45 @@ private func checkForwardedSearch(_ gateway: GatewayStore, label: String) async 
     check(hit?.sender == "Kiko", "\(label): search result for Kiko's message names Kiko (\(hit?.sender ?? "no hit"))")
 }
 
+/// Your unsent (failed or queued) messages between Kiko's and Claw's are their own rows and
+/// never join or split the agents' groups.
+@MainActor
+private func checkForwardedWithOutbox(_ gateway: GatewayStore, _ chat: ChatStore) async {
+    let failedId = "forwarded-outbox-failed"
+    gateway.injectOutboxEntry(OutboxEntry(
+        id: failedId, sessionKey: "agent:main:main", agentId: "main", text: "Kiko, can you add the NAS drives too?",
+        createdAt: Date(), state: .failed(OutboxFailure(message: "The gateway timed out.", retryable: true)), attempts: 1))
+    defer { gateway.discardOutbox() }
+    let shown = await waitFor("failed row in Claw's chat") { chat.items.contains { $0.idempotencyKey == failedId && $0.outboxState != nil } }
+    check(shown, "demo: a failed message shows in Claw's chat with Kiko's messages")
+    guard shown, let failed = chat.items.first(where: { $0.idempotencyKey == failedId }),
+          let intro = chat.message(withId: "demo-kiko-intro"), let reply = chat.message(withId: "demo-claw-to-kiko"),
+          let thanks = chat.message(withId: "demo-kiko-thanks"), let note = chat.message(withId: "demo-claw-kiko-note")
+    else { return }
+    if case let .user(last)? = chat.entries.last {
+        check(last.idempotencyKey == failedId && last.sender == nil, "demo: the failed row is its own row, from you")
+    } else {
+        check(false, "demo: the failed row ends the transcript (\(String(describing: chat.entries.last?.id)))")
+    }
+    check(chat.message(withId: "demo-kiko-intro")?.sender?.agentId == "kiko", "demo: Kiko's attribution survives an outbox change")
+
+    // Interleaved: Kiko, you (failed), Claw, Kiko, you (queued), Claw.
+    var queued = failed
+    queued.id = "outbox:forwarded-outbox-queued"
+    queued.idempotencyKey = "forwarded-outbox-queued"
+    queued.outboxState = .queued
+    let entries = TranscriptBuilder.build([intro, failed, reply, thanks, queued, note])
+    let shape: [String] = entries.map { entry in
+        switch entry {
+        case let .assistant(turn): turn.sender?.displayName(agents: gateway.agents) ?? "Claw"
+        case let .user(item): item.outboxState == .queued ? "queued" : (item.outboxState == nil ? "you" : "failed")
+        case .marker: "-"
+        }
+    }
+    check(shape == ["Kiko", "failed", "Claw", "Kiko", "queued", "Claw"],
+          "demo: unsent rows between forwarded messages keep every group apart (\(shape))")
+}
+
 @MainActor
 private func connectForwarded(_ profile: GatewayProfile, _ label: String) async -> GatewayStore? {
     let gateway = GatewayStore(profile: profile)
@@ -107,6 +146,7 @@ func runDemoForwarded() async {
     checkForwardedExchange(gateway, chat, ForwardedSeed(intro: "demo-kiko-intro", reply: "demo-claw-to-kiko", thanks: "demo-kiko-thanks",
                                                         note: "demo-claw-kiko-note", you: "demo-main-thanks-both"), label: "demo")
     await checkForwardedSearch(gateway, label: "demo")
+    await checkForwardedWithOutbox(gateway, chat)
 
     // Kiko's own chat shows the sessions_send calls, as her messages.
     let kiko = gateway.chat(for: "agent:kiko:main")
