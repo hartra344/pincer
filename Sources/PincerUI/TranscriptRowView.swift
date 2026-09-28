@@ -1049,8 +1049,15 @@ final class TranscriptHeaderView: TranscriptBaseView {
     override func layoutContent() {
         let positions = self.positions()
         if let center = positions.spinnerCenter { self.spinner.place(center: center) }
-        if !self.badgeButton.isHidden, let rect = positions.badgeRect, self.badgeButton.frame != rect {
-            self.badgeButton.frame = rect
+        guard self.header?.link != nil, self.header?.badge != nil else { return }
+        if let rect = positions.badgeRect {
+            if self.badgeButton.frame != rect {
+                self.badgeButton.frame = rect
+                self.badgeButton.redraw()
+            }
+            self.badgeButton.isHidden = false
+        } else {
+            self.badgeButton.isHidden = true
         }
     }
 
@@ -1060,15 +1067,14 @@ final class TranscriptHeaderView: TranscriptBaseView {
         guard let header else { return Positions() }
         let style = self.style
         let baseline = style.headline.ascender
-        var reserved: CGFloat = 0
-        let badgeWidth = header.badge.map { singleLine($0, style.caption2Medium, TranscriptColors.secondary).lineWidth + 10 }
-        let timeWidth = header.time.map { singleLine($0, style.caption, TranscriptColors.tertiary).lineWidth }
-        if let badgeWidth { reserved += 6 + badgeWidth }
-        if let timeWidth { reserved += 6 + timeWidth }
-        if header.isPending { reserved += 6 + 10 }
         let natural = singleLine(header.name, style.headline, TranscriptColors.label).lineWidth
+        let timeWidth = header.time.map { singleLine($0, style.caption, TranscriptColors.tertiary).lineWidth }
+        let widths = Self.widths(available: self.bounds.width, name: natural,
+                                 badge: header.badge.map { singleLine($0, style.caption2Medium, TranscriptColors.secondary).lineWidth + 10 },
+                                 time: timeWidth, isPending: header.isPending)
+        let badgeWidth = widths.badge
         var positions = Positions()
-        positions.nameWidth = max(0, min(natural, self.bounds.width - reserved))
+        positions.nameWidth = widths.name
         var x = positions.nameWidth
         if let badgeWidth {
             x += 6
@@ -1086,6 +1092,23 @@ final class TranscriptHeaderView: TranscriptBaseView {
             positions.spinnerCenter = CGPoint(x: x + 6 + 5, y: baseline - style.caption.xHeight / 2)
         }
         return positions
+    }
+
+    /// Widths of the name and badge on a header line `available` wide. The time and spinner keep
+    /// theirs; the name keeps up to `minimumName` of its own; the badge gets what's left, truncated,
+    /// and is dropped under `minimumBadge` (its chat stays reachable from the menu and VoiceOver).
+    static func widths(available: CGFloat, name: CGFloat, badge: CGFloat?, time: CGFloat?, isPending: Bool,
+                       minimumName: CGFloat = 60, minimumBadge: CGFloat = 30) -> (name: CGFloat, badge: CGFloat?)
+    {
+        var fixed: CGFloat = 0
+        if let time { fixed += 6 + time }
+        if isPending { fixed += 6 + 10 }
+        let room = max(0, available - fixed)
+        guard let badge else { return (min(name, room), nil) }
+        let nameFloor = min(name, minimumName, room)
+        let badgeWidth = min(badge, room - nameFloor - 6)
+        guard badgeWidth >= minimumBadge else { return (min(name, room), nil) }
+        return (min(name, room - 6 - badgeWidth), badgeWidth)
     }
 
     override func draw(_ rect: CGRect) {
