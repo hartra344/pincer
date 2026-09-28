@@ -96,7 +96,8 @@ func runLive(url: String, token: String) async {
 
     let trip = gateway.chat(for: "agent:main:dashboard:trip")
     // Background prefetch may already have cached trip's whole history (it skips chats open here
-    // from now on): drop that so this checks paging from the Gateway.
+    // from now on): let it finish, then drop that so this checks paging from the Gateway.
+    await gateway.settlePrefetch()
     await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: "agent:main:dashboard:trip")
     await trip.load()
     let firstPage = trip.items.map(\.id)
@@ -267,7 +268,11 @@ func runLive(url: String, token: String) async {
     // A second device: names set on it before syncing are uploaded, and renames flow both ways.
     let otherProfile = GatewayProfile(name: "Mock 2", url: url, authMode: .token)
     otherProfile.secret = token
-    let other = GatewayStore(profile: otherProfile)
+    // Its own defaults suite: parallel check runs share UserDefaults.standard, and the avatar
+    // check below reads the device settings this store writes.
+    let (otherDefaults, otherSuite) = scratchDefaults()
+    defer { otherDefaults.removePersistentDomain(forName: otherSuite) }
+    let other = GatewayStore(profile: otherProfile, defaults: otherDefaults)
     let early = ChatServer(provider: "discord", id: "server-early", name: nil)
     let renamed = ChatServer(provider: "discord", id: "server-renamed", name: nil)
     other.renameServer(early, to: "Set Before Sync")
@@ -300,12 +305,12 @@ func runLive(url: String, token: String) async {
     let avatarSynced = await waitFor("avatar sync") {
         other.avatarChoices["main"] == "cat" && other.avatarChoices[AvatarPreferences.renderStyleEntry] == "plush"
     }
-    check(avatarSynced && UserDefaults.standard.string(forKey: AvatarPreferences.creatureKey(for: "main")) == "cat"
-          && UserDefaults.standard.string(forKey: AvatarPreferences.renderStyleKey) == "plush",
+    check(avatarSynced && otherDefaults.string(forKey: AvatarPreferences.creatureKey(for: "main")) == "cat"
+          && otherDefaults.string(forKey: AvatarPreferences.renderStyleKey) == "plush",
           "avatar character and style sync through users.prefs")
     other.setAvatarCreature(nil, for: "main")
     let avatarCleared = await waitFor("avatar clear") { gateway.avatarChoices["main"] == nil }
-    check(avatarCleared && UserDefaults.standard.object(forKey: AvatarPreferences.creatureKey(for: "main")) == nil,
+    check(avatarCleared && otherDefaults.object(forKey: AvatarPreferences.creatureKey(for: "main")) == nil,
           "setting a character back to Auto syncs")
     gateway.setAvatarRenderStyle(.pixel)
     _ = await waitFor("avatar style reset") { other.avatarChoices[AvatarPreferences.renderStyleEntry] == "pixel" }
