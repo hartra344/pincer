@@ -17,6 +17,7 @@ import { SESSION_MANAGER_METHODS, applyArchived, archiveProtectionError, handleS
 import { CHANNEL_LIFECYCLE_METHODS, createChannelsState, handleChannelsRequest } from './channels.mjs';
 import { healthSummary } from './health.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
+import { isSpawnedBy, markSubagentAborted, seedRunningSubagentRun, seedSubagents, simulateSpawn } from './subagents.mjs';
 import { DEVICE_PAIRING_EVENTS, DEVICE_PAIRING_METHODS, NODE_METHODS, approvePendingDevice, createDevicePairingState, devicePairingDisabled, handleDevicesRequest, noteDeviceConnected, nodesDisabled, openPairingRequest } from './devices.mjs';
 import { liveFileEditCall, seededFileEditCalls } from './file-edits.mjs';
 
@@ -481,6 +482,7 @@ function createSeedState() {
   transcripts.get('agent:coder:main').push(
     makeMessage('assistant', [textBlock('Forge can edit code, run builds, and report concise status.')]),
   );
+  seedSubagents({ row, sessions, transcripts, makeMessage, textBlock, thinkingBlock, toolCallBlock, base });
   const [editCall, writeCall, patchCall] = seededFileEditCalls();
   const fileEditResult = (call) => makeMessage('toolResult', [textBlock(call.result)], {
     extra: { toolCallId: call.id, toolName: call.name, details: call.details, isError: false },
@@ -503,7 +505,7 @@ function createSeedState() {
   );
   const sessionManager = seedSessionManager({ row, transcripts, makeMessage, textBlock, base });
 
-  return {
+  const state = {
     agents,
     agentWorkspaces,
     sessions,
@@ -536,6 +538,8 @@ function createSeedState() {
     setupState: createSetupState(),
     channelsState: createChannelsState(),
   };
+  seedRunningSubagentRun(state);
+  return state;
 }
 
 // `archived`: false/absent lists active rows, true only archived ones, "all" both (sessions.list).
@@ -567,6 +571,8 @@ function sendEvent(conn, event, payload) {
 }
 
 function broadcast(state, event, payload, predicate = () => true) {
+  // Upstream stamps every agent event with its emit time.
+  if (event === 'agent' && payload.ts === undefined) payload = { ...payload, ts: nowMs() };
   for (const conn of state.connections) {
     if (conn.authenticated && predicate(conn)) sendEvent(conn, event, payload);
   }
@@ -803,9 +809,19 @@ function finishRunAbort(state, run) {
     row.activeRunIds = row.activeRunIds.filter((id) => id !== run.runId);
     row.status = 'idle';
     markRunEnded(row);
+    markSubagentAborted(state, row, run, broadcastSessionChanged);
     updateSessionRow(row, { lastActivityAt: nowMs() });
     broadcastSessionChanged(state, run.sessionKey, 'abort', row);
   }
+  // Like upstream chat-abort.ts: a terminal lifecycle end marked aborted, then the chat state.
+  broadcast(state, 'agent', {
+    runId: run.runId,
+    sessionKey: run.sessionKey,
+    ...(run.spawnedBy ? { spawnedBy: run.spawnedBy } : {}),
+    seq: ++run.seq,
+    stream: 'lifecycle',
+    data: { phase: 'end', status: 'cancelled', aborted: true, stopReason: 'user', ...(run.startedAt ? { startedAt: run.startedAt } : {}), endedAt: nowMs() },
+  });
   broadcast(state, 'chat', { runId: run.runId, sessionKey: run.sessionKey, seq: ++run.seq, state: 'aborted' });
   state.activeRuns.delete(run.runId);
 }
@@ -985,6 +1001,8 @@ async function simulateRun(state, run, params, replyMeta = {}) {
       broadcast(state, 'exec.approval.requested', clone(approval));
     }
 
+    run.startedAt = nowMs();
+    broadcast(state, 'agent', { runId: run.runId, sessionKey, seq: ++run.seq, stream: 'lifecycle', data: { phase: 'start', startedAt: run.startedAt } });
     broadcast(state, 'chat', { runId: run.runId, sessionKey, seq: ++run.seq, state: 'status', phase: 'thinking' });
     const thinkingParts = ['Thinking', ' through', ' the', ' mock', ' gateway', ' response...'];
     let thinking = '';
@@ -1026,6 +1044,16 @@ async function simulateRun(state, run, params, replyMeta = {}) {
     let answered = null;
     if (/\bask\b/i.test(String(text ?? ''))) {
       answered = await simulateQuestion(state, run, sessionKey, row);
+      if (run.aborted) return;
+    }
+
+    // `spawn` delegates to a subagent (`spawn fail` makes it fail), like `sessions_spawn`.
+    let spawned = null;
+    if (/\bspawn\b/i.test(String(text ?? ''))) {
+      spawned = await simulateSpawn(state, run, sessionKey, {
+        broadcast, broadcastSessionChanged, broadcastSessionMessage, makeSessionRow, makeMessage, textBlock, thinkingBlock,
+        toolCallBlock, runDelay, shortId, rowModel,
+      }, { fail: /\bspawn fail\b/i.test(String(text ?? '')) });
       if (run.aborted) return;
     }
 
@@ -1086,7 +1114,7 @@ async function simulateRun(state, run, params, replyMeta = {}) {
       broadcastSessionMessage(state, sessionKey, toolResult, transcript.length);
     }
 
-    const reply = answered ?? `I heard: "${String(text ?? '')}".\n\n## Mock response\n\n- Streaming deltas are working.\n- Tool events are ${wantsTool ? 'included' : 'available when requested'}.\n- Markdown rendering can be tested here.\n\n\`\`\`text\nrunId=${run.runId}\n\`\`\``;
+    const reply = spawned ? `Spawned a subagent: ${spawned.childSessionKey}. It will report back here.` : answered ?? `I heard: "${String(text ?? '')}".\n\n## Mock response\n\n- Streaming deltas are working.\n- Tool events are ${wantsTool ? 'included' : 'available when requested'}.\n- Markdown rendering can be tested here.\n\n\`\`\`text\nrunId=${run.runId}\n\`\`\``;
     const words = reply.split(/(\s+)/).filter((p) => p.length > 0);
     let out = '';
     for (const word of words) {
@@ -1213,7 +1241,9 @@ function handleAuthedRequest(state, conn, msg) {
       break;
     }
     case 'sessions.list': {
-      sendRes(conn, id, { sessions: sortedSessions(state, params.archived), defaults: sessionDefaults(), nextOffset: null, hasMore: false });
+      let listed = sortedSessions(state, params.archived);
+      if (typeof params.spawnedBy === 'string' && params.spawnedBy) listed = listed.filter((row) => isSpawnedBy(row, params.spawnedBy));
+      sendRes(conn, id, { sessions: listed, defaults: sessionDefaults(), nextOffset: null, hasMore: false });
       break;
     }
     case 'sessions.groups.list': {
