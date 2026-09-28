@@ -903,12 +903,12 @@
         }
       }
     },
-    "Auto picks a character from the agent's identity. Reduce Motion keeps them still.": {
+    "Auto picks a character from the agent's identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Auto picks a character from the agent's identity. Reduce Motion keeps them still."
+            "value": "Auto picks a character from the agent's identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still."
           }
         }
       }

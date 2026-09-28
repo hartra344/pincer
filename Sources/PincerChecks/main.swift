@@ -4395,6 +4395,23 @@ func runLive(url: String, token: String) async {
         let iconCleared = await waitFor("icon clear") { gateway.customIcon(for: iconKey) == nil }
         check(iconCleared, "clearing a chat icon syncs")
     }
+    // Avatar characters and the Pixel/Plush style sync through `pincer.avatars`, and land in the
+    // device settings the views read.
+    gateway.setAvatarCreature(.cat, for: "main")
+    gateway.setAvatarRenderStyle(.plush)
+    let avatarSynced = await waitFor("avatar sync") {
+        other.avatarChoices["main"] == "cat" && other.avatarChoices[AvatarPreferences.renderStyleEntry] == "plush"
+    }
+    check(avatarSynced && UserDefaults.standard.string(forKey: AvatarPreferences.creatureKey(for: "main")) == "cat"
+          && UserDefaults.standard.string(forKey: AvatarPreferences.renderStyleKey) == "plush",
+          "avatar character and style sync through users.prefs")
+    other.setAvatarCreature(nil, for: "main")
+    let avatarCleared = await waitFor("avatar clear") { gateway.avatarChoices["main"] == nil }
+    check(avatarCleared && UserDefaults.standard.object(forKey: AvatarPreferences.creatureKey(for: "main")) == nil,
+          "setting a character back to Auto syncs")
+    gateway.setAvatarRenderStyle(.pixel)
+    _ = await waitFor("avatar style reset") { other.avatarChoices[AvatarPreferences.renderStyleEntry] == "pixel" }
+    UserDefaults.standard.removeObject(forKey: AvatarPreferences.renderStyleKey)
 
     // Groups: created empty, kept when emptied, reordered, and chats arranged by hand.
     do {
@@ -4799,7 +4816,8 @@ func runLive(url: String, token: String) async {
         check(false, "second device and the mock's failed delivery issue")
     }
     second.stop()
-    for prefix in ["serverNames", "serverNamesSynced", "chatIcons", "chatIconsSynced", "healthDismissals", "healthDismissalsSynced"] {
+    for prefix in ["serverNames", "serverNamesSynced", "chatIcons", "chatIconsSynced", "avatars", "avatarsSynced", "healthDismissals",
+                   "healthDismissalsSynced"] {
         UserDefaults.standard.removeObject(forKey: "pincer.\(prefix).\(second.id.uuidString)")
     }
     check(health.heartbeat?.status == .okToken && health.presence.contains(where: health.isThisDevice), "heartbeat and this device's presence")
@@ -4824,7 +4842,8 @@ func runLive(url: String, token: String) async {
     admin.stop()
 
     for store in [gateway, other] {
-        for prefix in ["serverNames", "serverNamesSynced", "chatIcons", "chatIconsSynced", "healthDismissals", "healthDismissalsSynced"] {
+        for prefix in ["serverNames", "serverNamesSynced", "chatIcons", "chatIconsSynced", "avatars", "avatarsSynced", "healthDismissals",
+                           "healthDismissalsSynced"] {
             UserDefaults.standard.removeObject(forKey: "pincer.\(prefix).\(store.id.uuidString)")
         }
     }
