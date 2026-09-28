@@ -117,6 +117,18 @@ public final class GatewayStore: Identifiable {
             Task { await self.refreshSessions() }
         }
     }
+    public var showAutomations: Bool {
+        didSet {
+            guard showAutomations != oldValue else { return }
+            self.defaults.set(self.showAutomations, forKey: "pincer.showAutomations.\(self.id.uuidString)")
+        }
+    }
+    public var showSlashCommands: Bool {
+        didSet {
+            guard showSlashCommands != oldValue else { return }
+            self.defaults.set(self.showSlashCommands, forKey: "pincer.showSlashCommands.\(self.id.uuidString)")
+        }
+    }
 
     @ObservationIgnored let connection: GatewayConnection
     @ObservationIgnored private var chats: [String: ChatStore] = [:]
@@ -245,6 +257,8 @@ public final class GatewayStore: Identifiable {
         self.connection = GatewayConnection(profile: profile, identity: identity)
         self.organization = SidebarOrganization(
             rawValue: defaults.string(forKey: "pincer.org.v2.\(profile.id.uuidString)") ?? "") ?? .servers
+        self.showAutomations = defaults.bool(forKey: "pincer.showAutomations.\(profile.id.uuidString)")
+        self.showSlashCommands = defaults.bool(forKey: "pincer.showSlashCommands.\(profile.id.uuidString)")
         self.serverNameOverrides = defaults.dictionary(forKey: "pincer.serverNames.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.chatIcons = defaults.dictionary(forKey: "pincer.chatIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.chatColors = defaults.dictionary(forKey: "pincer.chatColors.\(profile.id.uuidString)") as? [String: String] ?? [:]
@@ -1037,7 +1051,15 @@ public final class GatewayStore: Identifiable {
     }
 
     /// Subagent runs are the agent's own work; their parent chat carries the result.
-    public var totalUnread: Int { self.sessions.values.filter { $0.isUnread && !$0.isArchived && !$0.isSubagent }.count }
+    public var totalUnread: Int {
+        self.sessions.values.filter { $0.isUnread && !$0.isArchived && !$0.isSubagent && !self.isHiddenInSidebar($0) }.count
+    }
+
+    /// Automation and slash-command sessions stay out of the sidebar unless opted in; the open chat always shows.
+    public func isHiddenInSidebar(_ row: SessionRow) -> Bool {
+        guard row.key != self.selectedKey else { return false }
+        return (row.isAutomation && !self.showAutomations) || (row.isSlashCommands && !self.showSlashCommands)
+    }
 
     public var serverNameOverrides: [String: String] {
         didSet { self.defaults.set(self.serverNameOverrides, forKey: "pincer.serverNames.\(self.id.uuidString)") }
@@ -1381,8 +1403,14 @@ public final class GatewayStore: Identifiable {
 
     public func sections(search: String = "") -> [SidebarSection] {
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+        let hidden = query.isEmpty ? Set(self.sortedRows.filter(self.isHiddenInSidebar).map(\.key)) : []
         let rows = self.sortedRows.filter { row in
-            query.isEmpty || row.title.lowercased().contains(query) || (row.preview?.lowercased().contains(query) ?? false)
+            guard query.isEmpty else {
+                return row.title.lowercased().contains(query) || (row.preview?.lowercased().contains(query) ?? false)
+            }
+            // Threads of a hidden session go with it rather than surfacing at the top level.
+            return row.key == self.selectedKey
+                || (!hidden.contains(row.key) && !row.parentCandidates.contains(where: hidden.contains))
         }
         // Subagent sessions become threads under their parent, one level deep.
         let keys = Set(rows.map(\.key))

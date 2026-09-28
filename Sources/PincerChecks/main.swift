@@ -2466,6 +2466,8 @@ if arguments.contains("--demo") {
     await runDemoReactionsReply()
     print("Menu bar (demo)")
     await runMenuBarDemo()
+    print("Sidebar automations & slash commands (demo)")
+    await runDemoSidebarVisibility()
     print("Setup wizard (demo)")
     await runDemoSetup()
     print("Deep links (demo)")
@@ -4118,6 +4120,9 @@ func runLive(url: String, token: String) async {
     check(!trip.hasMoreHistory && trip.items.count == 302, "reaches the start (\(trip.items.count))")
     check(trip.items.first?.plainText == "Idea for day 1?", "oldest message first")
     await checkLiveMessageSearch(gateway)
+    // Not before the paging checks: they must load the trip before the background prefetch caches all of it.
+    await checkSidebarVisibility(gateway, automations: ["agent:main:cron:morning-briefing", "agent:main:cron:disk-check"],
+                                 slashKey: "agent:main:discord:slash:418235907214753792", label: "live")
 
     let research = gateway.chat(for: "agent:research:main")
     await research.load()
@@ -4335,7 +4340,9 @@ func runLive(url: String, token: String) async {
         }
 
         // Arrange chats within a group by hand.
-        let workKeys = gateway.sessions.values.filter { !$0.isSubagent && !$0.isArchived }.map(\.key).sorted().prefix(3)
+        // Sidebar-listed chats only: automations and slash commands are hidden by default (#174).
+        let workKeys = gateway.sessions.values.filter { !$0.isSubagent && !$0.isArchived && !gateway.isHiddenInSidebar($0) }
+            .map(\.key).sorted().prefix(3)
         for key in workKeys where gateway.sessions[key]?.category != "Work" {
             await gateway.moveChat(key, toGroup: "Work", before: nil)
         }

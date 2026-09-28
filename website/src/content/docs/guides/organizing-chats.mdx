@@ -17,7 +17,7 @@ Pick a layout from the menu at the top of the sidebar:
 
 | Layout | How chats are grouped |
 | --- | --- |
-| **By server** (default) | Each Discord server gets a section with its `#channels`. Automations get their own section, and everything else is grouped under its agent. |
+| **By server** (default) | Each Discord server gets a section with its `#channels`. Automations get their own section when shown, and everything else is grouped under its agent. |
 | **By agent** | One section per agent. |
 | **By group** | One section per group you've made. |
 | **Recent** | One list, most recently active first. |
@@ -29,6 +29,7 @@ Pick a layout from the menu at the top of the sidebar:
 This menu, called **Organize**, also has:
 
 - **Show Archived**, to list archived chats;
+- **Show Automations** and **Show Slash Commands**, to list automation (cron) chats and slash-command chats (see [Automation and slash-command chats](#automation-and-slash-command-chats));
 - **New Group…**, in *By group* and *By server*;
 - **Automations…**;
 - **Approval History…**, to see [past approval decisions](../gateway-settings/#approval-history);
@@ -91,6 +92,16 @@ Subagent runs stay out of the sidebar by default. When helpers are working, the 
 If you'd rather see them, **Settings → Sidebar** can list them under their parent, behind a ✨ count chip. Helper runs never add to unread counts or send notifications.
 
 To see every helper a chat started, with its status and a timeline of what it did, open the chat's [Runs panel](../subagents-and-runs/).
+
+## Automation and slash-command chats
+
+Chats created by automations (cron jobs) and by slash commands are hidden from the sidebar by default. Turn on **Show Automations** or **Show Slash Commands** in the Organize menu to list them in every layout. Each gateway remembers its own choice.
+
+While hidden, they don't add to unread counts or section badges. They're still easy to reach:
+
+- the chat you have open stays in the sidebar until you leave it;
+- typing in the sidebar's **Search** field lists matching hidden chats too;
+- [Search messages](../search/), the command palette (<kbd>⌘</kbd> <kbd>K</kbd>), links and **Organize → Automations…** open them as usual.
 
 ## Compaction
 
