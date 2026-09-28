@@ -73,6 +73,10 @@ The mock serves 30 days of deterministic usage for its seeded chats, for the [Us
 
 The data covers the cases the page handles: one model with some unpriced requests (partial cost), one session with no pricing at all (unknown cost), a rate limit window above 90% that resets within the hour, a provider with an error, and, for ranges starting more than 31 days ago, a session that's still being counted.
 
+## Sessions
+
+For the [Session manager](../../guides/sessions/), the mock seeds archived sessions, a run in progress, a failed run, a session interrupted by a restart and a session with three branches. It supports `sessions.preview`, `sessions.describe`, `sessions.branches.list`, `sessions.branches.switch`, `sessions.rewind`, `sessions.recover`, `sessions.delete` and `sessions.patchMany` with the gateway's scopes: switching branches and rewinding need `operator.admin`, and deleting needs it unless the session is archived and the request has `archivedOnly: true`. Every change broadcasts `sessions.changed`. `MOCK_NO_SESSION_MANAGER=1` hides all of these methods; `MOCK_NO_SESSIONS_RECOVER=1` and `MOCK_NO_PATCH_MANY=1` hide just `sessions.recover` or `sessions.patchMany`, like a gateway older than 2026.8.
+
 ## Channel pairing
 
 The mock serves `channels.pairing.list`, `channels.pairing.approve` and `channels.pairing.dismiss` with two pairing accounts (Telegram "Home bot" and Discord "Family server") and three requests, one of which expires about 2 minutes after the mock starts. Every method needs `operator.pairing` or `operator.admin`, so set **Access** to **Full Management** to see them in Pincer. Approving or dismissing a request that's already gone fails with "pending DM access request no longer exists". `MOCK_PAIRING` is about device pairing, not these.

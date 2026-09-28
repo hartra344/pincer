@@ -25,6 +25,8 @@ Messages you haven't sent yet aren't part of the cache: the [outbox](../offline-
 
 Files use complete file protection. Removing a gateway deletes its whole folder. Because it's in the system's Caches folder, macOS and iOS may also clear it when storage runs low; Pincer just refetches.
 
+When a session is deleted, rewound, switched to another branch or recovered (from the [Session manager](../sessions/) or anywhere else), Pincer deletes that chat's whole cached transcript, including its tool call details, and an open chat reloads from the gateway.
+
 To turn the cache off, set `PINCER_CACHE_DIR=off`. Nothing is written, and message search is off too (except in the demo, which keeps its index in memory). To use another folder, set it to a path. See [Security & privacy](../../reference/security/#local-cache).
 
 ## Updates and old cache files

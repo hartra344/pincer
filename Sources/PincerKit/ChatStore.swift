@@ -149,6 +149,8 @@ public final class ChatStore: Identifiable {
     /// Background cache filler: no UI, no live subscription.
     @ObservationIgnored private let headless: Bool
     @ObservationIgnored private var cacheChecked = false
+    /// The session was deleted, so its transcript is never cached again.
+    @ObservationIgnored private var cachingStopped = false
     /// What restoring from the transcript cache found; nil until it's been tried.
     @ObservationIgnored private(set) var cacheOutcome: TranscriptCache.LoadOutcome?
     @ObservationIgnored private var saveTask: Task<Void, Never>?
@@ -309,15 +311,42 @@ public final class ChatStore: Identifiable {
             activityMs: activityMs)
     }
 
+    /// The Gateway rewrote this chat's history (rewind, branch switch, recovery): drops what's
+    /// loaded, including tool details, runs `clearCache` once no save can land, then refetches.
+    func reloadAfterHistoryChange(clearingCache clearCache: @MainActor () async -> Void = {}) async {
+        self.saveTask?.cancel()
+        self.backfillTask?.cancel()
+        self.olderTask?.cancel()
+        self.cacheChecked = true
+        self.hasPagedOlder = false
+        self.olderOffset = nil
+        self.hasMoreHistory = false
+        self.fullMessages = [:]
+        self.recoveryAttempted = []
+        let pending = self.items.filter(\.isPending)
+        if pending != self.items { self.items = pending }
+        self.hasLoaded = false
+        await clearCache()
+        await self.load(force: true)
+    }
+
+    /// The session was deleted: nothing more is written to the transcript cache.
+    func stopCaching() {
+        self.saveTask?.cancel()
+        self.backfillTask?.cancel()
+        self.olderTask?.cancel()
+        self.cachingStopped = true
+    }
+
     /// Writes what's loaded to the transcript cache now (after it was cleared).
     func saveToCache() async {
-        guard self.hasLoaded else { return }
+        guard self.hasLoaded, !self.cachingStopped else { return }
         self.saveTask?.cancel()
         await TranscriptCache.save(self.snapshot(), gatewayId: self.gatewayId, sessionKey: self.sessionKey)
     }
 
     private func scheduleSave() {
-        guard self.hasLoaded else { return }
+        guard self.hasLoaded, !self.cachingStopped else { return }
         self.saveTask?.cancel()
         self.saveTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1))

@@ -376,6 +376,11 @@ private struct ChatSessionMenu: View {
                 Button(L("Session Usage…"), systemImage: "chart.bar") {
                     self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
                 }
+                if self.gateway.supportsSessionManager {
+                    Button("Manage Session…", systemImage: "rectangle.stack") {
+                        self.openGatewaySettings(self.gateway, at: .sessions, routes: [.sessionDetail(row.key)])
+                    }
+                }
                 if self.gateway.supportsToolsEffective {
                     Button(L("Tools & Policy…"), systemImage: "wrench.and.screwdriver") {
                         self.toolsInspector = ChatToolsInspection(model: self.gateway.toolsInspector(sessionKey: row.key),
