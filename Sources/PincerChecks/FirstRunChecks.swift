@@ -197,11 +197,15 @@ func runDemoFirstRun() async {
     check(!app.firstRun.isPresented, "Try the Demo leaves the wizard (\(String(describing: app.firstRun.presentation)))")
     check(FirstRunStore.load(from: defaults) == nil, "nothing left to resume")
     guard let demo else { return }
+    check(!demo.setup.isShowingOrPending, "Try the Demo doesn't queue a setup offer")
     let connected = await waitFor("first-run demo connects") { demo.state.isConnected && !demo.sessions.isEmpty }
     check(connected, "the demo connects")
-    let offered = await waitFor("demo setup offered") { demo.setup.isPresented }
-    check(offered, "the demo offers its setup, as Try the Demo always has")
-    demo.setup.close()
+    // Try the Demo lands straight in the chat list (#175 product review r1): no setup wizard offer.
+    try? await Task.sleep(for: .milliseconds(500))
+    check(!demo.setup.isPresented && !demo.setup.isShowingOrPending,
+          "the connected demo doesn't offer setup (presented \(demo.setup.isPresented))")
+    check(app.selectedGatewayId == demo.id && !app.firstRun.isPresented,
+          "the demo stays selected with first-run dismissed")
     app.remove(demo.id)
     check(app.firstRun.presentation == .window && app.firstRun.state.step == .welcome,
           "removing the demo (the last gateway) shows Welcome again")

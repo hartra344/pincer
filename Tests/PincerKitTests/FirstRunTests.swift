@@ -77,9 +77,21 @@ struct FirstRunStateTests {
         #expect(FirstRunState.countedStages.count == 5)
         let numbers = [FirstRunStep.welcome, .haveGateway, .install, .findGateway, .signIn, .verify, .gatewaySetup, .done]
             .map { FirstRunState.at($0).stepNumber }
-        #expect(numbers == [1, 2, 2, 2, 3, 4, 5, nil])
+        #expect(numbers == [1, 1, 1, 2, 3, 4, 5, nil], "Welcome, Have a gateway? and Install are all Get started")
         #expect(FirstRunStage.find < FirstRunStage.signIn)
         #expect(FirstRunStage.allCases.map(\.title).allSatisfy { !$0.isEmpty })
+    }
+
+    /// The header FirstRunView builds from the model: "Step N of 5 · <stage title>" (product review r1).
+    @Test(arguments: [FirstRunStep.welcome, .haveGateway, .install])
+    func getStartedStepsAreStepOne(_ step: FirstRunStep) throws {
+        let state = FirstRunState.at(step)
+        let number = try #require(state.stepNumber)
+        #expect("Step \(number) of \(FirstRunState.countedStages.count) · \(state.stage.title)" == "Step 1 of 5 · Get started")
+    }
+
+    @Test func demoCaption() {
+        #expect(FirstRunCopy.demoCaption == "No gateway needed. Explore sample agents and chats. Nothing leaves this device.")
     }
 
     // MARK: Welcome, Have a gateway?, Install
@@ -226,6 +238,7 @@ struct FirstRunStateTests {
         #expect(state.addressError == FirstRunCopy.insecureAddress)
         #expect(state.send(.checkAddress).isEmpty)
         #expect(state.reachability.error == FirstRunCopy.insecureAddress)
+        #expect(!state.canSkip, "no Continue Anyway for an address Pincer won't use")
     }
 
     @Test func checkAddressProbesTheNormalizedURL() throws {
@@ -266,7 +279,9 @@ struct FirstRunStateTests {
         state.send(.checkAddress)
         state.send(.reachabilityResult(address: "ws://127.0.0.1:1", .unreachable(FirstRunCopy.cantReach)))
         #expect(state.step == .findGateway)
+        // canSkip is what swaps the primary to "Try Again" with Continue Anyway beside it (FirstRunView).
         #expect(state.canSkip && state.canCheckAddress)
+        #expect(state.reachability.error == FirstRunCopy.cantReach)
         #expect(state.send(.skip) == [.stopDiscovery])
         #expect(state.step == .signIn)
     }
@@ -983,6 +998,9 @@ struct FirstRunModelTests {
         #expect(app.selectedGatewayId == app.gateways.first?.id)
         #expect(!app.firstRun.isPresented, "the demo opens in the main window, not under the wizard")
         #expect(FirstRunStore.load(from: scratch.defaults) == nil)
+        let demo = app.gateways.first { $0.profile.isDemo }
+        #expect(demo?.setup.isPresented == false && demo?.setup.isShowingOrPending == false,
+                "straight to the chat list: no setup offer")
     }
 
     @Test func removingTheLastGatewayShowsWelcome() {

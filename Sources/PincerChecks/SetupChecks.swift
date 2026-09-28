@@ -34,7 +34,7 @@ func runDemoSetup() async {
     let key = SetupProgress.key(for: profile.id)
     UserDefaults.standard.removeObject(forKey: key)
     let gateway = GatewayStore(profile: profile)
-    // What AppModel.openDemo (Try the Demo) does for a new demo gateway.
+    // An explicit one-off offer (Try the Demo no longer offers setup, #175; see FirstRunChecks).
     gateway.setup.requestOffer(connected: false)
     gateway.start()
     let demoUp = await waitFor("demo for setup") { gateway.state.isConnected && !gateway.sessions.isEmpty }
@@ -45,7 +45,7 @@ func runDemoSetup() async {
 
     // Offered at once, as the intro page.
     let offered = await waitFor("demo setup offer") { setup.isPresented }
-    check(offered && setup.showsIntro && setup.isDemo, "Try the Demo offers Set Up at once (presented \(setup.isPresented), intro \(setup.showsIntro))")
+    check(offered && setup.showsIntro && setup.isDemo, "an explicit demo offer shows Set Up at once (presented \(setup.isPresented), intro \(setup.showsIntro))")
     let demoLoaded = await setupLoaded(gateway, "demo setup checks")
     check(demoLoaded, "demo setup checks load")
 
@@ -110,14 +110,14 @@ func runDemoSetup() async {
     check(setup.progress.completed && !setup.isPresented, "Finish completes and closes")
     check(UserDefaults.standard.object(forKey: key) == nil, "demo setup progress is never saved")
 
-    // A demo connection without Try the Demo doesn't pop it up; Try the Demo again offers it again.
+    // A demo connection alone doesn't pop it up; an explicit offer shows it again.
     let again = GatewayStore(profile: .demo())
     again.start()
     _ = await waitFor("demo reconnect") { again.state.isConnected && !again.sessions.isEmpty }
     try? await Task.sleep(for: .milliseconds(300))
     check(!again.setup.isPresented && !again.setup.isShowingOrPending, "a demo connection alone doesn't offer setup")
     again.setup.requestOffer(connected: true)
-    check(again.setup.isPresented && again.setup.showsIntro, "Try the Demo again offers setup again")
+    check(again.setup.isPresented && again.setup.showsIntro, "an explicit offer shows demo setup again")
     setupCleanup(again)
 }
 

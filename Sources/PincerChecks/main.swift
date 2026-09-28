@@ -3016,6 +3016,16 @@ func waitFor(_ label: String, timeout: Double = 15, every interval: Int = 100, _
     return condition()
 }
 
+/// Keeps `key` out of the background prefetch (`GatewayStore.startPrefetch`, 2 s after connecting), so a
+/// paging check sees the Gateway's latest page rather than a full transcript cached behind its back.
+/// Under the side-by-side lanes a check can reach the chat after the prefetch has cached it.
+@MainActor
+func claimForPaging(_ gateway: GatewayStore, _ key: String) -> ChatStore {
+    let chat = gateway.chat(for: key)
+    if let file = TranscriptCache.file(gatewayId: gateway.id, sessionKey: key) { try? FileManager.default.removeItem(at: file) }
+    return chat
+}
+
 @MainActor
 func runDemo() async {
     // Keep "approve later" quick; the demo reads this when it schedules the approval.
@@ -3028,6 +3038,7 @@ func runDemo() async {
     let connected = await waitFor("demo connection") { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(connected, "demo connected and bootstrapped")
     guard connected else { return }
+    _ = claimForPaging(gateway, "agent:main:dashboard:trip")
     check(gateway.agents.count >= 3, "agents (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions (\(gateway.sessions.count))")
     check(gateway.approvals.map(\.id) == ["approval_demo_push"] && gateway.approvals.first?.isExpired() == false
@@ -3044,7 +3055,7 @@ func runDemo() async {
     let loaded = await waitFor("history") { chat.hasLoaded }
     check(loaded && !chat.entries.isEmpty, "welcome history loaded")
 
-    let trip = gateway.chat(for: "agent:main:dashboard:trip")
+    let trip = claimForPaging(gateway, "agent:main:dashboard:trip")
     await trip.load()
     check(trip.hasMoreHistory && trip.items.count == 120, "trip latest page (\(trip.items.count))")
     // Find in Chat only searches what's loaded, so the latest page must have something to find.
@@ -4096,6 +4107,7 @@ func runLive(url: String, token: String) async {
     check(connected, "connected and bootstrapped (pairing seen: \(sawPairing))")
     check(!sawReconnecting, "first connect never reports reconnecting")
     guard connected else { return }
+    _ = claimForPaging(gateway, "agent:main:dashboard:trip")
     await runLiveShare(profile: profile, gateway: gateway)
     check(gateway.agents.count >= 3, "agents.list (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions.subscribe (\(gateway.sessions.count) rows)")
@@ -4129,7 +4141,7 @@ func runLive(url: String, token: String) async {
         check(false, "history includes an image")
     }
 
-    let trip = gateway.chat(for: "agent:main:dashboard:trip")
+    let trip = claimForPaging(gateway, "agent:main:dashboard:trip")
     await trip.load()
     let firstPage = trip.items.map(\.id)
     check(trip.hasMoreHistory && firstPage.count == 120, "latest page only (\(firstPage.count))")

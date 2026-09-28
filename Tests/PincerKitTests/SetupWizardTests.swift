@@ -80,7 +80,8 @@ final class SetupFakeGateway {
         #expect(SetupRules.agent(agents: [], defaultAgentId: "main", defaultModelRef: "a/b", loaded: true).needsAttention)
         #expect(SetupRules.agent(agents: agents, defaultAgentId: "main", defaultModelRef: "a/b", loaded: false) == .notChecked(nil))
 
-        #expect(SetupRules.testMessage(sent: true).isDone && !SetupRules.testMessage(sent: false).isSettled)
+        #expect(SetupRules.testMessage(sent: true) == .done("Your test message was sent."))
+        #expect(SetupRules.testMessage(sent: false) == .notChecked(nil))
         #expect(SetupRules.resolved(.needsAttention("x"), skipped: true) == .skipped)
         #expect(SetupRules.resolved(.done("x"), skipped: true).isDone, "done wins over skipped")
         #expect(SetupRules.resolved(.needsAttention("x"), skipped: false).needsAttention)
