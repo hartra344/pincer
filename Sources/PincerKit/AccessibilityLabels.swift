@@ -104,6 +104,7 @@ public enum AccessibilityText {
     ///
     /// - Parameters:
     ///   - unreadCount: exact count when known; `isUnread` alone speaks `Unread`.
+    ///   - workingLabel: spoken instead of `Working` while running, e.g. "Moki is working".
     ///   - preview: last message preview; summarized to `previewLimit` characters.
     public static func sessionRow(
         title: String,
@@ -112,6 +113,7 @@ public enum AccessibilityText {
         isUnread: Bool = false,
         isPinned: Bool = false,
         isRunning: Bool = false,
+        workingLabel: String? = nil,
         hasError: Bool = false,
         isArchived: Bool = false,
         preview: String? = nil,
@@ -124,7 +126,7 @@ public enum AccessibilityText {
             agentName,
             isPinned ? "Pinned" : nil,
             isArchived ? "Archived" : nil,
-            isRunning ? "Working" : nil,
+            isRunning ? (workingLabel.flatMap { $0.isEmpty ? nil : $0 } ?? "Working") : nil,
             hasError ? "Last run failed" : nil,
             unread,
             preview.map { Self.summary($0, limit: previewLimit) },
