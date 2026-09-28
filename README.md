@@ -290,3 +290,5 @@ To see what the gateway says about each request, run the app with `open --env PI
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+<!-- docs-only CI demo for #205; not for merge -->
