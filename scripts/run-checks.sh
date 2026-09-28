@@ -87,7 +87,8 @@ lane() {
 
 url() { echo "ws://127.0.0.1:$(($PORT_BASE + $1))"; }
 fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
-# Only the plain run does the slow Shortcuts & Siri offline checks; the others skip them.
+# Only the plain run does the offline suite (with the slow Shortcuts & Siri checks); mode runs
+# only run their own suite, so --skip-intent-checks there is a harmless no-op.
 # All of these share the CPU, so none enforces the perf smoke budgets (their timings are just
 # reported); a separate run enforces them afterwards, alone.
 lane unit-tests swift test --skip-build --parallel ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}

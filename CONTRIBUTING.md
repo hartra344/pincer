@@ -5,7 +5,7 @@ Pincer is laid out so parallel branches rarely touch the same file. Add new work
 ## Checks (`Sources/PincerChecks`)
 
 - Put a new check in a per-domain file, `Sources/PincerChecks/<Domain>Checks.swift`.
-- Add one section entry for it in `Sources/PincerChecks/Registry.swift`, under the suite that should run it: `unit`, `demo-core`, `demo-extras`, `live-core`, `live-extras`, `live-no-usage`, `live-no-reply-to`, and so on.
+- Add one section entry for it in `Sources/PincerChecks/Registry.swift`, under the suite that should run it: `unit`, `demoCore`, `demoExtras`, `liveCore`, `liveExtras`, `liveNoUsage`, `liveNoReplyTo`, and so on (run by `--demo-core`, `--live-core`, …).
 - Don't edit `main.swift`; it only dispatches modes.
 
 ## Mock gateway (`mock-gateway/`)
@@ -27,7 +27,7 @@ Pincer is laid out so parallel branches rarely touch the same file. Add new work
 
 ## Running checks
 
-`scripts/run-checks.sh` runs the unit tests, the selftest and every `PincerChecks` mode side by side, each live mode against its own fresh mock. To run one by hand, each mode runs only its own suite:
+`scripts/run-checks.sh` runs the unit tests and every `PincerChecks` mode side by side, each live mode against its own fresh mock. To run one by hand, each mode runs only its own suite:
 
 ```sh
 swift run PincerChecks                                   # unit (offline) suite

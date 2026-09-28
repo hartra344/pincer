@@ -70,7 +70,7 @@ swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock s
 swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token   # mock started with MOCK_NO_REPLY_TO=1 PORT=18791
 ```
 
-The first argument picks the mode, and each mode runs only its own suite: a mode flag doesn't also run the offline checks. Which sections belong to which suite is listed in `Sources/PincerChecks/Registry.swift` (see [Contributing](../contributing/)). `scripts/run-checks.sh` runs every mode side by side.
+A mode flag picks the mode, and each mode runs only its own suite: a mode flag doesn't also run the offline checks. Which sections belong to which suite is listed in `Sources/PincerChecks/Registry.swift` (see [Contributing](../contributing/)). `scripts/run-checks.sh` runs every mode side by side.
 
 | Mode | What it checks |
 | --- | --- |
@@ -83,7 +83,7 @@ The first argument picks the mode, and each mode runs only its own suite: a mode
 | `--live-no-usage <url> <token>` | A run against a gateway without the usage methods (the mock with `MOCK_NO_USAGE=1`), checking that Usage reports them as unsupported. |
 | `--live-no-reply-to <url> <token>` | A run against a gateway that rejects `chat.send`'s `replyToId` (the mock with `MOCK_NO_REPLY_TO=1`), checking that replies fall back to quoting the original. |
 
-Add `--skip-intent-checks` to any mode to leave out the Shortcuts & Siri offline checks, which wait on real reply timeouts (about 15 seconds).
+Add `--skip-intent-checks` to the plain run to leave out the Shortcuts & Siri offline checks, which wait on real reply timeouts (about 15 seconds).
 
 Add `--skip-perf-budgets` to any mode to report the offline perf smoke timings (message index build, query and append) without enforcing their budgets. Only clearly broken timings, such as a selective query over 1 second, still fail. Use it when other work shares the CPU. `--perf-smoke` runs only the perf smoke, with its budgets enforced.
 
