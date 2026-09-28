@@ -186,7 +186,15 @@ export function noteDeviceConnected(state, deviceId, params, remoteIp) {
 // A device that needs pairing (or more scopes) opens a request, or refreshes its open one.
 export function openPairingRequest(state, { deviceId, params, scopes, remoteIp, isRepair }, broadcast) {
   const client = params.client ?? {};
-  const existing = [...state.pendingPairing.values()].find((p) => p.deviceId === deviceId);
+  // Like `openclaw devices`: a retry with changed role, scopes or key supersedes the open request
+  // with a new requestId; an identical retry refreshes it.
+  let existing = [...state.pendingPairing.values()].find((p) => p.deviceId === deviceId);
+  const sameAsk = existing && existing.role === (params.role ?? OPERATOR_ROLE) && existing.publicKey === params.device?.publicKey
+    && [...existing.scopes].sort().join(',') === [...scopes].sort().join(',');
+  if (existing && !sameAsk) {
+    state.pendingPairing.delete(existing.requestId);
+    existing = undefined;
+  }
   const requestId = existing?.requestId ?? `pair_${crypto.randomBytes(6).toString('hex')}`;
   const request = {
     requestId,

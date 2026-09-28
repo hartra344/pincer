@@ -57,7 +57,7 @@ struct CommandPaletteView: View {
 
     private enum Command: String {
         case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, skills, usage, sessionUsage,
-             gatewayLogs, devices, setupGateway, sessions, manageSession
+             gatewayLogs, devices, setupGateway, sessions, manageSession, addGateway
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -403,6 +403,7 @@ struct CommandPaletteView: View {
             item(.nextUnread, "Next Unread Chat", "circle.badge", keywords: ["unread"], shortcut: "⌥⇧↓",
                  enabled: self.app.totalUnread > 0),
             item(.appSettings, "Open Settings…", "gearshape", keywords: ["preferences"], shortcut: "⌘,"),
+            item(.addGateway, "Add Gateway…", "plus.circle", keywords: ["connect", "new", "server", "setup", "wizard"]),
         ]
         if let setup = CommandPalette.setupGatewayItem(gateway: self.gateway) { items.append(setup) }
         if self.gateway != nil {
@@ -584,6 +585,8 @@ struct CommandPaletteView: View {
             if let gateway { self.openGatewaySettings(gateway, at: .devices) }
         case .sessionUsage:
             if let gateway, let row { self.openGatewaySettings.sessionUsage(gateway, key: row.key, agentId: row.agentId) }
+        case .addGateway:
+            self.app.firstRun.present()
         case .sessions:
             if let gateway { self.openGatewaySettings(gateway, at: .sessions) }
         case .manageSession:

@@ -446,7 +446,7 @@ actor DemoGateway {
     // MARK: Health and restart
 
     /// Discord is fine; Telegram lost its connection until a restart, so the demo starts out degraded.
-    /// WhatsApp is enabled but not linked yet (not configured, so not a problem) for the setup wizard.
+    /// WhatsApp is enabled but not linked (not configured, so not a problem).
     func health() -> JSONValue {
         let now = Self.now()
         let nowMs = now.double ?? 0

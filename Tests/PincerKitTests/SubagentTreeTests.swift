@@ -124,7 +124,7 @@ struct SubagentTreeTests {
         var tree = SubagentTree(rootKey: Self.root)
         let elapsed = clock.measure { tree = self.build(rows) }
         #expect(tree.count == 400)
-        #expect(elapsed < .seconds(2), "build took \(elapsed)")
+        #expect(elapsed < PerfBudget.limit(.seconds(2)), "build took \(elapsed)")
     }
 
     @Test func standaloneChatsDoNotNestButAutomationSubagentsFallBack() {

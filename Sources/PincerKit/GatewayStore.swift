@@ -228,18 +228,11 @@ public final class GatewayStore: Identifiable {
             // Real scopes only: the demo's simulated restart doesn't grant setup changes.
             hasAdmin: { [weak self] in self?.hello?.scopes.contains(GatewayConnection.adminScope) ?? false },
             methods: { [weak self] in self?.hello?.methods },
-            healthStatus: { [weak self] in
-                guard let self else { return .notChecked(nil) }
-                return SetupRules.health(level: self.health.level, activeIssues: self.health.activeIssues,
-                                         loaded: self.health.health != nil || self.health.hasLoaded,
-                                         channelsSeparate: true)
-            },
             agentStatus: { [weak self] in
                 guard let self else { return .notChecked(nil) }
                 return SetupRules.agent(agents: self.agents, defaultAgentId: self.defaultAgentId,
                                         defaultModelRef: self.defaultModelRef, loaded: self.hello != nil)
             },
-            healthChannels: { [weak self] in self?.health.health },
             refresh: { [weak self] in
                 guard let self else { return }
                 async let health: Void = self.health.load()
@@ -248,7 +241,7 @@ public final class GatewayStore: Identifiable {
             })
         let model = SetupWizardModel(gatewayId: self.id, isDemo: self.profile.isDemo, defaults: self.defaults,
                                      connectedBefore: self.connectedBeforeSetup, environment: environment)
-        // The demo is offered only right after "Try the Demo" (`AppModel.openDemo`).
+        // The demo never offers setup on its own; Try the Demo lands in the chat list (`AppModel.openDemo`).
         model.autoOffers = !self.profile.isDemo
         return model
     }()

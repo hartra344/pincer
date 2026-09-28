@@ -52,22 +52,26 @@ public final class AppModel {
     @ObservationIgnored private let sharedDefaults: UserDefaults
     /// Per-gateway preferences, and where lists saved before the App Group existed are read from.
     @ObservationIgnored private let localDefaults: UserDefaults
+    /// The first-run wizard: fills the window with no gateways, and "Add Gateway…" opens it.
+    @ObservationIgnored public let firstRun: FirstRunModel
 
     public convenience init() {
         self.init(sharedDefaults: SharedContainer.defaults, localDefaults: .standard)
     }
 
     /// Keeps every preference in `defaults`, e.g. a scratch suite for checks.
-    public convenience init(defaults: UserDefaults) {
-        self.init(sharedDefaults: defaults, localDefaults: defaults)
+    /// `firstRunEnvironment` stands in for the first-run wizard's network checks.
+    public convenience init(defaults: UserDefaults, firstRunEnvironment: FirstRunModel.Environment = .live) {
+        self.init(sharedDefaults: defaults, localDefaults: defaults, firstRunEnvironment: firstRunEnvironment)
     }
 
-    private init(sharedDefaults: UserDefaults, localDefaults: UserDefaults) {
+    private init(sharedDefaults: UserDefaults, localDefaults: UserDefaults, firstRunEnvironment: FirstRunModel.Environment = .live) {
         self.sharedDefaults = sharedDefaults
         self.localDefaults = localDefaults
         let profiles = GatewayProfileStore.load(from: sharedDefaults, legacy: localDefaults)
         SharedContainer.shareKeychainItems(for: profiles, defaults: sharedDefaults)
         self.gateways = profiles.map { GatewayStore(profile: $0, defaults: localDefaults, identity: .loadOrCreate()) }
+        self.firstRun = FirstRunModel(defaults: localDefaults, environment: firstRunEnvironment, hasGateways: !profiles.isEmpty)
         let saved = (sharedDefaults.string(forKey: Self.selectedGatewayKey)
             ?? localDefaults.string(forKey: Self.selectedGatewayKey)).flatMap(UUID.init(uuidString:))
         self.selectedGatewayId = self.gateways.first { $0.id == saved }?.id ?? self.gateways.first?.id
@@ -78,6 +82,7 @@ public final class AppModel {
         self.notifier.approvalResolver = { [weak self] gatewayId, approvalId, decision in
             await self?.respondToApproval(gatewayId: gatewayId, approvalId: approvalId, decision: decision) ?? .unknownGateway
         }
+        self.firstRun.app = self
         self.notifier.gatewayLookup = { [weak self] id in self?.gateways.first { $0.id == id } }
         self.notifier.pushDelivers = { [weak self] id in self?.push.isActive(id) ?? false }
         self.notifier.isConnected = { [weak self] id in
@@ -209,17 +214,18 @@ public final class AppModel {
         self.persist()
         self.selectedGatewayId = store.id
         store.start()
+        self.firstRun.gatewayAdded(store.id)
         return store
     }
 
-    /// Selects the built-in demo, adding it the first time.
-    /// Offers its setup wizard on this connection (now, if it's already connected).
+    /// Selects the built-in demo, adding it the first time. Try the Demo lands straight in its chat
+    /// list: its setup wizard is never offered on its own, only from the gateway menu and ⌘K (#175).
     public func openDemo() {
         if let existing = self.gateways.first(where: { $0.profile.isDemo }) {
             self.selectedGatewayId = existing.id
-            existing.setup.requestOffer(connected: existing.hasConnected && existing.state.isConnected)
+            existing.setup.withdrawOffer()
         } else {
-            self.add(.demo(), secret: nil).setup.requestOffer(connected: false)
+            self.add(.demo(), secret: nil).setup.withdrawOffer()
         }
     }
 
@@ -257,6 +263,7 @@ public final class AppModel {
         store.forgetLocalHealthDismissals()
         self.persist()
         if self.selectedGatewayId == id { self.selectedGatewayId = self.gateways.first?.id }
+        self.firstRun.showIfNoGateways()
     }
 
     /// Deletes every Gateway's cached transcripts and search indexes (Settings' Clear Cache), then

@@ -9,11 +9,24 @@ npm start
 
 Defaults: `HOST=127.0.0.1`, `PORT=18789`, `MOCK_TOKEN=dev-token`, `MOCK_PAIRING=auto`.
 
-Pairing modes:
+Pairing modes (`MOCK_PAIRING`):
 
-- `auto`: first unknown device receives `PAIRING_REQUIRED`, then is approved after about 3 seconds.
+- `auto`: first unknown device receives `PAIRING_REQUIRED`, then is approved after `MOCK_PAIRING_DELAY_MS` (default 3000).
 - `off`: unknown devices are accepted.
-- `manual`: approve by typing the printed `requestId` on stdin.
+- `manual`: approve by typing the printed `requestId` on stdin (`reject <requestId>` rejects), or from an operator connection with `operator.pairing` via `device.pair.approve` / `device.pair.reject`.
+- `reject`: every request is rejected after the delay, so each retry gets `PAIRING_REQUIRED` with a new `requestId`.
+- `reject-once`: a device's first request is rejected and its next one approved, to exercise "the request changed".
+
+Like upstream, a retry with the same scopes keeps the open `requestId`; changed role, scopes or key supersede it with a new one. A rejected request is just deleted (upstream has no "rejected" connect error). `PAIRING_REQUIRED` details carry `reason`, `requestId`, `remediationHint`, `deviceId`, `requestedRole`, `requestedScopes` (and `approvedScopes` for a scope upgrade).
+
+Connect auth and first-run failure modes (`connect-auth.mjs`, shaped like upstream's `connect-error-details.ts` and `auth-messages.ts`):
+
+- `MOCK_AUTH=token` (default, secret `MOCK_TOKEN`), `password` (secret `MOCK_PASSWORD`, default `dev-password`) or `none`. Either `auth.token` or `auth.password` may carry the configured secret; an issued device token always works. An empty `MOCK_TOKEN=` looks like a Gateway without a token configured.
+- Failures answer `INVALID_REQUEST` with upstream's message (e.g. `unauthorized: gateway token mismatch (provide gateway auth token)`), `details.code` (`AUTH_TOKEN_MISMATCH`, `AUTH_TOKEN_MISSING`, `AUTH_TOKEN_NOT_CONFIGURED`, `AUTH_PASSWORD_MISMATCH`, `AUTH_PASSWORD_MISSING`, `AUTH_PASSWORD_NOT_CONFIGURED`, `AUTH_DEVICE_TOKEN_MISMATCH`, `AUTH_RATE_LIMITED`), `details.authReason`, `canRetryWithDeviceToken` and `recommendedNextStep`, then close the socket with 1008.
+- `MOCK_AUTH_RATE_LIMIT=<n>`: after n failed attempts, connects get `AUTH_RATE_LIMITED` (`retryable`, `retryAfterMs`) for a minute.
+- `MOCK_PROTOCOL=<n>` (default 4): a Gateway on another protocol answers `INVALID_REQUEST` "protocol mismatch" with `details.code: PROTOCOL_MISMATCH` and closes with 1002.
+- `MOCK_CHALLENGE=off`: never sends `connect.challenge`, like a WebSocket server that isn't a Gateway.
+- Unreachable: point the client at a port nothing listens on.
 
 Chat triggers: messages mentioning `tool`, `disk` or `image` stream a tool call; `patch` or `diff` streams an `edit` of `config/retry.json` (top-level `oldText`/`newText`; the result carries upstream's `details` receipt `{changed, diff, patch, firstChangedLine}`); `approve` raises an exec approval (with `request.allowedDecisions`; `approve once-only` leaves out `allow-always`, and `approve short-lived` expires after 3 seconds). Like the Gateway, `exec.approval.resolve` answers an unknown or expired id with `INVALID_REQUEST` "approval expired or not found" (`details.reason: APPROVAL_NOT_FOUND`), an identical retry with `{ok: true}`, a different decision with "approval already resolved" (`APPROVAL_ALREADY_RESOLVED`), and `allow-always` on a once-only approval with "allow-always is unavailable for this command" (`APPROVAL_ALLOW_ALWAYS_UNAVAILABLE`, still pending); `ask` asks an `ask_user` question (`question.requested`, `question.list`, `question.resolve`, `question.resolved`; needs `operator.questions`; with `MOCK_LEGACY_PAIRING=1`, first pairings leave that scope out so the next connect needs a scope upgrade, and `swift run PincerChecks --live-scope-upgrade ws://127.0.0.1:PORT dev-token` checks Pincer's fallback) and waits for the answer before replying; `plan` walks a three-step `progress_card` (`progressCard.get`/`progressCard.put`, `progressCard.changed`). For failure tests, a message containing `[mock:fail-send]` is refused with `UNAVAILABLE`, and `[mock:drop]` closes that connection (the client reconnects after its backoff). For the outbox and Retry (#46): `[mock:reject-send]` is always refused with a non-retryable `INVALID_REQUEST`; `[mock:unavailable-once]` refuses the first attempt for an `idempotencyKey` with upstream's retryable busy error `{code: "UNAVAILABLE", message: "Previous run is still shutting down. Please try again in a moment.", retryable: true, retryAfterMs: 250}`; `[mock:drop-once]` closes the connection (1012) before accepting the first attempt; and `[mock:drop-after-accept]` accepts the first attempt (the run starts and the message lands) and then closes the connection without acknowledging it, the ambiguous case. The `-once` hooks count attempts per `idempotencyKey`, so a retry with the same key goes through. Like the Gateway, `chat.send` dedupes by `idempotencyKey`: a repeated key starts nothing new and answers `{runId, status: "in_flight"}` while that run is going, then `{runId, status: "ok"}`, so a double send shows as one copy in `chat.history`. `[mock:fail-run]` starts the run, then ends it like a provider timeout: a `chat` event with `state: "error"`, `errorMessage` and `errorKind: "timeout"`, then an `agent` lifecycle `phase: "error"`.
 

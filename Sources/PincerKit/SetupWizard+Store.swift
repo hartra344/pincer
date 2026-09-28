@@ -59,7 +59,7 @@ extension GatewayStore {
     }
 
     /// Opens a new chat with the default agent and sends `text`. Done once the Gateway accepts the
-    /// send; the reply isn't awaited.
+    /// send; the wizard watches `chat(for: key)` for the reply.
     public func sendSetupTestMessage(_ text: String) async -> (key: String?, outcome: ChatStore.SendOutcome) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return (nil, .failed("Type a message first.")) }
@@ -67,7 +67,7 @@ extension GatewayStore {
             return (nil, .failed(self.lastError ?? "Couldn't start a chat."))
         }
         let outcome = await self.chat(for: key).sendMessage(text, requiresConnection: true)
-        if case .sent = outcome { self.setup.markTestMessageSent() }
+        if case .sent = outcome { self.setup.markTestMessageSent(chatKey: key) }
         return (key, outcome)
     }
 

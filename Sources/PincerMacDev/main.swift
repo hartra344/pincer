@@ -1,3 +1,4 @@
+import PincerKit
 import PincerUI
 import SwiftUI
 
@@ -33,6 +34,21 @@ if let index = CommandLine.arguments.firstIndex(of: "--avatar-snapshots") {
     }
 }
 
+// `--first-run-screens <dir> [gateway-url]` walks the first-run wizard against a fresh mock Gateway
+// (token dev-token, MOCK_PAIRING=auto), saves a PNG of the window at each step, removes the gateway it
+// added and quits. For reviewing the wizard; see FirstRunTour.
+#if DEBUG
+if let index = CommandLine.arguments.firstIndex(of: "--first-run-screens") {
+    let rest = CommandLine.arguments.dropFirst(index + 1)
+    let path = rest.first ?? "first-run-screens"
+    let url = rest.dropFirst().first ?? "ws://127.0.0.1:18789"
+    let directory = URL(filePath: (path as NSString).expandingTildeInPath)
+    Task { @MainActor in
+        let code = await FirstRunTour.run(to: directory, gatewayURL: url)
+        exit(code)
+    }
+}
+#endif
 // `--sidebar-working-snapshots <dir>` renders the sidebar's working indicator to PNGs and exits.
 if let index = CommandLine.arguments.firstIndex(of: "--sidebar-working-snapshots") {
     let path = CommandLine.arguments.dropFirst(index + 1).first ?? "sidebar-working-snapshots"

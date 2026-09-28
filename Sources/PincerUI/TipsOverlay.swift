@@ -9,7 +9,7 @@ struct TipsOverlay: ViewModifier {
     func body(content: Content) -> some View {
         let gateway = self.app.selectedGateway
         let connected = gateway?.hasConnected == true && gateway?.state.isConnected == true
-        let setupBlocking = gateway?.setup.isShowingOrPending ?? true
+        let setupBlocking = (gateway?.setup.isShowingOrPending ?? true) || self.app.firstRun.presentation != nil
         content
             .overlay(alignment: .bottomTrailing) {
                 if self.tips.isPresented {

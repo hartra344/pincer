@@ -4,8 +4,21 @@ import SwiftUI
 /// iOS: closes the Gateway Settings sheet, e.g. to show a chat.
 struct GatewaySettingsCloser {
     var close: (() -> Void)?
+    /// Closes, then runs the action once the sheet is gone (its `onDismiss`), so the next sheet
+    /// can present without a fixed delay (#133).
+    var closeThen: ((@escaping @MainActor () -> Void) -> Void)?
 
     func callAsFunction() { self.close?() }
+
+    @MainActor
+    func callAsFunction(then action: @escaping @MainActor () -> Void) {
+        if let closeThen {
+            closeThen(action)
+        } else {
+            self.close?()
+            action()
+        }
+    }
 }
 
 extension EnvironmentValues {

@@ -20,6 +20,7 @@ struct ChannelList: View {
     @State private var showingSettings = false
     @State private var expandedThreads: Set<String> = []
     @Environment(\.appTheme) private var theme
+    @Environment(AppModel.self) private var app
     @State private var prompt: TextPrompt?
     @State private var confirmation: ConfirmPrompt?
 
@@ -90,6 +91,8 @@ struct ChannelList: View {
                         .keyboardShortcut(",", modifiers: [.command, .shift])
                     Button("Edit Connection…") { self.openGatewaySettings(self.gateway, at: .connection) }
                     Button("Reconnect") { self.gateway.stop(); self.gateway.start() }
+                    Divider()
+                    Button("Add Gateway…") { self.app.firstRun.present() }
                 } label: {
                     Label("Organize", systemImage: Theme.filterSymbol)
                 }

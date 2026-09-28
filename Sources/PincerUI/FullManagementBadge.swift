@@ -14,7 +14,7 @@ struct FullManagementBadge: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Button(L("Open Connection…"), action: self.openConnection)
-                .buttonStyle(.borderless)
+                .firstRunLink()
                 .font(.callout)
         }
     }

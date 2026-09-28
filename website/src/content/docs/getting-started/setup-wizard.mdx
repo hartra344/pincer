@@ -1,78 +1,54 @@
 ---
 title: Set up a gateway
-description: Check a newly connected gateway's health, channels, agent, model and skills, then send a test message.
+description: After you connect, pick your default agent and model, look at skills, and send a test message.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import testMessage from '../../../assets/screenshots/first-run/setup-test-message.png';
+import testMessageIOS from '../../../assets/screenshots/ios/first-run/setup-test-message.png';
 
-After you add a gateway and Pincer connects to it for the first time, Pincer offers a short guided setup. It checks that the gateway is healthy and ready, and finishes with a test message. It doesn't replace any settings: each step shows a summary and links to the page where you'd change that setting.
+Once Pincer is [connected to your gateway](../connect-a-gateway/), choose **Continue Setup** to finish getting ready to chat. There are three short steps, and you can skip any of them:
+
+1. **Agent & Model**: pick the agent and model new chats start with.
+2. **Skills** (optional): see what extra abilities your agent has.
+3. **Test Message**: send a message to your agent and make sure it answers.
+
+Setup doesn't replace any settings. Each step shows a summary and links to the page where you'd change it. When you're done, you land in your chat list with the gateway selected.
 
 ## Start or resume setup
 
-The first time a new gateway connects, Pincer shows **Set Up &lt;gateway name&gt;**. Choose **Start Setup** to begin, or **Not Now** to close it. Either way it won't pop up again for that gateway. Gateways you used before this version of Pincer aren't offered setup automatically.
-
-You can open setup any time the gateway is connected:
+On a new gateway, setup follows straight on from [connecting](../connect-a-gateway/). You can also open it any time the gateway is connected:
 
 - choose **Set Up Gateway…** from the gateway's menu in the sidebar;
-- press <kbd>⌘</kbd> <kbd>K</kbd> and choose **Set Up Gateway…** (dimmed while the gateway is disconnected). Until setup is complete, it shows how many steps are settled, such as *3 of 5 steps*;
+- press <kbd>⌘</kbd> <kbd>K</kbd> and choose **Set Up Gateway…** (dimmed while the gateway is disconnected). Until setup is complete, it shows how many steps are settled;
 - open [Gateway Settings](../../guides/gateway-settings/) → **Overview** and choose **Set Up Gateway…**. It shows **Done** once setup is complete.
 
 Pincer remembers each gateway's progress separately, including after you relaunch. Setup opens on the first step that isn't done or skipped yet.
 
-## The steps
-
-| Step | Done when | Where to change it |
-| --- | --- | --- |
-| **Gateway Health** | The gateway is **Healthy**, or its only problems are with channels (those show under **Channels**). | [Gateway Health](../../guides/gateway-health/) |
-| **Channels** | At least one channel (Discord, Telegram, WhatsApp, …) is connected, and none has a problem. | Gateway Settings → **Channels** |
-| **Agent & Model** | There's a default agent and a default model. | Gateway Settings → **Agents & Models** |
-| **Skills** | No skill is missing what it needs (a CLI tool, an environment variable or a setting). | Gateway Settings → [**Skills**](../../guides/skills-and-tools/) (**Tools & Skills** on gateways without it) |
-| **Test Message** | The gateway accepted a test message. | — |
-
-On a Mac the steps are listed down the side, and on iOS across the top. You can jump to any step. Each step shows one of these statuses:
-
-| Status | Meaning |
-| --- | --- |
-| **Not Checked** | Pincer hasn't checked it yet, or can't, such as while the gateway is restarting or when it doesn't report this. |
-| **Done** | Everything checks out. |
-| **Needs Attention** | Something needs fixing. The step says what, and links to the page for it. |
-| **Skipped** | You skipped it. Choose **Unskip** to bring it back. A skipped step that's fixed later shows **Done**. |
-
 Use the buttons at the bottom:
 
 - **Continue** goes to the next step. On the last step it's **Finish**.
-- **Skip** marks the step skipped and moves on. Steps that are done don't have it.
+- **Skip** moves on without changing anything.
 - **Back** goes to the previous step.
-- **Check Again** (the circular arrow) runs the checks again.
-- **Close** keeps your progress for later.
-
-Setup is complete when you choose **Finish**, or once every step is done or skipped. You can still open it again to check the gateway.
-
-## Needs Full Management
-
-Checking the gateway only needs the default **Chat & Approvals** access. Changes, such as saving a default agent and model or linking a channel with a QR code, need **Full Management**. Without it, the **Channels**, **Agent & Model** and **Skills** steps show a **Needs Full Management** badge: "This device can view but not change this. Open Connection to request Full Management." Everything else in the step still works, and you can skip it. Choose **Open Connection…** to switch the access level (see [Access levels](../connect-a-gateway/#access-levels)).
-
-## Channels
-
-The **Channels** step lists each channel and account with its status, and any problem the gateway reports along with how to fix it.
-
-For **WhatsApp** and **Zalo** (personal account), choose **Link with QR Code…** (or **Relink with QR Code…** if it's already linked). Pincer asks the gateway for a QR code (`web.login.start`). Scan it with the app on your phone, and Pincer waits for the link (`web.login.wait`), showing a new code if the old one expires. QR login needs **Full Management**. Other channels are set up in **Gateway Settings → Channels**.
-
-<Aside>
-The gateway doesn't say which channels support QR login, so Pincer offers it for WhatsApp and Zalo only, like the Control UI. It also doesn't flag when a wait for the scan times out, so Pincer keeps waiting while the gateway says it's still waiting.
-</Aside>
+- **Close** keeps your progress for later. When setup follows on from connecting, **Skip to Chats** takes its place at the top and goes straight to your chats.
 
 ## Agent & Model
 
-Pick a **Default agent** and **Default model**, then choose **Save Defaults**. Pincer saves them to the gateway's config: the agent's `agents.entries.<id>.default` and `agents.defaults.model.primary`. This needs **Full Management**. If Gateway Settings has unsaved changes, save or discard those first. For anything more, such as adding agents or per-agent models, choose **Open Agents & Models**.
+Pick a **Default agent** and **Default model**, then choose **Save Defaults**. Pincer saves them to the gateway: the agent's `agents.entries.<id>.default` and `agents.defaults.model.primary`. If Gateway Settings has unsaved changes, save or discard those first. For anything more, such as adding agents or per-agent models, choose **Open Agents & Models**.
 
-## Skills
+Saving needs **Full Management**. Without it, the step shows **Needs Full Management**: "This device can view but not change this. Open Connection to request Full Management." You can still see the current defaults, or skip the step. Choose **Open Connection…** to change the access level (see [Access levels](../connect-a-gateway/#access-levels)).
 
-The **Skills** step lists each skill that's missing what it needs, like a CLI tool or an environment variable, along with any install options the gateway suggests. **Open Skills** takes you to the [Skills page](../../guides/skills-and-tools/), where you can run a skill's installer or fill in what it needs. On gateways without the Skills page, it's **Open Tools & Skills**.
+## Skills (optional)
+
+Skills add abilities to your agent, and you can add them any time. This step lists your agent's skills, and marks any that aren't set up yet, such as one waiting for a CLI tool. That's for information only: a skill that isn't set up never counts as a problem, and you can continue straight past it. **Open Skills** takes you to the [Skills page](../../guides/skills-and-tools/) if you want to set one up now.
 
 ## Test message
 
-The message starts out as **hello**. Choose **Send "hello"**, or type your own and choose **Send** (or press Return). Pincer sends it in a chat called *Setup Test* with the default agent, starting one the first time and reusing it after that. The step is done as soon as the gateway accepts the message, without waiting for the reply. Choose **Open Chat** to see the reply.
+The message starts out as "Hi! Are you there?" Choose **Send**, or type your own and press Return. As the step says, "Pincer starts a chat called Setup Test with Claw" (or whichever agent is your default). It starts that chat the first time and reuses it after that. While it waits, setup shows "Sent. Waiting for your agent…". Choose **Send Again** to send another.
+
+When the agent answers, setup shows **Your agent replied.** with the first few lines of the reply, and "Finish opens this chat." Choose **Finish** to land in your chat list with the *Setup Test* chat selected, ready to keep talking. If the agent doesn't answer, setup says "Your agent didn't answer. You can try again, or skip and chat later." Choose **Try Again** or **Skip**.
+
+<DocScreenshot src={testMessage} ios={testMessageIOS} alt="Setup's Test Message step marked Done, with the message Hi! Are you there?, a Send Again button, Your agent replied. with the start of the reply, and Finish opens this chat." iosAlt="The Test Message step on iPhone, with Agent & Model, Skills and Test Message along the top and Your agent replied. under the message." caption="Test Message after the agent replied (local mock reply). The steps are listed on the left." iosCaption="On iPhone, the steps are along the top." />
 
 ## Tips
 
@@ -82,10 +58,4 @@ To see it again, choose **Show Tips Again** under **Settings → General → Tip
 
 ## Try it in the demo
 
-The [demo](../try-the-demo/) offers setup each time you choose **Try the Demo**, and never saves your progress, so you can try it as often as you like. Any other time, open it from the demo's gateway menu or ⌘K. It starts with a few things to find:
-
-- **Channels** needs attention: Telegram has lost its connection, and WhatsApp isn't linked yet. **Gateway Health** is **Done**, because channel problems are shown under **Channels**.
-- **Skills** needs attention: the *summarize* skill is missing its CLI tool.
-- **Test Message** sends to a demo *Setup Test* chat and gets a demo reply.
-
-The demo connects with standard access, so the **Channels**, **Agent & Model** and **Skills** steps show **Needs Full Management**, and QR login and **Save Defaults** are unavailable. The demo shows the tips card again each time Pincer launches.
+**Try the Demo** goes straight to the chat list, but you can open setup in the [demo](../try-the-demo/) from its gateway menu or <kbd>⌘</kbd> <kbd>K</kbd> → **Set Up Gateway…**. It never saves your progress, so you can try it as often as you like. The demo connects with standard access, so **Agent & Model** shows **Needs Full Management**, and **Test Message** sends to a demo *Setup Test* chat and gets a demo reply. The demo shows the tips card again each time Pincer launches.

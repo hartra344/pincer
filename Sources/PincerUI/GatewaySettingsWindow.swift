@@ -37,6 +37,8 @@ struct GatewaySettingsWindow: View {
     let gatewayId: UUID?
     /// iOS: closes the sheet.
     var close: (() -> Void)?
+    /// iOS: closes the sheet, then runs the action once it's dismissed.
+    var closeThen: ((@escaping @MainActor () -> Void) -> Void)?
     @Environment(AppModel.self) private var app
     @State private var navigator = SettingsNavigator(destination: nil)
 
@@ -45,7 +47,7 @@ struct GatewaySettingsWindow: View {
             GatewaySettingsRoot(close: self.close)
                 .environment(gateway)
                 .environment(self.navigator)
-                .environment(\.closeGatewaySettings, GatewaySettingsCloser(close: self.close))
+                .environment(\.closeGatewaySettings, GatewaySettingsCloser(close: self.close, closeThen: self.closeThen))
         } else {
             ContentUnavailableView("Gateway Removed", systemImage: "server.rack",
                                    description: Text("This Gateway is no longer in Pincer."))

@@ -8,25 +8,31 @@ import { Steps, Aside } from '@astrojs/starlight/components';
 [Tailscale](https://tailscale.com) is the easiest way to reach a gateway running at home from your laptop or phone, without opening ports to the internet.
 
 <Steps>
-1. **Expose the gateway on your tailnet.** On the gateway host, set up Tailscale Serve for the gateway, following the OpenClaw remote-access docs.
+1. **Turn on Tailscale Serve on the gateway host.** The gateway stays private to your tailnet, and Tailscale adds HTTPS:
+
+   ```sh
+   openclaw config set gateway.tailscale.mode serve
+   openclaw gateway restart
+   ```
+
+   See OpenClaw's [stable HTTPS URL guide](https://docs.openclaw.ai/gateway/stable-https-url) for details.
 
 2. **Make sure your device is on the same tailnet.** Install Tailscale on your Mac or iPhone and sign in to the same account.
 
-3. **Add the gateway in Pincer.** Click **+** in the rail and enter one of these addresses:
+3. **Add the gateway in Pincer.** On first launch choose **Get Started** (or choose **Add Gateway…** from the sidebar's **Organize** menu or <kbd>⌘</kbd> <kbd>K</kbd>). On **Find your gateway**, choose **Tailscale** and enter the address:
 
-   - **With Tailscale Serve:** `wss://<host>.<tailnet>.ts.net`, for example `wss://my-mac.tail1234.ts.net`. Serve uses HTTPS on port 443, so use `wss://` and leave off the port.
-   - **Directly by tailnet IP:** `ws://100.x.y.z:18789`, using the gateway's port.
+   - **With Tailscale Serve:** `wss://<host>.<tailnet>.ts.net`, for example `wss://my-mac.tail1234.ts.net`. Serve uses HTTPS on port 443, so leave off the port. You can type just the host name.
+   - **Directly by tailnet IP:** `ws://100.x.y.z:18789`, if the gateway is bound to its tailnet IP (`gateway.bind: "tailnet"`) instead of using Serve.
 
-4. **Pick the auth mode** your gateway uses (token, password, or Tailscale identity) and enter the secret.
+4. **Sign in** with your gateway's token (`openclaw config get gateway.auth.token`) or password.
 
-5. **Approve the device.** The first time, Pincer shows a pairing request. On the gateway host, run:
+5. **Approve the device.** The first time, Pincer shows the exact command to run on the gateway host:
 
    ```sh
-   openclaw devices list
    openclaw devices approve <requestId>
    ```
 
-   Pincer reconnects on its own after you approve it. If another device is already paired with **Full Management**, you can approve it there instead, under **Gateway Settings → Devices**. See [Devices & Nodes](../../guides/devices/).
+   Pincer moves on by itself after you approve it. If another device is already paired with **Full Management**, you can approve it there instead, under **Gateway Settings → Devices**. See [Connect a gateway](../connect-a-gateway/) for the full walkthrough and [Devices & Nodes](../../guides/devices/).
 </Steps>
 
 <Aside type="caution" title="ws:// with a .ts.net name">

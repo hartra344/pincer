@@ -30,6 +30,12 @@ public struct PincerScene: Scene {
         .defaultSize(width: 1180, height: 780)
         .commands {
             TranscriptFindCommands()
+            CommandGroup(after: .newItem) {
+                Button("Add Gateway…") {
+                    self.app.firstRun.present()
+                    QuickCaptureController.shared.showMainWindow()
+                }
+            }
             CommandGroup(after: .sidebar) {
                 Button("Next Unread Chat") { self.app.selectNextUnread() }
                     .keyboardShortcut(.downArrow, modifiers: [.option, .shift])
@@ -86,9 +92,10 @@ struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.appTheme) private var theme
     @Environment(\.scenePhase) private var scenePhase
-    @State private var addingGateway = false
     /// iOS: Gateway Settings shown as a sheet.
     @State private var settingsRequest: GatewaySettingsRequest?
+    /// iOS: runs once the Gateway Settings sheet is gone (#133).
+    @State private var afterSettingsDismiss: AfterDismiss?
     /// iOS: Automations shown as a sheet.
     @State private var automationsRequest: AutomationsRequest?
     /// iOS: app Settings opened from the command palette.
@@ -103,7 +110,11 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if let gateway = self.app.selectedGateway {
+            if self.showsFirstRun {
+                // Outside the split view: on iPhone it collapses to the (empty) sidebar column.
+                FirstRunView()
+                    .onAppear { self.compactColumn = .sidebar }
+            } else if let gateway = self.app.selectedGateway {
                 NavigationSplitView(columnVisibility: self.$columns, preferredCompactColumn: self.$compactColumn) {
                     ChannelList(openChat: { self.compactColumn = .detail })
                         .environment(gateway)
@@ -116,10 +127,6 @@ struct RootView: View {
                     GatewayDetail(gateway: gateway)
                         .background { self.theme.background(.chatBackground)?.ignoresSafeArea() }
                 }
-            } else {
-                // Outside the split view: on iPhone it collapses to the (empty) sidebar column.
-                WelcomeView(add: { self.addingGateway = true }, tryDemo: { self.app.openDemo() })
-                    .onAppear { self.compactColumn = .sidebar }
             }
         }
         .overlay {
@@ -128,7 +135,7 @@ struct RootView: View {
         .animation(.snappy(duration: 0.15), value: self.paletteRequest)
         .focusedSceneValue(\.commandPalette, self.showsCommandPalette)
         .focusedSceneValue(\.searchMessages, self.app.selectedGateway == nil ? nil : self.searchMessagesAction)
-        .sheet(isPresented: self.$addingGateway) { ConnectionSheet() }
+        .modifier(FirstRunCover())
         .modifier(SetupWizardPresenter())
         .modifier(TipsOverlay())
         #if os(iOS)
@@ -139,8 +146,12 @@ struct RootView: View {
             }
         }
         #endif
-        .sheet(item: self.$settingsRequest) { request in
-            GatewaySettingsWindow(gatewayId: request.id, close: { self.settingsRequest = nil })
+        .sheet(item: self.$settingsRequest, onDismiss: self.settingsDismissed) { request in
+            GatewaySettingsWindow(gatewayId: request.id, close: { self.settingsRequest = nil },
+                                  closeThen: { action in
+                                      self.afterSettingsDismiss = AfterDismiss(run: action)
+                                      self.settingsRequest = nil
+                                  })
         }
         .sheet(item: self.$automationsRequest) { request in
             AutomationsWindow(gatewayId: request.id, close: { self.automationsRequest = nil })
@@ -153,12 +164,32 @@ struct RootView: View {
         }
         .modifier(CompactColumnRouting(column: self.$compactColumn))
         .background { UnreadBadgeSync() }
+        #if os(macOS)
+        .modifier(MainWindowFronting())
+        #endif
         .onAppear {
-            if self.app.gateways.isEmpty { self.addingGateway = true }
+            self.app.firstRun.showIfNoGateways()
             #if os(macOS)
             QuickCaptureController.shared.openWindow = self.openWindow
             #endif
         }
+    }
+
+    /// The first-run wizard fills the window with no gateways; on macOS "Add Gateway…" shows it
+    /// here too (iOS covers the chat list instead).
+    private var showsFirstRun: Bool {
+        let presentation = self.app.firstRun.presentation
+        #if os(macOS)
+        return presentation != nil || self.app.selectedGateway == nil
+        #else
+        return presentation == .window || self.app.selectedGateway == nil
+        #endif
+    }
+
+    private func settingsDismissed() {
+        let action = self.afterSettingsDismiss
+        self.afterSettingsDismiss = nil
+        action?.run()
     }
 
     /// ⌘K: the palette's root page.
@@ -265,25 +296,21 @@ private struct GatewayDetail: View {
     }
 }
 
-struct WelcomeView: View {
-    let add: () -> Void
-    let tryDemo: () -> Void
+#if os(macOS)
+/// Brings the main window forward when a wizard opens on it, e.g. from Gateway Settings or the
+/// menu bar, so it isn't left behind another window (#131).
+private struct MainWindowFronting: ViewModifier {
+    @Environment(AppModel.self) private var app
 
-    var body: some View {
-        ContentUnavailableView {
-            Label("Welcome to Pincer", systemImage: "bubble.left.and.text.bubble.right")
-        } description: {
-            Text("A native client for your OpenClaw Gateway. Connect over Tailscale to chat with your agents as yourself — with thinking, tools and images inline.")
-        } actions: {
-            Button("Add Gateway…", action: self.add)
-                .glassProminentButton()
-                .controlSize(.large)
-            Button("Try the Demo", action: self.tryDemo)
-                .glassButton()
-                .controlSize(.large)
-        }
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: self.app.firstRun.presentationCount) { QuickCaptureController.shared.showMainWindow() }
+            .onChange(of: self.app.selectedGateway?.setup.isPresented ?? false) { _, presented in
+                if presented { QuickCaptureController.shared.showMainWindow() }
+            }
     }
 }
+#endif
 
 /// macOS: a tabbed Settings window, like the system's own apps. iOS: one grouped form in a sheet.
 struct SettingsView: View {

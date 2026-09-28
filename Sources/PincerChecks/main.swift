@@ -2456,6 +2456,9 @@ checkToolDiffs()
 checkOutboxLogic()
 checkSidebarWorking()
 
+print("First-run wizard")
+await runFirstRunChecks()
+
 let arguments = CommandLine.arguments
 func liveTarget(_ flag: String) -> (url: String, token: String)? {
     guard let index = arguments.firstIndex(of: flag), arguments.count > index + 2 else { return nil }
@@ -2489,6 +2492,9 @@ if let (url, token) = liveExtras {
     await runLiveAvatars(url: url, token: token)
     print("Outbox & retry (live)")
     await runLiveOutbox(url: url, token: token)
+    // Last: it pairs a fresh device identity.
+    print("First-run wizard (live)")
+    await runLiveFirstRun(url: url, token: token)
 }
 if let index = arguments.firstIndex(of: "--live-scope-upgrade"), arguments.count > index + 2 {
     print("Scope upgrade fallback against \(arguments[index + 1])")
@@ -2535,6 +2541,8 @@ if arguments.contains("--demo") {
     await runDemoToolDiffs()
     print("Agent avatars (demo)")
     await runDemoAvatars()
+    print("First-run wizard (demo)")
+    await runDemoFirstRun()
     print("Outbox & retry (demo)")
     await runDemoOutbox()
     print("Accessibility labels (demo)")
@@ -3079,6 +3087,7 @@ func runDemo() async {
     let connected = await waitFor("demo connection") { gateway.state.isConnected && !gateway.sessions.isEmpty }
     check(connected, "demo connected and bootstrapped")
     guard connected else { return }
+    _ = gateway.chat(for: "agent:main:dashboard:trip")
     check(gateway.agents.count >= 3, "agents (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions (\(gateway.sessions.count))")
     check(gateway.approvals.map(\.id) == ["approval_demo_push"] && gateway.approvals.first?.isExpired() == false
@@ -4153,6 +4162,7 @@ func runLive(url: String, token: String) async {
     check(connected, "connected and bootstrapped (pairing seen: \(sawPairing))")
     check(!sawReconnecting, "first connect never reports reconnecting")
     guard connected else { return }
+    _ = gateway.chat(for: "agent:main:dashboard:trip")
     await runLiveShare(profile: profile, gateway: gateway)
     check(gateway.agents.count >= 3, "agents.list (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions.subscribe (\(gateway.sessions.count) rows)")
