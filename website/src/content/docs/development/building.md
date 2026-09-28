@@ -74,9 +74,12 @@ swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token   # moc
 | no flag | Offline checks: identity, protocol models, stores, the transcript cache, message search and composer drafts. |
 | `--demo` | The offline checks, then a full run against the in-process demo gateway, including sidebar navigation and message search. |
 | `--live <url> <token>` | The offline checks, then an end-to-end run against a real or [mock](../mock-gateway/) gateway. |
+| `--live-core <url> <token>` / `--live-extras <url> <token>` | The two halves of `--live`, so they can run side by side against separate mocks. `--live-core` is the main end-to-end run; `--live-extras` covers Quick Capture, replies and reactions, the transcript cache, the setup wizard, deep links, tool diffs and avatars. |
 | `--perf` | Builds a message search index over 20 synthetic chats of 20,000 messages each and checks build time, query time, memory and index size. Build it in release (`-c release`), since its time targets assume an optimized build. |
 | `--live-no-usage <url> <token>` | The offline checks, then a run against a gateway without the usage methods (the mock with `MOCK_NO_USAGE=1`), checking that Usage reports them as unsupported. |
 | `--live-no-reply-to <url> <token>` | The offline checks, then a run against a gateway that rejects `chat.send`'s `replyToId` (the mock with `MOCK_NO_REPLY_TO=1`), checking that replies fall back to quoting the original. |
+
+Add `--skip-intent-checks` to any mode to leave out the Shortcuts & Siri offline checks, which wait on real reply timeouts (about 15 seconds).
 
 Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaults suite, so concurrent runs don't share storage. It also keeps every secret in memory, so it never touches or prompts for your real Keychain (no `PINCER_KEYCHAIN=memory` needed), and it fails if any real Keychain call happens.
 
@@ -98,15 +101,20 @@ scripts/check-launch-cpu.sh --menu-bar on --demo
 1. **Mock gateway selftest** (Ubuntu): `npm ci && npm run selftest` in `mock-gateway/`.
 2. **Swift build and checks** (macOS, `PINCER_KEYCHAIN=memory`):
    - Restores the cached `.build` folder
-   - `swift build --build-tests`, then `swift test --skip-build --parallel`
-   - `PincerChecks`
-   - `PincerChecks --demo` (with `PINCER_DEMO_DELAY_SCALE=0.2`) and `PincerChecks --live` against the mock (started just before), **at the same time**
-   - `PincerChecks --live-no-usage` against a second mock started with `MOCK_NO_USAGE=1` on port 18790
-   - `PincerChecks --live-no-reply-to` against a third mock started with `MOCK_NO_REPLY_TO=1` on port 18791
+   - `swift build --build-tests`
+   - `scripts/run-checks.sh`, which starts four mocks and then runs these **at the same time**:
+     - `swift test --skip-build --parallel`
+     - `PincerChecks`
+     - `PincerChecks --demo` (with `PINCER_DEMO_DELAY_SCALE=0.2`)
+     - `PincerChecks --live-core` and `PincerChecks --live-extras` (with `PINCER_DEMO_DELAY_SCALE=0.2`), each against its own mock
+     - `PincerChecks --live-no-usage` against a mock started with `MOCK_NO_USAGE=1`
+     - `PincerChecks --live-no-reply-to` against a mock started with `MOCK_NO_REPLY_TO=1`
+
+     Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
 
 CI passes `-Xswiftc -enable-incremental-file-hashing` to every `swift` command. Checkout gives every file a new modification time, so without it the restored build would recompile everything.
 
-To reproduce CI locally, run the same commands. For the live step, start the mock first: see [Mock gateway](../mock-gateway/). Each check run keeps its drafts, transcript cache and saved gateways in its own scratch folders and defaults suites, so the demo and live runs can safely run at the same time.
+To reproduce CI locally, run `npm ci` in `mock-gateway/` and `swift build --build-tests`, then `scripts/run-checks.sh`. It starts its own mocks on ports 18801–18804 (set `CHECKS_PORT_BASE` to use others) and writes logs to a temporary folder (or `CHECKS_LOG_DIR`). Each check run keeps its drafts, transcript cache and saved gateways in its own scratch folders and defaults suites, so the demo and live runs can safely run at the same time.
 
 ## Environment variables
 

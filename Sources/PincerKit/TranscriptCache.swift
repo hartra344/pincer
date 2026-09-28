@@ -320,8 +320,10 @@ public enum TranscriptCache {
     /// Deletes the Gateway's transcripts and message search index. `permanently`: the Gateway
     /// was removed from the app, so saves still under way don't write them again.
     public static func removeAll(gatewayId: UUID, permanently: Bool = false) {
-        MessageIndex.discard(gatewayId: gatewayId, permanently: permanently)
-        self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
+        MessageIndex.whileDeleting {
+            MessageIndex.discard(gatewayId: gatewayId, permanently: permanently)
+            self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
+        }
     }
 
     /// Deletes the Gateway's transcripts under another cache root (tests).
@@ -335,11 +337,13 @@ public enum TranscriptCache {
     /// follows a written transcript) or writes a fresh, valid file.
     public static func removeEverything() {
         guard let root = Self.root else { return }
-        let entries = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
-        for entry in entries {
-            if let id = UUID(uuidString: entry.lastPathComponent) { MessageIndex.discard(gatewayId: id) }
+        MessageIndex.whileDeleting {
+            let entries = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+            for entry in entries {
+                if let id = UUID(uuidString: entry.lastPathComponent) { MessageIndex.discard(gatewayId: id) }
+            }
+            self.removeEverything(root: root)
         }
-        self.removeEverything(root: root)
         logger.notice("Cleared the transcript cache")
     }
 

@@ -14,6 +14,8 @@ import UserNotifications
 // Self-checks that run without XCTest (unavailable with Command Line Tools only).
 //   swift run PincerChecks                  → unit checks
 //   swift run PincerChecks --live URL TOKEN → end-to-end against a (mock) Gateway
+//     (--live-core / --live-extras run its two halves separately, each against a fresh mock)
+//   add --skip-intent-checks to leave out the slow Shortcuts & Siri offline checks
 //   swift run -c release PincerChecks --perf → message index at 20 chats × 20k messages
 //   swift run PincerChecks --live-no-usage URL TOKEN → a Gateway without usage (mock with MOCK_NO_USAGE=1)
 //   swift run PincerChecks --live-no-reply-to URL TOKEN → a Gateway without replyToId (mock with MOCK_NO_REPLY_TO=1)
@@ -2403,8 +2405,12 @@ do {
 print("Share extension")
 await runShareChecks()
 
-print("Shortcuts & Siri")
-await runIntentChecks()
+// The slowest offline section (real reply timeouts). CI skips it in the demo and live runs,
+// since its plain run already covers it.
+if !CommandLine.arguments.contains("--skip-intent-checks") {
+    print("Shortcuts & Siri")
+    await runIntentChecks()
+}
 
 print("Deep links & Handoff")
 runDeepLinkChecks()
@@ -2414,11 +2420,19 @@ checkToolDiffs()
 checkSidebarWorking()
 
 let arguments = CommandLine.arguments
-if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
-    let url = arguments[index + 1]
-    let token = arguments[index + 2]
+func liveTarget(_ flag: String) -> (url: String, token: String)? {
+    guard let index = arguments.firstIndex(of: flag), arguments.count > index + 2 else { return nil }
+    return (arguments[index + 1], arguments[index + 2])
+}
+// `--live` runs both halves in order. CI runs `--live-core` and `--live-extras` side by side,
+// each against its own mock, to shorten the longest check run.
+let liveCore = liveTarget("--live") ?? liveTarget("--live-core")
+let liveExtras = liveTarget("--live") ?? liveTarget("--live-extras")
+if let (url, token) = liveCore {
     print("Live against \(url)")
     await runLive(url: url, token: token)
+}
+if let (url, token) = liveExtras {
     print("Quick Capture (live)")
     await runQuickCaptureLive(url: url, token: token)
     print("Replies & reactions (live)")

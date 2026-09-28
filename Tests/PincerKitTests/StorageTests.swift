@@ -76,6 +76,19 @@ struct TranscriptCacheTests {
         #expect(await TranscriptCache.load(gatewayId: self.gateway, sessionKey: self.key, root: nil) == nil)
         #expect(TranscriptCache.file(gatewayId: self.gateway, sessionKey: self.key, root: nil) == nil)
     }
+
+    /// Clear Cache: an index created while the folders are deleted would keep its connection
+    /// on a deleted file, so it's inert and never registered.
+    @Test func noSearchIndexIsOpenedWhileTheCacheIsDeleted() async throws {
+        let gateway = UUID()
+        defer { MessageIndex.discard(gatewayId: gateway) }
+        var during: MessageIndex?
+        MessageIndex.whileDeleting { during = MessageIndex.shared(gatewayId: gateway) }
+        let inert = try #require(during)
+        let after = MessageIndex.shared(gatewayId: gateway)
+        #expect(inert !== after && MessageIndex.shared(gatewayId: gateway) === after)
+        #expect(try await inert.search("anything").isEmpty)
+    }
 }
 
 @Suite("Transcript snapshot limits")
