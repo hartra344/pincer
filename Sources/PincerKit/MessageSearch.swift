@@ -19,6 +19,8 @@ public enum MessageSearch {
         public var role: ChatRole
         /// e.g. "Discord" when a user message arrived through another channel.
         public var via: String?
+        /// Another agent, automation or helper that wrote it.
+        public var sender: MessageSender?
         public var timestamp: Date?
         /// Markdown source.
         public var text: String

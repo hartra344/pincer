@@ -572,6 +572,9 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     public var transportChannel: String?
     /// Conversation it arrived in (`__openclaw.transport.conversationRef`), e.g. `channel:123`.
     public var conversationRef: String?
+    /// Set when another agent, an automation or a helper wrote this message (it's shown as
+    /// theirs, not as yours or this chat's agent's).
+    public var sender: MessageSender?
 
     /// A committed message that replies and reactions can point at.
     public var isReplyable: Bool {
@@ -793,6 +796,8 @@ public struct AssistantTurn: Identifiable, Hashable, Sendable {
     /// change when the session's model does. Nil when the Gateway didn't record one.
     public var model: String?
     public var provider: String?
+    /// Who wrote the turn when it isn't this chat's agent: another agent, an automation or a helper.
+    public var sender: MessageSender?
 
     public var body: String { self.text.joined(separator: "\n\n") }
     /// `provider/model`, e.g. `anthropic/claude-opus-4-8`.
