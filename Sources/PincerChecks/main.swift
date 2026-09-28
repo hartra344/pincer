@@ -17,7 +17,8 @@ import UserNotifications
 //     (--live-core / --live-extras run its two halves separately, each against a fresh mock)
 //   add --skip-intent-checks to leave out the slow Shortcuts & Siri offline checks
 //   add --skip-perf-budgets to only report the perf smoke timings, failing just on clearly broken
-//     ones (scripts/run-checks.sh passes it to every mode run, which share the CPU with each other)
+//     ones (scripts/run-checks.sh passes it to every run it starts side by side, since they share the CPU)
+//   swift run PincerChecks --perf-smoke     → only the perf smoke, budgets enforced (run it alone)
 //   swift run -c release PincerChecks --perf → message index at 20 chats × 20k messages
 //   swift run PincerChecks --live-no-usage URL TOKEN → a Gateway without usage (mock with MOCK_NO_USAGE=1)
 //   swift run PincerChecks --live-no-reply-to URL TOKEN → a Gateway without replyToId (mock with MOCK_NO_REPLY_TO=1)
@@ -64,6 +65,16 @@ func checkBudget(_ elapsed: Duration, _ budget: Duration, hardLimit: Duration, _
         return
     }
     check(elapsed <= (skipPerfBudgets ? hardLimit : budget), label, line: line)
+}
+
+if CommandLine.arguments.contains("--perf-smoke") {
+    print("Message index perf smoke")
+    await withScratchCache { _ in await checkMessageIndexPerfSmoke() }
+    print("\n\(passes) passed, \(failures) failed")
+    try? FileManager.default.removeItem(at: draftsRoot)
+    try? FileManager.default.removeItem(at: cacheRoot)
+    try? FileManager.default.removeItem(at: outboxRoot)
+    exit(failures == 0 ? 0 : 1)
 }
 
 func json(_ text: String) -> JSONValue {

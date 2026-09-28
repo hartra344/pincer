@@ -68,10 +68,11 @@ lane() {
 
 url() { echo "ws://127.0.0.1:$(($PORT_BASE + $1))"; }
 fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
-# Only the plain run does the slow Shortcuts & Siri offline checks and enforces the perf smoke
-# budgets; the mode runs skip both (they share the CPU, so their timings are just reported).
+# Only the plain run does the slow Shortcuts & Siri offline checks; the others skip them.
+# All of these share the CPU, so none enforces the perf smoke budgets (their timings are just
+# reported); a separate run enforces them afterwards, alone.
 lane unit-tests swift test --skip-build --parallel ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
-lane self-checks "$CHECKS"
+lane self-checks "$CHECKS" --skip-perf-budgets
 lane demo "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --demo
 lane live-core "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-core "$(url 0)" dev-token
 lane live-extras "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-extras "$(url 1)" dev-token
@@ -80,15 +81,23 @@ lane live-no-reply-to "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-
 
 status=0
 summary=()
-for i in "${!pids[@]}"; do
-    name=${names[$i]}
-    if wait "${pids[$i]}"; then result=passed; else result=FAILED; status=1; fi
-    seconds=$(cat "$LOGS/$name.seconds" 2>/dev/null || echo "?")
-    echo "::group::$name ($result)"
-    cat "$LOGS/$name.log"
-    echo "::endgroup::"
-    summary+=("$(printf '%-18s %-7s %4ss  %s' "$name" "$result" "$seconds" "$(tail -n 1 "$LOGS/$name.log")")")
-done
+# Waits for lanes from index $1 on, then prints their logs and adds them to the summary.
+report() {
+    local i name result seconds
+    for ((i = $1; i < ${#pids[@]}; i++)); do
+        name=${names[$i]}
+        if wait "${pids[$i]}"; then result=passed; else result=FAILED; status=1; fi
+        seconds=$(cat "$LOGS/$name.seconds" 2>/dev/null || echo "?")
+        echo "::group::$name ($result)"
+        cat "$LOGS/$name.log"
+        echo "::endgroup::"
+        summary+=("$(printf '%-18s %-7s %4ss  %s' "$name" "$result" "$seconds" "$(tail -n 1 "$LOGS/$name.log")")")
+    done
+}
+report 0
+# The perf smoke budgets are wall-clock, so they only mean something with the CPU to themselves.
+lane perf-smoke "$CHECKS" --perf-smoke
+report $((${#pids[@]} - 1))
 
 echo
 grep -H "✗\|timed out" "$LOGS"/*.log || true
