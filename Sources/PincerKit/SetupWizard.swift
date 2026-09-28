@@ -80,59 +80,6 @@ public enum SetupStepStatus: Hashable, Sendable {
 
 // MARK: Gateway results
 
-/// `channels.status` (operator.read): channels with their account snapshots, plus the Gateway's
-/// own status issues. Channels are `GatewayChannelHealth`, the same type Gateway Health shows.
-public struct SetupChannelsSnapshot: Hashable, Sendable {
-    public struct Issue: Hashable, Sendable {
-        public let channel: String
-        public let accountId: String
-        public let kind: String
-        public let message: String
-        public let fix: String?
-    }
-
-    public let channels: [GatewayChannelHealth]
-    public let issues: [Issue]
-
-    public init(channels: [GatewayChannelHealth], issues: [Issue] = []) {
-        self.channels = channels
-        self.issues = issues
-    }
-
-    /// Parses a `channels.status` result: `channelOrder`, `channelLabels`, `channelAccounts`
-    /// (`{ <channel>: [accountSnapshot] }`), `channels` (per-channel summaries) and `statusIssues`.
-    public init?(_ json: JSONValue) {
-        guard json.object != nil else { return nil }
-        let labels = json["channelLabels"]?.object ?? [:]
-        let summaries = json["channels"]?.object ?? [:]
-        let accounts = json["channelAccounts"]?.object ?? [:]
-        let order = (json["channelOrder"]?.array ?? []).compactMap(\.text)
-        var seen: Set<String> = []
-        let ids = (order + accounts.keys.sorted() + summaries.keys.sorted()).filter { seen.insert($0).inserted }
-        self.channels = ids.map { id in
-            var entry = summaries[id]?.object ?? [:]
-            var byId: [String: JSONValue] = [:]
-            for account in accounts[id]?.array ?? [] {
-                guard let accountId = account["accountId"]?.text else { continue }
-                byId[accountId] = account
-            }
-            if !byId.isEmpty { entry["accounts"] = .object(byId) }
-            return GatewayChannelHealth(id: id, label: labels[id]?.text, .object(entry))
-        }
-        self.issues = (json["statusIssues"]?.array ?? []).compactMap { issue in
-            guard let channel = issue["channel"]?.text, let message = issue["message"]?.text else { return nil }
-            return Issue(channel: channel, accountId: issue["accountId"]?.text ?? "default",
-                         kind: issue["kind"]?.text ?? "runtime", message: message, fix: issue["fix"]?.text)
-        }
-    }
-
-    /// From the `health` payload, when `channels.status` isn't available.
-    public init(health: GatewayHealthSummary) {
-        self.channels = health.channels
-        self.issues = []
-    }
-}
-
 /// One entry of `skills.status` (operator.read) `skills[]`.
 public struct SetupSkill: Identifiable, Hashable, Sendable {
     public let name: String
@@ -189,36 +136,14 @@ public struct SetupSkillsReport: Hashable, Sendable {
     public var ready: [SetupSkill] { self.skills.filter { $0.eligible && !$0.disabled } }
 }
 
-/// `web.login.start` / `web.login.wait` results (operator.admin; not advertised in `hello.methods`).
-public struct WebLoginResult: Hashable, Sendable {
-    public let qrDataUrl: String?
-    public let sessionKey: String?
-    public let connected: Bool?
-    public let message: String?
-
-    public init(_ json: JSONValue) {
-        self.qrDataUrl = json["qrDataUrl"]?.text
-        self.sessionKey = json["sessionKey"]?.text
-        self.connected = json["connected"]?.bool
-        self.message = json["message"]?.text
-    }
-
-    /// The PNG in `qrDataUrl` (`data:image/png;base64,…`).
-    public var qrImageData: Data? {
-        guard let url = self.qrDataUrl, let comma = url.firstIndex(of: ","),
-              url[..<comma].hasSuffix(";base64") else { return nil }
-        return Data(base64Encoded: String(url[url.index(after: comma)...]))
-    }
-}
-
 // MARK: Rules
 
 /// How each step's status follows from what the Gateway reports. Pure, for tests.
 public enum SetupRules {
     /// Channels whose plugin implements QR login (`loginWithQrStart`) upstream.
-    public static let qrLoginChannels: Set<String> = ["whatsapp", "zalouser"]
+    public static var qrLoginChannels: Set<String> { ChannelRules.qrLoginChannels }
 
-    public static func supportsQRLogin(_ channelId: String) -> Bool { self.qrLoginChannels.contains(channelId) }
+    public static func supportsQRLogin(_ channelId: String) -> Bool { ChannelRules.supportsQRLogin(channelId) }
 
     /// Healthy: done; degraded or down: attention (the first active issue); restarting: not checked.
     /// With `channelsSeparate`, channel issues are left to the Channels step: a Gateway degraded only by
@@ -464,21 +389,7 @@ public final class SetupWizardModel {
     }
 
     /// QR login for one channel account (`web.login.start`, then `web.login.wait`).
-    public enum QRLoginState: Hashable, Sendable {
-        case idle
-        case starting
-        /// Scan this; `web.login.wait` is running.
-        case showing(qr: Data, message: String?)
-        case connected(String?)
-        case failed(String)
-
-        public var isRunning: Bool {
-            switch self {
-            case .starting, .showing: true
-            default: false
-            }
-        }
-    }
+    public typealias QRLoginState = ChannelQRLoginState
 
     public static let testMessageText = "hello"
 
@@ -495,13 +406,13 @@ public final class SetupWizardModel {
     public private(set) var skills: SetupSkillsReport?
     public private(set) var skillsFailure: String?
     public private(set) var loadState = OperationState.idle
-    /// Keyed by `"<channel>/<accountId>"` (accountId `default` when omitted).
-    public private(set) var qrLogins: [String: QRLoginState] = [:]
+    /// QR logins, keyed by `"<channel>/<accountId>"` (accountId `default` when omitted).
+    public let qr: ChannelQRLoginController
+    public var qrLogins: [String: QRLoginState] { self.qr.logins }
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let connectedBefore: Bool
     @ObservationIgnored private let environment: Environment
-    @ObservationIgnored private var qrTasks: [String: Task<Void, Never>] = [:]
 
     /// `connectedBefore`: this gateway connected before the wizard existed, so it isn't offered.
     /// The demo's progress lives in memory only, so every "Try the Demo" offers it again.
@@ -513,9 +424,11 @@ public final class SetupWizardModel {
         self.defaults = defaults
         self.connectedBefore = connectedBefore
         self.environment = environment
+        self.qr = ChannelQRLoginController(request: environment.request)
         let saved = isDemo ? nil : SetupProgress.load(gatewayId: gatewayId, defaults: defaults)
         self.progress = saved ?? SetupProgress()
         self.hasSavedProgress = saved != nil
+        self.qr.onLinked = { [weak self] _ in await self?.loadChannels() }
     }
 
     @ObservationIgnored private var hasSavedProgress: Bool
@@ -753,10 +666,12 @@ public final class SetupWizardModel {
 
     // MARK: QR login
 
-    public static func qrKey(channel: String, accountId: String?) -> String { "\(channel)/\(accountId ?? "default")" }
+    public static func qrKey(channel: String, accountId: String?) -> String {
+        ChannelQRLoginController.key(channel: channel, accountId: accountId)
+    }
 
     public func qrLogin(channel: String, accountId: String? = nil) -> QRLoginState {
-        self.qrLogins[Self.qrKey(channel: channel, accountId: accountId)] ?? .idle
+        self.qr.state(channel: channel, accountId: accountId)
     }
 
     /// QR login needs Full Management and a channel whose plugin supports it.
@@ -764,105 +679,28 @@ public final class SetupWizardModel {
         self.hasAdmin && SetupRules.supportsQRLogin(channel)
     }
 
-    /// `web.login.start` then `web.login.wait` (refreshing the QR when the provider rotates it)
-    /// until connected, failed or cancelled.
+    /// `web.login.start` then `web.login.wait` (see `ChannelQRLoginController`).
     public func startQRLogin(channel: String, accountId: String? = nil, force: Bool = false) {
-        let key = Self.qrKey(channel: channel, accountId: accountId)
-        self.qrTasks[key]?.cancel()
-        self.qrLogins[key] = .starting
-        self.qrTasks[key] = Task { [weak self] in
-            await self?.runQRLogin(key: key, channel: channel, accountId: accountId, force: force)
-        }
+        self.qr.start(channel: channel, accountId: accountId, force: force)
     }
 
     public func cancelQRLogin(channel: String, accountId: String? = nil) {
-        let key = Self.qrKey(channel: channel, accountId: accountId)
-        self.qrTasks.removeValue(forKey: key)?.cancel()
-        self.qrLogins[key] = nil
+        self.qr.cancel(channel: channel, accountId: accountId)
     }
 
     private func cancelQRLogins() {
-        for task in self.qrTasks.values { task.cancel() }
-        self.qrTasks = [:]
-        self.qrLogins = self.qrLogins.filter { !$0.value.isRunning }
+        self.qr.cancelAll()
     }
 
-    public nonisolated static let qrStartTimeoutMs = 30000
-    public nonisolated static let qrWaitTimeoutMs = 120_000
-    public nonisolated static let qrMaxRounds = 5
+    public nonisolated static let qrStartTimeoutMs = ChannelQRLoginController.startTimeoutMs
+    public nonisolated static let qrWaitTimeoutMs = ChannelQRLoginController.waitTimeoutMs
+    public nonisolated static let qrMaxRounds = ChannelQRLoginController.maxRounds
 
-    /// Upstream has no structured flag for a wait that timed out; the WhatsApp and Zalo plugins both
-    /// return `connected:false` with a "Still waiting…" message, while other messages are terminal.
     public nonisolated static func isStillWaiting(_ message: String) -> Bool {
-        message.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix("still waiting")
+        ChannelQRLoginController.isStillWaiting(message)
     }
 
-    /// Upstream `web.login.start` without `force` on a linked account answers with just a message:
-    /// WhatsApp "WhatsApp is already linked (…). Say “relink” …", Zalo "Zalo is already linked (…)."
-    /// Relinking is `startQRLogin(…, force: true)`.
     public nonisolated static func isAlreadyLinked(_ message: String) -> Bool {
-        message.lowercased().contains("is already linked")
-    }
-
-    private func runQRLogin(key: String, channel: String, accountId: String?, force: Bool) async {
-        var start: [String: JSONValue] = ["channel": .string(channel), "force": .bool(force),
-                                          "timeoutMs": .number(Double(Self.qrStartTimeoutMs))]
-        if let accountId { start["accountId"] = .string(accountId) }
-        do {
-            var result = WebLoginResult(try await self.environment.request("web.login.start", .object(start)))
-            var rounds = 0
-            while !Task.isCancelled {
-                if result.connected == true {
-                    self.qrLogins[key] = .connected(result.message)
-                    await self.loadChannels()
-                    return
-                }
-                // Starting on a linked account returns only a message (no `connected` flag): it's linked.
-                if result.qrImageData == nil, let message = result.message, Self.isAlreadyLinked(message) {
-                    self.qrLogins[key] = .connected(message)
-                    await self.loadChannels()
-                    return
-                }
-                guard let qr = result.qrImageData else {
-                    self.qrLogins[key] = .failed(result.message ?? "The Gateway didn't send a QR code.")
-                    return
-                }
-                self.qrLogins[key] = .showing(qr: qr, message: result.message)
-                rounds += 1
-                guard rounds <= Self.qrMaxRounds else {
-                    self.qrLogins[key] = .failed("The QR code expired. Try again.")
-                    return
-                }
-                var wait: [String: JSONValue] = ["channel": .string(channel), "timeoutMs": .number(Double(Self.qrWaitTimeoutMs))]
-                if let accountId { wait["accountId"] = .string(accountId) }
-                if let sessionKey = result.sessionKey { wait["sessionKey"] = .string(sessionKey) }
-                if let url = result.qrDataUrl { wait["currentQrDataUrl"] = .string(url) }
-                let next = WebLoginResult(try await self.environment.request("web.login.wait", .object(wait)))
-                // A wait without a new QR keeps showing the current one.
-                result = next.qrDataUrl == nil && next.connected != true
-                    ? WebLoginResult(qrDataUrl: result.qrDataUrl, sessionKey: next.sessionKey ?? result.sessionKey,
-                                     connected: next.connected, message: next.message)
-                    : next
-                if next.connected == false, next.qrDataUrl == nil, let message = next.message,
-                   !Self.isStillWaiting(message) {
-                    self.qrLogins[key] = .failed(message)
-                    return
-                }
-            }
-        } catch is CancellationError {
-            return
-        } catch {
-            guard !Task.isCancelled else { return }
-            self.qrLogins[key] = .failed(Self.message(error))
-        }
-    }
-}
-
-extension WebLoginResult {
-    init(qrDataUrl: String?, sessionKey: String?, connected: Bool?, message: String?) {
-        self.qrDataUrl = qrDataUrl
-        self.sessionKey = sessionKey
-        self.connected = connected
-        self.message = message
+        ChannelQRLoginController.isAlreadyLinked(message)
     }
 }
