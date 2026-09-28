@@ -1,0 +1,619 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild build -project Pincer.xcodeproj -scheme Pincer-iOS -destination "generic/platform=iOS Simulator" -derivedDataPath DerivedData CODE_SIGNING_ALLOWED=NO
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  Pincer: /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (9 targets)
+    Target 'Pincer-iOS' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerNotifications-iOS' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerShare-iOS' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerUI-product' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerKit-product' in project 'Pincer'
+    Target 'PincerUI-product' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerUI' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerPush' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerKit' in project 'Pincer'
+    Target 'PincerUI' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerPush' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerKit' in project 'Pincer'
+    Target 'PincerShare-iOS' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerKit-product' in project 'Pincer'
+    Target 'PincerKit-product' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerKit' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerPush' in project 'Pincer'
+    Target 'PincerKit' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerPush' in project 'Pincer'
+    Target 'PincerNotifications-iOS' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerPush-product' in project 'Pincer'
+    Target 'PincerPush-product' in project 'Pincer'
+        ➜ Explicit dependency on target 'PincerPush' in project 'Pincer'
+    Target 'PincerPush' in project 'Pincer' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Apps/Shared/AppIcon.icon
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+Build description signature: add0b9b66b9a2c019b484344429fd48a
+Build description path: /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/XCBuildData/add0b9b66b9a2c019b484344429fd48a.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A430-8dc58220667be655e1bcc261a7455254.sdkstatcache
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -o /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A430-8dc58220667be655e1bcc261a7455254.sdkstatcache
+
+CreateBuildDirectory /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj
+    builtin-create-build-directory /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator
+
+CreateBuildDirectory /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj
+    builtin-create-build-directory /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphonesimulator
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-22eec190f0c8d44d8fa91ca94572ba67-VFS-iphonesimulator/all-product-headers.yaml
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-22eec190f0c8d44d8fa91ca94572ba67-VFS-iphonesimulator/all-product-headers.yaml
+
+CreateBuildDirectory /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/PackageFrameworks
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj
+    builtin-create-build-directory /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/PackageFrameworks
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare.hmap (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugDylibPath-normal-arm64.txt (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugDylibPath-normal-arm64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugDylibPath-normal-x86_64.txt (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugDylibPath-normal-x86_64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugDylibInstallName-normal-x86_64.txt (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugDylibInstallName-normal-x86_64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare.DependencyStaticMetadataFileList (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare.DependencyStaticMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-generated-files.hmap (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-generated-files.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugEntryPoint-normal-arm64.txt (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugEntryPoint-normal-arm64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugDylibInstallName-normal-arm64.txt (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugDylibInstallName-normal-arm64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-all-non-framework-target-headers.hmap (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-all-non-framework-target-headers.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare.DependencyMetadataFileList (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare.DependencyMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-project-headers.hmap (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-project-headers.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-own-target-headers.hmap (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-own-target-headers.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-all-target-headers.hmap (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-all-target-headers.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugEntryPoint-normal-x86_64.txt (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/PincerShare-DebugEntryPoint-normal-x86_64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/PincerUI.modulemap (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/PincerUI.modulemap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/PincerUI.DependencyStaticMetadataFileList (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/PincerUI.DependencyStaticMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/PincerUI.DependencyMetadataFileList (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/PincerUI.DependencyMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/x86_64/PincerShare-iOS_const_extract_protocols.json (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/x86_64/PincerShare-iOS_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/x86_64/PincerShare.SwiftFileList (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/x86_64/PincerShare.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/x86_64/PincerShare.SwiftConstValuesFileList (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/x86_64/PincerShare.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/x86_64/PincerShare.LinkFileList (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/x86_64/PincerShare.LinkFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/x86_64/PincerShare-iOS-OutputFileMap.json (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/x86_64/PincerShare-iOS-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/x86_64/PincerUI_const_extract_protocols.json (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/x86_64/PincerUI_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/x86_64/PincerUI.SwiftFileList (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/x86_64/PincerUI.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/x86_64/PincerUI.LinkFileList (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/x86_64/PincerUI.LinkFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/x86_64/PincerUI.SwiftConstValuesFileList (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/x86_64/PincerUI.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/arm64/PincerShare.SwiftFileList (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/arm64/PincerShare.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/arm64/PincerShare.SwiftConstValuesFileList (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/arm64/PincerShare.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/x86_64/PincerUI-OutputFileMap.json (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/x86_64/PincerUI-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/arm64/PincerUI_const_extract_protocols.json (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/arm64/PincerUI_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/arm64/PincerUI-OutputFileMap.json (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/arm64/PincerUI-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/arm64/PincerUI.SwiftFileList (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/arm64/PincerUI.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/arm64/PincerUI.LinkFileList (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/arm64/PincerUI.LinkFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/arm64/PincerUI.SwiftConstValuesFileList (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/Objects-normal/arm64/PincerUI.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/arm64/PincerShare.LinkFileList (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/arm64/PincerShare.LinkFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/arm64/PincerShare-iOS_const_extract_protocols.json (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/arm64/PincerShare-iOS_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/arm64/PincerShare-iOS-OutputFileMap.json (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerShare-iOS.build/Objects-normal/arm64/PincerShare-iOS-OutputFileMap.json
+
+Copy /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/PincerUI.modulemap /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/PincerUI.modulemap (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerUI-t.build/PincerUI.modulemap /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/PincerPush.modulemap (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/PincerPush.modulemap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/PincerPush.DependencyStaticMetadataFileList (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/PincerPush.DependencyStaticMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/PincerPush.DependencyMetadataFileList (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/PincerPush.DependencyMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications.hmap (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-project-headers.hmap (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-project-headers.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-own-target-headers.hmap (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-own-target-headers.hmap
+
+Copy /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/PincerPush.modulemap /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/PincerPush.modulemap (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/PincerPush.modulemap /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-generated-files.hmap (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-generated-files.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush.SwiftFileList (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications.DependencyStaticMetadataFileList (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications.DependencyStaticMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush.SwiftFileList (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush.LinkFileList (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush.LinkFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush.SwiftConstValuesFileList (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush_const_extract_protocols.json (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush_const_extract_protocols.json (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush.LinkFileList (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush.LinkFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications.DependencyMetadataFileList (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications.DependencyMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush.SwiftConstValuesFileList (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush-OutputFileMap.json (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush-OutputFileMap.json (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-all-target-headers.hmap (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-all-target-headers.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-all-non-framework-target-headers.hmap (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-all-non-framework-target-headers.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugEntryPoint-normal-x86_64.txt (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugEntryPoint-normal-x86_64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugEntryPoint-normal-arm64.txt (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugEntryPoint-normal-arm64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugDylibPath-normal-x86_64.txt (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugDylibPath-normal-x86_64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugDylibPath-normal-arm64.txt (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugDylibPath-normal-arm64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugDylibInstallName-normal-x86_64.txt (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugDylibInstallName-normal-x86_64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugDylibInstallName-normal-arm64.txt (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/PincerNotifications-DebugDylibInstallName-normal-arm64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/PincerKit.DependencyStaticMetadataFileList (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/PincerKit.DependencyStaticMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/x86_64/PincerNotifications.SwiftConstValuesFileList (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/x86_64/PincerNotifications.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/x86_64/PincerNotifications.LinkFileList (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/x86_64/PincerNotifications.LinkFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/x86_64/PincerNotifications.SwiftFileList (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/x86_64/PincerNotifications.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/PincerKit.modulemap (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/PincerKit.modulemap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/PincerKit.DependencyMetadataFileList (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/PincerKit.DependencyMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/x86_64/PincerNotifications-iOS-OutputFileMap.json (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/x86_64/PincerNotifications-iOS-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/arm64/PincerNotifications.LinkFileList (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/arm64/PincerNotifications.LinkFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/x86_64/PincerNotifications-iOS_const_extract_protocols.json (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/x86_64/PincerNotifications-iOS_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/arm64/PincerNotifications.SwiftFileList (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/arm64/PincerNotifications.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/arm64/PincerNotifications-iOS-OutputFileMap.json (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/arm64/PincerNotifications-iOS-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/arm64/PincerNotifications-iOS_const_extract_protocols.json (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/arm64/PincerNotifications-iOS_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/arm64/PincerNotifications.SwiftConstValuesFileList (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerNotifications-iOS.build/Objects-normal/arm64/PincerNotifications.SwiftConstValuesFileList
+
+Copy /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator/PincerKit.modulemap /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/PincerKit.modulemap (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/PincerKit.modulemap /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/GeneratedModuleMaps-iphonesimulator
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/x86_64/PincerKit_const_extract_protocols.json (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/x86_64/PincerKit_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/x86_64/PincerKit.SwiftFileList (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/x86_64/PincerKit.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/x86_64/PincerKit.SwiftConstValuesFileList (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/x86_64/PincerKit.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/x86_64/PincerKit-OutputFileMap.json (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/x86_64/PincerKit-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/arm64/PincerKit.SwiftFileList (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/arm64/PincerKit.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/arm64/PincerKit_const_extract_protocols.json (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/arm64/PincerKit_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/arm64/PincerKit.SwiftConstValuesFileList (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/arm64/PincerKit.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/arm64/PincerKit.LinkFileList (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/arm64/PincerKit.LinkFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/arm64/PincerKit-OutputFileMap.json (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/arm64/PincerKit-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer.hmap (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer.DependencyStaticMetadataFileList (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer.DependencyStaticMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/x86_64/PincerKit.LinkFileList (in target 'PincerKit' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerKit-t.build/Objects-normal/x86_64/PincerKit.LinkFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer.DependencyMetadataFileList (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer.DependencyMetadataFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-project-headers.hmap (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-project-headers.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-own-target-headers.hmap (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-own-target-headers.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-generated-files.hmap (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-generated-files.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-all-target-headers.hmap (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-all-target-headers.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-all-non-framework-target-headers.hmap (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-all-non-framework-target-headers.hmap
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-DebugDylibPath-normal-x86_64.txt (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-DebugDylibPath-normal-x86_64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-DebugDylibInstallName-normal-x86_64.txt (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-DebugDylibInstallName-normal-x86_64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-DebugDylibPath-normal-arm64.txt (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-DebugDylibPath-normal-arm64.txt
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-DebugDylibInstallName-normal-arm64.txt (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Pincer-DebugDylibInstallName-normal-arm64.txt
+
+MkDir /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/PincerShare.appex (in target 'PincerShare-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    /bin/mkdir -p /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/PincerShare.appex
+
+MkDir /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/PincerNotifications.appex (in target 'PincerNotifications-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    /bin/mkdir -p /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/PincerNotifications.appex
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/x86_64/Pincer.SwiftFileList (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/x86_64/Pincer.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/x86_64/Pincer.SwiftConstValuesFileList (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/x86_64/Pincer.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/arm64/Pincer-iOS_const_extract_protocols.json (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/arm64/Pincer-iOS_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/arm64/Pincer-iOS-OutputFileMap.json (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/arm64/Pincer-iOS-OutputFileMap.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/x86_64/Pincer.LinkFileList (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/x86_64/Pincer.LinkFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/x86_64/Pincer-iOS_const_extract_protocols.json (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/x86_64/Pincer-iOS_const_extract_protocols.json
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/x86_64/Pincer-iOS-OutputFileMap.json (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/x86_64/Pincer-iOS-OutputFileMap.json
+
+MkDir /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/Pincer.app (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    /bin/mkdir -p /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/Pincer.app
+
+MkDir /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/Pincer.app/PlugIns (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    /bin/mkdir -p /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/Pincer.app/PlugIns
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/arm64/Pincer.SwiftFileList (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/arm64/Pincer.SwiftFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/arm64/Pincer.SwiftConstValuesFileList (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/arm64/Pincer.SwiftConstValuesFileList
+
+WriteAuxiliaryFile /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/arm64/Pincer.LinkFileList (in target 'Pincer-iOS' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide
+    write-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/Pincer-iOS.build/Objects-normal/arm64/Pincer.LinkFileList
+
+SwiftDriver PincerPush normal arm64 com.apple.xcode.tools.swift.compiler (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -parse-as-library -module-name PincerPush -Onone @/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush.SwiftFileList -DSWIFT_PACKAGE -DDEBUG -DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE -DXcode -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -target arm64-apple-ios18.0-simulator -g -module-cache-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk/Developer/Library/Frameworks -c -j18 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A430-8dc58220667be655e1bcc261a7455254.sdkstatcache -output-file-map /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -package-name hartra344_didactic_guide -emit-const-values -const-gather-protocols-list /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush_const_extract_protocols.json -Xcc -I/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/DerivedSources-normal/arm64 -Xcc -I/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/DerivedSources/arm64 -Xcc -I/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/DerivedSources -Xcc -DSWIFT_PACKAGE -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/arm64/PincerPush-Swift.h -working-directory /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj -experimental-emit-module-separately -disable-cmo
+
+SwiftDriver PincerPush normal x86_64 com.apple.xcode.tools.swift.compiler (in target 'PincerPush' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Package.swift')
+    cd /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -parse-as-library -module-name PincerPush -Onone @/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush.SwiftFileList -DSWIFT_PACKAGE -DDEBUG -DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE -DXcode -plugin-path /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -target x86_64-apple-ios18.0-simulator -g -module-cache-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 6 -I /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator -Isystem /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/usr/lib -F /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/Library/Frameworks -F /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk/Developer/Library/Frameworks -c -j18 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A430-8dc58220667be655e1bcc261a7455254.sdkstatcache -output-file-map /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush-OutputFileMap.json -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules -emit-dependencies -emit-module -emit-module-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush.swiftmodule -serialize-diagnostics -dependency-scan-serialize-diagnostics-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush-dependency-scan.dia -validate-clang-modules-once -clang-build-session-file /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -fmodules-prune-interval\=86400 -Xcc -fmodules-prune-after\=345600 -package-name hartra344_didactic_guide -emit-const-values -const-gather-protocols-list /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush_const_extract_protocols.json -Xcc -I/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Products/Debug-iphonesimulator/include -Xcc -I/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/DerivedSources-normal/x86_64 -Xcc -I/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/DerivedSources/x86_64 -Xcc -I/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/DerivedSources -Xcc -DSWIFT_PACKAGE -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/Build/Intermediates.noindex/Pincer.build/Debug-iphonesimulator/PincerPush-t.build/Objects-normal/x86_64/PincerPush-Swift.h -working-directory /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/Pincer.xcodeproj -experimental-emit-module-separately -disable-cmo
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/ptrauth-F55MPAXQ72NSRMUHTGJ3G4UW0.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_stdarg-957T1VTOK3AMOKSVHI6ITFUV3.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_SwiftConcurrencyShims-AF9XPWCRM0GMTD7MPKQV5YE3Y.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_stdbool-9JPZGX5HMWW4NJG284E9G6WEA.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/ptrcheck-9E9PFSTMM6V0ZZAQLUPEFE6HA.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_stddef-FB6SJ9LP01BGRR434KCK6JW7.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/SwiftShims-ERRM4W9OSXRC8G628CMKRTEOO.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_stdbool-5X5MC7A5DXA701U56150ZEMVE.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/ptrauth-B4JL7SDLZGKSMJSD1UGK2KL0D.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/SwiftShims-C2PTAMLL1KRK1BECD25STMJMU.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_stdarg-7ZCBMHZ97BD6YZO4VZK05OPVZ.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_AvailabilityInternal-62ZAM4NYXN6AJX5VU4UQOHT0F.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_SwiftConcurrencyShims-36VFJGH2Z3DCO45U1QHEKYIJZ.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_stddef-84GTQ13RC9WSPUDY3NNFIYRX6.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_float-BQXGC0HYMKB84UOXN1APUS1FV.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/ptrcheck-MAF9COEP3O3XVYTCOZTGJ3KX.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_float-31JWLTYNMK1JL5TY2TJVXOAWC.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_AvailabilityInternal-BDCUCX45YGD2TLJI050YNWCJD.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_DarwinFoundation1-8299EHEQVDN7YF05KXI6JQVZX.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_DarwinFoundation1-CQCJ38ENNJ3RXSSCCKE7M50QR.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_limits-5VGTO2GBVR3953UTEQFBEIMGH.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_limits-F1CQT1LYCDALOM8SB4YVX1595.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_DarwinFoundation2-1SUV5EJND1HV45OIYM0RJONZL.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_DarwinFoundation2-9110050OC16QZZEVCJI9SLFNA.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/string_h-BC8IKE63QT72KM5D8DCJPQV21.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/sys_types-DV2V2PQFBI1JDQI2GTLWI3XA0.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_stdint-2SDLVX8JPJLXQWAF2THA0W4ZL.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_Builtin_stdint-480OAGF23HLZD5ST7R2CRTFD3.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/string_h-CPUMSEXSXP3WBB4MLOJMJPODK.pcm
+
+SwiftExplicitDependencyGeneratePcm arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/sys_types-31Y4G3XIBNU7RBNDPZOZGW6A7.pcm
+
+SwiftExplicitDependencyGeneratePcm x86_64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-didactic-guide/DerivedData/SDKExplicitPrecompiledModules/_DarwinFoundation3-7EPST53GMMTHLW03XFPNCRPL9.pcm
