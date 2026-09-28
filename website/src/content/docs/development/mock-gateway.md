@@ -42,6 +42,8 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `image` | Streams a tool call and attaches an image. |
 | `patch`, `diff` | Streams an `edit` tool call shaped like upstream's (`file_path`, `old_string`, `new_string`), shown as a [file diff](../../guides/file-diffs/). |
 | `approve` | Raises an exec approval. |
+| `approve once-only` | Raises an approval whose `allowedDecisions` leave out `allow-always`. **Always allow** then fails with `APPROVAL_ALLOW_ALWAYS_UNAVAILABLE` and the approval stays pending. |
+| `approve short-lived` | Raises an approval that expires after 3 seconds, so acting on it afterwards gets `APPROVAL_NOT_FOUND` ("That approval expired. Nothing was run."). Mock only. |
 | `plan` | Walks a three-step progress card. |
 | `[mock:fail-send]` | Refuses the `chat.send` with `UNAVAILABLE`, for testing failed sends. |
 | `[mock:drop]` | Closes the connection. The client reconnects after its backoff. |
@@ -93,13 +95,13 @@ The mock serves `health`, `status`, `last-heartbeat` and `system-presence` for t
 
 ## Selftest and live checks
 
-The mock has its own selftest, and it is the target for Pincer's live end-to-end checks. CI runs both.
+The mock has its own selftest, one section per domain in `mock-gateway/selftest/<domain>.mjs`, and it is the target for Pincer's live end-to-end checks. CI runs both. See [Contributing](../contributing/) for adding handlers and selftests.
 
 ```sh
 cd mock-gateway && npm ci && npm run selftest
 
 # in another terminal, with the mock running:
-swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+swift run PincerChecks --live-core ws://127.0.0.1:18789 dev-token   # and --live-extras, each against a fresh mock
 
 # a gateway without usage, on another port:
 MOCK_NO_USAGE=1 PORT=18790 npm start

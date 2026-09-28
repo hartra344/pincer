@@ -87,7 +87,7 @@ More in [Connect over Tailscale](../tailscale/).
 
 <DocScreenshot src={findTailscale} alt="Find your Gateway with Tailscale selected, the two Tailscale Serve commands, and the address my-mac.tail1234.ts.net, which Pincer will connect to as wss://my-mac.tail1234.ts.net." caption="Tailscale: type the host name and Pincer shows the full address it will use." />
 
-If your gateway announces itself on your network, it also shows up under **Nearby**. Choose it to fill in the address. You still sign in in the next step.
+If your gateway announces itself on your network (Bonjour, `_openclaw-gw._tcp`), it also shows up under **Nearby**. Bonjour is on by default for gateways on macOS; on other hosts run `openclaw plugins enable bonjour`, and the gateway has to accept connections beyond loopback to be reachable. Choose it to fill in the address. You still sign in in the next step.
 
 Choose **Continue**. Pincer checks that it can reach the gateway before moving on. If it can't, it tells you why (see [If something goes wrong](#if-something-goes-wrong)) and the button becomes **Try Again**. If you're sure the address is right, for example because the gateway is still starting, choose **Continue Anyway** next to **Back**. It's only offered when the address itself is valid and secure.
 

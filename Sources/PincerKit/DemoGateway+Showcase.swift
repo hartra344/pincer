@@ -1,0 +1,412 @@
+import CoreGraphics
+import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+
+/// Demo showcase transcripts and seed content.
+extension DemoGateway {
+    // MARK: Content
+
+    static func reply(to text: String, usedTool: Bool, note: String? = nil) -> String {
+        let quoted = text.split(separator: "\n").map { "> \($0)" }.joined(separator: "\n")
+        return """
+        \(quoted.isEmpty ? "" : quoted + "\n\n")\(note.map { $0 + "\n\n" } ?? "")This is **Pincer's demo mode**, \
+        so this reply is canned. Connect your own OpenClaw Gateway to chat with real agents.
+
+        \(Self.thingsToTry(usedTool: usedTool))
+
+        ```text
+        streaming: ok · markdown: ok · tools: \(usedTool ? "ran" : "on request")
+        ```
+        """
+    }
+
+    // MARK: Demo showcase: tips
+
+    /// Trigger words match anywhere in a message, so each tip names only its own.
+    static func thingsToTry(usedTool: Bool) -> String {
+        """
+        ## Things to try
+
+        - **tool** or **disk** runs a live tool call\(usedTool ? " (like the one above)" : "").
+        - **image** adds an inline chart.
+        - **approve** raises a command approval; **approve once-only** leaves out Always allow, and \
+        **approve later** sends one a few seconds after the reply.
+        - **ask** brings up a question card.
+        - **plan** walks the task progress card.
+        - **fail** ends the run with an error.
+        - Send **/compact**, or use **Compact Now** in the context ring.
+        - **⌘F** searches the chat — try "onsen" in *Japan trip*.
+        - **⌘K** opens the command palette, and **⌘1–⌘3** jump to pinned chats.
+        - On a Mac, **⌃⇧Space** opens Quick Capture.
+        - Switch models, or pin, rename and group chats in the sidebar.
+        """
+    }
+
+    static func words(_ text: String) -> [String] {
+        var parts: [String] = []
+        var current = ""
+        for character in text {
+            current.append(character)
+            if character.isWhitespace {
+                parts.append(current)
+                current = ""
+            }
+        }
+        if !current.isEmpty { parts.append(current) }
+        return parts
+    }
+
+    static func now() -> JSONValue {
+        .number((Date().timeIntervalSince1970 * 1000).rounded())
+    }
+
+    static func shortId(_ prefix: String = "") -> String {
+        prefix + UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(12).lowercased()
+    }
+
+    static func text(_ text: String) -> JSONValue { ["type": "text", "text": .string(text)] }
+    static func thinking(_ text: String) -> JSONValue { ["type": "thinking", "thinking": .string(text)] }
+    static func toolCall(_ id: String, _ name: String, _ args: JSONValue) -> JSONValue {
+        ["type": "toolCall", "id": .string(id), "name": .string(name), "arguments": args]
+    }
+
+    static func image(_ artifactId: String, alt: String) -> JSONValue {
+        ["type": "image", "artifactId": .string(artifactId), "mimeType": "image/png", "alt": .string(alt),
+         "width": 320, "height": 200]
+    }
+
+    static func file(_ artifactId: String, name: String, mimeType: String) -> JSONValue {
+        ["type": "file", "artifactId": .string(artifactId), "fileName": .string(name), "mimeType": .string(mimeType)]
+    }
+
+    static let diskScript = """
+    #!/bin/sh
+    # Prints each mounted volume's usage, flagging any above 80%.
+    set -eu
+
+    df -h | awk 'NR == 1 { print; next }
+    {
+      used = $5 + 0
+      flag = used > 80 ? "  <- getting full" : ""
+      print $0 flag
+    }'
+    """
+
+    /// `replyToId` + `replyToPreview` for a user message replying to `targetId`, like the Gateway
+    /// records them. Unknown ids reply to nothing.
+    func replyFacts(_ key: String, _ targetId: String?) -> Row {
+        guard let targetId, !targetId.hasPrefix(ChatItem.pendingInputPrefix),
+              let target = self.transcripts[key]?.first(where: { $0["__openclaw"]?["id"]?.string == targetId })
+        else { return [:] }
+        let text = (target["content"]?.array ?? []).compactMap { $0["type"]?.string == "text" ? $0["text"]?.string : nil }
+            .joined(separator: "\n\n")
+        let sender: String = target["role"]?.string == "assistant"
+            ? self.agentName(self.sessions[key]?["agentId"]?.string ?? "main") : GatewayConnection.displayName
+        return ["replyToId": .string(targetId),
+                "replyToPreview": ["text": .string(String(text.prefix(2000))), "senderLabel": .string(sender)]]
+    }
+
+    func agentName(_ id: String) -> String {
+        self.agents.first { $0["id"]?.string == id }?["name"]?.string ?? id
+    }
+
+    static func message(
+        _ role: String, _ content: [JSONValue], runId: String? = nil, idempotencyKey: String? = nil,
+        model: (provider: String, model: String)? = nil, id: String? = nil, openclaw facts: Row = [:],
+        ago: Double = 0, extra: Row = [:]) -> JSONValue
+    {
+        var openclaw: Row = ["id": .string(id ?? UUID().uuidString.lowercased())]
+        openclaw.merge(facts) { _, new in new }
+        if let runId { openclaw["runId"] = .string(runId) }
+        if let idempotencyKey { openclaw["idempotencyKey"] = .string(idempotencyKey) }
+        let timestamp = ago > 0 ? JSONValue.number(((Date().timeIntervalSince1970 - ago) * 1000).rounded()) : Self.now()
+        var message: Row = ["role": .string(role), "content": .array(content), "timestamp": timestamp,
+                            "__openclaw": .object(openclaw)]
+        if role == "assistant" {
+            let model = model ?? Self.defaultModel
+            message["provider"] = .string(model.provider)
+            message["model"] = .string(model.model)
+        }
+        message.merge(extra) { _, new in new }
+        return .object(message)
+    }
+
+    static func row(key: String, agentId: String, title: String, preview: String, ageMs: Double = 0) -> Row {
+        let at = JSONValue.number((Self.now().double ?? 0) - ageMs)
+        return [
+            "key": .string(key), "sessionId": .string(UUID().uuidString.lowercased()), "kind": "direct",
+            "label": nil, "derivedTitle": .string(title), "lastMessagePreview": .string(preview),
+            "channel": "webchat", "agentId": .string(agentId), "isMain": false, "pinned": false, "unread": false,
+            "archived": false, "updatedAt": at, "lastActivityAt": at, "status": "idle", "hasActiveRun": false,
+            "activeRunIds": [], "model": .string(Self.defaultModel.model),
+            "modelProvider": .string(Self.defaultModel.provider), "modelOverrideSource": nil,
+        ]
+    }
+
+    static func seed() -> (sessions: [String: Row], transcripts: [String: [JSONValue]]) {
+        var sessions: [String: Row] = [:]
+        var transcripts: [String: [JSONValue]] = [:]
+        func add(_ key: String, agent: String, title: String, preview: String, age: Double, _ extra: Row = [:],
+                 messages: [JSONValue])
+        {
+            var row = Self.row(key: key, agentId: agent, title: title, preview: preview, ageMs: age)
+            row.merge(["totalTokens": 24_000, "totalTokensFresh": true, "inputTokens": 24_000, "outputTokens": 900,
+                       "contextTokens": JSONValue(Self.contextTokens)]) { _, new in new }
+            row.merge(extra) { _, new in new }
+            var messages = messages
+            // Each chat runs on the model its sample usage is billed to.
+            if let model = DemoUsage.model(for: key) {
+                row["model"] = .string(model.model)
+                row["modelProvider"] = .string(model.provider)
+                messages = messages.map { message in
+                    // Messages forwarded from another agent keep that agent's own model, not this chat's.
+                    guard case var .object(fields) = message, fields["role"]?.string == "assistant",
+                          fields["senderSession"] == nil else { return message }
+                    fields["provider"] = .string(model.provider)
+                    fields["model"] = .string(model.model)
+                    return .object(fields)
+                }
+            }
+            sessions[key] = row
+            transcripts[key] = messages
+        }
+
+        let dfCall = "call_seed_df"
+        let ackCall = "call_seed_ack"
+        let minute = 60.0, hour = 3600.0, day = 86400.0
+        /// A seeded message sent `ago` seconds before launch, so results show realistic dates.
+        func said(_ role: String, _ text: String, ago: Double, extra: Row = [:]) -> JSONValue {
+            Self.message(role, [Self.text(text)], ago: ago, extra: extra)
+        }
+        add("agent:main:main", agent: "main", title: "Main", preview: "Disk looks healthy.", age: 10_000,
+            ["isMain": true, "totalTokens": 172_000, "inputTokens": 172_000], messages: [
+                said("user", "Every weekday at 7:30, send me a morning briefing: weather, calendar and anything urgent in my inbox.",
+                     ago: 9 * day),
+                said("assistant", """
+                Done. The morning briefing runs weekdays at 7:30 and posts here. Tomorrow's includes the forecast, \
+                your first three meetings and any flagged mail.
+                """, ago: 9 * day - minute),
+                said("user", "Remind me to renew my passport before the Japan trip.", ago: 6 * day),
+                said("assistant", """
+                Reminder set for Monday at 9:00: **renew your passport**. Renewals take about four weeks, which \
+                still leaves plenty of time before the flight to Tokyo.
+                """, ago: 6 * day - minute),
+                said("user", "Did last night's Time Machine backup finish?", ago: 5 * day),
+                said("assistant", """
+                Yes. The backup finished at 02:14 and copied 3.2 GB. The oldest snapshot still kept is from March.
+                """, ago: 5 * day - minute),
+                said("user", "Book a table for two at Café Lumière on Friday at 8.", ago: 3 * day),
+                said("assistant", """
+                Café Lumière has nothing at 8:00 on Friday, but 8:15 is free. I've held 8:15 for two under your \
+                name; reply *confirm* to keep it.
+                """, ago: 3 * day - minute),
+                said("user", "confirm", ago: 3 * day - 5 * minute),
+                said("assistant", "Confirmed: Café Lumière, Friday at 8:15 pm, two people. It's in your calendar with the address.",
+                     ago: 3 * day - 6 * minute),
+            ] + Self.seedKikoIntroInClaw() + [
+                Self.message("user", [Self.text("Can you check disk usage and show me a quick status?")], id: "demo-main-ask",
+                             ago: 20 * minute),
+                Self.message("assistant", [
+                    Self.thinking("I should look at disk usage and summarize the main volumes."),
+                    Self.toolCall(ackCall, "message", ["action": "react", "emoji": "✅"]),
+                    Self.toolCall(dfCall, "exec", ["command": "df -h"]),
+                ], ago: 20 * minute - 5),
+                Self.message("toolResult", [Self.text(#"{"ok":true,"added":"✅"}"#)], ago: 20 * minute - 7,
+                             extra: ["toolCallId": .string(ackCall), "toolName": "message", "isError": false]),
+                Self.message("toolResult", [Self.text("""
+                Filesystem      Size  Used Avail Use% Mounted on
+                /dev/disk3s1   926G  411G  490G  46% /
+                /dev/disk3s6   926G  7.0G  490G   2% /System/Volumes/VM
+                """)], ago: 20 * minute - 10, extra: ["toolCallId": .string(dfCall), "toolName": "exec", "isError": false]),
+                Self.message("assistant", [
+                    Self.text("""
+                    ## Disk status
+
+                    - The root volume has plenty of room.
+                    - The VM volume is barely used.
+
+                    ```text
+                    /dev/disk3s1  46% used
+                    ```
+
+                    Here's a quick chart.
+                    """),
+                    Self.image("demo-chart", alt: "Disk usage chart"),
+                    Self.file("demo-script", name: "disk-report.sh", mimeType: "text/x-shellscript"),
+                ], id: "demo-main-status", ago: 20 * minute - 15),
+                Self.message("user", [Self.text("Can you sketch that as a little gauge?")], id: "demo-main-gauge-ask",
+                             openclaw: ["replyToId": "demo-main-status",
+                                        "replyToPreview": ["text": "Disk status — The root volume has plenty of room…",
+                                                           "senderLabel": "Claw"]],
+                             ago: 15 * minute),
+                Self.message("assistant", [Self.text("""
+                Here's the root volume as a gauge:
+
+                ```svg
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 140" width="240" height="140">
+                  <path d="M20 120 A100 100 0 0 1 220 120" fill="none" stroke="#d9dde3" stroke-width="18" stroke-linecap="round"/>
+                  <path d="M20 120 A100 100 0 0 1 108 21" fill="none" stroke="#34a37a" stroke-width="18" stroke-linecap="round"/>
+                  <text x="120" y="112" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="30" font-weight="600" fill="#34a37a">46%</text>
+                </svg>
+                ```
+                """)], id: "demo-main-gauge", ago: 15 * minute - 10),
+                Self.message("assistant", [Self.text("""
+                👋 **Welcome to the Pincer demo.** Everything here is simulated on your device, so no Gateway \
+                is needed. Send a message to see a streamed reply. Try the words *tool*, *image*, *approve*, *ask* or *plan*, \
+                or send */compact*.
+                """)], ago: 10),
+            ])
+        add(Self.kikoKey, agent: "kiko", title: "Main", preview: "Claw sent the list of home-lab bills.", age: 86_400_000,
+            ["isMain": true], messages: Self.seedKikoChat())
+        let discord: Row = ["provenance": ["sourceChannel": "discord"]]
+        add("agent:main:discord:channel:123", agent: "main", title: "home-lab", preview: "Discord bridge is online.",
+            age: 20_000, ["label": "home-lab", "category": "Home", "channel": "discord", "pinned": true, "unread": true],
+            messages: [
+                said("user", "Nightly backup to the NAS failed again, can you check why?", ago: 12 * day, extra: discord),
+                said("assistant", """
+                The backup job stopped at 03:02 because the NAS share ran out of space: old photo library \
+                snapshots take 1.1 TB. Want me to prune everything older than 90 days?
+                """, ago: 12 * day - minute),
+                said("user", "Yes, prune them and rerun it.", ago: 12 * day - 10 * minute, extra: discord),
+                said("assistant", "Pruned 412 snapshots (780 GB freed) and reran the backup. It finished in 41 minutes with no errors.",
+                     ago: 12 * day - 55 * minute),
+                said("user", "What's drawing so much power on the rack?", ago: 8 * day, extra: discord),
+                said("assistant", """
+                The UPS reports 186 W. The old Dell server idles at 95 W of that; the switch, the NAS and the \
+                Raspberry Pis share the rest.
+                """, ago: 8 * day - minute),
+                said("user", "Add the new Zigbee door sensor to Home Assistant.", ago: 4 * day, extra: discord),
+                said("assistant", """
+                Paired it as `binary_sensor.garage_door`. It reports open, closed and battery level, and it's on \
+                the Security dashboard now.
+                """, ago: 4 * day - 2 * minute),
+                said("user", "Is the Grafana dashboard still showing the Pi-hole stats?", ago: day, extra: discord),
+                said("assistant", """
+                Yes. Pi-hole blocked 18% of 42,000 queries in the last 24 hours; the panel came back after the \
+                container restarted.
+                """, ago: day - minute),
+                Self.message("user", [Self.text("The lab temperature sensor looks noisy tonight.")], id: "demo-lab-sensor",
+                             openclaw: ["transport": ["channel": "discord", "messageId": "1300000000000000001",
+                                                      "conversationRef": "channel:123"]],
+                             ago: minute, extra: discord),
+                Self.message("assistant", [
+                    Self.toolCall("call_seed_lab_ack", "message",
+                                  ["action": "react", "emoji": "👀", "messageId": "1300000000000000001"]),
+                ], ago: 50),
+                Self.message("toolResult", [Self.text(#"{"ok":true,"added":"👀"}"#)], ago: 45,
+                             extra: ["toolCallId": "call_seed_lab_ack", "toolName": "message", "isError": false]),
+                said("assistant", "I'll keep an eye on the home-lab channel and flag anything unusual.", ago: 20),
+            ])
+        add("agent:main:dashboard:trip", agent: "main", title: "Japan trip", preview: "Kyoto day plan drafted.",
+            age: 60_000, ["label": "Japan trip", "category": "Personal", "color": "pink", "pinned": true,
+                          "totalTokens": 192_000, "inputTokens": 192_000],
+            messages: Self.seedTripTranscript())
+        add("agent:research:main", agent: "research", title: "Main", preview: "Research queue is clear.", age: 90_000,
+            ["isMain": true], messages: [
+                said("assistant", "Scout is ready to dig into papers, repos, and docs.", ago: 14 * day),
+                said("user", "Compare SQLite FTS5 and Tantivy for searching chat history on a phone.", ago: 6 * day),
+                said("assistant", """
+                FTS5 is the better fit on a phone: it ships with the OS, adds nothing to the app's size and \
+                searches a few hundred thousand messages in milliseconds. Tantivy is faster at larger scale but \
+                adds about 5 MB and a Rust toolchain.
+                """, ago: 6 * day - 2 * minute),
+                said("user", "Find the best reviewed noise-cancelling headphones for long flights.", ago: 3 * minute),
+                said("assistant", """
+                Reviewers agree on the Sony WH-1000XM6 for noise cancelling and battery life. The Bose \
+                QuietComfort Ultra is more comfortable on a long flight, like the one to Tokyo.
+                """, ago: 90),
+            ])
+        add("agent:research:dashboard:papers", agent: "research", title: "Paper digest",
+            preview: "Three papers summarized.", age: 120_000,
+            ["label": "Paper digest", "category": "Work", "unread": true, "pinned": true],
+            messages: [
+                said("user", "What's new in speculative decoding?", ago: 5 * day),
+                said("assistant", """
+                Two themes this week: draft models that share the target model's KV cache, and tree-based \
+                verification that accepts several tokens per step. Both report 2–3× faster generation with \
+                identical outputs.
+                """, ago: 5 * day - 2 * minute),
+                said("user", "Summarize the latest diffusion papers.", ago: 3 * minute),
+                said("assistant", "The main themes are consistency models, faster sampling, and video generation.",
+                     ago: 2 * minute),
+            ])
+        add("agent:research:subagent:abc", agent: "research", title: "Summarize arXiv 2401.x",
+            preview: "Subagent found the main contribution.", age: 180_000,
+            ["label": "Summarize arXiv 2401.x", "parentSessionKey": "agent:research:dashboard:papers",
+             "spawnedBy": "agent:research:dashboard:papers", "hasActiveRun": true, "status": "running",
+             "activeRunIds": [.string(Self.seededHelperRunId)]],
+            messages: [
+                said("assistant", "The paper mainly improves how retrieval-augmented summaries are evaluated.", ago: 3 * minute),
+            ])
+        add(DemoOutbox.sessionKey, agent: "main", title: DemoOutbox.title, preview: DemoOutbox.preview, age: 120_000,
+            ["label": .string(DemoOutbox.title), "category": "Personal"], messages: Self.seedOutboxTranscript())
+        // Forge is still at work here, so the sidebar shows a working chat at launch.
+        add(Self.fileEditsKey, agent: "coder", title: "Fix retry backoff", preview: Self.fileEditsPreview,
+            age: 5 * hour * 1000, ["hasActiveRun": true, "status": "running", "activeRunIds": [.string(Self.seededRunId)]],
+            messages: Self.seedFileEditsTranscript())
+        add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
+            ["isMain": true, "unread": true], messages: [
+                said("assistant", "Forge can edit code, run builds, and report back briefly.", ago: 14 * day),
+                said("user", "The login test is flaky on CI again.", ago: 10 * day),
+                said("assistant", """
+                It races the token refresh: the test signs in before the mock clock advances. I pinned the clock \
+                in `LoginTests.setUp()`, and it has passed 50 runs in a row.
+                """, ago: 10 * day - 4 * minute),
+                said("user", "Write a script that backs up the Postgres database every night.", ago: 7 * day),
+                said("assistant", """
+                Added `scripts/backup-db.sh`. It runs `pg_dump`, gzips the output to \
+                `/backups/db-$(date +%F).sql.gz` and keeps the last 14 days. A cron entry runs the backup at 02:30.
+                """, ago: 7 * day - 3 * minute),
+                said("user", "Why is the release build slower than debug?", ago: 2 * day),
+                said("assistant", """
+                Whole-module optimization was off in the Release configuration, so every file compiled on its \
+                own. Turning it on cut the build from 6 min 40 s to 2 min 55 s.
+                """, ago: 2 * day - 2 * minute),
+                said("user", "Fix the login timeout and push it.", ago: 3 * minute),
+                said("assistant", """
+                Raised the login timeout to 30 s and the tests pass. I've asked to run \
+                `git push origin fix/login-timeout`; approve it and I'll push.
+                """, ago: 45),
+            ])
+        // Chats of the demo's cron jobs (the log's morning-briefing and disk-check), hidden from the
+        // sidebar until Organize ▸ Show Automations is on.
+        let cron: Row = ["channel": "cron", "totalTokens": 6_400, "inputTokens": 6_400, "outputTokens": 420]
+        let briefingPrompt = "Write my morning briefing: weather, calendar and anything urgent in my inbox."
+        add("agent:main:cron:morning-briefing", agent: "main", title: "Morning briefing",
+            preview: "Sunny, 22°C. Two meetings and one flagged email.", age: 2 * hour * 1000,
+            cron.merging(["label": "Automation: Morning briefing", "unread": true]) { _, new in new }, messages: [
+                said("user", briefingPrompt, ago: day + 2 * hour),
+                said("assistant", """
+                **Good morning.** Light rain until 10, then clearing to 19°C. You have a 1:1 with Priya at 10:00 \
+                and nothing else before lunch. No urgent mail overnight.
+                """, ago: day + 2 * hour - minute),
+                said("user", briefingPrompt, ago: 2 * hour),
+                said("assistant", """
+                **Good morning.** Sunny and 22°C all day.
+
+                - 09:30 Design review
+                - 14:00 Dentist (Harbor St.)
+
+                One flagged email: the landlord needs the lease renewal signed **by Friday**.
+                """, ago: 2 * hour - minute),
+            ])
+        add("agent:main:cron:disk-check", agent: "main", title: "Check disk space",
+            preview: "The external drive isn't mounted.", age: 3 * hour * 1000,
+            cron.merging(["label": "Automation: Check disk space"]) { _, new in new }, messages: [
+                said("user", "Check free space on every volume and warn me under 10%.", ago: 3 * hour),
+                said("assistant", """
+                The root volume is at 46% and fine. The external drive isn't mounted, so I couldn't check it \
+                (`df` exited with code 1).
+                """, ago: 3 * hour - minute),
+            ])
+        // Native Discord slash commands run in their own `…:discord:slash:<userId>` session.
+        add("agent:main:discord:slash:418235907214753792", agent: "main", title: "Slash commands",
+            preview: "Status: online, 3 agents, 1 pending approval.", age: 4 * hour * 1000,
+            ["channel": "discord", "totalTokens": 1_200, "inputTokens": 1_200, "outputTokens": 80], messages: [
+                said("user", "/status", ago: 4 * hour, extra: discord),
+                said("assistant", "Status: online, 3 agents, 1 pending approval.", ago: 4 * hour - 2),
+            ])
+        return (sessions, transcripts)
+    }
+}

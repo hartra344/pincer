@@ -61,25 +61,29 @@ The tests are hermetic:
 `PincerChecks` is an executable harness that exercises the stores end to end. It complements the unit tests:
 
 ```sh
-swift run PincerChecks          # offline checks
-swift run PincerChecks --demo   # the built-in demo gateway
-swift run PincerChecks --live ws://127.0.0.1:18789 dev-token
+swift run PincerChecks          # offline (unit) checks
+swift run PincerChecks --demo   # the built-in demo gateway (--demo-core + --demo-extras)
+swift run PincerChecks --live-core ws://127.0.0.1:18789 dev-token
+swift run PincerChecks --live-extras ws://127.0.0.1:18789 dev-token
 swift run -c release PincerChecks --perf   # message search at scale
 swift run PincerChecks --live-no-usage ws://127.0.0.1:18790 dev-token   # mock started with MOCK_NO_USAGE=1 PORT=18790
 swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token   # mock started with MOCK_NO_REPLY_TO=1 PORT=18791
 ```
 
+A mode flag picks the mode, and each mode runs only its own suite: a mode flag doesn't also run the offline checks. Which sections belong to which suite is listed in `Sources/PincerChecks/Registry.swift` (see [Contributing](../contributing/)). `scripts/run-checks.sh` runs every mode side by side.
+
 | Mode | What it checks |
 | --- | --- |
 | no flag | Offline checks: identity, protocol models, stores, the transcript cache, message search and composer drafts. |
-| `--demo` | The offline checks, then a full run against the in-process demo gateway, including sidebar navigation and message search. |
-| `--live <url> <token>` | The offline checks, then an end-to-end run against a real or [mock](../mock-gateway/) gateway. |
-| `--live-core <url> <token>` / `--live-extras <url> <token>` | The two halves of `--live`, so they can run side by side against separate mocks. `--live-core` is the main end-to-end run; `--live-extras` covers Quick Capture, replies and reactions, the transcript cache, the setup wizard, deep links, tool diffs and avatars. |
+| `--demo` | Both halves of the demo run, `--demo-core` then `--demo-extras`. |
+| `--demo-core` / `--demo-extras` | The two halves of `--demo`, so they can run side by side. A full run against the in-process demo gateway, including sidebar navigation and message search. |
+| `--live <url> <token>` | Both halves of the end-to-end run, `--live-core` then `--live-extras`, against a real or [mock](../mock-gateway/) gateway. |
+| `--live-core <url> <token>` / `--live-extras <url> <token>` | The two halves of `--live`, so they can run side by side against separate, fresh mocks. `--live-core` is the main end-to-end run; `--live-extras` covers Quick Capture, replies and reactions, the transcript cache, the setup wizard, deep links, tool diffs and avatars. |
 | `--perf` | Builds a message search index over 20 synthetic chats of 20,000 messages each and checks build time, query time, memory and index size. Build it in release (`-c release`), since its time targets assume an optimized build. |
-| `--live-no-usage <url> <token>` | The offline checks, then a run against a gateway without the usage methods (the mock with `MOCK_NO_USAGE=1`), checking that Usage reports them as unsupported. |
-| `--live-no-reply-to <url> <token>` | The offline checks, then a run against a gateway that rejects `chat.send`'s `replyToId` (the mock with `MOCK_NO_REPLY_TO=1`), checking that replies fall back to quoting the original. |
+| `--live-no-usage <url> <token>` | A run against a gateway without the usage methods (the mock with `MOCK_NO_USAGE=1`), checking that Usage reports them as unsupported. |
+| `--live-no-reply-to <url> <token>` | A run against a gateway that rejects `chat.send`'s `replyToId` (the mock with `MOCK_NO_REPLY_TO=1`), checking that replies fall back to quoting the original. |
 
-Add `--skip-intent-checks` to any mode to leave out the Shortcuts & Siri offline checks, which wait on real reply timeouts (about 15 seconds).
+Add `--skip-intent-checks` to the plain run to leave out the Shortcuts & Siri offline checks, which wait on real reply timeouts (about 15 seconds).
 
 Add `--skip-perf-budgets` to any mode to report the offline perf smoke timings (message index build, query and append) without enforcing their budgets. Only clearly broken timings, such as a selective query over 1 second, still fail. Use it when other work shares the CPU. `--perf-smoke` runs only the perf smoke, with its budgets enforced.
 
@@ -110,7 +114,7 @@ CI runs it every night (`.github/workflows/launch-cpu.yml`), with the menu bar o
    - `scripts/run-checks.sh`, which starts four mocks, waits until they all listen (it checks every 50 ms and fails with a mock's log if it exits or isn't up within 30 seconds), and then runs these **at the same time**:
      - `swift test --skip-build --parallel`
      - `PincerChecks`
-     - `PincerChecks --demo` (with `PINCER_DEMO_DELAY_SCALE=0.2`)
+     - `PincerChecks --demo-core` and `PincerChecks --demo-extras` (with `PINCER_DEMO_DELAY_SCALE=0.2`)
      - `PincerChecks --live-core` and `PincerChecks --live-extras` (with `PINCER_DEMO_DELAY_SCALE=0.2`), each against its own mock
      - `PincerChecks --live-no-usage` against a mock started with `MOCK_NO_USAGE=1`
      - `PincerChecks --live-no-reply-to` against a mock started with `MOCK_NO_REPLY_TO=1`
@@ -152,7 +156,7 @@ open --env PINCER_REQUEST_LOG=/tmp/pincer.log build/Pincer.app
 | `Apps/iOSNotificationService` | iOS notification service extension that decrypts relayed pushes. |
 | `Design/AppIcon` | Flattened reference artwork for the app icon. |
 | `Sources/PincerMacDev` | Dev entry point so SwiftPM alone can produce the macOS app. |
-| `Sources/PincerChecks` | Self-checks, with optional demo and live end-to-end runs. |
+| `Sources/PincerChecks` | Self-checks: per-domain `*Checks.swift` files, and `Registry.swift` listing which run in each mode. |
 | `Sources/PincerPush` | Web Push decryption (RFC 8291), per-gateway push keys and payload parsing, shared by the app and its notification service extension. |
 | `push-relay/` | Zero-dependency Node relay from Gateway Web Push to APNs. See [Push notifications](../../guides/push-notifications/). |
 | `Tests/PincerKitTests` | Unit tests for PincerKit (`swift test`). |
