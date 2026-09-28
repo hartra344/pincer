@@ -20,30 +20,49 @@ enum SidebarDance {
     static let badgeHeight: CGFloat = 10
     static let badgeFontSize: CGFloat = 8
 
+    static let keyTimes: [CGFloat] = [0, 0.08, 0.25, 0.42, 0.5, 0.58, 0.75, 0.92, 1]
+
     /// Two hops a loop: anticipate, hop up leaning one way, land with a squash, then the other way.
-    /// `up` is the sign of "up" in the host layer's coordinates (+1 on macOS, -1 on iOS).
-    static func animation(up: CGFloat, offset: CFTimeInterval) -> CAAnimationGroup {
-        let keyTimes: [NSNumber] = [0, 0.08, 0.25, 0.42, 0.5, 0.58, 0.75, 0.92, 1]
+    /// `up` is the sign of "up" in the host layer's coordinates (+1 on macOS, -1 on iOS). Keyed by
+    /// transform key path, one value per `keyTimes` entry.
+    static func tracks(up: CGFloat) -> [(path: String, values: [CGFloat])] {
         let tilt = 6 * CGFloat.pi / 180
-        func track(_ path: String, _ values: [CGFloat]) -> CAKeyframeAnimation {
-            let animation = CAKeyframeAnimation(keyPath: path)
-            animation.values = values
-            animation.keyTimes = keyTimes
-            animation.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: keyTimes.count - 1)
+        return [
+            ("transform.translation.y", [0, 0, 1.5 * up, 0, 0, 0, 1.5 * up, 0, 0]),
+            ("transform.rotation.z", [0, 0, tilt, 0, 0, 0, -tilt, 0, 0]),
+            ("transform.scale.x", [1, 1.06, 0.97, 1.06, 1, 1.06, 0.97, 1.06, 1]),
+            ("transform.scale.y", [1, 0.94, 1.03, 0.94, 1, 0.94, 1.03, 0.94, 1]),
+        ]
+    }
+
+    static func animation(up: CGFloat, offset: CFTimeInterval) -> CAAnimationGroup {
+        let group = CAAnimationGroup()
+        group.animations = self.tracks(up: up).map { track in
+            let animation = CAKeyframeAnimation(keyPath: track.path)
+            animation.values = track.values
+            animation.keyTimes = self.keyTimes.map { NSNumber(value: Double($0)) }
+            animation.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: self.keyTimes.count - 1)
             return animation
         }
-        let group = CAAnimationGroup()
-        group.animations = [
-            track("transform.translation.y", [0, 0, 1.5 * up, 0, 0, 0, 1.5 * up, 0, 0]),
-            track("transform.rotation.z", [0, 0, tilt, 0, 0, 0, -tilt, 0, 0]),
-            track("transform.scale.x", [1, 1.06, 0.97, 1.06, 1, 1.06, 0.97, 1.06, 1]),
-            track("transform.scale.y", [1, 0.94, 1.03, 0.94, 1, 0.94, 1.03, 0.94, 1]),
-        ]
         group.duration = self.duration
         group.repeatCount = .infinity
         group.isRemovedOnCompletion = false
         group.timeOffset = offset
         return group
+    }
+
+    /// The dance's transform at `progress` (0...1) through a loop, eased like the animation.
+    static func transform(at progress: CGFloat, up: CGFloat) -> CATransform3D {
+        let i = max(self.keyTimes.lastIndex { $0 <= progress } ?? 0, 0)
+        let j = min(i + 1, self.keyTimes.count - 1)
+        let span = self.keyTimes[j] - self.keyTimes[i]
+        let t = span > 0 ? (progress - self.keyTimes[i]) / span : 0
+        let eased = t * t * (3 - 2 * t)
+        let value = { (values: [CGFloat]) in values[i] + (values[j] - values[i]) * eased }
+        let v = self.tracks(up: up).map { value($0.values) }
+        var transform = CATransform3DMakeTranslation(0, v[0], 0)
+        transform = CATransform3DRotate(transform, v[1], 0, 0, 1)
+        return CATransform3DScale(transform, v[2], v[3], 1)
     }
 
     /// A stable phase in the loop for `seed`, so several working rows don't hop in lockstep.
@@ -53,11 +72,17 @@ enum SidebarDance {
         return Double(hash % 1000) / 1000 * self.duration
     }
 
+    /// Forces Reduce Motion on or off; only the snapshot renderer sets it.
+    static var reduceMotionOverride: Bool?
+    /// Forces the bitmap scale; only the snapshot renderer sets it.
+    static var scaleOverride: CGFloat?
+
     static func reduceMotion() -> Bool {
+        if let reduceMotionOverride { return reduceMotionOverride }
         #if os(macOS)
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        return NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         #else
-        UIAccessibility.isReduceMotionEnabled
+        return UIAccessibility.isReduceMotionEnabled
         #endif
     }
 
@@ -97,10 +122,10 @@ enum SidebarDance {
         }
     }
 
-    /// White bold count text for the helper-runs badge.
-    static func badgeText(_ text: String, scale: CGFloat) -> CGImage? {
-        self.cached("badge|\(text)|\(scale)") {
-            let line = self.line(text, font: self.font(size: self.badgeFontSize, weight: .bold, rounded: false))
+    /// Bold count text for the helper-runs badge.
+    static func badgeText(_ text: String, color: CGColor, scale: CGFloat) -> CGImage? {
+        self.cached("badge|\(text)|\(color.components ?? [])|\(scale)") {
+            let line = self.line(text, font: self.font(size: self.badgeFontSize, weight: .bold, rounded: false), color: color)
             let bounds = CTLineGetBoundsWithOptions(line, .useOpticalBounds)
             let size = CGSize(width: ceil(bounds.width), height: self.badgeHeight)
             return self.render(size: size, scale: scale) { context in
@@ -154,10 +179,10 @@ enum SidebarDance {
         #endif
     }
 
-    private static func line(_ text: String, font: CTFont) -> CTLine {
+    private static func line(_ text: String, font: CTFont, color: CGColor = CGColor(gray: 1, alpha: 1)) -> CTLine {
         let attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): font,
-            NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1),
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): color,
         ]
         return CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
     }
@@ -208,7 +233,8 @@ private final class SidebarDanceLayers {
         var image: CGImage?
         var badge: String?
         var badgeImage: CGImage?
-        var accent: CGColor
+        /// The dot and badge fill; the badge text is drawn into `badgeImage`.
+        var fill: CGColor
         var ring: CGColor
         var scale: CGFloat
         var reduceMotion: Bool
@@ -230,7 +256,7 @@ private final class SidebarDanceLayers {
         self.dot.isHidden = !look.reduceMotion
         self.dot.frame = CGRect(x: bounds.maxX - dot + 1, y: self.up > 0 ? bounds.minY - 1 : bounds.maxY - dot + 1,
                                 width: dot, height: dot)
-        self.dot.backgroundColor = look.accent
+        self.dot.backgroundColor = look.fill
         self.dot.borderColor = look.ring
 
         self.badge.isHidden = look.badge == nil
@@ -241,7 +267,7 @@ private final class SidebarDanceLayers {
             // Overhangs up and right, into the row's spare height and trailing padding.
             self.badge.frame = CGRect(x: bounds.maxX - width + 4, y: self.up > 0 ? bounds.maxY - height + 5 : bounds.minY - 5,
                                       width: width, height: height)
-            self.badge.backgroundColor = look.accent
+            self.badge.backgroundColor = look.fill
             self.badge.borderColor = look.ring
             self.badgeText.frame = CGRect(x: (width - textSize.width) / 2, y: (height - textSize.height) / 2,
                                           width: textSize.width, height: textSize.height)
@@ -269,7 +295,7 @@ final class SidebarWorkingAvatarView: NSView {
     private var indicator: SidebarWorkingIndicator?
     private var companion: AvatarStyle?
     private var phase: CFTimeInterval = 0
-    /// On an emphasized (accent) selection the dot and badge get a white ring so they stand out.
+    /// On an emphasized (accent) selection the dot and badge turn white so they stand out.
     var isEmphasized = false {
         didSet { if self.isEmphasized != oldValue { self.refresh() } }
     }
@@ -325,13 +351,16 @@ final class SidebarWorkingAvatarView: NSView {
         var look: SidebarDanceLayers.Look?
         self.effectiveAppearance.performAsCurrentDrawingAppearance {
             let dark = self.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            let scale = self.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+            let scale = SidebarDance.scaleOverride ?? self.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+            let tint = TranscriptColors.tint.cgColor
+            let (fill, text) = self.isEmphasized ? (CGColor.white, tint) : (tint, CGColor.white)
             look = SidebarDanceLayers.Look(
                 image: SidebarDance.image(for: indicator.source, companion: self.companion, dark: dark,
                                           disc: TranscriptColors.agentAvatar.cgColor, scale: scale),
-                badge: indicator.badge, badgeImage: indicator.badge.flatMap { SidebarDance.badgeText($0, scale: scale) },
-                accent: TranscriptColors.tint.cgColor,
-                ring: self.isEmphasized ? .white : NSColor.windowBackgroundColor.cgColor,
+                badge: indicator.badge,
+                badgeImage: indicator.badge.flatMap { SidebarDance.badgeText($0, color: text, scale: scale) },
+                fill: fill,
+                ring: self.isEmphasized ? .clear : NSColor.windowBackgroundColor.cgColor,
                 scale: scale, reduceMotion: SidebarDance.reduceMotion())
         }
         if let look { self.layers.apply(look, in: self.bounds) }
@@ -381,7 +410,7 @@ final class SidebarWorkingAvatarView: UIView {
     private var indicator: SidebarWorkingIndicator?
     private var companion: AvatarStyle?
     private var phase: CFTimeInterval = 0
-    /// On a tinted selection the dot and badge get a white ring so they stand out.
+    /// On a tinted selection the dot and badge turn white so they stand out.
     var isEmphasized = false {
         didSet { if self.isEmphasized != oldValue { self.refresh() } }
     }
@@ -439,12 +468,16 @@ final class SidebarWorkingAvatarView: UIView {
         guard let indicator else { return }
         let traits = self.traitCollection
         let scale = max(traits.displayScale, 1)
+        let tint = TranscriptColors.tint.resolvedColor(with: traits).cgColor
+        let white = UIColor.white.cgColor
+        let (fill, text) = self.isEmphasized ? (white, tint) : (tint, white)
         let look = SidebarDanceLayers.Look(
             image: SidebarDance.image(for: indicator.source, companion: self.companion, dark: traits.userInterfaceStyle == .dark,
                                       disc: TranscriptColors.agentAvatar.resolvedColor(with: traits).cgColor, scale: scale),
-            badge: indicator.badge, badgeImage: indicator.badge.flatMap { SidebarDance.badgeText($0, scale: scale) },
-            accent: TranscriptColors.tint.resolvedColor(with: traits).cgColor,
-            ring: self.isEmphasized ? UIColor.white.cgColor : UIColor.systemBackground.resolvedColor(with: traits).cgColor,
+            badge: indicator.badge,
+            badgeImage: indicator.badge.flatMap { SidebarDance.badgeText($0, color: text, scale: scale) },
+            fill: fill,
+            ring: self.isEmphasized ? UIColor.clear.cgColor : UIColor.systemBackground.resolvedColor(with: traits).cgColor,
             scale: scale, reduceMotion: SidebarDance.reduceMotion())
         self.layers.apply(look, in: self.bounds)
         self.updateDancing()
