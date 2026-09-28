@@ -121,7 +121,7 @@ struct ChatView: View {
         case .none:
             return
         case .success:
-            let reply = self.chat.entries.last { if case .assistant = $0 { true } else { false } }
+            let reply = self.chat.entries.last { if case let .assistant(turn) = $0 { turn.sender == nil } else { false } }
             guard case let .assistant(turn) = reply else { return }
             AccessibilityAnnouncer.announce(AccessibilityText.replyFinishedAnnouncement(author: self.agent.name, text: turn.body))
         case .error:

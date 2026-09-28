@@ -664,10 +664,19 @@ final class TranscriptRowView: TranscriptBaseView {
         return menu
     }
 
-    /// Reply, Add Reaction… and one-click reactions for the message under `point` (in `view`).
+    /// Reply, Add Reaction… and one-click reactions for the message under `point` (in `view`), and
+    /// the chat a forwarded message came from.
     func messageMenuItems(at point: CGPoint, in view: NSView) -> [NSMenuItem] {
         let rowPoint = self.convert(point, from: view)
-        guard let actions, let id = self.layout?.message(at: rowPoint.y) else { return [] }
+        guard let actions else { return [] }
+        var source: [NSMenuItem] = []
+        if let chat = self.layout?.sourceChat {
+            source = [TranscriptMenuItem(chat.title, symbol: "bubble.left.and.bubble.right") { [weak actions] in
+                actions?.openChat(chat.sessionKey)
+            }]
+        }
+        guard let id = self.layout?.message(at: rowPoint.y) else { return source }
+        if !source.isEmpty { source.insert(.separator(), at: 0) }
         var items: [NSMenuItem] = [TranscriptMenuItem(L("Reply"), symbol: "arrowshape.turn.up.left") { [weak actions] in
             actions?.reply(to: id)
         }]
@@ -683,12 +692,22 @@ final class TranscriptRowView: TranscriptBaseView {
                 quick,
             ]
         }
-        return items
+        return items + source
     }
     #else
-    /// Reply, Add Reaction… and one-tap reactions for the message at `point` (row coordinates).
+    /// Reply, Add Reaction… and one-tap reactions for the message at `point` (row coordinates), and
+    /// the chat a forwarded message came from.
     func messageMenuElements(at point: CGPoint, anchor: UIView? = nil) -> [UIMenuElement] {
-        guard let actions, let id = self.layout?.message(at: point.y) else { return [] }
+        guard let actions else { return [] }
+        var source: [UIMenuElement] = []
+        if let chat = self.layout?.sourceChat {
+            source = [UIMenu(options: .displayInline, children: [
+                UIAction(title: chat.title, image: UIImage(systemName: "bubble.left.and.bubble.right")) { [weak actions] _ in
+                    actions?.openChat(chat.sessionKey)
+                },
+            ])]
+        }
+        guard let id = self.layout?.message(at: point.y) else { return source }
         let anchorView: UIView = anchor ?? self
         let anchorRect = anchor.map { $0.bounds } ?? CGRect(origin: point, size: CGSize(width: 1, height: 1))
         var elements: [UIMenuElement] = [
@@ -715,7 +734,7 @@ final class TranscriptRowView: TranscriptBaseView {
                 UIMenu(options: .displayInline, preferredElementSize: .small, children: quick),
             ]
         }
-        return elements
+        return elements + source
     }
     #endif
 }
@@ -846,7 +865,7 @@ final class TranscriptAvatarView: TranscriptBaseView {
         }
         let top = self.resolved(lighten(avatar.color, by: 0.18)), bottom = self.resolved(avatar.color)
         let size = self.bounds.size, scale = self.scale
-        let key = "\(avatar.text)|\(avatar.emoji ?? "")|\(top.components ?? [])|\(bottom.components ?? [])|\(size.width)|\(scale)"
+        let key = "\(avatar.text)|\(avatar.emoji ?? "")|\(avatar.symbol ?? "")|\(top.components ?? [])|\(bottom.components ?? [])|\(size.width)|\(scale)"
         guard key != self.key else { return }
         self.key = key
         let image = Self.cache[key] ?? Self.render(avatar, top: top, bottom: bottom, size: size, scale: scale)
@@ -906,14 +925,6 @@ final class TranscriptAvatarView: TranscriptBaseView {
             context.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: bounds.maxY), options: [])
         }
         context.restoreGState()
-        let text: NSAttributedString = if let emoji = avatar.emoji {
-            NSAttributedString(string: emoji, attributes: [.font: PFont.systemFont(ofSize: size.width * 0.55)])
-        } else {
-            NSAttributedString(string: avatar.text, attributes: [
-                .font: TranscriptStyle.rounded(size: size.width * 0.38, weight: .semibold),
-                .foregroundColor: PColor.white,
-            ])
-        }
         #if os(macOS)
         let previous = NSGraphicsContext.current
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
@@ -922,6 +933,19 @@ final class TranscriptAvatarView: TranscriptBaseView {
         UIGraphicsPushContext(context)
         defer { UIGraphicsPopContext() }
         #endif
+        if let symbol = avatar.symbol {
+            TranscriptSymbols.draw(symbol, in: bounds.insetBy(dx: size.width * 0.22, dy: size.height * 0.22),
+                                   size: size.width * 0.46, weight: .semibold, color: .white)
+            return context.makeImage()
+        }
+        let text: NSAttributedString = if let emoji = avatar.emoji {
+            NSAttributedString(string: emoji, attributes: [.font: PFont.systemFont(ofSize: size.width * 0.55)])
+        } else {
+            NSAttributedString(string: avatar.text, attributes: [
+                .font: TranscriptStyle.rounded(size: size.width * 0.38, weight: .semibold),
+                .foregroundColor: PColor.white,
+            ])
+        }
         let textSize = text.size()
         text.draw(at: CGPoint(x: bounds.midX - textSize.width / 2, y: bounds.midY - textSize.height / 2))
         return context.makeImage()
@@ -931,6 +955,8 @@ final class TranscriptAvatarView: TranscriptBaseView {
 final class TranscriptHeaderView: TranscriptBaseView {
     private var header: TranscriptPart.Header?
     private let spinner = TranscriptSpinner(size: 10)
+    /// The badge, when it opens a chat.
+    private let badgeButton = TranscriptBadgeButton()
 
     private struct Positions {
         var nameWidth: CGFloat = 0
@@ -942,6 +968,8 @@ final class TranscriptHeaderView: TranscriptBaseView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         self.addSubview(self.spinner)
+        self.badgeButton.isHidden = true
+        self.addSubview(self.badgeButton)
     }
 
     override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
@@ -949,8 +977,18 @@ final class TranscriptHeaderView: TranscriptBaseView {
         let old = self.header
         self.header = header
         self.spinner.setAnimating(header.isPending)
-        if old?.name != header.name || old?.badge != header.badge || old?.time != header.time || old?.isPending != header.isPending {
+        if old?.name != header.name || old?.badge != header.badge || old?.time != header.time || old?.isPending != header.isPending
+            || old?.link != header.link
+        {
             self.redraw()
+        }
+        if let link = header.link, let badge = header.badge {
+            self.badgeButton.set(title: badge, help: link.title)
+            self.badgeButton.onTap = { [weak actions] in actions?.openChat(link.sessionKey) }
+            self.badgeButton.isHidden = false
+        } else {
+            self.badgeButton.onTap = nil
+            self.badgeButton.isHidden = true
         }
         #if os(macOS)
         self.setAccessibilityElement(true)
@@ -963,7 +1001,11 @@ final class TranscriptHeaderView: TranscriptBaseView {
     }
 
     override func layoutContent() {
-        if let center = self.positions().spinnerCenter { self.spinner.place(center: center) }
+        let positions = self.positions()
+        if let center = positions.spinnerCenter { self.spinner.place(center: center) }
+        if !self.badgeButton.isHidden, let rect = positions.badgeRect, self.badgeButton.frame != rect {
+            self.badgeButton.frame = rect
+        }
     }
 
     private var style: TranscriptStyle { TranscriptStyle.shared }
@@ -1007,7 +1049,7 @@ final class TranscriptHeaderView: TranscriptBaseView {
         let baseline = style.headline.ascender
         singleLine(header.name, style.headline, TranscriptColors.label)
             .drawLine(at: .zero, width: positions.nameWidth, font: style.headline)
-        if let badge = header.badge, let rect = positions.badgeRect {
+        if header.link == nil, let badge = header.badge, let rect = positions.badgeRect {
             TranscriptColors.strongFill.setFill()
             PBezierPath.rounded(rect, radius: rect.height / 2).fill()
             singleLine(badge, style.caption2Medium, TranscriptColors.secondary)
@@ -1017,6 +1059,37 @@ final class TranscriptHeaderView: TranscriptBaseView {
             let text = singleLine(time, style.caption, TranscriptColors.tertiary)
             text.drawLine(at: CGPoint(x: x, y: baseline - style.caption.ascender), width: text.lineWidth, font: style.caption)
         }
+    }
+}
+
+/// A header badge that opens a chat: the pill, in the link color.
+final class TranscriptBadgeButton: TranscriptTapView {
+    private var title = ""
+
+    func set(title: String, help: String) {
+        self.accessibilityText = help
+        #if os(macOS)
+        self.toolTip = help
+        #endif
+        guard title != self.title else { return }
+        self.title = title
+        self.redraw()
+    }
+
+    #if os(macOS)
+    override func resetCursorRects() {
+        self.addCursorRect(self.bounds, cursor: .pointingHand)
+    }
+    #endif
+
+    override func draw(_ rect: CGRect) {
+        let font = TranscriptStyle.shared.caption2Medium
+        let bounds = self.bounds
+        let color = self.isPressed ? TranscriptColors.link.withAlphaComponent(0.5) : TranscriptColors.link
+        TranscriptColors.strongFill.setFill()
+        PBezierPath.rounded(bounds, radius: bounds.height / 2).fill()
+        singleLine(self.title, font, color)
+            .drawLine(at: CGPoint(x: 5, y: 1), width: bounds.width - 10, font: font)
     }
 }
 

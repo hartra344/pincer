@@ -35,7 +35,8 @@ struct TranscriptRowAccessibilityAction {
     let name: String
     let perform: () -> Void
 
-    /// Copy for each of the row's copy items, then Reply and React on its last message.
+    /// Copy for each of the row's copy items, Reply and React on its last message, then opening the
+    /// chat a forwarded message came from.
     @MainActor
     static func actions(for layout: TranscriptRowLayout, actions: TranscriptRowActions?, anchor: PView)
         -> [TranscriptRowAccessibilityAction]
@@ -44,7 +45,11 @@ struct TranscriptRowAccessibilityAction {
         for (index, item) in layout.copyItems.enumerated() where !item.text.isEmpty {
             result.append(.init(name: index == 0 ? L("Copy message") : item.title) { Clipboard.copy(item.text) })
         }
-        guard let actions, let messageId = layout.messages.last?.id else { return result }
+        guard let actions else { return result }
+        let source = layout.sourceChat.map { chat in
+            [TranscriptRowAccessibilityAction(name: chat.title) { [weak actions] in actions?.openChat(chat.sessionKey) }]
+        } ?? []
+        guard let messageId = layout.messages.last?.id else { return result + source }
         result.append(.init(name: L("Reply")) { [weak actions] in actions?.reply(to: messageId) })
         if actions.reactionsEnabled {
             result.append(.init(name: L("Add Reaction")) { [weak actions, weak anchor] in
@@ -54,6 +59,6 @@ struct TranscriptRowAccessibilityAction {
                                      rect: CGRect(x: 24, y: max(size.height - 24, 0), width: 1, height: 1))
             })
         }
-        return result
+        return result + source
     }
 }
