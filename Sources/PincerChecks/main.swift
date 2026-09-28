@@ -4126,6 +4126,9 @@ func runLive(url: String, token: String) async {
     }
 
     let trip = gateway.chat(for: "agent:main:dashboard:trip")
+    // Background prefetch may already have cached trip's whole history (it skips chats open here
+    // from now on): drop that so this checks paging from the Gateway.
+    await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: "agent:main:dashboard:trip")
     await trip.load()
     let firstPage = trip.items.map(\.id)
     check(trip.hasMoreHistory && firstPage.count == 120, "latest page only (\(firstPage.count))")
