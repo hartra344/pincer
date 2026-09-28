@@ -312,6 +312,16 @@ struct SendFailureClassificationTests {
         #expect(SendFailure.classify(CancellationError()) == .transient)
     }
 
+    @Test func failureMessagesShowTheGatewayReasonOrAPlainLabel() {
+        #expect(SendFailure.message(for: self.rpc("INVALID_REQUEST", "invalid chat.send params: mock rejection"))
+            == "invalid chat.send params: mock rejection")
+        #expect(SendFailure.message(for: self.rpc("NOT_PAIRED", "device not paired")) == SendFailure.signInRequired)
+        #expect(SendFailure.message(for: self.rpc("INVALID_REQUEST", "session agent:main:dashboard:x was not found"))
+            == SendFailure.sessionMissing)
+        #expect(SendFailure.message(for: self.rpc("INVALID_REQUEST", "That chat no longer exists")) == SendFailure.sessionMissing)
+        #expect(SendFailure.message(for: self.rpc("INVALID_REQUEST", "message was not found")) == "message was not found")
+    }
+
     @Test func clientConfigurationErrorsAreRejected() {
         if case .rejected = SendFailure.classify(GatewayError.protocolViolation("bad frame")) {} else { Issue.record("protocolViolation") }
         if case .rejected = SendFailure.classify(GatewayError.invalidURL("x")) {} else { Issue.record("invalidURL") }
