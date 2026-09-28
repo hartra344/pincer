@@ -4073,8 +4073,6 @@ func runLive(url: String, token: String) async {
     gateway.organization = .group
     check(gateway.sections().contains { $0.title == "Home" }, "group organization")
     gateway.organization = .agent
-    await checkSidebarVisibility(gateway, automations: ["agent:main:cron:morning-briefing", "agent:main:cron:disk-check"],
-                                 slashKey: "agent:main:discord:slash:418235907214753792", label: "live")
 
     let key = "agent:main:main"
     await gateway.loadCommands(sessionKey: key, agentId: "main")
@@ -4113,6 +4111,9 @@ func runLive(url: String, token: String) async {
     check(!trip.hasMoreHistory && trip.items.count == 302, "reaches the start (\(trip.items.count))")
     check(trip.items.first?.plainText == "Idea for day 1?", "oldest message first")
     await checkLiveMessageSearch(gateway)
+    // Not before the paging checks: they must load the trip before the background prefetch caches all of it.
+    await checkSidebarVisibility(gateway, automations: ["agent:main:cron:morning-briefing", "agent:main:cron:disk-check"],
+                                 slashKey: "agent:main:discord:slash:418235907214753792", label: "live")
 
     let research = gateway.chat(for: "agent:research:main")
     await research.load()
