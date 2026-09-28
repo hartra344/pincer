@@ -618,6 +618,45 @@ final class TranscriptRowView: TranscriptBaseView {
             }
         }
         if self.viewAlpha != layout.alpha { self.viewAlpha = layout.alpha }
+        self.applySendActions(layout.sendStatus)
+    }
+
+    /// Retry and Delete for an unsent message, as accessibility actions on the row.
+    private func applySendActions(_ status: TranscriptPart.SendStatus?) {
+        #if os(macOS)
+        let actions = self.sendActions(status).map { action in
+            NSAccessibilityCustomAction(name: action.title) { action.run(); return true }
+        }
+        self.setAccessibilityCustomActions(actions.isEmpty ? nil : actions)
+        #else
+        let actions = self.sendActions(status).map { action in
+            UIAccessibilityCustomAction(name: action.title) { _ in action.run(); return true }
+        }
+        self.accessibilityCustomActions = actions.isEmpty ? nil : actions
+        #endif
+    }
+
+    struct SendAction {
+        let title: String
+        let symbol: String
+        let isDestructive: Bool
+        let run: () -> Void
+    }
+
+    func sendActions(_ status: TranscriptPart.SendStatus? = nil) -> [SendAction] {
+        guard let status = status ?? self.layout?.sendStatus, let actions else { return [] }
+        var result: [SendAction] = []
+        if status.canRetry {
+            result.append(SendAction(title: "Retry", symbol: "arrow.clockwise", isDestructive: false) { [weak actions] in
+                actions?.retrySend(status.id)
+            })
+        }
+        if status.canDelete {
+            result.append(SendAction(title: "Delete", symbol: "trash", isDestructive: true) { [weak actions] in
+                actions?.deleteSend(status.id)
+            })
+        }
+        return result
     }
 
     private static func make(_ kind: TranscriptPart.Kind) -> TranscriptBaseView {
@@ -639,6 +678,7 @@ final class TranscriptRowView: TranscriptBaseView {
         case .loading: TranscriptLoadingView()
         case .replyQuote: TranscriptReplyQuoteView()
         case .reactions: TranscriptReactionsView()
+        case .sendStatus: TranscriptSendStatusView()
         case .flash: TranscriptFlashView()
         }
     }
@@ -656,6 +696,7 @@ final class TranscriptRowView: TranscriptBaseView {
         let items = self.copyItems(extra: extra)
         let point = self.convert(event.locationInWindow, from: nil)
         let messageItems = self.messageMenuItems(at: point, in: self)
+            + self.sendActions().map { action in TranscriptMenuItem(action.title, symbol: action.symbol, handler: action.run) }
         guard !items.isEmpty || !messageItems.isEmpty else { return nil }
         let menu = NSMenu()
         for item in messageItems { menu.addItem(item) }
@@ -751,7 +792,12 @@ extension TranscriptRowView {
             }
         }
         let items = self.copyItems(extra: extra)
+        let sendItems: [UIMenuElement] = self.sendActions().map { action in
+            UIAction(title: action.title, image: UIImage(systemName: action.symbol),
+                     attributes: action.isDestructive ? .destructive : []) { _ in action.run() }
+        }
         let messageItems = self.messageMenuElements(at: location)
+            + (sendItems.isEmpty ? [] : [UIMenu(options: .displayInline, children: sendItems)])
         guard !items.isEmpty || !messageItems.isEmpty else { return nil }
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
             UIMenu(children: messageItems + items.map { item in
@@ -1105,6 +1151,101 @@ final class TranscriptLabelButton: TranscriptTapView {
         let text = singleLine(self.title, font, color)
         text.drawLine(at: CGPoint(x: 18, y: (height - TranscriptStyle.lineHeight(font)) / 2), width: self.bounds.width - 18, font: font)
     }
+}
+
+/// The line under an unsent message: "Queued", "Sending…" or "Failed — reason", then Retry and
+/// Delete.
+final class TranscriptSendStatusView: TranscriptBaseView {
+    private var status: TranscriptPart.SendStatus?
+    private let retryButton = TranscriptLabelButton()
+    private let deleteButton = TranscriptLabelButton()
+    private weak var actions: TranscriptRowActions?
+    /// Where the buttons start, after the status text.
+    private var textWidth: CGFloat = 0
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.retryButton.set(title: "Retry", symbol: "arrow.clockwise")
+        self.retryButton.accessibilityText = "Retry sending"
+        self.retryButton.onTap = { [weak self] in
+            guard let self, let id = self.status?.id else { return }
+            self.actions?.retrySend(id)
+        }
+        self.deleteButton.set(title: "Delete", symbol: "trash")
+        self.deleteButton.accessibilityText = "Delete unsent message"
+        self.deleteButton.isSubdued = true
+        self.deleteButton.onTap = { [weak self] in
+            guard let self, let id = self.status?.id else { return }
+            self.actions?.deleteSend(id)
+        }
+        for button in [self.retryButton, self.deleteButton] { self.addSubview(button) }
+        // VoiceOver hears the status in the message's label (with Retry and Delete as the row's
+        // actions); only the buttons here are elements.
+        #if os(iOS)
+        self.isAccessibilityElement = false
+        #endif
+    }
+
+    override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
+        guard case let .sendStatus(status) = part else { return }
+        let old = self.status
+        self.status = status
+        self.actions = actions
+        self.retryButton.isHidden = !status.canRetry
+        self.deleteButton.isHidden = !status.canDelete
+        if old != status {
+            self.redraw()
+            self.setNeedsLayoutContent()
+        }
+        #if os(macOS)
+        self.toolTip = status.detail
+        #endif
+    }
+
+    private func setNeedsLayoutContent() {
+        #if os(macOS)
+        self.needsLayout = true
+        #else
+        self.setNeedsLayout()
+        #endif
+    }
+
+    private var font: PFont { TranscriptStyle.shared.caption }
+    private static let iconWidth: CGFloat = 18
+
+    override func layoutContent() {
+        let buttons = [self.retryButton, self.deleteButton].filter { !$0.isHidden }
+        let buttonsWidth = buttons.reduce(CGFloat(0)) { $0 + $1.buttonSize.width + 10 }
+        let natural = Self.iconWidth + singleLine(self.status?.text ?? "", self.font, TranscriptColors.secondary).lineWidth
+        let textWidth = min(natural, max(self.bounds.width - buttonsWidth - 4, 40))
+        var x = textWidth + 10
+        for button in buttons {
+            let size = button.buttonSize
+            let frame = CGRect(x: x, y: (self.bounds.height - size.height) / 2, width: size.width, height: size.height)
+            if button.frame != frame { button.frame = frame }
+            x = frame.maxX + 10
+        }
+        if textWidth != self.textWidth {
+            self.textWidth = textWidth
+            self.redraw()
+        }
+    }
+
+    override func draw(_ rect: CGRect) {
+        guard let status else { return }
+        let font = self.font
+        let color = status.isFailed ? TranscriptColors.red : TranscriptColors.secondary
+        let height = self.bounds.height
+        let symbol = status.isFailed ? "exclamationmark.circle.fill" : status.canDelete ? "clock" : "arrow.up.circle"
+        TranscriptSymbols.draw(symbol, in: CGRect(x: 0, y: 0, width: 14, height: height), size: font.pointSize, color: color)
+        singleLine(status.text, font, color)
+            .drawLine(at: CGPoint(x: Self.iconWidth, y: (height - TranscriptStyle.lineHeight(font)) / 2),
+                      width: max(self.textWidth - Self.iconWidth, 0), font: font)
+    }
+
+    #if os(macOS)
+    override func isAccessibilityElement() -> Bool { false }
+    #endif
 }
 
 /// The line under a message: Copy, Reply and React, then details such as the time it was sent

@@ -252,6 +252,8 @@ public final class AppModel {
         TranscriptCache.removeAll(gatewayId: id, permanently: true)
         self.history.prune { $0.gatewayId != id }
         DraftStore.removeAll(gatewayId: id)
+        store.outbox = Outbox()
+        OutboxStore.remove(gatewayId: id)
         store.forgetLocalHealthDismissals()
         self.persist()
         if self.selectedGatewayId == id { self.selectedGatewayId = self.gateways.first?.id }
@@ -262,6 +264,14 @@ public final class AppModel {
     public func clearTranscriptCache() async {
         await Task.detached(priority: .userInitiated) { TranscriptCache.removeEverything() }.value
         for gateway in self.gateways { await gateway.cacheCleared() }
+    }
+
+    /// Unsent messages (queued or failed) across every Gateway.
+    public var unsentCount: Int { self.gateways.reduce(0) { $0 + $1.unsentCount } }
+
+    /// Discards every Gateway's unsent messages (Settings → Storage).
+    public func discardUnsentMessages() {
+        for gateway in self.gateways { gateway.discardOutbox() }
     }
 
     public func move(_ id: UUID, by offset: Int) {

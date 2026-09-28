@@ -554,7 +554,8 @@ private struct SetupTestMessageStep: View {
             self.sending = false
             switch result.outcome {
             case .sent: self.sentKey = result.key
-            case let .failed(message): self.error = message
+            case let .failed(message), let .failedInline(message): self.error = message
+            case .queued: self.error = "Couldn’t send: not connected to the Gateway."
             }
         }
     }

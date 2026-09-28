@@ -17,6 +17,8 @@ import context from '../../../assets/screenshots/context-meter.png';
 | New line | <kbd>⇧</kbd> <kbd>Return</kbd> or <kbd>⌥</kbd> <kbd>Return</kbd> |
 | Stop the current run | <kbd>⌘</kbd> <kbd>.</kbd> |
 
+If you're offline, or a message can't be sent, it stays in the chat marked **Queued** or **Failed — Retry**. See [Offline sending & retry](../offline-outbox/).
+
 ## Replying to a message
 
 After you choose **Reply** on a message (see [Replies](../transcript/#replies)), a **Replying to** chip sits above the composer with who wrote the message and how it starts. The composer takes focus, so you can start typing. Send as usual and your message is sent as a reply to that one, and the chip goes away.
@@ -25,13 +27,15 @@ After you choose **Reply** on a message (see [Replies](../transcript/#replies)),
 - Choosing **Reply** on another message replaces the one you're replying to.
 - Each chat keeps its own reply while you switch between chats. Replies aren't saved in drafts, so they're gone after you quit Pincer.
 - Slash commands aren't sent as replies. The chip stays for your next message.
-- If sending fails, the chip and your text stay, so you can try again.
+- Replies you send while offline are queued with the rest of your messages and still go out as replies. See [Offline sending & retry](../offline-outbox/).
 
 The gateway gives the agent the message you replied to, so your text is sent as you wrote it. Older gateways don't accept replies. With those, Pincer quotes the original at the start of your message instead, as `> **Claw:** …`, and keeps doing so on that connection.
 
 ## Attachments
 
 Paste, drag in, or pick images and files with the **+** button. Images are downscaled to fit the gateway's limits before they're sent.
+
+Attachments need a connection: while you're offline the **+** button is unavailable. See [Offline sending & retry](../offline-outbox/).
 
 To send something from another app, use the share sheet. See [Share to Pincer](../sharing-to-pincer/).
 

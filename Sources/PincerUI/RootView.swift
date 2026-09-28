@@ -502,6 +502,7 @@ private struct TranscriptCacheSettingsSection: View {
     @Environment(AppModel.self) private var app
     @State private var usage: Int64?
     @State private var confirming = false
+    @State private var confirmingUnsent = false
     private let enabled = TranscriptCache.root != nil
 
     var body: some View {
@@ -528,10 +529,21 @@ private struct TranscriptCacheSettingsSection: View {
                 } message: {
                     Text("Chats are downloaded again from your gateways when you open them, and message search is rebuilt. Nothing on your gateways is deleted.")
                 }
+            LabeledContent("Outbox") {
+                Text(self.app.unsentCount == 1 ? "1 message" : "\(self.app.unsentCount.formatted()) messages")
+                    .monospacedDigit()
+            }
+            Button("Clear Outbox…", role: .destructive) { self.confirmingUnsent = true }
+                .disabled(self.app.unsentCount == 0)
+                .confirmationDialog("Clear the outbox?", isPresented: self.$confirmingUnsent, titleVisibility: .visible) {
+                    Button("Clear Outbox", role: .destructive) { self.app.discardUnsentMessages() }
+                } message: {
+                    Text("Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected.")
+                }
         } header: {
             Text("Storage")
         } footer: {
-            Text("Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages.")
+            Text("Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send.")
         }
         .task { await self.measure() }
     }

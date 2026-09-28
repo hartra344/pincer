@@ -22,6 +22,15 @@ public enum GatewayError: Error, LocalizedError, Sendable, Equatable {
         }
     }
 
+    /// The Gateway flagged the failure `retryable` (`ErrorShape.retryable`).
+    public var isRetryable: Bool { self.retryableFlag ?? false }
+
+    /// `ErrorShape.retryable` as sent: nil when the Gateway didn't say.
+    public var retryableFlag: Bool? {
+        if case let .rpc(_, _, details) = self { return details?["retryable"]?.bool }
+        return nil
+    }
+
     public var detailCode: String? {
         if case let .rpc(_, _, details) = self { return details?["code"]?.string }
         return nil
@@ -652,6 +661,20 @@ public actor GatewayConnection {
         case event(GatewayEvent)
     }
 
+    /// `ErrorShape.details`, with the shape's top-level `retryable` flag folded in (as
+    /// `details.retryable`) so `GatewayError.isRetryable` can read it.
+    static func errorDetails(_ error: JSONValue?) -> JSONValue? {
+        let details = error?["details"]
+        guard let retryable = error?["retryable"]?.bool else { return details }
+        switch details {
+        case nil, .null?: return .object(["retryable": .bool(retryable)])
+        case var .object(dict)?:
+            if dict["retryable"] == nil { dict["retryable"] = .bool(retryable) }
+            return .object(dict)
+        default: return details
+        }
+    }
+
     /// Decodes one WebSocket frame; nil for frames Pincer ignores (unknown types, malformed challenges…).
     static func inboundFrame(_ data: Data) -> InboundFrame? {
         guard let frame = try? JSONValue.decode(data), let type = frame["type"]?.string else { return nil }
@@ -665,7 +688,7 @@ public actor GatewayConnection {
             return .response(id: id, result: .failure(GatewayError.rpc(
                 code: error?["code"]?.string ?? "ERROR",
                 message: error?["message"]?.string ?? "Request failed",
-                details: error?["details"])))
+                details: Self.errorDetails(error))))
         case "event":
             guard let name = frame["event"]?.string else { return nil }
             let payload = frame["payload"] ?? .null
