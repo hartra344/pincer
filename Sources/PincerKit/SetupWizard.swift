@@ -20,6 +20,15 @@ public enum SetupStep: String, CaseIterable, Codable, Hashable, Sendable, Identi
         }
     }
 
+    /// The title on the step's own page (the list uses `title`).
+    public var heading: String {
+        switch self {
+        case .agent: "Pick your default agent"
+        case .skills: "Skills"
+        case .testMessage: "Send a test message"
+        }
+    }
+
     /// One line under the step's title.
     public var summary: String {
         switch self {

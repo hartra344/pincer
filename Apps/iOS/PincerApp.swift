@@ -7,7 +7,12 @@ import UIKit
 struct PincerApp: App {
     @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var delegate
 
-    init() { PincerIntentsSetup.install() }
+    init() {
+        PincerIntentsSetup.install()
+        #if DEBUG
+        FirstRunTour.startIfRequested()
+        #endif
+    }
 
     var body: some Scene {
         PincerScene()

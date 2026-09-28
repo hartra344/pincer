@@ -1,0 +1,64 @@
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:macOS, arch:arm64, id:00006050-000141CA34F1401C, name:My Mac }
+{ platform:macOS, arch:x86_64, id:00006050-000141CA34F1401C, name:My Mac }
+{ platform:macOS, name:Any Mac }
+/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-bookish-train/Sources/PincerUI/WindowCloseGuard.swift:47:35: warning: 'weak' ownership of capture 'proxy' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+44 |             self.proxy = proxy
+45 |             let setCloser = self.setCloser
+46 |             DispatchQueue.main.async {
+   |                                      |- note: 'proxy' implicitly strongly captured here
+   |                                      `- note: add 'proxy' as a capture list item to silence
+47 |                 setCloser { [weak proxy] in proxy?.closeWithoutAsking() }
+   |                                   |- warning: 'weak' ownership of capture 'proxy' differs from implicitly-captured strong reference in outer scope [#ImplicitStrongCapture]
+   |                                   `- note: explicitly assign the capture list item to silence
+48 |             }
+49 |         }
+
+/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-bookish-train/Sources/PincerUI/WindowCloseGuard.swift:74:26: warning: call to main actor-isolated instance method 'performClose' in a synchronous nonisolated context [#ActorIsolatedCall]
+70 |         }
+71 | 
+72 |         func closeWithoutAsking() {
+   |              `- note: add '@MainActor' to make instance method 'closeWithoutAsking()' part of global actor 'MainActor'
+73 |             self.bypass = true
+74 |             self.window?.performClose(nil)
+   |                          `- warning: call to main actor-isolated instance method 'performClose' in a synchronous nonisolated context [#ActorIsolatedCall]
+75 |             self.bypass = false
+76 |         }
+
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX27.0.sdk/System/Library/Frameworks/AppKit.framework/Headers/NSWindow.h:490:1: note: calls to instance method 'performClose' from outside of its actor context are implicitly asynchronous
+ 488 | @property (readonly) CGFloat backingScaleFactor API_AVAILABLE(macos(10.7)); 
+ 489 | 
+ 490 | - (void)performClose:(nullable id)sender;
+     | |- note: calls to instance method 'performClose' from outside of its actor context are implicitly asynchronous
+     | `- note: main actor isolation inferred from inheritance from class 'NSResponder'
+ 491 | - (void)performMiniaturize:(nullable id)sender;
+ 492 | - (void)performZoom:(nullable id)sender;
+
+[#ActorIsolatedCall]: <https://docs.swift.org/compiler/documentation/diagnostics/actor-isolated-call>
+[#ImplicitStrongCapture]: <https://docs.swift.org/compiler/documentation/diagnostics/implicit-strong-capture>
+/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-bookish-train/Sources/PincerUI/FirstRunView.swift:22:38: warning: Storing a closure in '@Entry var firstRunAfterDismiss' may invalidate dependents on every update because closures may not be comparable. (from macro 'Entry ')
+ 20 | extension EnvironmentValues {
+ 21 |     /// iOS: inside the first-run cover, runs an action once the cover is gone.
+ 22 |     @Entry var firstRunAfterDismiss: ((AfterDismiss) -> Void)?
+    |                                      `- warning: Storing a closure in '@Entry var firstRunAfterDismiss' may invalidate dependents on every update because closures may not be comparable. (from macro 'Entry ')
+ 23 | }
+ 24 | 
+/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-bookish-train/Sources/PincerUI/FirstRunView.swift:22:38: warning: Storing a closure in '@Entry var firstRunAfterDismiss' may invalidate dependents on every update because closures may not be comparable. (from macro 'Entry ')
+ 20 | extension EnvironmentValues {
+ 21 |     /// iOS: inside the first-run cover, runs an action once the cover is gone.
+ 22 |     @Entry var firstRunAfterDismiss: ((AfterDismiss) -> Void)?
+    |                                      `- warning: Storing a closure in '@Entry var firstRunAfterDismiss' may invalidate dependents on every update because closures may not be comparable. (from macro 'Entry ')
+ 23 | }
+ 24 | 
+error: the following command failed with exit code 0 but produced no further output
+SwiftCompile normal arm64 /Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-bookish-train/Sources/PincerUI/SidebarList+AppKit.swift (in target 'PincerUI' from project 'Pincer' at path '/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-bookish-train/Package.swift')
+/Users/travisvu/code/copilot-worktrees/OpenClawTool/hartra344-bookish-train/Sources/PincerUI/SidebarList+AppKit.swift:63:48: warning: 'sourceList' was deprecated in macOS 12.0: Set the NSTableView.style property to NSTableViewStyleSourceList instead. [#DeprecatedDeclaration]
+ 61 |             let outline = NSOutlineView()
+ 62 |             outline.style = .sourceList
+ 63 |             outline.selectionHighlightStyle = .sourceList
+    |                                                `- warning: 'sourceList' was deprecated in macOS 12.0: Set the NSTableView.style property to NSTableViewStyleSourceList instead. [#DeprecatedDeclaration]
+ 64 |             outline.headerView = nil
+ 65 |             outline.rowSizeStyle = .custom
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+MAC EXIT 0

@@ -250,7 +250,7 @@ private struct SetupStepDetail: View {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Image(systemName: step.symbol).font(.title2).foregroundStyle(.tint)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(step.title).font(.title3.bold())
+                            Text(step.heading).font(.title3.bold()).accessibilityAddTraits(.isHeader)
                             HStack(spacing: 4) {
                                 SetupStatusIcon(status: status)
                                 Text(status.label).foregroundStyle(SetupStatusIcon.color(status))
@@ -449,35 +449,33 @@ private struct SetupSkillsStep: View {
 private struct SetupTestMessageStep: View {
     let setup: SetupWizardModel
     @Environment(GatewayStore.self) private var gateway
-    @Environment(AppModel.self) private var app
     @State private var text = SetupWizardModel.testMessageText
     @State private var sending = false
     @State private var error: String?
-    @State private var sentKey: String?
-    /// The test chat, kept from the send so the body never creates a chat store.
+    /// The Setup Test chat (`setup.testChatKey`), looked up outside `body` so it never creates a store.
     @State private var chat: ChatStore?
 
     var body: some View {
+        let failed = self.error != nil || self.chat.map(SetupTestReply.failed) == true
         Section {
             TextField("Message", text: self.$text)
                 .onSubmit(self.send)
             HStack {
-                Button(self.sentKey == nil ? "Send" : "Try Again", action: self.send)
+                Button(failed ? "Try Again" : self.chat == nil ? "Send" : "Send Again", action: self.send)
                     .disabled(self.sending || !self.gateway.state.isConnected
                         || self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if self.sending { ProgressView().controlSize(.small) }
             }
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
-            if let chat = self.chat, let key = self.sentKey {
+            if let chat = self.chat {
+                // Finish opens this chat (no separate Open Chat, #175).
                 SetupTestReply(chat: chat)
-                Button("Open Chat") {
-                    self.setup.close()
-                    self.app.open(Notifier.Target(gatewayId: self.gateway.id, sessionKey: key))
-                }
-                .buttonStyle(.borderless)
             }
         } footer: {
             Text("Starts a new chat with \(self.gateway.agent(self.gateway.defaultAgentId).name) in Pincer.")
+        }
+        .task(id: self.setup.testChatKey) {
+            self.chat = self.setup.testChatKey.map { self.gateway.chat(for: $0) }
         }
     }
 
@@ -489,13 +487,7 @@ private struct SetupTestMessageStep: View {
         Task {
             let result = await self.gateway.sendSetupTestMessage(text)
             self.sending = false
-            switch result.outcome {
-            case .sent:
-                self.sentKey = result.key
-                self.chat = result.key.map { self.gateway.chat(for: $0) }
-            case let .failed(message):
-                self.error = message
-            }
+            if case let .failed(message) = result.outcome { self.error = message }
         }
     }
 }
@@ -526,6 +518,11 @@ private struct SetupTestReply: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// The agent answered with an error, or the send failed after it was accepted.
+    static func failed(_ chat: ChatStore) -> Bool {
+        self.reply(in: chat)?.isError == true || chat.errorMessage != nil
     }
 
     /// The last assistant turn after the last user message.

@@ -17,9 +17,18 @@ struct AfterDismiss {
     let run: @MainActor () -> Void
 }
 
+/// iOS: inside the first-run cover, queues an action for once the cover is gone. Always equal, so
+/// setting it never invalidates the views that read it (#119).
+struct FirstRunDismissQueue: Equatable {
+    let enqueue: @MainActor (AfterDismiss) -> Void
+
+    @MainActor func callAsFunction(_ action: AfterDismiss) { self.enqueue(action) }
+
+    static func == (lhs: Self, rhs: Self) -> Bool { true }
+}
+
 extension EnvironmentValues {
-    /// iOS: inside the first-run cover, runs an action once the cover is gone.
-    @Entry var firstRunAfterDismiss: ((AfterDismiss) -> Void)?
+    @Entry var firstRunAfterDismiss: FirstRunDismissQueue?
 }
 
 /// iOS "Add Gateway…" over the chat list: a full-screen cover, so nothing hands off sheet to sheet (#133).
@@ -32,7 +41,7 @@ struct FirstRunCover: ViewModifier {
         @Bindable var model = self.app.firstRun
         content.fullScreenCover(isPresented: $model.isSheetPresented, onDismiss: self.dismissed) {
             FirstRunView()
-                .environment(\.firstRunAfterDismiss) { self.afterDismiss = $0 }
+                .environment(\.firstRunAfterDismiss, FirstRunDismissQueue { self.afterDismiss = $0 })
         }
         #else
         content
@@ -69,7 +78,7 @@ private struct FirstRunScreens: View {
                     } else {
                         FirstRunSignInScreen(model: self.model)
                     }
-                case .verify: FirstRunVerify(model: self.model)
+                case .verify: FirstRunVerify(model: self.model, openHealth: self.openHealth)
                 case .gatewaySetup: FirstRunGatewaySetup(model: self.model, openSettings: self.openSettings)
                 case .done: FirstRunDone(model: self.model)
                 }
@@ -87,14 +96,28 @@ private struct FirstRunScreens: View {
 
     /// A settings link inside the embedded setup: leave for the chat list, then open it.
     private func openSettings(_ destination: SettingsDestination) {
-        guard let gateway = self.model.gateway else { return }
+        guard let id = self.model.gateway?.id else { return }
+        self.leave(then: destination, gatewayId: id)
+    }
+
+    /// Verify's Details: saves the gateway (as Skip to Chats does), then opens its Health page.
+    private func openHealth() {
+        self.leave(then: .health, gatewayId: self.model.state.profileId)
+    }
+
+    /// Skip to the chat list, then open `destination` for the gateway once the wizard is gone.
+    private func leave(then destination: SettingsDestination, gatewayId: UUID) {
         let opener = self.openGatewaySettings
+        let app = self.app
+        let open = { @MainActor in
+            if let gateway = app.gateways.first(where: { $0.id == gatewayId }) { opener(gateway, at: destination) }
+        }
         if let afterDismiss = self.firstRunAfterDismiss {
-            afterDismiss(AfterDismiss { opener(gateway, at: destination) })
+            afterDismiss(AfterDismiss(run: open))
             self.model.send(.skip)
         } else {
             self.model.send(.skip)
-            opener(gateway, at: destination)
+            open()
         }
     }
 }
@@ -167,12 +190,15 @@ private struct FirstRunPage<Content: View, Buttons: View>: View {
     var symbolColor: Color?
     let title: String
     let message: String?
+    /// Centered in the window while it fits (Welcome).
+    var centered = false
     @ViewBuilder let content: Content
     @ViewBuilder let buttons: Buttons
 
-    init(symbol: String? = nil, symbolColor: Color? = nil, title: String, message: String? = nil,
+    init(symbol: String? = nil, symbolColor: Color? = nil, title: String, message: String? = nil, centered: Bool = false,
          @ViewBuilder content: () -> Content, @ViewBuilder buttons: () -> Buttons)
     {
+        self.centered = centered
         self.symbol = symbol
         self.symbolColor = symbolColor
         self.title = title
@@ -207,6 +233,7 @@ private struct FirstRunPage<Content: View, Buttons: View>: View {
                 .padding(.horizontal, 24)
                 .padding(.vertical, 20)
             }
+            .defaultScrollAnchor(self.centered ? .center : .top, for: .alignment)
             Divider()
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) { self.buttons }
@@ -297,7 +324,7 @@ private struct FirstRunWelcome: View {
 
     var body: some View {
         FirstRunPage(symbol: "bubble.left.and.text.bubble.right", title: "Welcome to Pincer",
-                     message: "Chat with your OpenClaw agents from your Mac, iPhone, and iPad.") {
+                     message: "Chat with your OpenClaw agents from your Mac, iPhone, and iPad.", centered: true) {
             EmptyView()
         } buttons: {
             Button("Try the Demo") { self.model.send(.tryDemo) }
@@ -642,6 +669,7 @@ private struct FirstRunPairing: View {
 
 private struct FirstRunVerify: View {
     let model: FirstRunModel
+    let openHealth: () -> Void
 
     var body: some View {
         let state = self.model.state
@@ -676,7 +704,13 @@ private struct FirstRunVerify: View {
                     }
                 }
                 if let problem = verified.healthProblem {
-                    InlineMessage(text: "Your Gateway reported a problem: \(problem)", isError: false)
+                    // Information only: it never blocks Continue Setup (spec §2.8).
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        InlineMessage(text: "Your Gateway reported a problem: \(problem)", isError: false)
+                        Button("Details", action: self.openHealth)
+                            .buttonStyle(.borderless)
+                            .accessibilityHint("Saves this Gateway and opens its Health page.")
+                    }
                 }
             }
         } buttons: {
