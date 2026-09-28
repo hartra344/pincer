@@ -70,8 +70,8 @@ struct TranscriptCacheVersioningTests {
         ("array", Data("[1,2,3]".utf8)),
         ("no version", Data(#"{"items":[],"complete":true}"#.utf8)),
         ("string version", Data(#"{"version":"5","items":[],"complete":true}"#.utf8)),
-        ("wrong shape", Data(#"{"version":5,"items":{"a":1},"complete":true}"#.utf8)),
-        ("missing items", Data(#"{"version":5,"complete":true}"#.utf8)),
+        ("wrong shape", Data(#"{"version":6,"items":{"a":1},"complete":true}"#.utf8)),
+        ("missing items", Data(#"{"version":6,"complete":true}"#.utf8)),
     ])
     func decodeCorrupt(_ label: String, _ data: Data) {
         let (snapshot, outcome) = Cache.decode(data)

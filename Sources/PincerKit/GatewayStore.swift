@@ -488,7 +488,8 @@ public final class GatewayStore: Identifiable {
             let messages = zip(group.hits, snippets).map { hit, snippet in
                 MessageSearch.Message(
                     hit: hit,
-                    sender: hit.role == .user ? hit.via.map { "via \($0)" } ?? "You" : agent,
+                    sender: hit.sender?.displayName(agents: self.agents)
+                        ?? (hit.role == .user ? hit.via.map { "via \($0)" } ?? "You" : agent),
                     snippet: snippet)
             }
             return MessageSearch.Chat(sessionKey: row.key, title: row.title, isArchived: row.isArchived,

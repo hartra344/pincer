@@ -13,7 +13,7 @@ public enum TranscriptCache {
         /// Session activity when saved; an unchanged session needs no background refresh.
         public var activityMs: Double?
 
-        public static let currentVersion = 5
+        public static let currentVersion = 6
 
         public init(version: Int = Self.currentVersion, items: [ChatItem], complete: Bool, activityMs: Double? = nil) {
             self.version = version
@@ -88,6 +88,10 @@ public enum TranscriptCache {
     //    file without it decodes, and its edit cards fall back to diffing the tool's arguments
     //    (a `write` shows as a new file rather than an overwrite). That degrades gracefully,
     //    unlike v4's missing reply ids, so it isn't worth refetching every cached transcript.
+    //  - v6 (#207, agent-to-agent messages) added `ChatItem.sender`. A v5 file shows another
+    //    agent's messages as the chat agent's, and the provenance that names the sender isn't
+    //    cached, so v5 isn't migratable: it's discarded and refetched, and
+    //    `oldestMigratableVersion` is 6.
 
     /// Upgrades a snapshot's JSON object from the version it's keyed by to the next one.
     typealias Migration = @Sendable (inout [String: Any]) throws -> Void
@@ -96,7 +100,7 @@ public enum TranscriptCache {
     static let migrations: [Int: Migration] = [:]
 
     /// Older transcripts are discarded rather than migrated.
-    static let oldestMigratableVersion = 5
+    static let oldestMigratableVersion = 6
 
     struct MigrationError: Error, CustomStringConvertible {
         var description: String
