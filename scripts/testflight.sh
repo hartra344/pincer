@@ -34,6 +34,16 @@ generate() { rm -rf Pincer.xcodeproj/xcshareddata; xcodegen generate --quiet; }
 trap generate EXIT
 PINCER_APP_STORE_SIGNING=YES generate
 
+# The App Store build must ask for the production APNs environment (iOS is the only platform with push).
+if [ "$PLATFORM" = ios ]; then
+  APS="$(xcodebuild -showBuildSettings -project Pincer.xcodeproj -scheme "$SCHEME" -configuration Release \
+    2>/dev/null | awk '$1 == "PINCER_APS_ENVIRONMENT" { print $3; exit }')"
+  if [ "$APS" != production ]; then
+    echo "error: PINCER_APS_ENVIRONMENT resolves to '${APS:-<unset>}' with App Store signing; expected 'production'" >&2
+    exit 1
+  fi
+fi
+
 xcodebuild archive \
   -project Pincer.xcodeproj \
   -scheme "$SCHEME" \
