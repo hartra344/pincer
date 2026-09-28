@@ -158,6 +158,7 @@ func runDemo() async {
           "demo long line capped for display")
     let demoCursor = demoLogs.cursor ?? 0
     let demoLast = demoLogs.entries.last?.id ?? 0
+    // The demo emits log lines on its own clock; give it time to produce new ones.
     try? await Task.sleep(for: .milliseconds(700))
     await demoLogs.poll()
     let demoNew = demoLogs.entries.filter { $0.id > demoLast }
@@ -367,6 +368,7 @@ func runDemo() async {
               && gateway.healthDismissals[telegram.id] == "until:state=not-connected", "demo dismiss hides the Telegram issue")
         // The demo's users.prefs.set echoes users.prefs.changed and the store re-reads users.prefs.get,
         // replacing the local copy with the Gateway's.
+        // Negative window: the echoed users.prefs must not replace the dismissal.
         try? await Task.sleep(for: .milliseconds(500))
         check(gateway.healthDismissals == [telegram.id: "until:state=not-connected"] && health.level == .healthy,
               "demo dismissal kept after re-reading users.prefs (\(gateway.healthDismissals))")
@@ -391,6 +393,7 @@ func runDemo() async {
     check(recovered && health.issues.isEmpty
           && health.health?.channels.first { $0.id == "telegram" }?.status == .connected, "Telegram recovers after the demo restart")
     check(gateway.healthDismissals.isEmpty, "the recovered Telegram issue's dismissal is pruned (\(gateway.healthDismissals))")
+    // Negative window: the prune sync must leave the dismissals empty.
     try? await Task.sleep(for: .milliseconds(500))
     check(gateway.healthDismissals.isEmpty, "the prune synced to users.prefs (\(gateway.healthDismissals))")
     check(health.presence.first(where: health.isThisDevice)?.host?.hasPrefix("Pincer on ") == true, "this device named, not \"This device\"")

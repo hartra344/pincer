@@ -105,6 +105,7 @@ func checkGatewayLogsLive(_ gateway: GatewayStore) async {
     check(GatewayLogLevel.allCases.filter { logs.count($0) > 0 }.count >= 4, "mock log mixes levels")
     let firstFile = logs.file
     let lastId = logs.entries.last?.id ?? 0
+    // The mock appends log lines on a fixed timer; give it time to write new ones.
     try? await Task.sleep(for: .milliseconds(1_200))
     await logs.poll()
     check(logs.entries.contains { $0.id > lastId && !$0.isMarker } && logs.file == firstFile, "logs.tail cursor poll gets new lines")
@@ -132,6 +133,7 @@ func checkGatewayLogsLive(_ gateway: GatewayStore) async {
     var idle = false
     for _ in 0..<3 {
         idle = await waitFor("log trigger replies", timeout: 30) { !logChat.isRunning }
+        // Debounce: a reply can re-start a run just after isRunning clears.
         try? await Task.sleep(for: .milliseconds(500))
         if idle && !logChat.isRunning { break }
     }

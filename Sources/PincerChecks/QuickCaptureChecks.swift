@@ -320,11 +320,19 @@ func runQuickCaptureLive(url: String, token: String) async {
     func selectionUnchanged() -> Bool {
         app.selectedGatewayId == home.id && home.selectedKey == "agent:main:main" && work.selectedKey == "agent:research:main"
     }
+    /// The store's session keys once its list has loaded and stopped changing, so a reload in flight
+    /// can't make every session look new later.
+    func baseline(_ store: GatewayStore) async -> Set<String> {
+        _ = await waitFor("\(store.profile.name) sessions loaded", timeout: 10) { !store.sessions.isEmpty }
+        await waitForQuiet("\(store.profile.name) session count", quiet: 0.5, timeout: 5) { store.sessions.count }
+        return Set(store.sessions.keys)
+    }
     /// Sessions that appeared since `before`; when none are expected it just gives `sessions.changed` time to arrive.
     func created(on store: GatewayStore, since before: Set<String>, expected: Bool = true) async -> [String] {
         if expected {
             _ = await waitFor("sessions.changed", timeout: 3) { Set(store.sessions.keys).count > before.count }
         } else {
+            // Negative window: a stray sessions.changed would show up within this time.
             try? await Task.sleep(for: .seconds(1))
         }
         return Array(Set(store.sessions.keys).subtracting(before))
@@ -340,7 +348,7 @@ func runQuickCaptureLive(url: String, token: String) async {
 
     // 9. An existing chat: one chat.send, no sessions.create, nothing selected.
     let trip = "agent:main:dashboard:trip"
-    var workKeys = Set(work.sessions.keys)
+    var workKeys = await baseline(work)
     let opens = app.openRequests
     model.prepare()
     model.target = QuickCaptureTarget(gatewayId: work.id, target: .chat(trip))
@@ -361,7 +369,7 @@ func runQuickCaptureLive(url: String, token: String) async {
     check(fresh.target == QuickCaptureTarget(gatewayId: work.id, target: .chat(trip)), "14. a new model starts at the last target")
 
     // 10. A new chat: sessions.create, then chat.send to the new key; nothing selected.
-    workKeys = Set(work.sessions.keys)
+    workKeys = await baseline(work)
     model.target = QuickCaptureTarget(gatewayId: work.id, target: .newChat(agentId: "research"))
     model.text = "qc new \(nonce)"
     let sentNew = await model.send()
@@ -377,7 +385,7 @@ func runQuickCaptureLive(url: String, token: String) async {
           "new chat: the last target is the created chat (\(model.settings.lastTarget?.storageValue ?? "nil"))")
 
     // 11. Reveal: the created chat on the other Gateway is opened.
-    workKeys = Set(work.sessions.keys)
+    workKeys = await baseline(work)
     model.target = QuickCaptureTarget(gatewayId: work.id, target: .newChat(agentId: "main"))
     model.text = "qc reveal \(nonce)"
     let revealed = await model.send(reveal: true)

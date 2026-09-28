@@ -28,6 +28,7 @@ func runScopeUpgrade(url: String, token: String) async {
           "connected without operator.questions (\(gateway.hello?.withheldScopes ?? []))")
     check(gateway.hello?.scopeUpgradeRequestId?.hasPrefix("pair_") == true, "upgrade request id kept for the hint")
     // The mock approves upgrades after 3 seconds; Try Again then picks up the new scope.
+    // The mock approves the scope upgrade on a fixed 3 s timer; there is no event to await.
     try? await Task.sleep(for: .seconds(3.5))
     gateway.retryQuestionAccess()
     let upgraded = await waitFor("questions scope after approval", timeout: 20) {
@@ -45,6 +46,7 @@ func runLive(url: String, token: String) async {
     let gateway = GatewayStore(profile: profile)
     gateway.start()
     // What launch does: the scene turning active asks for a reconnect mid-handshake.
+    // Deliberate race delay (RACE_MS), not a wait on a condition.
     try? await Task.sleep(for: .milliseconds(Int(ProcessInfo.processInfo.environment["RACE_MS"] ?? "30") ?? 30))
     gateway.reconnectIfNeeded()
 
@@ -721,6 +723,7 @@ func runLive(url: String, token: String) async {
     check(!gateway.health.canRestart && admin.health.canRestart, "restart needs admin")
     let uptimeBefore = health.uptime() ?? 0
     await gateway.health.restart()
+    // Negative window: a non-admin restart must not disturb the connections.
     try? await Task.sleep(for: .milliseconds(400))
     check(gateway.health.restartState == .failed(ConfigWriteError.adminRequired.message) && gateway.state.isConnected
           && admin.state.isConnected && (health.uptime() ?? 0) >= uptimeBefore,

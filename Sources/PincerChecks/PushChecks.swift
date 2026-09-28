@@ -165,15 +165,12 @@ func checkPushLive(_ gateway: GatewayStore) async {
     print("Push (live)")
     guard let sink = PushSink() else { return check(false, "push sink listening") }
     defer { sink.stop() }
-    let registrar = PushRegistrar.shared
-    let relayKey = PushRegistrar.relayKey
-    UserDefaults.standard.set("http://127.0.0.1:\(sink.port)", forKey: relayKey)
-    defer { UserDefaults.standard.removeObject(forKey: relayKey) }
-    // The relay id is cached in the defaults, which outlive the run; a cache left by an earlier
-    // run whose sink got the same port would skip the registration counted below.
-    let relayIdKey = "pincer.push.relayId"
-    UserDefaults.standard.removeObject(forKey: relayIdKey)
-    defer { UserDefaults.standard.removeObject(forKey: relayIdKey) }
+    // Its own registrar and defaults: GatewayStore's connect-time sync goes to `.shared`, which has no
+    // APNs token here and so never subscribes.
+    let (scratch, scratchName) = scratchDefaults()
+    defer { UserDefaults.standard.removePersistentDomain(forName: scratchName) }
+    scratch.set("http://127.0.0.1:\(sink.port)", forKey: PushRegistrar.relayKey)
+    let registrar = PushRegistrar(defaults: scratch)
     var registrations = 0
     registrar.registerWithRelay = { _, token, _ in registrations += 1; return "relay-\(token.prefix(6))" }
     var enabled = true
@@ -232,6 +229,7 @@ func checkPushLive(_ gateway: GatewayStore) async {
     let after = sink.deliveries.count
     await chat.send("no push now")
     _ = await waitFor("reply", timeout: 20) { !chat.isRunning }
+    // Negative window: no push may arrive after unsubscribing.
     try? await Task.sleep(for: .milliseconds(500))
     let lateTitles = sink.deliveries.dropFirst(after).compactMap {
         PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString, "p": $0.body.base64URL]])?.title

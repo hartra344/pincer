@@ -583,6 +583,7 @@ func checkApprovalOutcomes(_ gateway: GatewayStore, chat: ChatStore, label: Stri
     cancelled.cancel()
     let cancelledOutcome = await cancelled.value
     check(cancelledOutcome == .unreachable, "\(label): cancelled resolve → unreachable (\(cancelledOutcome))")
+    // Negative window: a cancelled resolve must not send an RPC.
     try? await Task.sleep(for: .milliseconds(500))
     check(gateway.approvals.contains { $0.id == late.id }, "\(label): neither sent an RPC, approval still pending")
     _ = await waitFor("\(label) reconnect") { gateway.state.isConnected }
@@ -644,6 +645,7 @@ func checkLiveApprovals(profile: GatewayProfile, gateway: GatewayStore, chat: Ch
 
     // The mock's short-lived approval expires after 3 s.
     guard let short = await raise("approve short-lived") else { return check(false, "short-lived approval surfaced") }
+    // Wait out the approval's wall-clock expiry (mock: 3 s); expiry is time-driven.
     try? await Task.sleep(for: .seconds(max(0, (short.expiresAt ?? Date()).timeIntervalSinceNow) + 0.3))
     check(short.isExpired(), "short-lived approval past expiresAt")
     let expired = await gateway.resolveApproval(short, decision: "allow-once")
