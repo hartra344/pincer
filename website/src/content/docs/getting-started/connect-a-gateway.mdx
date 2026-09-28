@@ -5,23 +5,33 @@ description: The first-run setup walks you from opening Pincer to chatting with 
 
 import DocScreenshot from '../../../components/DocScreenshot.astro';
 import connection from '../../../assets/screenshots/connect-gateway.png';
+import welcome from '../../../assets/screenshots/first-run/welcome.png';
+import setUpOpenClaw from '../../../assets/screenshots/first-run/set-up-openclaw.png';
+import setUpOpenClawIOS from '../../../assets/screenshots/ios/first-run/set-up-openclaw.png';
+import findTailscale from '../../../assets/screenshots/first-run/find-tailscale.png';
+import approveDevice from '../../../assets/screenshots/first-run/approve-device.png';
+import connected from '../../../assets/screenshots/first-run/connected.png';
 
 import { Steps, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
 
 The first time you open Pincer, it walks you through connecting to your OpenClaw Gateway. You'll find the gateway, sign in, approve this device, and finish with a quick [setup](../setup-wizard/) of your default agent. Every step has **Back**, and the progress bar at the top shows where you are. If you quit partway through, Pincer picks up where you left off.
 
-You can start the same flow any time with **Add Gateway…**. It's in the sidebar's **Organize** menu (the filter button), under **File ▸ Add Gateway…** and in the menu bar on macOS, and in the command palette (<kbd>⌘</kbd> <kbd>K</kbd>). It starts at **Find your gateway**.
+You can start the same flow any time with **Add Gateway…**. It's in the sidebar's **Organize** menu (the filter button), under **File ▸ Add Gateway…** and in the menu bar on macOS, and in the command palette (<kbd>⌘</kbd> <kbd>K</kbd>). It starts at **Find your Gateway**.
 
 ## 1. Welcome
 
-Choose **Get Started**. To look around first, choose **Try the Demo**, right below it: no gateway needed, and nothing leaves your device (see [Try the demo](../try-the-demo/)).
+Choose **Get Started**. To look around first, choose **Try the Demo**, right below it (or press <kbd>⌘</kbd> <kbd>D</kbd> on a Mac). As the caption under it says: "No gateway needed. Explore sample agents and chats. Nothing leaves this device." One tap takes you straight to the chat list, with no setup steps (see [Try the demo](../try-the-demo/)).
+
+<DocScreenshot src={welcome} alt="The Welcome to Pincer screen with a blue Get Started button and a Try the Demo button right under it." caption="The first screen. Try the Demo is one tap away and needs no gateway." />
 
 ## 2. Do you have a gateway?
 
 Pincer connects to a Gateway you run on your own computer or server. It never runs one itself.
 
 - **Yes, it's running** goes to the next step.
-- **No, help me set one up** shows the commands below. Run them on the computer that will host your gateway, then choose **My Gateway Is Running**.
+- **No, help me set one up** opens **Set up OpenClaw** with the commands below, each with a **Copy** button. Run them on the computer that will host your gateway, then choose **My Gateway Is Running**. **Try the Demo** is on this screen too.
+
+<DocScreenshot src={setUpOpenClaw} ios={setUpOpenClawIOS} alt="Set up OpenClaw with three numbered commands to install OpenClaw, keep it running and check it's working, plus Back, Try the Demo and My Gateway Is Running." iosAlt="Set up OpenClaw on iPhone, with My Gateway Is Running at the bottom and Back and Try the Demo under it." caption="Set up OpenClaw on macOS. Windows users open On Windows for the PowerShell command." iosCaption="The same step on iPhone." />
 
 <Steps>
 1. Install OpenClaw. Follow the prompts and choose **Quick start**.
@@ -75,9 +85,11 @@ openclaw gateway restart
 
 More in [Connect over Tailscale](../tailscale/).
 
+<DocScreenshot src={findTailscale} alt="Find your Gateway with Tailscale selected, the two Tailscale Serve commands, and the address my-mac.tail1234.ts.net, which Pincer will connect to as wss://my-mac.tail1234.ts.net." caption="Tailscale: type the host name and Pincer shows the full address it will use." />
+
 If your gateway announces itself on your network, it also shows up under **Nearby**. Choose it to fill in the address. You still sign in in the next step.
 
-Choose **Continue**. Pincer checks that it can reach the gateway before moving on. If it can't, it tells you why (see [If something goes wrong](#if-something-goes-wrong)). If you're sure the address is right, for example because the gateway is still starting, choose **Continue Anyway**.
+Choose **Continue**. Pincer checks that it can reach the gateway before moving on. If it can't, it tells you why (see [If something goes wrong](#if-something-goes-wrong)) and the button becomes **Try Again**. If you're sure the address is right, for example because the gateway is still starting, choose **Continue Anyway** next to **Back**. It's only offered when the address itself is valid and secure.
 
 ## 4. Sign in
 
@@ -97,33 +109,37 @@ Choose **Sign In**. You only need to do this once per device. Pincer keeps the s
 
 ## 5. Approve this device
 
-For your security, the gateway has to approve each new device once. Pincer shows the exact command to run on the gateway host, with **Copy Command**:
+For your security, the gateway has to approve each new device once. Pincer shows the exact command to run on the gateway host, with a **Copy** button:
 
 ```sh
 openclaw devices approve <requestId>
 ```
 
-While it waits, Pincer shows **Waiting for approval…** and moves on by itself as soon as you approve it. If the request ID changes, for example after you reject a request, Pincer shows the new command. To see every pending request:
+While it waits, Pincer shows **Waiting for approval…** and moves on by itself as soon as you approve it. If the request ID changes, for example after you reject a request, Pincer says "The request changed. Use this new command." and shows it. **Didn't work?** explains that the request ID may have changed and how to see every pending request:
 
 ```sh
 openclaw devices list
 ```
 
+<DocScreenshot src={approveDevice} alt="Approve Pincer on your Gateway, with the command openclaw devices approve and a request ID, a Copy button, Waiting for approval…, and a note about approving from another device in Gateway Settings → Devices." caption="Run the command on the gateway host. Pincer continues by itself once it's approved." />
+
 <Aside type="tip">
 Every Mac, iPhone and iPad has its own device key, so each needs to be approved once. After that, it reconnects on its own.
 
-Pincer can't approve its own first pairing, so the first device always needs the host. After that, a device paired with Full Management can approve your other devices from Gateway Settings → Devices. See [Devices & Nodes](../../guides/devices/).
+Pincer can't approve its own first pairing, so the first device always needs the host. After that, as the approve screen says: "Already use Pincer on another device with Full Management? You can approve this one there, in Gateway Settings → Devices." See [Devices & Nodes](../../guides/devices/).
 </Aside>
 
 ## 6. You're connected
 
 Pincer shows the gateway's name, its version, and what this device can do. You can change the **Name** Pincer uses for it.
 
-If the gateway reports a health problem, you'll see a note with **Details**. It doesn't stop you from continuing.
+If the gateway reports a health problem, you'll see "Your Gateway reported a problem. You can keep going and check it later." with **Details**, which opens the gateway's Health page. It doesn't stop you from continuing.
 
 If it says **Full Management** isn't on: Full Management lets Pincer change gateway settings and agents. You don't need it to chat. You can turn it on later in **Gateway Settings → Connection** (see [Access levels](#access-levels)).
 
 Choose **Continue Setup** to pick your default agent and send a test message (see [Set up a gateway](../setup-wizard/)), or **Skip to Chats** to start chatting. Either way, you land in your chat list with the new gateway selected.
+
+<DocScreenshot src={connected} alt="You're connected, listing the gateway, its version and access (Chat and approvals), a Name field set to Studio, a Full Management note and a health note with Details, above Back, Skip to Chats and Continue Setup." caption="Local mock example. Your gateway, version and name will differ." />
 
 ## If something goes wrong
 
@@ -145,7 +161,7 @@ More in [Troubleshooting](../../reference/troubleshooting/).
 
 ## Advanced connection settings
 
-Most people never need these. Choose **Advanced…** on the **Find your gateway** step to open the full connection form, or change them later under **Gateway Settings → Connection** (**Edit Connection**).
+Most people never need these. Choose **Advanced…** on the **Find your Gateway** step to open the full connection form, or change them later under **Gateway Settings → Connection** (**Edit Connection**).
 
 <DocScreenshot src={connection} alt="Connection form for Local Mock at ws://127.0.0.1:19879 with a masked token and Full Management selected." caption="Local development example, not a production address. Use your own gateway address and access level." narrow />
 

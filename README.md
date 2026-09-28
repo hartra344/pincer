@@ -27,7 +27,9 @@ It **never** bundles, launches or embeds a Gateway, and it never registers as a 
 
 The first time you open Pincer, a short setup walks you from launch to your first chat. Every step has **Back**, a progress bar shows where you are, and Pincer resumes where you left off if you quit.
 
-1. **Welcome:** choose **Get Started**, or **Try the Demo** right under it to look around with a simulated gateway (no gateway needed; nothing leaves the device). This is the path for App Review and TestFlight testers.
+1. **Welcome:** choose **Get Started**, or **Try the Demo** right under it (⌘D on macOS) to look around with a simulated gateway: "No gateway needed. Explore sample agents and chats. Nothing leaves this device." One tap lands in the chat list, with no setup. This is the path for App Review and TestFlight testers.
+
+   <img src="website/src/assets/screenshots/first-run/welcome.png" alt="The Welcome to Pincer screen with Get Started and, right under it, Try the Demo." width="600">
 2. **Do you have a gateway?** If not, Pincer shows how to set one up. On the computer that will host it:
    ```sh
    curl -fsSL https://openclaw.ai/install.sh | bash   # install and onboard; choose Quick start
@@ -40,7 +42,7 @@ The first time you open Pincer, a short setup walks you from launch to your firs
 5. **Approve this device:** Pincer shows the command to run on the gateway host, `openclaw devices approve <requestId>`, and continues by itself once you approve it. Your first device always needs the host; after that, a device with **Full Management** can approve others from **Gateway Settings → Devices**.
 6. **You're connected:** Pincer shows the gateway's name, version and access. Then **Continue Setup** to pick your default agent and model, look at skills and send a test message, or **Skip to Chats**.
 
-**Add Gateway…** (in the sidebar's **Organize** menu, **File ▸ Add Gateway…** on macOS, the menu bar or ⌘K) starts the same flow at step 3. TLS pinning, access level and "no auth" live behind **Advanced…** on the **Find your gateway** step and in Gateway Settings → Connection. The full walkthrough, with every error message and what to do about it, is on the website: [Connect a gateway](website/src/content/docs/getting-started/connect-a-gateway.mdx).
+**Add Gateway…** (in the sidebar's **Organize** menu, **File ▸ Add Gateway…** on macOS, the menu bar or ⌘K) starts the same flow at step 3. TLS pinning, access level and "no auth" live behind **Advanced…** on the **Find your Gateway** step and in Gateway Settings → Connection. The full walkthrough, with every error message and what to do about it, is on the website: [Connect a gateway](website/src/content/docs/getting-started/connect-a-gateway.mdx).
 
 ## Features
 

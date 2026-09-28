@@ -40,7 +40,7 @@ Testers and App Review don't need a gateway. Paste this into TestFlight's **What
 
 ```text
 Pincer is a client for a self-hosted OpenClaw Gateway. No account or server is needed to review it:
-open the app and tap "Try the Demo" on the first screen (right under "Get Started"). The demo runs
-a simulated gateway entirely on the device, with sample agents, chats, approvals and settings.
-Nothing leaves the device.
+open the app and tap "Try the Demo" on the first screen (right under "Get Started"). It opens
+straight to the chat list. The demo runs a simulated gateway entirely on the device, with sample
+agents, chats, approvals and settings. Nothing leaves the device.
 ```

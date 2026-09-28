@@ -3,6 +3,10 @@ title: Set up a gateway
 description: After you connect, pick your default agent and model, look at skills, and send a test message.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import testMessage from '../../../assets/screenshots/first-run/setup-test-message.png';
+import testMessageIOS from '../../../assets/screenshots/ios/first-run/setup-test-message.png';
+
 Once Pincer is [connected to your gateway](../connect-a-gateway/), choose **Continue Setup** to finish getting ready to chat. There are three short steps, and you can skip any of them:
 
 1. **Agent & Model**: pick the agent and model new chats start with.
@@ -26,8 +30,7 @@ Use the buttons at the bottom:
 - **Continue** goes to the next step. On the last step it's **Finish**.
 - **Skip** moves on without changing anything.
 - **Back** goes to the previous step.
-- **Close** keeps your progress for later.
-- **Skip to Chats** (when setup follows on from connecting) goes straight to your chats.
+- **Close** keeps your progress for later. When setup follows on from connecting, **Skip to Chats** takes its place at the top and goes straight to your chats.
 
 ## Agent & Model
 
@@ -41,9 +44,11 @@ Skills add abilities to your agent, and you can add them any time. This step lis
 
 ## Test message
 
-The message starts out as "Hi! Are you there?" Choose **Send**, or type your own and press Return. Pincer sends it straight to your default agent, in a Pincer chat called *Setup Test*. It starts that chat the first time and reuses it after that. Choose **Send Again** to send another.
+The message starts out as "Hi! Are you there?" Choose **Send**, or type your own and press Return. As the step says, "Pincer starts a chat called Setup Test with Claw" (or whichever agent is your default). It starts that chat the first time and reuses it after that. While it waits, setup shows "Sent. Waiting for your agent…". Choose **Send Again** to send another.
 
-When the agent answers, setup shows **Your agent replied.** with the reply. Choose **Finish** to land in your chat list with the *Setup Test* chat selected, ready to keep talking. If the agent doesn't answer, setup says "Your agent didn't answer. You can try again, or skip and chat later." Choose **Try Again** or **Skip**.
+When the agent answers, setup shows **Your agent replied.** with the first few lines of the reply, and "Finish opens this chat." Choose **Finish** to land in your chat list with the *Setup Test* chat selected, ready to keep talking. If the agent doesn't answer, setup says "Your agent didn't answer. You can try again, or skip and chat later." Choose **Try Again** or **Skip**.
+
+<DocScreenshot src={testMessage} ios={testMessageIOS} alt="Setup's Test Message step marked Done, with the message Hi! Are you there?, a Send Again button, Your agent replied. with the start of the reply, and Finish opens this chat." iosAlt="The Test Message step on iPhone, with Agent & Model, Skills and Test Message along the top and Your agent replied. under the message." caption="Test Message after the agent replied (local mock reply). The steps are listed on the left." iosCaption="On iPhone, the steps are along the top." />
 
 ## Tips
 
