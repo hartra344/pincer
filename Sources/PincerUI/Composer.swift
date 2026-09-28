@@ -89,6 +89,7 @@ struct Composer: View {
                 .disabled(!self.canSend)
                 .help(self.sendLabel)
                 .accessibilityLabel(self.sendLabel)
+                .accessibilityHint(self.gateway.state.isConnected ? "" : Self.offlineHint)
             }
             .padding(.leading, 10)
             .padding(.trailing, 7)
@@ -182,11 +183,17 @@ struct Composer: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .composerControl()
+        .disabled(!self.gateway.state.isConnected)
+        .help(self.gateway.state.isConnected ? "Attach" : Self.attachmentsNeedConnection)
+        .accessibilityLabel("Attach")
+        .accessibilityHint(self.gateway.state.isConnected ? "" : Self.attachmentsNeedConnection)
         .overlay(alignment: .trailing) {
             #if os(iOS)
             PhotosPicker(selection: self.$photoItems, maxSelectionCount: 6, matching: .images) {
                 Image(systemName: "photo").font(.title3)
             }
+            .disabled(!self.gateway.state.isConnected)
+            .accessibilityHint(self.gateway.state.isConnected ? "" : Self.attachmentsNeedConnection)
             .offset(x: 30)
             #endif
         }
@@ -211,8 +218,11 @@ struct Composer: View {
         return self.gateway.state.isConnected || (self.attachments.isEmpty && !self.isTypingCommand)
     }
 
+    private static let offlineHint = "Offline — messages send when you reconnect"
+    private static let attachmentsNeedConnection = "Attachments need a connection"
+
     private var sendLabel: String {
-        if !self.gateway.state.isConnected { return "Send when back online" }
+        if !self.gateway.state.isConnected { return "Queue Message" }
         return self.chat.isRunning ? "Queue a follow-up" : "Send"
     }
 
@@ -220,16 +230,14 @@ struct Composer: View {
     private var offlineNote: String? {
         guard !self.gateway.state.isConnected else { return nil }
         let queued = self.chat.unsentEntries.filter { $0.state == .queued }.count
-        let hasDraft = !self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty
-        guard hasDraft || queued > 0 else { return nil }
         let waiting = queued == 0 ? nil : queued == 1 ? "1 message queued" : "\(queued) messages queued"
         if !self.attachments.isEmpty {
-            return [waiting, "Connect to send attachments"].compactMap(\.self).joined(separator: " · ")
+            return [waiting, Self.attachmentsNeedConnection].compactMap(\.self).joined(separator: " · ")
         }
         if self.isTypingCommand {
             return [waiting, "Connect to run commands"].compactMap(\.self).joined(separator: " · ")
         }
-        return [waiting, "Offline — messages send when you reconnect"].compactMap(\.self).joined(separator: " · ")
+        return [waiting, Self.offlineHint].compactMap(\.self).joined(separator: " · ")
     }
 
     private func submit() {

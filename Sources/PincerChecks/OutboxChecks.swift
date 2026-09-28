@@ -80,10 +80,10 @@ func runDemoOutbox() async {
     defer { gateway.stop() }
     let chat = gateway.chat(for: DemoOutbox.sessionKey)
     await chat.load()
-    _ = await waitFor("demo trip history") { chat.hasLoaded }
+    _ = await waitFor("demo dinner history") { chat.hasLoaded }
     let id = DemoOutbox.failedId
     let seeded = await waitFor("seeded failed message") { outboxItem(chat, id) != nil }
-    check(seeded, "demo: the Japan trip chat shows a failed message")
+    check(seeded, "demo: the Dinner party chat shows a failed message")
     guard seeded, let item = outboxItem(chat, id) else { return }
     check(isFailed(item.outboxState, retryable: true) && item.isPending && item.role == .user,
           "demo: it reads Failed with Retry (\(String(describing: item.outboxState)))")

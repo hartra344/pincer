@@ -1768,6 +1768,8 @@ actor DemoGateway {
             messages: [
                 said("assistant", "The paper mainly improves how retrieval-augmented summaries are evaluated.", ago: 3 * minute),
             ])
+        add(DemoOutbox.sessionKey, agent: "main", title: DemoOutbox.title, preview: DemoOutbox.preview, age: 120_000,
+            ["label": .string(DemoOutbox.title), "category": "Personal"], messages: Self.seedOutboxTranscript())
         add(Self.fileEditsKey, agent: "coder", title: "Fix retry backoff", preview: Self.fileEditsPreview,
             age: 5 * hour * 1000, messages: Self.seedFileEditsTranscript())
         add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,

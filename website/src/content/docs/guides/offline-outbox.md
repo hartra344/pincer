@@ -9,11 +9,17 @@ You can keep writing when your connection drops. Messages you send while offline
 
 When Pincer isn't connected to the gateway, the composer still works for text messages and [replies](../composer/#replying-to-a-message):
 
-- A line above the composer says **Offline — messages send when you reconnect**.
+- A line above the composer says **Offline — messages send when you reconnect**, with how many of this chat's messages are waiting, for example **2 messages queued · Offline — messages send when you reconnect**.
 - The Send button stays where it is, and <kbd>Return</kbd> still sends. Its tooltip and VoiceOver label read **Queue Message**.
 - Your message appears in the chat straight away, marked **Queued**, and the composer clears as usual.
 
-Attachments need a connection. While you're offline, the **+** button is unavailable and the composer says **Attachments need a connection**. Anything already attached stays in your [draft](../composer/#drafts) until you're back online.
+Some things need a connection:
+
+- **Attachments.** While you're offline, the attach buttons are unavailable and the composer says **Attachments need a connection**. Anything already attached stays in your [draft](../composer/#drafts) until you're back online.
+- **Slash commands.** Typing `/` while offline shows **Connect to run commands**, and Send stays unavailable.
+- **[Quick Capture](../quick-capture/)** and the setup wizard's test message aren't queued. If you're offline they show an error and keep what you typed.
+
+While you're connected, a new message also waits, marked **Queued**, if an earlier message in the same chat hasn't gone out yet. A message with attachments can't wait like that: the composer keeps it and says **Couldn’t send: an earlier message in this chat hasn’t gone out yet.**
 
 ## Message states
 
@@ -21,9 +27,9 @@ Messages that haven't reached the gateway yet show their state under your messag
 
 | State | What it means |
 | --- | --- |
-| **Queued** (clock) | Waiting for a connection, or for an earlier message in the same chat. |
-| **Sending…** | Pincer is sending it now. |
-| **Failed — Retry** | It couldn't be sent. The reason is shown with it. |
+| **Queued** (clock) | Waiting for a connection, or for an earlier message in the same chat. You can delete it. |
+| **Sending…** | Pincer is sending it now. It can't be deleted until the attempt ends. |
+| **Failed — *reason*** (red) | It couldn't be sent, for example **Failed — Sign-in required**. Hover over it on macOS for the full message. |
 
 Once the gateway has the message, the marker goes away and the message stays where it is. It isn't shown twice.
 
@@ -31,13 +37,13 @@ Queued and failed messages don't count as unread, don't post notifications and d
 
 ## Retrying and deleting
 
-A failed message offers **Retry** and **Delete**:
+A failed message offers **Retry** and **Delete**, and a queued one **Delete**. Retry isn't offered when retrying can't help, such as a message the gateway rejected (see [below](#why-a-message-fails)).
 
-- Click or tap **Retry** or **Delete** under the message.
+- Click or tap **Retry** or **Delete** next to the status.
 - Or use the message's context menu (right-click on macOS, long-press on iOS).
-- With VoiceOver, the message reads, for example, "Your message. Failed to send: …", and Retry and Delete are available as actions.
+- With VoiceOver, the status reads, for example, "Your message. Not sent yet, queued." or "Your message. Failed to send: …", and Retry and Delete are available as actions.
 
-Delete removes the message from Pincer only. It was never sent, so there's nothing to remove on the gateway. To change a queued message, delete it and type it again.
+Retry sends the message again as soon as Pincer is connected, reconnecting first if it isn't. Delete removes the message from Pincer only. It was never sent, so there's nothing to remove on the gateway. To change a queued message, delete it and type it again.
 
 ## Order and sending exactly once
 
@@ -50,18 +56,18 @@ Each message is sent with the same idempotency key every time it's tried, includ
 | What happened | What Pincer does |
 | --- | --- |
 | You went offline, or the connection dropped while sending | Keeps it **Queued** and sends it automatically when you reconnect. No error is shown. |
-| The gateway timed out or was temporarily unavailable while you were still connected | Marks it **Failed** with **Retry**. It isn't retried automatically. |
-| The gateway rejected the message (for example, an invalid request) | Marks it **Failed** with the gateway's own message. It's never retried automatically; retrying sends it unchanged, so it usually fails again. |
-| This device lost access (unpaired, token revoked, missing scope) | Marks it **Failed** with **Sign-in required**. Reconnect or pair again, then choose **Retry**. |
-| The chat no longer exists on the gateway | Marks it **Failed** with **Session no longer exists**. Delete it. |
+| The gateway timed out, or said it was busy and to try again, while you were still connected | Marks it **Failed** with **Retry**. It isn't retried automatically. |
+| The gateway rejected the message (for example, an invalid request) | Marks it **Failed** with the gateway's own message, with **Delete** only. Sending it unchanged would fail again. |
+| This device lost access (unpaired, or missing a permission) | Marks it **Failed — Sign-in required**. Reconnect or pair again, then choose **Retry**. It's never sent automatically. |
+| The chat no longer exists on the gateway | Marks it **Failed — Session no longer exists**, with **Delete** only. |
 
-A message with attachments that fails can be retried until you quit Pincer. Attachments aren't saved in the outbox, so after a relaunch it's gone. Its text is still in the failed message until then, so you can copy it.
+A message with attachments is never sent automatically. If it fails, including when the connection drops, it's marked **Failed** and can be retried until you quit Pincer. Attachments aren't saved in the outbox, so after a relaunch it's gone. Until then, its text is still in the chat, so you can copy it.
 
 ## Several gateways
 
 Each gateway has its own outbox. Messages queued for one gateway are sent only when Pincer is connected to that gateway, so switching gateways never sends a message to the wrong one.
 
-Deleting a chat in Pincer deletes its unsent messages too; the confirmation says how many. Removing a gateway deletes its outbox.
+When a chat is deleted on the gateway, its unsent messages are deleted with it. Removing a gateway deletes its outbox.
 
 ## Where the outbox is stored
 
@@ -78,9 +84,9 @@ To keep the outbox in memory only, so it lasts until you quit Pincer, set `PINCE
 
 To see or empty it, open **Settings** (**General** tab on macOS) and find **Storage**:
 
-- **Unsent messages** shows how many messages are queued or failed, across all gateways.
-- **Clear Outbox…** asks for confirmation, then deletes every queued and failed message. Your chats and their history aren't affected.
+- **Outbox** shows how many messages are unsent, across all gateways.
+- **Clear Outbox…** asks **Clear the outbox?** and, when you confirm with **Clear Outbox**, deletes every queued and failed message without sending it. A message being sent at that moment isn't affected. Your chats and cached transcripts aren't affected either.
 
 ## Trying it out
 
-The built-in demo has a failed message you can retry. See [Try the demo](../../getting-started/try-the-demo/).
+The built-in demo has a failed message at the end of the *Dinner party* chat. Choose **Retry** and it's sent. See [Try the demo](../../getting-started/try-the-demo/).

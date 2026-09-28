@@ -529,16 +529,16 @@ private struct TranscriptCacheSettingsSection: View {
                 } message: {
                     Text("Chats are downloaded again from your gateways when you open them, and message search is rebuilt. Nothing on your gateways is deleted.")
                 }
-            LabeledContent("Unsent messages") {
-                Text(self.app.unsentCount.formatted())
+            LabeledContent("Outbox") {
+                Text(self.app.unsentCount == 1 ? "1 message" : "\(self.app.unsentCount.formatted()) messages")
                     .monospacedDigit()
             }
-            Button("Discard Unsent Messages…", role: .destructive) { self.confirmingUnsent = true }
+            Button("Clear Outbox…", role: .destructive) { self.confirmingUnsent = true }
                 .disabled(self.app.unsentCount == 0)
-                .confirmationDialog("Discard unsent messages?", isPresented: self.$confirmingUnsent, titleVisibility: .visible) {
-                    Button("Discard", role: .destructive) { self.app.discardUnsentMessages() }
+                .confirmationDialog("Clear the outbox?", isPresented: self.$confirmingUnsent, titleVisibility: .visible) {
+                    Button("Clear Outbox", role: .destructive) { self.app.discardUnsentMessages() }
                 } message: {
-                    Text("Messages waiting to send, or that failed to send, are deleted from this device. Messages already sending aren’t affected.")
+                    Text("Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected.")
                 }
         } header: {
             Text("Storage")
