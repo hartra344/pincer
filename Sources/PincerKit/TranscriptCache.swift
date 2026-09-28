@@ -88,19 +88,48 @@ public enum TranscriptCache {
     //    file without it decodes, and its edit cards fall back to diffing the tool's arguments
     //    (a `write` shows as a new file rather than an overwrite). That degrades gracefully,
     //    unlike v4's missing reply ids, so it isn't worth refetching every cached transcript.
-    //  - v6 (#207, agent-to-agent messages) added `ChatItem.sender`. A v5 file shows another
-    //    agent's messages as the chat agent's, and the provenance that names the sender isn't
-    //    cached, so v5 isn't migratable: it's discarded and refetched, and
-    //    `oldestMigratableVersion` is 6.
+    //  - v6 (#207, agent-to-agent messages) added `ChatItem.sender`. The provenance that names a
+    //    sender isn't cached, but an unprojected inter-session message was cached as your turn
+    //    with the Gateway's `[Inter-session message] sourceSession=…` header still in its text;
+    //    `migrations[5]` (`forwardedSenderMigration`) reads the sender from that header, strips
+    //    it, and shows the message as the sender's. Messages the Gateway had already projected
+    //    decode without a sender until the newest page is refetched over them on open.
 
     /// Upgrades a snapshot's JSON object from the version it's keyed by to the next one.
     typealias Migration = @Sendable (inout [String: Any]) throws -> Void
 
     /// Keyed by source version: `migrations[n]` turns a version-n snapshot into version n + 1.
-    static let migrations: [Int: Migration] = [:]
+    static let migrations: [Int: Migration] = [
+        5: forwardedSenderMigration,
+    ]
+
+    /// v5 → v6 (#207): cached inter-session turns become the sending agent's.
+    static let forwardedSenderMigration: Migration = { json in
+        guard var items = json["items"] as? [Any] else { return }
+        for index in items.indices {
+            guard let object = items[index] as? [String: Any], object["role"] as? String == ChatRole.user.rawValue,
+                  let data = try? JSONSerialization.data(withJSONObject: object),
+                  var item = try? JSONDecoder().decode(ChatItem.self, from: data),
+                  item.sender == nil, let sender = MessageSender.fromPromptHeader(item.plainText)
+            else { continue }
+            item.sender = sender
+            item.role = .assistant
+            item.via = nil
+            item.blocks = item.blocks.compactMap { block in
+                guard case let .text(text) = block else { return block }
+                let stripped = MessageSender.stripInterSessionPrefix(text)
+                return stripped.isEmpty ? nil : .text(stripped)
+            }
+            guard let encoded = try? JSONEncoder().encode(item),
+                  let migrated = try? JSONSerialization.jsonObject(with: encoded)
+            else { continue }
+            items[index] = migrated
+        }
+        json["items"] = items
+    }
 
     /// Older transcripts are discarded rather than migrated.
-    static let oldestMigratableVersion = 6
+    static let oldestMigratableVersion = 5
 
     struct MigrationError: Error, CustomStringConvertible {
         var description: String

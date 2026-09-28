@@ -110,6 +110,23 @@ public struct MessageSender: Hashable, Codable, Sendable {
         return MessageSender(kind: senderKind, sessionKey: sessionKey, agentId: agentId, label: label)
     }
 
+    /// The sender named by an inter-session prompt header (`buildInterSessionPromptContext`
+    /// upstream). Only for cached transcripts, which kept the text but not the provenance.
+    static func fromPromptHeader(_ text: String) -> MessageSender? {
+        guard text.hasPrefix(self.interSessionPromptPrefix) else { return nil }
+        let header = text.prefix { $0 != "\n" }.dropFirst(self.interSessionPromptPrefix.count)
+        var fields: [String: String] = [:]
+        for pair in header.split(separator: " ") {
+            let parts = pair.split(separator: "=", maxSplits: 1)
+            if parts.count == 2 { fields[String(parts[0])] = String(parts[1]) }
+        }
+        let tool = fields["sourceTool"]
+        let key = fields["sourceSession"]
+        let isHelper = tool == "subagent_announce" || tool == "subagent_settle" || key?.contains(":subagent:") == true
+        guard tool == "sessions_send" || isHelper else { return nil }
+        return MessageSender(kind: isHelper ? .helper : .agent, sessionKey: key)
+    }
+
     /// `stripInterSessionPromptPrefixForDisplay`, upstream.
     public static func stripInterSessionPrefix(_ text: String) -> String {
         guard let range = text.range(of: self.interSessionPromptPrefix) else { return text }
