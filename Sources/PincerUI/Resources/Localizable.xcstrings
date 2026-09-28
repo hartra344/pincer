@@ -211,6 +211,28 @@
         }
       }
     },
+    "%lld messages queued": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld message queued"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld messages queued"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld more…": {
       "localizations": {
         "en": {
@@ -861,6 +883,16 @@
         }
       }
     },
+    "Attachments need a connection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attachments need a connection"
+          }
+        }
+      }
+    },
     "Auto": {
       "localizations": {
         "en": {
@@ -1297,6 +1329,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect to a Gateway to see its nodes."
+          }
+        }
+      }
+    },
+    "Connect to run commands": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to run commands"
           }
         }
       }
@@ -4101,6 +4143,16 @@
         }
       }
     },
+    "Offline — messages send when you reconnect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline — messages send when you reconnect"
+          }
+        }
+      }
+    },
     "Online for %@": {
       "localizations": {
         "en": {
@@ -4667,6 +4719,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Question from the agent"
+          }
+        }
+      }
+    },
+    "Queue Message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Queue Message"
           }
         }
       }
