@@ -464,7 +464,7 @@ private final class SidebarChatCell: NSTableCellView {
     private let pin = NSImageView()
     private let preview = NSTextField(labelWithString: "")
     private let chip = NSButton()
-    private let spinner = NSProgressIndicator()
+    private let workingAvatar = SidebarWorkingAvatarView()
     private let unreadDot = NSImageView()
     private let date = NSTextField(labelWithString: "")
     private var onToggleThreads: (() -> Void)?
@@ -502,15 +502,12 @@ private final class SidebarChatCell: NSTableCellView {
         self.chip.imagePosition = .imageLeading
         self.chip.target = self
         self.chip.action = #selector(self.toggleThreads)
-        self.spinner.style = .spinning
-        self.spinner.controlSize = .mini
-        self.spinner.isDisplayedWhenStopped = false
         self.unreadDot.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: "Unread")
         self.unreadDot.symbolConfiguration = .init(pointSize: 7, weight: .regular)
         self.unreadDot.contentTintColor = .labelColor
         self.date.font = .systemFont(ofSize: NSFont.systemFontSize(for: .mini))
         self.date.textColor = .tertiaryLabelColor
-        for view in [self.chip, self.spinner, self.unreadDot, self.date] as [NSView] {
+        for view in [self.chip, self.workingAvatar, self.unreadDot, self.date] as [NSView] {
             view.setContentHuggingPriority(.required, for: .horizontal)
             view.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
@@ -526,7 +523,7 @@ private final class SidebarChatCell: NSTableCellView {
         let spacer = NSView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
         spacer.setContentCompressionResistancePriority(.init(1), for: .horizontal)
-        let row = NSStackView(views: [self.threadArrow, self.icon, text, spacer, self.chip, self.spinner, self.unreadDot, self.date])
+        let row = NSStackView(views: [self.threadArrow, self.icon, text, spacer, self.chip, self.workingAvatar, self.unreadDot, self.date])
         row.spacing = 7
         row.alignment = .centerY
         row.distribution = .fill
@@ -571,14 +568,13 @@ private final class SidebarChatCell: NSTableCellView {
             self.onToggleThreads = { actions.toggleThreads(key) }
         }
 
-        let working = row.hasActiveRun || (!entry.showSubagentRuns && entry.runningSubagents > 0)
-        if working {
-            self.spinner.startAnimation(nil)
-            self.spinner.toolTip = row.hasActiveRun ? "Working" : "\(entry.runningSubagents) helper runs working"
+        let working = entry.working != nil
+        self.workingAvatar.isHidden = !working
+        if let indicator = entry.working {
+            self.workingAvatar.configure(indicator, companion: entry.workingAvatar, phaseSeed: row.key)
         } else {
-            self.spinner.stopAnimation(nil)
+            self.workingAvatar.stop()
         }
-        self.spinner.isHidden = !working
         self.unreadDot.isHidden = working || !(row.isUnread && !row.isSubagent)
         let activity = working || !self.unreadDot.isHidden ? nil : row.activityDate
         self.date.isHidden = activity == nil
@@ -586,8 +582,17 @@ private final class SidebarChatCell: NSTableCellView {
 
         var label = row.title
         if row.isUnread, !row.isSubagent { label += ", unread" }
-        if working { label += ", working" }
+        if let indicator = entry.working { label += ", \(indicator.label)" }
         self.setAccessibilityLabel(label)
+    }
+
+    override var backgroundStyle: NSView.BackgroundStyle {
+        didSet { self.workingAvatar.isEmphasized = self.backgroundStyle == .emphasized }
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        self.workingAvatar.stop()
     }
 
     @objc private func toggleThreads() {

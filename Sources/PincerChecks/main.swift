@@ -2410,6 +2410,7 @@ print("Deep links & Handoff")
 runDeepLinkChecks()
 
 checkToolDiffs()
+checkSidebarWorking()
 
 let arguments = CommandLine.arguments
 if let index = arguments.firstIndex(of: "--live"), arguments.count > index + 2 {
@@ -2476,6 +2477,8 @@ if arguments.contains("--demo") {
     await runDemoToolDiffs()
     print("Agent avatars (demo)")
     await runDemoAvatars()
+    print("Sidebar working avatar (demo)")
+    await runDemoSidebarWorking()
 }
 
 print("Keychain isolation")
@@ -3699,7 +3702,9 @@ func runMenuBarDemo() async {
     check(Set(inbox.unread.map(\.target.sessionKey)) == [homeLab, papers] && inbox.unreadCount == 3
           && inbox.unread.map(\.title) == ["🦞 home-lab · Claw", "🔭 Paper digest · Scout"],
           "unread lists home-lab and Paper digest (\(inbox.unread.map(\.title)), \(inbox.unreadCount) unread)")
-    check(inbox.running.isEmpty && !inbox.isCaughtUp && inbox.badgeText == "4", "nothing running; the icon shows 4 (\(inbox.badgeText ?? "none"))")
+    // Forge's "Fix retry backoff" opens mid-run; running chats don't add to the badge.
+    check(inbox.running.map(\.title) == ["🛠️ Fix retry backoff · Forge"] && !inbox.isCaughtUp && inbox.badgeText == "4",
+          "only the seeded run is running; the icon shows 4 (\(inbox.running.map(\.title)), \(inbox.badgeText ?? "none"))")
     // #9: the menu takes `now` from a tick, not body. Past its 30 minutes the seeded approval drops out.
     let expired = MenuBarInbox(app: app, now: Date().addingTimeInterval(31 * 60))
     check(expired.needsYou.isEmpty && expired.needsYouCount == 0 && expired.badgeText == "3" && !expired.accessibilityLabel.contains("need"),
@@ -3773,6 +3778,7 @@ func runMenuBarDemo() async {
         let recorded = await waitFor("seeded approval in history", timeout: 5) { history.items.first?.id == pending.id }
         check(recorded && history.items.first?.sessionKey == coderKey, "the resolved seeded approval shows in Approval History")
         for row in gateway.sessions.values where row.isUnread { await gateway.markRead(row.key) }
+        await gateway.chat(for: "agent:coder:dashboard:retry-fix").abort()
         let caughtUp = await waitFor("caught up") { MenuBarInbox(app: app).isCaughtUp }
         check(caughtUp && MenuBarInbox(app: app).badgeText == nil, "with nothing left the menu is all caught up")
     } else {

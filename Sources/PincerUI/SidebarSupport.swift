@@ -51,6 +51,10 @@ struct SidebarModel: Equatable {
         let showSubagentRuns: Bool
         /// Last-message line under the title, or `nil` when previews are off or there's none.
         let preview: String?
+        /// The dancing avatar that replaces the old spinner, or `nil` when the chat isn't working.
+        let working: SidebarWorkingIndicator?
+        /// The agent's companion style for `working` when animated avatars are on.
+        let workingAvatar: AvatarStyle?
     }
 
     struct Group: Equatable {
@@ -74,9 +78,19 @@ struct SidebarModel: Equatable {
         var model = SidebarModel()
         for section in gateway.sections(search: search) {
             var entries: [Entry] = []
+            func working(_ row: SessionRow, runningSubagents: Int) -> (SidebarWorkingIndicator?, AvatarStyle?) {
+                guard row.hasActiveRun || (!showSubagentRuns && runningSubagents > 0) else { return (nil, nil) }
+                let agent = gateway.agent(row.agentId)
+                let indicator = SidebarWorkingIndicator.resolve(
+                    hasActiveRun: row.hasActiveRun, runningSubagents: runningSubagents, showSubagentRuns: showSubagentRuns,
+                    agent: agent, companionsEnabled: avatarsOn)
+                return (indicator, indicator != nil && avatarsOn ? AvatarSettings.style(for: agent) : nil)
+            }
             for channel in section.channels {
                 let expanded = expandedThreads.contains(channel.row.key)
                 let subagents = channel.threads.filter(\.isSubagent)
+                let runningSubagents = subagents.filter(\.hasActiveRun).count
+                let channelWorking = working(channel.row, runningSubagents: runningSubagents)
                 entries.append(Entry(
                     id: self.entryId(channel.row.key),
                     row: channel.row,
@@ -84,11 +98,12 @@ struct SidebarModel: Equatable {
                     color: ChannelRowStyle.colorName(for: channel.row, gateway: gateway),
                     isThread: false,
                     subagentCount: subagents.count,
-                    runningSubagents: subagents.filter(\.hasActiveRun).count,
+                    runningSubagents: runningSubagents,
                     hiddenUnreadThreads: expanded ? 0 : subagents.filter { $0.isUnread && !$0.hasActiveRun }.count,
                     threadsExpanded: expanded,
                     showSubagentRuns: showSubagentRuns,
-                    preview: showPreviews ? channel.row.preview : nil))
+                    preview: showPreviews ? channel.row.preview : nil,
+                    working: channelWorking.0, workingAvatar: channelWorking.1))
                 // Like Discord, helper runs live inside the conversation (as "Open run" on their
                 // tool call) unless the sidebar is set to list them.
                 let visible: [SessionRow]
@@ -100,12 +115,14 @@ struct SidebarModel: Equatable {
                     visible = channel.threads.filter { !$0.isSubagent || $0.hasActiveRun || $0.key == selected }
                 }
                 for thread in visible {
+                    let threadWorking = working(thread, runningSubagents: 0)
                     entries.append(Entry(id: self.entryId(thread.key), row: thread,
                                          icon: ChannelRowStyle.customSymbol(for: thread, gateway: gateway),
                                          color: ChannelRowStyle.colorName(for: thread, gateway: gateway), isThread: true, subagentCount: 0,
                                          runningSubagents: 0, hiddenUnreadThreads: 0, threadsExpanded: false,
                                          showSubagentRuns: showSubagentRuns,
-                                         preview: showPreviews ? thread.preview : nil))
+                                         preview: showPreviews ? thread.preview : nil,
+                                         working: threadWorking.0, workingAvatar: threadWorking.1))
                 }
             }
             let newChatAgent = section.agentId ?? (gateway.organization == .recent ? gateway.defaultAgentId : nil)

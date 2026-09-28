@@ -1396,7 +1396,22 @@ actor DemoGateway {
             self.emit("chat", ["runId": .string(id), "sessionKey": .string(run.sessionKey),
                                "seq": JSONValue(run.seq + 2), "state": "aborted"])
         }
+        // The runs seeded as already going have no task behind them; stopping one just ends it.
+        guard matching.isEmpty, let sessionKey, let row = self.sessions[sessionKey], row["hasActiveRun"]?.bool == true,
+              let seeded = row["activeRunIds"]?.array?.first?.string, runId == nil || runId == seeded,
+              [Self.seededRunId, Self.seededHelperRunId].contains(seeded)
+        else { return }
+        self.updateRow(sessionKey, reason: "abort") { row in
+            row["hasActiveRun"] = false
+            row["activeRunIds"] = []
+            row["status"] = "idle"
+        }
+        self.emit("chat", ["runId": .string(seeded), "sessionKey": .string(sessionKey), "seq": JSONValue(1), "state": "aborted"])
     }
+
+    /// Runs the demo opens with already going: Forge's "Fix retry backoff" chat and Scout's helper run.
+    static let seededRunId = "run_demo_seeded_retry"
+    static let seededHelperRunId = "run_demo_seeded_helper"
 
     // MARK: Events
 
@@ -1817,12 +1832,15 @@ actor DemoGateway {
         add("agent:research:subagent:abc", agent: "research", title: "Summarize arXiv 2401.x",
             preview: "Subagent found the main contribution.", age: 180_000,
             ["label": "Summarize arXiv 2401.x", "parentSessionKey": "agent:research:dashboard:papers",
-             "spawnedBy": "agent:research:dashboard:papers"],
+             "spawnedBy": "agent:research:dashboard:papers", "hasActiveRun": true, "status": "running",
+             "activeRunIds": [.string(Self.seededHelperRunId)]],
             messages: [
                 said("assistant", "The paper mainly improves how retrieval-augmented summaries are evaluated.", ago: 3 * minute),
             ])
+        // Forge is still at work here, so the sidebar shows a working chat at launch.
         add(Self.fileEditsKey, agent: "coder", title: "Fix retry backoff", preview: Self.fileEditsPreview,
-            age: 5 * hour * 1000, messages: Self.seedFileEditsTranscript())
+            age: 5 * hour * 1000, ["hasActiveRun": true, "status": "running", "activeRunIds": [.string(Self.seededRunId)]],
+            messages: Self.seedFileEditsTranscript())
         add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
             ["isMain": true, "unread": true], messages: [
                 said("assistant", "Forge can edit code, run builds, and report back briefly.", ago: 14 * day),
