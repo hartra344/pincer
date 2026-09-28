@@ -98,7 +98,9 @@ func runDemoSessions(_ gateway: GatewayStore) async {
 
     if let running = manager.row(refactor), let failed = manager.row(ciFix) {
         let elapsed = SessionManager.runDuration(running, now: Date()) ?? -1
-        check(SessionRunState(row: running) == .running && elapsed >= 300, "demo running session with duration (\(elapsed))")
+        // The seeded run finishes on its own 90 s after connecting, so a slow run may see it done.
+        let state = SessionRunState(row: running)
+        check((state == .running || state == .done) && elapsed >= 300, "demo running session with duration (\(state), \(elapsed))")
         check(SessionRunState(row: failed) == .failed && SessionManager.runDuration(failed, now: Date()) == 94, "demo failed run 1m 34s")
     } else {
         check(false, "demo seeds running and failed sessions")
