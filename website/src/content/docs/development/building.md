@@ -81,6 +81,8 @@ swift run PincerChecks --live-no-reply-to ws://127.0.0.1:18791 dev-token   # moc
 
 Add `--skip-intent-checks` to any mode to leave out the Shortcuts & Siri offline checks, which wait on real reply timeouts (about 15 seconds).
 
+Add `--skip-perf-budgets` to any mode to report the offline perf smoke timings (message index build, query and append) without enforcing their budgets. Only clearly broken timings, such as a selective query over 1 second, still fail. Use it when other work shares the CPU. `--perf-smoke` runs only the perf smoke, with its budgets enforced.
+
 Each run sets its own `PINCER_DRAFTS_DIR`, `PINCER_CACHE_DIR` and scratch defaults suite, so concurrent runs don't share storage. It also keeps every secret in memory, so it never touches or prompts for your real Keychain (no `PINCER_KEYCHAIN=memory` needed), and it fails if any real Keychain call happens.
 
 ## Launch CPU check
@@ -110,7 +112,7 @@ scripts/check-launch-cpu.sh --menu-bar on --demo
      - `PincerChecks --live-no-usage` against a mock started with `MOCK_NO_USAGE=1`
      - `PincerChecks --live-no-reply-to` against a mock started with `MOCK_NO_REPLY_TO=1`
 
-     Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
+     Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. Because they share the CPU (CI runners have 3 cores), they all pass `--skip-perf-budgets`. After they finish, `PincerChecks --perf-smoke` runs alone and enforces the perf smoke budgets. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
 
 CI passes `-Xswiftc -enable-incremental-file-hashing` to every `swift` command. Checkout gives every file a new modification time, so without it the restored build would recompile everything.
 
