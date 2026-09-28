@@ -427,7 +427,7 @@ public final class GatewayStore: Identifiable {
         Task { await self.pull(self.syncedMap(Self.groupIconsPref)) }
         Task { await self.pull(self.syncedMap(Reactions.prefKey)) }
         Task { await self.pull(self.syncedMap(Self.healthDismissalsPref)) }
-        Task { await self.pull(self.syncedMap(AvatarPreferences.prefKey)) }
+        Task { await self.pullAvatarChoices() }
         Task { await self.loadGroups() }
         // Only pick a chat on the first connect: on iPhone, going back to the sidebar clears the
         // selection, and re-selecting on every reconnect would push a chat the user left.
@@ -1497,10 +1497,27 @@ public final class GatewayStore: Identifiable {
         self.setAvatarChoice(style.rawValue, for: AvatarPreferences.renderStyleEntry)
     }
 
+    /// Choices made while this Gateway was unreachable. Its map is left alone until it reconnects,
+    /// so pulling its older map can't undo them on this device; they're pushed after that pull.
+    private var queuedAvatarChoices: [String: String?] = [:]
+
     private func setAvatarChoice(_ value: String?, for entry: String) {
+        guard self.state.isConnected else {
+            self.queuedAvatarChoices[entry] = .some(value)
+            return
+        }
+        // A choice made now beats one queued while offline and not yet replayed.
+        self.queuedAvatarChoices.removeValue(forKey: entry)
         guard self.avatarChoices[entry] != value else { return }
         self.avatarChoices[entry] = value
         Task { await self.push(self.syncedMap(AvatarPreferences.prefKey), entry, value) }
+    }
+
+    private func pullAvatarChoices() async {
+        await self.pull(self.syncedMap(AvatarPreferences.prefKey))
+        let queued = self.queuedAvatarChoices
+        self.queuedAvatarChoices = [:]
+        for (entry, value) in queued { self.setAvatarChoice(value, for: entry) }
     }
 
     // MARK: Chat icons
