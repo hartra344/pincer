@@ -184,7 +184,7 @@ struct UsageSectionBody<Content: View>: View {
         } else if let error = self.status.error {
             UsageErrorLabel(message: error, forbidden: self.status.isForbidden, connected: connected, retry: self.status.retry)
         } else {
-            Text("Not connected.")
+            Text("Not connected.", bundle: .module)
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -206,7 +206,7 @@ struct UsageErrorLabel: View {
                 Label(self.message, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red)
             }
-            Button("Try Again") { Task { await self.retry() } }
+            Button(L("Try Again")) { Task { await self.retry() } }
                 .disabled(!self.connected)
         }
         .font(.callout)
@@ -362,7 +362,7 @@ struct UsageRangeBar: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            Picker("Range", selection: Binding(
+            Picker(L("Range"), selection: Binding(
                 get: { self.selection.preset },
                 set: { preset in
                     var selection = self.selection

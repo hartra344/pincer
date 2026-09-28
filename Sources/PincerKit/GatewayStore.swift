@@ -69,7 +69,17 @@ public final class GatewayStore: Identifiable {
     public private(set) var hello: GatewayHello?
     public private(set) var agents: [AgentSummary] = []
     public private(set) var defaultAgentId = "main"
-    public private(set) var sessions: [String: SessionRow] = [:]
+    public private(set) var sessions: [String: SessionRow] = [:] {
+        didSet {
+            self.subagentTrees = [:]
+            self.settleRunTimeline()
+        }
+    }
+    /// `subagentTree(rootKey:)` per root and connection state, until the rows change.
+    @ObservationIgnored var subagentTrees: [String: SubagentTree] = [:]
+    /// Streamed run activity, read through `runTimeline`; bumping the revision publishes it.
+    @ObservationIgnored var runTimelineState = RunTimeline()
+    var runTimelineRevision = 0
     public private(set) var approvals: [ExecApproval] = []
     /// Pending agent questions (`ask_user`), oldest first.
     public private(set) var questions: [QuestionPrompt] = []
@@ -105,6 +115,18 @@ public final class GatewayStore: Identifiable {
         didSet {
             guard showArchived != oldValue, self.bootstrapped else { return }
             Task { await self.refreshSessions() }
+        }
+    }
+    public var showAutomations: Bool {
+        didSet {
+            guard showAutomations != oldValue else { return }
+            self.defaults.set(self.showAutomations, forKey: "pincer.showAutomations.\(self.id.uuidString)")
+        }
+    }
+    public var showSlashCommands: Bool {
+        didSet {
+            guard showSlashCommands != oldValue else { return }
+            self.defaults.set(self.showSlashCommands, forKey: "pincer.showSlashCommands.\(self.id.uuidString)")
         }
     }
 
@@ -235,6 +257,8 @@ public final class GatewayStore: Identifiable {
         self.connection = GatewayConnection(profile: profile, identity: identity)
         self.organization = SidebarOrganization(
             rawValue: defaults.string(forKey: "pincer.org.v2.\(profile.id.uuidString)") ?? "") ?? .servers
+        self.showAutomations = defaults.bool(forKey: "pincer.showAutomations.\(profile.id.uuidString)")
+        self.showSlashCommands = defaults.bool(forKey: "pincer.showSlashCommands.\(profile.id.uuidString)")
         self.serverNameOverrides = defaults.dictionary(forKey: "pincer.serverNames.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.chatIcons = defaults.dictionary(forKey: "pincer.chatIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.chatColors = defaults.dictionary(forKey: "pincer.chatColors.\(profile.id.uuidString)") as? [String: String] ?? [:]
@@ -487,7 +511,8 @@ public final class GatewayStore: Identifiable {
         self.prefetchTask?.cancel()
         self.prefetchTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
-            guard let rows = self?.sessions.values.filter({ !$0.isSubagent }).sorted(by: { $0.activityMs > $1.activityMs })
+            guard let rows = self?.sessions.values.filter({ !$0.isSubagent && !$0.isPlaceholder })
+                .sorted(by: { $0.activityMs > $1.activityMs })
             else { return }
             for row in rows {
                 guard !Task.isCancelled, let self, self.state.isConnected else { return }
@@ -519,6 +544,7 @@ public final class GatewayStore: Identifiable {
         for row in list["sessions"]?.array?.compactMap(SessionRow.init) ?? [] {
             next[row.key] = row
         }
+        self.addAgentHomes(to: &next)
         self.sessions = next
         if let defaults = list["defaults"], let model = defaults["model"]?.text {
             self.defaultModelRef = ModelRef.qualified(model, provider: defaults["modelProvider"]?.text)
@@ -547,10 +573,43 @@ public final class GatewayStore: Identifiable {
     /// Called after any Gateway's agent list loads, e.g. so the app can refresh Siri's App Shortcut phrases.
     public static var agentsDidLoad: (@MainActor () -> Void)?
 
-    private func applyAgents(_ result: JSONValue) {
+    func applyAgents(_ result: JSONValue) {
         self.agents = result["agents"]?.array?.compactMap(AgentSummary.init) ?? []
         self.defaultAgentId = result["defaultId"]?.text ?? self.agents.first?.id ?? "main"
+        self.agentMainKey = result["mainKey"]?.text ?? "main"
+        self.agentScope = result["scope"]?.text
+        var next = self.sessions
+        self.addAgentHomes(to: &next)
+        if next != self.sessions { self.sessions = next }
         Self.agentsDidLoad?()
+    }
+
+    /// `agents.list` `mainKey`: each agent's home chat is `agent:<id>:<mainKey>`.
+    @ObservationIgnored private var agentMainKey = "main"
+    /// `agents.list` `scope`; `global` shares one session instead of per-agent home chats.
+    @ObservationIgnored private var agentScope: String?
+
+    /// The Gateway only lists sessions it has stored, and an agent's home chat isn't stored until
+    /// its first message, so a new agent would have no chats and no sidebar section. Like the
+    /// Control UI, list each agent's home chat anyway; it opens empty and the first send creates
+    /// it. Placeholders for agents that are gone are dropped.
+    private func addAgentHomes(to rows: inout [String: SessionRow]) {
+        let agentIds = Set(self.agents.filter { !$0.isSystem }.map(\.id))
+        for (key, row) in rows where row.isPlaceholder && !agentIds.contains(row.agentId) {
+            rows.removeValue(forKey: key)
+        }
+        guard self.agentScope != "global" else { return }
+        let mainAgents = Set(rows.values.filter { $0.isMain && !$0.isPlaceholder }.map(\.agentId))
+        for agent in self.agents where !agent.isSystem && !mainAgents.contains(agent.id) {
+            let key = "agent:\(agent.id):\(self.agentMainKey)"
+            guard rows[key] == nil,
+                  let row = SessionRow(.object([
+                      "key": .string(key), "agentId": .string(agent.id), "isMain": true, "kind": "direct",
+                      SessionRow.placeholderField: true,
+                  ]))
+            else { continue }
+            rows[key] = row
+        }
     }
 
     /// Re-fetches `agents.list` so the sidebar and pickers show created, renamed and deleted agents.
@@ -593,6 +652,7 @@ public final class GatewayStore: Identifiable {
         case "chat":
             guard let key = payload["sessionKey"]?.text else { return }
             if let runId = payload["runId"]?.text { self.runSessions[runId] = key }
+            self.recordRunActivity(event)
             self.chats[key]?.handleChat(payload)
             if payload["state"]?.string == "final" {
                 self.notifyReply(sessionKey: key, runId: payload["runId"]?.text, snapshot: payload["message"])
@@ -600,6 +660,7 @@ public final class GatewayStore: Identifiable {
         case "agent":
             guard let runId = payload["runId"]?.text else { return }
             let key = payload["sessionKey"]?.text ?? self.runSessions[runId]
+            self.recordRunActivity(event, sessionKey: key)
             if let key { self.chats[key]?.handleAgent(payload) }
         case "session.message":
             let key = payload["sessionKey"]?.text ?? payload["session"]?["key"]?.text
@@ -1025,7 +1086,15 @@ public final class GatewayStore: Identifiable {
     }
 
     /// Subagent runs are the agent's own work; their parent chat carries the result.
-    public var totalUnread: Int { self.sessions.values.filter { $0.isUnread && !$0.isArchived && !$0.isSubagent }.count }
+    public var totalUnread: Int {
+        self.sessions.values.filter { $0.isUnread && !$0.isArchived && !$0.isSubagent && !self.isHiddenInSidebar($0) }.count
+    }
+
+    /// Automation and slash-command sessions stay out of the sidebar unless opted in; the open chat always shows.
+    public func isHiddenInSidebar(_ row: SessionRow) -> Bool {
+        guard row.key != self.selectedKey else { return false }
+        return (row.isAutomation && !self.showAutomations) || (row.isSlashCommands && !self.showSlashCommands)
+    }
 
     public var serverNameOverrides: [String: String] {
         didSet { self.defaults.set(self.serverNameOverrides, forKey: "pincer.serverNames.\(self.id.uuidString)") }
@@ -1369,8 +1438,14 @@ public final class GatewayStore: Identifiable {
 
     public func sections(search: String = "") -> [SidebarSection] {
         let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+        let hidden = query.isEmpty ? Set(self.sortedRows.filter(self.isHiddenInSidebar).map(\.key)) : []
         let rows = self.sortedRows.filter { row in
-            query.isEmpty || row.title.lowercased().contains(query) || (row.preview?.lowercased().contains(query) ?? false)
+            guard query.isEmpty else {
+                return row.title.lowercased().contains(query) || (row.preview?.lowercased().contains(query) ?? false)
+            }
+            // Threads of a hidden session go with it rather than surfacing at the top level.
+            return row.key == self.selectedKey
+                || (!hidden.contains(row.key) && !row.parentCandidates.contains(where: hidden.contains))
         }
         // Subagent sessions become threads under their parent, one level deep.
         let keys = Set(rows.map(\.key))

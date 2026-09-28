@@ -43,10 +43,13 @@ struct MessageIndexFileTests {
         #expect(try await self.hits("aardvark") == ["before"])
         let original = self.index
         let url = try #require(MessageIndex.url(gatewayId: self.gateway))
-        let standIn = MessageIndex.discard([self.gateway]) { () -> MessageIndex in
+        var handedOut: MessageIndex?
+        MessageIndex.whileDeleting {
+            MessageIndex.discard(gatewayId: self.gateway)
             try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
-            return MessageIndex.shared(gatewayId: self.gateway)
+            handedOut = MessageIndex.shared(gatewayId: self.gateway)
         }
+        let standIn = try #require(handedOut)
         #expect(standIn !== original)
         // The stand-in does nothing, and in particular doesn't create an index file.
         await standIn.index(sessionKey: "during", snapshot: Self.snapshot("d1", "aardvark during"), fileMtime: Date())

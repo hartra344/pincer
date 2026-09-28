@@ -46,6 +46,10 @@ With **Include Tool Output** turned on in [Find in Chat](../transcript/#find-in-
 - If the tool call fails, the card shows the arguments and the error like any other tool, because the change may never have been made. When the gateway sends back a diff of what it actually wrote, Pincer shows that diff with a **Failed** badge.
 - If Pincer can't read the arguments as a file change (an unknown shape, or a malformed patch), the card shows the raw arguments, the same as any other tool.
 
+## VoiceOver
+
+The card's header is a button that reads what changed and whether it's expanded, for example "Edited foo.swift, 3 added, 1 removed, collapsed". **Copy diff** (or **Copy file contents** for a new file) says "Copied" when you use it, and **Show all N lines** / **Show fewer lines** are labelled buttons. See [Accessibility](../accessibility/).
+
 ## Chats cached by earlier versions
 
 Chats that Pincer cached before it showed file diffs don't have the gateway's result details, so Pincer can't tell whether a write created its file or replaced one. After updating, those writes are labelled **Written**, never **New file**, and show only the added lines, the same as any overwrite. Edits and patches in those chats show a diff worked out from the arguments. The upgrade happens once, on your device, without downloading the chats again. To get the gateway's own diffs for those chats, clear the cache under **Settings → Storage** (see [Local cache](../local-cache/#clearing-the-cache)), and they reload from the gateway.

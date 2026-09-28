@@ -83,6 +83,8 @@ func runDemoDeepLinks() async {
     app.updateVisible()
     let approvalsBefore = demo.approvals.map(\.id)
     let activityBefore = demo.sessions.mapValues(\.activityMs)
+    // The demo's seeded subagent is already running.
+    let runningBefore = Set(demo.sessions.values.filter(\.hasActiveRun).map(\.key))
 
     // A link that also carries would-be actions: only the navigation part may happen.
     let link = app.route(for: Notifier.Target(gatewayId: demo.id, sessionKey: homeLab), messageId: "demo-lab-sensor")
@@ -157,7 +159,7 @@ func runDemoDeepLinks() async {
 
     // Give any stray send/resolve a moment to surface.
     try? await Task.sleep(for: .milliseconds(800))
-    let running = demo.sessions.values.filter(\.hasActiveRun).map(\.key)
+    let running = demo.sessions.values.filter { $0.hasActiveRun && !runningBefore.contains($0.key) }.map(\.key)
     check(running.isEmpty, "no run started by opening links (\(running))")
     check(demo.approvals.map(\.id) == approvalsBefore, "no approval resolved by opening links")
     check(demo.sessions[homeLab]?.activityMs == activityBefore[homeLab], "home-lab saw no new activity")

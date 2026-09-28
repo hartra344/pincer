@@ -23,7 +23,7 @@ struct ExecPolicyPage: View {
             }
             .formStyle(.grouped)
         }
-        .navigationTitle("Command Policy")
+        .navigationTitle(L("Command Policy"))
         .execPolicyChrome()
         .task(id: connected) {
             if connected { await model.loadIfNeeded() }
@@ -38,7 +38,7 @@ struct ExecPolicyPage: View {
                 ExecPolicyControl(model: model, field: field, agent: nil)
             }
         } header: {
-            Text("Defaults for all agents")
+            Text("Defaults for all agents", bundle: .module)
         } footer: {
             ExecPolicyFooter(model: model, connected: connected)
         }
@@ -47,7 +47,7 @@ struct ExecPolicyPage: View {
     @ViewBuilder private func recent(_ model: ExecPolicyModel) -> some View {
         let recent = model.recentlyAllowed
         if !recent.isEmpty {
-            Section("Recently allowed") {
+            Section(L("Recently allowed")) {
                 ForEach(recent) { item in
                     NavigationLink(value: SettingsRoute.execAgent(item.agentId)) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -73,7 +73,7 @@ struct ExecPolicyPage: View {
     }
 
     private func agents(_ model: ExecPolicyModel) -> some View {
-        Section("Agents") {
+        Section(L("Agents")) {
             ForEach(model.agentRows(agents: self.gateway.agents)) { row in
                 NavigationLink(value: SettingsRoute.execAgent(row.id)) {
                     ExecAgentRowView(row: row)
@@ -95,7 +95,7 @@ private struct ExecAgentRowView: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                 if !self.row.isCurrentAgent {
-                    Text("Not a current agent")
+                    Text("Not a current agent", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -108,7 +108,7 @@ private struct ExecAgentRowView: View {
                     .padding(.vertical, 2)
                     .foregroundStyle(.secondary)
                     .background(.secondary.opacity(0.15), in: Capsule())
-                    .accessibilityLabel("\(self.row.badgeCount) allowed")
+                    .accessibilityLabel(L("\(self.row.badgeCount) allowed"))
             }
         }
     }
@@ -141,7 +141,7 @@ struct ExecAgentPage: View {
         .toolbar {
             if model.snapshot != nil, self.hasEntries(model) {
                 ToolbarItem {
-                    Button(self.editing ? "Done" : "Edit") { withAnimation { self.editing.toggle() } }
+                    Button(self.editing ? L("Done") : L("Edit")) { withAnimation { self.editing.toggle() } }
                         .disabled(!self.editable(model, connected: connected))
                 }
             }
@@ -167,15 +167,15 @@ struct ExecAgentPage: View {
             ForEach(ExecPolicyField.allCases) { field in
                 ExecPolicyControl(model: model, field: field, agent: self.agentId)
             }
-            Button("Use Defaults for Everything") { model.useDefaults(agent: self.agentId) }
+            Button(L("Use Defaults for Everything")) { model.useDefaults(agent: self.agentId) }
                 .disabled(model.draft.overrides(self.agentId).isEmpty || !self.editable(model, connected: connected))
         } header: {
             if self.agentId == ExecApprovalsFile.wildcardAgent {
-                Text("Applies to every agent")
+                Text("Applies to every agent", bundle: .module)
             } else if !known {
-                Text("Not a current agent")
+                Text("Not a current agent", bundle: .module)
             } else {
-                Text("Policy")
+                Text("Policy", bundle: .module)
             }
         } footer: {
             ExecPolicyFooter(model: model, connected: connected)
@@ -184,9 +184,9 @@ struct ExecAgentPage: View {
 
     private func commands(_ model: ExecPolicyModel, editable: Bool) -> some View {
         let entries = model.draft.allowlist(self.agentId)
-        return Section("Allowed Commands") {
+        return Section(L("Allowed Commands")) {
             if entries.isEmpty {
-                Text("No allowed commands. When you choose **Always allow** on an approval, the command is added here.")
+                Text("No allowed commands. When you choose **Always allow** on an approval, the command is added here.", bundle: .module)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -204,9 +204,9 @@ struct ExecAgentPage: View {
 
     private func tools(_ model: ExecPolicyModel, editable: Bool) -> some View {
         let grants = model.draft.mcpTools(self.agentId)
-        return Section("Allowed Tools") {
+        return Section(L("Allowed Tools")) {
             if grants.isEmpty {
-                Text("No allowed tools. When you choose **Always allow** on a tool approval, the tool is added here.")
+                Text("No allowed tools. When you choose **Always allow** on a tool approval, the tool is added here.", bundle: .module)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -234,18 +234,18 @@ private struct ExecRemovableRow<Content: View>: View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             if self.editing {
                 Button(role: .destructive, action: self.remove) {
-                    Label("Remove", systemImage: "minus.circle.fill")
+                    Label(L("Remove"), systemImage: "minus.circle.fill")
                         .labelStyle(.iconOnly)
                         .foregroundStyle(.red)
                 }
                 .buttonStyle(.borderless)
                 .disabled(!self.editable)
-                .help("Remove")
+                .help(L("Remove"))
             }
             self.content
         }
         .contextMenu {
-            Button("Remove", systemImage: "trash", role: .destructive, action: self.remove)
+            Button(L("Remove"), systemImage: "trash", role: .destructive, action: self.remove)
                 .disabled(!self.editable)
         }
         #if os(macOS)
@@ -280,7 +280,7 @@ private struct ExecAllowlistRow: View {
                     .textSelection(.enabled)
             }
             if let argPattern = self.entry.argPattern {
-                Text("Arguments: \(argPattern)")
+                Text("Arguments: \(argPattern)", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -288,7 +288,7 @@ private struct ExecAllowlistRow: View {
                     .textSelection(.enabled)
             }
             if let used = self.entry.lastUsedAt {
-                Text("Last used \(used.formatted(.relative(presentation: .named)))")
+                Text("Last used \(used.formatted(.relative(presentation: .named)))", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     #if os(macOS)
@@ -431,28 +431,28 @@ private struct ExecPolicyStates<Content: View>: View {
 
     var body: some View {
         if !self.model.supported {
-            ContentUnavailableView("Command Policy Isn't Available", systemImage: "lock.slash",
-                                   description: Text("This gateway can't share its command policy. Update OpenClaw to manage it here."))
+            ContentUnavailableView(L("Command Policy Isn't Available"), systemImage: "lock.slash",
+                                   description: Text("This gateway can't share its command policy. Update OpenClaw to manage it here.", bundle: .module))
         } else if self.model.needsAdmin {
             ContentUnavailableView {
-                Label("Needs Full Management", systemImage: "lock.shield")
+                Label(L("Needs Full Management"), systemImage: "lock.shield")
             } description: {
                 Text(ExecPolicy.needsAdminMessage)
             } actions: {
-                Button("Open Connection") { self.navigator.destination = .connection }
+                Button(L("Open Connection")) { self.navigator.destination = .connection }
             }
         } else if self.model.snapshot != nil {
             self.content
         } else if !self.connected, !self.model.loadState.isRunning {
-            ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                   description: Text("Connect to the gateway to see its command policy."))
+            ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                   description: Text("Connect to the gateway to see its command policy.", bundle: .module))
         } else if let error = self.model.loadState.error {
             ContentUnavailableView {
-                Label("Couldn't Load Command Policy", systemImage: "exclamationmark.triangle")
+                Label(L("Couldn't Load Command Policy"), systemImage: "exclamationmark.triangle")
             } description: {
                 Text(error)
             } actions: {
-                Button("Try Again") { Task { await self.model.load() } }
+                Button(L("Try Again")) { Task { await self.model.load() } }
             }
         } else {
             ProgressView()
@@ -470,7 +470,7 @@ private struct ExecPolicyHeader: View {
         if self.showsSubtitle || self.model.banner != nil {
             Section {
                 if self.showsSubtitle {
-                    Text("Which commands your agents can run on the Gateway host, and when they have to ask.")
+                    Text("Which commands your agents can run on the Gateway host, and when they have to ask.", bundle: .module)
                         .foregroundStyle(.secondary)
                 }
                 if let banner = self.model.banner {
@@ -500,7 +500,7 @@ private struct ExecPolicyHeader: View {
                     .textSelection(.enabled)
                 // A reload keeps unsaved edits, so it can't help while there are some.
                 if retrySave || !self.model.hasChanges {
-                Button("Try Again") {
+                Button(L("Try Again")) {
                     Task {
                         if retrySave {
                             await self.model.save(agentNames: ExecPolicyUI.agentNames(self.gateway))
@@ -526,7 +526,7 @@ private struct ExecPolicyFooter: View {
                 Text("The Gateway has no policy file yet and uses its defaults. Saving creates \(snapshot.path ?? "the policy file").")
             }
             if !self.connected {
-                Text("Not connected.")
+                Text("Not connected.", bundle: .module)
             }
         }
     }
@@ -579,13 +579,13 @@ private struct ExecPolicyChrome: ViewModifier {
                         if !model.canWrite {
                             self.readOnly
                         }
-                        Button("Revert") { model.revert() }
+                        Button(L("Revert")) { model.revert() }
                             .disabled(!model.hasChanges || model.isSaving)
-                            .help("Discard your changes to the command policy")
-                        Button("Save") { self.save(model) }
+                            .help(L("Discard your changes to the command policy"))
+                        Button(L("Save")) { self.save(model) }
                             .keyboardShortcut("s", modifiers: .command)
                             .disabled(!canSave)
-                            .help("Save the command policy to the Gateway")
+                            .help(L("Save the command policy to the Gateway"))
                     }
                     #else
                     ToolbarItem(placement: .confirmationAction) {
@@ -594,13 +594,13 @@ private struct ExecPolicyChrome: ViewModifier {
                         } else if !model.canWrite {
                             self.readOnly
                         } else {
-                            Button("Save") { self.save(model) }
+                            Button(L("Save")) { self.save(model) }
                                 .disabled(!canSave)
                         }
                     }
                     if model.hasChanges {
                         ToolbarItemGroup(placement: .bottomBar) {
-                            Button("Revert", role: .destructive) { model.revert() }
+                            Button(L("Revert"), role: .destructive) { model.revert() }
                                 .disabled(model.isSaving)
                             Spacer()
                         }
@@ -612,7 +612,7 @@ private struct ExecPolicyChrome: ViewModifier {
 
     private var readOnly: some View {
         Button { self.navigator.destination = .connection } label: {
-            Label("Read Only", systemImage: "lock")
+            Label(L("Read Only"), systemImage: "lock")
                 .labelStyle(.titleAndIcon)
         }
         .help(self.gateway.execPolicy.readOnlyReason ?? "")

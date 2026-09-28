@@ -12,13 +12,13 @@ struct QuickCaptureSettingsSection: View {
     var body: some View {
         Section {
             Toggle(isOn: Binding(get: { self.controller.isEnabled }, set: { self.controller.setEnabled($0) })) {
-                Text("Quick Capture shortcut")
-                Text("Open a small composer from any app to send to a chat.")
+                Text("Quick Capture shortcut", bundle: .module)
+                Text("Open a small composer from any app to send to a chat.", bundle: .module)
             }
-            LabeledContent("Shortcut") {
+            LabeledContent(L("Shortcut")) {
                 HStack(spacing: 8) {
                     if self.controller.shortcut != .default {
-                        Button("Reset to Default") {
+                        Button(L("Reset to Default")) {
                             self.problem = nil
                             self.controller.reset()
                         }
@@ -28,7 +28,7 @@ struct QuickCaptureSettingsSection: View {
                 }
             }
         } header: {
-            Text("Quick Capture")
+            Text("Quick Capture", bundle: .module)
         } footer: {
             if let message = self.problem ?? (self.controller.isEnabled ? self.controller.registrationError : nil) {
                 Text(message).foregroundStyle(.red)
@@ -58,7 +58,7 @@ private struct ShortcutRecorder: View {
         }
         .buttonStyle(.bordered)
         .background(RecorderProbe(host: self.host))
-        .accessibilityLabel("Quick Capture shortcut")
+        .accessibilityLabel(L("Quick Capture shortcut"))
         .accessibilityValue(self.label)
         .onDisappear { self.stop() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in self.stop() }

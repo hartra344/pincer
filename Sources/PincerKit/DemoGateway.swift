@@ -90,6 +90,13 @@ actor DemoGateway {
     private var idempotency: [String: String] = [:]
     private var runs: [String: Run] = [:]
     private var sessionsSubscribed = false
+    /// The seeded runs' activity streams once per demo connection (DemoGateway+Subagents.swift).
+    private var replayedSeededRuns = false
+    /// The seeded running subagent's run: stoppable, but not an active run that defers a restart.
+    private var seededRunningRuns = [DemoGateway.seededRunningSubagentRunId: DemoGateway.seededSubagents.running]
+    /// The last `agent` seq the seeded running helper sent; it keeps streaming tool calls until stopped.
+    private var seededRunningSeq = DemoGateway.seededRunningLastSeq
+    private var seededStreamTask: Task<Void, Never>?
     private var messageSubscriptions: Set<String> = []
     private var eventSeq = 0
     private var sink: (@Sendable (GatewayEvent) -> Void)?
@@ -114,6 +121,7 @@ actor DemoGateway {
         let seeded = Self.seed()
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
+        Self.seedSubagents(sessions: &self.sessions, transcripts: &self.transcripts)
         self.approvalHistory = Self.seedApprovalHistory()
         let pending = Self.seedPendingApproval()
         if let id = pending["id"]?.string {
@@ -211,6 +219,14 @@ actor DemoGateway {
             return ["defaultId": "main", "mainKey": "main", "scope": "per-sender", "agents": .array(self.agents)]
         case "sessions.subscribe":
             self.sessionsSubscribed = true
+            if !self.replayedSeededRuns {
+                self.replayedSeededRuns = true
+                // After the list lands, so the rows can't settle a lane halfway through its replay.
+                Task { [weak self] in
+                    try? await Task.sleep(for: .milliseconds(50))
+                    await self?.replaySeededRuns()
+                }
+            }
             return ["subscribed": true, "list": self.sessionList(params)]
         case "sessions.list":
             return self.sessionList(params)
@@ -1350,7 +1366,12 @@ actor DemoGateway {
     }
 
     private func abort(sessionKey: String?, runId: String?) {
-        let matching = self.runs.filter { id, run in runId.map { $0 == id } ?? (run.sessionKey == sessionKey) }
+        var matching = self.runs.filter { id, run in runId.map { $0 == id } ?? (run.sessionKey == sessionKey) }
+        for (id, key) in self.seededRunningRuns where runId.map({ $0 == id }) ?? (key == sessionKey) {
+            self.seededRunningRuns[id] = nil
+            matching[id] = Run(sessionKey: key, text: "", seq: self.seededRunningSeq)
+            self.seededStreamTask?.cancel()
+        }
         for (id, run) in matching {
             run.task?.cancel()
             self.runs[id] = nil
@@ -1358,16 +1379,64 @@ actor DemoGateway {
                 row["hasActiveRun"] = false
                 row["activeRunIds"] = []
                 row["status"] = "idle"
+                Self.markSubagentAborted(&row)
             }
+            // Like the Gateway: a terminal lifecycle end marked aborted, then the chat state.
+            var lifecycle: [String: JSONValue] = [
+                "runId": .string(id), "sessionKey": .string(run.sessionKey), "seq": JSONValue(run.seq + 1),
+                "stream": "lifecycle", "ts": Self.now(),
+                "data": ["phase": "end", "status": "cancelled", "aborted": true, "stopReason": "user", "endedAt": Self.now()],
+            ]
+            if let parent = self.sessions[run.sessionKey]?["spawnedBy"]?.string {
+                lifecycle["spawnedBy"] = .string(parent)
+                let running = Self.hasRunningChild(parent, in: self.sessions)
+                self.updateRow(parent, reason: "subagent") { $0["hasActiveSubagentRun"] = .bool(running) }
+            }
+            self.emit("agent", .object(lifecycle))
             self.emit("chat", ["runId": .string(id), "sessionKey": .string(run.sessionKey),
-                               "seq": JSONValue(run.seq + 1), "state": "aborted"])
+                               "seq": JSONValue(run.seq + 2), "state": "aborted"])
         }
+        // The runs seeded as already going have no task behind them; stopping one just ends it.
+        guard matching.isEmpty, let sessionKey, let row = self.sessions[sessionKey], row["hasActiveRun"]?.bool == true,
+              let seeded = row["activeRunIds"]?.array?.first?.string, runId == nil || runId == seeded,
+              [Self.seededRunId, Self.seededHelperRunId].contains(seeded)
+        else { return }
+        self.updateRow(sessionKey, reason: "abort") { row in
+            row["hasActiveRun"] = false
+            row["activeRunIds"] = []
+            row["status"] = "idle"
+        }
+        self.emit("chat", ["runId": .string(seeded), "sessionKey": .string(sessionKey), "seq": JSONValue(1), "state": "aborted"])
     }
+
+    /// Runs the demo opens with already going: Forge's "Fix retry backoff" chat and Scout's helper run.
+    static let seededRunId = "run_demo_seeded_retry"
+    static let seededHelperRunId = "run_demo_seeded_helper"
 
     // MARK: Events
 
     func emitHealth() {
         self.emit("health", self.health())
+    }
+
+    private func replaySeededRuns() {
+        for event in Self.seededRunEvents() { self.emit("agent", event) }
+        self.seededStreamTask = Task { [weak self] in
+            var step = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.liveSubagentStepInterval)
+                guard let self, await self.streamSeededStep(step) else { return }
+                step += 1
+            }
+        }
+    }
+
+    private func streamSeededStep(_ step: Int) -> Bool {
+        guard !Task.isCancelled, self.seededRunningRuns[Self.seededRunningSubagentRunId] != nil else { return false }
+        let next = Self.liveSubagentStep(step, seq: self.seededRunningSeq)
+        self.seededRunningSeq = next.seq
+        for event in next.events { self.emit("agent", event) }
+        return true
     }
 
     func emit(_ name: String, _ payload: JSONValue) {
@@ -1763,12 +1832,15 @@ actor DemoGateway {
         add("agent:research:subagent:abc", agent: "research", title: "Summarize arXiv 2401.x",
             preview: "Subagent found the main contribution.", age: 180_000,
             ["label": "Summarize arXiv 2401.x", "parentSessionKey": "agent:research:dashboard:papers",
-             "spawnedBy": "agent:research:dashboard:papers"],
+             "spawnedBy": "agent:research:dashboard:papers", "hasActiveRun": true, "status": "running",
+             "activeRunIds": [.string(Self.seededHelperRunId)]],
             messages: [
                 said("assistant", "The paper mainly improves how retrieval-augmented summaries are evaluated.", ago: 3 * minute),
             ])
+        // Forge is still at work here, so the sidebar shows a working chat at launch.
         add(Self.fileEditsKey, agent: "coder", title: "Fix retry backoff", preview: Self.fileEditsPreview,
-            age: 5 * hour * 1000, messages: Self.seedFileEditsTranscript())
+            age: 5 * hour * 1000, ["hasActiveRun": true, "status": "running", "activeRunIds": [.string(Self.seededRunId)]],
+            messages: Self.seedFileEditsTranscript())
         add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
             ["isMain": true, "unread": true], messages: [
                 said("assistant", "Forge can edit code, run builds, and report back briefly.", ago: 14 * day),
@@ -1792,6 +1864,44 @@ actor DemoGateway {
                 Raised the login timeout to 30 s and the tests pass. I've asked to run \
                 `git push origin fix/login-timeout`; approve it and I'll push.
                 """, ago: 45),
+            ])
+        // Chats of the demo's cron jobs (the log's morning-briefing and disk-check), hidden from the
+        // sidebar until Organize ▸ Show Automations is on.
+        let cron: Row = ["channel": "cron", "totalTokens": 6_400, "inputTokens": 6_400, "outputTokens": 420]
+        let briefingPrompt = "Write my morning briefing: weather, calendar and anything urgent in my inbox."
+        add("agent:main:cron:morning-briefing", agent: "main", title: "Morning briefing",
+            preview: "Sunny, 22°C. Two meetings and one flagged email.", age: 2 * hour * 1000,
+            cron.merging(["label": "Automation: Morning briefing", "unread": true]) { _, new in new }, messages: [
+                said("user", briefingPrompt, ago: day + 2 * hour),
+                said("assistant", """
+                **Good morning.** Light rain until 10, then clearing to 19°C. You have a 1:1 with Priya at 10:00 \
+                and nothing else before lunch. No urgent mail overnight.
+                """, ago: day + 2 * hour - minute),
+                said("user", briefingPrompt, ago: 2 * hour),
+                said("assistant", """
+                **Good morning.** Sunny and 22°C all day.
+
+                - 09:30 Design review
+                - 14:00 Dentist (Harbor St.)
+
+                One flagged email: the landlord needs the lease renewal signed **by Friday**.
+                """, ago: 2 * hour - minute),
+            ])
+        add("agent:main:cron:disk-check", agent: "main", title: "Check disk space",
+            preview: "The external drive isn't mounted.", age: 3 * hour * 1000,
+            cron.merging(["label": "Automation: Check disk space"]) { _, new in new }, messages: [
+                said("user", "Check free space on every volume and warn me under 10%.", ago: 3 * hour),
+                said("assistant", """
+                The root volume is at 46% and fine. The external drive isn't mounted, so I couldn't check it \
+                (`df` exited with code 1).
+                """, ago: 3 * hour - minute),
+            ])
+        // Native Discord slash commands run in their own `…:discord:slash:<userId>` session.
+        add("agent:main:discord:slash:418235907214753792", agent: "main", title: "Slash commands",
+            preview: "Status: online, 3 agents, 1 pending approval.", age: 4 * hour * 1000,
+            ["channel": "discord", "totalTokens": 1_200, "inputTokens": 1_200, "outputTokens": 80], messages: [
+                said("user", "/status", ago: 4 * hour, extra: discord),
+                said("assistant", "Status: online, 3 agents, 1 pending approval.", ago: 4 * hour - 2),
             ])
         return (sessions, transcripts)
     }

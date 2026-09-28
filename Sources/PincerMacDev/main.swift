@@ -33,5 +33,19 @@ if let index = CommandLine.arguments.firstIndex(of: "--avatar-snapshots") {
     }
 }
 
+// `--sidebar-working-snapshots <dir>` renders the sidebar's working indicator to PNGs and exits.
+if let index = CommandLine.arguments.firstIndex(of: "--sidebar-working-snapshots") {
+    let path = CommandLine.arguments.dropFirst(index + 1).first ?? "sidebar-working-snapshots"
+    let directory = URL(filePath: (path as NSString).expandingTildeInPath)
+    do {
+        let count = try MainActor.assumeIsolated { try SidebarWorkingSnapshots.write(to: directory) }
+        print("Wrote \(count) images to \(directory.path)")
+        exit(0)
+    } catch {
+        print("Couldn't write sidebar working snapshots: \(error)")
+        exit(1)
+    }
+}
+
 PincerMacApp.main()
 #endif

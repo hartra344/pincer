@@ -25,7 +25,7 @@ Only the text of your messages and the agent's replies is searched, as the trans
 ## What's searched
 
 - **The selected gateway only.** Switch gateways to search another one.
-- **Chats in the sidebar.** Helper (subagent) runs never show up, even when the sidebar lists them. Archived chats show up only while **Show Archived** (in the Organize menu) is on.
+- **Chats in the sidebar.** Helper (subagent) runs never show up, even when the sidebar lists them. Archived chats show up only while **Show Archived** (in the Organize menu) is on. Automation and slash-command chats are searched even while the sidebar hides them.
 - **Cached history only.** Pincer caches every chat in the background after connecting (see [History and caching](../transcript/#history-and-caching)). The cache keeps up to the latest 20,000 messages of each chat, so anything older isn't searched.
 
 New messages become searchable as soon as they're cached, whether you sent them or they arrived. A message that changes is searched with its new text.

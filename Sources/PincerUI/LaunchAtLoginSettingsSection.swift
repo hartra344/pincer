@@ -62,15 +62,15 @@ struct LaunchAtLoginSettingsSection: View {
         let presentation = self.controller.presentation
         Section {
             Toggle(isOn: Binding(get: { presentation.isOn }, set: { self.controller.setEnabled($0) })) {
-                Text("Open at Login")
-                Text("Start Pincer when you log in, so Quick Capture is ready.")
+                Text("Open at Login", bundle: .module)
+                Text("Start Pincer when you log in, so Quick Capture is ready.", bundle: .module)
             }
             if presentation.showsSettingsButton {
-                Button("Open Login Items Settings…") { self.controller.openSystemSettings() }
+                Button(L("Open Login Items Settings…")) { self.controller.openSystemSettings() }
                     .buttonStyle(.borderless)
             }
         } header: {
-            Text("Launch")
+            Text("Launch", bundle: .module)
         } footer: {
             if let footer = presentation.footer {
                 Text(footer).foregroundStyle(presentation.footerIsError ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))

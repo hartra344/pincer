@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Pincer",
+    defaultLocalization: "en",
     platforms: [.macOS(.v15), .iOS(.v18)],
     products: [
         .library(name: "PincerKit", targets: ["PincerKit"]),
@@ -15,7 +16,7 @@ let package = Package(
         // Web Push decryption and payload parsing, shared with the iOS Notification Service Extension.
         .target(name: "PincerPush"),
         // Shared SwiftUI for macOS and iOS.
-        .target(name: "PincerUI", dependencies: ["PincerKit"]),
+        .target(name: "PincerUI", dependencies: ["PincerKit"], resources: [.process("Resources")]),
         // Development entry point so the macOS app can be built with SwiftPM alone.
         .executableTarget(name: "PincerMacDev", dependencies: ["PincerUI"]),
         // Self-checks runnable without XCTest (`swift run PincerChecks`).

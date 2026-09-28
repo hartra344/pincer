@@ -530,11 +530,14 @@ private final class TranscriptCell: UICollectionViewCell {
 
     private let content = TranscriptRowView()
     private var serial: Int?
+    private weak var actions: TranscriptRowActions?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         self.contentView.addSubview(self.content)
         self.backgroundConfiguration = .clear()
+        // One swipe per message; the row's buttons become its custom actions.
+        self.isAccessibilityElement = true
     }
 
     @available(*, unavailable)
@@ -552,7 +555,70 @@ private final class TranscriptCell: UICollectionViewCell {
         if self.content.frame != frame { self.content.frame = frame }
         guard layout.serial != self.serial else { return }
         self.serial = layout.serial
+        self.actions = actions
         self.content.apply(layout, actions: actions)
+    }
+
+    // Computed when VoiceOver asks, not on every layout, so scrolling pays nothing for them.
+    override var accessibilityLabel: String? {
+        get { self.content.layout?.accessibilityLabel }
+        set {}
+    }
+
+    override var accessibilityCustomActions: [UIAccessibilityCustomAction]? {
+        get {
+            guard let layout = self.content.layout else { return nil }
+            var actions = TranscriptRowAccessibilityAction.actions(for: layout, actions: self.actions, anchor: self.content)
+            var names = Set(actions.map(\.name))
+            // The row's other buttons (disclosures, links, images, reaction chips), which a single
+            // element would otherwise hide. The footers' own buttons are covered above.
+            for control in Self.tapViews(in: self.content) where !names.contains(control.accessibilityText) {
+                names.insert(control.accessibilityText)
+                actions.append(.init(name: control.accessibilityText) { [weak control] in control?.onTap?() })
+            }
+            // Markdown links in the message text, which the single element hides too.
+            for (title, url) in AccessibilityText.linkActions(Self.linkRuns(in: self.content)) {
+                let name = L("Open \(title)")
+                guard names.insert(name).inserted else { continue }
+                actions.append(.init(name: name) { [weak renderer = self.actions] in renderer?.open(url) })
+            }
+            return actions.map { action in
+                UIAccessibilityCustomAction(name: action.name) { _ in
+                    action.perform()
+                    return true
+                }
+            }
+        }
+        set {}
+    }
+
+    /// Every link run in the row's visible text, top to bottom (deduped and capped by the caller).
+    private static func linkRuns(in view: UIView) -> [(text: String, url: URL)] {
+        var runs: [(text: String, url: URL)] = []
+        for subview in view.subviews where !subview.isHidden {
+            if let text = subview as? UITextView {
+                let storage = text.textStorage
+                storage.enumerateAttribute(.link, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
+                    guard let url = (value as? URL) ?? (value as? String).flatMap(URL.init(string:)) else { return }
+                    runs.append((storage.attributedSubstring(from: range).string, url))
+                }
+            } else {
+                runs += Self.linkRuns(in: subview)
+            }
+        }
+        return runs
+    }
+
+    private static func tapViews(in view: UIView) -> [TranscriptTapView] {
+        var found: [TranscriptTapView] = []
+        for subview in view.subviews where !subview.isHidden {
+            if subview is TranscriptFooterView { continue }
+            if let tap = subview as? TranscriptTapView, tap.onTap != nil, !tap.accessibilityText.isEmpty {
+                found.append(tap)
+            }
+            found += Self.tapViews(in: subview)
+        }
+        return found
     }
 }
 #endif

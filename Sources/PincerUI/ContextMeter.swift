@@ -24,9 +24,10 @@ struct ContextMeter: View {
             }
             .buttonStyle(.plain)
             .frame(width: 32, height: Composer.controlHeight)
-            .help("Context: \(usage.summary) tokens (\(usage.percentLabel))")
-            .accessibilityLabel("Context window")
-            .accessibilityValue("\(usage.percentLabel) full, \(usage.summary) tokens")
+            .help(L("Context: \(usage.summary) tokens (\(usage.percentLabel))"))
+            .accessibilityLabel(L("Context window"))
+            .accessibilityValue(AccessibilityText.contextMeterValue(usage))
+            .accessibilityHint(L("Shows context details and Compact Now"))
             .popover(isPresented: self.$showing, arrowEdge: Self.popoverArrowEdge) {
                 ContextMeterPopover(chat: self.chat)
                     .presentationCompactAdaptation(.popover)
@@ -67,6 +68,8 @@ private struct ContextRing: View {
                 Text("\(self.usage.percent)")
                     .font(.system(size: 8, weight: .bold).monospacedDigit())
                     .foregroundStyle(tint)
+                    // The button's value already speaks the percentage; the ring is too small to scale it.
+                    .accessibilityHidden(true)
             }
         }
         .frame(width: 20, height: 20)
@@ -119,7 +122,7 @@ struct ContextMeterPopover: View {
             if let usage {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(usage.isPromptBudget ? "Prompt Budget" : "Context Window").font(.headline)
+                        Text(usage.isPromptBudget ? L("Prompt Budget") : L("Context Window")).font(.headline)
                         Spacer(minLength: 12)
                         Text("\(usage.summary) · \(usage.percentLabel)")
                             .font(.callout.monospacedDigit())
@@ -135,7 +138,7 @@ struct ContextMeterPopover: View {
                             .foregroundStyle(usage.level.tint)
                             .fixedSize(horizontal: false, vertical: true)
                     } else if usage.isApproximate {
-                        Text("Estimated from before the last run.")
+                        Text("Estimated from before the last run.", bundle: .module)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -144,7 +147,7 @@ struct ContextMeterPopover: View {
             if let row, row.inputTokens != nil || row.outputTokens != nil {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 2) {
                     GridRow {
-                        Text("Last run").foregroundStyle(.secondary)
+                        Text("Last run", bundle: .module).foregroundStyle(.secondary)
                         Text("In \(row.inputTokens.map(TokenCount.format) ?? "–")")
                         Text("Out \(row.outputTokens.map(TokenCount.format) ?? "–")")
                     }
@@ -166,14 +169,14 @@ struct ContextMeterPopover: View {
         let state = self.chat.compaction
         let running = state?.isRunning == true
         VStack(alignment: .leading, spacing: 8) {
-            TextField("Instructions (optional)", text: self.$instructions, axis: .vertical)
+            TextField(L("Instructions (optional)"), text: self.$instructions, axis: .vertical)
                 .lineLimit(1...4)
                 .textFieldStyle(.roundedBorder)
                 .disabled(running)
                 .onSubmit(self.compact)
             HStack(spacing: 8) {
                 Button(action: self.compact) {
-                    Label("Compact Now", systemImage: "arrow.down.right.and.arrow.up.left")
+                    Label(L("Compact Now"), systemImage: "arrow.down.right.and.arrow.up.left")
                 }
                 .glassProminentButton()
                 .disabled(!self.canCompact)
@@ -186,7 +189,7 @@ struct ContextMeterPopover: View {
                 }
             }
             if self.chat.isRunning, !running {
-                Text("Wait for the current run to finish.").font(.caption).foregroundStyle(.secondary)
+                Text("Wait for the current run to finish.", bundle: .module).font(.caption).foregroundStyle(.secondary)
             }
         }
     }

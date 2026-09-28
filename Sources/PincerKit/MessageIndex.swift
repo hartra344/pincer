@@ -47,8 +47,8 @@ public actor MessageIndex {
         var removed: Set<UUID> = []
         /// Gateways whose index is kept in memory while the transcript cache is off (the demo).
         var inMemory: Set<UUID> = []
-        /// Gateways whose index files are being deleted, with how many deletions are under way.
-        var deleting: [UUID: Int] = [:]
+        /// Cache folders being deleted (`whileDeleting`).
+        var deleting = 0
     }
 
     /// Where an index lives: next to the transcript cache, or in memory.
@@ -60,12 +60,12 @@ public actor MessageIndex {
     private static let registry = Mutex(Registry())
 
     /// The index for a Gateway. One per Gateway, shared by everything that reads or writes it.
-    /// While its files are being deleted, a stand-in that does nothing is returned, so no index
-    /// opens a file that's then deleted from under it.
     public static func shared(gatewayId: UUID) -> MessageIndex {
         self.registry.withLock { registry in
-            if registry.deleting[gatewayId] != nil { return MessageIndex(gatewayId: gatewayId, removed: true) }
             if let index = registry.indexes[gatewayId] { return index }
+            // A file opened now would be deleted under its connection, leaving search broken
+            // until relaunch. Until the deletion is done, hand out an inert index instead.
+            if registry.deleting > 0 { return MessageIndex(gatewayId: gatewayId, removed: true) }
             let index = MessageIndex(gatewayId: gatewayId, removed: registry.removed.contains(gatewayId))
             registry.indexes[gatewayId] = index
             return index
@@ -76,34 +76,22 @@ public actor MessageIndex {
     /// still running on the old instance can't recreate the file. `permanently` (the Gateway was
     /// removed from the app): no later instance can either.
     static func discard(gatewayId: UUID, permanently: Bool = false) {
-        self.discard([gatewayId], permanently: permanently) {}
+        let index = self.registry.withLock { registry in
+            if permanently { registry.removed.insert(gatewayId) }
+            return registry.indexes.removeValue(forKey: gatewayId)
+        }
+        guard let index else { return }
+        index.removed.withLock { $0 = true }
+        index.interrupter.interruptAny()
+        Task { await index.close() }
     }
 
-    /// Forgets these Gateways' indexes and runs `deleteFiles`, which deletes their files. Until
-    /// it returns no index for them opens (saves meanwhile aren't indexed), so a save racing
-    /// Clear Cache can't leave the index on a deleted file, failing every search after it.
-    static func discard<T>(_ gatewayIds: [UUID], permanently: Bool = false, deleteFiles: () -> T) -> T {
-        let indexes = self.registry.withLock { registry in
-            gatewayIds.compactMap { id -> MessageIndex? in
-                if permanently { registry.removed.insert(id) }
-                registry.deleting[id, default: 0] += 1
-                return registry.indexes.removeValue(forKey: id)
-            }
-        }
-        for index in indexes {
-            index.removed.withLock { $0 = true }
-            index.interrupter.interruptAny()
-            Task { await index.close() }
-        }
-        defer {
-            self.registry.withLock { registry in
-                for id in gatewayIds {
-                    let count = (registry.deleting[id] ?? 1) - 1
-                    registry.deleting[id] = count > 0 ? count : nil
-                }
-            }
-        }
-        return deleteFiles()
+    /// Runs `body`, which discards indexes and deletes their folders, without creating an index
+    /// meanwhile. Writes in that window are dropped, like the transcripts they index.
+    static func whileDeleting(_ body: () -> Void) {
+        self.registry.withLock { $0.deleting += 1 }
+        defer { self.registry.withLock { $0.deleting -= 1 } }
+        body()
     }
 
     /// The Gateway was removed from the app, so nothing may be cached for it again.
@@ -654,11 +642,14 @@ public actor MessageIndex {
     /// Only a file that isn't a database, or a damaged one, counts as corrupt, and one deleted
     /// while open as vanished. Busy, full, other I/O, can't-open and auth errors (a
     /// file-protected index while the device is locked) may pass.
+    /// Apple's SQLite `SQLITE_IOERR_VNODE`: the file was unlinked or replaced while open. It stays
+    /// so until reopened.
+    private static let ioerrVnode: Int32 = SQLITE_IOERR | (27 << 8)
+
     private static func error(code: Int32, message: String) -> IndexError {
         switch code & 0xFF {
         case SQLITE_CORRUPT, SQLITE_NOTADB: .corrupt(message)
-        // Apple's SQLite: the file was unlinked or replaced while open. It stays so until reopened.
-        case SQLITE_IOERR where code == SQLITE_IOERR | (27 << 8): .vanished(message)
+        case SQLITE_IOERR where code == Self.ioerrVnode: .vanished(message)
         default: .sqlite("\(message) (\(code))")
         }
     }

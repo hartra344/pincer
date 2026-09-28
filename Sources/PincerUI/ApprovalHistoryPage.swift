@@ -26,19 +26,19 @@ struct ApprovalHistoryPage: View {
         let connected = self.gateway.state.isConnected
         Group {
             if !model.supported {
-                ContentUnavailableView("Approval History Isn't Available", systemImage: "clock.badge.xmark",
-                                       description: Text("This gateway doesn't keep an approval history. Update OpenClaw to see past decisions."))
+                ContentUnavailableView(L("Approval History Isn't Available"), systemImage: "clock.badge.xmark",
+                                       description: Text("This gateway doesn't keep an approval history. Update OpenClaw to see past decisions.", bundle: .module))
             } else {
                 self.list(model, connected: connected)
             }
         }
-        .navigationTitle("Approval History")
+        .navigationTitle(L("Approval History"))
         .toolbar {
             if model.supported {
                 ToolbarItem {
-                    Button { Task { await model.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    Button { Task { await model.refresh() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
                         .disabled(!connected || model.loadState.isRunning)
-                        .help("Refresh")
+                        .help(L("Refresh"))
                 }
             }
         }
@@ -54,7 +54,7 @@ struct ApprovalHistoryPage: View {
             if let error = model.loadState.error, !model.items.isEmpty {
                 Section {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
-                    Button("Try Again") { Task { await model.refresh() } }
+                    Button(L("Try Again")) { Task { await model.refresh() } }
                         .disabled(!connected)
                 }
             }
@@ -69,7 +69,7 @@ struct ApprovalHistoryPage: View {
                 }
             } footer: {
                 if !connected, !model.items.isEmpty {
-                    Text("Not connected.")
+                    Text("Not connected.", bundle: .module)
                 }
             }
         }
@@ -77,7 +77,7 @@ struct ApprovalHistoryPage: View {
         .refreshable { if connected { await model.refresh() } }
         #endif
         .safeAreaInset(edge: .top, spacing: 0) {
-            Picker("Kind", selection: Binding(
+            Picker(L("Kind"), selection: Binding(
                 get: { model.kindFilter },
                 set: { filter in Task { await model.setKindFilter(filter) } }
             )) {
@@ -99,11 +99,11 @@ struct ApprovalHistoryPage: View {
             if model.loadMoreState.isRunning {
                 ProgressView().controlSize(.small)
             } else if model.loadMoreState.error != nil {
-                Text("Couldn't load more.").foregroundStyle(.secondary)
-                Button("Try Again") { Task { await model.loadMore() } }
+                Text("Couldn't load more.", bundle: .module).foregroundStyle(.secondary)
+                Button(L("Try Again")) { Task { await model.loadMore() } }
                     .disabled(!connected)
             } else {
-                Button("Load More") { Task { await model.loadMore() } }
+                Button(L("Load More")) { Task { await model.loadMore() } }
                     .disabled(!connected || model.loadState.isRunning)
             }
             Spacer()
@@ -115,24 +115,24 @@ struct ApprovalHistoryPage: View {
     @ViewBuilder private func state(_ model: ApprovalHistoryModel, connected: Bool) -> some View {
         if model.items.isEmpty {
             if !connected, !model.loadState.isRunning {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see its approval history."))
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Connect to the gateway to see its approval history.", bundle: .module))
             } else if !model.hasLoaded || model.loadState.isRunning {
                 ProgressView()
             } else if let error = model.loadState.error {
                 ContentUnavailableView {
-                    Label("Couldn't Load History", systemImage: "exclamationmark.triangle")
+                    Label(L("Couldn't Load History"), systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(error)
                 } actions: {
-                    Button("Try Again") { Task { await model.refresh() } }
+                    Button(L("Try Again")) { Task { await model.refresh() } }
                 }
             } else if let filtered = model.kindFilter.emptyMessage {
-                ContentUnavailableView("No Approval History", systemImage: "checkmark.shield",
+                ContentUnavailableView(L("No Approval History"), systemImage: "checkmark.shield",
                                        description: Text(filtered))
             } else {
-                ContentUnavailableView("No Approval History", systemImage: "checkmark.shield",
-                                       description: Text("Decisions on commands, plugins and system changes show up here for 30 days. Pending approvals appear in the chat."))
+                ContentUnavailableView(L("No Approval History"), systemImage: "checkmark.shield",
+                                       description: Text("Decisions on commands, plugins and system changes show up here for 30 days. Pending approvals appear in the chat.", bundle: .module))
             }
         }
     }
@@ -257,15 +257,15 @@ struct ApprovalDetailPage: View {
             } else if model.detailState[self.approvalId]?.isRunning == true {
                 ProgressView()
             } else if !self.gateway.state.isConnected {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see this approval."))
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Connect to the gateway to see this approval.", bundle: .module))
             } else {
-                ContentUnavailableView("Approval Not Found", systemImage: "checkmark.shield",
+                ContentUnavailableView(L("Approval Not Found"), systemImage: "checkmark.shield",
                                        description: Text(model.detailState[self.approvalId]?.error
                                            ?? "This approval is no longer on the Gateway."))
             }
         }
-        .navigationTitle("Approval")
+        .navigationTitle(L("Approval"))
         .task(id: self.gateway.state.isConnected) {
             if self.gateway.state.isConnected { await model.loadDetail(self.approvalId) }
         }
@@ -275,27 +275,27 @@ struct ApprovalDetailPage: View {
         Form {
             self.request(record)
             self.requester(record)
-            Section("Decision") {
-                LabeledContent("Outcome") { ApprovalStatusCapsule(record: record) }
-                if let decision = record.decision { LabeledContent("Decision", value: decision.label) }
-                if let reason = record.reason { LabeledContent("Reason", value: reason.explanation) }
-                LabeledContent("Decided by", value: model.decidedBy(record))
+            Section(L("Decision")) {
+                LabeledContent(L("Outcome")) { ApprovalStatusCapsule(record: record) }
+                if let decision = record.decision { LabeledContent(L("Decision"), value: decision.label) }
+                if let reason = record.reason { LabeledContent(L("Reason"), value: reason.explanation) }
+                LabeledContent(L("Decided by"), value: model.decidedBy(record))
             }
-            Section("Times") {
-                LabeledContent("Requested", value: ApprovalFormatting.date(record.createdAt))
-                LabeledContent("Decided", value: ApprovalFormatting.date(record.resolvedAt))
-                LabeledContent("Expires", value: ApprovalFormatting.date(record.expiresAt))
+            Section(L("Times")) {
+                LabeledContent(L("Requested"), value: ApprovalFormatting.date(record.createdAt))
+                LabeledContent(L("Decided"), value: ApprovalFormatting.date(record.resolvedAt))
+                LabeledContent(L("Expires"), value: ApprovalFormatting.date(record.expiresAt))
             }
             Section {
-                LabeledContent("ID") {
+                LabeledContent(L("ID")) {
                     Text(record.id).font(.caption.monospaced()).textSelection(.enabled)
                 }
-                Button("Copy ID", systemImage: "doc.on.doc") { Clipboard.copy(record.id) }
+                Button(L("Copy ID"), systemImage: "doc.on.doc") { Clipboard.copy(record.id) }
             } footer: {
                 if model.detailState[self.approvalId]?.isRunning == true {
                     ProgressView().controlSize(.small)
                 } else if let error = model.detailState[self.approvalId]?.error {
-                    Text("Couldn't load the full record: \(error)")
+                    Text("Couldn't load the full record: \(error)", bundle: .module)
                 }
             }
         }
@@ -303,15 +303,15 @@ struct ApprovalDetailPage: View {
     }
 
     @ViewBuilder private func request(_ record: ApprovalRecord) -> some View {
-        Section("Request") {
-            LabeledContent("Kind", value: record.kind.label)
+        Section(L("Request")) {
+            LabeledContent(L("Kind"), value: record.kind.label)
             if let command = record.commandText ?? record.commandPreview {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(command)
                         .font(.body.monospaced())
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("Copy Command", systemImage: "doc.on.doc") { Clipboard.copy(command) }
+                    Button(L("Copy Command"), systemImage: "doc.on.doc") { Clipboard.copy(command) }
                         .buttonStyle(.borderless)
                         .font(.callout)
                 }
@@ -328,20 +328,20 @@ struct ApprovalDetailPage: View {
             if let warning = record.warningText {
                 Label(warning, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
             }
-            if let host = record.host { LabeledContent("Host", value: host) }
-            if let node = record.nodeId { LabeledContent("Node", value: node) }
-            if let plugin = record.pluginId { LabeledContent("Plugin", value: plugin) }
-            if let tool = record.toolName { LabeledContent("Tool", value: tool) }
-            if let severity = record.severity { LabeledContent("Severity", value: severity.capitalized) }
+            if let host = record.host { LabeledContent(L("Host"), value: host) }
+            if let node = record.nodeId { LabeledContent(L("Node"), value: node) }
+            if let plugin = record.pluginId { LabeledContent(L("Plugin"), value: plugin) }
+            if let tool = record.toolName { LabeledContent(L("Tool"), value: tool) }
+            if let severity = record.severity { LabeledContent(L("Severity"), value: severity.capitalized) }
         }
     }
 
     @ViewBuilder private func requester(_ record: ApprovalRecord) -> some View {
-        Section("Requested by") {
-            LabeledContent("Agent", value: record.agentId.map { self.gateway.agent($0).name } ?? "Unknown")
-            LabeledContent("Chat", value: ApprovalFormatting.chat(record, gateway: self.gateway) ?? "Unknown")
+        Section(L("Requested by")) {
+            LabeledContent(L("Agent"), value: record.agentId.map { self.gateway.agent($0).name } ?? "Unknown")
+            LabeledContent(L("Chat"), value: ApprovalFormatting.chat(record, gateway: self.gateway) ?? "Unknown")
             if let key = record.sessionKey, self.gateway.sessions[key] != nil, self.canOpenChat {
-                Button("Open Chat", systemImage: "bubble.left.and.text.bubble.right") { self.openChat(key) }
+                Button(L("Open Chat"), systemImage: "bubble.left.and.text.bubble.right") { self.openChat(key) }
             }
         }
     }

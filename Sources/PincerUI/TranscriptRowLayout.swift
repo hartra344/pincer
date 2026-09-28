@@ -394,7 +394,10 @@ struct TranscriptLayoutBuilder {
         }
         layout.alpha = item.isPending ? 0.7 : 1
         layout.copyItems = [.init(title: "Copy Text", text: text)]
-        layout.accessibilityLabel = "\(header.name): \(text)"
+        let attachments = item.blocks.filter { if case .image = $0 { true } else if case .file = $0 { true } else { false } }.count
+        layout.accessibilityLabel = AccessibilityText.messageRow(
+            role: .user, text: text, timestamp: header.time, attachmentCount: attachments,
+            isPending: item.isPending, via: item.via, summaryLimit: 0)
         if let quote {
             layout.accessibilityLabel = "In reply to \(quote.sender ?? "a message"): \(quote.preview.string). " + layout.accessibilityLabel
         }
@@ -428,7 +431,10 @@ struct TranscriptLayoutBuilder {
         let thinking = turn.thinking.joined(separator: "\n\n")
         layout.copyItems = [.init(title: "Copy Reply", text: turn.body)]
         if !thinking.isEmpty { layout.copyItems.append(.init(title: "Copy Thinking", text: thinking)) }
-        layout.accessibilityLabel = "\(agent.name): \(turn.body)"
+        layout.accessibilityLabel = AccessibilityText.messageRow(
+            role: .assistant, author: agent.name, text: turn.body, timestamp: header.time,
+            toolCount: turn.tools.count, attachmentCount: turn.images.count + turn.files.count,
+            isStreaming: turn.isStreaming, isError: turn.isError, summaryLimit: 0)
         let reasoning = self.settings.reasoningOff ? "" : thinking
         let hasSteps = !reasoning.isEmpty || !turn.tools.isEmpty
         let hasReply = !turn.text.isEmpty || !turn.images.isEmpty || !turn.files.isEmpty
@@ -765,9 +771,9 @@ struct TranscriptLayoutBuilder {
         if finding {
             toggleTitle = nil
         } else if hidden > 0 {
-            toggleTitle = "Show all \(edit.rows.count) lines"
+            toggleTitle = L("Show all \(edit.rows.count) lines")
         } else if showsAll, edit.isLarge {
-            toggleTitle = "Show fewer lines"
+            toggleTitle = L("Show fewer lines")
         }
         var toggleFrame = CGRect.zero
         if let toggleTitle {

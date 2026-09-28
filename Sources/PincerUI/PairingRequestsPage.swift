@@ -16,24 +16,24 @@ struct PairingRequestsPage: View {
         let connected = self.gateway.state.isConnected
         Group {
             if !connected {
-                ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to review pairing requests."))
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Connect to the gateway to review pairing requests.", bundle: .module))
             } else if !model.supported {
-                ContentUnavailableView("Pairing Requests Aren't Available", systemImage: "person.badge.key",
-                                       description: Text("This Gateway doesn't support channel pairing requests. Update OpenClaw to review them here."))
+                ContentUnavailableView(L("Pairing Requests Aren't Available"), systemImage: "person.badge.key",
+                                       description: Text("This Gateway doesn't support channel pairing requests. Update OpenClaw to review them here.", bundle: .module))
             } else if model.needsAccess {
                 self.accessNeeded
             } else {
                 self.list(model)
             }
         }
-        .navigationTitle("Pairing Requests")
+        .navigationTitle(L("Pairing Requests"))
         .toolbar {
             if connected, model.supported, !model.needsAccess {
                 if model.showsChannelFilter {
                     ToolbarItem {
-                        Picker("Channel", selection: $model.channelFilter) {
-                            Text("All Channels").tag(String?.none)
+                        Picker(L("Channel"), selection: $model.channelFilter) {
+                            Text("All Channels", bundle: .module).tag(String?.none)
                             ForEach(model.channels, id: \.id) { channel in
                                 Text(channel.label).tag(Optional(channel.id))
                             }
@@ -42,9 +42,9 @@ struct PairingRequestsPage: View {
                     }
                 }
                 ToolbarItem {
-                    Button { Task { await model.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                    Button { Task { await model.refresh() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
                         .disabled(model.loadState.isRunning)
-                        .help("Refresh")
+                        .help(L("Refresh"))
                 }
             }
         }
@@ -67,17 +67,17 @@ struct PairingRequestsPage: View {
 
     private var accessNeeded: some View {
         ContentUnavailableView {
-            Label("Full Management Needed", systemImage: "lock")
+            Label(L("Full Management Needed"), systemImage: "lock")
         } description: {
             Text(PairingInboxModel.missingScopeMessage)
         } actions: {
             if self.gateway.profile.access == .admin, !self.gateway.settings.canEdit {
-                Text("The Gateway hasn't granted Full Management to this device yet.")
+                Text("The Gateway hasn't granted Full Management to this device yet.", bundle: .module)
                     .foregroundStyle(.orange)
                 ApprovalInstructions(requestId: nil)
                     .frame(maxWidth: 420)
             }
-            Button("Open Connection") { self.navigator.destination = .connection }
+            Button(L("Open Connection")) { self.navigator.destination = .connection }
         }
     }
 
@@ -88,7 +88,7 @@ struct PairingRequestsPage: View {
             if let error = model.loadState.error, model.hasLoaded, !model.accounts.isEmpty || !model.requests.isEmpty {
                 Section {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
-                    Button("Try Again") { Task { await model.refresh() } }
+                    Button(L("Try Again")) { Task { await model.refresh() } }
                 }
             }
             if groups.count > 1 {
@@ -137,7 +137,7 @@ struct PairingRequestsPage: View {
             VStack(spacing: 6) {
                 Image(systemName: "person.badge.key").font(.largeTitle).foregroundStyle(.secondary)
                 Text(model.channelFilterLabel.map { "No Requests for \($0)" } ?? "No Pending Requests").font(.headline)
-                Text("When someone messages one of these accounts, their request shows up here.")
+                Text("When someone messages one of these accounts, their request shows up here.", bundle: .module)
                     .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
@@ -148,7 +148,7 @@ struct PairingRequestsPage: View {
                 Label(account.summary, systemImage: "bubble.left.and.bubble.right")
             }
         } header: {
-            Text("Accounts Using DM Pairing")
+            Text("Accounts Using DM Pairing", bundle: .module)
         } footer: {
             if let footer = Self.limitsText(model.limits) { Text(footer) }
         }
@@ -160,15 +160,15 @@ struct PairingRequestsPage: View {
                 ProgressView()
             } else if let error = model.loadState.error {
                 ContentUnavailableView {
-                    Label("Couldn't Load Pairing Requests", systemImage: "exclamationmark.triangle")
+                    Label(L("Couldn't Load Pairing Requests"), systemImage: "exclamationmark.triangle")
                 } description: {
                     Text(error)
                 } actions: {
-                    Button("Try Again") { Task { await model.refresh() } }
+                    Button(L("Try Again")) { Task { await model.refresh() } }
                 }
             } else {
-                ContentUnavailableView("No Channels Use DM Pairing", systemImage: "person.badge.key",
-                                       description: Text("Set a channel's dmPolicy to \"pairing\" on the Gateway, and new senders will ask for access here."))
+                ContentUnavailableView(L("No Channels Use DM Pairing"), systemImage: "person.badge.key",
+                                       description: Text("Set a channel's dmPolicy to \"pairing\" on the Gateway, and new senders will ask for access here.", bundle: .module))
             }
         }
     }
@@ -262,7 +262,7 @@ private struct PairingRequestRow: View {
                     .accessibilityValue(self.absoluteTimes)
                 let details = self.request.details
                 if !details.isEmpty {
-                    DisclosureGroup("Details") {
+                    DisclosureGroup(L("Details")) {
                         ForEach(details, id: \.label) { detail in
                             LabeledContent(detail.label) { Text(detail.value).textSelection(.enabled) }
                                 .font(.caption)
@@ -286,23 +286,23 @@ private struct PairingRequestRow: View {
             .padding(.vertical, 4)
         }
         .contextMenu {
-            Button("Copy Sender ID", systemImage: "doc.on.doc") { Clipboard.copy(self.request.senderId) }
-            Button("Copy Request ID", systemImage: "number") { Clipboard.copy(self.request.requestId) }
+            Button(L("Copy Sender ID"), systemImage: "doc.on.doc") { Clipboard.copy(self.request.senderId) }
+            Button(L("Copy Request ID"), systemImage: "number") { Clipboard.copy(self.request.requestId) }
         }
     }
 
     @ViewBuilder private func buttons(busy: Bool, expired: Bool) -> some View {
         if busy { ProgressView().controlSize(.small) }
-        Button("Dismiss") { Task { await self.model.dismiss(self.request) } }
+        Button(L("Dismiss")) { Task { await self.model.dismiss(self.request) } }
             .buttonStyle(.bordered)
             .disabled(busy)
-            .help("Removes this request. The sender isn't blocked and can ask again.")
-            .accessibilityLabel("Dismiss \(self.request.title)")
-        Button("Approve", action: self.approve)
+            .help(L("Removes this request. The sender isn't blocked and can ask again."))
+            .accessibilityLabel(L("Dismiss \(self.request.title)"))
+        Button(L("Approve"), action: self.approve)
             .buttonStyle(.borderedProminent)
-            .accessibilityLabel("Approve \(self.request.title)")
+            .accessibilityLabel(L("Approve \(self.request.title)"))
             .disabled(busy || expired)
-            .help(expired ? "This request expired." : "Let this sender message your agents")
+            .help(expired ? L("This request expired.") : L("Let this sender message your agents"))
     }
 
     private var absoluteTimes: String {
@@ -333,27 +333,27 @@ private struct ApprovePairingSheet: View {
         VStack(spacing: 0) {
             Form {
                 Section {
-                    Text("Let \(self.request.title) message your agents?")
+                    Text("Let \(self.request.title) message your agents?", bundle: .module)
                         .font(.title3.weight(.semibold))
                         .fixedSize(horizontal: false, vertical: true)
                     LabeledContent(self.request.senderLabel) {
                         Text(self.request.senderId).font(.body.monospaced()).textSelection(.enabled)
                     }
-                    LabeledContent("Channel", value: self.request.accountLine)
+                    LabeledContent(L("Channel"), value: self.request.accountLine)
                 } footer: {
-                    Text("They'll be able to DM the agent on this account. To revoke access later, edit the channel's allowlist on the Gateway.")
+                    Text("They'll be able to DM the agent on this account. To revoke access later, edit the channel's allowlist on the Gateway.", bundle: .module)
                 }
                 if self.request.notifySupported || canBootstrap {
                     Section {
                         if self.request.notifySupported {
-                            Toggle("Tell them they were approved", isOn: self.$notify)
+                            Toggle(L("Tell them they were approved"), isOn: self.$notify)
                         }
                         if canBootstrap {
-                            Toggle("Make them the command owner", isOn: self.$makeCommandOwner)
+                            Toggle(L("Make them the command owner"), isOn: self.$makeCommandOwner)
                         }
                     } footer: {
                         if canBootstrap {
-                            Text("This Gateway has no command owner yet. The command owner can run owner-only commands from this channel.")
+                            Text("This Gateway has no command owner yet. The command owner can run owner-only commands from this channel.", bundle: .module)
                         }
                     }
                 }
@@ -366,9 +366,9 @@ private struct ApprovePairingSheet: View {
                         Text(PairingInboxModel.expiredMessage).font(.callout).foregroundStyle(.orange)
                     }
                     Spacer()
-                    Button("Cancel", role: .cancel) { self.dismiss() }
+                    Button(L("Cancel"), role: .cancel) { self.dismiss() }
                         .keyboardShortcut(.cancelAction)
-                    Button("Approve") {
+                    Button(L("Approve")) {
                         let request = self.request
                         let notify = self.notify
                         let owner = canBootstrap && self.makeCommandOwner
