@@ -73,7 +73,8 @@ fast=(env PINCER_DEMO_DELAY_SCALE=0.2)
 # reported); a separate run enforces them afterwards, alone.
 lane unit-tests swift test --skip-build --parallel ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"}
 lane self-checks "$CHECKS" --skip-perf-budgets
-lane demo "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --demo
+lane demo-core "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --demo-core
+lane demo-extras "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --demo-extras
 lane live-core "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-core "$(url 0)" dev-token
 lane live-extras "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-extras "$(url 1)" dev-token
 lane live-no-usage "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-no-usage "$(url 2)" dev-token
