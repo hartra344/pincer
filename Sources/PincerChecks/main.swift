@@ -508,6 +508,7 @@ await checkApprovalHistoryModel()
 await checkGatewayLogsModel()
 await checkExecPolicy()
 await checkAgentManagement()
+checkSubagents()
 await checkChannelStatus()
 await checkDeviceManagement()
 await checkSkillsTools()
@@ -3293,6 +3294,7 @@ func runDemo() async {
     await checkDemoSentMessageSearch(gateway, chat)
     await runDemoExecPolicy(gateway, chat: chat)
     await runDemoAgents(gateway)
+    await runDemoSubagents(gateway)
     await runDemoDevices(gateway)
     await runDemoSkills(gateway)
 
@@ -4654,6 +4656,7 @@ func runLive(url: String, token: String) async {
     }
     await runLiveExecPolicy(profile: profile, gateway: gateway, admin: admin)
     await runLiveAgents(profile: profile, gateway: gateway, admin: admin)
+    await runLiveSubagents(gateway: admin)
     // Before Health: reconnects the mock's degraded Telegram so only the failed delivery is left.
     await runLiveChannels(profile: profile, admin: admin)
     await runLiveDevices(profile: profile, gateway: gateway, admin: admin)
