@@ -187,7 +187,13 @@ public actor MessageIndex {
     /// messages too, which needs `documents`.
     @discardableResult
     private func write(sessionKey: String, chat: ChatState, documents: [Prepared]?) -> WriteResult {
-        self.withRecovery { db -> WriteResult in
+        // A save indexes after writing its transcript; if the chat was removed from the cache
+        // since, its file is gone and indexing it would bring it back into search.
+        if case .file = self.location,
+           let file = TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: sessionKey),
+           !FileManager.default.fileExists(atPath: file.path)
+        { return .done }
+        return self.withRecovery { db -> WriteResult in
             let existing = try self.chatRow(sessionKey, db: db)
             if let existing, existing.mtime > chat.mtime { return .done }
             let unchanged = existing?.digest == chat.digest
@@ -275,6 +281,23 @@ public actor MessageIndex {
                 ], db: db)
                 let id = sqlite3_last_insert_rowid(db)
                 try self.step(index, [.int(Int(id)), .text(prepared.folded)], db: db)
+            }
+        }
+    }
+
+    /// Drops a chat's messages from the index. Call after deleting its transcript file, so a save
+    /// still indexing it afterwards finds the file gone and doesn't add it back.
+    public func remove(sessionKey: String) {
+        guard !self.isRemoved else { return }
+        self.withRecovery { db in
+            try self.exec(db, "BEGIN IMMEDIATE")
+            do {
+                try self.replace(sessionKey: sessionKey, with: [], db: db)
+                try self.run(db, "DELETE FROM chats WHERE session_key = ?", [.text(sessionKey)])
+                try self.exec(db, "COMMIT")
+            } catch {
+                try? self.exec(db, "ROLLBACK")
+                throw error
             }
         }
     }

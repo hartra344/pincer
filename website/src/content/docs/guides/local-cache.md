@@ -62,7 +62,7 @@ To free the space or start fresh, open **Settings** (**General** tab on macOS) a
 - **Cached transcripts** shows how much space the cache uses, for all gateways (or **Off** when `PINCER_CACHE_DIR=off`).
 - **Clear Cache…** asks **Clear cached transcripts?** and, when you confirm with **Clear Cache**, deletes every gateway's cached transcripts, search indexes and quarantined files.
 
-Nothing on your gateways is deleted. Chats you have open stay on screen and are saved again right away. While you're connected, Pincer downloads the other chats again in the background, and message search fills back in as they're cached, without a relaunch.
+Nothing on your gateways is deleted. Chats you have open stay on screen and are saved again right away, and you can search them again as soon as Clear Cache finishes. While you're connected, Pincer downloads the other chats again in the background, and message search fills back in as they're cached, without a relaunch.
 
 ## Search index
 

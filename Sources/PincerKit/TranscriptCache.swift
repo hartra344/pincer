@@ -337,6 +337,25 @@ public enum TranscriptCache {
         _ = await Writer.shared.write(snapshot, to: url)
     }
 
+    /// Deletes one chat's cached transcript (its stored tool details included), its sidecar and
+    /// its rows in the message search index, e.g. when the session is deleted or rewound. A
+    /// quarantined copy is left for diagnosis. The files go through the same writer as saves, so a
+    /// save already queued lands before the removal, and the index skips a chat whose file is gone,
+    /// so that save can't make it searchable again.
+    public static func remove(gatewayId: UUID, sessionKey: String) async {
+        await self.remove(gatewayId: gatewayId, sessionKey: sessionKey, root: Self.root)
+        if Self.root != nil || MessageIndex.location(gatewayId: gatewayId) == .memory {
+            await MessageIndex.shared(gatewayId: gatewayId).remove(sessionKey: sessionKey)
+        }
+    }
+
+    /// Deletes one chat's transcript and sidecar under another cache root (tests); the message
+    /// search index, which lives under the default root, isn't touched.
+    static func remove(gatewayId: UUID, sessionKey: String, root: URL?) async {
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else { return }
+        await Writer.shared.remove(url)
+    }
+
     /// Deletes the Gateway's transcripts and message search index. `permanently`: the Gateway
     /// was removed from the app, so saves still under way don't write them again.
     public static func removeAll(gatewayId: UUID, permanently: Bool = false) {
@@ -404,6 +423,11 @@ public enum TranscriptCache {
     /// Serializes writes so an older snapshot can never land after a newer one.
     private actor Writer {
         static let shared = Writer()
+
+        func remove(_ url: URL) {
+            try? FileManager.default.removeItem(at: url.appendingPathExtension("meta"))
+            try? FileManager.default.removeItem(at: url)
+        }
 
         /// The file's modification date once written, or nil when it couldn't be.
         func write(_ snapshot: Snapshot, to url: URL) -> Date? {

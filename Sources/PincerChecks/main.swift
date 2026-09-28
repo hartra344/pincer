@@ -1509,6 +1509,7 @@ func checkMessageIndex() async {
         await checkAsync({ await allTrue(quiet.statuses == [.ready], sqliteInts(MessageIndex.url(gatewayId: fresh), "SELECT count(*), max(id) FROM docs") == freshRows) },
               "reconcile skips chats already indexed")
 
+        await checkMessageIndexRemoval()
         await checkMessageIndexCancellation(gatewayId: gatewayId)
         await checkMessageIndexPerfSmoke()
     }
@@ -1529,6 +1530,8 @@ func checkMessageIndex() async {
         check(empty.isEmpty && !empty.failed, "cache off: searchMessages is empty, not failed")
         check(!FileManager.default.fileExists(atPath: root.path(percentEncoded: false)) && !fileExists(URL(filePath: "off")),
               "cache off: no files written")
+        let demo = GatewayStore(profile: .demo())
+        await checkMessageIndexRemovalInMemory(gatewayId: demo.id)
     }
 }
 
@@ -2983,6 +2986,19 @@ func waitFor(_ label: String, timeout: Double = 15, every interval: Int = 100, _
     }
     print("    … timed out waiting for \(label)")
     return condition()
+}
+
+/// Waits until `value` stops changing for `quiet` seconds (or `timeout` passes).
+@MainActor
+func waitForQuiet(_ label: String, quiet: Double = 1, timeout: Double = 10, _ value: () -> Int) async {
+    let deadline = Date().addingTimeInterval(timeout)
+    var last = value(), since = Date()
+    while Date() < deadline {
+        try? await Task.sleep(for: .milliseconds(100))
+        let now = value()
+        if now != last { last = now; since = Date() } else if Date().timeIntervalSince(since) >= quiet { return }
+    }
+    print("    … timed out waiting for \(label) to settle")
 }
 
 @MainActor
@@ -5173,6 +5189,11 @@ func checkPushLive(_ gateway: GatewayStore) async {
     let relayKey = PushRegistrar.relayKey
     UserDefaults.standard.set("http://127.0.0.1:\(sink.port)", forKey: relayKey)
     defer { UserDefaults.standard.removeObject(forKey: relayKey) }
+    // The relay id is cached in the defaults, which outlive the run; a cache left by an earlier
+    // run whose sink got the same port would skip the registration counted below.
+    let relayIdKey = "pincer.push.relayId"
+    UserDefaults.standard.removeObject(forKey: relayIdKey)
+    defer { UserDefaults.standard.removeObject(forKey: relayIdKey) }
     var registrations = 0
     registrar.registerWithRelay = { _, token, _ in registrations += 1; return "relay-\(token.prefix(6))" }
     var enabled = true
@@ -5221,6 +5242,9 @@ func checkPushLive(_ gateway: GatewayStore) async {
         check(false, "approval push decrypted")
     }
     _ = await waitFor("approval run to finish", timeout: 20) { !chat.isRunning }
+    // The run's "agent finished" and "approval updated" pushes are sent after its final event, so
+    // they can land after isRunning clears; let them all arrive before unsubscribing.
+    await waitForQuiet("pushes from the approval run", timeout: 10) { sink.deliveries.count }
 
     enabled = false
     await registrar.sync(gateway)
@@ -5229,7 +5253,10 @@ func checkPushLive(_ gateway: GatewayStore) async {
     await chat.send("no push now")
     _ = await waitFor("reply", timeout: 20) { !chat.isRunning }
     try? await Task.sleep(for: .milliseconds(500))
-    check(sink.deliveries.count == after, "no pushes after unsubscribing")
+    let lateTitles = sink.deliveries.dropFirst(after).compactMap {
+        PushMessage(apnsPayload: ["pincer": ["g": gateway.id.uuidString, "p": $0.body.base64URL]])?.title
+    }
+    check(lateTitles.isEmpty, "no pushes after unsubscribing (\(lateTitles))")
     enabled = true
     await registrar.sync(gateway)
     await registrar.forget(gateway)

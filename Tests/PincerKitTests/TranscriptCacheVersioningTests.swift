@@ -180,6 +180,72 @@ struct TranscriptCacheVersioningTests {
         #expect(empty.outcome == .migrated(from: 5) && empty.snapshot?.items.isEmpty == true)
     }
 
+    // MARK: Removing one chat (#38 session manager)
+
+    @Test func removeDeletesOneChatAndItsSidecar() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let other = "agent:main:other"
+        await Cache.save(Cache.Snapshot(items: [item("a")], complete: true, activityMs: 1), gatewayId: self.gateway,
+                         sessionKey: self.key, root: temp.url)
+        await Cache.save(Cache.Snapshot(items: [item("b")], complete: true, activityMs: 2), gatewayId: self.gateway,
+                         sessionKey: other, root: temp.url)
+        let file = try #require(Cache.file(gatewayId: self.gateway, sessionKey: self.key, root: temp.url))
+        #expect(temp.exists(file) && temp.exists(file.appendingPathExtension("meta")))
+
+        await Cache.remove(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(!temp.exists(file) && !temp.exists(file.appendingPathExtension("meta")))
+        #expect(await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url).outcome == .missing)
+        #expect(await Cache.meta(gatewayId: self.gateway, sessionKey: self.key, root: temp.url) == nil)
+        let (kept, keptOutcome) = await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: other, root: temp.url)
+        #expect(keptOutcome == .loaded && kept?.items.map(\.id) == ["b"], "other chats are left alone")
+
+        // Removing again, or a chat that was never cached, is a no-op.
+        await Cache.remove(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        await Cache.remove(gatewayId: UUID(), sessionKey: "agent:main:never", root: temp.url)
+        #expect(await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: other, root: temp.url).outcome == .loaded)
+        // The chat can be cached again afterwards.
+        await Cache.save(Cache.Snapshot(items: [item("c")], complete: false), gatewayId: self.gateway,
+                         sessionKey: self.key, root: temp.url)
+        #expect(await Cache.load(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)?.items.map(\.id) == ["c"])
+    }
+
+    @Test func removeClearsMigratedToolDetails() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let file = try self.writeRaw(Data(Self.legacyV5.utf8), root: temp.url)
+        #expect(await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url).outcome == .migrated(from: 5))
+        await Cache.remove(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(!temp.exists(file) && !temp.exists(file.appendingPathExtension("meta")))
+        // Nothing of the migrated chat is left: its folder holds no other file for it.
+        let digest = file.deletingPathExtension().lastPathComponent
+        #expect(!temp.contents(of: file.deletingLastPathComponent()).contains { $0.hasPrefix(digest) })
+    }
+
+    @Test func removeKeepsQuarantinedCopies() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        try self.writeRaw(Data("junk".utf8), root: temp.url)
+        _ = await Cache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(try self.quarantined(temp).count == 1)
+        await Cache.remove(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(try self.quarantined(temp).count == 1, "quarantined copies are kept for diagnosis")
+    }
+
+    @Test func removeLandsAfterAQueuedSave() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let big = Cache.Snapshot(items: (0..<2000).map { item("m\($0)") }, complete: true)
+        async let saved: Void = Cache.save(big, gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        try await Task.sleep(for: .milliseconds(1))
+        await Cache.remove(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        await saved
+        // Either the save ran first and was removed, or the removal ran first and the save
+        // wrote afterwards; never a transcript without its sidecar or the reverse.
+        let file = try #require(Cache.file(gatewayId: self.gateway, sessionKey: self.key, root: temp.url))
+        #expect(temp.exists(file) == temp.exists(file.appendingPathExtension("meta")))
+    }
+
     // MARK: Migration machinery (injected chain)
 
     @Test func migrationChainRunsEveryStep() throws {
