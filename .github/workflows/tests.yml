@@ -14,8 +14,58 @@ permissions:
   contents: read
 
 jobs:
+  # Docs- and website-only changes skip the jobs below (docs.yml builds the website instead).
+  # A job-level `if` rather than `paths-ignore`: the ruleset requires both checks, and a skipped job
+  # counts as passing, whereas a workflow that never starts leaves them pending forever.
+  # The jobs run unless this says `false`, so if it fails they still run.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: Anything besides docs?
+        id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          # Lists the changed files (and a rename's old path), or fails (and so runs everything) when it can't tell.
+          changed_files() {
+            case "$EVENT" in
+              pull_request) gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)' ;;
+              push)
+                case "$BEFORE" in ''|0000000000000000000000000000000000000000) return 1 ;; esac
+                # Compare lists at most 300 files; a force push isn't "ahead".
+                gh api "repos/$REPO/compare/$BEFORE...$AFTER" \
+                  --jq 'if .status == "ahead" and (.files | length) < 300 then .files[] | .filename, (.previous_filename // empty) else error("full run") end' ;;
+              *) return 1 ;;
+            esac
+          }
+          # Docs only: the website, docs/ and top-level Markdown or LICENSE files.
+          docs='^(website/|docs/|[^/]+\.md$|LICENSE$)'
+          if files="$(changed_files)" && [ -n "$files" ]; then
+            printf 'Changed files:\n%s\n' "$files"
+            if grep -qvE "$docs" <<<"$files"; then code=true; else code=false; fi
+          else
+            echo "Couldn't list the changed files for this $EVENT; running everything."
+            code=true
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "Full run: $code"
+
   mock-gateway:
     name: Mock gateway selftest
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -33,6 +83,8 @@ jobs:
 
   swift:
     name: Swift build and checks
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: macos-26
     timeout-minutes: 30
     env:
