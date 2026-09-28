@@ -42,6 +42,8 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `image` | Streams a tool call and attaches an image. |
 | `patch`, `diff` | Streams an `edit` tool call shaped like upstream's (`file_path`, `old_string`, `new_string`), shown as a [file diff](../../guides/file-diffs/). |
 | `approve` | Raises an exec approval. |
+| `approve once-only` | Raises an approval whose `allowedDecisions` leave out `allow-always`. **Always allow** then fails with `APPROVAL_ALLOW_ALWAYS_UNAVAILABLE` and the approval stays pending. |
+| `approve short-lived` | Raises an approval that expires after 3 seconds, so acting on it afterwards gets `APPROVAL_NOT_FOUND` ("That approval expired. Nothing was run."). Mock only. |
 | `plan` | Walks a three-step progress card. |
 | `[mock:fail-send]` | Refuses the `chat.send` with `UNAVAILABLE`, for testing failed sends. |
 | `[mock:drop]` | Closes the connection. The client reconnects after its backoff. |
