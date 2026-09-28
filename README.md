@@ -190,11 +190,11 @@ UI strings live in `Sources/PincerUI/Resources/Localizable.xcstrings`, which Swi
 
 ### Tests on CI
 
-`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs the `PincerKitTests` unit tests, runs `PincerChecks` in offline, `--demo`, `--live`, `--live-no-usage` and `--live-no-reply-to` (against the mock gateway) modes, and runs the mock gateway's selftest.
+`.github/workflows/tests.yml` runs on every pull request and push to `main`. It builds every target, runs the `PincerKitTests` unit tests, runs `PincerChecks` in offline, `--demo`, `--live`, `--live-no-usage` and `--live-no-reply-to` (against the mock gateway) modes, and runs the mock gateway's selftest. Pull requests and pushes that only touch docs (`website/`, top-level Markdown) skip both jobs; `.github/workflows/docs.yml` builds the website instead. `.github/workflows/launch-cpu.yml` runs `scripts/check-launch-cpu.sh` nightly against a release build of `main`.
 
 ### TestFlight
 
-`.github/workflows/testflight.yml` archives both apps, signs them for the App Store, and uploads them to TestFlight. To run it, go to **Actions → TestFlight → Run workflow** and pick a platform, or push a `v*` tag. Each build number is `<run number>.<attempt>`.
+`.github/workflows/testflight.yml` archives both apps, signs them for the App Store, and uploads them to TestFlight. To run it, go to **Actions → TestFlight → Run workflow** and pick a platform (or `gh workflow run testflight.yml -f platform=both|ios|macos`), or push a `v*` tag. Only the selected platforms start a runner. Each build number is `<run number>.<attempt>`.
 
 Signing uses manual App Store profiles through `project.appstore.yml`, which is included only when `PINCER_APP_STORE_SIGNING=YES`. `scripts/testflight.sh ios|macos` does the work and also runs locally (`UPLOAD=0` exports without uploading). The workflow needs these repository secrets:
 

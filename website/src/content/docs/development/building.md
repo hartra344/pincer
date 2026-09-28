@@ -96,15 +96,18 @@ scripts/check-launch-cpu.sh --menu-bar on --demo
 
 `--menu-bar on|off` sets the menu bar item for the run, and `--demo` saves only the built-in demo gateway, so it connects at launch. By default the script runs a copy of the app under its own bundle id with an in-memory Keychain, and it restores that bundle's defaults afterwards, so your own settings and gateways aren't touched. Run `scripts/check-launch-cpu.sh --help` for the other options.
 
+CI runs it every night (`.github/workflows/launch-cpu.yml`), with the menu bar on and the demo gateway and again with the menu bar off, against a release build of `main`. The nightly run is skipped when `main` has no commits from the last day. The workflow also runs on pull requests that change the check or `scripts/bundle-mac.sh`, and from **Actions → Launch CPU → Run workflow**.
+
 ## Continuous integration
 
 `.github/workflows/tests.yml` runs on every pull request and every push to `main`:
 
-1. **Mock gateway selftest** (Ubuntu): `npm ci && npm run selftest` in `mock-gateway/`.
-2. **Swift build and checks** (macOS, `PINCER_KEYCHAIN=memory`):
+1. **Detect changes** (Ubuntu): lists the changed files. If they're all docs (`website/`, `docs/`, top-level Markdown files or `LICENSE`), the next two jobs are skipped, which counts as passing. Anything else, including workflows, `Package.swift`, `project.yml`, `scripts/`, `mock-gateway/` and the sources, runs them. If the list isn't available (a new branch or a force push), they run too.
+2. **Mock gateway selftest** (Ubuntu): `npm ci && npm run selftest` in `mock-gateway/`.
+3. **Swift build and checks** (macOS, `PINCER_KEYCHAIN=memory`):
    - Restores the cached `.build` folder
    - `swift build --build-tests`
-   - `scripts/run-checks.sh`, which starts four mocks and then runs these **at the same time**:
+   - `scripts/run-checks.sh`, which starts four mocks, waits until they all listen (it checks every 50 ms and fails with a mock's log if it exits or isn't up within 30 seconds), and then runs these **at the same time**:
      - `swift test --skip-build --parallel`
      - `PincerChecks`
      - `PincerChecks --demo` (with `PINCER_DEMO_DELAY_SCALE=0.2`)
@@ -113,6 +116,8 @@ scripts/check-launch-cpu.sh --menu-bar on --demo
      - `PincerChecks --live-no-reply-to` against a mock started with `MOCK_NO_REPLY_TO=1`
 
      Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. Because they share the CPU (CI runners have 3 cores), they all pass `--skip-perf-budgets`. After they finish, `PincerChecks --perf-smoke` runs alone and enforces the perf smoke budgets. Then the unit tests with wall-clock budgets run alone with `PINCER_STRICT_PERF=1`; in the parallel `swift test` lane they're only held to five times their budget. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
+
+`.github/workflows/docs.yml` builds the website (`npm ci && npm run build` in `website/`) on pull requests and pushes to `main` that change it.
 
 CI passes `-Xswiftc -enable-incremental-file-hashing` to every `swift` command. Checkout gives every file a new modification time, so without it the restored build would recompile everything.
 

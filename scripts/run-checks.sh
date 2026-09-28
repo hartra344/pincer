@@ -20,6 +20,8 @@ CHECKS="$BIN/PincerChecks"
 [ -d mock-gateway/node_modules ] || { echo "Run npm ci in mock-gateway first"; exit 1; }
 
 mocks=()
+mock_names=()
+mock_ports=()
 cleanup() { for pid in ${mocks[@]+"${mocks[@]}"}; do kill "$pid" 2>/dev/null; done; }
 trap cleanup EXIT
 
@@ -33,6 +35,30 @@ start_mock() {
     fi
     env PORT="$port" "$@" node mock-gateway/server.mjs > "$LOGS/mock-$name.log" 2>&1 &
     mocks+=($!)
+    mock_names+=("$name")
+    mock_ports+=("$port")
+}
+
+# Waits up to 30s for every mock to listen, polling every 0.05s. Fails with the mock's log as soon
+# as one exits or times out.
+wait_for_mocks() {
+    local i name port deadline=$((SECONDS + 30))
+    for i in "${!mocks[@]}"; do
+        name=${mock_names[$i]} port=${mock_ports[$i]}
+        until nc -z 127.0.0.1 "$port" 2>/dev/null; do
+            if ! kill -0 "${mocks[$i]}" 2>/dev/null; then
+                echo "Mock $name (port $port) exited before listening:"
+                cat "$LOGS/mock-$name.log"
+                exit 1
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "Mock $name (port $port) didn't start within 30s:"
+                cat "$LOGS/mock-$name.log"
+                exit 1
+            fi
+            sleep 0.05
+        done
+    done
 }
 
 # Mocks start just before the checks: some of their seeded data expires minutes after launch.
@@ -40,14 +66,7 @@ start_mock core $((PORT_BASE))
 start_mock extras $((PORT_BASE + 1))
 start_mock no-usage $((PORT_BASE + 2)) MOCK_NO_USAGE=1
 start_mock no-reply-to $((PORT_BASE + 3)) MOCK_NO_REPLY_TO=1
-for port in $((PORT_BASE)) $((PORT_BASE + 1)) $((PORT_BASE + 2)) $((PORT_BASE + 3)); do
-    for _ in $(seq 1 30); do nc -z 127.0.0.1 "$port" 2>/dev/null && break; sleep 1; done
-    if ! nc -z 127.0.0.1 "$port" 2>/dev/null; then
-        echo "Mock on port $port didn't start:"
-        cat "$LOGS"/mock-*.log
-        exit 1
-    fi
-done
+wait_for_mocks
 
 names=()
 pids=()
