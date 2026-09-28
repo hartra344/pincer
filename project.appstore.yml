@@ -13,7 +13,13 @@ targets:
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: Apple Distribution
         PROVISIONING_PROFILE_SPECIFIER: Pincer_iOS_AppStore_CI
-        PINCER_APS_ENVIRONMENT: production
+      # Per-configuration so it wins over project.yml's target-level `development` default,
+      # which XcodeGen otherwise keeps over an included file's base setting.
+      configs:
+        Debug:
+          PINCER_APS_ENVIRONMENT: production
+        Release:
+          PINCER_APS_ENVIRONMENT: production
   PincerNotifications-iOS:
     settings:
       base:
