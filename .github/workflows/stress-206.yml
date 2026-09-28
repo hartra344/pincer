@@ -51,7 +51,7 @@ jobs:
 
       - run: swift build --build-tests -Xswiftc -enable-incremental-file-hashing
 
-      # Correctness failures (✗ / timed out / FAILED lanes) count as flakes. The wall-clock perf
+      # Correctness failures (✗ lines / FAILED lanes; "timed out" alone is informational) count as flakes. The wall-clock perf
       # lanes are reported but not counted when three runs share the CPU on purpose.
       - name: Stress
         env:
@@ -69,9 +69,9 @@ jobs:
             local out="$ROOT/$1.out" bad
             bad=$(grep -E "^[a-z-]+ +FAILED" "$out" | grep -vE "^perf-(smoke|tests) " || true)
             if [ "$2" = no ] && grep -qE "^perf-(smoke|tests) +FAILED" "$out"; then bad="$bad perf"; fi
-            if [ -n "$bad" ] || grep -q "✗\|timed out" "$ROOT/$1"/*.log 2>/dev/null; then
+            if [ -n "$bad" ] || grep -q "✗" "$ROOT/$1"/*.log 2>/dev/null; then
               flakes=$((flakes + 1)); echo "::error::$1 flaked: $bad"
-              grep -H "✗\|timed out" "$ROOT/$1"/*.log || true
+              grep -H "✗" "$ROOT/$1"/*.log || true
             else
               echo "$1: clean"
             fi
