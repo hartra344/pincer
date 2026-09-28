@@ -118,6 +118,7 @@ private func checkIndexSurvivesDeletedFiles() async {
                                                                     complete: true), gatewayId: gatewayId, sessionKey: "agent:main:race")
             }
         }
+        // Deliberate: lets some saves start so Clear Cache lands mid-stream (the race under test).
         try? await Task.sleep(for: .milliseconds(2))
         TranscriptCache.removeEverything()
         await saves.value
@@ -184,7 +185,6 @@ func checkTranscriptCacheVersioning() async {
         for index in 0..<10 {
             writeRawCache(Data("junk \(index)".utf8), gatewayId: gatewayId, sessionKey: "bulk-\(index)")
             _ = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "bulk-\(index)")
-            try? await Task.sleep(for: .milliseconds(3))
         }
         check(quarantineCount(gatewayId) <= 5 && quarantineCount(gatewayId) > 0, "quarantine is bounded (\(quarantineCount(gatewayId)))")
 
@@ -270,8 +270,7 @@ func runLiveCacheRecovery(url: String, token: String) async {
     check(!expected.isEmpty, "history loaded (\(expected.count) items)")
     let saved = await waitFor("cache written", timeout: 10) { fileExists(TranscriptCache.file(gatewayId: profile.id, sessionKey: key)) }
     check(saved, "transcript cached")
-    first.stop()
-    try? await Task.sleep(for: .milliseconds(300))
+    await first.stopAndFlushCache()
 
     // Between launches: the file is torn in half.
     guard let file = TranscriptCache.file(gatewayId: profile.id, sessionKey: key),

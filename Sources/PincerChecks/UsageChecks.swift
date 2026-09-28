@@ -319,9 +319,11 @@ func checkUsageDemo(_ gateway: GatewayStore) async {
     check((detail?.row?.usage?.totals.totalTokens ?? 0) > 0 && detail?.totals.loadState == .idle, "demo drill-down totals")
     check((detail?.timeseries.value?.points.count ?? 0) >= 40, "demo drill-down timeseries (\(detail?.timeseries.value?.points.count ?? 0))")
     check(detail?.logs.value?.count == 20 && Set(detail?.logs.value?.map(\.role) ?? []) == [.user, .assistant, .tool, .toolResult], "demo drill-down logs")
-    let quiet = gateway.sessions.keys.first { key in !["agent:main:main", "agent:main:discord:channel:123", "agent:main:dashboard:trip",
-                                                       "agent:research:main", "agent:research:dashboard:papers",
-                                                       "agent:research:subagent:abc", "agent:coder:main"].contains(key) }
+    // Deterministic (#243): the first chat, by key, that the 30-day dashboard lists no usage for.
+    await usage.setPreset(.month)
+    let used = Set(usage.sessions.value?.sessions.filter { !($0.usage?.totals.isEmpty ?? true) }.map(\.key) ?? [])
+    let quiet = gateway.sessions.keys.sorted().first { !used.contains($0) }
+    check(quiet != nil && !used.isEmpty, "demo has a chat without usage (\(used.count) with usage)")
     if let quiet {
         await usage.loadSession(quiet)
         let empty = usage.detail(quiet)

@@ -352,6 +352,14 @@ public final class GatewayStore: Identifiable {
         Task { await connection.stop() }
     }
 
+    /// `stop()` for a store that won't be started again, returning once its chats' last cache
+    /// writes and search indexing have landed and nothing more will be written.
+    public func stopAndFlushCache() async {
+        self.stop()
+        for chat in self.chats.values { await chat.finishCaching() }
+        await TranscriptCache.flush(gatewayId: self.id)
+    }
+
     /// Whether this connection can see and answer agent questions (`operator.questions`).
     public var canAnswerQuestions: Bool { self.hello?.canAnswerQuestions ?? false }
 
