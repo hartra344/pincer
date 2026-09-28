@@ -53,6 +53,8 @@ actor DemoGateway {
     var transcripts: [String: [JSONValue]] = [:]
     /// Inactive transcript branches by session key, then leaf entry id (DemoGateway+Sessions.swift).
     var branchTips: [String: [String: [JSONValue]]] = [:]
+    /// Finishes the seeded run in flight a while after the first connection (DemoGateway+Sessions.swift).
+    var seededRunEnd: Task<Void, Never>?
     private var artifacts: [String: (mimeType: String, data: Data)] = [:]
     private var approvals: [String: JSONValue] = [:]
     private var approvalOrder: [String] = []
@@ -184,6 +186,7 @@ actor DemoGateway {
         self.sink = sink
         self.sessionsSubscribed = false
         self.messageSubscriptions.removeAll()
+        self.scheduleSeededRunEnd()
         return [
             "type": "hello-ok",
             "protocol": .number(Double(GatewayConnection.protocolVersion)),
@@ -806,9 +809,18 @@ actor DemoGateway {
         if let expected = params["expectedSessionId"]?.string, expected != row["sessionId"]?.string {
             throw GatewayError.rpc(code: "INVALID_REQUEST", message: "expectedSessionId mismatch", details: nil)
         }
-        for field in ["unread", "pinned", "label", "category", "color", "archived"] {
+        if params["archived"]?.bool == true {
+            // Like the Gateway (and the demo's sessions.patchMany): main sessions stay, work in flight stops.
+            if Self.isMainKey(key) {
+                throw GatewayError.rpc(code: "INVALID_REQUEST", message: "Cannot archive an agent's main session.", details: nil)
+            }
+            self.stopRuns(key)
+            row = self.sessions[key] ?? row
+        }
+        for field in ["unread", "pinned", "label", "category", "color"] {
             if let value = params[field] { row[field] = value }
         }
+        if let archived = params["archived"]?.bool { Self.applyArchived(&row, archived) }
         self.registerGroup(params["category"]?.string)
         if let model = params["model"] {
             if model.isNull {
@@ -1359,7 +1371,7 @@ actor DemoGateway {
         return !Task.isCancelled && self.runs[runId] != nil
     }
 
-    private func abort(sessionKey: String?, runId: String?) {
+    func abort(sessionKey: String?, runId: String?) {
         let matching = self.runs.filter { id, run in runId.map { $0 == id } ?? (run.sessionKey == sessionKey) }
         for (id, run) in matching {
             run.task?.cancel()
@@ -1404,7 +1416,7 @@ actor DemoGateway {
                             "stream": .string(stream), "data": data])
     }
 
-    private func append(_ key: String, _ message: JSONValue) {
+    func append(_ key: String, _ message: JSONValue) {
         self.transcripts[key, default: []].append(message)
         guard self.messageSubscriptions.contains(key) else { return }
         self.emit("session.message", [

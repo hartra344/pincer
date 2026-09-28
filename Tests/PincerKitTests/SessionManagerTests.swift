@@ -446,6 +446,18 @@ struct SessionManagerTests {
         #expect(model.actionError == "Branch switch is unavailable while the agent is working.")
     }
 
+    @MainActor @Test func demoSeededRunFinishesOnItsOwn() async throws {
+        let demo = DemoGateway()
+        let before = try #require(try await Self.demoRow(demo, Seed.refactor))
+        #expect(before["hasActiveRun"] == true)
+        await demo.finishSeededRun()
+        let after = try #require(try await Self.demoRow(demo, Seed.refactor))
+        #expect(after["hasActiveRun"] == false && after["status"] == "done")
+        #expect(after["endedAt"]?.double != nil && after["runtimeMs"]?.double != nil)
+        await demo.finishSeededRun()
+        #expect(try await Self.demoRow(demo, Seed.refactor)?["status"] == "done", "finishing twice is a no-op")
+    }
+
     /// The demo's row for `key` (`sessions.describe`), nil once deleted.
     static func demoRow(_ demo: DemoGateway, _ key: String) async throws -> JSONValue? {
         let session = try await demo.handle("sessions.describe", ["key": .string(key)])["session"]

@@ -261,7 +261,7 @@ extension DemoGateway {
             throw GatewayError.rpc(code: "INVALID_REQUEST", message: "Session \(key) changed before deletion. Retry.",
                                    details: ["details": ["reason": "session-changed"]])
         }
-        self.stopStubRun(key)
+        self.stopRuns(key)
         let agentId = row["agentId"]?.text ?? "main"
         let sessionId = row["sessionId"]?.text ?? ""
         let transcript = self.transcripts[key] ?? []
@@ -308,7 +308,7 @@ extension DemoGateway {
             if patch["archived"]?.bool == true {
                 if Self.isMainKey(key) { return failure("Cannot archive an agent's main session.") }
                 // Like the Gateway, archiving stops work in flight first.
-                self.stopStubRun(key)
+                self.stopRuns(key)
             }
             guard var row = self.sessions[key] else { return failure("unknown session") }
             for field in fields where field != "archived" {
@@ -442,6 +442,48 @@ extension DemoGateway {
     private func stubRunSession(_ runId: String?) -> String? {
         guard let runId else { return nil }
         return self.sessions.first { $0.value["activeRunIds"]?.array?.contains(.string(runId)) == true }?.key
+    }
+
+    /// Stops everything running in a session: the seeded run and any demo reply.
+    func stopRuns(_ key: String) {
+        self.stopStubRun(key)
+        self.abort(sessionKey: key, runId: nil)
+    }
+
+    /// How long after the demo first connects the seeded run finishes on its own.
+    static let seededRunDuration: Duration = .seconds(90)
+
+    /// Lets the seeded run finish by itself, so Running (and the menu bar) empties like a real run.
+    func scheduleSeededRunEnd() {
+        guard self.seededRunEnd == nil else { return }
+        self.seededRunEnd = Task { [weak self] in
+            try? await Task.sleep(for: Self.seededRunDuration)
+            guard !Task.isCancelled else { return }
+            await self?.finishSeededRun()
+        }
+    }
+
+    /// The seeded run's normal end: its reply, `final`, lifecycle end, and a done row with its duration.
+    func finishSeededRun() {
+        let key = SessionManagerSeed.refactor
+        let runId = SessionManagerSeed.refactorRunId
+        guard var row = self.sessions[key], row["activeRunIds"]?.array?.contains(.string(runId)) == true else { return }
+        let now = Self.now()
+        let reply = "Done: TokenStore is now a protocol with KeychainTokenStore and MemoryTokenStore; all auth tests pass."
+        let message = Self.sessionManagerMessage("assistant", reply, id: "demo-refactor-done", at: now.double ?? 0)
+        self.append(key, message)
+        self.emit("chat", ["runId": .string(runId), "sessionKey": .string(key), "seq": 1, "state": "final", "message": message])
+        self.emit("agent", ["runId": .string(runId), "sessionKey": .string(key), "seq": 2, "stream": "lifecycle",
+                            "data": ["phase": "end"]])
+        row["hasActiveRun"] = false
+        row["activeRunIds"] = []
+        row["status"] = "done"
+        row["endedAt"] = now
+        if let started = row["startedAt"]?.double, let ended = now.double { row["runtimeMs"] = .number(max(0, ended - started)) }
+        row["lastMessagePreview"] = .string(String(reply.prefix(120)))
+        self.touch(&row)
+        self.sessions[key] = row
+        self.sessionChanged(key, reason: "run-finished")
     }
 
     /// Ends the seeded run in flight (it has no task behind it).
