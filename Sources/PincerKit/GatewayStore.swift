@@ -455,7 +455,6 @@ public final class GatewayStore: Identifiable {
     /// `CancellationError` when a newer search replaced this one.
     public func searchMessages(_ query: String) async throws -> MessageSearch.Results {
         let query = TranscriptSearch.normalized(query)
-        if ProcessInfo.processInfo.environment["OBXDBG"] != nil { FileHandle.standardError.write("SRCHIN \(query) fts=\(MessageSearch.ftsQuery(query) != nil) \(Date().timeIntervalSince1970)\n".data(using: .utf8)!) }
         guard MessageSearch.ftsQuery(query) != nil else { return MessageSearch.Results(query: query) }
         let index = self.messageIndex
         let allowed = self.searchableSessionKeys
@@ -466,7 +465,6 @@ public final class GatewayStore: Identifiable {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            if ProcessInfo.processInfo.environment["OBXDBG"] != nil { FileHandle.standardError.write("SRCHERR \(query) \(error)\n".data(using: .utf8)!) }
             // The index may have been deleted; refill it from the transcripts, at most once a minute.
             let now = ContinuousClock.now
             if self.lastFailureReconcile.map({ now - $0 >= .seconds(60) }) ?? true {
@@ -478,7 +476,6 @@ public final class GatewayStore: Identifiable {
         let groups = await Task.detached(priority: .userInitiated) {
             MessageSearch.collect(candidates, query: query, allowed: allowed)
         }.value
-        if ProcessInfo.processInfo.environment["OBXDBG"] != nil { FileHandle.standardError.write("SRCH \(query) cand=\(candidates.map(\.sessionKey)) allowed=\(allowed.count) groups=\(groups.count) main=\(self.chats["agent:main:main"]?.items.suffix(2).map { "\($0.plainText.prefix(30)) p=\($0.isPending)" } ?? [])\n".data(using: .utf8)!) }
         try Task.checkCancellation()
         let snippets = await Task.detached(priority: .userInitiated) {
             groups.map { $0.hits.map { MessageSearch.snippet(query: query, markdown: $0.text) } }

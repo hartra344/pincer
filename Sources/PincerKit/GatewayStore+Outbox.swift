@@ -48,7 +48,6 @@ extension GatewayStore {
     }
 
     func outboxChanged(from old: Outbox) {
-        if ProcessInfo.processInfo.environment["OBXDBG"] != nil { FileHandle.standardError.write("OBX \(self.profile.name) \(self.outbox.entries.map { "\($0.text.prefix(14)):\($0.state):\($0.attempts)" }) conn=\(self.state.isConnected) flushing=\(self.outboxFlushing)\n".data(using: .utf8)!) }
         let changed = Set(old.entries.map(\.sessionKey) + self.outbox.entries.map(\.sessionKey)).filter {
             old.entries(for: $0) != self.outbox.entries(for: $0)
         }
@@ -89,9 +88,7 @@ extension GatewayStore {
                 await chat.load(force: chat.hasLoaded)
                 guard self.outbox.entry(id: entry.id)?.state == .queued else { continue }
             }
-            let r = await chat.deliver(entry)
-            if ProcessInfo.processInfo.environment["OBXDBG"] != nil { FileHandle.standardError.write("OBX deliver \(entry.text.prefix(14)) -> \(r)\n".data(using: .utf8)!) }
+            _ = await chat.deliver(entry)
         }
-        if ProcessInfo.processInfo.environment["OBXDBG"] != nil { FileHandle.standardError.write("OBX flush end conn=\(self.state.isConnected) hello=\(self.hello != nil)\n".data(using: .utf8)!) }
     }
 }

@@ -293,9 +293,18 @@ struct SendFailureClassificationTests {
 
     @Test func nonRetryableErrorsAreRejected() {
         #expect(SendFailure.classify(self.rpc("INVALID_REQUEST", "invalid chat.send params")) == .rejected("invalid chat.send params"))
-        // Upstream caches non-client-retry dispatch failures as UNAVAILABLE without `retryable`: resending won't help.
-        #expect(SendFailure.classify(self.rpc("UNAVAILABLE", "mock send failure")) == .rejected("mock send failure"))
+        // UNAVAILABLE flagged `retryable: false` means resending won't help.
         #expect(SendFailure.classify(self.rpc("UNAVAILABLE", "x", details: .object(["retryable": .bool(false)]))) == .rejected("x"))
+    }
+
+    @Test func unavailableWithoutAFlagIsTransient() {
+        // The Gateway busy or briefly down, not saying either way: while connected it fails with Retry.
+        #expect(SendFailure.classify(self.rpc("UNAVAILABLE", "mock send failure")) == .transient)
+        var box = Outbox()
+        box.enqueue(OutboxEntry(id: "a", sessionKey: "agent:main:main", text: "hi", createdAt: Date(timeIntervalSince1970: 0)))
+        box.markSending(id: "a")
+        box.markFailed(id: "a", kind: SendFailure.classify(self.rpc("UNAVAILABLE", "busy")), isConnected: true)
+        #expect(box.entry(id: "a")?.state == .failed(OutboxFailure(message: "Couldn't send.", retryable: true)))
     }
 
     @Test func authFailuresAreAuthRevoked() {

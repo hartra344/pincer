@@ -144,6 +144,9 @@ public enum SendFailure {
         case let .rpc(code, message, _):
             if self.authCodes.contains(code) || gateway.detailCode == "MISSING_SCOPE" { return .authRevoked }
             if gateway.isRetryable { return .transient }
+            // UNAVAILABLE is the Gateway being busy or briefly down: worth a Retry, unless it
+            // said outright that retrying won't help.
+            if code == "UNAVAILABLE", gateway.retryableFlag != false { return .transient }
             return .rejected(message)
         case .notConnected, .timeout, .closed:
             return .transient

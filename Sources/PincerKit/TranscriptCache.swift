@@ -322,6 +322,8 @@ public enum TranscriptCache {
     public static func removeAll(gatewayId: UUID, permanently: Bool = false) {
         MessageIndex.discard(gatewayId: gatewayId, permanently: permanently)
         self.deleteDirectory(gatewayId: gatewayId, root: Self.root)
+        // A save that landed meanwhile opened a new index on the files just deleted: drop it too.
+        MessageIndex.discard(gatewayId: gatewayId, permanently: permanently)
     }
 
     /// Deletes the Gateway's transcripts under another cache root (tests).
@@ -336,10 +338,12 @@ public enum TranscriptCache {
     public static func removeEverything() {
         guard let root = Self.root else { return }
         let entries = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
-        for entry in entries {
-            if let id = UUID(uuidString: entry.lastPathComponent) { MessageIndex.discard(gatewayId: id) }
-        }
+        let ids = entries.compactMap { UUID(uuidString: $0.lastPathComponent) }
+        for id in ids { MessageIndex.discard(gatewayId: id) }
         self.removeEverything(root: root)
+        // A save that landed meanwhile (background prefetch) opened a new index on the files just
+        // deleted, and it would fail every search: drop those too, so the next use starts fresh.
+        for id in ids { MessageIndex.discard(gatewayId: id) }
         logger.notice("Cleared the transcript cache")
     }
 

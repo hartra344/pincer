@@ -23,9 +23,12 @@ public enum GatewayError: Error, LocalizedError, Sendable, Equatable {
     }
 
     /// The Gateway flagged the failure `retryable` (`ErrorShape.retryable`).
-    public var isRetryable: Bool {
-        if case let .rpc(_, _, details) = self { return details?["retryable"]?.bool ?? false }
-        return false
+    public var isRetryable: Bool { self.retryableFlag ?? false }
+
+    /// `ErrorShape.retryable` as sent: nil when the Gateway didn't say.
+    public var retryableFlag: Bool? {
+        if case let .rpc(_, _, details) = self { return details?["retryable"]?.bool }
+        return nil
     }
 
     public var detailCode: String? {

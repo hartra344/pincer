@@ -1179,10 +1179,10 @@ final class TranscriptSendStatusView: TranscriptBaseView {
             self.actions?.deleteSend(id)
         }
         for button in [self.retryButton, self.deleteButton] { self.addSubview(button) }
+        // VoiceOver hears the status in the message's label (with Retry and Delete as the row's
+        // actions); only the buttons here are elements.
         #if os(iOS)
-        // One element for VoiceOver, with Retry and Delete as its actions.
-        self.isAccessibilityElement = true
-        self.accessibilityTraits = .staticText
+        self.isAccessibilityElement = false
         #endif
     }
 
@@ -1199,11 +1199,6 @@ final class TranscriptSendStatusView: TranscriptBaseView {
         }
         #if os(macOS)
         self.toolTip = status.detail
-        #else
-        self.accessibilityLabel = "Your message. \(status.spoken)"
-        self.accessibilityCustomActions = self.rowView?.sendActions(status).map { action in
-            UIAccessibilityCustomAction(name: action.title) { _ in action.run(); return true }
-        }
         #endif
     }
 
