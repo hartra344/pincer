@@ -13,6 +13,7 @@ import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, createChannelPairingState, handleChannelPairingRequest } from './pairing.mjs';
 import { HEALTH_EVENTS, HEALTH_METHODS, addFailedDelivery, broadcastPresence, cancelPendingRestart, createHealthState, handleHealthRequest, healthDisabled, helloSnapshot, isRestarting } from './health.mjs';
 import { SETUP_METHODS, createSetupState, handleSetupRequest } from './setup.mjs';
+import { CHANNEL_LIFECYCLE_METHODS, createChannelsState, handleChannelsRequest } from './channels.mjs';
 import { healthSummary } from './health.mjs';
 import { createWebPushState, handleWebPushEvent, handleWebPushRequest } from './webpush.mjs';
 import { DEVICE_PAIRING_EVENTS, DEVICE_PAIRING_METHODS, NODE_METHODS, approvePendingDevice, createDevicePairingState, devicePairingDisabled, handleDevicesRequest, noteDeviceConnected, nodesDisabled, openPairingRequest } from './devices.mjs';
@@ -62,6 +63,7 @@ const METHODS = [
   ...NODE_METHODS,
   ...HEALTH_METHODS,
   ...SETUP_METHODS,
+  ...CHANNEL_LIFECYCLE_METHODS,
 ];
 const EVENTS = [
   'connect.challenge',
@@ -527,6 +529,7 @@ function createSeedState() {
     channelPairingState: createChannelPairingState(base),
     healthState: createHealthState(base),
     setupState: createSetupState(),
+    channelsState: createChannelsState(),
   };
 }
 
@@ -1141,6 +1144,7 @@ function handleAuthedRequest(state, conn, msg) {
   if (handleUsageRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr })) return;
   if (handleSetupRequest(state, conn, msg, { sendRes, sendErr, broadcast, healthSummary })) return;
+  if (handleChannelsRequest(state, conn, msg, { sendRes, sendErr, broadcast, healthSummary })) return;
   if (handleDevicesRequest(state, conn, msg, { sendRes, sendErr, broadcast })) return;
   if (handleHealthRequest(state, conn, msg, { sendRes, sendErr, broadcast, abortRun: finishRunAbort })) return;
   switch (method) {

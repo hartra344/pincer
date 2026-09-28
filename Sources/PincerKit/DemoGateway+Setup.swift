@@ -172,6 +172,7 @@ extension DemoGateway {
         }
         self.setup.login = nil
         self.setup.whatsappLinked = true
+        self.channelLifecycle.stopped.remove("whatsapp")
         self.setup.whatsappLinkedAt = Self.now().double
         self.emitHealth()
         return ["connected": true, "message": "✅ Linked! WhatsApp is ready."]

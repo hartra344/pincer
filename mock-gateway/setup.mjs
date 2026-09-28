@@ -17,8 +17,10 @@ export const WHATSAPP_NOT_LINKED = 'Not linked (no WhatsApp Web session).';
 export const WHATSAPP_RELINK_FIX = 'Run: openclaw channels login (scan QR on the gateway host).';
 const QR_TTL_MS = 3 * 60_000;
 const WHATSAPP_SELF = '+15550100';
-const CHANNEL_META = [
+export const TELEGRAM_CONFLICT = 'getUpdates: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running';
+export const CHANNEL_META = [
   { id: 'discord', label: 'Discord', detailLabel: 'Discord Bot' },
+  { id: 'telegram', label: 'Telegram', detailLabel: 'Telegram Bot' },
   { id: 'whatsapp', label: 'WhatsApp', detailLabel: 'WhatsApp Web' },
   { id: 'slack', label: 'Slack', detailLabel: 'Slack App' },
 ];
@@ -113,25 +115,65 @@ function discordEnabled(state) {
   return state.configState?.config?.channels?.discord?.enabled !== false;
 }
 
-/** Per-account snapshots, shared by `health` and `channels.status`. */
+/**
+ * Per-account snapshots, shared by `health` and `channels.status`. Runtime state (running,
+ * degraded, logged out) comes from `state.channelsState` (channels.mjs); WhatsApp's link from
+ * `state.setupState`.
+ */
 export function channelAccountSnapshots(state) {
   const startedAt = state.healthState?.startedAt ?? Date.now();
+  const runtime = state.channelsState ?? {};
+  const discordRt = runtime.discord ?? { running: true };
+  const telegramRt = runtime.telegram ?? { running: true, degraded: true, loggedOut: false };
+  const whatsappRt = runtime.whatsapp ?? { stopped: false };
   const discordOn = discordEnabled(state);
+  const discordConfigured = discordRt.loggedOut !== true;
+  const discordRunning = discordOn && discordConfigured && discordRt.running !== false;
+  const telegramConfigured = telegramRt.loggedOut !== true;
+  const telegramRunning = telegramConfigured && telegramRt.running !== false;
+  const telegramDegraded = telegramRunning && telegramRt.degraded === true;
   const wa = state.setupState?.whatsapp ?? { linked: false };
+  const waRunning = wa.linked && whatsappRt.stopped !== true;
   return {
     discord: {
       accountId: 'default',
       name: 'Discord',
       enabled: discordOn,
-      configured: true,
-      running: discordOn,
-      connected: discordOn,
+      configured: discordConfigured,
+      running: discordRunning,
+      connected: discordRunning,
       restartPending: false,
       reconnectAttempts: 0,
-      lastConnectedAt: startedAt + 2_000,
+      lastConnectedAt: discordRunning ? (discordRt.lastStartAt ?? startedAt) + 2_000 : (discordRt.lastConnectedAt ?? startedAt + 2_000),
+      lastStartAt: discordRt.lastStartAt ?? startedAt,
+      lastStopAt: discordRt.lastStopAt ?? null,
+      lastInboundAt: Date.now() - 4 * 60_000,
+      lastOutboundAt: Date.now() - 3 * 60_000,
       lastError: null,
-      tokenSource: 'config',
+      tokenSource: discordConfigured ? 'config' : 'none',
       dmPolicy: 'pairing',
+      ...(discordRunning ? { healthState: 'healthy' } : {}),
+    },
+    // Running, but another bot instance holds the long poll: not connected, retrying, with the
+    // Bot API's 409 as its last error, until someone reconnects it (stop + start) or restarts.
+    telegram: {
+      accountId: 'default',
+      name: 'Telegram',
+      enabled: true,
+      configured: telegramConfigured,
+      running: telegramRunning,
+      connected: telegramRunning && !telegramDegraded,
+      restartPending: false,
+      reconnectAttempts: telegramDegraded ? 3 : 0,
+      lastConnectedAt: telegramDegraded ? startedAt + 5_000 : telegramRunning ? (telegramRt.lastStartAt ?? startedAt) + 1_000 : null,
+      lastStartAt: telegramRt.lastStartAt ?? startedAt,
+      lastStopAt: telegramRt.lastStopAt ?? null,
+      lastInboundAt: telegramDegraded ? startedAt + 60_000 : telegramRt.lastInboundAt ?? null,
+      lastError: telegramDegraded ? TELEGRAM_CONFLICT : null,
+      tokenSource: telegramConfigured ? 'env' : 'none',
+      mode: 'polling',
+      dmPolicy: 'pairing',
+      ...(telegramDegraded ? { healthState: 'disconnected' } : telegramRunning ? { healthState: 'healthy' } : {}),
     },
     // Enabled in config, but no WhatsApp Web session yet: not configured until someone scans the QR.
     whatsapp: wa.linked
@@ -141,13 +183,14 @@ export function channelAccountSnapshots(state) {
           enabled: true,
           configured: true,
           linked: true,
-          running: true,
-          connected: true,
+          running: waRunning,
+          connected: waRunning,
           restartPending: false,
           reconnectAttempts: 0,
           lastConnectedAt: wa.linkedAt,
+          lastStopAt: whatsappRt.lastStopAt ?? null,
           lastError: null,
-          healthState: 'healthy',
+          ...(waRunning ? { healthState: 'healthy' } : {}),
           dmPolicy: 'pairing',
         }
       : {
@@ -187,7 +230,9 @@ export function channelsStatus(state, { probe = false, channel } = {}) {
     const account = { ...snapshots[id] };
     if (probe && account.configured && account.enabled) {
       account.lastProbeAt = now;
-      account.probe = { ok: true, elapsedMs: 38 };
+      account.probe = account.lastError
+        ? { ok: false, error: account.lastError, elapsedMs: 212 }
+        : { ok: true, elapsedMs: 38 };
     }
     const { accountId: _accountId, name: _name, ...summary } = account;
     channels[id] = summary;
