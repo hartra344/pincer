@@ -209,6 +209,7 @@ func runIntentChecks() async {
     check(none.isEmpty, "suggestions are empty when the gateway can't be reached")
     let slow = FakeIntentConnection()
     slow.responders["agents.list"] = { _ in
+        // Simulated hung server; the suggestion timeout must cut it off.
         try await Task.sleep(for: .seconds(3))
         return [:]
     }
@@ -248,6 +249,7 @@ func runIntentChecks() async {
         connection.responders["chat.send"] = { [weak connection] params in
             let key = params["sessionKey"]?.string ?? ""
             Task { @MainActor in
+                // Simulated server: the final event arrives after the send response.
                 try? await Task.sleep(for: .milliseconds(50))
                 connection?.chatEvent(runId: "run-2", sessionKey: key, state: "final")
             }

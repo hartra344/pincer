@@ -95,6 +95,7 @@ func runDemoOutbox() async {
     check(gateway.unsentCount == 1, "demo: one unsent message (\(gateway.unsentCount))")
 
     // Nothing resends it on its own; Retry sends it once with the same key.
+    // Negative window: nothing may resend the failed message on its own.
     try? await Task.sleep(for: .milliseconds(500))
     check(isFailed(outboxItem(chat, id)?.outboxState, retryable: true) && committedCopies(chat, text) == 0,
           "demo: a failed message waits for Retry")
@@ -110,6 +111,18 @@ func runDemoOutbox() async {
 }
 
 // MARK: Live
+
+/// `historyCopies`, re-read until it matches `expected` (or five seconds pass) instead of guessing a delay.
+@MainActor
+private func historyCopiesSettled(url: String, token: String, key: String, texts: [String], expected: [Int]) async -> [Int]? {
+    let deadline = Date().addingTimeInterval(5)
+    var copies = await historyCopies(url: url, token: token, key: key, texts: texts)
+    while copies != expected, Date() < deadline {
+        try? await Task.sleep(for: .milliseconds(100)) // poll interval
+        copies = await historyCopies(url: url, token: token, key: key, texts: texts)
+    }
+    return copies
+}
 
 /// A fresh store (its own profile, so its own cache) that reads the chat straight from `chat.history`.
 @MainActor
@@ -171,8 +184,7 @@ func runLiveOutbox(url: String, token: String) async {
     }
     check(flushed, "reconnecting sends the queue (\(gateway.unsentCount) left)")
     _ = await waitFor("runs settle", timeout: 30) { !chat.isRunning }
-    try? await Task.sleep(for: .milliseconds(300))
-    let copies = await historyCopies(url: url, token: token, key: key, texts: [first, second, third])
+    let copies = await historyCopiesSettled(url: url, token: token, key: key, texts: [first, second, third], expected: [1, 1, 1])
     check(copies == [1, 1, 1], "chat.history has each message exactly once (\(copies ?? []))")
     let order = await historyOrder(url: url, token: token, key: key, texts: [first, second, third])
     check(order == [first, second, third], "…in the order they were written (\(order))")
@@ -189,6 +201,7 @@ func runLiveOutbox(url: String, token: String) async {
           "the rejected message shows inline as Failed")
     // A reconnect doesn't resend it either.
     gateway.reconnectIfNeeded()
+    // Negative window: a reconnect must not resend the rejected message.
     try? await Task.sleep(for: .seconds(2))
     _ = await waitFor("reconnected", timeout: 20) { gateway.state.isConnected }
     await gateway.flushOutbox()
@@ -231,8 +244,7 @@ func runLiveOutbox(url: String, token: String) async {
     }
     check(settled, "the ambiguous send settles after reconnect (\(gateway.unsentCount) unsent, key \(ambiguousId ?? "gone"))")
     _ = await waitFor("runs settle", timeout: 30) { !chat.isRunning }
-    try? await Task.sleep(for: .milliseconds(300))
-    let afterDrops = await historyCopies(url: url, token: token, key: key, texts: [busy, ambiguous, rejected])
+    let afterDrops = await historyCopiesSettled(url: url, token: token, key: key, texts: [busy, ambiguous, rejected], expected: [1, 1, 0])
     check(afterDrops == [1, 1, 0], "busy and ambiguous land once, rejected never (\(afterDrops ?? []))")
     await chat.load(force: true)
     check(committedCopies(chat, ambiguous) == 1 && !chat.items.contains { $0.plainText == ambiguous && $0.isPending },
@@ -265,7 +277,6 @@ private func runLiveOutboxRelaunch(url: String, token: String, key: String) asyn
         OutboxStore.file(gatewayId: profile.id).map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
     }
     check(saved, "the outbox is saved to disk")
-    try? await Task.sleep(for: .milliseconds(300))
 
     let second = GatewayStore(profile: profile)
     second.start()
@@ -276,8 +287,7 @@ private func runLiveOutboxRelaunch(url: String, token: String, key: String) asyn
     check(sent, "the next launch sends what was queued (\(second.unsentCount) left)")
     let secondChat = second.chat(for: key)
     _ = await waitFor("relaunch runs settle", timeout: 30) { !secondChat.isRunning }
-    try? await Task.sleep(for: .milliseconds(300))
-    let copies = await historyCopies(url: url, token: token, key: key, texts: [trigger, text])
+    let copies = await historyCopiesSettled(url: url, token: token, key: key, texts: [trigger, text], expected: [1, 1])
     check(copies == [1, 1], "…exactly once each, across the relaunch (\(copies ?? []))")
     let cleared = await waitFor("outbox file cleared", timeout: 5) {
         OutboxStore.file(gatewayId: profile.id).map { !FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? true

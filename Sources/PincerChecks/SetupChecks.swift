@@ -114,6 +114,7 @@ func runDemoSetup() async {
     let again = GatewayStore(profile: .demo())
     again.start()
     _ = await waitFor("demo reconnect") { again.state.isConnected && !again.sessions.isEmpty }
+    // Negative window: a connection alone must not offer setup.
     try? await Task.sleep(for: .milliseconds(300))
     check(!again.setup.isPresented && !again.setup.isShowingOrPending, "a demo connection alone doesn't offer setup")
     again.setup.requestOffer(connected: true)
@@ -150,6 +151,7 @@ func runLiveSetup(url: String, token: String) async {
     let back = GatewayStore(profile: reader)
     back.start()
     _ = await waitFor("mock reconnect") { back.state.isConnected && !back.sessions.isEmpty }
+    // Negative window: reconnecting must not offer setup again.
     try? await Task.sleep(for: .milliseconds(300))
     check(!back.setup.isPresented, "not offered again after Not Now")
     _ = await setupLoaded(back, "mock resume checks")

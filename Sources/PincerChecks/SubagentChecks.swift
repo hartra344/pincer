@@ -122,6 +122,7 @@ func runDemoSubagents(_ gateway: GatewayStore) async {
     let abortMarkers = gateway.runTimeline.latestLane(sessionKey: kids.running)?.segments.filter { $0.kind == .abort }.count
     check(abortMarkers == 1, "demo abort leaves one abort marker (\(abortMarkers ?? 0))")
     let toolsAtStop = gateway.runTimeline.latestLane(sessionKey: kids.running)?.toolCount
+    // Negative window: a stopped helper must not keep streaming.
     try? await Task.sleep(for: .seconds(3))
     check(gateway.runTimeline.latestLane(sessionKey: kids.running)?.toolCount == toolsAtStop, "demo helper stops streaming once stopped")
     check(gateway.subagentTree(rootKey: root).runningCount == 0, "no helper still running")

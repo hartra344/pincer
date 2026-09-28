@@ -7,6 +7,7 @@ import PincerKit
 /// Lets deferred `connection.close()` tasks run.
 @MainActor
 private func settle() async {
+    // Deferred close() tasks have no completion signal to await; a short pause lets them run.
     try? await Task.sleep(for: .milliseconds(50))
 }
 
@@ -191,6 +192,7 @@ func runIntentEdgeChecks(labels: UserDefaults, home: GatewayProfile, work: Gatew
             let key = params["sessionKey"]?.string ?? ""
             Task { @MainActor in
                 for (index, piece) in ["Po", "ng", "!"].enumerated() {
+                    // Scripted pacing: the fake server spaces its deltas.
                     try? await Task.sleep(for: .milliseconds(20))
                     connection?.chatEvent(runId: "run-d", sessionKey: key, state: "delta", extra: ["deltaText": .string(piece), "seq": .number(Double(index))])
                 }
@@ -471,6 +473,7 @@ private func runIntentReviewChecks(labels: UserDefaults, home: GatewayProfile, w
         for (index, profile) in profiles.enumerated() {
             let connection = FakeIntentConnection()
             connection.responders["agents.list"] = { _ in
+                // Simulated slow server; the check measures parallel vs serial time.
                 try await Task.sleep(for: .milliseconds(700))
                 return json(#"{"agents":[{"id":"a\#(index)","name":"Agent \#(index)"}]}"#)
             }
@@ -496,6 +499,7 @@ private func runIntentReviewChecks(labels: UserDefaults, home: GatewayProfile, w
 
         for connection in connections.values {
             connection.responders["agents.list"] = { _ in
+                // Simulated hung server; the suggestion timeout must cut it off.
                 try await Task.sleep(for: .seconds(3))
                 return [:]
             }

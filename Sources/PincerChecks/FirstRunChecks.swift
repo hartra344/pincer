@@ -201,6 +201,7 @@ func runDemoFirstRun() async {
     let connected = await waitFor("first-run demo connects") { demo.state.isConnected && !demo.sessions.isEmpty }
     check(connected, "the demo connects")
     // Try the Demo lands straight in the chat list (#175 product review r1): no setup wizard offer.
+    // Negative window: a connected demo must not offer setup.
     try? await Task.sleep(for: .milliseconds(500))
     check(!demo.setup.isPresented && !demo.setup.isShowingOrPending,
           "the connected demo doesn't offer setup (presented \(demo.setup.isPresented))")

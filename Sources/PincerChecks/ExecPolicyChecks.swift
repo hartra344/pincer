@@ -552,6 +552,7 @@ func runDemoExecPolicy(_ gateway: GatewayStore, chat: ChatStore) async {
     }
     let resolved = await gateway.resolveApproval(approval, decision: "allow-always")
     check(resolved == .resolved, "demo allow-always resolved (\(resolved))")
+    // Negative window: the resolved event must not reload the draft.
     try? await Task.sleep(for: .milliseconds(800))
     check(policy.hasChanges && policy.snapshot?.hash == hashWithDraft, "a draft isn't reloaded by exec.approval.resolved")
     let stale = await policy.save()

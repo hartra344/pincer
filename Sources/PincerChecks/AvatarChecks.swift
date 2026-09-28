@@ -18,6 +18,7 @@ private func watchAvatar(_ chat: ChatStore, timeout: Double = 20, until done: (A
         let state = avatarState(chat)
         if seen.last != state { seen.append(state) }
         if done(state) { break }
+        // Poll interval for sampling the avatar state.
         try? await Task.sleep(for: .milliseconds(10))
     }
     return seen

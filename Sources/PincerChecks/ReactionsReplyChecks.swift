@@ -239,6 +239,7 @@ func checkReactionsReply() {
 // MARK: Demo
 
 private func pause(_ seconds: Double) async {
+    // Demo pacing between scripted steps; not a wait on a condition.
     try? await Task.sleep(for: .milliseconds(Int(seconds * 1000)))
 }
 
@@ -248,6 +249,7 @@ private func recordedActions(_ gateway: GatewayStore, atLeast count: Int, timeou
     let deadline = Date().addingTimeInterval(timeout)
     var actions = await gateway.demoRecordedActions()
     while actions.count < count, Date() < deadline {
+        // Poll interval.
         try? await Task.sleep(for: .milliseconds(50))
         actions = await gateway.demoRecordedActions()
     }

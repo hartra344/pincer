@@ -218,6 +218,7 @@ func runLiveDeepLinks(url: String, token: String) async {
     check(app.open(url: route.url) == .openChat(Notifier.Target(gatewayId: gateway.id, sessionKey: key), messageId: messageId)
           && app.selectedGatewayId == gateway.id && gateway.selectedKey == key,
           "opening a live link selects the chat (message \(messageId ?? "none"))")
+    // Negative window: opening a link must not send or approve anything.
     try? await Task.sleep(for: .milliseconds(500))
     check(gateway.sessions[key]?.hasActiveRun == false && gateway.approvals.map(\.id) == approvalsBefore,
           "opening a live link sends and approves nothing")
