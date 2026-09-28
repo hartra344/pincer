@@ -22,7 +22,7 @@ struct AvatarSettingsSection: View {
                 Text("Each agent gets a little companion that shows what it's doing. Off keeps the initial or emoji.", bundle: .module)
             }
             if self.enabled {
-                Picker(L("Style"), selection: Binding(get: { self.renderStyle }, set: self.setRenderStyle)) {
+                Picker(L("Style"), selection: Binding(get: { self.renderStyle }, set: { self.setRenderStyle($0) })) {
                     Text("Pixel", bundle: .module).tag(AvatarRenderStyle.pixel.rawValue)
                     Text("Plush", bundle: .module).tag(AvatarRenderStyle.plush.rawValue)
                 }
@@ -64,7 +64,7 @@ private struct AvatarCharacterRow: View {
 
     var body: some View {
         let style = AvatarSettings.style(for: self.agent, creature: self.creature, renderStyle: self.renderStyle)
-        Picker(selection: Binding(get: { self.creature }, set: self.setCreature)) {
+        Picker(selection: Binding(get: { self.creature }, set: { self.setCreature($0) })) {
             Text("Auto", bundle: .module).tag("")
             ForEach(AvatarCreature.allCases, id: \.self) { creature in
                 Text(creature.rawValue.capitalized).tag(creature.rawValue)
