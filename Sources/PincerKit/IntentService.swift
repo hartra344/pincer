@@ -627,31 +627,50 @@ public final class IntentService {
     }
 
     // Display names seen in the last listing, so saved Shortcuts show names offline.
-    static let labelsKey = "pincer.intents.labels"
-    static let labelLimit = 1000
+    nonisolated static let labelsKey = "pincer.intents.labels"
+    nonisolated static let labelLimit = 1000
 
     private func label(_ id: String) -> [String]? {
         (self.labels.dictionary(forKey: Self.labelsKey) as? [String: [String]])?[id]
     }
 
+    /// Ids in the name cache, most recently listed first.
+    nonisolated static let labelOrderKey = "pincer.intents.labels.order"
+    private nonisolated static let rememberLock = NSLock()
+
     private func remember(agents: [IntentAgent] = [], chats: [IntentChat] = []) {
-        guard !agents.isEmpty || !chats.isEmpty else { return }
-        var stored = self.labels.dictionary(forKey: Self.labelsKey) as? [String: [String]] ?? [:]
-        var current: [String: [String]] = [:]
-        for agent in agents { current[agent.entityID] = [agent.name, agent.emoji ?? ""] }
-        for chat in chats { current[chat.entityID] = [chat.title, chat.agentName] }
-        stored.merge(current) { $1 }
-        if stored.count > Self.labelLimit {
-            // Keep what was just listed, then fill up with older names.
-            var trimmed = current.count > Self.labelLimit
-                ? Dictionary(uniqueKeysWithValues: current.sorted { $0.key < $1.key }.prefix(Self.labelLimit).map { ($0.key, $0.value) })
-                : current
-            for (id, label) in stored.sorted(by: { $0.key < $1.key }) where trimmed.count < Self.labelLimit && trimmed[id] == nil {
-                trimmed[id] = label
-            }
-            stored = trimmed
+        var listing: [(id: String, label: [String])] = []
+        for agent in agents { listing.append((agent.entityID, [agent.name, agent.emoji ?? ""])) }
+        for chat in chats { listing.append((chat.entityID, [chat.title, chat.agentName])) }
+        Self.remember(listing, in: self.labels)
+    }
+
+    /// Merges `listing` into the cache, trimming to `labelLimit` by recency: the listing first,
+    /// then previously seen names newest first. Names without recency info (older caches) rank
+    /// oldest, ordered by key.
+    nonisolated static func remember(_ listing: [(id: String, label: [String])], in defaults: UserDefaults) {
+        guard !listing.isEmpty else { return }
+        self.rememberLock.lock()
+        defer { self.rememberLock.unlock() }
+        var stored = defaults.dictionary(forKey: self.labelsKey) as? [String: [String]] ?? [:]
+        var order: [String] = []
+        var seen = Set<String>()
+        func append(_ id: String) {
+            if seen.insert(id).inserted { order.append(id) }
         }
-        self.labels.set(stored, forKey: Self.labelsKey)
+        for entry in listing {
+            stored[entry.id] = entry.label
+            append(entry.id)
+        }
+        for id in defaults.stringArray(forKey: self.labelOrderKey) ?? [] where stored[id] != nil { append(id) }
+        for id in stored.keys.sorted() { append(id) }
+        if order.count > self.labelLimit {
+            order = Array(order.prefix(self.labelLimit))
+            let kept = Set(order)
+            stored = stored.filter { kept.contains($0.key) }
+        }
+        defaults.set(stored, forKey: self.labelsKey)
+        defaults.set(order, forKey: self.labelOrderKey)
     }
 
     // MARK: Ask / send / start

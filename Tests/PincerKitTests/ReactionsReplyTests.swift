@@ -47,12 +47,12 @@ struct ReactionsReplyTests {
     }
 
     @Test func recentEmojiPersistInDefaults() {
-        let saved = UserDefaults.standard.object(forKey: Reactions.recentDefaultsKey)
-        defer { UserDefaults.standard.set(saved, forKey: Reactions.recentDefaultsKey) }
-        UserDefaults.standard.removeObject(forKey: Reactions.recentDefaultsKey)
-        #expect(Reactions.recent.isEmpty)
-        for emoji in ["👍", "🎉", "👍", "1", "2", "3", "4", "5", "6", "7"] { Reactions.noteRecent(emoji) }
-        #expect(Reactions.recent == ["7", "6", "5", "4", "3", "2", "1", "👍"])
+        let name = "pincer-tests-\(UUID())"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(Reactions.recent(in: defaults).isEmpty)
+        for emoji in ["👍", "🎉", "👍", "1", "2", "3", "4", "5", "6", "7"] { Reactions.noteRecent(emoji, defaults: defaults) }
+        #expect(Reactions.recent(in: defaults) == ["7", "6", "5", "4", "3", "2", "1", "👍"])
     }
 
     /// AC-33: no invented gateway methods. Every method Pincer calls is a known one; reactions

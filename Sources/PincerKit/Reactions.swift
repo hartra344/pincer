@@ -195,12 +195,14 @@ public enum Reactions {
         return bar
     }
 
-    public static var recent: [String] {
-        UserDefaults.standard.stringArray(forKey: self.recentDefaultsKey) ?? []
+    public static var recent: [String] { self.recent(in: .standard) }
+
+    public static func recent(in defaults: UserDefaults) -> [String] {
+        defaults.stringArray(forKey: self.recentDefaultsKey) ?? []
     }
 
-    static func noteRecent(_ emoji: String) {
-        UserDefaults.standard.set(self.recording(emoji, in: self.recent), forKey: self.recentDefaultsKey)
+    static func noteRecent(_ emoji: String, defaults: UserDefaults = .standard) {
+        defaults.set(self.recording(emoji, in: self.recent(in: defaults)), forKey: self.recentDefaultsKey)
     }
 
     // MARK: Groups

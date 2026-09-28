@@ -31,7 +31,7 @@ public final class PushRegistrar {
     /// `pincer.pushRelay`, or `PINCER_PUSH_RELAY` for development.
     public var relayURL: URL? {
         let raw = ProcessInfo.processInfo.environment["PINCER_PUSH_RELAY"]
-            ?? UserDefaults.standard.string(forKey: Self.relayKey) ?? ""
+            ?? self.defaults.string(forKey: Self.relayKey) ?? ""
         return Self.validRelay(raw)
     }
 
@@ -44,13 +44,16 @@ public final class PushRegistrar {
         #endif
     }()
 
-    @ObservationIgnored public var notificationsEnabled: () -> Bool = {
-        UserDefaults.standard.object(forKey: "pincer.notifications") as? Bool ?? true
-    }
+    @ObservationIgnored public var notificationsEnabled: () -> Bool
     @ObservationIgnored public var registerWithRelay: (URL, String, String) async throws -> String = PushRegistrar.register
     @ObservationIgnored var onTokenChange: (() -> Void)?
 
-    public init() {}
+    @ObservationIgnored let defaults: UserDefaults
+
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.notificationsEnabled = { defaults.object(forKey: "pincer.notifications") as? Bool ?? true }
+    }
 
     public func isActive(_ gatewayId: UUID) -> Bool { self.status[gatewayId] == .active }
 
@@ -80,7 +83,7 @@ public final class PushRegistrar {
     /// Gateway upserts by endpoint, so this runs on every connect.
     public func sync(_ gateway: GatewayStore) async {
         guard !gateway.profile.isDemo, gateway.state.isConnected else { return }
-        let stored = UserDefaults.standard.string(forKey: self.storedEndpointKey(gateway.id))
+        let stored = self.defaults.string(forKey: self.storedEndpointKey(gateway.id))
         guard self.notificationsEnabled(), let token = self.deviceToken, let relay = self.relayURL else {
             if let stored { await self.unsubscribe(gateway, endpoint: stored) }
             self.status[gateway.id] = .off
@@ -95,7 +98,7 @@ public final class PushRegistrar {
                 "endpoint": .string(endpoint),
                 "keys": ["p256dh": .string(keys.p256dh), "auth": .string(keys.auth)],
             ])
-            UserDefaults.standard.set(endpoint, forKey: self.storedEndpointKey(gateway.id))
+            self.defaults.set(endpoint, forKey: self.storedEndpointKey(gateway.id))
             self.status[gateway.id] = .active
         } catch let error as GatewayError {
             if case let .rpc(code, message, _) = error,
@@ -112,7 +115,7 @@ public final class PushRegistrar {
 
     /// Before removing a gateway: drop its subscription and keys.
     public func forget(_ gateway: GatewayStore) async {
-        if let stored = UserDefaults.standard.string(forKey: self.storedEndpointKey(gateway.id)) {
+        if let stored = self.defaults.string(forKey: self.storedEndpointKey(gateway.id)) {
             await self.unsubscribe(gateway, endpoint: stored)
         }
         PushKeyStore.delete(for: gateway.id)
@@ -120,7 +123,7 @@ public final class PushRegistrar {
     }
 
     private func unsubscribe(_ gateway: GatewayStore, endpoint: String) async {
-        UserDefaults.standard.removeObject(forKey: self.storedEndpointKey(gateway.id))
+        self.defaults.removeObject(forKey: self.storedEndpointKey(gateway.id))
         _ = try? await gateway.connection.request("push.web.unsubscribe", ["endpoint": .string(endpoint)])
     }
 
@@ -129,13 +132,13 @@ public final class PushRegistrar {
     /// The relay's opaque id for this token, cached per relay, token and environment.
     private func relayId(relay: URL, token: String) async throws -> String {
         let cacheKey = "\(relay.absoluteString)|\(self.environment)|\(token)"
-        if let cached = UserDefaults.standard.dictionary(forKey: "pincer.push.relayId"),
+        if let cached = self.defaults.dictionary(forKey: "pincer.push.relayId"),
            cached["key"] as? String == cacheKey, let id = cached["id"] as? String
         {
             return id
         }
         let id = try await self.registerWithRelay(relay, token, self.environment)
-        UserDefaults.standard.set(["key": cacheKey, "id": id], forKey: "pincer.push.relayId")
+        self.defaults.set(["key": cacheKey, "id": id], forKey: "pincer.push.relayId")
         return id
     }
 
