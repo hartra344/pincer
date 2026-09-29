@@ -43,6 +43,11 @@ struct SidebarHierarchyTests {
                 #expect(!sub.entries.isEmpty)
                 #expect(sub.entries.allSatisfy { $0.row.agentId == agentId && $0.row.category == sub.header.section.title })
                 #expect(sub.subgroups.isEmpty)
+                #expect(sub.header.level == 1 && agent.header.level == 0)
+                #expect(sub.header.chatCount == sub.header.section.channels.count && agent.header.chatCount == 0)
+                #expect(sub.entries.allSatisfy { $0.depth == 1 && $0.groupName == sub.header.section.title })
+                #expect(agent.header.agentAccessibilityLabel == "\(agent.header.section.title), agent")
+                #expect(sub.header.agentAccessibilityLabel == nil)
             }
         }
     }
@@ -64,6 +69,9 @@ struct SidebarHierarchyTests {
         #expect(mochi.childIds == expected)
         #expect(Set(mochi.allEntries.map(\.id)).count == mochi.allEntries.count)
         #expect(mochi.subgroups.first?.header.agentName == "Mochi")
+        #expect(mochi.subgroups.map(\.header.subsectionAccessibilityLabel)
+            == ["Preparations, group in Mochi, 2 chats", "Day of move, group in Mochi, 1 chat"])
+        #expect((mochi.leadingEntries + mochi.entries).allSatisfy { $0.groupName == nil && $0.depth == 0 })
     }
 
     @Test func collapsingAGroupKeepsItsChatsInTheModelButFlagsTheHeader() async throws {
@@ -76,6 +84,9 @@ struct SidebarHierarchyTests {
         let prep = try #require(mochi.subgroups.first { $0.header.section.id == groupId })
         let move = try #require(mochi.subgroups.first { $0.header.section.title == "Day of move" })
         #expect(prep.header.isCollapsed && !move.header.isCollapsed && !mochi.header.isCollapsed)
+        #expect(prep.header.accessibilityValue == L("Collapsed") && move.header.accessibilityValue == L("Expanded"))
+        #expect(prep.header.accessibilityValue(isCollapsed: false) == L("Expanded"))
+        #expect(prep.header.chatCount == 2)
         #expect(prep.entries.count == 2)
 
         let agentCollapsed = try #require(self.model(gateway, collapsed: ["agent:mochi"]).groups.first { $0.header.id == mochi.header.id })
@@ -94,10 +105,10 @@ struct SidebarHierarchyTests {
         let unread = prep.entries.filter { $0.row.isUnread }.count
         #expect(prep.header.section.unreadCount == unread)
         let label = prep.header.subsectionAccessibilityLabel
-        #expect(label.contains("Preparations group in Mochi") && label.contains("collapsed"))
-        #expect(label.contains("unread") == (unread > 0))
+        #expect(label.hasPrefix("Preparations, group in Mochi, 2 chats"))
+        #expect(label.hasSuffix(", \(unread) unread") == (unread > 0))
 
         let open = try #require(self.model(gateway).groups.first { $0.header.section.kind == .agent("mochi") }?.subgroups.first)
-        #expect(!open.header.subsectionAccessibilityLabel.contains("collapsed"))
+        #expect(open.header.subsectionAccessibilityLabel == "Preparations, group in Mochi, 2 chats")
     }
 }
