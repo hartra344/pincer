@@ -14,6 +14,12 @@ enum PrefetchProbeShim {
     #if os(macOS)
     /// e.g. `{ "\($0.prefetchStats)" }`. nil on the baseline.
     static let stats: ((TranscriptList.Coordinator) -> String)? = { "\($0.prefetchStats)" }
+    /// Off-main premeasure counters next to the main-thread TextKit counters.
+    static let premeasure: ((TranscriptList.Coordinator) -> String)? = {
+        let (mainLayouts, memoHits) = TranscriptText.measureStats
+        return "\($0.premeasureStats); main TextKit layouts \(mainLayouts), memo hits \(memoHits), "
+            + "worker layouts \(TranscriptPremeasurer.offMainLayouts.withLock { $0 })"
+    }
     #endif
     /// e.g. `{ "\($0.decodedBytes) bytes, \($0.imageCount) images, peak downloads \($0.peakConcurrentDownloads)" }`.
     static let loaderStats: ((ArtifactImageLoader) -> String)? = {
@@ -136,6 +142,7 @@ struct TranscriptPrefetchProbe {
         window.orderBack(nil)
         _ = await Self.spinUntilIdle(cap: 0.5)
 
+        TranscriptText.resetMeasureStats()
         let rssBefore = ProbeMeter.footprintMiB()
         let feedWall = ProbeMeter.wall(), feedCPU = ProbeMeter.threadCPU()
         coordinator.update(rows: rows, context: context, insets: (0, 0))
@@ -174,6 +181,7 @@ struct TranscriptPrefetchProbe {
             "| RSS footprint before / after open / after scroll (MiB) | \(f(rssBefore, 0)) / \(f(rssOpen, 0)) / \(f(rssAfter, 0)) |",
         ]
         if let stats = PrefetchProbeShim.stats { lines.append("| prefetchStats | \(stats(coordinator)) |") }
+        if let stats = PrefetchProbeShim.premeasure { lines.append("| premeasureStats / measureStats | \(stats(coordinator)) |") }
         print("\nTranscriptPrefetchProbe (\(Self.rowCount) rows, 700x900 window)\n" + lines.joined(separator: "\n"))
 
         // Sanity only: the numbers above are the point, not a budget.

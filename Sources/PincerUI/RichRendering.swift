@@ -103,10 +103,10 @@ enum InlineMathText {
     }
 
     /// First private-use scalar used as a placeholder; one per span, so at most `limit` spans a paragraph.
-    private static let base: UInt32 = 0xF0000
-    private static let limit = 512
+    private nonisolated static let base: UInt32 = 0xF0000
+    private nonisolated static let limit = 512
 
-    static func mask(_ text: String) -> Masked {
+    nonisolated static func mask(_ text: String) -> Masked {
         let found = InlineMath.spans(in: text)
         guard !found.isEmpty, !text.unicodeScalars.contains(where: { $0.value >= base && $0.value < base + UInt32(limit) })
         else { return Masked(text: text, spans: [:]) }
@@ -127,7 +127,7 @@ enum InlineMathText {
     /// Appends `string`, replacing placeholders with drawn math (or the original source if it can't be drawn).
     static func append(_ string: String, spans: [Unicode.Scalar: (latex: String, source: String)],
                        attributes: [NSAttributedString.Key: Any], font: PFont, color: PColor,
-                       to result: NSMutableAttributedString)
+                       dark: Bool = RichBlock.isDark, to result: NSMutableAttributedString)
     {
         var pending = ""
         func flush() {
@@ -137,7 +137,7 @@ enum InlineMathText {
         }
         for scalar in string.unicodeScalars {
             guard let span = spans[scalar] else { pending.unicodeScalars.append(scalar); continue }
-            if let attachment = self.attachment(span.latex, font: font, color: color) {
+            if let attachment = self.attachment(span.latex, font: font, color: color, dark: dark) {
                 flush()
                 var attachmentAttributes = attributes
                 attachmentAttributes[.attachment] = attachment
@@ -154,8 +154,7 @@ enum InlineMathText {
 
     /// One attachment object per formula, size and appearance, so an unchanged prefix of a streaming
     /// reply compares equal and TextKit doesn't re-lay it out.
-    static func attachment(_ latex: String, font: PFont, color: PColor) -> NSTextAttachment? {
-        let dark = RichBlock.isDark
+    static func attachment(_ latex: String, font: PFont, color: PColor, dark: Bool = RichBlock.isDark) -> NSTextAttachment? {
         let cgColor = self.resolved(color, dark: dark)
         let components = (cgColor.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil)?
             .components ?? []).map { String(format: "%.3f", $0) }.joined(separator: ",")
