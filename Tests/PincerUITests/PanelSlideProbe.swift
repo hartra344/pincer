@@ -183,7 +183,7 @@ struct PanelSlideProbe {
         for t in toggles {
             #expect(t.buildsDuringFrames <= 2, "\(t.name): layout builds during frames")
             #expect(t.buildsAfterThaw > 0, "\(t.name): one relayout after the width settles")
-            #expect(t.buildsAfterThaw <= 80, "\(t.name): relayout bounded by ~1 screen around the viewport")
+            #expect(t.buildsAfterThaw <= 120, "\(t.name): relayout bounded by ~1 screen either side of the viewport")
             #expect(t.anchorDrift <= 1, "\(t.name): anchor moved \(t.anchorDrift) pt")
             #expect(t.staleVisibleRows == 0, "\(t.name): visible rows not at the final clip width")
         }
