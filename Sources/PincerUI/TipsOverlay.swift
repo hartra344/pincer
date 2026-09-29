@@ -18,15 +18,6 @@ struct TipsOverlay: ViewModifier {
         let setupBlocking = (gateway?.setup.isShowingOrPending ?? true) || self.app.firstRun.presentation != nil
         let prompting = NotificationPrompt.shared.isShowing
         content
-            // iPhone: an inset, so the list, its search field and the composer move up instead of being covered (#333).
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if self.isCompact, self.tips.isPresented {
-                    CompactTipsCard { self.tips.dismiss() }
-                        .padding(.horizontal, Theme.Spacing.xl)
-                        .padding(.bottom, Theme.Spacing.md)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
             .overlay(alignment: .bottomTrailing) {
                 if !self.isCompact, self.tips.isPresented {
                     TipsCard { self.tips.dismiss() }
@@ -87,6 +78,28 @@ private struct TipsCard: View {
         .accessibilityElement(children: .contain)
     }
 }
+
+#if os(iOS)
+/// iPhone: the tips card in the chat list, above its bottom search bar, one tip at a time (#333).
+/// `TipsOverlay` still decides when it shows; in a chat it steps aside so the composer stays clear.
+struct CompactTipsHost: ViewModifier {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var tips: TipsModel { TipsModel.shared }
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .bottom) {
+                if self.sizeClass == .compact, self.tips.isPresented {
+                    CompactTipsCard { self.tips.dismiss() }
+                        .padding(.horizontal, Theme.Spacing.xl)
+                        .padding(.bottom, Theme.Spacing.md)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.snappy, value: self.tips.isPresented)
+    }
+}
+#endif
 
 /// iPhone: one tip at a time in a short full-width card, so the chat list stays visible (#333).
 private struct CompactTipsCard: View {
