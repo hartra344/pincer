@@ -531,7 +531,7 @@ struct UsageModelTests {
         }
         await model.load()
         #expect(model.status.loadState.error == "The Gateway couldn't load usage." && model.status.supported)
-        #expect(!model.cost.isForbidden && model.cost.loadState.error == "missing scope: operator.read", "a missing scope isn't the role refusal")
+        #expect(!model.cost.isForbidden && model.cost.loadState.error == GatewayError.missingScopeMessage(for: GatewayError.rpc(code: "FORBIDDEN", message: "missing scope: operator.read", details: ["code": "MISSING_SCOPE"])), "a missing scope isn't the role refusal; it reads as the shared sentence")
         #expect(model.sessions.value?.totals.totalTokens == 9 && model.totals?.totalTokens == 9)
     }
 

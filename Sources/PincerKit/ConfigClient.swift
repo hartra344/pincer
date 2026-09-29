@@ -121,11 +121,11 @@ public enum ConfigWriteError: Error, Equatable, Sendable {
     public var message: String {
         switch self {
         case .adminRequired:
-            "Changing Gateway settings needs Full Management access. Turn it on under Connection, then approve this device on the Gateway host."
+            L("Changing Gateway settings needs Full Management access. Turn it on under Connection, then approve this device on the Gateway host.")
         case .staleHash:
-            "The config changed on the Gateway since it was loaded."
+            L("The config changed on the Gateway since it was loaded.")
         case let .invalid(issues):
-            issues.count == 1 ? "The Gateway rejected the change: \(issues[0].message)" : "The Gateway rejected \(issues.count) values."
+            issues.count == 1 ? L("The Gateway rejected the change: \(issues[0].message)") : L("The Gateway rejected \(issues.count) values.")
         case let .notApplied(message, _, _), let .rateLimited(message), let .other(message):
             message
         }

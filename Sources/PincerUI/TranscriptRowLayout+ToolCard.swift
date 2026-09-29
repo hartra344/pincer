@@ -426,7 +426,7 @@ extension TranscriptLayoutBuilder {
                           into card: inout ToolCardBuild)
     {
         let style = self.style
-        let copy = TranscriptLabelButton.size(title: "Copied")
+        let copy = TranscriptLabelButton.size(title: L("Copied"))
         let badgeFont = style.caption2Medium
         let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
         let titleFont = style.captionSemibold

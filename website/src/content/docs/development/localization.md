@@ -38,7 +38,13 @@ Some tips:
 - Interpolate values rather than joining strings, so translators can reorder them: `L("Show \(count) subagent runs")`.
 - Don't build sentences from fragments like `"Show " + title`. Word order differs between languages.
 - Names, titles, message text and anything else from the Gateway are data. Don't localize them.
-- `PincerKit` has no resource bundle. Its VoiceOver text builders (`AccessibilityText` in `Sources/PincerKit/AccessibilityLabels.swift`) compose English phrases from parts. When a language is added, pass the fixed phrases in from PincerUI's catalog.
+- Keep a user-visible string in plain `Text(verbatim:)` only when it's data or not language-specific (a symbol, a command like `openclaw devices approve`).
+
+## Strings from PincerKit
+
+`PincerKit` has no resource bundle of its own. Its user-facing sentences (error messages, VoiceOver phrases from `AccessibilityText`, forwarded-sender names, Gateway failure copy) are keys in **PincerUI's** catalog. PincerKit has its own internal `L()` in `Sources/PincerKit/Localization.swift`, which looks keys up in the bundle PincerUI registers at launch (`PincerStrings.bundle = .module` in `PincerScene`). Without a registered bundle, as in unit tests and `PincerChecks`, it returns the English key with its values filled in.
+
+Gateway failures are classified with `GatewayError.classify(_:)` as a missing scope (naming the scope when the Gateway does), an unsupported method, or the Gateway's own message. `GatewayError.message(for:scope:unavailable:)` turns that into a sentence. Pages pass their own missing-scope sentence and a localized feature phrase, such as `L("device management")` for "This Gateway doesn't support device management yet."
 
 ## Adding or updating strings
 
@@ -50,8 +56,10 @@ Some tips:
    scripts/sync-strings.sh --skip-build # reuses the last run's extraction output in build/strings
    ```
 
-   The script builds the `PincerUI` scheme with the compiler's string extraction turned on, then runs `xcstringstool sync` over every PincerUI file that uses `bundle: .module` or `L("…")`. Each key's English value is the key itself. Keys with no letters, such as `"%@ %@"`, are left out because there's nothing to translate. Existing translations and comments are kept, and keys that are no longer used in code are removed. It needs Xcode, and the full run takes a few minutes.
+   The script builds the `PincerUI` scheme with the compiler's string extraction turned on, then runs `xcstringstool sync` over every PincerUI file that uses `bundle: .module` or `L("…")`, and every PincerKit file that uses `L("…")`. Each key's English value is the key itself. Keys with no letters, such as `"%@ %@"`, are left out because there's nothing to translate. Existing translations and comments are kept, and keys that are no longer used in code are removed. It needs Xcode, and the full run takes a few minutes.
 3. Commit `Localizable.xcstrings` along with your code change.
+
+`swift test` checks that every key used in code is in the catalog. It also fails on a new hard-coded literal passed to a user-facing API, such as `Text("…")`, `Button("…")` or `.help("…")`. The few older ones are listed in `Tests/PincerKitTests/HardCodedStringsTests.swift`, and that list may only shrink.
 
 Don't add keys by hand or by building the app in Xcode. The catalog's entries have no extraction state, so let the script keep it in step with the code.
 

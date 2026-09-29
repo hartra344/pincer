@@ -8,6 +8,8 @@ public struct PincerScene: Scene {
     @State private var app = AppModel.shared
 
     public init() {
+        // PincerKit's sentences are keys in this catalog.
+        PincerStrings.bundle = .module
         SVGRasterizer.install()
         #if os(macOS)
         QuickCaptureController.shared.install(app: AppModel.shared)
@@ -32,16 +34,16 @@ public struct PincerScene: Scene {
         .commands {
             TranscriptFindCommands()
             CommandGroup(after: .newItem) {
-                Button("Add Gateway…") {
+                Button(L("Add Gateway…")) {
                     self.app.firstRun.present()
                     QuickCaptureController.shared.showMainWindow()
                 }
             }
             CommandGroup(after: .sidebar) {
-                Button("Next Unread Chat") { self.app.selectNextUnread() }
+                Button(L("Next Unread Chat")) { self.app.selectNextUnread() }
                     .keyboardShortcut(.downArrow, modifiers: [.option, .shift])
                 Divider()
-                Button("Reload Pincer") { AppRelauncher.relaunch() }
+                Button(L("Reload Pincer")) { AppRelauncher.relaunch() }
                     .keyboardShortcut("r", modifiers: .command)
             }
         }
@@ -49,7 +51,7 @@ public struct PincerScene: Scene {
         .commands { GoCommands(app: self.app) }
 
         #if os(macOS)
-        WindowGroup("Gateway Settings", id: "gateway-settings", for: UUID.self) { $gatewayId in
+        WindowGroup(L("Gateway Settings"), id: "gateway-settings", for: UUID.self) { $gatewayId in
             GatewaySettingsWindow(gatewayId: gatewayId)
                 .environment(self.app)
                 .themed()
@@ -57,7 +59,7 @@ public struct PincerScene: Scene {
         .defaultSize(width: 860, height: 640)
         .restorationBehavior(.disabled)
 
-        WindowGroup("Automations", id: "automations", for: UUID.self) { $gatewayId in
+        WindowGroup(L("Automations"), id: "automations", for: UUID.self) { $gatewayId in
             AutomationsWindow(gatewayId: gatewayId)
                 .environment(self.app)
                 .themed()
@@ -143,7 +145,7 @@ struct RootView: View {
         .sheet(isPresented: self.$showingAppSettings) {
             NavigationStack {
                 SettingsView()
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { self.showingAppSettings = false } } }
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.showingAppSettings = false } } }
             }
         }
         #endif
@@ -289,7 +291,7 @@ private struct GatewayDetail: View {
                     ContentUnavailableView(L("Pick a chat"), systemImage: "bubble.left.and.bubble.right",
                                            description: Text("Choose a chat from the sidebar or start a new one.", bundle: .module))
                 } else {
-                    ProgressView("Connecting to \(gateway.profile.name)…")
+                    ProgressView(L("Connecting to \(gateway.profile.name)…"))
                 }
             }
         }
@@ -335,7 +337,7 @@ struct SettingsView: View {
         .frame(width: 520)
         #else
         SettingsForm(sections: SettingsForm.Section.available)
-            .navigationTitle("Settings")
+            .navigationTitle(L("Settings"))
         #endif
     }
 }
@@ -444,11 +446,11 @@ struct SettingsForm: View {
         switch section {
         case .you:
             SwiftUI.Section {
-                TextField("Display name", text: self.$ownerName, prompt: Text(Owner.displayName))
+                TextField(L("Display name"), text: self.$ownerName, prompt: Text(Owner.displayName))
             } header: {
-                Text("You")
+                Text("You", bundle: .module)
             } footer: {
-                Text("Your messages show under this name, whichever channel they came from.")
+                Text("Your messages show under this name, whichever channel they came from.", bundle: .module)
             }
         case .tips:
             TipsSettingsSection()
@@ -466,15 +468,15 @@ struct SettingsForm: View {
             #endif
         case .appearance:
             SwiftUI.Section {
-                Picker("Appearance", selection: self.$mode) {
+                Picker(L("Appearance"), selection: self.$mode) {
                     ForEach(AppearanceMode.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 ThemePresetGrid(selection: self.$preset)
             } header: {
-                Text("Theme")
+                Text("Theme", bundle: .module)
             } footer: {
-                Text("Themes set the accent, links, avatars and backgrounds. Default follows your system accent color.")
+                Text("Themes set the accent, links, avatars and backgrounds. Default follows your system accent color.", bundle: .module)
             }
         case .avatars:
             AvatarSettingsSection()
@@ -485,55 +487,55 @@ struct SettingsForm: View {
                 }
             } header: {
                 HStack {
-                    Text("Colors")
+                    Text("Colors", bundle: .module)
                     Spacer()
                     if !self.theme.overrides.isEmpty {
-                        Button("Reset All") { AppTheme.resetOverrides() }
+                        Button(L("Reset All")) { AppTheme.resetOverrides() }
                             .buttonStyle(.borderless)
                             .font(.callout)
                     }
                 }
             } footer: {
-                Text("Pick a color to override the theme for just that part.")
+                Text("Pick a color to override the theme for just that part.", bundle: .module)
             }
         case .conversation:
-            SwiftUI.Section("Conversation") {
+            SwiftUI.Section(L("Conversation")) {
                 Picker(selection: self.$thinkingDisplay) {
                     ForEach(ThinkingDisplay.allCases) { Text($0.label).tag($0) }
                 } label: {
-                    Text("Thinking steps")
+                    Text("Thinking steps", bundle: .module)
                     Text(self.thinkingDisplay.detail + " Includes reasoning and tool calls.")
                 }
                 Toggle(isOn: self.$loadWebImages) {
-                    Text("Load images the agent links from the web")
-                    Text("Like OpenClaw's web UI. The image's website can see your IP address.")
+                    Text("Load images the agent links from the web", bundle: .module)
+                    Text("Like OpenClaw's web UI. The image's website can see your IP address.", bundle: .module)
                 }
                 Toggle(isOn: self.$reactionsEnabled) {
-                    Text("Enable experimental reactions")
-                    Text("Off by default. Reactions may not interoperate across channels or Gateways.")
+                    Text("Enable experimental reactions", bundle: .module)
+                    Text("Off by default. Reactions may not interoperate across channels or Gateways.", bundle: .module)
                 }
             }
         case .sidebar:
-            SwiftUI.Section("Sidebar") {
+            SwiftUI.Section(L("Sidebar")) {
                 Toggle(isOn: self.$showMessagePreviews) {
-                    Text("Show last message under each chat")
-                    Text("A one-line preview of the latest message in the chat list.")
+                    Text("Show last message under each chat", bundle: .module)
+                    Text("A one-line preview of the latest message in the chat list.", bundle: .module)
                 }
                 Toggle(isOn: self.$showSubagentRuns) {
-                    Text("List subagent runs under their chat")
-                    Text("Off keeps one thread per chat. Open a run from its tool call instead.")
+                    Text("List subagent runs under their chat", bundle: .module)
+                    Text("Off keeps one thread per chat. Open a run from its tool call instead.", bundle: .module)
                 }
             }
         case .notifications:
             NotificationSettingsSection()
         case .device:
-            SwiftUI.Section("This device") {
-                LabeledContent("Device ID") {
+            SwiftUI.Section(L("This device")) {
+                LabeledContent(L("Device ID")) {
                     Text(DeviceIdentity.loadOrCreate().deviceId.prefix(16) + "…")
                         .font(.caption.monospaced())
                         .textSelection(.enabled)
                 }
-                LabeledContent("Role", value: "operator (read, write, approvals, questions)")
+                LabeledContent(L("Role"), value: "operator (read, write, approvals, questions)")
             }
         case .storage:
             TranscriptCacheSettingsSection()
@@ -551,9 +553,9 @@ private struct TranscriptCacheSettingsSection: View {
 
     var body: some View {
         SwiftUI.Section {
-            LabeledContent("Cached transcripts") {
+            LabeledContent(L("Cached transcripts")) {
                 if !self.enabled {
-                    Text("Off")
+                    Text("Off", bundle: .module)
                 } else if let usage {
                     Text(usage.formatted(.byteCount(style: .file)))
                         .monospacedDigit()
@@ -561,33 +563,33 @@ private struct TranscriptCacheSettingsSection: View {
                     ProgressView().controlSize(.small)
                 }
             }
-            Button("Clear Cache…", role: .destructive) { self.confirming = true }
+            Button(L("Clear Cache…"), role: .destructive) { self.confirming = true }
                 .disabled(!self.enabled || self.usage == 0)
-                .confirmationDialog("Clear cached transcripts?", isPresented: self.$confirming, titleVisibility: .visible) {
-                    Button("Clear Cache", role: .destructive) {
+                .confirmationDialog(L("Clear cached transcripts?"), isPresented: self.$confirming, titleVisibility: .visible) {
+                    Button(L("Clear Cache"), role: .destructive) {
                         Task {
                             await self.app.clearTranscriptCache()
                             await self.measure()
                         }
                     }
                 } message: {
-                    Text("Chats are downloaded again from your Gateways when you open them, and message search is rebuilt. Nothing on your Gateways is deleted.")
+                    Text("Chats are downloaded again from your Gateways when you open them, and message search is rebuilt. Nothing on your Gateways is deleted.", bundle: .module)
                 }
-            LabeledContent("Outbox") {
+            LabeledContent(L("Outbox")) {
                 Text(self.app.unsentCount == 1 ? "1 message" : "\(self.app.unsentCount.formatted()) messages")
                     .monospacedDigit()
             }
-            Button("Clear Outbox…", role: .destructive) { self.confirmingUnsent = true }
+            Button(L("Clear Outbox…"), role: .destructive) { self.confirmingUnsent = true }
                 .disabled(self.app.unsentCount == 0)
-                .confirmationDialog("Clear the outbox?", isPresented: self.$confirmingUnsent, titleVisibility: .visible) {
-                    Button("Clear Outbox", role: .destructive) { self.app.discardUnsentMessages() }
+                .confirmationDialog(L("Clear the outbox?"), isPresented: self.$confirmingUnsent, titleVisibility: .visible) {
+                    Button(L("Clear Outbox"), role: .destructive) { self.app.discardUnsentMessages() }
                 } message: {
-                    Text("Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected.")
+                    Text("Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected.", bundle: .module)
                 }
         } header: {
-            Text("Storage")
+            Text("Storage", bundle: .module)
         } footer: {
-            Text("Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send.")
+            Text("Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send.", bundle: .module)
         }
         .task { await self.measure() }
     }
@@ -607,7 +609,7 @@ private struct ThemePresetGrid: View {
             ForEach(ThemePreset.allCases) { preset in
                 Button { self.selection = preset } label: { self.swatch(preset) }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("\(preset.label) theme")
+                    .accessibilityLabel(L("\(preset.label) theme"))
                     .accessibilityAddTraits(preset == self.selection ? .isSelected : [])
             }
         }
@@ -661,7 +663,7 @@ private struct ThemeColorRow: View {
                 HStack(spacing: Theme.Spacing.sm) {
                     Text(self.role.label)
                     if overridden {
-                        Text("Custom").font(.caption).foregroundStyle(.secondary)
+                        Text("Custom", bundle: .module).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -672,8 +674,8 @@ private struct ThemeColorRow: View {
                     Image(systemName: "arrow.uturn.backward")
                 }
                 .buttonStyle(.borderless)
-                .help("Use the theme's color")
-                .accessibilityLabel("Reset \(self.role.label)")
+                .help(L("Use the theme's color"))
+                .accessibilityLabel(L("Reset \(self.role.label)"))
             }
         }
         // Reset or Reset All: follow the theme again.

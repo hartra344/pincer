@@ -806,19 +806,17 @@ public final class DeviceManagementModel {
     // MARK: Errors
 
     public nonisolated static let needsAccessTitle = "Managing devices needs Full Management"
-    public nonisolated static let needsAccessMessage =
-        "You can only see this device. Turn on Full Management under Connection, then approve this device on the Gateway host."
-    public nonisolated static let readOnlyMessage =
-        "Approving, rejecting and revoking devices needs Full Management. Turn it on under Connection."
-    public nonisolated static let unsupportedMessage = "This Gateway can't manage devices."
-    public nonisolated static let disconnectedMessage = "Connect to a Gateway to manage devices."
-    public nonisolated static let staleRequestMessage = "This request was already handled or expired."
-    public nonisolated static let staleDeviceMessage = "This device was already revoked."
-    public nonisolated static let staleNodeMessage = "This node was already removed."
-    public nonisolated static let labelTooLongMessage = "Names can be at most 64 characters."
-    public nonisolated static let renameUnsupportedMessage = "This Gateway can't rename devices. Update OpenClaw to rename them here."
-    public nonisolated static let nodeUnsupportedMessage = "This Gateway can't change nodes. Update OpenClaw to manage them here."
-    public nonisolated static let revokeMessage = "This device will be disconnected and must pair again to reconnect."
+    public nonisolated static var needsAccessMessage: String { L("You can only see this device. Turn on Full Management under Connection, then approve this device on the Gateway host.") }
+    public nonisolated static var readOnlyMessage: String { L("Approving, rejecting and revoking devices needs Full Management. Turn it on under Connection.") }
+    public nonisolated static var unsupportedMessage: String { L("This Gateway can't manage devices.") }
+    public nonisolated static var disconnectedMessage: String { L("Connect to a Gateway to manage devices.") }
+    public nonisolated static var staleRequestMessage: String { L("This request was already handled or expired.") }
+    public nonisolated static var staleDeviceMessage: String { L("This device was already revoked.") }
+    public nonisolated static var staleNodeMessage: String { L("This node was already removed.") }
+    public nonisolated static var labelTooLongMessage: String { L("Names can be at most 64 characters.") }
+    public nonisolated static var renameUnsupportedMessage: String { L("This Gateway can't rename devices. Update OpenClaw to rename them here.") }
+    public nonisolated static var nodeUnsupportedMessage: String { L("This Gateway can't change nodes. Update OpenClaw to manage them here.") }
+    public nonisolated static var revokeMessage: String { L("This device will be disconnected and must pair again to reconnect.") }
     /// Shown before revoking the device Pincer itself connects with.
     public nonisolated static func selfRevokeWarning(gateway: String) -> String {
         "This is the device Pincer is using to connect. Pincer will be disconnected from \(gateway) and can't reconnect until its new pairing request is approved, from another device with Full Management or with openclaw devices approve on the Gateway host."
@@ -836,6 +834,6 @@ public final class DeviceManagementModel {
     }
 
     static func message(for error: Error) -> String {
-        GatewayError.message(for: error, scope: Self.needsAccessMessage)
+        GatewayError.message(for: error, scope: Self.needsAccessMessage, unavailable: L("device management"))
     }
 }

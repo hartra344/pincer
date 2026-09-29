@@ -283,7 +283,7 @@ struct SidebarList: UIViewRepresentable {
             guard let entry = self.entry(at: path), !entry.row.isMain else { return nil }
             let row = entry.row
             let archive = UIContextualAction(style: row.isArchived ? .normal : .destructive,
-                                             title: row.isArchived ? "Unarchive" : "Archive") { [gateway] _, _, done in
+                                             title: row.isArchived ? L("Unarchive") : L("Archive")) { [gateway] _, _, done in
                 Task { @MainActor in
                     await gateway.patch(row.key, ["archived": .bool(!row.isArchived)])
                     done(true)
@@ -297,7 +297,7 @@ struct SidebarList: UIViewRepresentable {
         private func leadingSwipe(_ path: IndexPath) -> UISwipeActionsConfiguration? {
             guard let entry = self.entry(at: path) else { return nil }
             let row = entry.row
-            let read = UIContextualAction(style: .normal, title: row.isUnread ? "Read" : "Unread") { [gateway] _, _, done in
+            let read = UIContextualAction(style: .normal, title: row.isUnread ? L("Read") : L("Unread")) { [gateway] _, _, done in
                 Task { @MainActor in
                     await gateway.patch(row.key, ["unread": .bool(!row.isUnread)])
                 }
@@ -305,7 +305,7 @@ struct SidebarList: UIViewRepresentable {
             }
             read.image = UIImage(systemName: row.isUnread ? "envelope.open" : "envelope.badge")
             read.backgroundColor = .systemBlue
-            let pin = UIContextualAction(style: .normal, title: row.isPinned ? "Unpin" : "Pin") { [gateway] _, _, done in
+            let pin = UIContextualAction(style: .normal, title: row.isPinned ? L("Unpin") : L("Pin")) { [gateway] _, _, done in
                 Task { @MainActor in
                     await gateway.patch(row.key, ["pinned": .bool(!row.isPinned)])
                 }
@@ -509,7 +509,7 @@ private final class SidebarChatListCell: UICollectionViewListCell {
         self.unreadDot.contentMode = .center
         self.unreadDot.frame = CGRect(x: 0, y: 0, width: 12, height: 12)
         self.unreadDot.tintColor = .tintColor
-        self.unreadDot.accessibilityLabel = "Unread"
+        self.unreadDot.accessibilityLabel = L("Unread")
     }
 
     @available(*, unavailable)
@@ -565,7 +565,7 @@ private final class SidebarChatListCell: UICollectionViewListCell {
             chip.attributedTitle = title
             chip.baseForegroundColor = entry.hiddenUnreadThreads > 0 ? .tintColor : .secondaryLabel
             self.chip.configuration = chip
-            self.chip.accessibilityLabel = entry.threadsExpanded ? "Hide subagent runs" : "Show \(entry.subagentCount) subagent runs"
+            self.chip.accessibilityLabel = entry.threadsExpanded ? L("Hide subagent runs") : L("Show \(entry.subagentCount) subagent runs")
             let key = row.key
             self.onToggleThreads = { actions.toggleThreads(key) }
             self.chip.sizeToFit()
@@ -621,7 +621,7 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
         add.baseForegroundColor = .secondaryLabel
         add.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
         self.add.configuration = add
-        self.add.accessibilityLabel = "New chat"
+        self.add.accessibilityLabel = L("New chat")
         self.add.addAction(UIAction { [weak self] _ in self?.onAdd?() }, for: .primaryActionTriggered)
         self.add.sizeToFit()
     }
@@ -668,7 +668,7 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
             self.badge.text = "\(unread)"
             let width = max(18, ceil(self.badge.intrinsicContentSize.width) + 10)
             self.badge.frame = CGRect(x: 0, y: 0, width: width, height: 18)
-            self.badge.accessibilityLabel = "\(unread) unread"
+            self.badge.accessibilityLabel = L("\(unread) unread")
             accessories.append(.customView(configuration: .init(customView: self.badge, placement: .trailing(),
                                                                 reservedLayoutWidth: .custom(width), maintainsFixedSize: true)))
         }

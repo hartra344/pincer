@@ -629,7 +629,7 @@ private final class SidebarChatCell: NSTableCellView {
         if showChip {
             self.chip.title = "\(entry.subagentCount) \(entry.threadsExpanded ? "▴" : "▾")"
             self.chip.contentTintColor = entry.hiddenUnreadThreads > 0 ? TranscriptColors.tint : .secondaryLabelColor
-            self.chip.toolTip = entry.threadsExpanded ? "Hide subagent runs" : "Show \(entry.subagentCount) subagent runs"
+            self.chip.toolTip = entry.threadsExpanded ? L("Hide subagent runs") : L("Show \(entry.subagentCount) subagent runs")
             self.chip.setAccessibilityLabel(self.chip.toolTip)
             let key = row.key
             self.onToggleThreads = { actions.toggleThreads(key) }
@@ -708,7 +708,7 @@ private final class SidebarHeaderCell: NSTableCellView {
         self.add.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "New chat")
         self.add.symbolConfiguration = .init(pointSize: 11, weight: .medium)
         self.add.contentTintColor = .secondaryLabelColor
-        self.add.toolTip = "New chat"
+        self.add.toolTip = L("New chat")
         self.add.target = self
         self.add.action = #selector(self.addChat)
         self.chevron.bezelStyle = .accessoryBarAction
@@ -782,7 +782,7 @@ private final class SidebarHeaderCell: NSTableCellView {
         let label = AccessibilityText.sectionToggle(title: section.title, isCollapsed: header.isCollapsed)
         self.chevron.image = NSImage(systemSymbolName: header.isCollapsed ? "chevron.right" : "chevron.down",
                                      accessibilityDescription: label)
-        self.chevron.toolTip = header.isCollapsed ? "Show" : "Hide"
+        self.chevron.toolTip = header.isCollapsed ? L("Show") : L("Hide")
         self.chevron.setAccessibilityLabel(label)
     }
 

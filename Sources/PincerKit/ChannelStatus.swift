@@ -128,7 +128,7 @@ public enum ChannelRules {
 
     /// An RPC error as the page shows it.
     @MainActor public static func errorText(_ error: Error) -> String {
-        GatewayError.message(for: error, scope: SetupWizardModel.fullManagementMessage)
+        GatewayError.message(for: error, scope: SetupWizardModel.fullManagementMessage, unavailable: L("channel status"))
     }
 
     /// The action the Gateway said a channel doesn't support ("does not support logout/start"), if any.
@@ -143,14 +143,14 @@ public enum ChannelRules {
     /// A lifecycle failure, with friendlier copy for what upstream reports as unsupported.
     @MainActor public static func message(for error: Error, action: ChannelsModel.Action, channelLabel: String) -> String {
         if GatewayError.isMissingScope(error) { return SetupWizardModel.fullManagementMessage }
-        if GatewayError.isUnknownMethod(error) { return "This Gateway can't \(action.verb) channels." }
+        if GatewayError.isUnknownMethod(error) { return L("This Gateway can't \(action.verb) channels.") }
         guard case let GatewayError.rpc(_, message, _) = error else { return error.localizedDescription }
         let lower = message.lowercased()
-        if lower.contains("does not support logout") { return "\(channelLabel) doesn't support logging out." }
+        if lower.contains("does not support logout") { return L("\(channelLabel) doesn't support logging out.") }
         if lower.contains("does not support start") || lower.contains("does not support runtime start") {
-            return "\(channelLabel) can't be started from Pincer."
+            return L("\(channelLabel) can't be started from Pincer.")
         }
-        if lower.contains("config invalid") { return "The Gateway's config is invalid. Fix it before logging out." }
+        if lower.contains("config invalid") { return L("The Gateway's config is invalid. Fix it before logging out.") }
         return message
     }
 
@@ -159,18 +159,18 @@ public enum ChannelRules {
         let outcome = result["outcome"]
         switch outcome?["status"]?.text {
         case "retry":
-            return "\(channelLabel) is still stopping. Try again in a moment."
+            return L("\(channelLabel) is still stopping. Try again in a moment.")
         case "skipped":
             let reason: String = switch outcome?["reason"]?.text {
-            case "disabled": "the account is disabled"
-            case "unconfigured": "the account isn't configured"
-            case "unlinked": "the account isn't linked. Log in first"
-            case "secret-unavailable": "its credentials aren't available"
-            case "unsupported": "the channel doesn't support starting"
+            case "disabled": L("the account is disabled")
+            case "unconfigured": L("the account isn't configured")
+            case "unlinked": L("the account isn't linked. Log in first")
+            case "secret-unavailable": L("its credentials aren't available")
+            case "unsupported": L("the channel doesn't support starting")
             case let other?: ApprovalRecord.humanized(other).lowercased()
-            case nil: "the Gateway skipped it"
+            case nil: L("the Gateway skipped it")
             }
-            return "\(channelLabel) didn't start: \(reason)."
+            return L("\(channelLabel) didn't start: \(reason).")
         default:
             return nil
         }

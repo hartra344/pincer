@@ -122,7 +122,6 @@ struct LocalizationCatalogTests {
 
     /// Files migrated to the catalog for #58 keep looking their strings up in PincerUI's bundle.
     /// (Theme.swift is migrated too, but only through `AccessibilityAnnouncer.announceCopied()`.)
-    /// ConnectionViews.swift is deliberately not migrated (reverted for #175).
     @Test func migratedFilesUseTheCatalog() throws {
         let migrated = [
             "Composer", "SlashCommandMenu", "ModelPicker", "ContextMeter", "TranscriptFind", "SettingsPages",
@@ -133,6 +132,10 @@ struct LocalizationCatalogTests {
             "ToolsInspectorViews", "AgentManagementViews", "MenuBarExtra", "ChatView", "PluginSettings",
             "ThinkingDisplay", "ImageViews", "DevicesPage", "ChannelStatusPage", "ChannelQRLoginView",
             "FullManagementBadge", "GatewayHealthPage", "RunTimelineView", "RunsPanel", "SubagentTreeView",
+            // #191, #192, #351
+            "ConnectionViews", "FirstRunView", "SetupWizardView", "RootView", "CommandPaletteView",
+            "GatewaySettingsWindow", "DeepLinkRouting", "SidebarList+AppKit", "SidebarSupport", "ChannelList",
+            "TranscriptRowLayout", "TranscriptRowView+Parts",
         ]
         let folder = Self.root.appending(path: "Sources/PincerUI")
         var unmigrated: [String] = []
@@ -143,11 +146,13 @@ struct LocalizationCatalogTests {
         #expect(unmigrated.isEmpty, "migrated files with no catalog lookups: \(unmigrated)")
     }
 
-    /// Every literal key passed with `bundle: .module` in PincerUI must be in the catalog, or
-    /// SwiftUI falls back to showing the raw key at runtime in other locales.
+    /// Every literal key passed with `bundle: .module` in PincerUI, or to PincerKit's `L("…")` (whose
+    /// sentences live in PincerUI's catalog, #193 #228 #295), must be in the catalog, or the raw
+    /// English key shows at runtime in other locales.
     @Test func everyModuleBundleKeyInPincerUIIsInTheCatalog() throws {
         let keys = Set(try self.strings().keys)
         let usages = try SourceScan.moduleBundleKeys(in: Self.root.appending(path: "Sources/PincerUI"))
+            + SourceScan.moduleBundleKeys(in: Self.root.appending(path: "Sources/PincerKit"))
         var missing: [String] = []
         for usage in usages where !keys.contains(usage.key) {
             let pattern = SourceScan.interpolationPattern(usage.key)

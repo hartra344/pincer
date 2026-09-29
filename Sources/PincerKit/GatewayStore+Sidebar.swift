@@ -11,10 +11,10 @@ public enum SidebarOrganization: String, CaseIterable, Identifiable, Sendable {
     public var id: String { self.rawValue }
     public var label: String {
         switch self {
-        case .servers: "By server"
-        case .agent: "By agent"
-        case .group: "By group"
-        case .recent: "Recent"
+        case .servers: L("By server")
+        case .agent: L("By agent")
+        case .group: L("By group")
+        case .recent: L("Recent")
         }
     }
 }

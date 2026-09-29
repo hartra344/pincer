@@ -21,11 +21,11 @@ final class TranscriptReplyQuoteView: TranscriptTapView {
             guard let self, let id = self.quote?.targetId else { return }
             self.actions?.showOriginal(id)
         }
-        self.accessibilityText = "Show original message"
+        self.accessibilityText = L("Show original message")
         #if os(macOS)
-        self.toolTip = "Show original message"
+        self.toolTip = L("Show original message")
         #else
-        self.accessibilityHint = "Jumps to the message this replies to"
+        self.accessibilityHint = L("Jumps to the message this replies to")
         #endif
     }
 
@@ -87,7 +87,7 @@ final class TranscriptReactionChipView: TranscriptTapView {
         return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
             var children: [UIMenuElement] = []
             if chip.includesYou {
-                children.append(UIAction(title: "Remove My Reaction", image: UIImage(systemName: "minus.circle"),
+                children.append(UIAction(title: L("Remove My Reaction"), image: UIImage(systemName: "minus.circle"),
                                          attributes: .destructive) { _ in self?.onRemove?() })
             }
             return UIMenu(title: "\(chip.emoji) \(chip.reactors)", children: children)
