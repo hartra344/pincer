@@ -115,7 +115,7 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored let connection: GatewayConnection
     @ObservationIgnored internal(set) var chats: [String: ChatStore] = [:]
     @ObservationIgnored private var runSessions: [String: String] = [:]
-    @ObservationIgnored private var bootstrapped = false
+    @ObservationIgnored private(set) var bootstrapped = false
     @ObservationIgnored private var didPickInitialChat = false
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?

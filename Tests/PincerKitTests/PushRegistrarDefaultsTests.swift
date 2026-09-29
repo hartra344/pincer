@@ -23,6 +23,8 @@ struct PushRegistrarDefaultsTests {
             #expect(regB.relayURL == nil)
         }
         #expect(!regA.notificationsEnabled())
+        #expect(!regB.notificationsEnabled())
+        ClosedAppDelivery.set(.pushRelay, b)
         #expect(regB.notificationsEnabled())
         #expect(b.string(forKey: "pincer.push.endpoint.x") == nil)
         #expect(b.dictionary(forKey: "pincer.push.relayId") == nil)
