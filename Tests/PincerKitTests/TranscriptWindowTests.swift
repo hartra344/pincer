@@ -623,4 +623,55 @@ struct TranscriptWindowTests {
         await chat.saveSnapshot()
         #expect(await self.cached(gateway) == parsed.map(\.id))
     }
+
+    func settle(_ condition: () -> Bool) async {
+        for _ in 0..<1500 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
+    }
+
+    @Test func aCappedCacheIsNotRefilledOnEveryOpenOrReconnect() async throws {
+        let profile = GatewayProfile.demo()
+        let key = "agent:main:dashboard:garden"
+        let defaults = UserDefaults(suiteName: "TranscriptWindowTests.\(UUID().uuidString)")!
+        func connect() async -> GatewayStore {
+            let gateway = GatewayStore(profile: profile, defaults: defaults, identity: Fixtures.identity())
+            gateway.cacheRoot = self.temp.url
+            gateway.start()
+            await self.settle { gateway.state == .connected && !gateway.sessions.isEmpty }
+            return gateway
+        }
+        let first = await connect()
+        defer { TranscriptCache.removeAll(gatewayId: first.id, permanently: true, root: self.temp.url); self.temp.remove() }
+        let seed = first.chat(for: key)
+        await seed.load(force: true)
+        let real = seed.items.filter { !$0.isPending }
+        #expect(!real.isEmpty)
+        seed.stopCaching()
+        first.stop()
+
+        // The newest 20,000 items are cached (the retention cap) with older history left out.
+        let older = V8.items(TranscriptCache.maxItems - real.count).map { item -> ChatItem in
+            var item = item
+            item.id = "old-\(item.id)"
+            item.transcriptId = item.id
+            return item
+        }
+        var capped = V8.snapshot(older + real, complete: false, activityMs: 1, retained: true)
+        capped.retained = true
+        await TranscriptCache.save(capped, gatewayId: first.id, sessionKey: key, root: self.temp.url)
+        await TranscriptCache.flush(gatewayId: first.id, root: self.temp.url)
+
+        let gateway = await connect()
+        defer { gateway.stop() }
+        let chat = gateway.chat(for: key)
+        for _ in 0..<3 { await chat.load(force: true) }
+        // Long enough for a background fill (or the prefetch, which waits 2 s) to have rewritten the cache.
+        try? await Task.sleep(for: .seconds(3))
+        await gateway.settlePrefetch()
+        chat.stopCaching()
+        let meta = await TranscriptCache.meta(gatewayId: gateway.id, sessionKey: key, root: self.temp.url)
+        #expect(meta?.retained == true)
+        let cached = await TranscriptCache.load(gatewayId: gateway.id, sessionKey: key, root: self.temp.url)
+        #expect(cached?.items.count == TranscriptCache.maxItems)
+        #expect(cached?.items.first?.id == older.first?.id)
+    }
 }

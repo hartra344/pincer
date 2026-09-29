@@ -70,6 +70,31 @@ func runLiveTranscriptWindow(url: String, token: String) async {
     let paged = reopened.items.map(\.id)
     check(paged == all, "cache pages then Gateway pages join with no gap or duplicate (\(paged.count) of \(all.count) items, \(rounds) pages)")
     check(!reopened.hasOlderItems, "nothing older is reported once the start is reached")
+
+    // Items that merged several messages leave the cache shorter than the span it covers, so the
+    // Gateway offset from the cache start underestimates and the first page overlaps the cache.
+    // Without message ids (MOCK_HISTORY_NO_IDS=1) the overlap can't be deduped by id.
+    var thinned = Array(reference.items.suffix(cachedCount))
+    for index in stride(from: thinned.count - 5, to: 10, by: -12) { thinned.remove(at: index) }
+    await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: longChatKey)
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: thinned, complete: false, activityMs: nil),
+                               gatewayId: gateway.id, sessionKey: longChatKey)
+    await TranscriptCache.flush(gatewayId: gateway.id)
+    let overlapped = makeChat()
+    await overlapped.restoreFromCache()
+    overlapped.hasLoaded = true
+    rounds = 0
+    while overlapped.hasOlderItems, rounds < 200 {
+        guard await overlapped.loadOlder() else { break }
+        rounds += 1
+    }
+    let seen = overlapped.items.map { "\($0.timestamp?.timeIntervalSince1970 ?? 0)|\($0.plainText)" }
+    let idless = reference.items.contains { $0.transcriptId == nil }
+    check(Set(overlapped.items.map(\.id)).count == overlapped.items.count && Set(seen).count == seen.count,
+          "paging from an underestimated offset adds no duplicate or colliding items (\(overlapped.items.count) items, ids \(idless ? "index-based" : "stable"))")
+    let stamps2 = overlapped.items.compactMap(\.timestamp)
+    check(stamps2.count == overlapped.items.count && zip(stamps2, stamps2.dropFirst()).allSatisfy { $0 < $1 },
+          "the joined transcript stays in order")
 }
 #else
 @MainActor
