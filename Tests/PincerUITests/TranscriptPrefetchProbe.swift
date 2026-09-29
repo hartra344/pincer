@@ -7,16 +7,18 @@ import AppKit
 import Darwin
 #endif
 
-/// Optional hooks that only exist on builds with #198's instrumentation. Everything else in this file
-/// measures from the outside (thread CPU time, wall time, RSS), so the same file runs on the baseline.
+/// Hooks for #198's instrumentation; set both to nil to run this file on a build without it (the baseline was
+/// measured that way). Everything else measures from the outside (thread CPU time, wall time, RSS).
 @MainActor
 enum PrefetchProbeShim {
     #if os(macOS)
     /// e.g. `{ "\($0.prefetchStats)" }`. nil on the baseline.
-    static let stats: ((TranscriptList.Coordinator) -> String)? = nil
+    static let stats: ((TranscriptList.Coordinator) -> String)? = { "\($0.prefetchStats)" }
     #endif
     /// e.g. `{ "\($0.decodedBytes) bytes, \($0.imageCount) images, peak downloads \($0.peakConcurrentDownloads)" }`.
-    static let loaderStats: ((ArtifactImageLoader) -> String)? = nil
+    static let loaderStats: ((ArtifactImageLoader) -> String)? = {
+        "decodedBytes \($0.decodedBytes / 1_048_576) MiB, imageCount \($0.imageCount), peak downloads \($0.peakConcurrentDownloads)"
+    }
 }
 
 enum ProbeMeter {
