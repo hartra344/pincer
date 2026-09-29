@@ -1,6 +1,11 @@
 import CoreGraphics
 import Foundation
 import Testing
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 @testable import PincerKit
 @testable import PincerUI
 
@@ -23,6 +28,29 @@ struct RichRenderingTests {
         #expect(first.ref.alt == "Mermaid diagram")
         let dark = try #require(RichBlock.render(language: "mermaid", code: code, dark: true))
         #expect(dark.ref != first.ref)
+    }
+
+    @Test func inlineMathBecomesSharedAttachments() {
+        func attachments(_ s: NSAttributedString) -> [NSTextAttachment] {
+            var found: [NSTextAttachment] = []
+            s.enumerateAttribute(.attachment, in: NSRange(location: 0, length: s.length)) { value, _, _ in
+                if let attachment = value as? NSTextAttachment { found.append(attachment) }
+            }
+            return found
+        }
+        let font = TranscriptStyle().body
+        let text = TranscriptText.inline("Area is $\\pi r^2$, **not** $x_i$.", font: font, color: TranscriptColors.label)
+        #expect(text.string == "Area is \u{FFFC}, not \u{FFFC}.")
+        let first = attachments(text)
+        #expect(first.count == 2)
+        #expect((first.first?.bounds.minY ?? 0) < 0)
+        // The same formula reuses its attachment, so a streaming prefix compares equal.
+        let again = TranscriptText.inline("Area is $\\pi r^2$", font: font, color: TranscriptColors.label)
+        #expect(attachments(again).first === first.first)
+        let prices = TranscriptText.inline("It costs $5 and $10.", font: font, color: TranscriptColors.label)
+        #expect(prices.string == "It costs $5 and $10.")
+        let unknown = TranscriptText.inline("Keep $\\nope x$ as is", font: font, color: TranscriptColors.label)
+        #expect(unknown.string == "Keep $\\nope x$ as is")
     }
 
     @Test func unsupportedSourceStaysCode() {

@@ -276,7 +276,10 @@ enum TranscriptText {
 
     /// Inline Markdown (bold, italic, code, links, strikethrough) as attributes on `font`.
     static func inline(_ text: String, font: PFont, color: PColor, cached: Bool = true) -> NSMutableAttributedString {
-        let parsed = cached ? MarkdownCache.inline(text) : MarkdownBlock.inline(text)
+        // Inline math is swapped for placeholders before Markdown sees it (so `_` and `*` inside it
+        // aren't read as emphasis), then drawn as image attachments.
+        let math = InlineMathText.mask(text)
+        let parsed = cached ? MarkdownCache.inline(math.text) : MarkdownBlock.inline(math.text)
         let result = NSMutableAttributedString()
         for run in parsed.runs {
             let string = MarkdownBlock.softBreaks(String(parsed[run.range].characters))
@@ -297,7 +300,12 @@ enum TranscriptText {
                 attributes[.link] = link
             }
             attributes[.font] = runFont
-            result.append(NSAttributedString(string: string, attributes: attributes))
+            if math.spans.isEmpty {
+                result.append(NSAttributedString(string: string, attributes: attributes))
+            } else {
+                InlineMathText.append(string, spans: math.spans, attributes: attributes, font: runFont,
+                                      color: color, to: result)
+            }
         }
         return result
     }
