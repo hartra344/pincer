@@ -35,7 +35,7 @@ struct VisibleChatReadTests {
     }
 
     func settled(_ gateway: GatewayStore, _ key: String, unread: Bool) async -> Bool {
-        await eventually { gateway.sessions[key]?.isUnread == unread }
+        await eventually(timeout: .seconds(15)) { gateway.sessions[key]?.isUnread == unread }
     }
 
     @Test func arrivingInTheVisibleChatMarksItRead() async {

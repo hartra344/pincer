@@ -22,8 +22,13 @@ extension GatewayStore {
 
     func markVisibleChatsRead() {
         guard self.state.isConnected, !self.visibleChatsByViewer.isEmpty else { return }
-        for key in self.visibleChatKeys where !self.markingRead.contains(key) && self.sessions[key]?.isUnread == true {
-            Task { await self.markRead(key) }
+        for key in self.visibleChatKeys where self.sessions[key]?.isUnread == true {
+            if self.markingRead.contains(key) {
+                // Unread again (or still) while a patch is in flight: check once more when it lands.
+                self.recheckRead.insert(key)
+            } else {
+                Task { await self.markRead(key) }
+            }
         }
     }
 }
