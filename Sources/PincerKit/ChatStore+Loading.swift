@@ -432,14 +432,22 @@ extension ChatStore {
     /// For the UI, e.g. once Find closes: trims if the chat is idle and not selected.
     public func trimWhenIdle() async { await self.trimToWindow() }
 
+    /// For the open chat once Find has closed and its transcript is anchored at the bottom (#335), so
+    /// dropping rows above the window doesn't move what the reader sees. Otherwise like `trimWhenIdle`.
+    /// `stillWanted` is checked again after the save, which suspends (Find may have reopened).
+    public func trimOpenChatToWindow(stillWanted: @MainActor () -> Bool) async {
+        await self.trimToWindow(allowSelected: true, stillWanted: stillWanted)
+    }
+
     /// Drops the oldest committed items beyond `windowLimit` from a chat that isn't in use. What's
     /// dropped stays on disk and pages back in through `loadOlder`.
-    func trimToWindow() async {
-        guard self.canTrim, self.committedCount > self.windowLimit else { return }
+    func trimToWindow(allowSelected: Bool = false, stillWanted: @MainActor () -> Bool = { true }) async {
+        guard self.canTrim(allowSelected: allowSelected), self.committedCount > self.windowLimit else { return }
         self.saveTask?.cancel()
         await self.saveSnapshot()
         // The save suspended: the chat may have been opened or become busy meanwhile.
-        guard self.canTrim, self.savedState == self.currentCacheState else { return }
+        guard self.canTrim(allowSelected: allowSelected), self.savedState == self.currentCacheState, stillWanted()
+        else { return }
         let cut = Self.windowCut(self.items, limit: self.windowLimit)
         guard cut > 0 else { return }
         self.olderInCache = true
@@ -458,10 +466,10 @@ extension ChatStore {
     }
 
     /// Warm chats may be trimmed too: only a selected, running, locating or paging chat is left alone.
-    private var canTrim: Bool {
+    private func canTrim(allowSelected: Bool) -> Bool {
         let state = self.residencySnapshot
         guard !self.headless, self.isHydrated, !self.cachingStopped, !self.cacheUnreadable, self.olderTask == nil,
-              !state.isSelected, !state.isRunning, !state.isLocatingReply, !state.isLoadingOlder,
+              allowSelected || !state.isSelected, !state.isRunning, !state.isLocatingReply, !state.isLoadingOlder,
               TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: self.sessionKey, root: self.cacheRoot) != nil
         else { return false }
         return true
