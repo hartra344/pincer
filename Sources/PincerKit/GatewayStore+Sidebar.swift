@@ -302,6 +302,8 @@ extension GatewayStore {
             if nestGroups {
                 let home = channels.filter { $0.row.isMain }
                 let rest = channels.filter { !$0.row.isMain }
+                let pinned = rest.filter { $0.row.category == nil && $0.row.isPinned }
+                let leading = home + pinned
                 let byGroup = Dictionary(grouping: rest.filter { $0.row.category != nil }, by: { $0.row.category ?? "" })
                 let subsections = self.groupNames.compactMap { name -> SidebarSection? in
                     guard let members = byGroup[name], !members.isEmpty else { return nil }
@@ -309,8 +311,8 @@ extension GatewayStore {
                                           channels: self.arranged(members), kind: .agentGroup(agent: agentId, group: name))
                 }
                 return SidebarSection(id: "agent:\(agentId)", title: agent.name, emoji: agent.emoji,
-                                      channels: home + rest.filter { $0.row.category == nil }, kind: .agent(agentId),
-                                      subsections: subsections, leadingChannelCount: home.count)
+                                      channels: leading + rest.filter { $0.row.category == nil && !$0.row.isPinned },
+                                      kind: .agent(agentId), subsections: subsections, leadingChannelCount: leading.count)
             }
             return SidebarSection(id: "agent:\(agentId)", title: agent.name, emoji: agent.emoji, channels: channels, kind: .agent(agentId))
         }
