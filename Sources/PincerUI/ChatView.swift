@@ -7,6 +7,15 @@ import UniformTypeIdentifiers
 enum BodyCounter {
     nonisolated(unsafe) static var counts: [String: Int] = [:]
     static func hit(_ name: String) { self.counts[name, default: 0] += 1 }
+
+    /// Prints and resets the counts when PINCER_BODY_COUNTS=1; called as a run ends.
+    static func report() {
+        defer { self.counts = [:] }
+        guard ProcessInfo.processInfo.environment["PINCER_BODY_COUNTS"] == "1" else { return }
+        let line = ["ChatView", "TranscriptPane", "Composer", "ReasoningHint"]
+            .map { "\($0)=\(self.counts[$0, default: 0])" }.joined(separator: " ")
+        FileHandle.standardError.write(Data("BODY_COUNTS \(line)\n".utf8))
+    }
 }
 #endif
 
@@ -98,6 +107,9 @@ struct ChatView: View {
         .onChange(of: self.chat.hasLoaded) { self.takeMessageJump() }
         .onChange(of: self.chat.lastOutcomeAt) { _, finished in
             if finished != nil { self.announceOutcome() }
+            #if DEBUG
+            if finished != nil { BodyCounter.report() }
+            #endif
         }
         .modifier(ChatHandoff(sessionKey: self.chat.sessionKey))
         #if os(iOS)
