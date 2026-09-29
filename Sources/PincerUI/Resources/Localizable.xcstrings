@@ -3453,6 +3453,16 @@
         }
       }
     },
+    "Couldn't Export Chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't Export Chat"
+          }
+        }
+      }
+    },
     "Couldn't Load Automations": {
       "localizations": {
         "en": {
@@ -3509,6 +3519,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't Open %@"
+          }
+        }
+      }
+    },
+    "Couldn't Save File": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't Save File"
           }
         }
       }
@@ -12229,6 +12249,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "The demo runs a simulated Gateway on this device, with sample agents, chats and replies. Nothing is sent anywhere."
+          }
+        }
+      }
+    },
+    "The file couldn't be prepared for sharing.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file couldn't be prepared for sharing."
+          }
+        }
+      }
+    },
+    "The file couldn't be saved: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file couldn't be saved: %@"
           }
         }
       }

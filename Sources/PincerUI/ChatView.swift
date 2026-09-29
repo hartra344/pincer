@@ -34,6 +34,9 @@ struct ChatView: View {
     @State private var find = TranscriptFind()
     @State private var jump: TranscriptJump?
     @State private var exportState = ChatExportState()
+    /// A built export waiting for its sheet to close: the save panel or share sheet can't open over it (#430).
+    @State private var pendingExport: ExportedFile?
+    @State private var exportError: String?
     @State private var scrollToBottom = ScrollToBottomModel()
     #if os(iOS)
     @State private var sharedFile: SharedFile?
@@ -113,23 +116,28 @@ struct ChatView: View {
             isPresented: Binding(get: { self.exporting != nil }, set: { if !$0 { self.exporting = nil } }),
             document: self.exporting,
             contentType: self.exporting?.contentType ?? .data,
-            defaultFilename: self.exporting?.name) { _ in
+            defaultFilename: self.exporting?.name) { result in
                 self.exporting = nil
+                if case let .failure(error) = result, (error as? CocoaError)?.code != .userCancelled {
+                    self.exportError = String(format: L("The file couldn't be saved: %@"), error.localizedDescription)
+                }
             }
         .task(id: self.chat.sessionKey) {
             await self.chat.load()
         }
         .focusedSceneValue(\.transcriptFind, self.find)
         .focusedSceneValue(\.chatExport, self.exportState)
-        .sheet(isPresented: self.$exportState.showExport) {
+        .sheet(isPresented: self.$exportState.showExport, onDismiss: self.presentPendingExport) {
             ExportSheet(chat: self.chat, title: self.row?.title ?? L("Chat"), agentName: self.agent.name,
-                        agents: self.gateway.agents) { name, data in
-                #if os(iOS)
-                self.sharedFile = SharedFile.write(name: name, data: data)
-                #else
-                self.exporting = ExportedFile(name: name, data: data)
-                #endif
+                        agents: self.gateway.agents) { file in
+                self.pendingExport = file
             }
+        }
+        .alert(L("Couldn't Save File"), isPresented: Binding(get: { self.exportError != nil },
+                                                             set: { if !$0 { self.exportError = nil } })) {
+            Button(L("OK")) {}
+        } message: {
+            Text(self.exportError ?? "")
         }
         #if os(iOS)
         .sheet(item: self.$sharedFile) { file in
@@ -203,6 +211,21 @@ struct ChatView: View {
     }
 
     /// Opens Find on a message search result meant for this chat.
+    /// Opens the save panel (macOS) or share sheet (iOS) for the export built while the sheet was up.
+    private func presentPendingExport() {
+        guard let file = self.pendingExport else { return }
+        self.pendingExport = nil
+        #if os(iOS)
+        guard let shared = SharedFile.write(name: file.name, data: file.data) else {
+            self.exportError = L("The file couldn't be prepared for sharing.")
+            return
+        }
+        self.sharedFile = shared
+        #else
+        self.exporting = file
+        #endif
+    }
+
     private func takeFindRequest() {
         guard let request = self.app.findRequest,
               Self.hasFindRequest(app: self.app, gateway: self.gateway, chat: self.chat),
