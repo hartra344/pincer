@@ -159,13 +159,13 @@ extension TranscriptCacheWindowTests {
         await Cache.flush(gatewayId: self.gateway, root: temp.url)
 
         let window = Array(items[4800...])
-        let before = Cache.segmentDecodeCount
+        let before = Cache.segmentDecodeCount(root: temp.url)
         let extra = V8.items(1, from: 6000)
         let result = await Cache.saveReturningStats(
             V8.snapshot(window + extra), gatewayId: self.gateway, sessionKey: self.key, keepingOlder: true, root: temp.url)
         await Cache.flush(gatewayId: self.gateway, root: temp.url)
         #expect(!result.unchanged)
-        #expect(Cache.segmentDecodeCount - before <= 2, "decoded \(Cache.segmentDecodeCount - before) segments")
+        #expect(Cache.segmentDecodeCount(root: temp.url) - before <= 2, "decoded \(Cache.segmentDecodeCount(root: temp.url) - before) segments")
 
         let index = MessageIndex.shared(gatewayId: self.gateway, root: temp.url)
         #expect(index.lastIndexStats.path == .tail)

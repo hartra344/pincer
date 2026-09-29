@@ -4,21 +4,23 @@ import Testing
 
 /// A chat saves only when its content changed, never over a cache it couldn't read, and the
 /// prefetch skips chats that are already as fresh as they can get (#199).
-@Suite("Chat store cache saves", .serialized, .enabled(if: TranscriptCache.root != nil))
+@Suite("Chat store cache saves", .serialized)
 @MainActor
 struct ChatStoreSaveTests {
     let key = "agent:main:main"
+    let temp = TempDir()
 
     func makeStore() -> (ChatStore, GatewayStore) {
         let suite = "ChatStoreSaveTests.\(UUID().uuidString)"
         let profile = GatewayProfile(id: UUID(), name: "T", url: "ws://127.0.0.1:1", authMode: .none)
         let gateway = GatewayStore(profile: profile, defaults: UserDefaults(suiteName: suite)!, identity: Fixtures.identity())
+        gateway.cacheRoot = self.temp.url
         let chat = ChatStore(sessionKey: self.key, agentId: nil, gateway: gateway, headless: true)
         return (chat, gateway)
     }
 
     func manifest(_ gateway: GatewayStore) -> URL {
-        TranscriptCache.file(gatewayId: gateway.id, sessionKey: self.key)!
+        TranscriptCache.file(gatewayId: gateway.id, sessionKey: self.key, root: self.temp.url)!
     }
 
     func mtime(_ url: URL) -> Date? {
@@ -27,33 +29,33 @@ struct ChatStoreSaveTests {
 
     @Test func unchangedRefreshDoesNotSave() async throws {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: self.temp.url) ; self.temp.remove() }
         let items = V8.items(30)
         chat.items = items
         chat.hasLoaded = true
         await chat.saveSnapshot()
-        await TranscriptCache.flush(gatewayId: gateway.id)
+        await TranscriptCache.flush(gatewayId: gateway.id, root: self.temp.url)
         let url = self.manifest(gateway)
         let first = try #require(self.mtime(url))
 
         try await Task.sleep(for: .milliseconds(30))
         chat.items = items
         await chat.saveSnapshot()
-        await TranscriptCache.flush(gatewayId: gateway.id)
+        await TranscriptCache.flush(gatewayId: gateway.id, root: self.temp.url)
         #expect(self.mtime(url) == first)
 
         chat.items = items + V8.items(1, from: 30)
         await chat.saveSnapshot()
-        await TranscriptCache.flush(gatewayId: gateway.id)
+        await TranscriptCache.flush(gatewayId: gateway.id, root: self.temp.url)
         #expect(try #require(self.mtime(url)) > first)
     }
 
     @Test func unavailableRestoreDoesNotSaveAndRetries() async throws {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: self.temp.url) ; self.temp.remove() }
         let old = V8.items(400)
-        await TranscriptCache.save(V8.snapshot(old), gatewayId: gateway.id, sessionKey: self.key)
-        await TranscriptCache.flush(gatewayId: gateway.id)
+        await TranscriptCache.save(V8.snapshot(old), gatewayId: gateway.id, sessionKey: self.key, root: self.temp.url)
+        await TranscriptCache.flush(gatewayId: gateway.id, root: self.temp.url)
         let url = self.manifest(gateway)
         let before = try Data(contentsOf: url)
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
@@ -69,7 +71,7 @@ struct ChatStoreSaveTests {
         chat.items = Array(old.suffix(20))
         chat.hasLoaded = true
         await chat.saveSnapshot()
-        await TranscriptCache.flush(gatewayId: gateway.id)
+        await TranscriptCache.flush(gatewayId: gateway.id, root: self.temp.url)
 
         try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
         #expect(try Data(contentsOf: url) == before)
@@ -82,10 +84,10 @@ struct ChatStoreSaveTests {
 
     @Test func retryAfterUnavailableMergesOlderHistory() async throws {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: self.temp.url) ; self.temp.remove() }
         let all = V8.items(400)
-        await TranscriptCache.save(V8.snapshot(all), gatewayId: gateway.id, sessionKey: self.key)
-        await TranscriptCache.flush(gatewayId: gateway.id)
+        await TranscriptCache.save(V8.snapshot(all), gatewayId: gateway.id, sessionKey: self.key, root: self.temp.url)
+        await TranscriptCache.flush(gatewayId: gateway.id, root: self.temp.url)
         let url = self.manifest(gateway)
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path) }
@@ -100,17 +102,17 @@ struct ChatStoreSaveTests {
 
         chat.items.append(contentsOf: V8.items(1, from: 400))
         await chat.saveSnapshot()
-        await TranscriptCache.flush(gatewayId: gateway.id)
-        let saved = try #require(await TranscriptCache.load(gatewayId: gateway.id, sessionKey: self.key))
+        await TranscriptCache.flush(gatewayId: gateway.id, root: self.temp.url)
+        let saved = try #require(await TranscriptCache.load(gatewayId: gateway.id, sessionKey: self.key, root: self.temp.url))
         #expect(saved.items.count == 401 && saved.items.first?.id == all.first?.id)
     }
 
     @Test func retryWithoutOverlapSplicesNothing() async throws {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: self.temp.url) ; self.temp.remove() }
         let cached = V8.items(100)
-        await TranscriptCache.save(V8.snapshot(cached), gatewayId: gateway.id, sessionKey: self.key)
-        await TranscriptCache.flush(gatewayId: gateway.id)
+        await TranscriptCache.save(V8.snapshot(cached), gatewayId: gateway.id, sessionKey: self.key, root: self.temp.url)
+        await TranscriptCache.flush(gatewayId: gateway.id, root: self.temp.url)
         let url = self.manifest(gateway)
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
         defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path) }

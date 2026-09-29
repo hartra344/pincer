@@ -74,6 +74,35 @@ func checkSessionManager() async {
 }
 
 /// The demo's Sessions page: every flow against seeded sessions (see DemoGateway+Sessions.swift).
+/// Caches a one-message transcript for `key` holding `word`, and waits until search indexes it.
+@MainActor
+private func seedRemovalCache(_ gateway: GatewayStore, _ key: String, word: String) async -> Bool {
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("seed-\(word)", .user, "\(word) removal probe", at: 1)], complete: true),
+                               gatewayId: gateway.id, sessionKey: key)
+    var indexed = false
+    for _ in 0..<50 where !indexed {
+        indexed = await !((try? gateway.messageIndex.search(word)) ?? []).isEmpty
+        if !indexed { try? await Task.sleep(for: .milliseconds(100)) }
+    }
+    return indexed && fileExists(TranscriptCache.file(gatewayId: gateway.id, sessionKey: key))
+}
+
+/// #225: the probe is gone from the cache and from search (`fileGone`: the file itself, for deletes;
+/// a rewound open chat may refetch and save the post-rewind history, which lacks the probe).
+@MainActor
+private func checkRemovalProbe(_ gateway: GatewayStore, _ key: String, word: String, fileGone: Bool, _ label: String) async {
+    var gone = false
+    for _ in 0..<50 where !gone {
+        let cached = await TranscriptCache.load(gatewayId: gateway.id, sessionKey: key)
+        let hits = (try? await gateway.messageIndex.search(word)) ?? []
+        let cacheClean = fileGone ? !fileExists(TranscriptCache.file(gatewayId: gateway.id, sessionKey: key))
+            : cached?.items.contains { $0.plainText.contains(word) } != true
+        gone = cacheClean && hits.isEmpty
+        if !gone { try? await Task.sleep(for: .milliseconds(100)) }
+    }
+    check(gone, label)
+}
+
 @MainActor
 func runDemoSessions(_ gateway: GatewayStore) async {
     print("Session manager (demo)")
@@ -121,6 +150,8 @@ func runDemoSessions(_ gateway: GatewayStore) async {
         check(false, "demo drip branch (\(branches.map(\.headline)))")
     }
     await manager.loadRewindPoints(key: garden)
+    let demoSeeded = await seedRemovalCache(gateway, garden, word: "gardenprobexq")
+    check(demoSeeded, "demo rewind: probe cached and searchable")
     if let point = manager.rewindPoints[garden]?.first {
         let chat = gateway.chat(for: garden)
         let emptyBefore = chat.draft.text.isEmpty
@@ -132,6 +163,7 @@ func runDemoSessions(_ gateway: GatewayStore) async {
             !chat.items.contains { $0.plainText == "Add a drip irrigation plan." }
         }
         check(reloaded, "the open chat reloads without the cut messages")
+        await checkRemovalProbe(gateway, garden, word: "gardenprobexq", fileGone: false, "demo rewind drops the cached transcript and its search hits")
     } else {
         check(false, "demo rewind points")
     }
@@ -143,8 +175,11 @@ func runDemoSessions(_ gateway: GatewayStore) async {
     let main = await manager.setArchived(["agent:main:main"], archived: true)
     check(main.failed.first?.message == "Cannot archive an agent's main session.", "demo protects main sessions")
 
+    let benchSeeded = await seedRemovalCache(gateway, bench, word: "benchprobexq")
     let deleted = await manager.delete([bench])
     check(deleted.succeeded == [bench] && manager.row(bench) == nil, "demo delete archived (\(manager.actionError ?? ""))")
+    check(benchSeeded, "demo delete: probe cached and searchable")
+    await checkRemovalProbe(gateway, bench, word: "benchprobexq", fileGone: true, "demo delete removes the cache file and its search hits")
 
     if let tombstoned = manager.row(photo), manager.canRecover(tombstoned) {
         let result = await manager.recover(key: photo)
@@ -237,11 +272,14 @@ func runLiveSessions(profile: GatewayProfile, admin: GatewayStore) async {
         check(false, "live herbs branch")
     }
     await manager.loadRewindPoints(key: garden)
+    let liveSeeded = await seedRemovalCache(admin, garden, word: "gardenprobexq")
+    check(liveSeeded, "live rewind: probe cached and searchable")
     if let point = manager.rewindPoints[garden]?.first {
         check(point.text == "What about an herbs-only bed instead?", "rewind point is the latest user message (\(point.text))")
         let ok = await manager.rewind(key: garden, entryId: point.entryId)
         check(ok && manager.lastEditorText == point.text, "live rewind returns the cut message (\(manager.actionError ?? ""))")
         check(manager.branches[garden]?.first?.headline.hasPrefix("Tomatoes") == true, "active path cut before it")
+        await checkRemovalProbe(admin, garden, word: "gardenprobexq", fileGone: false, "live rewind drops the cached transcript and its search hits")
     } else {
         check(false, "live rewind points (\(manager.rewindErrors[garden] ?? ""))")
     }
@@ -268,7 +306,10 @@ func runLiveSessions(profile: GatewayProfile, admin: GatewayStore) async {
         if let key = result?.key {
             let listed = await waitFor("recovered session listed", timeout: 5) { gateway.sessions[key] != nil }
             check(listed, "recovered session appears in the sidebar")
+            let successorSeeded = await seedRemovalCache(admin, key, word: "successorprobexq")
             let deletedSuccessor = await manager.delete([key])
+            check(successorSeeded, "live delete: probe cached and searchable")
+            await checkRemovalProbe(admin, key, word: "successorprobexq", fileGone: true, "live delete removes the cache file and its search hits")
             check(deletedSuccessor.succeeded == [key], "admin deletes a live session (\(manager.actionError ?? ""))")
         }
     } else {

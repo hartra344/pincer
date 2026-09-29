@@ -73,7 +73,9 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private(set) var connectionEpoch = 0
     public var selectedKey: String? {
         didSet {
-            guard oldValue != self.selectedKey, let key = self.selectedKey else { return }
+            guard oldValue != self.selectedKey else { return }
+            if let oldValue, let left = self.chats[oldValue] { Task { await left.trimToWindow() } }
+            guard let key = self.selectedKey else { return }
             self.defaults.set(key, forKey: "pincer.selected.\(self.id.uuidString)")
             self.noteSelected(key)
             Task { await self.openChat(key) }
@@ -119,6 +121,13 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var didPickInitialChat = false
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
+    /// Background full-history fills, one per chat, shared by the prefetch and the open chat.
+    @ObservationIgnored private var headlessFills: [String: (id: UUID, task: Task<Void, Never>)] = [:]
+    /// How many background fills actually started per chat (tests).
+    @ObservationIgnored var headlessFillStarts: [String: Int] = [:]
+    /// Bumped when a chat's cached transcript is removed or rewritten by the Gateway, so a fill that
+    /// began before can't save its stale history over the new one.
+    @ObservationIgnored private var cacheGenerations: [String: Int] = [:]
     /// Whether the app is in the foreground, set from `AppModel.appIsActive`. Background prefetch
     /// stops while it's false and starts again on resume.
     public var appIsActive = true {
@@ -134,7 +143,9 @@ public final class GatewayStore: Identifiable {
     /// don't keep rebuilding it (each rebuild re-runs the search).
     @ObservationIgnored private var lastFailureReconcile: ContinuousClock.Instant?
     /// Full-text index of this Gateway's cached transcripts, for message search.
-    public var messageIndex: MessageIndex { MessageIndex.shared(gatewayId: self.id) }
+    /// Where this Gateway's transcripts and search index are cached; tests give each store its own folder.
+    @ObservationIgnored var cacheRoot: URL? = TranscriptCache.root
+    public var messageIndex: MessageIndex { MessageIndex.shared(gatewayId: self.id, root: self.cacheRoot) }
     /// Whether message search is ready, still indexing cached chats, or off (no transcript cache).
     public private(set) var messageIndexProgress: MessageIndex.Status = .ready
     @ObservationIgnored weak var notifier: Notifier?
@@ -344,6 +355,7 @@ public final class GatewayStore: Identifiable {
         self.eventBuffer?.finish()
         self.eventBuffer = nil
         self.prefetchTask?.cancel()
+        for fill in self.headlessFills.values { fill.task.cancel() }
         self.reconcileTask?.cancel()
         self.bootstrapTask?.cancel()
         self.bootstrapTask = nil
@@ -354,7 +366,8 @@ public final class GatewayStore: Identifiable {
     /// check can clear a cached chat without it being saved back.
     public func settlePrefetch() async {
         await self.prefetchTask?.value
-        await TranscriptCache.flush(gatewayId: self.id)
+        for fill in self.headlessFills.values { await fill.task.value }
+        await TranscriptCache.flush(gatewayId: self.id, root: self.cacheRoot)
     }
 
     /// `stop()` for a store that won't be started again, returning once the connection is torn
@@ -363,7 +376,7 @@ public final class GatewayStore: Identifiable {
         self.stop()
         await self.connection.stop()
         for chat in self.chats.values { await chat.finishCaching() }
-        await TranscriptCache.flush(gatewayId: self.id)
+        await TranscriptCache.flush(gatewayId: self.id, root: self.cacheRoot)
     }
 
     /// Whether this connection can see and answer agent questions (`operator.questions`).
@@ -538,7 +551,7 @@ public final class GatewayStore: Identifiable {
     /// Indexes cached transcripts the message index hasn't seen yet (caches from before it
     /// existed, or after it was rebuilt), in the background.
     private func reconcileMessageIndex() {
-        guard MessageIndex.status(gatewayId: self.id) != .unavailable else {
+        guard MessageIndex.status(gatewayId: self.id, root: self.cacheRoot) != .unavailable else {
             self.messageIndexProgress = .unavailable
             return
         }
@@ -632,13 +645,46 @@ public final class GatewayStore: Identifiable {
                 guard !Task.isCancelled, let self, self.state.isConnected, self.appIsActive,
                       fetched < Self.prefetchBudget else { return }
                 if let chat = self.chats[row.key], !chat.isDehydrated { continue }
-                let meta = await TranscriptCache.meta(gatewayId: self.id, sessionKey: row.key)
+                let meta = await TranscriptCache.meta(gatewayId: self.id, sessionKey: row.key, root: self.cacheRoot)
                 if Self.prefetchIsFresh(meta, activityMs: row.activityMs) { continue }
                 fetched += 1
-                let store = ChatStore(sessionKey: row.key, agentId: row.agentId, gateway: self, headless: true)
-                await store.fillCache()
+                await self.startHeadlessFill(sessionKey: row.key, agentId: row.agentId).value
             }
         }
+    }
+
+    func cacheGeneration(of key: String) -> Int { self.cacheGenerations[key, default: 0] }
+
+    /// Caches the chat's full history in a headless store, off the UI. One fill runs per chat at a
+    /// time; callers share it. When it finishes, the open chat (if any) picks up what it wrote.
+    @discardableResult
+    func startHeadlessFill(sessionKey key: String, agentId: String?) -> Task<Void, Never> {
+        if let running = self.headlessFills[key] { return running.task }
+        let generation = self.cacheGeneration(of: key)
+        let fillId = UUID()
+        self.headlessFillStarts[key, default: 0] += 1
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let store = ChatStore(sessionKey: key, agentId: agentId, gateway: self, headless: true)
+            store.windowLimit = TranscriptCache.maxItems
+            await store.fillCache(generation: generation)
+            if self.headlessFills[key]?.id == fillId { self.headlessFills[key] = nil }
+            guard !Task.isCancelled, self.cacheGeneration(of: key) == generation else { return }
+            await self.chats[key]?.adoptFilledCache()
+        }
+        self.headlessFills[key] = (fillId, task)
+        return task
+    }
+
+    /// The chat's cached transcript is about to be removed or replaced (delete, rewind, branch
+    /// switch, recovery): stops its background fill, waits for it to finish, and invalidates
+    /// anything it would still write. Call before clearing the cache.
+    func cancelHeadlessFill(_ key: String) async {
+        self.cacheGenerations[key, default: 0] += 1
+        guard let fill = self.headlessFills[key] else { return }
+        fill.task.cancel()
+        await fill.task.value
+        if self.headlessFills[key]?.id == fill.id { self.headlessFills[key] = nil }
     }
 
     private var listParams: [String: JSONValue] {
@@ -653,6 +699,7 @@ public final class GatewayStore: Identifiable {
     }
 
     func applySnapshot(_ list: JSONValue) {
+        let previous = Set(self.sessions.values.filter { !$0.isPlaceholder }.map(\.key))
         var next: [String: SessionRow] = [:]
         for row in list["sessions"]?.array?.compactMap(SessionRow.init) ?? [] {
             next[row.key] = row
@@ -671,6 +718,9 @@ public final class GatewayStore: Identifiable {
         if let defaults = list["defaults"] {
             self.defaultContextTokens = defaults["contextTokens"]?.int.flatMap { $0 > 0 ? $0 : nil }
         }
+        // Sessions deleted while we weren't listening (e.g. across a reconnect) lose their cache too.
+        let dropped = previous.subtracting(next.keys)
+        if !dropped.isEmpty { Task { await self.forgetVanishedSessions(dropped) } }
     }
 
     private func scheduleRefresh() {
