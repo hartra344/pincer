@@ -173,7 +173,8 @@ struct DeepLinkTests {
 
     @Test func resolvesUnknownGatewayAndSession() {
         #expect(Self.route("agent:main:main").resolve(in: [PincerRoute.Candidate]()) == .unknownGateway)
-        #expect(Self.route("agent:main:main", gateway: UUID()).resolve(in: [Self.home, Self.demo]) == .unknownGateway)
+        #expect(Self.route("agent:main:main", gateway: UUID()).resolve(in: [Self.home, Self.demo]) == .unknownGateway,
+                "every gateway has a main chat, so it alone never picks one")
         #expect(Self.route("agent:main:nope").resolve(in: [Self.home])
             == .unknownSession(gatewayId: Self.gateway, sessionKey: "agent:main:nope"))
         #expect(Self.route(nil).resolve(in: [Self.home]) == .openGateway(Self.gateway))
@@ -224,7 +225,8 @@ struct DeepLinkTests {
     @Test func handoffCarriesNoMessage() throws {
         let route = Self.route("agent:main:main", message: "m1")
         #expect(route.handoffUserInfo[PincerRoute.Key.message] == nil)
-        #expect(Set(route.handoffUserInfo.keys).isSubset(of: [PincerRoute.Key.gateway, PincerRoute.Key.session, PincerRoute.Key.url]))
+        #expect(Set(route.handoffUserInfo.keys).isSubset(of: [PincerRoute.Key.gateway, PincerRoute.Key.session,
+                                                             PincerRoute.Key.url, PincerRoute.Key.host]))
         let received = try #require(PincerRoute(handoffUserInfo: route.userInfo))
         #expect(received.messageId == nil && received.sessionKey == "agent:main:main" && received.gateway == .id(Self.gateway))
         #expect(PincerRoute(handoffUserInfo: nil) == nil)
@@ -265,7 +267,7 @@ struct DeepLinkTests {
         #expect(route.resolve(in: [local]) == .openChat(Self.target("agent:main:main", gateway: Self.other), messageId: nil))
         #expect(route.resolve(in: [twin, local], preferring: Self.other)
             == .openChat(Self.target("agent:main:main", gateway: Self.other), messageId: nil))
-        #expect(Self.route("agent:main:main").resolve(in: [local]) == .unknownGateway, "no address, no match")
+        #expect(Self.route("agent:main:main").resolve(in: [local]) == .unknownGateway, "no address, main chat: no match")
         let demoAtAddress = PincerRoute.Candidate(id: UUID(), isDemo: true, sessionKeys: nil, url: "ws://127.0.0.1:18789")
         #expect(route.resolve(in: [demoAtAddress]) == .unknownGateway, "an address never matches the demo")
     }
