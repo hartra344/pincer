@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 // MARK: Replies
@@ -315,5 +316,98 @@ public enum Reactions {
         let lowered = message.lowercased()
         return code == "UNKNOWN_METHOD" || code == "INVALID_REQUEST"
             || lowered.contains("unsupported") || lowered.contains("not supported") || lowered.contains("unknown action")
+    }
+}
+
+// MARK: Reaction store
+
+/// One gateway's reactions in `UserDefaults`, one bucket per session so a change rewrites only that
+/// session's entries instead of the whole map. Keys are `"<sessionKey>|<transcriptId>"` as in `Reactions`.
+public struct ReactionStore: @unchecked Sendable {
+    public let gatewayId: String
+    private let defaults: UserDefaults
+
+    public init(gatewayId: String, defaults: UserDefaults = .standard) {
+        self.gatewayId = gatewayId
+        self.defaults = defaults
+    }
+
+    /// The pre-bucket key holding the whole map.
+    var legacyKey: String { "pincer.reactions.\(self.gatewayId)" }
+    var indexKey: String { "pincer.reactions.\(self.gatewayId).index" }
+    private var bucketPrefix: String { "pincer.reactions.\(self.gatewayId).s." }
+
+    /// The bucket an entry lives in: the first 16 hex digits of the SHA-256 of its session key.
+    static func bucketName(forEntry key: String) -> String {
+        let sessionKey = key.lastIndex(of: "|").map { String(key[..<$0]) } ?? key
+        return SHA256.hash(data: Data(sessionKey.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func bucketKey(_ name: String) -> String { self.bucketPrefix + name }
+
+    private var bucketNames: [String] { self.defaults.stringArray(forKey: self.indexKey) ?? [] }
+
+    /// Every stored reaction, migrating the legacy map first.
+    public func load() -> [String: String] {
+        self.migrateIfNeeded()
+        var all: [String: String] = [:]
+        for name in self.bucketNames {
+            guard let bucket = self.defaults.dictionary(forKey: self.bucketKey(name)) as? [String: String] else { continue }
+            all.merge(bucket) { _, new in new }
+        }
+        return all
+    }
+
+    /// Writes the buckets of the entries that differ between `old` and `new`, leaving the rest alone.
+    public func apply(old: [String: String], new: [String: String]) {
+        guard old != new else { return }
+        var changed = Set<String>()
+        for key in Set(old.keys).union(new.keys) where old[key] != new[key] {
+            changed.insert(Self.bucketName(forEntry: key))
+        }
+        var contents = Dictionary(uniqueKeysWithValues: changed.map { ($0, [String: String]()) })
+        for (key, value) in new {
+            let name = Self.bucketName(forEntry: key)
+            if changed.contains(name) { contents[name]?[key] = value }
+        }
+        var names = Set(self.bucketNames)
+        let live = Set(contents.filter { !$0.value.isEmpty }.keys)
+        // The index goes first when it grows, so a crash never leaves a bucket `load` can't see.
+        if !live.isSubset(of: names) { self.defaults.set(Array(names.union(live)).sorted(), forKey: self.indexKey) }
+        for name in changed {
+            if let bucket = contents[name], !bucket.isEmpty {
+                self.defaults.set(bucket, forKey: self.bucketKey(name))
+            } else {
+                self.defaults.removeObject(forKey: self.bucketKey(name))
+            }
+        }
+        names = names.union(live).subtracting(changed.subtracting(live))
+        if names.isEmpty {
+            self.defaults.removeObject(forKey: self.indexKey)
+        } else if names != Set(self.bucketNames) {
+            self.defaults.set(names.sorted(), forKey: self.indexKey)
+        }
+    }
+
+    /// Moves the legacy single-key map into buckets. Buckets and index are written before the legacy
+    /// key is removed, so an interrupted run repeats safely and loses nothing.
+    public func migrateIfNeeded() {
+        guard let legacy = self.defaults.dictionary(forKey: self.legacyKey) as? [String: String] else {
+            if self.defaults.object(forKey: self.legacyKey) != nil { self.defaults.removeObject(forKey: self.legacyKey) }
+            return
+        }
+        var buckets: [String: [String: String]] = [:]
+        for (key, value) in legacy { buckets[Self.bucketName(forEntry: key), default: [:]][key] = value }
+        for (name, bucket) in buckets { self.defaults.set(bucket, forKey: self.bucketKey(name)) }
+        let names = Set(self.bucketNames).union(buckets.keys)
+        if !names.isEmpty { self.defaults.set(names.sorted(), forKey: self.indexKey) }
+        self.defaults.removeObject(forKey: self.legacyKey)
+    }
+
+    /// Forgets this device's reactions for the gateway (when it's removed).
+    public func removeAll() {
+        for name in self.bucketNames { self.defaults.removeObject(forKey: self.bucketKey(name)) }
+        self.defaults.removeObject(forKey: self.indexKey)
+        self.defaults.removeObject(forKey: self.legacyKey)
     }
 }
