@@ -147,6 +147,8 @@ public final class ChatStore: Identifiable {
     }
     /// The message the composer is replying to. Per chat, in memory only.
     public var replyTarget: ReplyTarget?
+    /// The user message being edited (Edit & Resend). Per chat, in memory only.
+    public var editTarget: MessageEditTarget?
     /// A passing, non-error note for the chat's notice bar (not a send failure).
     public var notice: String?
     /// The quoted message being looked for in older history, while paging.
