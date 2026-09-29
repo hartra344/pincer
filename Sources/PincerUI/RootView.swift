@@ -80,7 +80,7 @@ extension AppModel {
     func selectNextUnread() {
         let ordered = self.gateways.sorted { lhs, _ in lhs.id == self.selectedGatewayId }
         for gateway in ordered {
-            let unread = gateway.sections().flatMap { $0.channels.flatMap { [$0.row] + $0.threads } }.filter(\.isUnread)
+            let unread = gateway.sections().flatMap { $0.allChannels.flatMap { [$0.row] + $0.threads } }.filter(\.isUnread)
             if let next = unread.first(where: { $0.key != gateway.selectedKey }) {
                 self.open(Notifier.Target(gatewayId: gateway.id, sessionKey: next.key))
                 return

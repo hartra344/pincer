@@ -18,7 +18,7 @@ Pick a layout from the menu at the top of the sidebar:
 | Layout | How chats are grouped |
 | --- | --- |
 | **By server** (default) | Each Discord server gets a section with its `#channels`. Automations get their own section when shown, and everything else is grouped under its agent. |
-| **By agent** | One section per agent. Every agent's home chat is listed, even before its first message. |
+| **By agent** | One section per agent, with its groups nested inside (see [Groups in By agent](#groups-in-by-agent)). Every agent's home chat is listed first, even before its first message. |
 | **By group** | One section per group you've made. |
 | **Recent** | One list, most recently active first. |
 
@@ -58,6 +58,22 @@ Groups are your own folders for chats. They sync through the gateway, so they're
 - **Delete:** **Delete Group…** removes the group and leaves its chats ungrouped.
 
 Empty groups stay until you delete them, so you can set them up ahead of time.
+
+### Groups in By agent
+
+In *By agent*, each agent's section keeps your groups as a second level:
+
+- the agent's **home chat** comes first, followed by its pinned chats that aren't in a group;
+- then each group that has at least one of that agent's chats, in the same order as in *By group*;
+- then the agent's chats that aren't in a group.
+
+A group with chats from several agents shows up under each of them, with only that agent's chats. Each group under each agent collapses on its own, and the sidebar remembers it.
+
+- **New chat in a group:** click **+** on a group under an agent, or right-click the agent and choose **New Chat in Group**. The chat goes to that agent and that group.
+- **Move chats:** drag a chat onto another of the agent's groups, or between two of its chats to put it at that spot. Drop it on the agent's header to take it out of its group. Moving a chat between groups never changes its agent, so you can't drop it into another agent's group.
+- A group's header menu has the same actions as in *By group*: **Change Icon…**, **Rename…** and **Delete Group…** apply to the group everywhere. To reorder groups, switch to *By group*.
+
+In the built-in demo, **Mochi**, a New York moving planner, has **Preparations** and **Day of move** groups plus a chat outside them.
 
 ## Per-chat actions
 

@@ -61,7 +61,11 @@ struct SidebarList: NSViewRepresentable {
         }
 
         func makeScrollView() -> NSScrollView {
-            let outline = NSOutlineView()
+            let outline = SidebarOutlineView()
+            outline.hidesOutlineCell = { [weak self, weak outline] row in
+                guard let node = outline?.item(atRow: row) as? Node else { return false }
+                return self?.headers[node.id]?.isSubsection == true
+            }
             outline.style = .sourceList
             outline.selectionHighlightStyle = .sourceList
             outline.headerView = nil
@@ -118,7 +122,7 @@ struct SidebarList: NSViewRepresentable {
                 let old = self.model
                 self.model = model
                 self.rebuildIndex()
-                let structure = { (model: SidebarModel) in model.groups.flatMap { [$0.header.id] + $0.entries.map(\.id) } }
+                let structure = { (model: SidebarModel) in model.groups.flatMap { [$0.header.id] + $0.childIds } }
                 self.programmatic {
                     if !self.hasLoaded || structure(old) != structure(model) {
                         self.hasLoaded = true
@@ -142,22 +146,27 @@ struct SidebarList: NSViewRepresentable {
             self.headers = [:]
             self.entries = [:]
             self.children = [:]
-            self.roots = self.model.groups.map { group in
+            func index(_ group: SidebarModel.Group) -> Node {
                 let header = node(group.header.id)
                 self.headers[group.header.id] = group.header
-                self.children[group.header.id] = group.entries.map { entry in
-                    self.entries[entry.id] = entry
-                    return node(entry.id)
+                func entryNodes(_ list: [SidebarModel.Entry]) -> [Node] {
+                    list.map { entry in
+                        self.entries[entry.id] = entry
+                        return node(entry.id)
+                    }
                 }
+                self.children[group.header.id] = entryNodes(group.leadingEntries) + group.subgroups.map(index)
+                    + entryNodes(group.entries)
                 return header
             }
+            self.roots = self.model.groups.map(index)
             self.nodes = nodes
         }
 
         /// Same rows as before: refresh the ones that changed in place.
         private func reconfigure(changedFrom old: SidebarModel) {
             guard let outline else { return }
-            let oldEntries = Dictionary(old.groups.flatMap(\.entries).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+            let oldEntries = Dictionary(old.groups.flatMap(\.allEntries).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             var resized = IndexSet()
             for id in SidebarModel.changedRowKeys(old: old, new: self.model) {
                 guard let node = self.nodes[id] else { continue }
@@ -195,12 +204,20 @@ struct SidebarList: NSViewRepresentable {
             guard let outline else { return }
             self.allowsHeaderOutlineCell = true
             defer { self.allowsHeaderOutlineCell = false }
-            for root in self.roots {
-                guard let header = self.headers[root.id] else { continue }
-                if header.isCollapsed, outline.isItemExpanded(root) {
-                    outline.collapseItem(root)
-                } else if !header.isCollapsed, !outline.isItemExpanded(root) {
-                    outline.expandItem(root)
+            self.applyExpansion(to: self.roots)
+        }
+
+        /// Headers are expanded parent first, then their nested headers, so a group stays as the
+        /// user left it when its agent is collapsed and opened again.
+        private func applyExpansion(to nodes: [Node]) {
+            guard let outline else { return }
+            for node in nodes {
+                guard let header = self.headers[node.id] else { continue }
+                if header.isCollapsed, outline.isItemExpanded(node) {
+                    outline.collapseItem(node)
+                } else if !header.isCollapsed {
+                    if !outline.isItemExpanded(node) { outline.expandItem(node) }
+                    self.applyExpansion(to: self.children[node.id] ?? [])
                 }
             }
         }
@@ -245,9 +262,10 @@ struct SidebarList: NSViewRepresentable {
 
         // MARK: Delegate
 
+        /// Only top-level headers get source-list group styling; nested groups are ordinary rows.
         func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool {
-            guard let node = item as? Node else { return false }
-            return self.headers[node.id] != nil
+            guard let node = item as? Node, let header = self.headers[node.id] else { return false }
+            return !header.isSubsection
         }
 
         func outlineView(_ outlineView: NSOutlineView, heightOfRowByItem item: Any) -> CGFloat {
@@ -286,7 +304,9 @@ struct SidebarList: NSViewRepresentable {
         /// hover and pushes the + button aside when it does.
         func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool {
             guard let node = item as? Node else { return true }
-            return self.allowsHeaderOutlineCell || self.headers[node.id] == nil
+            // Nested group headers keep their outline cell so they expand and collapse (and answer
+            // the arrow keys), but SidebarOutlineView never lets its triangle show.
+            return self.allowsHeaderOutlineCell || self.headers[node.id] == nil || self.headers[node.id]?.isSubsection == true
         }
 
         private func toggle(_ id: String) {
@@ -315,6 +335,12 @@ struct SidebarList: NSViewRepresentable {
 
         func outlineViewItemDidExpand(_ notification: Notification) {
             self.expansionChanged(notification, collapsed: false)
+            // Nested groups come back in their own state.
+            if let node = notification.userInfo?["NSObject"] as? Node, let children = self.children[node.id] {
+                self.allowsHeaderOutlineCell = true
+                self.programmatic { self.applyExpansion(to: children) }
+                self.allowsHeaderOutlineCell = false
+            }
         }
 
         func outlineViewItemDidCollapse(_ notification: Notification) {
@@ -370,7 +396,9 @@ struct SidebarList: NSViewRepresentable {
                 return .chatInGroup(key, header: above, group: group, childIndex: self.children[above.id]?.count ?? 0)
             }
             guard let target = self.headerNode(for: item), let header = self.headers[target.id] else { return nil }
-            if case let .group(group) = header.section.kind, !header.isCollapsed {
+            if let group = header.section.groupName, !header.isCollapsed,
+               header.section.agentId == nil || header.section.agentId == row.agentId
+            {
                 if let node = item as? Node, node !== target {
                     // Dropped on a chat: go in front of it, or after it when moving down its own group.
                     guard var childIndex = self.children[target.id]?.firstIndex(where: { $0 === node }) else { return nil }
@@ -467,6 +495,15 @@ struct SidebarList: NSViewRepresentable {
     }
 }
 
+/// An outline that can keep an expandable row's disclosure triangle out of sight.
+private final class SidebarOutlineView: NSOutlineView {
+    var hidesOutlineCell: ((Int) -> Bool)?
+
+    override func frameOfOutlineCell(atRow row: Int) -> NSRect {
+        self.hidesOutlineCell?(row) == true ? .zero : super.frameOfOutlineCell(atRow: row)
+    }
+}
+
 private extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
@@ -488,6 +525,9 @@ private final class SidebarChatCell: NSTableCellView {
     private let unreadDot = NSImageView()
     private let date = NSTextField(labelWithString: "")
     private var onToggleThreads: (() -> Void)?
+    private var leading: NSLayoutConstraint?
+    /// Indent per nesting level; the outline itself uses none.
+    static let indentPerDepth: CGFloat = 14
 
     init() {
         super.init(frame: .zero)
@@ -554,8 +594,10 @@ private final class SidebarChatCell: NSTableCellView {
         row.setCustomSpacing(0, after: text)
         row.setCustomSpacing(4, after: spacer)
         self.addSubview(row)
+        let leading = row.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 6)
+        self.leading = leading
         NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 6),
+            leading,
             row.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -6),
             row.centerYAnchor.constraint(equalTo: self.centerYAnchor),
         ])
@@ -569,6 +611,7 @@ private final class SidebarChatCell: NSTableCellView {
     @MainActor
     func configure(_ entry: SidebarModel.Entry, actions: SidebarActions) {
         let row = entry.row
+        self.leading?.constant = 6 + CGFloat(entry.depth) * Self.indentPerDepth
         self.threadArrow.isHidden = !entry.isThread
         self.icon.image = NSImage(systemSymbolName: ChannelRowStyle.symbol(for: entry), accessibilityDescription: nil)
             ?? NSImage(systemSymbolName: "number", accessibilityDescription: nil)
@@ -635,6 +678,8 @@ private final class SidebarHeaderCell: NSTableCellView {
     private let chevron = NSButton()
     private var onAdd: (() -> Void)?
     private var onToggle: (() -> Void)?
+    private var leading: NSLayoutConstraint?
+    private(set) var isNested = false
     /// Width of each trailing button slot. Every header keeps both slots, so + and the chevron
     /// line up across sections and never move.
     static let buttonSlot: CGFloat = 22
@@ -690,8 +735,10 @@ private final class SidebarHeaderCell: NSTableCellView {
         row.alignment = .centerY
         row.translatesAutoresizingMaskIntoConstraints = false
         self.addSubview(row)
+        let leading = row.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 2)
+        self.leading = leading
         NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 2),
+            leading,
             row.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -2),
             row.centerYAnchor.constraint(equalTo: self.centerYAnchor),
         ])
@@ -704,6 +751,9 @@ private final class SidebarHeaderCell: NSTableCellView {
     @MainActor
     func configure(_ header: SidebarModel.Header, actions: SidebarActions, toggle: @escaping () -> Void) {
         let section = header.section
+        self.isNested = header.isSubsection
+        self.leading?.constant = header.isSubsection ? 2 + SidebarChatCell.indentPerDepth : 2
+        self.superview?.needsLayout = true
         self.onToggle = toggle
         self.avatar = header.avatar.map { ($0, header.avatarState) }
         self.drawAvatar()
@@ -721,7 +771,14 @@ private final class SidebarHeaderCell: NSTableCellView {
         self.add.alphaValue = canAdd ? 1 : 0
         self.add.isEnabled = canAdd
         self.add.setAccessibilityElement(canAdd)
-        self.onAdd = header.newChatAgent.map { agent in { actions.newChat(agent) } }
+        self.onAdd = header.addAction(actions)
+        self.add.toolTip = header.addAccessibilityLabel
+        self.add.setAccessibilityLabel(header.addAccessibilityLabel)
+        if header.isSubsection {
+            self.setAccessibilityLabel(header.subsectionAccessibilityLabel)
+        } else {
+            self.setAccessibilityLabel(nil)
+        }
         let label = AccessibilityText.sectionToggle(title: section.title, isCollapsed: header.isCollapsed)
         self.chevron.image = NSImage(systemSymbolName: header.isCollapsed ? "chevron.right" : "chevron.down",
                                      accessibilityDescription: label)
@@ -841,6 +898,31 @@ struct SidebarSearchField: NSViewRepresentable {
 /// Draws the selection in the theme's accent when it sets one; otherwise the system's source-list
 /// highlight.
 private final class SidebarRowView: NSTableRowView {
+    /// The outline draws nested rows inset from the trailing edge. A nested group header's cell
+    /// reaches out to where its agent header's cell ends, so its + and chevron sit in the same
+    /// slots and stay inside the cell (clickable).
+    override func layout() {
+        super.layout()
+        guard let cell = self.subviews.lazy.compactMap({ $0 as? SidebarHeaderCell }).first, cell.isNested else { return }
+        var ancestor = self.superview
+        while let view = ancestor, !(view is NSOutlineView) { ancestor = view.superview }
+        guard let outline = ancestor as? NSOutlineView else { return }
+        let row = outline.row(for: self)
+        guard row >= 0, var top = outline.item(atRow: row) else { return }
+        while let parent = outline.parent(forItem: top) { top = parent }
+        let topRow = outline.row(forItem: top)
+        guard topRow >= 0, topRow != row else { return }
+        let topEdge: CGFloat
+        if let topCell = outline.view(atColumn: 0, row: topRow, makeIfNecessary: false) {
+            topEdge = outline.convert(topCell.bounds, from: topCell).maxX
+        } else {
+            topEdge = outline.frameOfCell(atColumn: 0, row: topRow).maxX
+        }
+        let edge = self.convert(NSPoint(x: topEdge, y: 0), from: outline).x
+        let width = max(cell.frame.width, edge - cell.frame.minX)
+        if cell.frame.width != width { cell.frame.size.width = width }
+    }
+
     override func drawSelection(in dirtyRect: NSRect) {
         guard let accent = AppTheme.current.platformColor(.accent) else {
             super.drawSelection(in: dirtyRect)

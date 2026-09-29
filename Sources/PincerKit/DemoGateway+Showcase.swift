@@ -341,6 +341,40 @@ extension DemoGateway {
             ])
         add(Self.kikoKey, agent: "kiko", title: "Main", preview: "Claw sent the list of home-lab bills.", age: 86_400_000,
             ["isMain": true], messages: Self.seedKikoChat())
+        add("agent:mochi:main", agent: "mochi", title: "General", preview: "Moving day is Oct 18; I'll keep the checklist.",
+            age: 5 * 3_600_000, ["isMain": true, "label": "General"], messages: [
+                said("user", "I'm moving from Boston to Brooklyn on October 18.", ago: 6 * day),
+                said("assistant", "Got it. Moving day is Oct 18; I'll keep the checklist and split it into prep and the day itself.",
+                     ago: 6 * day - minute),
+            ])
+        add("agent:mochi:dashboard:apartments", agent: "mochi", title: "Apartment Hunt",
+            preview: "Three Park Slope listings under $3,200.", age: 4 * 3_600_000,
+            ["label": "Apartment Hunt", "category": "Preparations"], messages: [
+                said("user", "Find 1-bedrooms in Park Slope under $3,200 that allow cats.", ago: 5 * day),
+                said("assistant", "Three listings fit: 5th Ave ($3,050), 7th Ave ($3,150) and Garfield Pl ($3,190). All allow cats.",
+                     ago: 5 * day - minute),
+            ])
+        add("agent:mochi:dashboard:packing", agent: "mochi", title: "Packing list",
+            preview: "Kitchen is packed; books are next.", age: 3 * 3_600_000,
+            ["label": "Packing list", "category": "Preparations"], messages: [
+                said("user", "Make a room-by-room packing list.", ago: 4 * day),
+                said("assistant", "Kitchen is packed; books are next. Buy 20 small boxes for them; large ones get too heavy.",
+                     ago: 4 * day - minute),
+            ])
+        add("agent:mochi:dashboard:movers", agent: "mochi", title: "Movers",
+            preview: "Arrival window is 8-10am on the 18th.", age: 2 * 3_600_000,
+            ["label": "Movers", "category": "Day of move"], messages: [
+                said("user", "Book two movers for the morning of the 18th.", ago: 3 * day),
+                said("assistant", "Booked with Brooklyn Bound: arrival window is 8-10am on the 18th, 4-hour minimum.",
+                     ago: 3 * day - minute),
+            ])
+        add("agent:mochi:dashboard:utilities", agent: "mochi", title: "Utilities setup",
+            preview: "Con Edison transfer scheduled for the 17th.", age: 1 * 3_600_000,
+            ["label": "Utilities setup"], messages: [
+                said("user", "Set up electricity and internet at the new place.", ago: 2 * day),
+                said("assistant", "Con Edison transfer is scheduled for the 17th; internet install is booked for the 19th.",
+                     ago: 2 * day - minute),
+            ])
         let discord: Row = ["provenance": ["sourceChannel": "discord"]]
         add("agent:main:discord:channel:123", agent: "main", title: "home-lab", preview: "Discord bridge is online.",
             age: 20_000, ["label": "home-lab", "category": "Home", "channel": "discord", "pinned": true, "unread": true],

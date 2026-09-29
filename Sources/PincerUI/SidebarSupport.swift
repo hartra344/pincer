@@ -22,6 +22,38 @@ struct SidebarModel: Equatable {
         /// the still pose it holds for what the agent's chats are doing.
         var avatar: AvatarStyle?
         var avatarState = AvatarState.idle
+        /// Name of the agent a nested group sits under.
+        var agentName: String?
+
+        /// A group nested under an agent (by-agent mode).
+        var isSubsection: Bool {
+            if case .agentGroup = self.section.kind { return true }
+            return false
+        }
+
+        var addAccessibilityLabel: String {
+            guard self.isSubsection else { return "New chat" }
+            return self.agentName.map { "New chat in \(self.section.title) with \($0)" } ?? "New chat in \(self.section.title)"
+        }
+
+        /// What the header's + does: a new chat with the agent, and the group when this is one.
+        @MainActor
+        func addAction(_ actions: SidebarActions) -> (() -> Void)? {
+            guard let agent = self.newChatAgent else { return nil }
+            if case let .agentGroup(_, group) = self.section.kind { return { actions.newChatInGroup(group, agent) } }
+            return { actions.newChat(agent) }
+        }
+
+        /// VoiceOver label for a nested group header, which has no avatar or agent name to lean on.
+        var subsectionAccessibilityLabel: String {
+            var parts = [self.agentName.map { "\(self.section.title) group in \($0)" } ?? "\(self.section.title) group"]
+            if self.isCollapsed {
+                let unread = self.section.unreadCount
+                if unread > 0 { parts.append("\(unread) unread") }
+                parts.append("collapsed")
+            }
+            return parts.joined(separator: ", ")
+        }
 
         /// The symbol the header shows, if any.
         var symbol: String? {
@@ -32,7 +64,7 @@ struct SidebarModel: Equatable {
             lhs.id == rhs.id && lhs.isCollapsed == rhs.isCollapsed && lhs.newChatAgent == rhs.newChatAgent && lhs.icon == rhs.icon
                 && lhs.section.title == rhs.section.title && lhs.section.emoji == rhs.section.emoji
                 && lhs.section.kind == rhs.section.kind && lhs.section.unreadCount == rhs.section.unreadCount
-                && lhs.avatar == rhs.avatar && lhs.avatarState == rhs.avatarState
+                && lhs.agentName == rhs.agentName && lhs.avatar == rhs.avatar && lhs.avatarState == rhs.avatarState
         }
     }
 
@@ -55,11 +87,32 @@ struct SidebarModel: Equatable {
         let working: SidebarWorkingIndicator?
         /// The agent's companion style for `working` when animated avatars are on.
         let workingAvatar: AvatarStyle?
+        /// Nesting under the section header: 1 for chats inside a group nested under an agent.
+        var depth = 0
     }
 
     struct Group: Equatable {
         let header: Header
+        /// The section's chats; in by-agent mode, the ones after the nested groups.
         let entries: [Entry]
+        /// By-agent mode: the home chat(s) that come before the nested groups.
+        var leadingEntries: [Entry] = []
+        /// By-agent mode: groups nested under the agent, each with its chats.
+        var subgroups: [Group] = []
+
+        /// Every row id under the header, in display order (the header itself excluded).
+        var childIds: [String] {
+            self.leadingEntries.map(\.id) + self.subgroups.flatMap { [$0.header.id] + $0.childIds } + self.entries.map(\.id)
+        }
+
+        var allEntries: [Entry] {
+            self.leadingEntries + self.subgroups.flatMap(\.allEntries) + self.entries
+        }
+
+        /// This header and every nested one, in display order.
+        var allHeaders: [Header] {
+            [self.header] + self.subgroups.flatMap(\.allHeaders)
+        }
     }
 
     var groups: [Group] = []
@@ -75,18 +128,17 @@ struct SidebarModel: Equatable {
         let selected = gateway.selectedKey
         let avatarsOn = AvatarSettings.isEnabled
         let approvalKeys = avatarsOn ? Set(gateway.approvals.compactMap(\.sessionKey)) : []
-        var model = SidebarModel()
-        for section in gateway.sections(search: search) {
+        func working(_ row: SessionRow, runningSubagents: Int) -> (SidebarWorkingIndicator?, AvatarStyle?) {
+            guard row.hasActiveRun || (!showSubagentRuns && runningSubagents > 0) else { return (nil, nil) }
+            let agent = gateway.agent(row.agentId)
+            let indicator = SidebarWorkingIndicator.resolve(
+                hasActiveRun: row.hasActiveRun, runningSubagents: runningSubagents, showSubagentRuns: showSubagentRuns,
+                agent: agent, companionsEnabled: avatarsOn)
+            return (indicator, indicator != nil && avatarsOn ? AvatarSettings.style(for: agent) : nil)
+        }
+        func entries(_ channels: [SidebarChannel], depth: Int) -> [Entry] {
             var entries: [Entry] = []
-            func working(_ row: SessionRow, runningSubagents: Int) -> (SidebarWorkingIndicator?, AvatarStyle?) {
-                guard row.hasActiveRun || (!showSubagentRuns && runningSubagents > 0) else { return (nil, nil) }
-                let agent = gateway.agent(row.agentId)
-                let indicator = SidebarWorkingIndicator.resolve(
-                    hasActiveRun: row.hasActiveRun, runningSubagents: runningSubagents, showSubagentRuns: showSubagentRuns,
-                    agent: agent, companionsEnabled: avatarsOn)
-                return (indicator, indicator != nil && avatarsOn ? AvatarSettings.style(for: agent) : nil)
-            }
-            for channel in section.channels {
+            for channel in channels {
                 let expanded = expandedThreads.contains(channel.row.key)
                 let subagents = channel.threads.filter(\.isSubagent)
                 let runningSubagents = subagents.filter(\.hasActiveRun).count
@@ -103,7 +155,7 @@ struct SidebarModel: Equatable {
                     threadsExpanded: expanded,
                     showSubagentRuns: showSubagentRuns,
                     preview: showPreviews ? channel.row.preview : nil,
-                    working: channelWorking.0, workingAvatar: channelWorking.1))
+                    working: channelWorking.0, workingAvatar: channelWorking.1, depth: depth))
                 // Like Discord, helper runs live inside the conversation (as "Open run" on their
                 // tool call) unless the sidebar is set to list them.
                 let visible: [SessionRow]
@@ -122,24 +174,41 @@ struct SidebarModel: Equatable {
                                          runningSubagents: 0, hiddenUnreadThreads: 0, threadsExpanded: false,
                                          showSubagentRuns: showSubagentRuns,
                                          preview: showPreviews ? thread.preview : nil,
-                                         working: threadWorking.0, workingAvatar: threadWorking.1))
+                                         working: threadWorking.0, workingAvatar: threadWorking.1, depth: depth))
                 }
             }
+            return entries
+        }
+        func group(_ section: SidebarSection, depth: Int) -> Group {
             let newChatAgent = section.agentId ?? (gateway.organization == .recent ? gateway.defaultAgentId : nil)
             var icon: String?
-            if case let .group(name) = section.kind { icon = SymbolCatalog.symbol(for: gateway.groupIcon(for: name)) }
+            if let name = section.groupName, section.agentId == nil || depth > 0 {
+                icon = SymbolCatalog.symbol(for: gateway.groupIcon(for: name))
+            }
             var header = Header(id: self.headerId(section.id), section: section,
                                 isCollapsed: collapsed.contains(section.id), newChatAgent: newChatAgent, icon: icon)
-            if avatarsOn, let agentId = section.agentId {
+            if depth > 0, let agentId = section.agentId { header.agentName = gateway.agent(agentId).name }
+            if avatarsOn, case let .agent(agentId) = section.kind {
                 header.avatar = AvatarSettings.style(for: gateway.agent(agentId))
-                let rows = section.channels.flatMap { [$0.row] + $0.threads }
+                let rows = section.allChannels.flatMap { [$0.row] + $0.threads }
                 if rows.contains(where: { approvalKeys.contains($0.key) }) {
                     header.avatarState = .awaitingApproval
                 } else if rows.contains(where: \.hasActiveRun) {
                     header.avatarState = .thinking
                 }
             }
-            model.groups.append(Group(header: header, entries: entries))
+            if section.subsections.isEmpty {
+                return Group(header: header, entries: entries(section.channels, depth: depth))
+            }
+            let leading = min(section.leadingChannelCount, section.channels.count)
+            return Group(header: header,
+                         entries: entries(Array(section.channels[leading...]), depth: depth),
+                         leadingEntries: entries(Array(section.channels[..<leading]), depth: depth),
+                         subgroups: section.subsections.map { group($0, depth: depth + 1) })
+        }
+        var model = SidebarModel()
+        for section in gateway.sections(search: search) {
+            model.groups.append(group(section, depth: 0))
         }
         return model
     }
@@ -157,7 +226,8 @@ struct SidebarActions {
     var select: (String) -> Void
     var newChat: (String) -> Void
     /// Opens New Chat with a group already picked.
-    var newChatInGroup: (String) -> Void
+    /// The agent is the one the chat goes to, or `nil` for the default.
+    var newChatInGroup: (_ group: String, _ agentId: String?) -> Void
     var rename: (SessionRow) -> Void
     var changeIcon: (SessionRow) -> Void
     var changeGroupIcon: (String) -> Void
@@ -227,7 +297,7 @@ enum ChannelRowStyle {
     static func headerSymbol(for kind: SidebarSection.Kind) -> String? {
         switch kind {
         case let .server(server): self.symbol(server.provider)
-        case .group: "chevron.down.square"
+        case .group, .agentGroup: "chevron.down.square"
         case .automations: "clock.arrow.circlepath"
         case .agent, .other: nil
         }
@@ -340,50 +410,20 @@ enum SidebarMenus {
                 })
             }]
         case let .group(name):
-            let names = gateway.groupNames
-            let index = names.firstIndex(of: name) ?? 0
-            var items: [SidebarMenuItem] = [
-                .action("New Chat in Group…", image: "square.and.pencil") { actions.newChatInGroup(name) },
-                .action("Rename Group…", image: "pencil") {
-                    actions.prompt(TextPrompt(title: "Rename Group", field: "Name", initial: name) { newName in
-                        Task { await gateway.renameGroup(name, to: newName) }
-                    })
-                },
-                .action("Change Icon…", image: "face.smiling") { actions.changeGroupIcon(name) },
-            ]
-            if gateway.groupIcon(for: name) != nil {
-                items.append(.action("Reset Icon", image: "arrow.uturn.backward") { gateway.setGroupIcon(nil, for: name) })
+            return self.groupMenu(name, agent: nil, gateway: gateway, actions: actions)
+        case let .agentGroup(agent, name):
+            return self.groupMenu(name, agent: agent, gateway: gateway, actions: actions)
+        case let .agent(agent):
+            guard gateway.organization == .agent else { return [] }
+            // Every group, so an agent's first chat in a group can start here.
+            var groups: [SidebarMenuItem] = gateway.groupNames.map { name in
+                .action(name) { actions.newChatInGroup(name, agent) }
             }
-            if index > 0 {
-                items.append(.action("Move Up", image: "arrow.up") {
-                    Task { await gateway.moveGroup(name, before: names[index - 1]) }
-                })
-            }
-            if index < names.count - 1 {
-                items.append(.action("Move Down", image: "arrow.down") {
-                    Task { await gateway.moveGroup(name, before: index + 2 < names.count ? names[index + 2] : nil) }
-                })
-            }
-            items += [
-                .divider,
-                .action("New Group…", image: "folder.badge.plus") { self.newGroup(gateway: gateway, actions: actions) },
-                .divider,
-                .action("Delete Group…", image: "trash", destructive: true) {
-                    let count = gateway.groupOrder(name).count
-                    guard count > 0 else {
-                        Task { await gateway.deleteGroup(name) }
-                        return
-                    }
-                    actions.confirm(ConfirmPrompt(
-                        title: "Delete “\(name)”?",
-                        message: count == 1 ? "Its chat won’t be deleted; it just won’t be in a group."
-                            : "Its \(count) chats won’t be deleted; they just won’t be in a group.",
-                        action: "Delete Group") {
-                        Task { await gateway.deleteGroup(name) }
-                    })
-                },
-            ]
-            return items
+            if !groups.isEmpty { groups.append(.divider) }
+            groups.append(.action("New Group…") {
+                self.newGroup(gateway: gateway, actions: actions) { name in actions.newChatInGroup(name, agent) }
+            })
+            return [.submenu("New Chat in Group", image: "square.and.pencil", groups)]
         case .automations:
             return [.action("Manage Automations…", image: "clock.arrow.circlepath") { actions.openAutomations() }]
         case .other where section.id == "group:":
@@ -391,6 +431,56 @@ enum SidebarMenus {
         default:
             return []
         }
+    }
+
+    /// The menu of a group header. Nested under an agent (`agent` set) it starts chats with that
+    /// agent and leaves group ordering to the by-group view.
+    static func groupMenu(_ name: String, agent: String?, gateway: GatewayStore, actions: SidebarActions) -> [SidebarMenuItem] {
+        let names = gateway.groupNames
+        let index = names.firstIndex(of: name) ?? 0
+        var items: [SidebarMenuItem] = [
+            .action("New Chat in Group…", image: "square.and.pencil") { actions.newChatInGroup(name, agent) },
+            .action("Rename Group…", image: "pencil") {
+                actions.prompt(TextPrompt(title: "Rename Group", field: "Name", initial: name) { newName in
+                    Task { await gateway.renameGroup(name, to: newName) }
+                })
+            },
+            .action("Change Icon…", image: "face.smiling") { actions.changeGroupIcon(name) },
+        ]
+        if gateway.groupIcon(for: name) != nil {
+            items.append(.action("Reset Icon", image: "arrow.uturn.backward") { gateway.setGroupIcon(nil, for: name) })
+        }
+        if agent == nil, index > 0 {
+            items.append(.action("Move Up", image: "arrow.up") {
+                Task { await gateway.moveGroup(name, before: names[index - 1]) }
+            })
+        }
+        if agent == nil, index < names.count - 1 {
+            items.append(.action("Move Down", image: "arrow.down") {
+                Task { await gateway.moveGroup(name, before: index + 2 < names.count ? names[index + 2] : nil) }
+            })
+        }
+        items += [
+            .divider,
+            .action("New Group…", image: "folder.badge.plus") { self.newGroup(gateway: gateway, actions: actions) },
+            .divider,
+            .action("Delete Group…", image: "trash", destructive: true) {
+                let count = gateway.groupOrder(name).count
+                guard count > 0 else {
+                    Task { await gateway.deleteGroup(name) }
+                    return
+                }
+                actions.confirm(ConfirmPrompt(
+                    title: "Delete “\(name)”?",
+                    message: (count == 1 ? "Its chat won’t be deleted; it just won’t be in a group."
+                        : "Its \(count) chats won’t be deleted; they just won’t be in a group.")
+                        + (agent == nil ? "" : " This group is shared by all agents."),
+                    action: "Delete Group") {
+                    Task { await gateway.deleteGroup(name) }
+                })
+            },
+        ]
+        return items
     }
 
     /// Asks for a name and creates an empty group, then runs `then` with it.
@@ -425,12 +515,14 @@ extension SidebarModel {
         var oldEntries: [String: Entry] = [:]
         var changed: [String] = []
         for group in old.groups {
-            oldHeaders[group.header.id] = group.header
-            for entry in group.entries { oldEntries[entry.id] = entry }
+            for header in group.allHeaders { oldHeaders[header.id] = header }
+            for entry in group.allEntries { oldEntries[entry.id] = entry }
         }
         for group in new.groups {
-            if let previous = oldHeaders[group.header.id], previous != group.header { changed.append(group.header.id) }
-            for entry in group.entries {
+            for header in group.allHeaders {
+                if let previous = oldHeaders[header.id], previous != header { changed.append(header.id) }
+            }
+            for entry in group.allEntries {
                 if let previous = oldEntries[entry.id], previous != entry { changed.append(entry.id) }
             }
         }

@@ -300,6 +300,182 @@ struct SidebarTests {
         #expect(absent(store.groupDropValue(for: main, onto: mainAgent)))
     }
 
+    // MARK: Groups nested under agents (#236)
+
+    static let nested: JSONValue = Fixtures.json(#"""
+    {"sessions":[
+      {"key":"agent:main:main","category":"Prep","updatedAt":100},
+      {"key":"agent:main:dashboard:apt","label":"Apartment Hunt","category":"Prep","updatedAt":300},
+      {"key":"agent:main:dashboard:pack","label":"Packing list","category":"Prep","updatedAt":200},
+      {"key":"agent:main:dashboard:movers","label":"Movers","category":"Day of move","updatedAt":250},
+      {"key":"agent:main:dashboard:misc","label":"Utilities setup","updatedAt":150},
+      {"key":"agent:main:subagent:s1","label":"Apt helper","spawnedBy":"agent:main:dashboard:apt","updatedAt":400},
+      {"key":"agent:main:cron:nightly","label":"Automation: Nightly","category":"Prep","unread":true,"updatedAt":120},
+      {"key":"agent:main:discord:slash:42","category":"Prep","channel":"discord","unread":true,"updatedAt":110},
+      {"key":"agent:research:dashboard:papers","label":"Papers","category":"Prep","updatedAt":180},
+      {"key":"agent:research:dashboard:notes","label":"Notes","updatedAt":170}
+    ]}
+    """#)
+
+    func nestedStore() -> GatewayStore {
+        let store = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        store.applySnapshot(Self.nested)
+        store.groupCatalog = ["Prep", "Day of move", "Empty"]
+        store.organization = .agent
+        return store
+    }
+
+    func agentSection(_ store: GatewayStore, _ id: String, search: String = "") -> SidebarSection? {
+        store.sections(search: search).first { $0.id == "agent:\(id)" }
+    }
+
+    @Test func nestedTree() throws {
+        defer { self.scratch.remove() }
+        let store = self.nestedStore()
+        let main = try #require(self.agentSection(store, "main"))
+        #expect(main.leadingChannelCount == 1)
+        #expect(main.channels.map(\.id) == ["agent:main:main", "agent:main:dashboard:misc"])
+        // Subsections follow groupNames order; the empty group is omitted.
+        #expect(main.subsections.map(\.id) == ["agent:main/group:Prep", "agent:main/group:Day of move"])
+        #expect(main.subsections.map(\.title) == ["Prep", "Day of move"])
+        #expect(main.subsections.map(\.groupName) == ["Prep", "Day of move"])
+        #expect(main.subsections[0].kind == .agentGroup(agent: "main", group: "Prep"))
+        #expect(main.subsections[0].agentId == "main" && main.subsections[0].emoji == nil)
+        #expect(main.subsections[0].channels.map(\.id) == ["agent:main:dashboard:apt", "agent:main:dashboard:pack"])
+        #expect(main.subsections[1].channels.map(\.id) == ["agent:main:dashboard:movers"])
+        #expect(main.subsections[0].channels[0].threads.map(\.key) == ["agent:main:subagent:s1"])
+        // Display order: home, subsections' chats, then the ungrouped rest.
+        #expect(main.allChannels.map(\.id) == [
+            "agent:main:main", "agent:main:dashboard:apt", "agent:main:dashboard:pack",
+            "agent:main:dashboard:movers", "agent:main:dashboard:misc",
+        ])
+        #expect(main.groupName == nil && main.kind == .agent("main"))
+    }
+
+    @Test func nestedGroupSpanningAgents() throws {
+        defer { self.scratch.remove() }
+        let store = self.nestedStore()
+        let research = try #require(self.agentSection(store, "research"))
+        #expect(research.subsections.map(\.id) == ["agent:research/group:Prep"])
+        #expect(research.subsections[0].channels.map(\.id) == ["agent:research:dashboard:papers"])
+        #expect(research.channels.map(\.id) == ["agent:research:dashboard:notes"])
+        let main = try #require(self.agentSection(store, "main"))
+        #expect(!main.subsections[0].channels.contains { $0.id.hasPrefix("agent:research") })
+    }
+
+    @Test func nestedEmptyGroupsOmittedDuringSearch() throws {
+        defer { self.scratch.remove() }
+        let store = self.nestedStore()
+        let main = try #require(self.agentSection(store, "main", search: "movers"))
+        #expect(main.subsections.map(\.id) == ["agent:main/group:Day of move"])
+        #expect(main.allChannels.map(\.id) == ["agent:main:dashboard:movers"])
+        #expect(self.agentSection(store, "research", search: "movers") == nil)
+        #expect(store.sections(search: "zzz").allSatisfy { $0.allChannels.isEmpty })
+    }
+
+    @Test func nestedHomeStaysFirstWithCategory() throws {
+        defer { self.scratch.remove() }
+        let store = self.nestedStore()
+        let main = try #require(self.agentSection(store, "main"))
+        #expect(main.allChannels.first?.id == "agent:main:main")
+        #expect(!main.subsections.flatMap(\.channels).contains { $0.id == "agent:main:main" })
+    }
+
+    @Test func nestedHiddenKindsExcludedUnlessOptedIn() throws {
+        defer { self.scratch.remove() }
+        let store = self.nestedStore()
+        let hidden: Set = ["agent:main:cron:nightly", "agent:main:discord:slash:42"]
+        var main = try #require(self.agentSection(store, "main"))
+        #expect(Set(main.allChannels.map(\.id)).isDisjoint(with: hidden))
+        store.showAutomations = true
+        store.showSlashCommands = true
+        main = try #require(self.agentSection(store, "main"))
+        #expect(Set(main.subsections[0].channels.map(\.id)).isSuperset(of: hidden))
+    }
+
+    @Test func nestedByGroupUnchanged() {
+        defer { self.scratch.remove() }
+        let store = self.nestedStore()
+        store.organization = .group
+        let sections = store.sections()
+        #expect(sections.map(\.id) == ["group:Prep", "group:Day of move", "group:Empty", "group:"])
+        #expect(sections.allSatisfy { $0.subsections.isEmpty && $0.leadingChannelCount == 0 })
+        #expect(sections[0].channels.map(\.id).contains("agent:main:main"))
+    }
+
+    @Test func nestedCollapseIsPerAgentAndGroup() {
+        defer { self.scratch.remove() }
+        let store = self.nestedStore()
+        #expect(!store.collapsedSections.contains("agent:main/group:Prep"))
+        store.setSectionCollapsed("agent:main/group:Prep", true)
+        #expect(store.collapsedSections.contains("agent:main/group:Prep"))
+        #expect(!store.collapsedSections.contains("agent:research/group:Prep"))
+        let relaunched = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        #expect(relaunched.collapsedSections.contains("agent:main/group:Prep"))
+    }
+
+    @Test func nestedUnreadAndOrder() throws {
+        defer { self.scratch.remove() }
+        let store = self.nestedStore()
+        store.showAutomations = true
+        let main = try #require(self.agentSection(store, "main"))
+        #expect(main.unreadCount == 1 && main.subsections[0].unreadCount == 1 && main.subsections[1].unreadCount == 0)
+        store.showSlashCommands = true
+        #expect(try #require(self.agentSection(store, "main")).unreadCount == 2)
+        #expect(store.totalUnread == 2)
+    }
+
+    @Test func nestedPinnedChats() throws {
+        defer { self.scratch.remove() }
+        let store = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        store.applySnapshot(Fixtures.json(#"""
+        {"sessions":[
+          {"key":"agent:main:main","updatedAt":100},
+          {"key":"agent:main:dashboard:apt","label":"Apt","category":"Prep","pinned":true,"updatedAt":10},
+          {"key":"agent:main:dashboard:pack","label":"Pack","category":"Prep","updatedAt":300},
+          {"key":"agent:main:dashboard:pinned","label":"Pinned loose","pinned":true,"updatedAt":20},
+          {"key":"agent:main:dashboard:loose","label":"Loose","updatedAt":400}
+        ]}
+        """#))
+        store.groupCatalog = ["Prep"]
+        store.organization = .agent
+        let main = try #require(self.agentSection(store, "main"))
+        // Home, then pinned ungrouped chats, lead; pinned grouped chats stay in their group.
+        #expect(main.leadingChannelCount == 2)
+        #expect(main.channels.map(\.id) == ["agent:main:main", "agent:main:dashboard:pinned", "agent:main:dashboard:loose"])
+        #expect(main.subsections[0].channels.map(\.id).first == "agent:main:dashboard:apt")
+        #expect(main.allChannels.map(\.id) == [
+            "agent:main:main", "agent:main:dashboard:pinned", "agent:main:dashboard:apt",
+            "agent:main:dashboard:pack", "agent:main:dashboard:loose",
+        ])
+    }
+
+    @Test func nestedDropValues() {
+        defer { self.scratch.remove() }
+        let store = self.nestedStore()
+        let apt = "agent:main:dashboard:apt"
+        let misc = "agent:main:dashboard:misc"
+        let papers = "agent:research:dashboard:papers"
+        func sub(_ agent: String, _ group: String) -> SidebarSection {
+            SidebarSection(id: "agent:\(agent)/group:\(group)", title: group, emoji: nil, channels: [],
+                           kind: .agentGroup(agent: agent, group: group))
+        }
+        func agent(_ id: String) -> SidebarSection {
+            SidebarSection(id: "agent:\(id)", title: id, emoji: nil, channels: [], kind: .agent(id))
+        }
+        #expect(store.groupDropValue(for: misc, onto: sub("main", "Prep")) == .string("Prep"))
+        #expect(store.groupDropValue(for: apt, onto: sub("main", "Day of move")) == .string("Day of move"))
+        #expect(absent(store.groupDropValue(for: apt, onto: sub("main", "Prep"))))
+        #expect(absent(store.groupDropValue(for: papers, onto: sub("main", "Day of move"))))
+        #expect(absent(store.groupDropValue(for: apt, onto: sub("research", "Prep"))))
+        #expect(absent(store.groupDropValue(for: "agent:main:subagent:s1", onto: sub("main", "Prep"))))
+        #expect(store.groupDropValue(for: apt, onto: agent("main")) == .null)
+        #expect(absent(store.groupDropValue(for: misc, onto: agent("main"))))
+        #expect(absent(store.groupDropValue(for: apt, onto: agent("research"))))
+        store.organization = .group
+        #expect(absent(store.groupDropValue(for: apt, onto: agent("main"))))
+    }
+
     @Test func preferencesUseInjectedDefaults() {
         defer { self.scratch.remove() }
         let key = "pincer.org.v2.\(self.profile.id.uuidString)"

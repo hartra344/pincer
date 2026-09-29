@@ -30,6 +30,7 @@ public struct SidebarSection: Identifiable, Hashable, Sendable {
         case agent(String)
         case server(ChatServer)
         case group(String)
+        case agentGroup(agent: String, group: String)
         case automations
         case other
     }
@@ -39,15 +40,39 @@ public struct SidebarSection: Identifiable, Hashable, Sendable {
     public let emoji: String?
     public var channels: [SidebarChannel]
     public let kind: Kind
+    /// Groups nested in an agent section (by-agent mode).
+    public var subsections: [SidebarSection]
+    /// How many of `channels` come before `subsections`; the rest come after.
+    public var leadingChannelCount: Int
 
     public var agentId: String? {
-        if case let .agent(id) = self.kind { return id }
-        return nil
+        switch self.kind {
+        case let .agent(id), let .agentGroup(id, _): id
+        default: nil
+        }
     }
 
-    public var unreadCount: Int { self.channels.filter { $0.row.isUnread }.count }
+    public var groupName: String? {
+        switch self.kind {
+        case let .group(name), let .agentGroup(_, name): name
+        default: nil
+        }
+    }
 
-    public init(id: String, title: String, emoji: String?, channels: [SidebarChannel], kind: Kind) {
+    /// Channels in display order: leading, then each subsection's, then the rest.
+    public var allChannels: [SidebarChannel] {
+        let leading = min(self.leadingChannelCount, self.channels.count)
+        return Array(self.channels[..<leading]) + self.subsections.flatMap(\.allChannels) + Array(self.channels[leading...])
+    }
+
+    public var unreadCount: Int {
+        self.channels.filter { $0.row.isUnread }.count + self.subsections.reduce(0) { $0 + $1.unreadCount }
+    }
+
+    public init(id: String, title: String, emoji: String?, channels: [SidebarChannel], kind: Kind,
+                subsections: [SidebarSection] = [], leadingChannelCount: Int = 0) {
+        self.subsections = subsections
+        self.leadingChannelCount = leadingChannelCount
         self.id = id
         self.title = title
         self.emoji = emoji
@@ -182,7 +207,7 @@ extension GatewayStore {
         case .recent:
             return [SidebarSection(id: "recent", title: "Recent", emoji: nil, channels: channels, kind: .other)]
         case .agent:
-            return self.agentSections(channels)
+            return self.agentSections(channels, nestGroups: true)
         case .group:
             var sections = self.groupSections(channels.filter { $0.row.category != nil }, includeEmpty: query.isEmpty)
             let ungrouped = channels.filter { $0.row.category == nil }
@@ -231,6 +256,10 @@ extension GatewayStore {
             return row.category == name ? nil : .string(name)
         case .other where section.id == "group:":
             return row.category == nil ? nil : .null
+        case let .agentGroup(agent, name):
+            return row.agentId != agent || row.category == name ? nil : .string(name)
+        case let .agent(id) where self.organization == .agent:
+            return row.agentId == id && row.category != nil ? .null : nil
         case .server, .agent, .automations:
             // By server: a grouped chat can go back to the section it lives in without a group.
             guard self.organization == .servers, row.category != nil,
@@ -245,7 +274,7 @@ extension GatewayStore {
     @discardableResult
     public func moveToGroup(_ key: String, droppedOn section: SidebarSection) async -> Bool {
         guard let value = self.groupDropValue(for: key, onto: section) else { return false }
-        if case let .group(name) = section.kind {
+        if let name = section.groupName {
             await self.moveChat(key, toGroup: name, before: nil)
             return true
         }
@@ -264,12 +293,27 @@ extension GatewayStore {
         return .agent(row.agentId)
     }
 
-    private func agentSections(_ channels: [SidebarChannel]) -> [SidebarSection] {
+    private func agentSections(_ channels: [SidebarChannel], nestGroups: Bool = false) -> [SidebarSection] {
         let grouped = Dictionary(grouping: channels, by: { $0.row.agentId })
         let order = self.agents.map(\.id) + grouped.keys.filter { id in !self.agents.contains { $0.id == id } }.sorted()
         return order.compactMap { agentId in
             guard let channels = grouped[agentId], !channels.isEmpty else { return nil }
             let agent = self.agent(agentId)
+            if nestGroups {
+                let home = channels.filter { $0.row.isMain }
+                let rest = channels.filter { !$0.row.isMain }
+                let pinned = rest.filter { $0.row.category == nil && $0.row.isPinned }
+                let leading = home + pinned
+                let byGroup = Dictionary(grouping: rest.filter { $0.row.category != nil }, by: { $0.row.category ?? "" })
+                let subsections = self.groupNames.compactMap { name -> SidebarSection? in
+                    guard let members = byGroup[name], !members.isEmpty else { return nil }
+                    return SidebarSection(id: "agent:\(agentId)/group:\(name)", title: name, emoji: nil,
+                                          channels: self.arranged(members), kind: .agentGroup(agent: agentId, group: name))
+                }
+                return SidebarSection(id: "agent:\(agentId)", title: agent.name, emoji: agent.emoji,
+                                      channels: leading + rest.filter { $0.row.category == nil && !$0.row.isPinned },
+                                      kind: .agent(agentId), subsections: subsections, leadingChannelCount: leading.count)
+            }
             return SidebarSection(id: "agent:\(agentId)", title: agent.name, emoji: agent.emoji, channels: channels, kind: .agent(agentId))
         }
     }

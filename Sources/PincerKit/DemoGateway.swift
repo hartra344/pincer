@@ -49,6 +49,7 @@ actor DemoGateway {
         ["id": "research", "name": "Scout", "identity": ["name": "Scout", "emoji": "🔭"]],
         ["id": "coder", "name": "Forge", "identity": ["name": "Forge", "emoji": "🛠️"]],
         ["id": "kiko", "name": "Kiko", "identity": ["name": "Kiko", "emoji": "🌕"]],
+        ["id": "mochi", "name": "Mochi", "identity": ["name": "Mochi", "emoji": "📦"]],
     ]
     var sessions: [String: Row] = [:]
     var transcripts: [String: [JSONValue]] = [:]
@@ -91,7 +92,7 @@ actor DemoGateway {
     var demoNodes: [JSONValue] = []
     var prefs: [String: JSONValue] = [:]
     /// Custom group catalog in display order; groups stay until deleted, even when empty.
-    var groups = ["Home", "Personal", "Work"]
+    var groups = ["Home", "Personal", "Work", "Preparations", "Day of move"]
     var progressCards: [String: JSONValue] = [:]
     var idempotency: [String: String] = [:]
     var runs: [String: Run] = [:]

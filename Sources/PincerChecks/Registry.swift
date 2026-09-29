@@ -139,6 +139,7 @@ enum Suites {
         Section("Outbox & retry (demo)") { await runDemoOutbox() },
         Section("Accessibility labels (demo)") { await runDemoAccessibility() },
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
+        Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
     ]
 
     /// Against a (mock) Gateway, first half.

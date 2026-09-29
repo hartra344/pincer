@@ -141,10 +141,8 @@ struct SidebarList: UIViewRepresentable {
             self.headers = [:]
             self.entries = [:]
             for group in self.model.groups {
-                self.headers[group.header.id] = group.header
-                for entry in group.entries {
-                    self.entries[entry.id] = entry
-                }
+                for header in group.allHeaders { self.headers[header.id] = header }
+                for entry in group.allEntries { self.entries[entry.id] = entry }
             }
         }
 
@@ -163,12 +161,25 @@ struct SidebarList: UIViewRepresentable {
                 let id = group.header.id
                 let previous = oldGroups[id]
                 let current = dataSource.snapshot(for: id)
-                let structure = [id] + group.entries.map(\.id)
-                if current.items != structure || current.isExpanded(id) == group.header.isCollapsed {
+                let structure = [id] + group.childIds
+                let headers = group.allHeaders
+                if current.items != structure || headers.contains(where: { current.isExpanded($0.id) == $0.isCollapsed }) {
                     var section = NSDiffableDataSourceSectionSnapshot<String>()
                     section.append([id])
-                    section.append(group.entries.map(\.id), to: id)
-                    if group.header.isCollapsed { section.collapse([id]) } else { section.expand([id]) }
+                    // Groups nested under an agent are items with children of their own.
+                    func append(_ group: SidebarModel.Group) {
+                        let parent = group.header.id
+                        section.append(group.leadingEntries.map(\.id), to: parent)
+                        for subgroup in group.subgroups {
+                            section.append([subgroup.header.id], to: parent)
+                            append(subgroup)
+                        }
+                        section.append(group.entries.map(\.id), to: parent)
+                    }
+                    append(group)
+                    for header in headers {
+                        if header.isCollapsed { section.collapse([header.id]) } else { section.expand([header.id]) }
+                    }
                     dataSource.apply(section, to: id, animatingDifferences: animate && previous != nil)
                 }
             }
@@ -408,15 +419,35 @@ struct SidebarList: UIViewRepresentable {
                 if case .group = group.header.section.kind, groupsBefore > source { target += 1 }
                 return .group(name, before: names[safe: target])
             case let .chat(key):
-                guard let row = self.gateway.sessions[key], !row.isSubagent else { return nil }
-                if case let .group(name) = group.header.section.kind, !group.header.isCollapsed, path.item > 0 {
-                    return .chatInGroup(key, group: name,
-                                        before: SidebarModel.chat(atOrAfter: path.item - 1, in: group.entries, excluding: key))
+                guard let row = self.gateway.sessions[key], !row.isSubagent, let dataSource = self.dataSource else { return nil }
+                let visible = dataSource.snapshot(for: group.header.id).visibleItems
+                let target = visible[safe: path.item]
+                // The group a chat dropped here goes into: the one holding the row it lands in front
+                // of, or the row above when it lands at the end.
+                let anchor = target ?? (path.item > 0 ? visible[safe: path.item - 1] : nil)
+                let owner = ([group] + group.subgroups).first { owner in
+                    owner.entries.contains { $0.id == anchor }
                 }
-                guard self.gateway.groupDropValue(for: key, onto: group.header.section) != nil else { return nil }
-                return .chatOnSection(key, group.header.section)
+                if let owner, let name = owner.header.section.groupName, !owner.header.isCollapsed,
+                   owner.header.section.agentId == nil || owner.header.section.agentId == row.agentId
+                {
+                    let index = target.flatMap { id in owner.entries.firstIndex { $0.id == id } } ?? owner.entries.count
+                    return .chatInGroup(key, group: name,
+                                        before: SidebarModel.chat(atOrAfter: index, in: owner.entries, excluding: key))
+                }
+                // A nested group header takes the chat into that group.
+                let section = target.flatMap { id in group.subgroups.first { $0.header.id == id } }?.header.section
+                    ?? group.header.section
+                guard self.gateway.groupDropValue(for: key, onto: section) != nil else { return nil }
+                return .chatOnSection(key, section)
             }
         }
+    }
+}
+
+private extension UIFont {
+    func withWeight(_ weight: UIFont.Weight) -> UIFont {
+        UIFont.systemFont(ofSize: self.pointSize, weight: weight)
     }
 }
 
@@ -604,6 +635,15 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
         var content = self.traitCollection.horizontalSizeClass == .compact
             ? UIListContentConfiguration.groupedHeader()
             : UIListContentConfiguration.sidebarHeader()
+        if header.isSubsection {
+            // A group under an agent reads as a row, not a section title.
+            content = self.traitCollection.horizontalSizeClass == .compact
+                ? UIListContentConfiguration.cell()
+                : UIListContentConfiguration.sidebarCell()
+            content.textProperties.font = .preferredFont(forTextStyle: .subheadline).withWeight(.semibold)
+            content.textProperties.color = .secondaryLabel
+            content.imageProperties.reservedLayoutSize = CGSize(width: 26, height: 0)
+        }
         let title = section.emoji.map { header.avatar == nil ? "\($0)  \(section.title)" : section.title } ?? section.title
         content.text = title
         content.textProperties.numberOfLines = 1
@@ -632,13 +672,15 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
             accessories.append(.customView(configuration: .init(customView: self.badge, placement: .trailing(),
                                                                 reservedLayoutWidth: .custom(width), maintainsFixedSize: true)))
         }
-        if let agent = header.newChatAgent {
-            self.onAdd = { actions.newChat(agent) }
+        if let add = header.addAction(actions) {
+            self.onAdd = add
+            self.add.accessibilityLabel = header.addAccessibilityLabel
             accessories.append(.customView(configuration: .init(customView: self.add, placement: .trailing(),
                                                                 reservedLayoutWidth: .actual, maintainsFixedSize: true)))
         }
         accessories.append(.outlineDisclosure(options: .init(style: .header)))
         self.accessories = accessories
+        self.accessibilityLabel = header.isSubsection ? header.subsectionAccessibilityLabel : nil
     }
 }
 
