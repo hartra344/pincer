@@ -306,6 +306,9 @@ private struct TranscriptPane: View {
         #endif
         self.content
             .onAppear { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
+            .onChange(of: self.find.isPresented) { _, shown in
+                if shown { Task { await self.chat.loadAllCached() } }
+            }
             .onChange(of: self.chat.entries) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
             .onChange(of: self.reasoningOff) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
     }

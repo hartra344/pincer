@@ -144,7 +144,10 @@ struct TranscriptList: NSViewRepresentable {
             let contextChanged = context.differs(from: self.context)
             self.context = context
             self.renderer.update(context: context)
-            defer { self.revealPending() }
+            defer {
+                self.revealPending()
+                self.loadOlderIfShown()
+            }
             guard let table, let scroll = self.scrollView else { return }
             let top = TranscriptLayout.verticalInset + max(0, insets.top)
             let bottom = TranscriptLayout.verticalInset + max(0, insets.bottom)
@@ -561,6 +564,13 @@ struct TranscriptList: NSViewRepresentable {
             self.anchor = self.currentAnchor(stickDistance: movingUp ? 1 : TranscriptLayout.stickToBottomDistance)
             self.applyNearViewport()
             self.pinVisibleImages()
+            self.loadOlderIfShown()
+        }
+
+        private func loadOlderIfShown() {
+            guard case .loadingOlder? = self.rows.first, let table, table.rows(in: table.visibleRect).location == 0
+            else { return }
+            self.renderer.loadOlderIfShown()
         }
 
         private func pinVisibleImages() {

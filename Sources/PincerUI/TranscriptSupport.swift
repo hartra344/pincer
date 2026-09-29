@@ -27,7 +27,7 @@ enum TranscriptRow: Equatable {
     }
 
     @MainActor static func rows(for chat: ChatStore) -> [TranscriptRow] {
-        (chat.hasMoreHistory ? [.loadingOlder] : []) + chat.entries.map(TranscriptRow.entry)
+        (chat.hasOlderItems ? [.loadingOlder] : []) + chat.entries.map(TranscriptRow.entry)
     }
 }
 
@@ -568,6 +568,19 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     func showOriginal(_ messageId: String) { self.showOriginal(messageId, missingNotice: nil) }
+
+    private var lastOlderRequest = Date.distantPast
+
+    /// The loading-older row is on screen: pages in older history (the cache first). Retries after
+    /// a failure wait a second, so a streaming reply doesn't hammer the Gateway.
+    func loadOlderIfShown() {
+        guard let chat = self.context.chat, chat.hasOlderItems, !chat.isLoadingOlder,
+              Date().timeIntervalSince(self.lastOlderRequest) > 1 else { return }
+        self.lastOlderRequest = Date()
+        Task { @MainActor [weak self] in
+            if await chat.loadOlder() { self?.lastOlderRequest = .distantPast }
+        }
+    }
 
     /// Scrolls to and flashes a message, paging in older history if needed. `missingNotice`
     /// replaces the chat's note when it can't be found.
