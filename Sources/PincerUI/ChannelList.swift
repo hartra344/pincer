@@ -155,7 +155,9 @@ struct ChannelList: View {
                 self.openChat()
             },
             newChat: { self.newChat = NewChatRequest(agentId: $0) },
-            newChatInGroup: { self.newChat = NewChatRequest(agentId: self.gateway.defaultAgentId, group: $0) },
+            newChatInGroup: { group, agentId in
+                self.newChat = NewChatRequest(agentId: agentId ?? self.gateway.defaultAgentId, group: group)
+            },
             rename: { self.renaming = $0 },
             changeIcon: { self.changingIcon = $0 },
             changeGroupIcon: { self.changingGroupIcon = $0 },
