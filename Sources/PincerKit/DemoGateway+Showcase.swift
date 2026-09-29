@@ -356,7 +356,7 @@ extension DemoGateway {
             ])
         add("agent:mochi:dashboard:packing", agent: "mochi", title: "Packing list",
             preview: "Kitchen is packed; books are next.", age: 3 * 3_600_000,
-            ["label": "Packing list", "category": "Preparations", "unread": true], messages: [
+            ["label": "Packing list", "category": "Preparations"], messages: [
                 said("user", "Make a room-by-room packing list.", ago: 4 * day),
                 said("assistant", "Kitchen is packed; books are next. Buy 20 small boxes for them; large ones get too heavy.",
                      ago: 4 * day - minute),
