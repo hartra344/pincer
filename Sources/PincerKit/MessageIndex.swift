@@ -3,6 +3,15 @@ import Foundation
 import SQLite3
 import Synchronization
 
+/// How a saved transcript differs from the one last indexed.
+public enum IndexChange: Sendable, Equatable {
+    /// Nothing is known: index the whole transcript. `token` identifies this save.
+    case full(token: String?)
+    /// The first `unchangedPrefix` items equal those of the save identified by `baseToken`,
+    /// so only what follows is indexed. Falls back to `.full` when that save isn't the one indexed.
+    case tail(unchangedPrefix: Int, baseToken: String, token: String)
+}
+
 /// On-disk full-text index of one Gateway's cached transcripts (SQLite FTS5), next to the
 /// transcripts themselves. It's derived data: a file that isn't a readable index of this version
 /// (an old version, a corrupt file) is deleted and rebuilt from the transcript cache. Failures
@@ -19,6 +28,8 @@ public actor MessageIndex {
         /// The transcript cache is off (and the index isn't kept in memory), so there's nothing to search.
         case unavailable
     }
+
+    public typealias IndexChange = PincerKit.IndexChange
 
     public enum IndexError: Error {
         case unavailable
@@ -268,7 +279,9 @@ public actor MessageIndex {
 
     /// Indexes a chat's saved transcript. Does nothing when its messages haven't changed, and
     /// ignores a snapshot older than the one already indexed.
-    public nonisolated func index(sessionKey: String, snapshot: TranscriptCache.Snapshot, fileMtime: Date) async {
+    public nonisolated func index(sessionKey: String, snapshot: TranscriptCache.Snapshot, fileMtime: Date,
+                                  change: IndexChange = .full(token: nil)) async
+    {
         self.inFlight.begin()
         defer { self.inFlight.end() }
         let items = snapshot.items
