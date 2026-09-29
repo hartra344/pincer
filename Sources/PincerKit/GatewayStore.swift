@@ -146,7 +146,8 @@ public final class GatewayStore: Identifiable {
     public let files: FileContentLoader
     /// Gateway config and plugins; loaded when the settings screen opens.
     @ObservationIgnored public private(set) lazy var settings: GatewaySettingsModel = {
-        let settings = GatewaySettingsModel(connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] })
+        let settings = GatewaySettingsModel(connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] },
+                                            allowsWritesWithoutAdmin: self.profile.isDemo)
         settings.onRestartRequired = { [weak self] reason in self?.health.markRestartRequired(reason) }
         return settings
     }()

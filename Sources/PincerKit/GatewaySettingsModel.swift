@@ -44,13 +44,17 @@ public final class GatewaySettingsModel {
     @ObservationIgnored private var searchCache: (key: String, fields: [ConfigField])?
     @ObservationIgnored private var schemaGeneration = 0
 
-    init(connection: GatewayConnection, scopes: @escaping () -> [String]) {
+    /// The demo may save its (MCP-only) config without `operator.admin`.
+    @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
+
+    init(connection: GatewayConnection, scopes: @escaping () -> [String], allowsWritesWithoutAdmin: Bool = false) {
         self.client = GatewayConfigClient(connection: connection)
         self.scopes = scopes
+        self.allowsWritesWithoutAdmin = allowsWritesWithoutAdmin
     }
 
     /// The Gateway granted `operator.admin`, which every config and plugin write needs.
-    public var canEdit: Bool { self.scopes().contains(GatewayConnection.adminScope) }
+    public var canEdit: Bool { self.allowsWritesWithoutAdmin || self.scopes().contains(GatewayConnection.adminScope) }
     public var hasLoaded: Bool { self.snapshot != nil }
     public var isSaving: Bool { self.saveState.isRunning }
     public var config: JSONValue { self.edits.current }

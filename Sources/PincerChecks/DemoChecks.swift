@@ -345,7 +345,7 @@ func runDemo() async {
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
     let pairing = gateway.pairingInbox
-    check(pairing.canManage && !gateway.settings.canEdit && pairing.supported, "demo can review pairing requests, settings read-only")
+    check(pairing.canManage && gateway.settings.canEdit && pairing.supported, "demo can review pairing requests and edit its (MCP-only) settings")
     await pairing.seed()
     check(pairing.hasLoaded && pairing.requests.count == 3 && pairing.pendingCount() == 3 && pairing.accounts.count == 2,
           "demo pairing list (\(pairing.requests.map(\.requestId)))")
