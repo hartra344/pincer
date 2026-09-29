@@ -40,6 +40,9 @@ extension AppModel {
         case let .openChat(target, messageId):
             self.messageJump = messageId.map { MessageJump(target: target, messageId: $0) }
             self.open(target)
+            if let gateway = self.gateways.first(where: { $0.id == target.gatewayId }) {
+                gateway.revealInSidebar(gateway.resolveSessionKey(target.sessionKey))
+            }
         case let .openGateway(id):
             self.open(Notifier.Target(gatewayId: id, sessionKey: ""))
         case .openDemo:

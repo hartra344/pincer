@@ -95,6 +95,7 @@ extension AppModel {
             let unread = gateway.sections().flatMap { $0.allChannels.flatMap { [$0.row] + $0.threads } }.filter(\.isUnread)
             if let next = unread.first(where: { $0.key != gateway.selectedKey }) {
                 self.open(Notifier.Target(gatewayId: gateway.id, sessionKey: next.key))
+                gateway.revealInSidebar(next.key)
                 return
             }
         }
