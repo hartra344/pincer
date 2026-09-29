@@ -297,6 +297,7 @@ public final class AppModel {
         store.outbox = Outbox()
         OutboxStore.remove(gatewayId: id)
         store.forgetLocalHealthDismissals()
+        store.forgetGatewayHost()
         self.persist()
         if self.selectedGatewayId == id { self.selectedGatewayId = self.gateways.first?.id }
         self.firstRun.showIfNoGateways()
