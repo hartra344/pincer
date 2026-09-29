@@ -85,7 +85,7 @@ struct SidebarModel: Equatable {
         let preview: String?
         /// The dancing avatar that replaces the old spinner, or `nil` when the chat isn't working.
         let working: SidebarWorkingIndicator?
-        /// What the trailing avatar shows: the working dance, or the still idle pose of an unread chat.
+        /// What the trailing avatar shows: the working dance, or the gentle "has news" loop of an unread chat.
         /// `nil` when neither applies (the row falls back to the unread dot or nothing).
         let avatar: SidebarWorkingIndicator?
         /// The agent's companion style for `avatar` when animated avatars are on.
