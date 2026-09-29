@@ -99,6 +99,12 @@ func runDemoSidebarWorking() async {
     check(paperRow?.isUnread == true && paperRow?.hasActiveRun == false && paperUnread?.mode == .unread
           && paperUnread?.source == .companion && paperUnread?.showsUnreadMark == true && paperUnread?.agentId == "research",
           "demo: idle unread Paper digest resolves to Scout's avatar with the unread mark")
+    let idleUnread = gateway.sessions.values.filter { $0.isUnread && !$0.isSubagent && !$0.hasActiveRun && indicator($0.key) == nil }
+    check(!idleUnread.isEmpty && idleUnread.allSatisfy {
+        let avatar = SidebarWorkingIndicator.resolveUnread(isUnread: true, isSubagent: false, agent: gateway.agent($0.agentId),
+                                                           companionsEnabled: true)
+        return avatar?.mode == .unread && avatar?.showsUnreadMark == true && avatar?.isWorking == false
+    }, "demo: \(idleUnread.count) idle unread chat(s) show the avatar with the unread mark")
 
     // Stopping a seeded run ends it like any other.
     let chat = gateway.chat(for: retryFix)

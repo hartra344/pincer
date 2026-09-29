@@ -42,7 +42,7 @@ enum SidebarDance {
     static func unreadTracks(up: CGFloat) -> [(path: String, values: [CGFloat])] {
         let tilt = 4 * CGFloat.pi / 180
         return [
-            ("transform.translation.y", [0, 0, 1 * up, 0, 0, 0]),
+            ("transform.translation.y", [0, 0, 1.5 * up, 0, 0, 0]),
             ("transform.rotation.z", [0, 0, tilt, 0, 0, 0]),
             ("transform.scale.x", [1, 1.04, 0.98, 1.04, 1, 1]),
             ("transform.scale.y", [1, 0.96, 1.02, 0.96, 1, 1]),
