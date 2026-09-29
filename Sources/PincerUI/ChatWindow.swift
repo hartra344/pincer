@@ -108,8 +108,8 @@ struct ChatWindowVisibility: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .onChange(of: self.visible, initial: true) { _, visible in
-                self.gateway.setVisibleChat(visible ? self.key : nil, viewer: self.viewer)
+            .onChange(of: self.visible ? self.key : nil, initial: true) { _, shown in
+                self.gateway.setVisibleChat(shown, viewer: self.viewer)
             }
             .onDisappear { self.gateway.setVisibleChat(nil, viewer: self.viewer) }
     }
