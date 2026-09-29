@@ -20,11 +20,17 @@ private func voiceChecks(_ gateway: GatewayStore, label: String) async {
     check(Set(voice.personas.map(\.id)) == ["narrator", "concise"] && voice.activePersona == nil, "\(label): personas load, none active")
 
     do {
-        try await voice.setProvider("elevenlabs")
-        await voice.refresh()
-        check(voice.status?.provider == "elevenlabs", "\(label): setProvider round-trips")
         try await voice.setProvider("openai")
+        await voice.refresh()
+        check(voice.status?.provider == "openai", "\(label): setProvider round-trips")
     } catch { check(false, "\(label): setProvider threw \(error)") }
+    do {
+        try await voice.setProvider("elevenlabs")
+        check(false, "\(label): an unconfigured provider is refused")
+    } catch {
+        await voice.refresh()
+        check(voice.status?.provider == "openai", "\(label): unconfigured provider refused, state kept")
+    }
     do {
         try await voice.setProvider("nope")
         check(false, "\(label): unknown provider is rejected")
