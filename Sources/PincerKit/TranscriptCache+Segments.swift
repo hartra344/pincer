@@ -109,10 +109,14 @@ extension TranscriptCache {
     /// What the latest write through the writer did (tests and benchmarks).
     public static var lastSaveStats: SaveResult? { self.lastStats.withLock { $0 } }
 
-    private static let segmentDecodes = Atomic<Int>(0)
+    /// By cache root (the app has one), so parallel tests with their own roots don't count each other's.
+    private static let segmentDecodes = Mutex<[String: Int]>([:])
 
-    /// Segment files decoded so far in this process (tests check what a save or read touches).
-    static var segmentDecodeCount: Int { self.segmentDecodes.load(ordering: .relaxed) }
+    /// Segment files decoded so far in this process under `root` (tests check what a save or read touches).
+    static func segmentDecodeCount(root: URL) -> Int {
+        let key = root.standardizedFileURL.path(percentEncoded: false)
+        return self.segmentDecodes.withLock { $0[key, default: 0] }
+    }
 
     static func recordSaveStats(_ result: SaveResult) {
         self.lastStats.withLock { $0 = result }
@@ -209,7 +213,8 @@ extension TranscriptCache {
         guard segment.count == ref.count, segment.first?.id == ref.firstId, segment.last?.id == ref.lastId else {
             return .corrupt("segment \(ref.file) doesn't match its manifest entry")
         }
-        self.segmentDecodes.add(1, ordering: .relaxed)
+        let root = directory.deletingLastPathComponent().deletingLastPathComponent().standardizedFileURL.path(percentEncoded: false)
+        self.segmentDecodes.withLock { $0[root, default: 0] += 1 }
         return .items(segment)
     }
 
