@@ -16,7 +16,7 @@ Do any of these:
 
 ## What's in the window
 
-The window shows just that chat. It has its own title and subtitle (the chat title, and the agent and model), its own toolbar (model, chat menu and runs panel), and its own [composer](../composer/) with its own draft.
+The window shows just that chat. It has its own title and subtitle (the chat title, and the agent and model), its own toolbar (model, chat menu and runs panel), and a [composer](../composer/). The draft belongs to the chat, so it's the same one you'd see for that chat in the main window.
 
 It uses the same Gateway connection as the main window, so it doesn't open another one.
 
@@ -30,4 +30,4 @@ Clicking a subagent or run link inside a chat window opens it in the main window
 
 ## After you relaunch
 
-Chat windows come back when Pincer relaunches, using macOS window restoration. If the chat was deleted, or its Gateway was removed, the window shows **Chat unavailable**.
+Chat windows come back when Pincer relaunches, using macOS window restoration. If the chat's Gateway was removed, the window shows **Chat unavailable**; close it.
