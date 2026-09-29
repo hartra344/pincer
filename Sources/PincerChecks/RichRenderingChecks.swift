@@ -32,11 +32,14 @@ func runRichRenderingChecks() {
           && !MermaidSource.isMermaid(language: "swift"), "```mermaid is recognized")
     check(MathSource.isMath(language: "math") && MathSource.isMath(language: "latex") && !MathSource.isMath(language: "swift"),
           "```math and ```latex are recognized")
+    let flowchart = "flowchart TD\n    A[Request arrives] --> B{Tokens left?}\n    B -->|Yes| C[Take a token]\n    B -->|No| E[Return 429]\n    E -.-> A"
+    let sequence = "sequenceDiagram\n    participant C as Client\n    participant L as Limiter\n    C->>L: GET /orders\n    alt empty\n        L-->>C: 429\n    end"
+    let formula = #"T(t) = \min\left(b,\; T_0 + r\,(t - t_0)\right)"#
     for theme in RichRenderSVG.Theme.allCases {
         for (label, svg) in [
-            ("flowchart", MermaidSource.svg(for: DemoGateway.richRenderingFlowchart, theme: theme)),
-            ("sequence", MermaidSource.svg(for: DemoGateway.richRenderingSequence, theme: theme)),
-            ("math", MathSource.svg(for: DemoGateway.richRenderingMath, theme: theme)),
+            ("flowchart", MermaidSource.svg(for: flowchart, theme: theme)),
+            ("sequence", MermaidSource.svg(for: sequence, theme: theme)),
+            ("math", MathSource.svg(for: formula, theme: theme)),
         ] {
             let data = svg.map { Data($0.utf8) }
             check(data.map(SVGSource.isSVG) == true && data.flatMap(SVGSource.intrinsicSize) != nil
@@ -68,11 +71,10 @@ func runDemoRichRendering() async {
     check(gateway.sessions[richRenderingKey] != nil, "demo has the Rate limiter design chat")
     let chat = gateway.chat(for: richRenderingKey)
     await chat.load()
-    let text: () -> String = {
-        chat.entries.compactMap { entry -> String? in
-            if case let .assistant(turn) = entry { return turn.text }
-            return nil
-        }.joined(separator: "\n")
+    func text() -> String {
+        var parts: [String] = []
+        for case let .assistant(turn) in chat.entries { parts += turn.text }
+        return parts.joined(separator: "\n")
     }
     let loaded = await waitFor("rate limiter history") { text().contains("```mermaid") }
     let blocks = MarkdownBlock.parse(text())

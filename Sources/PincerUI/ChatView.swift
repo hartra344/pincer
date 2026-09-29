@@ -27,6 +27,7 @@ struct ChatView: View {
     @AppStorage(AvatarSettings.animatedKey) private var avatarAnnouncesErrors = true
     @State private var disclosure = TranscriptDisclosure()
     @State private var previewing: ImageRef?
+    @State private var previewingHTML: HTMLPreviewItem?
     @State private var exporting: ExportedFile?
     @State private var find = TranscriptFind()
     @State private var jump: TranscriptJump?
@@ -45,7 +46,7 @@ struct ChatView: View {
         #endif
         TranscriptPane(
             chat: self.chat, find: self.find, jump: self.jump, disclosure: self.disclosure,
-            previewing: self.$previewing, exporting: self.$exporting,
+            previewing: self.$previewing, previewingHTML: self.$previewingHTML, exporting: self.$exporting,
             bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
             topInset: self.topChrome + self.transcriptSafeArea.top,
             reasoningOff: self.reasoningOff)
@@ -84,6 +85,9 @@ struct ChatView: View {
             .animation(.snappy, value: self.chat.progressCard)
         .sheet(item: self.$previewing) { ref in
             ImagePreview(ref: ref, sessionKey: self.chat.sessionKey)
+        }
+        .sheet(item: self.$previewingHTML) { item in
+            HTMLPreviewSheet(item: item)
         }
         .fileExporter(
             isPresented: Binding(get: { self.exporting != nil }, set: { if !$0 { self.exporting = nil } }),
@@ -294,6 +298,7 @@ private struct TranscriptPane: View {
     let jump: TranscriptJump?
     let disclosure: TranscriptDisclosure
     @Binding var previewing: ImageRef?
+    @Binding var previewingHTML: HTMLPreviewItem?
     @Binding var exporting: ExportedFile?
     let bottomInset: CGFloat
     let topInset: CGFloat
@@ -357,7 +362,8 @@ private struct TranscriptPane: View {
                     reply: { [chat = self.chat, agent = self.agent] in chat.beginReply(to: $0, agentName: agent.name) },
                     copyLink: { [app = self.app, gateway = self.gateway, key = self.chat.sessionKey] in
                         CopyChatLinkButton.copyLink(app: app, gateway: gateway, sessionKey: key, messageId: $0)
-                    }),
+                    },
+                    previewHTML: { [$previewingHTML] in $previewingHTML.wrappedValue = HTMLPreviewItem(html: $0) }),
                 bottomInset: self.bottomInset,
                 topInset: self.topInset,
                 highlight: self.find.highlight,

@@ -40,6 +40,15 @@ extension DemoGateway {
     \text{max burst} = b + r\,\Delta t, \qquad \bar{\lambda} \le \frac{b}{\Delta t} + r
     """#
 
+    static let richRenderingHTML = """
+    <div style="font-family: -apple-system, sans-serif; max-width: 420px; margin: 24px auto; padding: 20px;
+                border: 1px solid #e5484d; border-radius: 12px; background: #fff5f5; color: #1d1d1f">
+      <h2 style="margin: 0 0 8px; color: #c62a2f">Slow down a little</h2>
+      <p style="margin: 0 0 12px">You've sent more requests than your plan allows. Try again in <b>2 seconds</b>.</p>
+      <code style="font-size: 12px; color: #6e6e73">HTTP 429 · Retry-After: 2</code>
+    </div>
+    """
+
     static func seedRichRenderingTranscript() -> [JSONValue] {
         let minute = 60.0
         return [
@@ -70,6 +79,12 @@ extension DemoGateway {
             $$
             \(Self.richRenderingBurst)
             $$
+
+            And the page a browser shows on a 429:
+
+            ```html
+            \(Self.richRenderingHTML)
+            ```
             """)], ago: 8 * minute),
         ]
     }

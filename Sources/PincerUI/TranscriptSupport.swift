@@ -68,6 +68,8 @@ struct TranscriptContext {
     var reply: (String) -> Void = { _ in }
     /// Copies a `pincer://` link to a message. Provided by `ChatView`.
     var copyLink: (String) -> Void = { _ in }
+    /// Opens an ```html fence in the sandboxed preview. Provided by `ChatView`, which owns the sheet.
+    var previewHTML: (String) -> Void = { _ in }
 
     func differs(from other: TranscriptContext) -> Bool {
         self.agent != other.agent || self.sessionKey != other.sessionKey || self.disclosure !== other.disclosure
@@ -90,6 +92,8 @@ protocol TranscriptRowActions: AnyObject {
     /// Opens another chat, e.g. the one a forwarded message came from.
     func openChat(_ sessionKey: String)
     func preview(_ ref: ImageRef)
+    /// Shows an ```html fence as a page in the sandboxed preview.
+    func previewHTML(_ html: String)
     func open(_ url: URL)
     func loadImage(_ ref: ImageRef)
     func loadFilePreview(_ file: FileRef)
@@ -532,6 +536,10 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     func preview(_ ref: ImageRef) {
         self.context.previewImage(ref)
+    }
+
+    func previewHTML(_ html: String) {
+        self.context.previewHTML(html)
     }
 
     func open(_ url: URL) {

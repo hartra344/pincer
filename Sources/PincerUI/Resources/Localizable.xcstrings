@@ -3393,6 +3393,16 @@
         }
       }
     },
+    "HTML Preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTML Preview"
+          }
+        }
+      }
+    },
     "HTTP %lld": {
       "localizations": {
         "en": {
@@ -6759,6 +6769,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scopes"
+          }
+        }
+      }
+    },
+    "Scripts and network access are off in this preview.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scripts and network access are off in this preview."
           }
         }
       }
