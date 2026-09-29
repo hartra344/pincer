@@ -171,6 +171,6 @@ Each reply's footer shows the model the gateway recorded for it, so earlier repl
 
 ## History and caching
 
-The full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer caches every chat, most recently active first, and skips chats that haven't changed. Opening a chat shows the cached transcript right away, then fetches only what's new.
+The full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer caches every chat, most recently active first, and skips chats that haven't changed. A chat longer than the cache's 20,000-message limit is cached once up to that limit and then counts as up to date, so it isn't downloaded again on every launch. On iPhone and iPad, background caching pauses while Pincer isn't the active app. Opening a chat shows the cached transcript right away, then fetches only what's new.
 
 [Search messages](../search/) covers everything in this cache. Where the cache lives, how it handles updates and damaged files, and how to clear it are described in [Local cache](../local-cache/).

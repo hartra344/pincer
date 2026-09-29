@@ -16,8 +16,9 @@ Each gateway gets its own folder, with one file per chat:
 
 `<gateway>` is the gateway's ID in Pincer, not its name. In that folder:
 
-- **`<chat>.json`**: the chat's transcript, up to the latest 20,000 messages. The file name is a hash of the chat's key, so it doesn't reveal the chat's name.
-- **`<chat>.json.meta`**: a small note of whether the history is complete and when the chat was last active, so Pincer can skip chats that haven't changed.
+- **`<chat>.json`**: a small index of the chat's transcript, up to the latest 20,000 messages. The file name is a hash of the chat's key, so it doesn't reveal the chat's name.
+- **`<chat>.segments/`**: the transcript itself, split into chunks of a few hundred messages. When a chat changes, Pincer rewrites only the chunks that changed (usually just the newest one), not the whole history, and saves nothing at all when a refresh brings nothing new.
+- **`<chat>.json.meta`**: a small note of whether the history is complete (or holds the latest 20,000 messages) and when the chat was last active, so Pincer can skip chats that haven't changed.
 - **`search-index.sqlite`** (plus `-wal` and `-shm`): the [message search](../search/) index, built from the transcripts.
 - **`Quarantine/`**: damaged cache files set aside for troubleshooting (see [below](#damaged-cache-files)). Usually absent.
 
@@ -37,7 +38,9 @@ Every transcript file records the cache format version it was written with. When
 - **Older version Pincer can upgrade:** it's converted to the current format in place, once, and shows as usual.
 - **Older version Pincer can't upgrade**, or **newer version** (for example after going back to an earlier Pincer build): the file is deleted. The chat shows its usual loading state, then the full history from the gateway, and the cache is written again in the current format.
 
-For example, updating from a build before cache format 6 upgrades every cached chat in place: chats cached before [file diffs](../file-diffs/#chats-cached-by-earlier-versions) arrived keep their history, and their file writes are labelled **Written** instead of guessing **New file**. Nothing is downloaded again, but the search index is rebuilt once.
+For example, updating from a build before cache format 8 (which split each transcript into chunks) converts every cached chat in place the first time it's read. Nothing is downloaded again, but the search index is rebuilt once.
+
+Updating from a build before cache format 6 upgrades every cached chat in place: chats cached before [file diffs](../file-diffs/#chats-cached-by-earlier-versions) arrived keep their history, and their file writes are labelled **Written** instead of guessing **New file**. Nothing is downloaded again, but the search index is rebuilt once.
 
 You don't see an error for any of this. The first launch after an update that changes the format may take a little longer to fill in history while chats reload in the background.
 
@@ -50,6 +53,8 @@ If a cache file is empty, cut short (for example by a crash or a full disk while
 3. writes a fresh cache file.
 
 There's no error banner, since nothing is lost. If you're offline, the chat shows the same state as any chat that hasn't loaded yet, and fills in once you reconnect.
+
+A file that exists but can't be read *right now* isn't treated as damaged. For example, while your iPhone or iPad is locked, complete file protection keeps the cache unreadable. Pincer leaves the file alone, loads the chat from the gateway, and tries the cache again the next time you open the chat. Nothing is quarantined or deleted.
 
 Only the 5 most recent quarantined files are kept per gateway; older ones are deleted automatically. They're kept only so a damaged file can be attached to a bug report, and can be deleted at any time. **Clear Cache** removes them too.
 
