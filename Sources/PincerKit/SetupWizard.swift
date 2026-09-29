@@ -296,11 +296,16 @@ public final class TipsModel {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let delay: Duration
     @ObservationIgnored private var shownThisLaunch = false
-    @ObservationIgnored private var pendingTask: Task<Void, Never>?
+    @ObservationIgnored private let sleep: @Sendable (Duration) async -> Void
+    /// Presents the card once the delay is up; tests await it.
+    @ObservationIgnored private(set) var pendingTask: Task<Void, Never>?
 
-    public init(defaults: UserDefaults, delay: Duration = SetupTips.presentationDelay) {
+    /// `sleep` waits out `delay`; tests pass one they release on cue.
+    public init(defaults: UserDefaults, delay: Duration = SetupTips.presentationDelay,
+                sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }) {
         self.defaults = defaults
         self.delay = delay
+        self.sleep = sleep
         self.hasSeen = defaults.bool(forKey: SetupTips.seenKey)
     }
 
@@ -322,8 +327,9 @@ public final class TipsModel {
         }
         self.isPending = true
         let delay = self.delay
+        let sleep = self.sleep
         self.pendingTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: delay)
+            await sleep(delay)
             guard !Task.isCancelled, let self, self.isPending else { return }
             self.present()
         }
