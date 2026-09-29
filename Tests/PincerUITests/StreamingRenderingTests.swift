@@ -98,7 +98,7 @@ struct StreamingRenderingTests {
         let memo = TranscriptText.liveMemoCount
         #expect(memo.chunks > 0)
         TranscriptText.endLive(row: "live-run_flat")
-        #expect(TranscriptText.liveMemoCount.chunks == 0 && TranscriptText.liveMemoCount.heights == 0)
+        #expect(TranscriptText.liveMemoCount.rows == memo.rows - 1)
     }
 
     @Test func liveSegmentsMatchCommittedText() {
@@ -179,5 +179,40 @@ struct StreamingRenderingTests {
                 #expect(liveText == doneText, "w \(width) f \(fraction)")
             }
         }
+    }
+
+    @Test func liveMemoHoldsSeveralRowsAndDropsTheLeastRecentlyUsed() {
+        let text = Self.reply(paragraphs: 30)
+        let ids = (0..<6).map { "live-run_multi\($0)" }
+        for id in ids { TranscriptText.endLive(row: id) }
+        let base = TranscriptText.liveMemoCount.rows
+        // Two rows streaming alternately keep their chunks (identity stays stable, nothing thrashes).
+        var firsts: [[TranscriptText.LiveSegment]] = []
+        for id in ids.prefix(2) { firsts.append(TranscriptText.liveMarkdown(text, tone: .primary, row: id)) }
+        for (n, id) in ids.prefix(2).enumerated() {
+            let again = TranscriptText.liveMarkdown(text + "x", tone: .primary, row: id)
+            for (x, y) in zip(firsts[n].filter(\.isFrozen), again.filter(\.isFrozen)) {
+                if case let .text(p) = x.segment, case let .text(q) = y.segment { #expect(p === q) }
+            }
+        }
+        #expect(TranscriptText.liveMemoCount.rows == base + 2)
+        for id in ids { _ = TranscriptText.liveMarkdown(text, tone: .primary, row: id) }
+        #expect(TranscriptText.liveMemoCount.rows <= TranscriptText.liveRowCapacity)
+        for id in ids { TranscriptText.endLive(row: id) }
+    }
+
+    @Test func liveMemoIsFreedWhenTheChatStopsStreaming() {
+        let (renderer, scratch) = self.renderer()
+        defer { scratch.remove() }
+        let before = TranscriptText.liveMemoCount.rows
+        var live = AssistantTurn(id: "live-run_free", timestamp: Date(timeIntervalSince1970: 1))
+        live.text = [Self.reply(paragraphs: 20)]
+        live.isStreaming = true
+        _ = renderer.layout(for: .entry(.assistant(live)), width: 600)
+        #expect(TranscriptText.liveMemoCount.rows == before + 1)
+        var done = AssistantTurn(id: "msg-committed", timestamp: Date(timeIntervalSince1970: 1))
+        done.text = live.text
+        _ = renderer.layout(for: .entry(.assistant(done)), width: 600)
+        #expect(TranscriptText.liveMemoCount.rows == before)
     }
 }

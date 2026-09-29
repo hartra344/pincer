@@ -1193,7 +1193,7 @@ public final class ChatStore: Identifiable {
         }
     }
 
-    var liveRunId: String? { self.live?.runId }
+    public var liveRunId: String? { self.live?.runId }
 
     // MARK: Replies
 

@@ -78,35 +78,45 @@ enum TranscriptText {
         let exact: Bool
     }
 
-    private static var liveRow: String?
-    private static var liveGeneration = -1
-    private static var liveTone: Tone?
-    /// The frozen part of the live row's text (`frozenText` bytes, up to its last cut) and the chunks built from it.
-    private static var frozenText = ""
-    private static var frozenChunks: [FrozenChunk] = []
-    private static var frozenHeights: [HeightKey: (text: NSAttributedString, height: CGFloat)] = [:]
-
-    /// Entries in the per-live-row memos, for tests.
-    static var liveMemoCount: (chunks: Int, heights: Int) { (self.frozenChunks.count, self.frozenHeights.count) }
-
-    /// Forgets a live row's memos once it commits (or another row starts streaming).
-    static func endLive(row: String) {
-        guard self.liveRow == row else { return }
-        self.resetLive(row: nil)
+    /// What is kept for one streaming row: its frozen text (up to its last cut), the chunks built from it,
+    /// and their measured heights.
+    private struct LiveState {
+        var owner: ObjectIdentifier?
+        var tone: Tone
+        var generation: Int
+        var frozenText = ""
+        var chunks: [FrozenChunk] = []
+        var heights: [HeightKey: (text: NSAttributedString, height: CGFloat)] = [:]
+        var lastUse = 0
     }
 
-    private static func resetLive(row: String?) {
-        self.liveRow = row
-        self.liveGeneration = TranscriptStyle.generation
-        self.liveTone = nil
-        self.frozenText = ""
-        self.frozenChunks.removeAll()
-        self.frozenHeights.removeAll()
+    /// Enough for a few chats streaming at once (windows); the least recently used row is dropped past it.
+    static let liveRowCapacity = 4
+    private static var liveStates: [String: LiveState] = [:]
+    private static var liveClock = 0
+    /// The row whose heights `liveSize` records: the one `liveMarkdown` last served.
+    private static var heightRow: String?
+
+    /// Entries in the per-live-row memos, for tests.
+    static var liveMemoCount: (rows: Int, chunks: Int, heights: Int) {
+        (self.liveStates.count, self.liveStates.values.reduce(0) { $0 + $1.chunks.count },
+         self.liveStates.values.reduce(0) { $0 + $1.heights.count })
+    }
+
+    /// Forgets a live row's memos once it commits.
+    static func endLive(row: String) {
+        self.liveStates[row] = nil
+    }
+
+    /// Forgets the memos of `owner`'s rows other than `keeping` (its row that is still streaming, if any).
+    static func endLive(owner: ObjectIdentifier, keeping: String?) {
+        guard !self.liveStates.isEmpty else { return }
+        for (row, state) in self.liveStates where state.owner == owner && row != keeping { self.liveStates[row] = nil }
     }
 
     /// Whether `source` still starts with the frozen text (a memcmp, not a Character walk).
-    private static func extendsFrozen(_ source: String) -> Bool {
-        var known = self.frozenText
+    private static func extends(_ frozen: String, _ source: String) -> Bool {
+        var known = frozen
         var new = source
         let count = known.utf8.count
         guard new.utf8.count >= count else { return false }
@@ -117,21 +127,29 @@ enum TranscriptText {
 
     /// A streaming message as frozen chunks plus a fresh tail. Never touches the shared caches.
     /// Only the text since the last cut is scanned and parsed; frozen chunks are reused as they are.
-    static func liveMarkdown(_ source: String, tone: Tone, row: String) -> [LiveSegment] {
-        if self.liveRow != row || self.liveGeneration != TranscriptStyle.generation { self.resetLive(row: row) }
-        if self.liveTone != tone || !self.extendsFrozen(source) {
-            self.resetLive(row: row)
-            self.liveTone = tone
+    static func liveMarkdown(_ source: String, tone: Tone, row: String, owner: ObjectIdentifier? = nil) -> [LiveSegment] {
+        self.liveClock += 1
+        var state = self.liveStates[row] ?? LiveState(owner: owner, tone: tone, generation: TranscriptStyle.generation)
+        if state.tone != tone || state.generation != TranscriptStyle.generation || !self.extends(state.frozenText, source) {
+            state = LiveState(owner: owner, tone: tone, generation: TranscriptStyle.generation)
         }
-        var start = source.utf8.index(source.startIndex, offsetBy: self.frozenText.utf8.count)
+        state.lastUse = self.liveClock
+        var start = source.utf8.index(source.startIndex, offsetBy: state.frozenText.utf8.count)
         for cut in MarkdownBlock.streamingFreezePoints(source, from: start) where cut > start && cut <= source.endIndex {
             let text = String(source[start..<cut])
             start = cut
             let blocks = MarkdownBlock.parse(text)
             var heading = false
             if case .heading = blocks.first { heading = true }
-            self.frozenChunks.append(FrozenChunk(segments: self.build(blocks, tone: tone, cached: false), startsWithHeading: heading))
-            self.frozenText += text
+            state.chunks.append(FrozenChunk(segments: self.build(blocks, tone: tone, cached: false), startsWithHeading: heading))
+            state.frozenText += text
+        }
+        self.liveStates[row] = state
+        self.heightRow = row
+        if self.liveStates.count > self.liveRowCapacity,
+           let oldest = self.liveStates.min(by: { $0.value.lastUse < $1.value.lastUse })?.key
+        {
+            self.liveStates[oldest] = nil
         }
         var result: [LiveSegment] = []
         var previousEndsWithText = false
@@ -145,7 +163,7 @@ enum TranscriptText {
                 if case .text = last { previousEndsWithText = true } else { previousEndsWithText = false }
             }
         }
-        for chunk in self.frozenChunks { add(chunk.segments, frozen: true, startsWithHeading: chunk.startsWithHeading) }
+        for chunk in state.chunks { add(chunk.segments, frozen: true, startsWithHeading: chunk.startsWithHeading) }
         if start < source.endIndex {
             let blocks = MarkdownBlock.parse(String(source[start...]))
             var heading = false
@@ -160,9 +178,9 @@ enum TranscriptText {
     static func liveSize(_ string: NSAttributedString, width: CGFloat, frozen: Bool, exact: Bool) -> CGSize {
         guard frozen else { return self.size(string, width: width, exact: exact) }
         let key = HeightKey(object: ObjectIdentifier(string), width: width, exact: exact)
-        if let known = self.frozenHeights[key] { return CGSize(width: width, height: known.height) }
+        if let row = self.heightRow, let known = self.liveStates[row]?.heights[key] { return CGSize(width: width, height: known.height) }
         let size = self.size(string, width: width, exact: exact)
-        self.frozenHeights[key] = (string, size.height)
+        if let row = self.heightRow { self.liveStates[row]?.heights[key] = (string, size.height) }
         return size
     }
 

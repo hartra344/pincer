@@ -357,6 +357,12 @@ struct TranscriptLayoutBuilder {
 
     func layout(_ row: TranscriptRow, width: CGFloat) -> TranscriptRowLayout {
         var layout = TranscriptRowLayout(id: row.id, width: width)
+        var streamingReply = false
+        if case let .entry(.assistant(turn)) = row { streamingReply = turn.isStreaming }
+        if let chat = self.context.chat, !streamingReply {
+            // A reply that commits (or a run that ends) leaves its live memo behind: drop what this chat no longer streams.
+            TranscriptText.endLive(owner: ObjectIdentifier(chat), keeping: chat.liveRunId.map { "live-\($0)" })
+        }
         layout.decoration = self.decoration(for: row)
         self.marks.reset(row: row.id, highlight: self.highlight)
         switch row {
@@ -538,7 +544,6 @@ struct TranscriptLayoutBuilder {
             case .grouped:
                 self.thinkingGroup(reasoning, turn: turn, into: &stack, layout: &layout)
             }
-            if !turn.isStreaming { TranscriptText.endLive(row: layout.id) }
             // Each message gets its own footer, which with the gap after it keeps back-to-back
             // messages apart. The last footer goes under the turn's images and files.
             let showFooters = !turn.isStreaming
@@ -653,7 +658,7 @@ struct TranscriptLayoutBuilder {
         let width = stack.width
         // A streaming message is split into frozen chunks and a tail; a committed one is one cached list.
         let pieces: [TranscriptText.LiveSegment] = live
-            ? TranscriptText.liveMarkdown(source, tone: tone, row: layout.id)
+            ? TranscriptText.liveMarkdown(source, tone: tone, row: layout.id, owner: self.context.chat.map(ObjectIdentifier.init))
             : TranscriptText.markdown(source, tone: tone).map { .init(segment: $0, isFrozen: false, extraSpacing: 0) }
         for piece in pieces {
             let spacing = TranscriptMetrics.blockSpacing + piece.extraSpacing
