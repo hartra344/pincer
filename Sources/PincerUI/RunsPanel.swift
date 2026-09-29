@@ -21,7 +21,7 @@ struct RunsPanelChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
             .toolbar {
-                ToolbarItem(placement: .primaryAction) { RunsToolbarButton(isPresented: self.$isPresented) }
+                ToolbarItem(placement: .primaryAction) { RunsToolbarButton(isPresented: self.$isPresented, isCompact: self.isCompact) }
             }
             .inspector(isPresented: self.presented(false)) {
                 RunsPanel()
@@ -47,13 +47,18 @@ struct RunsPanelChrome: ViewModifier {
 
 private struct RunsToolbarButton: View {
     @Binding var isPresented: Bool
+    /// Compact iPhone: the nav bar is crowded, so the button only shows while helpers run;
+    /// "Show Runs" in the chat's ⋯ menu covers the rest (#180).
+    let isCompact: Bool
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.chatWindowKey) private var windowKey
 
     var body: some View {
         // Kept while the panel is open, so it (and ⌥⌘R) can always close it again.
-        if let key = self.windowKey ?? self.gateway.selectedKey, self.isPresented || self.gateway.hasRuns(sessionKey: key) {
-            let running = self.gateway.subagentTree(rootKey: key).runningCount
+        if let key = self.windowKey ?? self.gateway.selectedKey, self.isPresented || self.gateway.hasRuns(sessionKey: key),
+           case let running = self.gateway.subagentTree(rootKey: key).runningCount,
+           RunsToolbarVisibility.shows(isCompact: self.isCompact, isPresented: self.isPresented, running: running)
+        {
             Button {
                 self.isPresented.toggle()
             } label: {
@@ -65,6 +70,12 @@ private struct RunsToolbarButton: View {
             .help(running == 0 ? L("Runs") : running == 1 ? L("Runs — 1 helper running") : L("Runs — \(running) helpers running"))
             .accessibilityValue(running > 0 ? L("\(running) running") : "")
         }
+    }
+}
+
+enum RunsToolbarVisibility {
+    static func shows(isCompact: Bool, isPresented: Bool, running: Int) -> Bool {
+        !isCompact || isPresented || running > 0
     }
 }
 

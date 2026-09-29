@@ -7073,6 +7073,16 @@
         }
       }
     },
+    "Next Tip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Tip"
+          }
+        }
+      }
+    },
     "Next Unread Chat": {
       "localizations": {
         "en": {
