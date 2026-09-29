@@ -694,6 +694,7 @@ public final class GatewayStore: Identifiable {
     }
 
     func applySnapshot(_ list: JSONValue) {
+        let previous = Set(self.sessions.values.filter { !$0.isPlaceholder }.map(\.key))
         var next: [String: SessionRow] = [:]
         for row in list["sessions"]?.array?.compactMap(SessionRow.init) ?? [] {
             next[row.key] = row
@@ -712,6 +713,9 @@ public final class GatewayStore: Identifiable {
         if let defaults = list["defaults"] {
             self.defaultContextTokens = defaults["contextTokens"]?.int.flatMap { $0 > 0 ? $0 : nil }
         }
+        // Sessions deleted while we weren't listening (e.g. across a reconnect) lose their cache too.
+        let dropped = previous.subtracting(next.keys)
+        if !dropped.isEmpty { Task { await self.forgetVanishedSessions(dropped) } }
     }
 
     private func scheduleRefresh() {
