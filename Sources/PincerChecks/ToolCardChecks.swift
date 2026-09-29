@@ -32,6 +32,9 @@ private func checkToolCardsChat(_ gateway: GatewayStore, label: String) async {
     check(output.contains("- Era") && output.contains("authorization required (OAuth pending)")
           && output.split(separator: "\n", omittingEmptySubsequences: false).count >= 20,
           "\(label): exec output is multi-line and shows the OAuth-pending server")
+    check(calls[0].details?["exitCode"]?.double == 0 && calls[0].details?["durationMs"]?.double == 1240
+          && calls[1].details?["exitCode"]?.double == 1 && calls[5].details?["status"]?.double == 200,
+          "\(label): loaded history keeps exit code, duration and HTTP status in details")
     check(calls[1].result?.contains("openclaw mcp auth Era") == true, "\(label): failed exec has stderr-like text")
     check(calls[3].fileEdit?.primaryPath == "src/mcp/servers.json" && calls[3].fileEdit?.additions == 1
           && calls[3].fileEdit?.deletions == 1, "\(label): edit is a one-line diff of servers.json")
