@@ -87,8 +87,9 @@ extension AppModel {
 
     /// The route to a chat, written so it works on other devices (the demo by name, not id).
     public func route(for target: Notifier.Target, messageId: String? = nil) -> PincerRoute {
-        let profile = self.gateways.first { $0.id == target.gatewayId }?.profile
-        return PincerRoute(target: target, isDemo: profile?.isDemo ?? false, messageId: messageId, gatewayURL: profile?.url)
+        let store = self.gateways.first { $0.id == target.gatewayId }
+        return PincerRoute(target: target, isDemo: store?.profile.isDemo ?? false, messageId: messageId,
+                           gatewayURL: store?.profile.url, gatewayHost: store?.gatewayHost)
     }
 
     /// The pending jump for `target`, once: it's cleared when taken.
