@@ -9,8 +9,8 @@ import UserNotifications
 
 /// What notifies the user while Pincer is closed.
 public enum ClosedAppDelivery: String, CaseIterable, Identifiable, Sendable {
-    case pushRelay = "push"
     case backgroundRefresh = "refresh"
+    case pushRelay = "push"
     case off
 
     public static let key = "pincer.closedAppDelivery"
@@ -65,6 +65,18 @@ public struct BackgroundRefreshCursorStore: Sendable {
     public func save(_ cursor: BackgroundRefreshCursor, for gatewayId: UUID) {
         guard let data = try? JSONEncoder().encode(cursor) else { return }
         self.defaults.set(data, forKey: self.key(gatewayId))
+    }
+
+    /// Marks something the live app already notified about. Only moves an existing cursor:
+    /// without one, the next run baselines anyway.
+    public func advance(gatewayId: UUID, activityMs: Double? = nil, approvalId: String? = nil, questionId: String? = nil) {
+        guard var cursor = self.cursor(for: gatewayId) else { return }
+        if let activityMs { cursor.activityMs = max(cursor.activityMs, activityMs) }
+        if let approvalId, !cursor.approvalIds.contains(approvalId) { cursor.approvalIds.append(approvalId) }
+        if let questionId, !cursor.questionIds.contains(questionId) { cursor.questionIds.append(questionId) }
+        cursor.approvalIds = Array(cursor.approvalIds.suffix(BackgroundRefreshPlanner.maxIds))
+        cursor.questionIds = Array(cursor.questionIds.suffix(BackgroundRefreshPlanner.maxIds))
+        self.save(cursor, for: gatewayId)
     }
 
     public func remove(for gatewayId: UUID) {
@@ -146,14 +158,13 @@ public enum BackgroundRefreshPlanner {
         let replies = snapshot.sessions
             .filter { $0.activityMs > cursor.activityMs && $0.isUnread && !$0.hasActiveRun && filter.notifies($0) }
             .sorted { $0.activityMs > $1.activityMs }
-        for row in replies {
-            requests.append(Notifier.replyContent(
+        return (requests + replies.prefix(self.maxPerGateway).map { row in
+            Notifier.replyContent(
                 id: "reply:\(row.key):\(Int(row.activityMs))",
                 title: Notifier.replyTitle(rowTitle: row.title, agent: snapshot.agent(row.agentId)),
                 body: Notifier.clip(row.preview ?? "New activity"),
-                target: Notifier.Target(gatewayId: gatewayId, sessionKey: row.key)))
-        }
-        return (Array(requests.prefix(self.maxPerGateway)), next)
+                target: Notifier.Target(gatewayId: gatewayId, sessionKey: row.key))
+        }, next)
     }
 
     /// The baseline: everything currently there counts as already seen.
@@ -229,16 +240,24 @@ public final class BackgroundRefresh {
         }
         let deadline = Date().addingTimeInterval(budget)
         let profiles = self.profiles().filter { !$0.isDemo }
+        let connector = self.connector
+        let fetches = profiles.map { profile in
+            Task { @MainActor () -> Outcome? in
+                let remaining = deadline.timeIntervalSinceNow
+                guard remaining > 0 else { return nil }
+                return await Self.bounded(seconds: remaining) {
+                    await Self.fetch(profile, connector: connector, timeout: remaining)
+                }
+            }
+        }
+        var outcomes: [UUID: Outcome?] = [:]
+        await withTaskCancellationHandler {
+            for (profile, fetch) in zip(profiles, fetches) { outcomes[profile.id] = await fetch.value }
+        } onCancel: {
+            for fetch in fetches { fetch.cancel() }
+        }
         for profile in profiles {
-            let remaining = deadline.timeIntervalSinceNow
-            guard !Task.isCancelled, remaining > 1 else {
-                report.aborted.append(profile.id)
-                continue
-            }
-            let outcome = await bounded(seconds: remaining) { [connector] in
-                await Self.fetch(profile, connector: connector, timeout: remaining)
-            }
-            guard !Task.isCancelled, let outcome else {
+            guard !Task.isCancelled, let outcome = outcomes[profile.id] ?? nil else {
                 report.aborted.append(profile.id)
                 continue
             }
@@ -254,21 +273,26 @@ public final class BackgroundRefresh {
             self.cursors.save(plan.cursor, for: profile.id)
             report.posted += plan.requests.count
         }
-        let unreached = report.aborted + report.failed
-        let result = report.posted > 0 ? "\(report.posted) new"
-            : unreached.first.flatMap { id in profiles.first { $0.id == id } }.map { "Couldn't reach \($0.name)" } ?? "Up to date"
+        let unreached = Set(report.aborted + report.failed)
+        let names = profiles.filter { unreached.contains($0.id) }.map(\.name)
+        let parts = [report.posted > 0 ? "\(report.posted) new" : nil,
+                     names.isEmpty ? nil : "Couldn't reach \(names.joined(separator: ", "))"].compactMap { $0 }
         self.defaults.set(Date(), forKey: "pincer.refresh.lastRun")
-        self.defaults.set(result, forKey: "pincer.refresh.lastResult")
+        self.defaults.set(parts.isEmpty ? "Up to date" : parts.joined(separator: " · "), forKey: "pincer.refresh.lastResult")
         return report
     }
 
-    /// On entering background: each connected gateway's live state is what the user has already seen.
+    /// On entering background: what each connected gateway's live state shows is already seen.
+    /// A cursor only moves forward, and only over ids still pending.
     public func seed(from gateways: [GatewayStore]) {
         for gateway in gateways where gateway.state.isConnected && !gateway.profile.isDemo {
-            let snapshot = BackgroundRefreshSnapshot(
-                agents: gateway.agents, defaultAgentId: gateway.defaultAgentId,
-                sessions: Array(gateway.sessions.values), approvals: gateway.approvals, questions: gateway.questions)
-            self.cursors.save(BackgroundRefreshPlanner.cursor(for: snapshot), for: gateway.id)
+            let live = BackgroundRefreshPlanner.cursor(for: BackgroundRefreshSnapshot(
+                sessions: Array(gateway.sessions.values), approvals: gateway.approvals, questions: gateway.questions))
+            var cursor = self.cursors.cursor(for: gateway.id) ?? live
+            cursor.activityMs = max(cursor.activityMs, live.activityMs)
+            cursor.approvalIds = Array(Set(cursor.approvalIds + live.approvalIds).intersection(live.approvalIds))
+            cursor.questionIds = Array(Set(cursor.questionIds + live.questionIds).intersection(live.questionIds))
+            self.cursors.save(cursor, for: gateway.id)
         }
     }
 
@@ -299,7 +323,7 @@ public final class BackgroundRefresh {
 
     /// The body's result, or nil when `seconds` pass or the caller is cancelled first; the body is
     /// cancelled then and closes its connection as it unwinds.
-    private func bounded<T: Sendable>(seconds: TimeInterval, _ body: @escaping @MainActor () async -> T) async -> T? {
+    private static func bounded<T: Sendable>(seconds: TimeInterval, _ body: @escaping @MainActor () async -> T) async -> T? {
         let (results, continuation) = AsyncStream<T?>.makeStream()
         let work = Task { @MainActor in
             continuation.yield(await body())

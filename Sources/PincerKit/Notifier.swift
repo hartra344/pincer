@@ -113,7 +113,8 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             id: "reply:\(dedupe ?? "\(row.key):\(row.activityMs)")",
             title: self.title(row: row, gateway: gateway),
             body: Self.clip(text ?? "New reply"),
-            target: Target(gatewayId: gateway.id, sessionKey: row.key))
+            target: Target(gatewayId: gateway.id, sessionKey: row.key),
+            activityMs: row.activityMs)
     }
 
     func notifyActivity(row: SessionRow, gateway: GatewayStore) {
@@ -121,12 +122,14 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             id: "reply:\(row.key):\(Int(row.activityMs))",
             title: self.title(row: row, gateway: gateway),
             body: Self.clip(row.preview ?? "New activity"),
-            target: Target(gatewayId: gateway.id, sessionKey: row.key))
+            target: Target(gatewayId: gateway.id, sessionKey: row.key),
+            activityMs: row.activityMs)
     }
 
     func notifyApproval(_ approval: ExecApproval, gateway: GatewayStore) {
         guard self.enabled, let center, !self.deferredToPush(gateway.id) else { return }
         center.add(Self.approvalRequest(approval, gatewayId: gateway.id, gatewayName: gateway.profile.name))
+        self.advanceRefreshCursor(gateway.id, approvalId: approval.id)
     }
 
     nonisolated static func approvalRequest(_ approval: ExecApproval, gatewayId: UUID, gatewayName: String) -> UNNotificationRequest {
@@ -160,6 +163,14 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
               let request = Self.questionRequest(prompt, gatewayId: gateway.id, agent: agent, chatTitle: chat)
         else { return }
         center.add(request)
+        self.advanceRefreshCursor(gateway.id, questionId: prompt.id)
+    }
+
+    /// What the live app just notified about must not be notified again by the next background refresh.
+    private func advanceRefreshCursor(_ gatewayId: UUID, activityMs: Double? = nil, approvalId: String? = nil, questionId: String? = nil) {
+        guard !self.appIsActive, ClosedAppDelivery.current() == .backgroundRefresh else { return }
+        BackgroundRefreshCursorStore().advance(
+            gatewayId: gatewayId, activityMs: activityMs, approvalId: approvalId, questionId: questionId)
     }
 
     nonisolated static func questionRequest(
@@ -203,7 +214,7 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         for request in requests { try? await center.add(request) }
     }
 
-    private func post(id: String, title: String, body: String, target: Target) {
+    private func post(id: String, title: String, body: String, target: Target, activityMs: Double) {
         guard self.enabled, let center, !self.deferredToPush(target.gatewayId) else { return }
         if self.appIsActive, self.visible == target { return }
         let dedupeKey = id.hasPrefix("reply:") ? "\(target.sessionKey)|\(body.prefix(80))" : id
@@ -212,6 +223,7 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         if self.recent.count > 200 { self.recent.removeFirst(self.recent.count - 200) }
 
         center.add(Self.replyContent(id: id, title: title, body: body, target: target))
+        self.advanceRefreshCursor(target.gatewayId, activityMs: activityMs)
     }
 
     public func clear(target: Target) {
