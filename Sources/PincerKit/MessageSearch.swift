@@ -172,10 +172,11 @@ public enum MessageSearch {
         return documents
     }
 
-    /// Where building `items` from can start when only what follows item `prefix` changed: the
-    /// latest user message or marker at or before it, else the start.
-    static func rowBoundary(items: [ChatItem], atOrBefore prefix: Int) -> Int {
-        var index = min(prefix, items.count - 1)
+    /// Where building `items` from can start when items from `prefix` on changed: the latest user
+    /// message or marker strictly before it (the old transcript may have had something else at
+    /// `prefix`, whose row started earlier), else the start.
+    static func rowBoundary(items: [ChatItem], before prefix: Int) -> Int {
+        var index = min(prefix - 1, items.count - 1)
         while index > 0 {
             if self.isRowBoundary(items[index]) { return index }
             index -= 1

@@ -320,7 +320,7 @@ public actor MessageIndex {
         case let .tail(prefix, baseToken, newToken):
             token = newToken
             if prefix >= 0, prefix <= items.count {
-                let start = MessageSearch.rowBoundary(items: items, atOrBefore: prefix)
+                let start = MessageSearch.rowBoundary(items: items, before: prefix)
                 if await self.indexTail(sessionKey: sessionKey, items: items, offset: 0, start: start, prefix: prefix,
                                         baseToken: baseToken, token: newToken, mtime: mtime) != .fallback { return }
             }
@@ -354,10 +354,10 @@ public actor MessageIndex {
             return .done
         }
         guard !self.isRemoved else { return .done }
-        guard case let .tail(prefix, baseToken, token) = change, prefix >= itemOffset, prefix <= totalCount,
+        guard case let .tail(prefix, baseToken, token) = change, prefix > itemOffset, prefix <= totalCount,
               !items.isEmpty
         else { return .needsEarlierItems }
-        let start = MessageSearch.rowBoundary(items: items, atOrBefore: prefix - itemOffset)
+        let start = MessageSearch.rowBoundary(items: items, before: prefix - itemOffset)
         // Without a boundary in reach, the row containing the change may begin before `items`.
         guard MessageSearch.isRowBoundary(items[start]) else { return .needsEarlierItems }
         let result = await self.indexTail(sessionKey: sessionKey, items: items, offset: itemOffset, start: start,

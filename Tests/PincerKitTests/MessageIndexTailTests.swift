@@ -86,7 +86,7 @@ struct MessageIndexTailTests {
 
     /// Indexes `old` in full, then `new` as a tail, and `new` in full elsewhere; the rows and
     /// search results must agree, and the tail must have taken the tail path.
-    func check(old: [ChatItem], new: [ChatItem], expectTail: Bool = true, sourceLocation: SourceLocation = #_sourceLocation) async throws {
+    func check(old: [ChatItem], new: [ChatItem], expectTail: Bool? = true, sourceLocation: SourceLocation = #_sourceLocation) async throws {
         let tailGateway = UUID()
         let fullGateway = UUID()
         try self.touchFile(tailGateway, key: self.key)
@@ -99,7 +99,7 @@ struct MessageIndexTailTests {
                               change: .tail(unchangedPrefix: prefix, baseToken: "t0", token: "t1"))
         await fullIndex.index(sessionKey: self.key, snapshot: self.snapshot(new), fileMtime: Date().addingTimeInterval(1))
         #expect(await tailIndex.indexedRows(sessionKey: self.key) == fullIndex.indexedRows(sessionKey: self.key), sourceLocation: sourceLocation)
-        #expect(await tailIndex.lastIndexStats.path == (expectTail ? .tail : .full), sourceLocation: sourceLocation)
+        if let expectTail { #expect(await tailIndex.lastIndexStats.path == (expectTail ? .tail : .full), sourceLocation: sourceLocation) }
         #expect(await tailIndex.chatToken(sessionKey: self.key) == "t1", sourceLocation: sourceLocation)
         #expect(try await tailIndex.search("alpha").map(\.entryId) == fullIndex.search("alpha").map(\.entryId), sourceLocation: sourceLocation)
         #expect(try await tailIndex.search("question").map(\.entryId) == fullIndex.search("question").map(\.entryId), sourceLocation: sourceLocation)
@@ -118,8 +118,8 @@ struct MessageIndexTailTests {
             if round % 5 == 0 { items[items.count / 2].isPending = true }
             let full = MessageSearch.positionedDocuments(sessionKey: "k", items: items[...])
             for prefix in stride(from: 0, to: items.count, by: 3) {
-                let start = MessageSearch.rowBoundary(items: items, atOrBefore: prefix)
-                #expect(start <= prefix)
+                let start = MessageSearch.rowBoundary(items: items, before: prefix)
+                #expect(start <= max(prefix - 1, 0))
                 let suffix = MessageSearch.positionedDocuments(sessionKey: "k", items: items[start...])
                 let expected = full.filter { $0.pos >= start }
                 #expect(suffix.map(\.document) == expected.map(\.document))
@@ -322,5 +322,39 @@ struct MessageIndexTailTests {
         #expect(done == .done)
         #expect(await index.chatToken(sessionKey: self.key) == "c")
         await MessageIndex.shutdown(root: self.root)
+    }
+
+    /// The first changed item may replace one that belonged to an earlier row in the old transcript.
+    @Test func changedItemStartingANewRowDropsTheOldRowsLaterMessages() async throws {
+        defer { try? FileManager.default.removeItem(at: self.root) }
+        func item(_ id: String, _ role: ChatRole, _ text: String) -> ChatItem {
+            var item = ChatItem(id: id, role: role, blocks: [.text(text)], timestamp: Date(timeIntervalSince1970: 1_700_000_000))
+            item.transcriptId = id
+            item.runId = role == .assistant ? "r" : nil
+            return item
+        }
+        let user = item("U0", .user, "question alpha")
+        let first = item("A1", .assistant, "one alpha")
+        var second = item("A2", .assistant, "two alpha")
+        second.blocks = [.text("two alpha")]
+        try await self.check(old: [user, first, second], new: [user, first, item("U3", .user, "question three")])
+        try await self.check(old: [user, first, second], new: [user, item("U3", .user, "question three")])
+        try await self.check(old: [user, first, second], new: [item("U3", .user, "question three")])
+    }
+
+    @Test func randomReplacementsMatchFullIndexing() async throws {
+        defer { try? FileManager.default.removeItem(at: self.root) }
+        var generator = Generator(state: 21)
+        for _ in 0..<25 {
+            let old = generator.items(groups: 12 + generator.next(10))
+            let keep = generator.next(old.count + 1)
+            let new = Array(old[..<keep]) + generator.items(groups: generator.next(6)).map { item in
+                var item = item
+                item.id = "n" + item.id
+                item.transcriptId = item.id
+                return item
+            }
+            try await self.check(old: old, new: new, expectTail: nil)
+        }
     }
 }
