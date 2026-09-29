@@ -103,6 +103,10 @@ struct AccessibilityLabelTests {
             == "Claude, Responding, Here")
     }
 
+    @Test func messageRowBookmarked() {
+        #expect(AccessibilityText.messageRow(role: .user, text: "check disk", isBookmarked: true) == "You, Bookmarked, check disk")
+    }
+
     @Test func messageRowStates() {
         #expect(AccessibilityText.messageRow(role: .assistant, text: "Boom", isError: true) == "Assistant, Error, Boom")
         #expect(AccessibilityText.messageRow(role: .user, text: "hi", isPending: true) == "You, Sending, hi")
