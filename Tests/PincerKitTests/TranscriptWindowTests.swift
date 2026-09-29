@@ -418,4 +418,178 @@ struct TranscriptWindowTests {
         #expect(ids.contains(V8.items(1, from: self.total)[0].id))
         #expect(Array(ids.prefix(self.total)) == self.ids(0..<self.total))
     }
+
+    // MARK: Architect amendments (A1, A2, A5, A6, id-less messages)
+
+    /// Gateway-shaped messages: users carry a transcript id, replies and tool results don't (they get `idx-` ids).
+    func idlessMessages(_ count: Int, from start: Int = 0) -> [JSONValue] {
+        (start..<(start + count)).map { n -> JSONValue in
+            switch n % 3 {
+            case 0: ["role": "user", "content": .string("question \(n)"), "timestamp": .number(1_700_000_000 + Double(n)), "__openclaw": ["id": .string("u\(n)")]]
+            case 1: ["role": "assistant", "content": .string("answer \(n)"), "timestamp": .number(1_700_000_000 + Double(n))]
+            default: ["role": "toolResult", "content": .string("result \(n)"), "timestamp": .number(1_700_000_000 + Double(n))]
+            }
+        }
+    }
+
+    @Test func snapshotIsIncompleteWhileOlderItemsAreOnlyOnDisk() async {
+        let (chat, gateway) = self.makeStore()
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
+        await self.seed(gateway)
+        await chat.restoreFromCache()
+        chat.hasLoaded = true
+        #expect(chat.olderInCache && !chat.hasMoreHistory)
+        #expect(chat.snapshot().complete == false)
+        await chat.loadAllCached()
+        #expect(chat.snapshot().complete == true)
+    }
+
+    @Test func windowSaveAfterAHeadlessFillOfIdlessMessagesKeepsOlderHistory() async {
+        let (chat, gateway) = self.makeStore()
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
+        let first = ChatStore.parse(self.idlessMessages(self.total), fallbackBase: 0)
+        await TranscriptCache.save(V8.snapshot(first), gatewayId: gateway.id, sessionKey: self.key)
+        await TranscriptCache.flush(gatewayId: gateway.id)
+        await chat.restoreFromCache()
+        chat.hasLoaded = true
+        #expect(chat.items.first?.transcriptId != nil)
+        let windowCount = chat.items.count
+
+        // A headless fill re-parses the same transcript; its id-less items get different fallback ids.
+        let refilled = ChatStore.parse(self.idlessMessages(self.total), fallbackBase: 5_000)
+        #expect(refilled.map(\.id) != first.map(\.id))
+        await TranscriptCache.save(V8.snapshot(refilled), gatewayId: gateway.id, sessionKey: self.key)
+        await TranscriptCache.flush(gatewayId: gateway.id)
+
+        chat.items += ChatStore.parse(self.idlessMessages(3, from: self.total), fallbackBase: self.total)
+        await chat.saveSnapshot()
+        let saved = await self.cached(gateway)
+        #expect(saved.count == self.total + 3)
+        #expect(Array(saved.prefix(self.total - windowCount)) == refilled.prefix(self.total - windowCount).map(\.id))
+    }
+
+    @Test func windowsStartOnAnItemWithATranscriptIdEvenWithIdlessMessages() async {
+        let (chat, gateway) = self.makeStore()
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
+        chat.windowLimit = 50
+        let items = ChatStore.parse(self.idlessMessages(self.total), fallbackBase: 0)
+        await TranscriptCache.save(V8.snapshot(items), gatewayId: gateway.id, sessionKey: self.key)
+        await TranscriptCache.flush(gatewayId: gateway.id)
+        await chat.restoreFromCache()
+        chat.hasLoaded = true
+        #expect(chat.items.first?.transcriptId != nil)
+        #expect(chat.items.map(\.id) == items.suffix(chat.items.count).map(\.id))
+        chat.items = items
+        await chat.trimToWindow()
+        #expect(chat.items.count < items.count && chat.items.count <= 50)
+        #expect(chat.items.first?.transcriptId != nil)
+        #expect(chat.items.map(\.id) == items.suffix(chat.items.count).map(\.id))
+        let saved = await self.cached(gateway)
+        #expect(saved == items.map(\.id))
+    }
+
+    @Test func loadOlderWorksInTheTrimmedStateWithoutAnOffset() async {
+        let (chat, gateway) = self.makeStore()
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
+        chat.items = V8.items(self.total)
+        chat.hasLoaded = true
+        await chat.trimToWindow()
+        #expect(chat.olderInCache && chat.olderOffset == nil)
+        let before = chat.items.count
+        #expect(await chat.loadOlder())
+        #expect(chat.items.count > before)
+        self.expectNewestSuffix(chat)
+    }
+
+    @Test func trimmedChatFallsBackToGatewayPagingWhenTheCacheIsGone() async {
+        let (chat, gateway) = self.makeStore()
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
+        chat.items = V8.items(self.total)
+        chat.hasMoreHistory = true
+        chat.hasLoaded = true
+        await chat.trimToWindow()
+        let count = chat.items.count
+        await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: self.key)
+        _ = await chat.loadOlder()
+        #expect(!chat.olderInCache && chat.hasMoreHistory)
+        #expect(chat.olderOffset == count)
+        #expect(chat.items.count == count)
+    }
+
+    @Test func locateWorksInTheTrimmedState() async {
+        let (chat, gateway) = self.makeStore()
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
+        chat.items = V8.items(self.total)
+        chat.hasLoaded = true
+        await chat.trimToWindow()
+        #expect(await chat.locate("u3"))
+        #expect(chat.message(withId: "u3") != nil)
+    }
+
+    @Test func aWarmIdleChatTrimsWhenAnotherIsSelected() async {
+        let (chat, gateway) = self.makeStore()
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
+        chat.items = V8.items(self.total)
+        chat.hasLoaded = true
+        gateway.selectedKey = "agent:main:dashboard:other"
+        await chat.trimToWindow()
+        #expect(chat.items.count <= self.limit && chat.olderInCache)
+    }
+
+    @Test func aBusyChatIsNotTrimmed() async {
+        let (chat, gateway) = self.makeStore()
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
+        chat.items = V8.items(self.total)
+        chat.hasLoaded = true
+        chat.live = LiveRun(runId: "r1")
+        #expect(chat.isRunning)
+        await chat.trimToWindow()
+        #expect(chat.items.count == self.total)
+    }
+
+    @Test func reconnectWithMoreThanAPageOfNewMessagesAfterATrimLeavesNoGap() async {
+        let (chat, gateway) = self.makeStore()
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
+        chat.items = V8.items(self.total)
+        chat.hasLoaded = true
+        await chat.trimToWindow()
+        #expect(chat.olderInCache)
+
+        // 130 new messages, none of them in what's loaded: the loaded window is stale.
+        let messages = self.idlessMessages(130, from: 1_000)
+        let parsed = ChatStore.parse(messages, fallbackBase: 0)
+        chat.apply(history: ["messages": .array(messages), "hasMore": true, "nextOffset": 130], parsed: parsed)
+        #expect(!chat.olderInCache)
+        #expect(chat.hasMoreHistory)
+        #expect(chat.items.map(\.id) == parsed.map(\.id))
+        await chat.saveSnapshot()
+        #expect(await self.cached(gateway) == parsed.map(\.id))
+    }
 }

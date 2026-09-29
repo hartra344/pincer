@@ -126,10 +126,43 @@ func runTranscriptWindowChecks() async {
     await jumping.saveSnapshot()
     let afterFill = await cachedIds()
     check(afterFill == windowIds(0..<(total + 3)), "a newer message saved by the visible chat survives a later full save")
+
+    let windowed = makeChat()
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: windowItems(total), complete: true, activityMs: 5),
+                               gatewayId: gateway.id, sessionKey: key)
+    await windowed.restoreFromCache()
+    windowed.hasLoaded = true
+    check(windowed.olderInCache && windowed.snapshot().complete == false, "a window with older items on disk saves as incomplete")
+
+    let messages: [JSONValue] = (0..<130).map { n in
+        ["role": "user", "content": .string("new \(n)"), "__openclaw": ["id": .string("new\(n)")]]
+    }
+    windowed.apply(history: ["messages": .array(messages), "hasMore": true], parsed: ChatStore.parse(messages))
+    await windowed.saveSnapshot()
+    let afterReset = await cachedIds()
+    check(!windowed.olderInCache && afterReset == windowed.items.map(\.id),
+          "more than a page of new messages with no overlap drops the stale window and saves no gap")
+}
+
+@MainActor
+func runTranscriptWindowCacheOffChecks() async {
+    let profile = GatewayProfile(id: UUID(), name: "Window", url: "ws://127.0.0.1:1", authMode: .none)
+    let defaults = UserDefaults(suiteName: "pincer.windowchecks.off.\(UUID().uuidString)")!
+    let gateway = GatewayStore(profile: profile, defaults: defaults, identity: DeviceIdentity(privateKey: .init()))
+    let chat = ChatStore(sessionKey: "agent:main:window-off", agentId: nil, gateway: gateway, headless: false)
+    chat.windowLimit = 50
+    chat.items = windowItems(300)
+    chat.hasLoaded = true
+    await chat.trimToWindow()
+    check(chat.items.count == 300 && !chat.olderInCache, "with the cache off a chat is never trimmed (nothing could page back)")
+    chat.stopCaching()
 }
 #else
 @MainActor
 func runTranscriptWindowChecks() async {
     print("  · needs a debug build; skipped")
 }
+
+@MainActor
+func runTranscriptWindowCacheOffChecks() async {}
 #endif
