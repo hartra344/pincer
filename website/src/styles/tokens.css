@@ -1,13 +1,12 @@
 /*
  * Pincer site tokens: a switchboard in telephone-gray-green enamel with coral lamps.
  * Coral (the Lobster accent) means "lit": primary action, active line, needs attention.
- * Shared by the landing page and the Starlight theme (docs.css).
+ * Shared by the landing page and the Starlight theme (docs.css). Type is the Apple system stack
+ * throughout (SF Pro on Apple devices), matching the native app; no web fonts.
  * Contrast (WCAG): text/bg ≥ 13:1, muted/bg ≥ 5.3:1, lamp-text/bg ≥ 4.9:1 in both modes.
  */
-@import '@fontsource-variable/big-shoulders';
-
 :root {
-	--font-display: 'Big Shoulders Variable', 'Big Shoulders', 'Arial Narrow', sans-serif;
+	--font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
 	--font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
 	--font-mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
 
