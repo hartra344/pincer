@@ -73,7 +73,9 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private(set) var connectionEpoch = 0
     public var selectedKey: String? {
         didSet {
-            guard oldValue != self.selectedKey, let key = self.selectedKey else { return }
+            guard oldValue != self.selectedKey else { return }
+            if let oldValue, let left = self.chats[oldValue] { Task { await left.trimToWindow() } }
+            guard let key = self.selectedKey else { return }
             self.defaults.set(key, forKey: "pincer.selected.\(self.id.uuidString)")
             self.noteSelected(key)
             Task { await self.openChat(key) }

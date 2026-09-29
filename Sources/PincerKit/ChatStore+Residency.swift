@@ -44,6 +44,7 @@ extension ChatStore {
         self.hasPagedOlder = false
         self.olderOffset = nil
         self.hasMoreHistory = false
+        self.olderInCache = false
         self.fullMessages = [:]
         self.recoveryAttempted = []
         self.sawThinking = false

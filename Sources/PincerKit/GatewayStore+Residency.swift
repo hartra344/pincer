@@ -29,12 +29,18 @@ extension GatewayStore {
         }
         let hydrated = Set(self.chats.values.filter(\.isHydrated).map(\.sessionKey))
         let victims = self.residency.victims(hydrated: hydrated, pinned: self.pinnedChatKeys(), limit: requested)
-        guard !victims.isEmpty else { return }
+        let pinned = self.pinnedChatKeys()
+        let trims = hydrated.subtracting(pinned).subtracting(victims)
+        guard !victims.isEmpty || !trims.isEmpty else { return }
         self.enforcingChatBudget = true
         Task { [weak self] in
             for key in victims {
                 guard let self, let chat = self.chats[key], !self.isChatPinned(key) else { continue }
                 await chat.dehydrate()
+            }
+            // Idle chats that stay resident keep only their newest window in memory.
+            for key in trims {
+                await self?.chats[key]?.trimToWindow()
             }
             guard let self else { return }
             self.enforcingChatBudget = false

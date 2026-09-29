@@ -126,6 +126,11 @@ public final class ChatStore: Identifiable {
     public internal(set) var hasLoaded = false
     public internal(set) var isSending = false
     public internal(set) var hasMoreHistory = false
+    /// Cached items exist on disk before the first committed item in memory (the window is a
+    /// contiguous newest suffix of the transcript).
+    public internal(set) var olderInCache = false
+    /// Whether anything older than what's loaded can still be paged in, from the cache or the Gateway.
+    public var hasOlderItems: Bool { self.olderInCache || self.hasMoreHistory }
     public internal(set) var isLoadingOlder = false
     public var errorMessage: String?
     /// Whether the transcript contains any reasoning; used to hint at `/reasoning on`.
@@ -162,6 +167,16 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var compactionRunId: String?
 
     @ObservationIgnored let historyLimit = 120
+    /// Most committed items kept in memory for a chat that isn't open.
+    #if os(macOS)
+    static let defaultWindowLimit = 3_000
+    #else
+    static let defaultWindowLimit = 1_200
+    #endif
+    @ObservationIgnored var windowLimit = ChatStore.defaultWindowLimit
+    /// Items per page when scrolling back through the cache; lookups (find, jump) use larger ones.
+    static let olderCachePageSize = 200
+    static let lookupCachePageSize = 2_000
     @ObservationIgnored let gatewayId: UUID
     /// Background cache filler: no UI, no live subscription.
     @ObservationIgnored let headless: Bool
