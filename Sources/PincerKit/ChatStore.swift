@@ -112,16 +112,15 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var lastPublishAt = Date.distantPast
     @ObservationIgnored var pendingFlush: Task<Void, Never>?
     @ObservationIgnored var hasPendingLive = false
-    /// True while `entries` is `committedEntries` plus a trailing live tail.
-    @ObservationIgnored var entriesTrackCommitted = false
+    /// How many leading `entries` come from committed items; the rest is the live tail. `nil` until
+    /// `entries` has been rebuilt from `items`, so the next rebuild rebuilds the committed part too.
+    @ObservationIgnored var committedEntryCount: Int?
     /// Whether a run is in progress here, streamed or reported by the session row. Stored, and only
     /// written on transitions, so views reading it don't re-render on every streamed token.
     public internal(set) var isRunning = false
     /// This chat's session row, kept in step by `GatewayStore` and only written when that row changes,
     /// so views reading it don't re-render when some other session changes.
     public internal(set) var sessionRow: SessionRow?
-    /// Transcript built from committed items; streaming only re-adds the live turn on top.
-    @ObservationIgnored var committedEntries: [TranscriptEntry] = []
     public internal(set) var isLoading = false
     public internal(set) var hasLoaded = false
     public internal(set) var isSending = false
@@ -308,9 +307,13 @@ public final class ChatStore: Identifiable {
         self.pendingFlush = nil
         self.hasPendingLive = false
         self.lastPublishAt = Date()
+        // `entries` is the only copy of the transcript (#315): committed entries first, then the live
+        // tail, which streaming replaces in place.
+        var committed: [TranscriptEntry]?
+        if itemsChanged || self.committedEntryCount == nil {
+            committed = TranscriptBuilder.build(self.items)
+        }
         if itemsChanged {
-            self.entriesTrackCommitted = false
-            self.committedEntries = TranscriptBuilder.build(self.items)
             var byId: [String: ChatItem] = [:]
             for item in self.items where item.isReplyable {
                 if let id = item.transcriptId { byId[id] = item }
@@ -348,15 +351,15 @@ public final class ChatStore: Identifiable {
         } else if self.compaction?.isRunning == true {
             entries.append(.marker(id: "live-compaction", label: "Compacting context…"))
         }
-        let committedCount = self.committedEntries.count
-        if self.entriesTrackCommitted, self.entries.count >= committedCount {
-            if !self.entries[committedCount...].elementsEqual(entries) {
-                self.entries.replaceSubrange(committedCount..., with: entries)
-            }
-        } else {
-            let all = self.committedEntries + entries
+        if var all = committed {
+            let count = all.count
+            all.append(contentsOf: entries)
             if all != self.entries { self.entries = all }
-            self.entriesTrackCommitted = true
+            self.committedEntryCount = count
+        } else if let count = self.committedEntryCount, self.entries.count >= count {
+            if !self.entries[count...].elementsEqual(entries) {
+                self.entries.replaceSubrange(count..., with: entries)
+            }
         }
     }
 
