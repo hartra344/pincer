@@ -85,8 +85,11 @@ struct SidebarModel: Equatable {
         let preview: String?
         /// The dancing avatar that replaces the old spinner, or `nil` when the chat isn't working.
         let working: SidebarWorkingIndicator?
-        /// The agent's companion style for `working` when animated avatars are on.
-        let workingAvatar: AvatarStyle?
+        /// What the trailing avatar shows: the working dance, or the gentle "has news" loop of an unread chat.
+        /// `nil` when neither applies (the row falls back to the unread dot or nothing).
+        let avatar: SidebarWorkingIndicator?
+        /// The agent's companion style for `avatar` when animated avatars are on.
+        let avatarStyle: AvatarStyle?
         /// Nesting under the section header: 1 for chats inside a group nested under an agent.
         var depth = 0
     }
@@ -128,13 +131,17 @@ struct SidebarModel: Equatable {
         let selected = gateway.selectedKey
         let avatarsOn = AvatarSettings.isEnabled
         let approvalKeys = avatarsOn ? Set(gateway.approvals.compactMap(\.sessionKey)) : []
-        func working(_ row: SessionRow, runningSubagents: Int) -> (SidebarWorkingIndicator?, AvatarStyle?) {
-            guard row.hasActiveRun || (!showSubagentRuns && runningSubagents > 0) else { return (nil, nil) }
+        func working(_ row: SessionRow, runningSubagents: Int) -> (SidebarWorkingIndicator?, SidebarWorkingIndicator?, AvatarStyle?) {
             let agent = gateway.agent(row.agentId)
-            let indicator = SidebarWorkingIndicator.resolve(
-                hasActiveRun: row.hasActiveRun, runningSubagents: runningSubagents, showSubagentRuns: showSubagentRuns,
-                agent: agent, companionsEnabled: avatarsOn)
-            return (indicator, indicator != nil && avatarsOn ? AvatarSettings.style(for: agent) : nil)
+            var indicator: SidebarWorkingIndicator?
+            if row.hasActiveRun || (!showSubagentRuns && runningSubagents > 0) {
+                indicator = SidebarWorkingIndicator.resolve(
+                    hasActiveRun: row.hasActiveRun, runningSubagents: runningSubagents, showSubagentRuns: showSubagentRuns,
+                    agent: agent, companionsEnabled: avatarsOn, isUnread: row.isUnread && !row.isSubagent)
+            }
+            let avatar = indicator ?? SidebarWorkingIndicator.resolveUnread(
+                isUnread: row.isUnread, isSubagent: row.isSubagent, agent: agent, companionsEnabled: avatarsOn)
+            return (indicator, avatar, avatar != nil && avatarsOn ? AvatarSettings.style(for: agent) : nil)
         }
         func entries(_ channels: [SidebarChannel], depth: Int) -> [Entry] {
             var entries: [Entry] = []
@@ -155,7 +162,7 @@ struct SidebarModel: Equatable {
                     threadsExpanded: expanded,
                     showSubagentRuns: showSubagentRuns,
                     preview: showPreviews ? channel.row.preview : nil,
-                    working: channelWorking.0, workingAvatar: channelWorking.1, depth: depth))
+                    working: channelWorking.0, avatar: channelWorking.1, avatarStyle: channelWorking.2, depth: depth))
                 // Like Discord, helper runs live inside the conversation (as "Open run" on their
                 // tool call) unless the sidebar is set to list them.
                 let visible: [SessionRow]
@@ -174,7 +181,7 @@ struct SidebarModel: Equatable {
                                          runningSubagents: 0, hiddenUnreadThreads: 0, threadsExpanded: false,
                                          showSubagentRuns: showSubagentRuns,
                                          preview: showPreviews ? thread.preview : nil,
-                                         working: threadWorking.0, workingAvatar: threadWorking.1, depth: depth))
+                                         working: threadWorking.0, avatar: threadWorking.1, avatarStyle: threadWorking.2, depth: depth))
                 }
             }
             return entries
