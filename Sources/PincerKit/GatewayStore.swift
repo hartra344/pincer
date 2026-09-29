@@ -203,6 +203,10 @@ public final class GatewayStore: Identifiable {
         allowsWritesWithoutAdmin: self.profile.isDemo,
         onTranscriptChanged: { [weak self] key, change in await self?.transcriptChanged(key: key, change: change) },
         onSessionsChanged: { [weak self] in await self?.refreshSessions() })
+    /// Gateway text-to-speech: the Voice settings page and Read Aloud's `tts.speak`. The demo may write without scopes.
+    @ObservationIgnored public private(set) lazy var voice = GatewayVoiceModel(
+        connection: self.connection, hello: { [weak self] in self?.hello },
+        allowsWritesWithoutAdmin: self.profile.isDemo)
     /// Token and cost usage; loaded when the Usage page opens.
     @ObservationIgnored public private(set) lazy var usage = UsageModel(
         connection: self.connection, hello: { [weak self] in self?.hello })
@@ -447,6 +451,7 @@ public final class GatewayStore: Identifiable {
         self.devices.handleReconnect()
         self.skills.handleReconnect()
         self.sessionManager.handleReconnect()
+        self.voice.handleReconnect()
     }
 
     @ObservationIgnored private var bootstrapTask: Task<Void, Never>?

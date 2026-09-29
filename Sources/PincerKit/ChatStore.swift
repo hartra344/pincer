@@ -133,6 +133,8 @@ public final class ChatStore: Identifiable {
     public var hasOlderItems: Bool { self.olderInCache || self.hasMoreHistory }
     public internal(set) var isLoadingOlder = false
     public var errorMessage: String?
+    /// Called when a new assistant reply arrives live (never from history loads). Read Aloud's auto-read uses it.
+    @ObservationIgnored public var onFinalAssistantReply: ((ChatItem) -> Void)?
     /// Whether the transcript contains any reasoning; used to hint at `/reasoning on`.
     public internal(set) var sawThinking = false
     /// The agent's task checklist for this session, shown above the composer.

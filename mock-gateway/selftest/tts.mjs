@@ -62,5 +62,5 @@ export async function run(ctx) {
   assert.equal(typeof conv.audioPath, 'string');
   assert.equal(conv.voiceCompatible, false);
   assert.equal((await c.call('tts.convert', {})).error.message, 'tts.convert requires text');
-  c.close?.();
+  c.ws.close();
 }

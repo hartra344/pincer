@@ -136,6 +136,7 @@ extension ChatStore {
             self.items[index] = item
         } else {
             self.items.append(item)
+            self.notifyFinalAssistantReply(item)
         }
         self.recoverCappedMessages()
         if let key = item.idempotencyKey { self.gateway?.reconcileOutbox(committedKeys: [key]) }
@@ -154,6 +155,13 @@ extension ChatStore {
             run.tools.removeAll { committedToolIds.contains($0.id) }
             self.live = run
         }
+    }
+
+    /// A new committed assistant reply that ends a step (no tool calls) arrived live; Read Aloud's auto-read listens.
+    private func notifyFinalAssistantReply(_ item: ChatItem) {
+        guard item.role == .assistant, !item.isPending else { return }
+        let hasToolCall = item.blocks.contains { if case .toolCall = $0 { true } else { false } }
+        if !hasToolCall { self.onFinalAssistantReply?(item) }
     }
 
     // MARK: Progress card

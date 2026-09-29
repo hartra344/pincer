@@ -39,7 +39,7 @@ actor DemoGateway {
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
     ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.channelLifecycleMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
-        + DemoGateway.sessionManagerMethods + DemoGateway.mcpMethods
+        + DemoGateway.sessionManagerMethods + DemoGateway.mcpMethods + DemoGateway.voiceMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -91,6 +91,7 @@ actor DemoGateway {
     var devicePaired: [JSONValue] = []
     var demoNodes: [JSONValue] = []
     var prefs: [String: JSONValue] = [:]
+    var voice = DemoVoiceState()
     /// Custom group catalog in display order; groups stay until deleted, even when empty.
     var groups = ["Home", "Personal", "Work", "Preparations", "Day of move"]
     var progressCards: [String: JSONValue] = [:]
@@ -227,6 +228,7 @@ actor DemoGateway {
         if let result = try self.handleMCP(method, params) { return result }
         if let result = try self.handleSkills(method, params) { return result }
         if let result = try self.handleSessionManager(method, params) { return result }
+        if let result = try self.handleVoice(method, params) { return result }
         if let result = try self.handleCatalog(method, params) { return result }
         if let result = try self.handleSessionList(method, params) { return result }
         if let result = try self.handleGroups(method, params) { return result }

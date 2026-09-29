@@ -122,6 +122,12 @@ MCP servers (`mcp.mjs`, #323):
 - `tools.effective` lists tools of connected servers only, adds a `mcp-server-diagnostic:<name>` warning for a server in `error` and an info `mcp-not-yet-connected` notice while servers connect.
 - `MOCK_NO_MCP=1` drops the methods from `hello-ok` and answers them with `UNKNOWN_METHOD`.
 
+Text-to-speech (`tts.mjs`):
+
+- `tts.status`, `tts.providers` (`openai` configured with voices `alloy`/`verse`, `elevenlabs` not configured), `tts.personas` (`narrator`, `concise`), `tts.enable`/`tts.disable` (flip `enabled` and `auto` between `always` and `off`), `tts.setProvider`, `tts.setPersona` (`off`/`none`/`default`/empty clears) and `tts.convert` (fake gateway-local `audioPath`). Provider, persona and enabled state are mutable per server. Bad ids fail with the Gateway's `Invalid provider. Use a registered TTS provider id.` / `Invalid persona. Use a configured TTS persona id.`.
+- `tts.speak` (`{ text }`) returns `{ audioBase64, provider, outputFormat: "wav", mimeType: "audio/wav", fileExtension: "wav" }` with a 0.3 s valid WAV. Empty text fails with `tts.speak requires text`, over 4096 characters with `tts.speak text too long (N chars, max 4096)`.
+- `MOCK_NO_TTS=1` drops all nine methods from `hello-ok` and answers them with `UNKNOWN_METHOD`.
+
 Usage & cost (`usage.mjs`):
 
 - `usage.status` returns four providers: Claude (a 92% 5-hour window resetting within the hour, plus weekly windows), OpenAI (a window, a credit balance and a monthly budget), Gemini (an `error`) and Ollama (a `summary` only).
