@@ -57,7 +57,7 @@ private struct ContextRing: View {
     var body: some View {
         let tint = self.usage.level.tint
         ZStack {
-            Circle().stroke(.quaternary, lineWidth: 3)
+            Circle().stroke(.tertiary, lineWidth: 3)
             Circle()
                 .trim(from: 0, to: max(0.02, Double(self.usage.percent) / 100))
                 .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
