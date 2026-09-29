@@ -1072,7 +1072,7 @@ public enum MediaDirectives {
     /// Mid-stream, the last line may be a directive that hasn't finished arriving.
     public static func withoutPartialDirective(_ text: String) -> String {
         guard !text.hasSuffix("\n") else { return text }
-        let lastLine = text.split(separator: "\n", omittingEmptySubsequences: false).last.map(String.init) ?? text
+        let lastLine = text[(text.lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex)...]
         let head = lastLine.trimmingCharacters(in: .whitespaces).prefix(6).uppercased()
         guard !head.isEmpty, "MEDIA:".hasPrefix(head) else { return text }
         return String(text.dropLast(lastLine.count))

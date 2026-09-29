@@ -34,6 +34,7 @@ extension DemoGateway {
         **approve later** sends one a few seconds after the reply.
         - **ask** brings up a question card.
         - **plan** walks the task progress card.
+        - **long** streams a multi-page reply.
         - **fail** ends the run with an error.
         - Send **/compact**, or use **Compact Now** in the context ring.
         - **⌘F** searches the chat — try "onsen" in *Japan trip*.
@@ -42,6 +43,87 @@ extension DemoGateway {
         - Switch models, or pin, rename and group chats in the sidebar.
         """
     }
+
+    // MARK: Demo showcase: long reply
+
+    /// Streamed for the **long** trigger word: several blocks (heading, lists, a code fence with a blank line,
+    /// a table, a quote) so a multi-page reply exercises chunked streaming.
+    static let longReply = """
+    ## Building a quiet home lab
+
+    A home lab is easiest to live with when it is small, documented and boring. Start with a single mini PC running a hypervisor, \
+    put the router and access point on their own circuit, and resist the urge to buy rack gear before you know what you will host. \
+    Most people end up running the same handful of services for years, so pick hardware for idle power draw, not peak benchmarks.
+
+    Networking deserves more thought than compute. Give the lab its own VLAN, keep guest devices and smart-home gadgets on \
+    separate segments, and reserve static addresses for anything you will point a bookmark at. A managed switch with eight \
+    ports is plenty, and once the cables are labelled you will thank yourself every time something needs moving.
+
+    Backups are the part that turns a hobby into infrastructure. Snapshot the virtual machines nightly, copy them to a second \
+    disk, and send an encrypted copy of the important data off site each week. Then actually restore one now and then; a backup \
+    you have never restored is only a hope, and the drill takes less than an hour once it is scripted.
+
+    ### What to run first
+
+    - A DNS resolver with ad blocking for the whole house.
+    - A reverse proxy that terminates TLS for every internal service.
+    - A media server for photos, music and home videos.
+    - A password manager the whole family can use.
+    - A monitoring stack with a dashboard and phone alerts.
+    - A small Git server for scripts and configuration.
+
+    ### Rollout order
+
+    1. Install the hypervisor and set a static address.
+    2. Create the VLANs and firewall rules on the router.
+    3. Bring up DNS and the reverse proxy.
+    4. Add monitoring, then alerts you can live with.
+    5. Schedule backups and test a restore.
+
+    A tiny health check script keeps the dashboard honest:
+
+    ```swift
+    import Foundation
+
+    struct Service {
+        let name: String
+        let url: URL
+    }
+
+    func check(_ service: Service) async -> Bool {
+        do {
+            let (_, response) = try await URLSession.shared.data(from: service.url)
+
+            return (response as? HTTPURLResponse)?.statusCode == 200
+        } catch {
+            return false
+        }
+    }
+
+    for service in [Service(name: "dns", url: URL(string: "http://10.0.10.2/health")!)] {
+        print(service.name, await check(service) ? "up" : "down")
+    }
+    ```
+
+    | Service | Host | Idle power |
+    | --- | --- | --- |
+    | DNS | mini PC | 1 W |
+    | Media | mini PC | 4 W |
+    | Backups | NAS | 9 W |
+
+    Power is the hidden cost. A mini PC idles at a few watts, but a rack server can draw a hundred, which adds up to a real \
+    line on the electricity bill by the end of the year. Measure with a plug-in meter before you commit, and turn off anything \
+    you have not touched in a month; you can always bring it back from a snapshot in a couple of minutes.
+
+    Noise and heat matter as well, especially in a flat. Fanless or low-profile machines can live in a cupboard, while anything \
+    with small, fast fans belongs in a garage or basement. Leave a few centimetres of clearance around every box, and check \
+    the temperatures on the dashboard after the first warm week.
+
+    > Keep it boring. The best lab is the one your family never notices is there.
+
+    That is the whole plan: one small box, a tidy network, and backups you have tested. Add one service at a time, write down \
+    what you changed, and the lab will stay a pleasure to run instead of a second job.
+    """
 
     static func words(_ text: String) -> [String] {
         var parts: [String] = []

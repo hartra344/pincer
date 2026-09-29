@@ -132,11 +132,16 @@ extension DemoGateway {
                                           extra: ["toolCallId": .string(callId), "toolName": "exec", "isError": false]))
         }
 
-        let reply = answered ?? Self.reply(to: text, usedTool: wantsTool,
-                                           note: approvesLater ? Self.laterApprovalNote : nil)
+        let wantsLong = lowered.range(of: #"\blong\b"#, options: .regularExpression) != nil
+        let reply = wantsLong ? Self.longReply
+            : answered ?? Self.reply(to: text, usedTool: wantsTool, note: approvesLater ? Self.laterApprovalNote : nil)
         var out = ""
-        for word in Self.words(reply) {
+        // The long reply streams a few words per step so it doesn't take a minute.
+        let words = Self.words(reply)
+        let step = wantsLong ? 3 : 1
+        for start in stride(from: 0, to: words.count, by: step) {
             guard await self.pause(runId, milliseconds: 30) else { return }
+            let word = words[start..<min(start + step, words.count)].joined()
             out += word
             self.chat(runId, ["state": "delta", "deltaText": .string(word),
                               "message": Self.message("assistant", [Self.thinking(thinking), Self.text(out)],
