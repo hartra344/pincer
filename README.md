@@ -13,6 +13,11 @@ Pincer is a **pure client**. It connects to a Gateway you already run and speaks
 
 ## Quick start
 
+Join the public beta on TestFlight:
+
+- [iOS / iPadOS](https://testflight.apple.com/join/PN4AQR11)
+- [macOS](https://testflight.apple.com/join/CehVqBEe)
+
 Install Pincer (see [Install](website/src/content/docs/getting-started/install.mdx)), open it and follow the first-run setup, or choose **Try the Demo** (⌘D on macOS) to look around with a simulated gateway. No gateway needed, and nothing leaves the device. The walkthrough is in [Connect a gateway](website/src/content/docs/getting-started/connect-a-gateway.mdx) and [Setup wizard](website/src/content/docs/getting-started/setup-wizard.mdx); for remote access see [Connect over Tailscale](website/src/content/docs/getting-started/tailscale.mdx).
 
 ## Features
