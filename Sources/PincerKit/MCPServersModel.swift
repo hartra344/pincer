@@ -33,6 +33,8 @@ public final class MCPServersModel {
     @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
     @ObservationIgnored private var hasLoaded = false
     @ObservationIgnored private var reloadQueued = false
+    /// The load in flight; later callers queue one more fetch and wait for it.
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var observingSaves = false
 
     init(settings: GatewaySettingsModel, connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?,
@@ -142,15 +144,23 @@ public final class MCPServersModel {
 
     public func load() async {
         self.observeSaves()
-        if self.loadState.isRunning {
+        if let running = self.loadTask {
+            // Callers (e.g. after sign-in) need a fetch that started after their change, not the one in flight.
             self.reloadQueued = true
+            await running.value
             return
         }
         self.loadState = .running
-        repeat {
-            self.reloadQueued = false
-            await self.fetchStatuses()
-        } while self.reloadQueued
+        let task = Task { @MainActor in
+            repeat {
+                self.reloadQueued = false
+                await self.fetchStatuses()
+            } while self.reloadQueued
+            // Cleared with no suspension after the last check, so no caller can wait on a finished load.
+            self.loadTask = nil
+        }
+        self.loadTask = task
+        await task.value
         self.hasLoaded = true
         if self.loadState.isRunning { self.loadState = .idle }
     }
