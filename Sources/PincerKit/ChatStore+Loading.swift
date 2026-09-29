@@ -24,6 +24,7 @@ extension ChatStore {
     }
 
     public func load(force: Bool = false) async {
+        self.isDehydrated = false
         await self.restoreDraft()
         await self.restoreFromCache()
         guard let gateway, gateway.state.isConnected else { return }
@@ -305,6 +306,7 @@ extension ChatStore {
         }
         let merged = older + parsed + pending
         if merged != self.items { self.items = merged }
+        self.pruneRecoveryState(keeping: parsed)
         self.recoverCappedMessages()
 
         if let inFlight = history["inFlightRun"], let runId = inFlight["runId"]?.text {

@@ -113,6 +113,11 @@ extension ChatStore {
     }
 
     func handleSessionMessage(_ payload: JSONValue) {
+        // A dehydrated chat has no transcript to append to; the next load fetches what it missed.
+        guard !self.isDehydrated else {
+            self.stale = true
+            return
+        }
         guard let message = payload["message"], let item = ChatItem(message, fallbackIndex: self.items.count) else {
             self.scheduleReload()
             return
