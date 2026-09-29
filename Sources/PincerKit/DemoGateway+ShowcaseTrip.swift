@@ -22,16 +22,18 @@ extension DemoGateway {
         var messages: [JSONValue] = []
         // Planned over about a month, newest a minute ago, so search results show realistic dates.
         let pairs = 91 + Self.tripRoute.count
-        func pair(_ user: String, _ assistant: String) {
+        func pair(_ user: String, _ assistant: String, assistantId: String? = nil) {
             let ago = Double(pairs - 1 - messages.count / 2) * 5 * 3600 + 60
             messages.append(Self.message("user", [Self.text(user)], ago: ago + 60))
-            messages.append(Self.message("assistant", [Self.text(assistant)], ago: ago))
+            messages.append(Self.message("assistant", [Self.text(assistant)], id: assistantId, ago: ago))
         }
         for index in 0..<91 {
             let idea = ideas[index % ideas.count]
             pair(idea.ask, "Idea #\(index + 1): \(idea.answer).")
         }
-        for (user, assistant) in Self.tripRoute { pair(user, assistant) }
+        for (user, assistant) in Self.tripRoute {
+            pair(user, assistant, assistantId: user == DemoBookmarks.tripQuestion ? DemoBookmarks.tripMessageId : nil)
+        }
         return messages
     }
 
