@@ -203,6 +203,44 @@ struct ChatEvictionTests {
         if let dir = TranscriptCache.directory(gatewayId: gateway.id) { try? FileManager.default.removeItem(at: dir) }
         self.scratch.remove()
     }
+    @Test func dehydratedChatNeverWritesEmptiedStateToCache() async {
+        let gateway = self.gateway()
+        let chat = gateway.chat(for: "agent:main:dashboard:a")
+        self.hydrate(chat)
+        await chat.dehydrate()
+        await chat.saveToCache()
+        chat.scheduleSave()
+        await gateway.cacheCleared()
+        await chat.finishCaching()
+        try? await Task.sleep(for: .milliseconds(1300))
+        let (snapshot, _) = await TranscriptCache.loadWithOutcome(gatewayId: gateway.id, sessionKey: chat.sessionKey)
+        #expect(snapshot?.items.map(\.id) == ["m0", "m1", "m2"])
+        await self.cleanup(gateway)
+    }
+
+    @Test func prefetchRecachesDehydratedChatsAfterCacheClear() async {
+        let gateway = GatewayStore(profile: .demo(), defaults: self.scratch.defaults, identity: Fixtures.identity())
+        gateway.start()
+        await self.settle { gateway.state == .connected && !gateway.sessions.isEmpty }
+        let key = "agent:main:dashboard:garden"
+        let chat = gateway.chat(for: key)
+        await chat.load(force: true)
+        #expect(chat.hasLoaded)
+        await chat.dehydrate()
+        #expect(chat.isDehydrated)
+        await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: key)
+        #expect(await TranscriptCache.meta(gatewayId: gateway.id, sessionKey: key) == nil)
+        await gateway.cacheCleared()
+        for _ in 0..<600 {
+            if await TranscriptCache.meta(gatewayId: gateway.id, sessionKey: key) != nil { break }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(await TranscriptCache.meta(gatewayId: gateway.id, sessionKey: key) != nil)
+        #expect(chat.isDehydrated && chat.items.isEmpty)
+        gateway.stop()
+        if let dir = TranscriptCache.directory(gatewayId: gateway.id) { try? FileManager.default.removeItem(at: dir) }
+        self.scratch.remove()
+    }
 }
 
 @MainActor

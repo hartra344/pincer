@@ -611,7 +611,7 @@ public final class GatewayStore: Identifiable {
             else { return }
             for row in rows {
                 guard !Task.isCancelled, let self, self.state.isConnected else { return }
-                if self.chats[row.key] != nil { continue }
+                if let chat = self.chats[row.key], !chat.isDehydrated { continue }
                 if let meta = await TranscriptCache.meta(gatewayId: self.id, sessionKey: row.key),
                    meta.complete, let cached = meta.activityMs, cached >= row.activityMs
                 {
