@@ -87,7 +87,7 @@ func runDemoOutbox() async {
     guard seeded, let item = outboxItem(chat, id) else { return }
     // A drop would keep it Queued; the seed is a timeout while connected, which really reads Failed.
     let reason: String? = if case let .failed(failure)? = item.outboxState { failure.message } else { nil }
-    check(reason == "The gateway timed out.", "demo: it failed on a timeout, not a drop (\(reason ?? "nil"))")
+    check(reason == "The Gateway timed out.", "demo: it failed on a timeout, not a drop (\(reason ?? "nil"))")
     check(isFailed(item.outboxState, retryable: true) && item.isPending && item.role == .user,
           "demo: it reads Failed with Retry (\(String(describing: item.outboxState)))")
     check(chat.items.last?.idempotencyKey == id, "demo: the failed message is the chat's latest")

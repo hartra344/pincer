@@ -238,7 +238,7 @@ struct GatewayLogsModelTests {
         let model = self.model(script)
         await model.poll()
         #expect(model.failure == .unavailable("EACCES: permission denied"))
-        #expect(model.failure?.message == "Couldn't read the gateway log: EACCES: permission denied. Retrying…")
+        #expect(model.failure?.message == "Couldn't read the Gateway log: EACCES: permission denied. Retrying…")
         #expect(model.nextDelay == .seconds(2))
         await model.poll()
         #expect(model.failure == .unavailable("busy") && model.nextDelay == .seconds(4))
@@ -597,7 +597,8 @@ struct GatewayLogsModelEdgeCaseTests {
         #expect(map("FORBIDDEN", "x", .object(["code": .string("MISSING_SCOPE")])) == .missingScope)
         #expect(map("UNAVAILABLE", "Log read failed:  ENOENT") == .unavailable("ENOENT"))
         #expect(map("UNAVAILABLE", "disk busy") == .unavailable("disk busy"))
-        #expect(map("FORBIDDEN", "operator.admin required") == .other("operator.admin required"))
+        #expect(map("FORBIDDEN", "operator.admin required") == .missingScope)
+        #expect(map("FORBIDDEN", "not allowed") == .other("not allowed"))
         #expect(GatewayLogsModel.failure(for: GatewayError.notConnected) != .missingScope)
     }
 

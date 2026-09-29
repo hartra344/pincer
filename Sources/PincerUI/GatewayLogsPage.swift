@@ -65,7 +65,7 @@ struct GatewayLogsPage: View {
         Group {
             if !model.supported {
                 ContentUnavailableView(L("Gateway Logs Aren't Available"), systemImage: "doc.text.magnifyingglass",
-                                       description: Text("This gateway doesn't offer logs.tail. Update OpenClaw to view its logs here.", bundle: .module))
+                                       description: Text("This Gateway doesn't offer logs.tail. Update OpenClaw to view its logs here.", bundle: .module))
             } else {
                 self.content(model, visible: visible, connected: connected)
             }
@@ -103,7 +103,7 @@ struct GatewayLogsPage: View {
             }
             Button(L("Cancel"), role: .cancel) {}
         } message: {
-            Text("Gateway logs are redacted by the gateway, but they can still contain hostnames, file paths and message content. Review them before sharing.", bundle: .module)
+            Text("Gateway logs are redacted by the Gateway, but they can still contain hostnames, file paths and message content. Review them before sharing.", bundle: .module)
         }
         .fileExporter(
             isPresented: Binding(get: { self.exportDocument != nil }, set: { if !$0 { self.exportDocument = nil } }),
@@ -163,7 +163,7 @@ struct GatewayLogsPage: View {
                         }
                 }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, Theme.Spacing.xs)
         }
         .scrollPosition(self.$position)
         // Only the first layout starts at the bottom; following the tail is done below, so
@@ -199,7 +199,7 @@ struct GatewayLogsPage: View {
                         .font(.callout)
                 }
                 .glassButton()
-                .padding(12)
+                .padding(Theme.Spacing.xl)
                 .transition(.opacity)
             }
         }
@@ -305,7 +305,7 @@ struct GatewayLogsPage: View {
                 .foregroundStyle(.orange)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
-                .padding(.vertical, 8)
+                .padding(.vertical, Theme.Spacing.md)
                 .background(Color.orange.opacity(0.12))
         } else if let failure = model.failure, !model.entries.isEmpty {
             HStack {
@@ -317,7 +317,7 @@ struct GatewayLogsPage: View {
             }
             .font(.callout)
             .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.vertical, Theme.Spacing.md)
             .background(Color.red.opacity(0.1))
         }
     }
@@ -325,7 +325,7 @@ struct GatewayLogsPage: View {
     @ViewBuilder private func emptyState(_ model: GatewayLogsModel, connected: Bool) -> some View {
         if !connected {
             ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                   description: Text("Connect to the gateway to see its logs.", bundle: .module))
+                                   description: Text("Connect to the Gateway to see its logs.", bundle: .module))
         } else if let failure = model.failure, !failure.isUnavailable {
             ContentUnavailableView {
                 Label(L("Couldn't Load Logs"), systemImage: "exclamationmark.triangle")
@@ -343,7 +343,7 @@ struct GatewayLogsPage: View {
                 if let file = model.file {
                     Text("New lines written to \(file) appear here.", bundle: .module)
                 } else {
-                    Text("New lines appear here as the gateway writes them.", bundle: .module)
+                    Text("New lines appear here as the Gateway writes them.", bundle: .module)
                 }
             }
         }
@@ -353,8 +353,8 @@ struct GatewayLogsPage: View {
 
     #if os(macOS)
     private func filterBar(_ model: GatewayLogsModel) -> some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 4) {
+        HStack(spacing: Theme.Spacing.md) {
+            HStack(spacing: Theme.Spacing.xs) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField(L("Search Logs"), text: self.$query)
                     .textFieldStyle(.plain)
@@ -367,9 +367,9 @@ struct GatewayLogsPage: View {
                         .help(L("Clear Search"))
                 }
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, Theme.Spacing.sm)
             .padding(.vertical, 3)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: Theme.Radius.small))
             .frame(minWidth: 160, maxWidth: 260)
             ForEach(GatewayLogLevel.allCases) { level in
                 Toggle(isOn: self.levelBinding(level)) {
@@ -383,7 +383,7 @@ struct GatewayLogsPage: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal)
-        .padding(.vertical, 6)
+        .padding(.vertical, Theme.Spacing.sm)
         .background(.bar)
     }
     #endif
@@ -391,7 +391,7 @@ struct GatewayLogsPage: View {
     private func statusBar(_ model: GatewayLogsModel, connected: Bool) -> some View {
         let matches = self.matches
         let total = self.totalLines
-        return HStack(spacing: 8) {
+        return HStack(spacing: Theme.Spacing.md) {
             Text(matches == total
                 ? "\(total.formatted()) line\(total == 1 ? "" : "s")"
                 : "\(matches.formatted()) of \(total.formatted()) lines")
@@ -416,7 +416,7 @@ struct GatewayLogsPage: View {
         }
         .font(.caption)
         .padding(.horizontal)
-        .padding(.vertical, 6)
+        .padding(.vertical, Theme.Spacing.sm)
         .background(.bar)
     }
 
@@ -513,7 +513,7 @@ private struct GatewayLogRow: View, Equatable {
         Group {
             switch self.entry.kind {
             case let .marker(text):
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.md) {
                     VStack { Divider() }
                     Text(text)
                         .font(.caption)
@@ -522,7 +522,7 @@ private struct GatewayLogRow: View, Equatable {
                         .fixedSize(horizontal: false, vertical: true)
                     VStack { Divider() }
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, Theme.Spacing.sm)
             case .line:
                 if self.showRaw {
                     Text(self.entry.displayRaw)
@@ -533,8 +533,8 @@ private struct GatewayLogRow: View, Equatable {
             }
         }
         .font(Self.font)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 2)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.xxs)
         .background(self.background)
     }
 
@@ -547,7 +547,7 @@ private struct GatewayLogRow: View, Equatable {
     }
 
     private var parsed: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
             if let label = GatewayLogTime.label(self.entry) {
                 Text(label)
                     .foregroundStyle(.secondary)
@@ -589,7 +589,7 @@ private struct GatewayLogBadge: View {
                 Text(level.label)
                     .font(.caption2.monospaced().weight(.bold))
                     .foregroundStyle(.white)
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, Theme.Spacing.xs)
                     .background(Color.red, in: Capsule())
             default:
                 Text(level.label)

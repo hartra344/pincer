@@ -117,7 +117,7 @@ private struct SetupIntroView: View {
     @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: Theme.Spacing.section) {
             Spacer(minLength: 0)
             Image(systemName: "checklist")
                 .font(.system(size: 44))
@@ -129,13 +129,13 @@ private struct SetupIntroView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 420)
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 ForEach(SetupStep.allCases) { step in
                     Label(step.title, systemImage: step.symbol)
                 }
             }
-            .padding(.vertical, 4)
-            HStack(spacing: 12) {
+            .padding(.vertical, Theme.Spacing.xs)
+            HStack(spacing: Theme.Spacing.xl) {
                 Button("Not Now") { self.setup.notNow() }
                     .keyboardShortcut(.cancelAction)
                 Button("Start Setup") { self.setup.startSetup() }
@@ -145,7 +145,7 @@ private struct SetupIntroView: View {
             .controlSize(.large)
             Spacer(minLength: 0)
         }
-        .padding(32)
+        .padding(Theme.Spacing.hero)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -191,26 +191,26 @@ private struct SetupStepList: View {
             Text("Set Up \(self.gateway.profile.name)")
                 .font(.headline)
                 .lineLimit(2)
-                .padding([.horizontal, .top], 16)
-                .padding(.bottom, 10)
+                .padding([.horizontal, .top], Theme.Spacing.xxl)
+                .padding(.bottom, Theme.Spacing.lg)
             List(SetupStep.allCases, selection: Binding(get: { self.setup.currentStep },
                                                          set: { if let step = $0 { self.setup.currentStep = step } })) { step in
                 let status = self.setup.status(of: step)
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.md) {
                     SetupStatusIcon(status: status, step: step)
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                         Text(step.title)
                         Text(SetupStatusIcon.label(status, step)).font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, Theme.Spacing.xxs)
                 .tag(step)
             }
             .listStyle(.sidebar)
             Text("\(self.setup.settledCount) of \(SetupStep.allCases.count) done or skipped")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .padding(16)
+                .padding(Theme.Spacing.xxl)
         }
     }
 }
@@ -220,17 +220,17 @@ private struct SetupStepStrip: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Spacing.md) {
                 ForEach(SetupStep.allCases) { step in
                     let status = self.setup.status(of: step)
                     Button { self.setup.currentStep = step } label: {
-                        HStack(spacing: 4) {
+                        HStack(spacing: Theme.Spacing.xs) {
                             SetupStatusIcon(status: status, step: step)
                             Text(step.title)
                         }
                         .font(.subheadline)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+                        .padding(.horizontal, Theme.Spacing.lg)
+                        .padding(.vertical, Theme.Spacing.sm)
                         .background(Capsule().fill(step == self.setup.currentStep ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.1)))
                     }
                     .buttonStyle(.plain)
@@ -238,7 +238,7 @@ private struct SetupStepStrip: View {
                 }
             }
             .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.vertical, Theme.Spacing.md)
         }
     }
 }
@@ -260,11 +260,11 @@ private struct SetupStepDetail: View {
         VStack(spacing: 0) {
             Form {
                 Section {
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.lg) {
                         Image(systemName: step.symbol).font(.title2).foregroundStyle(.tint)
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                             Text(step.heading).font(.title3.bold()).accessibilityAddTraits(.isHeader)
-                            HStack(spacing: 4) {
+                            HStack(spacing: Theme.Spacing.xs) {
                                 SetupStatusIcon(status: status, step: step)
                                 Text(SetupStatusIcon.label(status, step)).foregroundStyle(SetupStatusIcon.color(status, step))
                             }
@@ -304,7 +304,7 @@ private struct SetupStepDetail: View {
             Button("Back") { self.setup.goBack() }
                 .disabled(self.setup.previousStep == nil)
             if self.setup.loadState.isRunning {
-                ProgressView().controlSize(.small).padding(.leading, 4)
+                ProgressView().controlSize(.small).padding(.leading, Theme.Spacing.xs)
             } else if !self.embedded {
                 Button { Task { await self.setup.load() } } label: { Label("Check Again", systemImage: "arrow.clockwise") }
                     .labelStyle(.iconOnly)
@@ -329,7 +329,7 @@ private struct SetupStepDetail: View {
                 .keyboardShortcut(step == .testMessage ? nil : KeyboardShortcut.defaultAction)
                 .buttonStyle(.borderedProminent)
         }
-        .padding(12)
+        .padding(Theme.Spacing.xl)
     }
 }
 
@@ -431,7 +431,7 @@ private struct SetupSkillsStep: View {
                     Text("Not set up").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 }
                 ForEach(missing) { skill in
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                         Label {
                             Text(skill.name)
                         } icon: {
@@ -528,7 +528,7 @@ private struct SetupTestReply: View {
             Label("Your agent didn't answer. You can try again, or skip and chat later.", systemImage: "exclamationmark.bubble")
                 .foregroundStyle(.red)
         } else if let reply, !reply.body.isEmpty, !reply.isStreaming {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Label("Your agent replied.", systemImage: "checkmark.bubble.fill").foregroundStyle(.green)
                 Text(Self.inline(reply.body)).lineLimit(4).foregroundStyle(.secondary).textSelection(.enabled)
             }
@@ -537,7 +537,7 @@ private struct SetupTestReply: View {
             Label("Your agent didn't answer. You can try again, or skip and chat later.", systemImage: "exclamationmark.bubble")
                 .foregroundStyle(.red)
         } else {
-            HStack(spacing: 6) {
+            HStack(spacing: Theme.Spacing.sm) {
                 ProgressView().controlSize(.small)
                 Text("Sent. Waiting for your agent…")
                     .foregroundStyle(.secondary)

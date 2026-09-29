@@ -36,7 +36,7 @@ public enum FirstRunTour {
         if !(await self.until(3, { self.hasWindow })) { self.newWindow() }
         #endif
         guard await self.until(20, { self.hasWindow }) else { return self.fail("No main window.") }
-        guard app.gateways.isEmpty else { return self.fail("Start with no gateways.") }
+        guard app.gateways.isEmpty else { return self.fail("Start with no Gateways.") }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         #if os(macOS)
         self.mainWindow?.setContentSize(NSSize(width: 920, height: 660))
@@ -99,7 +99,7 @@ public enum FirstRunTour {
         await snap("verify")
 
         model.send(.continueToSetup)
-        guard let gateway = model.gateway else { return self.fail("The gateway wasn't added.") }
+        guard let gateway = model.gateway else { return self.fail("The Gateway wasn't added.") }
         let setup = gateway.setup
         _ = await self.until(45) { gateway.state.isConnected && !setup.loadState.isRunning && setup.skills != nil }
         setup.currentStep = .agent

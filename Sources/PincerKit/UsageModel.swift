@@ -63,7 +63,7 @@ public final class UsageModel {
 
     public nonisolated static let methods = ["usage.status", "usage.cost", "sessions.usage", "sessions.usage.timeseries",
                                              "sessions.usage.logs"]
-    public nonisolated static let decodeFailure = "The gateway sent usage data Pincer couldn't read."
+    public nonisolated static let decodeFailure = "The Gateway sent usage data Pincer couldn't read."
 
     @ObservationIgnored private let request: Request
     @ObservationIgnored private let methods: @MainActor () -> Set<String>?
@@ -289,7 +289,7 @@ public final class UsageModel {
                 section.loadState = .idle
                 section.hasLoaded = true
             }
-        } catch let error where GatewayConfigClient.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             guard self.generations[token] == generation else { return }
             edit { $0.markUnsupported() }
         } catch {
@@ -300,7 +300,7 @@ public final class UsageModel {
                     section.value = recovered
                     section.loadState = .idle
                 } else {
-                    section.isForbidden = Self.isForbidden(error)
+                    section.isForbidden = GatewayError.isForbidden(error)
                     section.loadState = .failed(Self.message(for: error))
                 }
                 section.hasLoaded = true
@@ -308,14 +308,9 @@ public final class UsageModel {
         }
     }
 
-    static func isForbidden(_ error: Error) -> Bool {
-        guard case let GatewayError.rpc(code, _, details) = error else { return false }
-        return code == "FORBIDDEN" && details?["code"]?.text != "MISSING_SCOPE"
-    }
-
     static func message(for error: Error) -> String {
         if error is DecodingError { return Self.decodeFailure }
         guard case let GatewayError.rpc(_, message, _) = error else { return error.localizedDescription }
-        return message.isEmpty ? "The gateway couldn't load usage." : message
+        return message.isEmpty ? "The Gateway couldn't load usage." : message
     }
 }

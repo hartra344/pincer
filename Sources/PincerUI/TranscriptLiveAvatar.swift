@@ -173,11 +173,11 @@ final class TranscriptLiveAvatar {
         }
         guard view.window != nil else { return }
         var next = AvatarStateMachine.nextTransition(for: self.signals, now: now)
+        // Offscreen or inactive, only a transient pose's expiry is scheduled; a row scrolling back in is
+        // reconfigured (attach), and windows, scene and Reduce Motion changes tick via observers.
         let wait: TimeInterval? = if active {
             AvatarMotion.frameInterval(for: state, plush: view.isPlush)
                 ?? AvatarMotion.nextIdleChange(after: now.timeIntervalSinceReferenceDate, phase: phase) - now.timeIntervalSinceReferenceDate
-        } else if isOffscreenOnly {
-            1
         } else {
             nil
         }
@@ -192,16 +192,5 @@ final class TranscriptLiveAvatar {
         timer.tolerance = 0.01
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
-    }
-
-    /// In a visible window but scrolled out of view, when polling for it coming back is cheaper
-    /// than hooking the scroll.
-    private var isOffscreenOnly: Bool {
-        guard Self.animates, let view = self.live, let window = view.window else { return false }
-        #if os(macOS)
-        return window.occlusionState.contains(.visible) && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        #else
-        return UIApplication.shared.applicationState == .active && !UIAccessibility.isReduceMotionEnabled
-        #endif
     }
 }

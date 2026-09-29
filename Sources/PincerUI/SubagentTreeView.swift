@@ -7,7 +7,7 @@ struct RunStatusLabel: View {
     var showsText = false
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Theme.Spacing.xs) {
             Group {
                 switch self.status {
                 case .running:
@@ -82,8 +82,8 @@ struct SubagentTreeView: View {
                         .lineLimit(1)
                 }
                 .buttonStyle(.borderless)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, Theme.Spacing.xl)
+                .padding(.vertical, Theme.Spacing.md)
                 Divider()
             }
             if self.tree.isEmpty {
@@ -161,7 +161,7 @@ private struct SubagentRowView: View {
     var body: some View {
         let duration = self.node.duration(now: self.now).map(RunDuration.format)
         let lastActive = self.lastActive.map { RunsFormat.relative($0, now: self.now) }
-        HStack(alignment: .top, spacing: 6) {
+        HStack(alignment: .top, spacing: Theme.Spacing.sm) {
             Group {
                 if self.node.children.isEmpty {
                     Color.clear
@@ -177,7 +177,7 @@ private struct SubagentRowView: View {
             }
             .frame(width: 12, height: 16)
             RunStatusLabel(status: self.node.status)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 HStack {
                     Text(self.title).lineLimit(1)
                     Spacer(minLength: 4)
@@ -196,7 +196,7 @@ private struct SubagentRowView: View {
             }
         }
         .padding(.leading, CGFloat(self.node.depth - 1) * 14)
-        .padding(.vertical, 2)
+        .padding(.vertical, Theme.Spacing.xxs)
         .accessibilityElement(children: .combine)
         .accessibilityLabel([self.title, self.agentName, self.node.status.label, duration,
                              lastActive.map { L("last active \($0)") }].compactMap { $0 }.joined(separator: ", "))

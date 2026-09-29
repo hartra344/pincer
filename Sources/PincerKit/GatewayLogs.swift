@@ -374,7 +374,7 @@ public final class GatewayLogsModel {
         public var message: String {
             switch self {
             case .missingScope: GatewayLogsModel.missingScopeMessage
-            case let .unavailable(message): "Couldn't read the gateway log: \(message). Retrying…"
+            case let .unavailable(message): "Couldn't read the Gateway log: \(message). Retrying…"
             case let .other(message): message
             }
         }
@@ -475,7 +475,7 @@ public final class GatewayLogsModel {
             self.supported = true
             self.failure = nil
             self.consecutiveFailures = 0
-        } catch let error where GatewayConfigClient.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             self.markUnsupported()
         } catch {
             self.consecutiveFailures += 1
@@ -580,10 +580,8 @@ public final class GatewayLogsModel {
     }
 
     static func failure(for error: Error) -> Failure {
-        guard case let GatewayError.rpc(code, message, details) = error else { return .other(error.localizedDescription) }
-        if code == "MISSING_SCOPE" || details?["code"]?.text == "MISSING_SCOPE" || message.lowercased().contains("operator.read") {
-            return .missingScope
-        }
+        guard case let GatewayError.rpc(code, message, _) = error else { return .other(error.localizedDescription) }
+        if GatewayError.isMissingScope(error) { return .missingScope }
         let prefix = "log read failed:"
         if message.lowercased().hasPrefix(prefix) {
             return .unavailable(message.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces))

@@ -29,7 +29,7 @@ public enum AgentManagement {
     public static let conflictErrorType = "agent_file_conflict"
 
     public static let needsAdminMessage = "Editing agents needs Full Management. Turn it on under Connection, then approve this device on the Gateway host."
-    public static let unsupportedMessage = "This gateway can't manage agents. Update OpenClaw to create and edit agents here."
+    public static let unsupportedMessage = "This Gateway can't manage agents. Update OpenClaw to create and edit agents here."
     public static let workspaceChangeWarning = "Changing the workspace points this agent at a different folder. Files aren't moved."
     public static let bindingsNotCopiedNote = "Channel bindings aren't copied. The copy gets its own new workspace."
 
@@ -81,7 +81,7 @@ public enum AgentManagement {
     /// The delete confirmation's message. `bindingCount` is nil when the config isn't loaded.
     public static func deleteMessage(agentName: String, bindingCount: Int?) -> String {
         let bindings = bindingCount.map { " and its \($0) binding\($0 == 1 ? "" : "s")" } ?? ""
-        return "This removes “\(agentName)” from the gateway\(bindings). Delete Agent keeps its workspace, sessions and other data on the gateway host. Delete and Move Files to Trash moves them to the host's Trash."
+        return "This removes “\(agentName)” from the Gateway\(bindings). Delete Agent keeps its workspace, sessions and other data on the Gateway host. Delete and Move Files to Trash moves them to the host's Trash."
     }
 
     /// The agent's own model override in the config (`agents.entries.<id>.model`, a ref or
@@ -410,12 +410,8 @@ public enum AgentManagementError: Error, Equatable, Sendable {
         if details?["type"]?.text == AgentManagement.conflictErrorType || lower.contains("changed since it was read") {
             return .conflict(currentHash: details?["currentHash"]?.text?.lowercased())
         }
-        if code == "MISSING_SCOPE" || details?["code"]?.text == "MISSING_SCOPE"
-            || lower.contains("missing scope") || lower.contains("operator.admin")
-        {
-            return .needsAdmin
-        }
-        if code == "UNKNOWN_METHOD" || code == "METHOD_NOT_FOUND" || lower.contains("unknown method") { return .unsupported }
+        if GatewayError.isMissingScope(error) { return .needsAdmin }
+        if GatewayError.isUnknownMethod(error) { return .unsupported }
         if lower.hasPrefix("agent \""), lower.hasSuffix("not found") { return .notFound(message) }
         if code == "INVALID_REQUEST" { return .validation(message) }
         return .other(message)
@@ -425,7 +421,7 @@ public enum AgentManagementError: Error, Equatable, Sendable {
         switch self {
         case .needsAdmin: AgentManagement.needsAdminMessage
         case .unsupported: AgentManagement.unsupportedMessage
-        case .conflict: "The file changed on the gateway since you opened it."
+        case .conflict: "The file changed on the Gateway since you opened it."
         case let .notFound(message): message
         case let .tooLarge(bytes): AgentManagement.tooLargeMessage(bytes: bytes)
         case let .validation(message), let .other(message): message
@@ -512,7 +508,7 @@ public final class AgentManagementModel {
     /// Why workspace files are read-only, or nil when they can be saved.
     public var filesReadOnlyReason: String? {
         if !self.filesSupported || !self.supports(AgentManagement.filesSetMethod) {
-            return "This gateway can't save workspace files. Update OpenClaw to edit them here."
+            return "This Gateway can't save workspace files. Update OpenClaw to edit them here."
         }
         if !self.hasAdmin { return AgentManagement.needsAdminMessage }
         return nil

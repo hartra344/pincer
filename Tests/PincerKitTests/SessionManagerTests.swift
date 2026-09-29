@@ -120,7 +120,7 @@ struct SessionManagerTests {
         let preview = try #require(SessionPreview(["key": "k", "status": "ok",
                                                    "items": [["role": "user", "text": "hi"], ["role": "assistant", "text": "hello"]]]))
         #expect(preview.items.map(\.role) == ["user", "assistant"] && preview.items.map(\.text) == ["hi", "hello"] && preview.emptyReason == nil)
-        #expect(SessionPreview(["key": "k", "status": "cold", "items": []])?.emptyReason == "The transcript isn't loaded on the gateway yet")
+        #expect(SessionPreview(["key": "k", "status": "cold", "items": []])?.emptyReason == "The transcript isn't loaded on the Gateway yet")
         #expect(SessionPreview(["key": "k", "status": "missing", "items": []])?.emptyReason == "This session is gone")
         #expect(SessionPreview(["key": "k", "status": "later"])?.status == .unknown)
         #expect(SessionPreview(["status": "ok"]) == nil)
@@ -293,7 +293,7 @@ struct SessionManagerTests {
         let admin = SessionManagerModel(request: { try recorder.request($0, $1) })
         await admin.load(filter: .active)
         let missing = await admin.delete([Self.alpha.key])
-        #expect(missing.failed.first?.message == "The gateway didn't delete this session.", "deleted: false isn't a success")
+        #expect(missing.failed.first?.message == "The Gateway didn't delete this session.", "deleted: false isn't a success")
         #expect(recorder.calls.last?.params["archivedOnly"] == nil, "admin deletes live rows without archivedOnly")
     }
 

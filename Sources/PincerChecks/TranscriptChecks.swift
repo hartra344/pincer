@@ -34,13 +34,9 @@ func runMediaDirectiveChecks() async {
     check(FileRef(name: "data", mimeType: "application/json").isText && !FileRef(name: "a.pdf", mimeType: "application/pdf").isText
           && FileRef(name: "Dockerfile").isText && !FileRef(name: "a.zip").isText, "text files recognized")
     let svgData = Data(#"<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><rect width="400" height="200" fill="red"/></svg>"#.utf8)
-    check(SVGRasterizer.isSVG(svgData) && !SVGRasterizer.isSVG(Data("<html><svg></svg>".utf8)), "SVG sniffing")
-    check(SVGRasterizer.intrinsicSize(svgData) == CGSize(width: 400, height: 200), "SVG size from viewBox")
-    check(SVGRasterizer.intrinsicSize(Data(#"<svg width="120px" height='60' viewBox="0 0 10 10">"#.utf8)) == CGSize(width: 120, height: 60), "SVG size from width/height")
-    let svgFitted = await SVGRasterizer.rasterize(svgData, fitting: CGSize(width: 3000, height: 900))
-    check(svgFitted?.width == 1800 && svgFitted?.height == 900, "SVG rasterizes to fit preview bounds")
-    let svgImage = await SVGRasterizer.rasterize(svgData)
-    check(svgImage?.width == 1200 && svgImage?.height == 600, "SVG rasterizes")
+    check(SVGSource.isSVG(svgData) && !SVGSource.isSVG(Data("<html><svg></svg>".utf8)), "SVG sniffing")
+    check(SVGSource.intrinsicSize(svgData) == CGSize(width: 400, height: 200), "SVG size from viewBox")
+    check(SVGSource.intrinsicSize(Data(#"<svg width="120px" height='60' viewBox="0 0 10 10">"#.utf8)) == CGSize(width: 120, height: 60), "SVG size from width/height")
     let turnEntries = TranscriptBuilder.build([ChatItem(json(#"{"role":"assistant","content":[{"type":"text","text":"Duck:\nMEDIA:https://e.example/d.webp"}]}"#), fallbackIndex: 0)!])
     if case let .assistant(turn) = turnEntries.first {
         check(turn.images.count == 1 && turn.body == "Duck:", "transcript turn renders MEDIA as image")

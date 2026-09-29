@@ -315,9 +315,9 @@ func checkPairingInboxModel() async {
     check(keeps.requests.count == 1 && keeps.loadState.error == "down", "failed refresh keeps the last list")
 
     // More scope and unsupported shapes.
-    let bareForbidden = PairingInboxModel { _, _ in throw GatewayError.rpc(code: "FORBIDDEN", message: "forbidden", details: nil) }
+    let bareForbidden = PairingInboxModel { _, _ in throw GatewayError.rpc(code: "FORBIDDEN", message: "forbidden: requires operator.pairing", details: nil) }
     await bareForbidden.load()
-    check(bareForbidden.needsAccess && bareForbidden.loadState.error == PairingInboxModel.missingScopeMessage, "plain FORBIDDEN → access needed")
+    check(bareForbidden.needsAccess && bareForbidden.loadState.error == PairingInboxModel.missingScopeMessage, "FORBIDDEN naming a scope → access needed")
     let revoked = Scripted(false)
     let revokedModel = PairingInboxModel { _, _ in
         if revoked.value {

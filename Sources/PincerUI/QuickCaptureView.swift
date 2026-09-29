@@ -60,13 +60,13 @@ struct QuickCaptureView: View {
     // MARK: Target
 
     private var targetRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Theme.Spacing.md) {
             Text("To:", bundle: .module)
                 .foregroundStyle(.secondary)
             Button {
                 self.model.togglePicker()
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text(self.model.targetTitle)
                         .fontWeight(.medium)
                         .lineLimit(1)
@@ -79,8 +79,8 @@ struct QuickCaptureView: View {
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(.secondary)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
+                .padding(.horizontal, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.xs)
                 .background(.quaternary, in: Capsule())
                 .contentShape(Capsule())
             }
@@ -94,8 +94,8 @@ struct QuickCaptureView: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Theme.Spacing.row)
+        .padding(.vertical, Theme.Spacing.lg)
     }
 
     private var picker: some View {
@@ -103,7 +103,7 @@ struct QuickCaptureView: View {
         let highlighted = self.model.highlighted(in: items)?.id
         let showsSections = self.model.query.trimmingCharacters(in: .whitespaces).isEmpty
         return VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
                 TextField(L("Search chats and agents…"), text: self.$model.query)
@@ -111,32 +111,32 @@ struct QuickCaptureView: View {
                     .focused(self.$searchFocused)
                     .accessibilityLabel(L("Search chats and agents"))
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, Theme.Spacing.row)
+            .padding(.vertical, Theme.Spacing.md)
             if items.isEmpty {
                 Text("No matches", bundle: .module)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    .padding(.vertical, Theme.Spacing.xxl)
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 2) {
+                        LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                                 if showsSections, index == 0 || items[index - 1].section != item.section {
                                     Text(item.section.title)
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(.secondary)
-                                        .padding(.horizontal, 10)
+                                        .padding(.horizontal, Theme.Spacing.lg)
                                         .padding(.top, index == 0 ? 2 : 8)
-                                        .padding(.bottom, 2)
+                                        .padding(.bottom, Theme.Spacing.xxs)
                                 }
                                 self.row(item, selected: item.id == highlighted)
                                     .id(item.id)
                             }
                         }
-                        .padding(.horizontal, 6)
-                        .padding(.bottom, 6)
+                        .padding(.horizontal, Theme.Spacing.sm)
+                        .padding(.bottom, Theme.Spacing.sm)
                     }
                     .frame(maxHeight: 300)
                     .onChange(of: self.model.highlightedId) { _, id in
@@ -151,11 +151,11 @@ struct QuickCaptureView: View {
         Button {
             self.model.pick(item)
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: Theme.Spacing.lg) {
                 Image(systemName: item.symbol)
                     .frame(width: 20)
                     .foregroundStyle(selected ? .primary : .secondary)
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                     Text(item.title).lineLimit(1)
                     if let subtitle = item.subtitle {
                         Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -166,10 +166,10 @@ struct QuickCaptureView: View {
                     Text(shortcut).font(.caption.monospaced()).foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, Theme.Spacing.lg)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
                 .fill(selected ? AnyShapeStyle(self.theme.accent.opacity(0.2)) : AnyShapeStyle(.clear)))
             .contentShape(Rectangle())
         }
@@ -182,7 +182,7 @@ struct QuickCaptureView: View {
     // MARK: Message
 
     private var messageArea: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             if let status = self.model.connectionStatus {
                 Label(status, systemImage: "bolt.horizontal.circle")
                     .font(.caption)
@@ -202,14 +202,14 @@ struct QuickCaptureView: View {
             }
             if !self.model.attachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: Theme.Spacing.md) {
                         ForEach(self.model.attachments) { attachment in
                             AttachmentThumb(attachment: attachment, size: 52) {
                                 self.model.attachments.removeAll { $0.id == attachment.id }
                             }
                         }
                     }
-                    .padding(.trailing, 6)
+                    .padding(.trailing, Theme.Spacing.sm)
                 }
             }
             ComposerTextView(
@@ -222,13 +222,13 @@ struct QuickCaptureView: View {
                 onMedia: { self.ingest.ingest($0) })
                 .frame(minHeight: 22)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.horizontal, Theme.Spacing.row)
+        .padding(.top, Theme.Spacing.xl)
+        .padding(.bottom, Theme.Spacing.md)
     }
 
     private var footer: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Theme.Spacing.lg) {
             Text("↩ Send · ⌘↩ Send & Open · esc Close", bundle: .module)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
@@ -246,12 +246,12 @@ struct QuickCaptureView: View {
                 .glassProminentButton()
                 .disabled(!self.model.canSend)
         }
-        .padding(.horizontal, 14)
-        .padding(.bottom, 12)
+        .padding(.horizontal, Theme.Spacing.row)
+        .padding(.bottom, Theme.Spacing.xl)
     }
 
     private var noGateways: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Theme.Spacing.xl) {
             Image(systemName: "server.rack")
                 .font(.title)
                 .foregroundStyle(.secondary)
@@ -264,7 +264,7 @@ struct QuickCaptureView: View {
             .glassProminentButton()
         }
         .frame(maxWidth: .infinity)
-        .padding(24)
+        .padding(Theme.Spacing.page)
     }
 
     private var ingest: AttachmentIngest {

@@ -16,7 +16,7 @@ struct QuickCaptureSettingsSection: View {
                 Text("Open a small composer from any app to send to a chat.", bundle: .module)
             }
             LabeledContent(L("Shortcut")) {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.md) {
                     if self.controller.shortcut != .default {
                         Button(L("Reset to Default")) {
                             self.problem = nil

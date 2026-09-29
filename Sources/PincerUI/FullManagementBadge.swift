@@ -7,7 +7,7 @@ struct FullManagementBadge: View {
     let openConnection: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Label(SetupWizardModel.fullManagementTitle, systemImage: "lock.fill")
                 .font(.callout.weight(.semibold))
             Text(SetupWizardModel.fullManagementMessage)

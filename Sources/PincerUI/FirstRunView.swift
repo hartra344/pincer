@@ -150,7 +150,7 @@ private struct FirstRunHeader: View {
 
     var body: some View {
         let state = self.model.state
-        HStack(spacing: 12) {
+        HStack(spacing: Theme.Spacing.xl) {
             if let number = state.stepNumber {
                 FirstRunProgress(number: number, stage: state.stage)
             }
@@ -161,8 +161,8 @@ private struct FirstRunHeader: View {
                     .firstRunLink()
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
+        .padding(.horizontal, Theme.Spacing.section)
+        .padding(.vertical, Theme.Spacing.xl)
     }
 }
 
@@ -172,8 +172,8 @@ private struct FirstRunProgress: View {
 
     var body: some View {
         let stages = FirstRunState.countedStages
-        HStack(spacing: 10) {
-            HStack(spacing: 6) {
+        HStack(spacing: Theme.Spacing.lg) {
+            HStack(spacing: Theme.Spacing.sm) {
                 ForEach(stages, id: \.self) { stage in
                     Capsule()
                         .fill(stage <= self.stage ? Color.accentColor : Color.secondary.opacity(0.25))
@@ -244,8 +244,8 @@ private struct FirstRunPage<Content: View, Secondary: View, Primary: View>: View
                 }
                 .frame(maxWidth: 560, alignment: .leading)
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 20)
+                .padding(.horizontal, Theme.Spacing.page)
+                .padding(.vertical, Theme.Spacing.section)
             }
             .defaultScrollAnchor(self.centered ? .center : .top, for: .alignment)
             .frame(maxHeight: .infinity)
@@ -256,21 +256,21 @@ private struct FirstRunPage<Content: View, Secondary: View, Primary: View>: View
     @ViewBuilder private var footer: some View {
         Divider()
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
+            HStack(spacing: Theme.Spacing.xl) {
                 self.secondary
                 Spacer(minLength: 12)
                 self.primary
             }
-            VStack(spacing: 12) {
+            VStack(spacing: Theme.Spacing.xl) {
                 self.primary.environment(\.firstRunWideButtons, true)
-                HStack(spacing: 20) { self.secondary }
+                HStack(spacing: Theme.Spacing.section) { self.secondary }
             }
         }
         .controlSize(.large)
         .frame(maxWidth: 560)
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 14)
+        .padding(.horizontal, Theme.Spacing.page)
+        .padding(.vertical, Theme.Spacing.row)
     }
 }
 
@@ -332,7 +332,7 @@ private struct CommandBox: View {
     @State private var copied = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.lg) {
             Text(self.command)
                 .font(.callout.monospaced())
                 .textSelection(.enabled)
@@ -348,8 +348,8 @@ private struct CommandBox: View {
             .accessibilityLabel(self.copied ? "Copied" : "Copy command")
             .accessibilityHint(self.command)
         }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.secondary.opacity(0.1)))
+        .padding(Theme.Spacing.xl)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous).fill(Color.secondary.opacity(0.1)))
         .task(id: self.copied) {
             guard self.copied else { return }
             try? await Task.sleep(for: .seconds(2))
@@ -396,7 +396,7 @@ private struct FirstRunWelcome: View {
         FirstRunPage(symbol: "bubble.left.and.text.bubble.right", title: "Welcome to Pincer",
                      message: "Chat with your OpenClaw agents from your Mac, iPhone, and iPad.", centered: true,
                      showsFooter: false) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                 Button { self.model.send(.getStarted) } label: {
                     Text("Get Started").frame(maxWidth: .infinity)
                 }
@@ -418,7 +418,7 @@ private struct FirstRunWelcome: View {
             }
             .controlSize(.large)
             .frame(maxWidth: 360, alignment: .leading)
-            .padding(.top, 6)
+            .padding(.top, Theme.Spacing.sm)
         } secondary: {
             EmptyView()
         }
@@ -433,7 +433,7 @@ private struct FirstRunHaveGateway: View {
     var body: some View {
         FirstRunPage(title: "Do you have an OpenClaw Gateway?",
                      message: "Pincer connects to a Gateway you run on your own computer or server.") {
-            VStack(spacing: 12) {
+            VStack(spacing: Theme.Spacing.xl) {
                 self.choice("Yes, it's running", symbol: "checkmark.circle", yes: true)
                     .keyboardShortcut(.defaultAction)
                 self.choice("No, help me set one up", symbol: "questionmark.circle", yes: false)
@@ -449,7 +449,7 @@ private struct FirstRunHaveGateway: View {
         } label: {
             Label(title, systemImage: symbol)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 6)
+                .padding(.vertical, Theme.Spacing.sm)
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
@@ -466,7 +466,7 @@ private struct FirstRunInstall: View {
                      message: "Run these on the computer that will host your Gateway. It takes about 5 minutes.") {
             self.step(1, "Install OpenClaw", command: FirstRunCopy.installCommand, caption: "Follow the prompts. Choose Quick start.")
             DisclosureGroup("On Windows") {
-                CommandBox(command: FirstRunCopy.installCommandWindows).padding(.top, 6)
+                CommandBox(command: FirstRunCopy.installCommandWindows).padding(.top, Theme.Spacing.sm)
             }
             self.step(2, "Keep it running", command: FirstRunCopy.keepRunningCommand)
             self.step(3, "Check it's working", command: FirstRunCopy.statusCommand)
@@ -480,7 +480,7 @@ private struct FirstRunInstall: View {
     }
 
     private func step(_ number: Int, _ title: String, command: String, caption: String? = nil) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("\(number). \(title)").font(.headline)
             CommandBox(command: command)
             if let caption { Text(caption).font(.caption).foregroundStyle(.secondary) }
@@ -516,7 +516,7 @@ private struct FirstRunFind: View {
                 ForEach(FirstRunCopy.tailscaleServeCommands, id: \.self) { CommandBox(command: $0) }
             }
             self.addressField(state)
-            HStack(spacing: 16) {
+            HStack(spacing: Theme.Spacing.xxl) {
                 Button("Advanced…", action: self.advanced).firstRunLink()
                 Link("Help me choose", destination: FirstRunCopy.chooseHelpURL)
             }
@@ -532,7 +532,7 @@ private struct FirstRunFind: View {
                 self.model.send(.checkAddress)
             } label: {
                 if state.reachability.isChecking {
-                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Checking…") }
+                    HStack(spacing: Theme.Spacing.sm) { ProgressView().controlSize(.small); Text("Checking…") }
                 } else {
                     Text(state.canSkip ? "Try Again" : "Continue")
                 }
@@ -552,7 +552,7 @@ private struct FirstRunFind: View {
     }
 
     @ViewBuilder private func addressField(_ state: FirstRunState) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Gateway address").font(.headline)
             TextField("Gateway address", text: Binding(get: { self.model.state.address },
                                                        set: { self.model.send(.setAddress($0)) }),
@@ -582,7 +582,7 @@ private struct FirstRunFind: View {
     }
 
     private func nearby(_ gateways: [FirstRunDiscoveredGateway]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text("Nearby").font(.headline).accessibilityAddTraits(.isHeader)
             ForEach(gateways) { gateway in
                 Button {
@@ -590,7 +590,7 @@ private struct FirstRunFind: View {
                 } label: {
                     HStack {
                         Image(systemName: "server.rack").accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 1) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                             Text(gateway.name)
                             Text(gateway.address).font(.caption).foregroundStyle(.secondary)
                         }
@@ -641,7 +641,7 @@ private struct FirstRunSignInScreen: View {
         let isToken = state.authMode != .password
         FirstRunPage(symbol: "key", title: "Sign in to your Gateway",
                      message: isToken ? "Paste your Gateway token. You'll only need to do this once." : nil) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 Text(isToken ? "Token" : "Password").font(.headline)
                 HStack {
                     SecureField(isToken ? "Token" : "Password", text: self.secretBinding)
@@ -660,7 +660,7 @@ private struct FirstRunSignInScreen: View {
                 }
                 if let error = state.signInStatus.error { InlineMessage(text: error) }
             }
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 Text("Run this on the Gateway host to see it:").foregroundStyle(.secondary)
                 CommandBox(command: isToken ? FirstRunCopy.tokenCommand : FirstRunCopy.passwordCommand)
             }
@@ -677,7 +677,7 @@ private struct FirstRunSignInScreen: View {
         } primary: {
             PrimaryButton(action: self.signIn) {
                 if state.signInStatus == .connecting {
-                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Signing in…") }
+                    HStack(spacing: Theme.Spacing.sm) { ProgressView().controlSize(.small); Text("Signing in…") }
                 } else {
                     Text("Sign In")
                 }
@@ -722,7 +722,7 @@ private struct FirstRunPairing: View {
             if self.model.state.pairingRequestChanged {
                 InlineMessage(text: FirstRunCopy.requestChanged, isError: false)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Spacing.md) {
                 ProgressView().controlSize(.small)
                 Text("Waiting for approval…")
             }
@@ -736,13 +736,13 @@ private struct FirstRunPairing: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             DisclosureGroup("Didn't work?", isExpanded: self.$showsHelp) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Text("If you changed settings, the request ID may have changed. Run openclaw devices list to see the latest one.")
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
                     CommandBox(command: FirstRunCopy.listDevicesCommand)
                 }
-                .padding(.top, 6)
+                .padding(.top, Theme.Spacing.sm)
             }
         } secondary: {
             BackButton(model: self.model)
@@ -764,12 +764,12 @@ private struct FirstRunVerify: View {
         let state = self.model.state
         FirstRunPage(symbol: "checkmark.circle.fill", symbolColor: .green, title: "You're connected") {
             if let verified = state.verified {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
                     LabeledContent("Gateway", value: URL(string: state.normalizedAddress)?.host ?? state.normalizedAddress)
                     if let version = verified.serverVersion { LabeledContent("Version", value: version) }
                     LabeledContent("Access", value: verified.hasFullManagement ? "Full Management" : "Chat and approvals")
                 }
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Text("Name").font(.headline)
                     TextField("Name", text: Binding(get: { self.model.state.name },
                                                     set: { self.model.send(.setName($0)) }),
@@ -787,14 +787,14 @@ private struct FirstRunVerify: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let id = verified.questionsRequestId {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                         Text("Answering agent questions is waiting for approval:").font(.callout).foregroundStyle(.secondary)
                         CommandBox(command: FirstRunCopy.approveCommand(requestId: id))
                     }
                 }
                 if verified.healthProblem != nil {
                     // Information only: it never blocks Continue Setup (spec §2.8).
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.lg) {
                         InlineMessage(text: FirstRunCopy.healthReported, isError: false)
                         Button("Details", action: self.openHealth)
                             .firstRunLink()

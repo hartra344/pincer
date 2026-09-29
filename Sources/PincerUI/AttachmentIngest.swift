@@ -158,17 +158,17 @@ struct AttachmentThumb: View {
                 if self.attachment.isImage, let image = ImageCodec.decode(self.attachment.data) {
                     Image(cgImage: image).resizable().aspectRatio(contentMode: .fill)
                 } else {
-                    VStack(spacing: 4) {
+                    VStack(spacing: Theme.Spacing.xs) {
                         Image(systemName: "doc").font(.title3)
                         Text(self.attachment.fileName).font(.caption2).lineLimit(2).multilineTextAlignment(.center)
                     }
-                    .padding(4)
+                    .padding(Theme.Spacing.xs)
                     .foregroundStyle(.secondary)
                 }
             }
             .frame(width: self.size, height: self.size)
             .background(.quinary)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
 
             Button(action: self.remove) {
                 Image(systemName: "xmark.circle.fill")

@@ -75,10 +75,10 @@ struct SkillsPage: View {
 
     @ViewBuilder private func content(_ model: SkillsModel, connected: Bool) -> some View {
         if !connected {
-            Section { Text("Connect to the gateway to see skills.", bundle: .module).foregroundStyle(.secondary) }
+            Section { Text("Connect to the Gateway to see skills.", bundle: .module).foregroundStyle(.secondary) }
         } else if model.report == nil, let error = model.loadError {
             Section {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled)
                     Button(L("Retry")) { Task { await model.load(agentId: self.requestAgent) } }
                 }
@@ -87,9 +87,9 @@ struct SkillsPage: View {
             Section { ProgressView().frame(maxWidth: .infinity) }
         } else if model.skills.isEmpty {
             Section {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("No skills found", bundle: .module).font(.callout.weight(.medium))
-                    Text(model.supportsSearch ? L("Browse ClawHub to find skills to install.") : L("Add skills to the agent's workspace on the gateway host."))
+                    Text(model.supportsSearch ? L("Browse ClawHub to find skills to install.") : L("Add skills to the agent's workspace on the Gateway host."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -120,7 +120,7 @@ struct SkillsReadOnlyNotice: View {
 
     var body: some View {
         if !self.model.hasAdmin, self.model.supportsInstall || self.model.supportsUpdate {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 Label(L("Managing skills needs Full Management"), systemImage: "lock.shield")
                     .font(.callout.weight(.medium))
                 Text(Skills.needsAdminMessage)
@@ -165,10 +165,10 @@ struct SkillRow: View {
     let skill: SkillStatusEntry
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.lg) {
             SkillIcon(emoji: self.skill.emoji)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text(self.skill.name).font(.body.weight(.medium))
                     SkillBadge(text: self.skill.sourceKind.label)
                 }
@@ -205,8 +205,8 @@ struct SkillBadge: View {
     var body: some View {
         Text(self.text)
             .font(.caption2.weight(.medium))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
+            .padding(.horizontal, Theme.Spacing.sm)
+            .padding(.vertical, Theme.Spacing.hairline)
             .foregroundStyle(self.tint)
             .background(self.tint.opacity(0.12), in: Capsule())
     }
@@ -234,12 +234,12 @@ struct SkillDetailPage: View {
                 self.form(skill)
             } else if !self.gateway.state.isConnected {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see skills.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see skills.", bundle: .module))
             } else if self.model.isLoading {
                 ProgressView()
             } else {
                 ContentUnavailableView(L("Skill Not Found"), systemImage: "wand.and.stars",
-                                       description: Text("“\(self.skillKey)” isn't a skill on this gateway anymore.", bundle: .module))
+                                       description: Text("“\(self.skillKey)” isn't a skill on this Gateway anymore.", bundle: .module))
             }
         }
         .navigationTitle(self.model.skill(key: self.skillKey)?.name ?? self.skillKey)
@@ -256,9 +256,9 @@ struct SkillDetailPage: View {
     @ViewBuilder private func form(_ skill: SkillStatusEntry) -> some View {
         Form {
             Section {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.lg) {
                     SkillIcon(emoji: skill.emoji).font(.title2)
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                         Text(skill.name).font(.title3.weight(.semibold))
                         if !skill.description.isEmpty {
                             Text(skill.description).foregroundStyle(.secondary).textSelection(.enabled)
@@ -321,7 +321,7 @@ struct SkillDetailPage: View {
                 } header: {
                     Text("Installers", bundle: .module)
                 } footer: {
-                    Text("Installers run on the gateway host to add what the skill needs.", bundle: .module)
+                    Text("Installers run on the Gateway host to add what the skill needs.", bundle: .module)
                 }
             }
             if skill.isClawHubTracked, self.model.supportsUpdate {
@@ -345,13 +345,13 @@ struct SkillDetailPage: View {
             }
             Button(L("Cancel"), role: .cancel) {}
         } message: { _ in
-            Text("It runs with the gateway's permissions.", bundle: .module)
+            Text("It runs with the Gateway's permissions.", bundle: .module)
         }
         .confirmationDialog(Skills.updateTitle(skill.name), isPresented: self.$confirmUpdate, titleVisibility: .visible) {
             Button(L("Update")) { Task { await self.update(skill, force: false) } }
             Button(L("Cancel"), role: .cancel) {}
         } message: {
-            Text("This downloads the latest version from ClawHub onto the gateway host.", bundle: .module)
+            Text("This downloads the latest version from ClawHub onto the Gateway host.", bundle: .module)
         }
         .confirmationDialog(Skills.forceReplaceMessage(skill.name), isPresented: self.$confirmForce, titleVisibility: .visible) {
             Button(L("Replace"), role: .destructive) { Task { await self.update(skill, force: true) } }
@@ -446,7 +446,7 @@ struct ClawHubSearchPage: View {
                 SkillsReadOnlyNotice(model: model)
                 SkillsMessages(model: model)
             } footer: {
-                Text("Skills install into \(self.agentName)'s workspace on the gateway host.", bundle: .module)
+                Text("Skills install into \(self.agentName)'s workspace on the Gateway host.", bundle: .module)
             }
             self.results(model)
         }
@@ -477,7 +477,7 @@ struct ClawHubSearchPage: View {
             Section { ProgressView().frame(maxWidth: .infinity) }
         } else if let error = model.searchError {
             Section {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled)
                     Button(L("Retry")) { Task { await model.search(self.query) } }
                 }
@@ -510,8 +510,8 @@ private struct ClawHubResultRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text(self.result.displayName).font(.body.weight(.medium))
                     if let label = self.state.label {
                         SkillBadge(text: label, tint: self.state == .notInstalled ? .secondary : (self.isUpdate ? .orange : .green))
@@ -567,7 +567,7 @@ private struct ClawHubSkillSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                         Text(self.result.displayName).font(.title3.weight(.semibold))
                         if let summary = self.detail?.summary ?? self.result.summary {
                             Text(summary).foregroundStyle(.secondary).textSelection(.enabled)
@@ -635,7 +635,7 @@ private struct ClawHubSkillSheet: View {
                 Button(L("Update")) { Task { await self.update(force: false) } }
                 Button(L("Cancel"), role: .cancel) {}
             } message: {
-                Text("This downloads the latest version from ClawHub onto the gateway host.", bundle: .module)
+                Text("This downloads the latest version from ClawHub onto the Gateway host.", bundle: .module)
             }
             .confirmationDialog(Skills.reinstallTitle(self.result.displayName), isPresented: self.$confirmReinstall,
                                 titleVisibility: .visible) {
