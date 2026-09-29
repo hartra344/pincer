@@ -1633,6 +1633,16 @@
         }
       }
     },
+    "Attachment: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attachment: %@"
+          }
+        }
+      }
+    },
     "Attachments need a connection": {
       "localizations": {
         "en": {
@@ -4579,6 +4589,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Export Chat…"
+          }
+        }
+      }
+    },
+    "Exported %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exported %@"
           }
         }
       }
@@ -7979,6 +7999,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Output"
+          }
+        }
+      }
+    },
+    "Output:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output:"
           }
         }
       }
@@ -12639,6 +12669,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tool result"
+          }
+        }
+      }
+    },
+    "Tool: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool: %@"
           }
         }
       }

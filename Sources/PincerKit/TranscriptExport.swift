@@ -52,7 +52,7 @@ public enum TranscriptExport {
                                 timeZone: TimeZone = .current) -> String
     {
         var out: [String] = ["# \(header.title)"]
-        out.append("_Exported \(Self.stamp(header.exportedAt, timeZone: timeZone))_")
+        out.append("_\(Self.exportedLine(header, timeZone: timeZone))_")
         for entry in TranscriptBuilder.build(items.filter { !$0.isPending }) {
             switch entry {
             case let .user(item):
@@ -67,7 +67,7 @@ public enum TranscriptExport {
                 var parts: [String] = []
                 if options.includeThinking {
                     for thought in turn.thinking where !thought.isBlank {
-                        parts.append("<details><summary>Thinking</summary>\n\n\(thought.trimmed)\n\n</details>")
+                        parts.append("<details><summary>\(Strings.thinking)</summary>\n\n\(thought.trimmed)\n\n</details>")
                     }
                 }
                 if options.includeToolCalls {
@@ -77,7 +77,7 @@ public enum TranscriptExport {
                 let files = turn.images.compactMap { $0.alt ?? $0.url } + turn.files.map(\.name)
                 if !files.isEmpty { parts.append(files.map { "- 📎 \($0)" }.joined(separator: "\n")) }
                 guard !parts.isEmpty else { continue }
-                let name = turn.sender?.displayName(agents: header.agents) ?? header.agentName ?? "Assistant"
+                let name = turn.sender?.displayName(agents: header.agents) ?? header.agentName ?? Strings.assistant
                 out.append("## \(name)\(Self.suffix(turn.timestamp, timeZone: timeZone))\n\n" + parts.joined(separator: "\n\n"))
             case let .marker(_, label):
                 out.append("---\n\n_\(label)_")
@@ -92,13 +92,13 @@ public enum TranscriptExport {
         if let headline = presentation.headline?.trimmed, !headline.isEmpty {
             title += " `\(headline.replacingOccurrences(of: "`", with: "'").prefix(200))`"
         }
-        if presentation.output?.isError == true || tool.isError { title += " — failed" }
+        if presentation.output?.isError == true || tool.isError { title += " — \(Strings.failed)" }
         var body = ""
         if let args = presentation.argumentsText, presentation.headline == nil || presentation.arguments.count > 1 {
             body += "\n\n" + Self.fence(args.replacingOccurrences(of: "\t", with: ": "))
         }
         if let output = presentation.output?.text.trimmed, !output.isEmpty {
-            body += "\n\nOutput:\n\n" + Self.fence(output)
+            body += "\n\n\(Strings.output)\n\n" + Self.fence(output)
         }
         return title + body
     }
@@ -115,7 +115,7 @@ public enum TranscriptExport {
     public static func plainText(_ items: [ChatItem], header: Header, options: Options = Options(),
                                  timeZone: TimeZone = .current) -> String
     {
-        var out: [String] = [header.title, "Exported \(Self.stamp(header.exportedAt, timeZone: timeZone))"]
+        var out: [String] = [header.title, Self.exportedLine(header, timeZone: timeZone)]
         for entry in TranscriptBuilder.build(items.filter { !$0.isPending }) {
             switch entry {
             case let .user(item):
@@ -124,20 +124,20 @@ public enum TranscriptExport {
                 guard !text.isEmpty || !files.isEmpty else { continue }
                 var lines = ["\(Self.userName(item, header))\(Self.suffix(item.timestamp, timeZone: timeZone)):"]
                 if !text.isEmpty { lines.append(text) }
-                lines += files.map { "[Attachment: \($0)]" }
+                lines += files.map { "[\(Strings.attachment(named: $0))]" }
                 out.append(lines.joined(separator: "\n"))
             case let .assistant(turn):
                 var parts: [String] = []
                 if options.includeThinking {
-                    for thought in turn.thinking where !thought.isBlank { parts.append("[Thinking]\n\(thought.trimmed)") }
+                    for thought in turn.thinking where !thought.isBlank { parts.append("[\(Strings.thinking)]\n\(thought.trimmed)") }
                 }
                 if options.includeToolCalls {
                     for tool in turn.tools { parts.append(Self.plainTool(tool)) }
                 }
                 parts += turn.text.map(\.trimmed).filter { !$0.isEmpty }
-                parts += (turn.images.compactMap { $0.alt ?? $0.url } + turn.files.map(\.name)).map { "[Attachment: \($0)]" }
+                parts += (turn.images.compactMap { $0.alt ?? $0.url } + turn.files.map(\.name)).map { "[\(Strings.attachment(named: $0))]" }
                 guard !parts.isEmpty else { continue }
-                let name = turn.sender?.displayName(agents: header.agents) ?? header.agentName ?? "Assistant"
+                let name = turn.sender?.displayName(agents: header.agents) ?? header.agentName ?? Strings.assistant
                 out.append("\(name)\(Self.suffix(turn.timestamp, timeZone: timeZone)):\n" + parts.joined(separator: "\n\n"))
             case let .marker(_, label):
                 out.append("— \(label) —")
@@ -148,9 +148,9 @@ public enum TranscriptExport {
 
     static func plainTool(_ tool: ToolActivity) -> String {
         let presentation = ToolCallPresentation.make(tool, limit: Self.toolOutputLimit)
-        var line = "[Tool: \(presentation.displayName)"
+        var line = "[\(Strings.tool(named: presentation.displayName))"
         if let headline = presentation.headline?.trimmed, !headline.isEmpty { line += " \(headline.prefix(200))" }
-        if presentation.output?.isError == true || tool.isError { line += " (failed)" }
+        if presentation.output?.isError == true || tool.isError { line += " (\(Strings.failed))" }
         line += "]"
         if let output = presentation.output?.text.trimmed, !output.isEmpty {
             line += "\n" + output.split(separator: "\n", omittingEmptySubsequences: false).map { "  \($0)" }.joined(separator: "\n")
@@ -164,12 +164,12 @@ public enum TranscriptExport {
     public static func fileName(title: String, format: Format) -> String {
         let cleaned = title.components(separatedBy: CharacterSet(charactersIn: "/\\:?%*|\"<>\n\r\t")).joined(separator: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
-        let base = cleaned.isEmpty ? "Chat" : String(cleaned.prefix(80))
+        let base = cleaned.isEmpty ? Strings.chat : String(cleaned.prefix(80))
         return "\(base).\(format.fileExtension)"
     }
 
     private static func userName(_ item: ChatItem, _ header: Header) -> String {
-        item.sender?.displayName(agents: header.agents) ?? "You"
+        item.sender?.displayName(agents: header.agents) ?? Strings.you
     }
 
     private static func attachmentNames(_ item: ChatItem) -> [String] {
@@ -184,6 +184,26 @@ public enum TranscriptExport {
 
     private static func suffix(_ date: Date?, timeZone: TimeZone) -> String {
         date.map { " · \(Self.stamp($0, timeZone: timeZone))" } ?? ""
+    }
+
+    static func exportedLine(_ header: Header, timeZone: TimeZone) -> String {
+        let stamp = Self.stamp(header.exportedAt, timeZone: timeZone)
+        return L("Exported \(stamp)", comment: "Transcript export header: when the chat was exported")
+    }
+
+    enum Strings {
+        static var you: String { L("You", comment: "Transcript export: name for the user's own messages") }
+        static var assistant: String { L("Assistant", comment: "Transcript export: name for the agent when it has none") }
+        static var thinking: String { L("Thinking", comment: "Transcript export: label for the agent's thinking") }
+        static var output: String { L("Output:", comment: "Transcript export: label before a tool call's output") }
+        static var failed: String { L("failed", comment: "Transcript export: a tool call that failed") }
+        static var chat: String { L("Chat", comment: "Transcript export: file name when the chat has no title") }
+        static func tool(named name: String) -> String {
+            L("Tool: \(name)", comment: "Transcript export (plain text): a tool call, e.g. Tool: exec")
+        }
+        static func attachment(named name: String) -> String {
+            L("Attachment: \(name)", comment: "Transcript export (plain text): an attached file")
+        }
     }
 
     static func stamp(_ date: Date, timeZone: TimeZone) -> String {
