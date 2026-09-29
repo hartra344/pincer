@@ -95,11 +95,17 @@ Chats you start with **New Chat** (<kbd>⌘</kbd> <kbd>N</kbd>) are listed on th
 
 ## Working chats
 
-While a chat has a run going, its agent's avatar dances at the right of the row, next to the date: a small hop and wiggle that loops about once a second. It stops and disappears when the run ends.
+While a chat has a run going, its agent's avatar dances at the right of the row, in place of the date: a small hop and wiggle that loops about once a second. It stops and disappears when the run ends.
 
 The avatar follows **Settings → Appearance → Animated avatars**: with it on you see the agent's pet, and with it off you see the agent's emoji or initial on a colored disc. With **Reduce Motion** on, the avatar stays still and a small accent-colored dot at its corner shows the chat is working.
 
 Hover the avatar (macOS) for who's working, for example "Moki is working". VoiceOver reads the same after the chat's name.
+
+## Unread chats
+
+A chat with new messages shows its agent's pet at the right of the row with a small accent-colored badge in the corner. While the agent is idle the pet does a gentle hop every couple of seconds, then rests; while a run is going it dances nonstop, so you can still tell working chats from ones that are just waiting to be read. Pets only move while the Pincer window is active, and with **Reduce Motion** on they stay still. If helpers are working, the badge shows their count instead.
+
+With **Animated avatars** off, idle unread chats show a plain dot. VoiceOver reads "Unread" after the chat's name either way. Helper runs never show as unread.
 
 ## Helper (subagent) runs
 
@@ -128,7 +134,7 @@ To see how full the context is, or to compact it yourself, use the [context mete
 ## Finding your way
 
 - **Search** at the top of the sidebar filters chats by name. While you type, a **Search messages for “…”** row above the chat list searches the text of every cached chat instead. See [Search messages](../search/).
-- **Unread dots** and the **Dock badge** show what's new.
+- **Unread badges** (the agent's pet with a badge, or a dot) and the **Dock badge** show what's new. See [Unread chats](#unread-chats).
 - **Next Unread Chat** (<kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>↓</kbd>) jumps to the next chat with unread messages.
 - The **command palette** (<kbd>⌘</kbd> <kbd>K</kbd>) finds any chat on any gateway by typing a few letters.
 - **Back** (<kbd>⌘</kbd> <kbd>[</kbd>) and **Forward** (<kbd>⌘</kbd> <kbd>]</kbd>) retrace the chats you've visited.
