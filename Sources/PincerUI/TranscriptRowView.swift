@@ -170,6 +170,15 @@ final class TranscriptRowView: TranscriptBaseView {
                 actions?.toggleBookmark(id)
             },
         ]
+        if actions.canBranch(from: id) {
+            items.append(TranscriptMenuItem(L("Branch from Here"), symbol: "arrow.triangle.branch") { [weak actions] in actions?.branch(from: id) })
+        }
+        if actions.canEdit(id) {
+            items.append(TranscriptMenuItem(L("Edit & Resend"), symbol: "pencil") { [weak actions] in actions?.edit(id) })
+        }
+        if actions.canRegenerate(id) {
+            items.append(TranscriptMenuItem(L("Regenerate"), symbol: "arrow.clockwise") { [weak actions] in actions?.regenerate(id) })
+        }
         if actions.reactionsEnabled {
             let quick = NSMenuItem()
             quick.view = QuickReactionsMenuView { [weak actions] emoji in actions?.toggleReaction(emoji, on: id) }
@@ -214,6 +223,17 @@ final class TranscriptRowView: TranscriptBaseView {
                 },
             ]),
         ]
+        var edits: [UIMenuElement] = []
+        if actions.canBranch(from: id) {
+            edits.append(UIAction(title: L("Branch from Here"), image: UIImage(systemName: "arrow.triangle.branch")) { [weak actions] _ in actions?.branch(from: id) })
+        }
+        if actions.canEdit(id) {
+            edits.append(UIAction(title: L("Edit & Resend"), image: UIImage(systemName: "pencil")) { [weak actions] _ in actions?.edit(id) })
+        }
+        if actions.canRegenerate(id) {
+            edits.append(UIAction(title: L("Regenerate"), image: UIImage(systemName: "arrow.clockwise")) { [weak actions] _ in actions?.regenerate(id) })
+        }
+        if !edits.isEmpty { elements.append(UIMenu(options: .displayInline, children: edits)) }
         if actions.reactionsEnabled {
             let quick = Reactions.quickBar(recent: Reactions.recent).map { emoji in
                 UIAction(title: emoji) { [weak actions] _ in actions?.toggleReaction(emoji, on: id) }

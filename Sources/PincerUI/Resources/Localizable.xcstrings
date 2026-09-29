@@ -101,6 +101,26 @@
         }
       }
     },
+    "%@ group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ group"
+          }
+        }
+      }
+    },
+    "%@ group in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ group in %2$@"
+          }
+        }
+      }
+    },
     "%@ is still stopping. Try again in a moment.": {
       "localizations": {
         "en": {
@@ -1883,6 +1903,26 @@
         }
       }
     },
+    "Branch %lld of %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branch %lld of %lld"
+          }
+        }
+      }
+    },
+    "Branch from Here": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branch from Here"
+          }
+        }
+      }
+    },
     "Branches need a newer Gateway.": {
       "localizations": {
         "en": {
@@ -1989,6 +2029,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel"
+          }
+        }
+      }
+    },
+    "Cancel edit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel edit"
           }
         }
       }
@@ -2259,6 +2309,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose File…"
+          }
+        }
+      }
+    },
+    "Choose a branch": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a branch"
           }
         }
       }
@@ -3503,12 +3563,42 @@
         }
       }
     },
+    "Couldn’t branch: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t branch: %@"
+          }
+        }
+      }
+    },
     "Couldn’t download “%@”": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t download “%@”"
+          }
+        }
+      }
+    },
+    "Couldn’t edit: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t edit: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t edit: the previous edit is still being sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t edit: the previous edit is still being sent."
           }
         }
       }
@@ -3533,12 +3623,32 @@
         }
       }
     },
+    "Couldn’t regenerate: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t regenerate: %@"
+          }
+        }
+      }
+    },
     "Couldn’t send: not connected to the Gateway.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t send: not connected to the Gateway."
+          }
+        }
+      }
+    },
+    "Couldn’t switch branch: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t switch branch: %@"
           }
         }
       }
@@ -4263,6 +4373,16 @@
         }
       }
     },
+    "Edit & Resend": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit & Resend"
+          }
+        }
+      }
+    },
     "Edit Automation": {
       "localizations": {
         "en": {
@@ -4329,6 +4449,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Editing agents needs Full Management. Turn it on under Connection, then approve this device on the Gateway host."
+          }
+        }
+      }
+    },
+    "Editing message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editing message"
           }
         }
       }
@@ -6943,6 +7073,16 @@
         }
       }
     },
+    "Next branch": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next branch"
+          }
+        }
+      }
+    },
     "Next match (⌘G)": {
       "localizations": {
         "en": {
@@ -8603,6 +8743,16 @@
         }
       }
     },
+    "Previous branch": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous branch"
+          }
+        }
+      }
+    },
     "Previous match (⇧⌘G)": {
       "localizations": {
         "en": {
@@ -9049,6 +9199,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Refusing unencrypted ws:// to public host %@. Use wss:// (Tailscale Serve) or a tailnet IP."
+          }
+        }
+      }
+    },
+    "Regenerate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regenerate"
           }
         }
       }

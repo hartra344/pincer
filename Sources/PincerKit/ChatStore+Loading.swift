@@ -62,6 +62,7 @@ extension ChatStore {
             self.scheduleSave()
             self.startBackfill()
             self.refreshProgressCard()
+            if !self.headless { Task { await self.refreshBranches() } }
         } catch is CancellationError {
             return
         } catch {

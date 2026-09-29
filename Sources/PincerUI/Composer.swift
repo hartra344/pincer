@@ -42,6 +42,15 @@ struct Composer: View {
                     .foregroundStyle(.secondary)
                     .accessibilityElement(children: .combine)
             }
+            if self.chat.canSwitchBranches, self.chat.branches.count > 1, !self.chat.isRunning {
+                BranchSwitcher(branches: self.chat.branches) { branch in
+                    Task { await self.chat.switchBranch(to: branch.leafEntryId) }
+                }
+            }
+            if let edit = self.chat.editTarget {
+                MessageEditChip(originalText: edit.originalText) { self.chat.cancelEdit() }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
             if let target = self.chat.replyTarget {
                 ReplyChip(target: target) { self.chat.replyTarget = nil }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -63,7 +72,7 @@ struct Composer: View {
                     placeholder: self.placeholder,
                     text: self.$chat.draft.text,
                     menuActive: !self.suggestions.isEmpty,
-                    escapeActive: self.chat.replyTarget != nil,
+                    escapeActive: self.chat.replyTarget != nil || self.chat.editTarget != nil,
                     focusRequest: self.focusRequest,
                     onSubmit: self.submit,
                     onMedia: self.ingest,
@@ -124,6 +133,9 @@ struct Composer: View {
                 }
             }
             .onChange(of: self.suggestions.map(\.id)) { self.menuSelection = 0 }
+        }
+        .onChange(of: self.chat.editTarget) { old, new in
+            if let new, new != old { self.focusRequest += 1 }
         }
         .onChange(of: self.chat.replyTarget) { old, new in
             if let new, new != old { self.focusRequest += 1 }
@@ -225,6 +237,7 @@ struct Composer: View {
     }
 
     private var canSend: Bool {
+        guard !self.chat.isSendingEdit else { return false }
         guard !self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty else { return false }
         // Offline, plain messages queue in the outbox; attachments and commands need the Gateway.
         return self.gateway.state.isConnected || (self.attachments.isEmpty && !self.isTypingCommand)
@@ -261,6 +274,14 @@ struct Composer: View {
         guard self.canSend else { return }
         let text = SlashCommand.outgoingText(self.text, commands: self.gateway.slashCommands(for: self.chat.sessionKey))
         let attachments = self.attachments
+        if self.chat.editTarget != nil, !self.isTypingCommand {
+            self.attachmentError = nil
+            Task {
+                // The store restores the pre-edit draft on success; on failure the edit stays in progress.
+                _ = await self.chat.sendEdit(text, attachments: attachments)
+            }
+            return
+        }
         let draft = self.chat.draft
         // Commands aren't replies; the reply stays set for the next message.
         let replyTo = self.isTypingCommand ? nil : self.chat.replyTarget
@@ -317,7 +338,12 @@ struct Composer: View {
     private func menuKey(_ key: ComposerKey) -> Bool {
         let suggestions = self.suggestions
         guard !suggestions.isEmpty else {
-            guard key == .escape, self.chat.replyTarget != nil else { return false }
+            guard key == .escape else { return false }
+            if self.chat.editTarget != nil {
+                self.chat.cancelEdit()
+                return true
+            }
+            guard self.chat.replyTarget != nil else { return false }
             self.chat.replyTarget = nil
             return true
         }
