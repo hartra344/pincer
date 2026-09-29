@@ -101,6 +101,16 @@
         }
       }
     },
+    "%@ on %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ on %@"
+          }
+        }
+      }
+    },
     "%@ saved": {
       "localizations": {
         "en": {
@@ -261,12 +271,22 @@
         }
       }
     },
-    "%lld images": {
+    "%lld images (shown in the reply)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld images"
+            "value": "%lld images (shown in the reply)"
+          }
+        }
+      }
+    },
+    "%lld images, shown in the reply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld images, shown in the reply"
           }
         }
       }
@@ -393,12 +413,22 @@
         }
       }
     },
-    "1 image": {
+    "1 image (shown in the reply)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "1 image"
+            "value": "1 image (shown in the reply)"
+          }
+        }
+      }
+    },
+    "1 image, shown in the reply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 image, shown in the reply"
           }
         }
       }
@@ -973,16 +1003,6 @@
         }
       }
     },
-    "Arguments": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Arguments"
-          }
-        }
-      }
-    },
     "Arguments: %@": {
       "localizations": {
         "en": {
@@ -1549,6 +1569,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Command suggestions"
+          }
+        }
+      }
+    },
+    "Command, %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command, %@"
           }
         }
       }
@@ -3133,16 +3163,6 @@
         }
       }
     },
-    "Formatted": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Formatted"
-          }
-        }
-      }
-    },
     "From": {
       "localizations": {
         "en": {
@@ -3303,6 +3323,26 @@
         }
       }
     },
+    "HTTP %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTP %lld"
+          }
+        }
+      }
+    },
+    "HTTP status %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTTP status %lld"
+          }
+        }
+      }
+    },
     "Health": {
       "localizations": {
         "en": {
@@ -3399,6 +3439,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Include Tool Output"
+          }
+        }
+      }
+    },
+    "Input": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Input"
           }
         }
       }
@@ -4459,6 +4509,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No models available"
+          }
+        }
+      }
+    },
+    "No output": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No output"
           }
         }
       }
@@ -6943,12 +7003,12 @@
         }
       }
     },
-    "Show formatted arguments": {
+    "Show formatted": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show formatted arguments"
+            "value": "Show formatted"
           }
         }
       }
@@ -6973,12 +7033,12 @@
         }
       }
     },
-    "Show raw JSON arguments": {
+    "Show raw JSON": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show raw JSON arguments"
+            "value": "Show raw JSON"
           }
         }
       }
@@ -7939,6 +7999,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Took %@"
+          }
+        }
+      }
+    },
+    "Took %@ seconds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took %@ seconds"
+          }
+        }
+      }
+    },
+    "Took %lld milliseconds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took %lld milliseconds"
           }
         }
       }

@@ -406,6 +406,14 @@ final class TranscriptLabelButton: TranscriptTapView {
     private var symbol = ""
     /// Draws in the secondary label color instead of the accent, for buttons that sit on every row.
     var isSubdued = false
+    /// Grows the touch target beyond the drawn button (iOS), for small icon-only buttons.
+    var hitOutset = CGSize.zero
+
+    #if os(iOS)
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        self.bounds.insetBy(dx: -self.hitOutset.width, dy: -self.hitOutset.height).contains(point)
+    }
+    #endif
 
     func set(title: String, symbol: String) {
         guard title != self.title || symbol != self.symbol else { return }
@@ -911,8 +919,9 @@ final class TranscriptToolView: TranscriptBaseView {
                 tool.isExpanded ? L("expanded") : L("collapsed"),
             ])
         } else {
+            let parts = ToolCardName(tool.tool.name)
             self.header.accessibilityText = AccessibilityText.join(
-                [tool.tool.name, tool.tool.summary]
+                [parts.server.map { L("\(parts.tool) on \($0)") } ?? tool.tool.name, tool.tool.summary]
                     + [tool.tool.isRunning ? L("running") : nil, tool.tool.isError ? L("failed") : nil,
                        tool.isExpanded ? L("expanded") : L("collapsed")]
                     + (tool.isExpanded ? tool.spoken : []))
@@ -992,6 +1001,8 @@ final class TranscriptToolView: TranscriptBaseView {
             button.set(title: control.title, symbol: control.symbol)
         }
         button.accessibilityText = control.spoken
+        // Icon-only buttons are 18×16; 28×28 is the least a finger can hit.
+        button.hitOutset = control.iconOnly ? CGSize(width: 5, height: 6) : .zero
     }
 
     private func tapped(_ control: TranscriptPart.Tool.Control) {
@@ -1071,11 +1082,11 @@ final class TranscriptToolView: TranscriptBaseView {
         PBezierPath(rect: CGRect(x: 0, y: part.headerHeight, width: bounds.width, height: 1)).fill()
         for item in part.decor {
             switch item {
-            case let .block(rect, tone):
+            case let .block(rect, tone, stroke):
                 let shape = PBezierPath.rounded(rect.insetBy(dx: 0.5, dy: 0.5), radius: 6)
                 tone.color.setFill()
                 shape.fill()
-                TranscriptColors.stroke.setStroke()
+                (stroke.map { $0.color.withAlphaComponent(0.5) } ?? TranscriptColors.stroke).setStroke()
                 shape.lineWidth = 1
                 shape.stroke()
             case let .pill(rect, tone):
@@ -1154,12 +1165,12 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         var right = chevronX - 8
         if part.tool.isError {
             let badgeFont = style.caption2Medium
-            let badge = singleLine(L("Failed"), badgeFont, TranscriptColors.red)
+            let badge = singleLine(L("Failed"), badgeFont, TranscriptColors.failure)
             let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
             let badgeWidth = badge.lineWidth + 10
             if right - badgeWidth > nameX + 40 {
                 let rect = CGRect(x: right - badgeWidth, y: (bounds.height - badgeHeight) / 2, width: badgeWidth, height: badgeHeight)
-                TranscriptColors.red.withAlphaComponent(0.15).setFill()
+                TranscriptColors.failure.withAlphaComponent(0.14).setFill()
                 PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
                 badge.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: badge.lineWidth, font: badgeFont)
                 right = rect.minX - 8
@@ -1168,7 +1179,7 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         let parts = ToolCardName(part.tool.name)
         var nameWidth: CGFloat = 0
         if let server = parts.server {
-            let serverText = singleLine("\(server) ›", nameFont, TranscriptColors.tertiary, truncation: .byTruncatingTail)
+            let serverText = singleLine("\(server) ›", nameFont, TranscriptColors.secondary, truncation: .byTruncatingTail)
             let serverWidth = min(serverText.lineWidth, max((right - nameX) / 3, 0))
             serverText.drawLine(at: CGPoint(x: nameX, y: nameY), width: serverWidth, font: nameFont)
             nameWidth = serverWidth + 5
@@ -1202,13 +1213,13 @@ extension TranscriptToolHeaderView {
 
         let badgeFont = style.caption2Medium
         let badgeText = part.tool.isError ? L("Failed") : edit.statusLabel(isRunning: part.tool.isRunning)
-        let badgeColor = part.tool.isError ? TranscriptColors.red : TranscriptColors.secondary
+        let badgeColor = part.tool.isError ? TranscriptColors.failure : TranscriptColors.secondary
         let badge = singleLine(badgeText, badgeFont, badgeColor)
         let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
         let badgeWidth = badge.lineWidth + 10
         if right - badgeWidth > nameX + 40 {
             let rect = CGRect(x: right - badgeWidth, y: (bounds.height - badgeHeight) / 2, width: badgeWidth, height: badgeHeight)
-            (part.tool.isError ? TranscriptColors.red.withAlphaComponent(0.15) : TranscriptColors.strongFill).setFill()
+            (part.tool.isError ? TranscriptColors.failure.withAlphaComponent(0.14) : TranscriptColors.strongFill).setFill()
             PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
             badge.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: badge.lineWidth, font: badgeFont)
             right = rect.minX - 8

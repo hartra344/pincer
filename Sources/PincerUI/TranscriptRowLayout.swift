@@ -69,13 +69,14 @@ enum TranscriptPart {
             var id: String?
         }
 
-        enum Tone { case label, secondary, tertiary, red, green, fill, strongFill, terminal }
+        enum Tone { case label, secondary, tertiary, ok, failure, fill, strongFill, terminal }
         enum Face { case caption, captionSemibold, captionMono, caption2Medium, code }
 
         /// Non-selectable drawing of an expanded card (badges, chips, titles, block backgrounds),
         /// in card coordinates and draw order.
         enum Decor {
-            case block(CGRect, Tone)
+            /// `stroke` outlines it in that tone instead of the neutral stroke.
+            case block(CGRect, Tone, stroke: Tone?)
             case pill(CGRect, Tone)
             case label(String, CGPoint, width: CGFloat, Face, Tone, truncation: NSLineBreakMode)
             case symbol(String, CGRect, Tone)
