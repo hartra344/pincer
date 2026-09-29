@@ -48,10 +48,11 @@ struct RunsPanelChrome: ViewModifier {
 private struct RunsToolbarButton: View {
     @Binding var isPresented: Bool
     @Environment(GatewayStore.self) private var gateway
+    @Environment(\.chatWindowKey) private var windowKey
 
     var body: some View {
         // Kept while the panel is open, so it (and ⌥⌘R) can always close it again.
-        if let key = self.gateway.selectedKey, self.isPresented || self.gateway.hasRuns(sessionKey: key) {
+        if let key = self.windowKey ?? self.gateway.selectedKey, self.isPresented || self.gateway.hasRuns(sessionKey: key) {
             let running = self.gateway.subagentTree(rootKey: key).runningCount
             Button {
                 self.isPresented.toggle()
@@ -87,6 +88,7 @@ struct RunsPanel: View {
     }
 
     @Environment(GatewayStore.self) private var gateway
+    @Environment(\.chatWindowKey) private var windowKey
     @State private var tab: Tab = .tree
     /// Session whose latest run the timeline highlights; nil for the chat itself.
     @State private var focusedSession: String?
@@ -100,7 +102,7 @@ struct RunsPanel: View {
             .labelsHidden()
             .padding(Theme.Spacing.lg)
             Divider()
-            if let key = self.gateway.selectedKey {
+            if let key = self.windowKey ?? self.gateway.selectedKey {
                 let tree = self.gateway.subagentTree(rootKey: key)
                 switch self.tab {
                 case .tree:
@@ -115,6 +117,6 @@ struct RunsPanel: View {
                 ContentUnavailableView(L("No chat selected"), systemImage: "bubble.left.and.bubble.right")
             }
         }
-        .onChange(of: self.gateway.selectedKey) { self.focusedSession = nil }
+        .onChange(of: self.windowKey ?? self.gateway.selectedKey) { self.focusedSession = nil }
     }
 }

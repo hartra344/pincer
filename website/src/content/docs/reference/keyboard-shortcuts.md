@@ -13,6 +13,7 @@ description: Keyboard shortcuts for Pincer on macOS (and iPad with a keyboard).
 | Gateway Settings | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>,</kbd> |
 | Settings | <kbd>⌘</kbd> <kbd>,</kbd> |
 | Reload Pincer | <kbd>⌘</kbd> <kbd>R</kbd> |
+| Open Chat in New Window (macOS) | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>N</kbd> |
 | [Export Chat…](../../guides/export-and-bookmarks/) | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>E</kbd> |
 | Quick Capture, from any app (macOS) | <kbd>⌃</kbd> <kbd>⇧</kbd> <kbd>Space</kbd> |
 

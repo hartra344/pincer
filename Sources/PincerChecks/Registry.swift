@@ -149,6 +149,7 @@ enum Suites {
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
         Section("Sidebar hierarchy (demo)") { await runDemoSidebarHierarchy() },
         Section("MCP servers (demo)") { await runDemoMCP() },
+        Section("Chat windows (demo)") { await runDemoChatWindows() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
     ]
 

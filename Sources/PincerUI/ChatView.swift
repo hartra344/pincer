@@ -433,6 +433,7 @@ private struct QuestionsAnimation: ViewModifier {
 /// of its buttons flash, the sidebar's included.
 struct ChatChrome: ViewModifier {
     @Environment(GatewayStore.self) private var gateway
+    @Environment(\.chatWindowKey) private var windowKey
     /// Per window, and kept across chat switches.
     @State private var showRuns = false
     /// The "Tools & Policy…" sheet. Held here, not on the toolbar menu, so a menu re-render or the
@@ -443,7 +444,7 @@ struct ChatChrome: ViewModifier {
     /// empty the title and toolbar items. Only ever a row of the selected chat, never a previous one.
     @State private var lastRow: SessionRow?
 
-    private var key: String? { self.gateway.selectedKey }
+    private var key: String? { self.windowKey ?? self.gateway.selectedKey }
     private var row: SessionRow? {
         if let key, let current = self.gateway.sessions[key] { return current }
         return self.lastRow.flatMap { $0.key == self.key ? $0 : nil }
@@ -470,7 +471,7 @@ struct ChatChrome: ViewModifier {
                 ChatToolsInspectorSheet(model: inspection.model, scopeTitle: inspection.scopeTitle, gateway: self.gateway)
             }
             .modifier(RunsPanelChrome(isPresented: self.$showRuns))
-            .onChange(of: self.gateway.selectedKey.flatMap { self.gateway.sessions[$0] }, initial: true) { _, row in
+            .onChange(of: self.key.flatMap { self.gateway.sessions[$0] }, initial: true) { _, row in
                 if let row { self.lastRow = row }
             }
     }

@@ -88,6 +88,10 @@ struct SidebarList: NSViewRepresentable {
             let menu = NSMenu()
             menu.delegate = self
             outline.menu = menu
+            // Double-click or ⌘-click opens the chat in a window of its own (#48).
+            outline.target = self
+            outline.doubleAction = #selector(self.openClickedInNewWindow)
+            outline.commandClick = { [weak self] row in self?.openInNewWindow(row: row) ?? false }
 
             let scroll = NSScrollView()
             scroll.documentView = outline
@@ -481,6 +485,19 @@ struct SidebarList: NSViewRepresentable {
             return outline.parent(forItem: node) as? Node
         }
 
+        @objc private func openClickedInNewWindow() {
+            guard let outline else { return }
+            _ = self.openInNewWindow(row: outline.clickedRow)
+        }
+
+        private func openInNewWindow(row: Int) -> Bool {
+            guard let open = self.actions.openInNewWindow, let outline, row >= 0,
+                  let node = outline.item(atRow: row) as? Node, let entry = self.entries[node.id]
+            else { return false }
+            open(entry.row.key)
+            return true
+        }
+
         // MARK: Context menu
 
         func menuNeedsUpdate(_ menu: NSMenu) {
@@ -498,6 +515,15 @@ struct SidebarList: NSViewRepresentable {
 /// An outline that can keep an expandable row's disclosure triangle out of sight.
 private final class SidebarOutlineView: NSOutlineView {
     var hidesOutlineCell: ((Int) -> Bool)?
+    /// Handles a ⌘-click on a row; true when it did, so the selection stays put.
+    var commandClick: ((Int) -> Bool)?
+
+    override func mouseDown(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if flags == .command, let commandClick,
+           commandClick(self.row(at: self.convert(event.locationInWindow, from: nil))) { return }
+        super.mouseDown(with: event)
+    }
 
     override func frameOfOutlineCell(atRow row: Int) -> NSRect {
         self.hidesOutlineCell?(row) == true ? .zero : super.frameOfOutlineCell(atRow: row)

@@ -554,12 +554,15 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var residency = ChatResidency(limit: max(ChatResidency.defaultLimit, GatewayStore.warmChatLimit))
     @ObservationIgnored var memoryPressureSource: (any DispatchSourceMemoryPressure)?
     @ObservationIgnored var enforcingChatBudget = false
+    /// Chats shown in their own windows, with how many windows each (#48).
+    var windowCounts: [String: Int] = [:]
     @ObservationIgnored var pendingChatBudgetLimit: Int?
 
     /// The selected chat, the most recent ones up to the cap, and any chat with a live run.
     func warmKeys(includingLive: Bool) -> Set<String> {
         var keys = Set(self.recentKeys.prefix(Self.warmChatLimit))
         if let selected = self.selectedKey { keys.insert(selected) }
+        keys.formUnion(self.windowCounts.keys)
         if includingLive {
             for chat in self.chats.values where chat.isRunning { keys.insert(chat.sessionKey) }
         }
