@@ -148,11 +148,17 @@ struct TranscriptRemovalTests {
         await self.cache(gateway, archived, "quillon waffle")
         await self.settle { await self.found(gateway, "zorblax") }
         gateway.setSession(nil, for: archived)
+        let unsent = "agent:main:dashboard:not-created-yet"
+        await self.cache(gateway, unsent, "brindle muffin")
+        let failure = OutboxFailure(message: "held", retryable: false)
+        gateway.outbox.enqueue(OutboxEntry(sessionKey: unsent, text: "brindle", createdAt: Date(), state: .failed(failure)))
 
-        await gateway.forgetVanishedSessions([gone, archived])
+        await gateway.forgetVanishedSessions([gone, archived, unsent])
         #expect(!self.cached(gateway, gone))
         #expect(await !self.found(gateway, "zorblax"))
         #expect(self.cached(gateway, archived), "still listed (archived): its cache stays")
+        #expect(self.cached(gateway, unsent) && gateway.outbox.entries(for: unsent).count == 1,
+                "a chat with outbox sends isn't forgotten")
         gateway.stop()
         await self.finish(gateway)
     }
