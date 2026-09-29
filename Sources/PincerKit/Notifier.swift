@@ -23,6 +23,8 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// What the user is looking at right now; that session is never notified.
     public var visible: Target?
+    /// Chats shown in their own windows (#48); like `visible`, never notified while the app is active.
+    public var windowVisible: Set<Target> = []
     public var appIsActive = true
     public var enabled: Bool {
         get { UserDefaults.standard.object(forKey: "pincer.notifications") as? Bool ?? true }
@@ -149,6 +151,11 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         return UNNotificationRequest(identifier: Self.approvalIdentifier(approval.id), content: content, trigger: nil)
     }
 
+    /// Whether the chat is on screen: in the main window or a chat window of its own.
+    func isShowing(_ target: Target) -> Bool {
+        self.visible == target || self.windowVisible.contains(target)
+    }
+
     /// In the background the push for the same event is on its way; posting too would double it.
     public func deferredToPush(_ gatewayId: UUID) -> Bool {
         !self.appIsActive && self.pushDelivers(gatewayId)
@@ -160,7 +167,7 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let chat = prompt.sessionKey.flatMap { gateway.sessions[$0]?.title }
         let target = Target(gatewayId: gateway.id, sessionKey: prompt.sessionKey ?? "")
         // The open chat already shows the card.
-        if self.appIsActive, prompt.sessionKey != nil, self.visible == target { return }
+        if self.appIsActive, prompt.sessionKey != nil, self.isShowing(target) { return }
         guard self.enabled else { return }
         self.advanceRefreshCursor(gateway.id, questionId: prompt.id)
         guard let center, let request = Self.questionRequest(prompt, gatewayId: gateway.id, agent: agent, chatTitle: chat)
@@ -228,7 +235,7 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         guard self.enabled, !self.deferredToPush(target.gatewayId) else { return }
         self.advanceRefreshCursor(target.gatewayId, activityMs: activityMs)
         guard let center else { return }
-        if self.appIsActive, self.visible == target { return }
+        if self.appIsActive, self.isShowing(target) { return }
         let dedupeKey = id.hasPrefix("reply:") ? "\(target.sessionKey)|\(body.prefix(80))" : id
         guard !self.recent.contains(id), !self.recent.contains(dedupeKey) else { return }
         self.recent.append(contentsOf: [id, dedupeKey])

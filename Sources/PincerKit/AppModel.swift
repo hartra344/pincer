@@ -32,6 +32,8 @@ public final class AppModel {
     public internal(set) var gatewayListRequests = 0
     /// Chats visited, for Back/Forward and the palette's recent chats.
     public private(set) var history = ChatHistory<Notifier.Target>()
+    /// Open chat windows per chat (#48), see `ChatWindowRef.swift`.
+    @ObservationIgnored var windowRefCounts: [ChatWindowRef: Int] = [:]
     /// False until a scene reports `.active`, so a background launch doesn't prefetch.
     public var appIsActive = false {
         didSet {
