@@ -25,6 +25,15 @@
 		</dict>
 	</array>
 	<!-- The first-run wizard's Nearby list: Gateways advertise over Bonjour (upstream docs/gateway/bonjour.md). -->
+	<!-- iOS only (macOS ignores these): background refresh checks gateways for local notifications. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>chat.pincer.refresh</string>
+	</array>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_openclaw-gw._tcp</string>

@@ -52,7 +52,9 @@ public final class PushRegistrar {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        self.notificationsEnabled = { defaults.object(forKey: "pincer.notifications") as? Bool ?? true }
+        self.notificationsEnabled = {
+            (defaults.object(forKey: "pincer.notifications") as? Bool ?? true) && ClosedAppDelivery.current(defaults) == .pushRelay
+        }
     }
 
     public func isActive(_ gatewayId: UUID) -> Bool { self.status[gatewayId] == .active }

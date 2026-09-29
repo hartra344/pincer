@@ -59,7 +59,7 @@ export default defineConfig({
 						{ slug: 'guides/deep-links-and-handoff' },
 						{ slug: 'guides/sharing-to-pincer' },
 						{ slug: 'guides/approvals-and-notifications' },
-						{ slug: 'guides/push-notifications' },
+						{ slug: 'guides/push-notifications', label: 'Notifications while closed (iOS)' },
 						{ slug: 'guides/gateway-settings' },
 						{ slug: 'guides/agents' },
 						{ slug: 'guides/devices' },
