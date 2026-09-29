@@ -57,7 +57,7 @@ export default defineConfig({
 						{ slug: 'guides/deep-links-and-handoff' },
 						{ slug: 'guides/sharing-to-pincer' },
 						{ slug: 'guides/approvals-and-notifications' },
-						{ slug: 'guides/push-notifications' },
+						{ slug: 'guides/push-notifications', label: 'Notifications while closed (iOS)' },
 						{ slug: 'guides/offline-outbox' },
 						{ slug: 'guides/local-cache' },
 						{ slug: 'guides/appearance' },

@@ -1,15 +1,67 @@
 ---
-title: Push notifications (iOS)
-description: Get notified on iPhone and iPad while Pincer is closed, through a self-hosted push relay.
+title: Notifications while Pincer is closed (iOS)
+description: Get notified on iPhone and iPad while Pincer is closed, by background refresh or a self-hosted push relay.
 ---
 
 import { Steps, Aside } from '@astrojs/starlight/components';
 
-On iOS, Pincer can only post notifications while it's running and connected. To get notified about finished replies and approvals while it's closed, you need a **push relay**.
+On iOS, Pincer can only post notifications while it's running and connected. To get notified about replies, approvals and questions while it's closed, pick a mode in **Settings → Notifications → While Pincer is closed**:
 
-On macOS you don't need any of this. Mac notifications arrive while Pincer is running and connected, and the **Push relay** setting only exists on iOS.
+| Mode | Server needed | How fast |
+| --- | --- | --- |
+| **Background refresh** | No | Delayed. iOS decides when Pincer checks. |
+| **Push relay** | Yes: a self-hosted relay and an APNs key | Instant. |
+| **Off** | No | You're notified only while Pincer is open. |
 
-## Why a relay
+**Background refresh** is the default until you enter a relay URL. If you already have a relay set up, Pincer keeps using **Push relay**.
+
+On macOS you don't need any of this. Mac notifications arrive while Pincer is running and connected, and this setting only exists on iOS.
+
+## Background refresh
+
+No server, no Apple Developer key. Turn it on and Pincer does the rest:
+
+1. iOS wakes Pincer now and then, even when it's closed.
+2. Pincer briefly connects to each saved gateway.
+3. It posts a notification for each new reply, approval and question since the last check.
+4. It disconnects.
+
+### It's not instant
+
+iOS decides when, usually 15 minutes to a few hours apart, depending on how often you use Pincer and your battery. It pauses in Low Power Mode, and stops after you swipe Pincer away in the app switcher until you open it again.
+
+- **Background App Refresh** has to be on for Pincer, under **Settings → General → Background App Refresh** in iOS. If it's off, Settings → Notifications in Pincer shows a warning with a button that opens iOS Settings. If your device restricts it, Settings says "Background App Refresh is restricted on this device".
+- Each gateway has to be reachable from your phone when iOS checks, for example with Tailscale connected. A gateway Pincer can't reach is skipped until the next check.
+
+If you need notifications right away, use a [push relay](#push-relay).
+
+### What you're notified about
+
+- **Replies** to your chats that finished and are unread. You get up to 10 per gateway per check, the newest first.
+- **Approvals** that are still waiting.
+- **Questions** an agent is waiting on you to answer.
+
+Approvals and questions always notify, even for hidden automation and slash-command chats. Replies skip subagents, archived chats, and hidden automation and slash-command chats. To include automation or slash-command chats, turn on **Show Automations** or **Show Slash Commands** in the chat list's **Organize** menu.
+
+The first check after you set it up only records a starting point, so you don't get a flood of old chats.
+
+Unlike push, these notifications include the message preview, the same as the ones Pincer posts while it's open.
+
+Turning off **Notify about replies and approvals** stops background refresh too.
+
+### Checking it works
+
+Under **While Pincer is closed**, the **Last checked** row shows when Pincer last checked and how it went, such as "Up to date", "3 new" or "Couldn't reach Home". Use it to troubleshoot: "Couldn't reach Home" means the gateway wasn't reachable, "Stopped early" means iOS cut a check short, and **Not yet** means iOS hasn't run a check.
+
+Notifications look and group the same as the others in Pincer, one thread per chat. Tap one to open the chat. You can answer an approval from its notification. See [Answering from a notification](../approvals-and-notifications/#answering-from-a-notification).
+
+A reply you already got while Pincer was open isn't notified again.
+
+## Push relay
+
+Push relay gives instant notifications, but you have to run a small server.
+
+### Why a relay
 
 iOS gives a suspended app no network, so Pincer can't keep its connection to the gateway open. Only Apple's push service (APNs) can wake it, and only a server holding the APNs key of the team that signed the app can send those pushes.
 
@@ -28,7 +80,7 @@ Pincer doesn't come with a relay, and there's no shared one. Pushes have to be s
 - **If you use a TestFlight build,** the key belongs to the maintainer's team, so you can't create it yourself. [Ask on GitHub](https://github.com/hartra344/pincer/issues) how to get a relay for TestFlight builds.
 </Aside>
 
-## What the relay and Apple can see
+### What the relay and Apple can see
 
 - **Not the content.** Each notification is end-to-end encrypted (RFC 8291) to a key that exists only on your device. A notification service extension decrypts it on the phone, so neither the relay nor Apple can read it.
 - **Not much, even decrypted.** The gateway sends only a generic title, such as "OpenClaw agent finished", and which chat or approval it's about. It never sends message content. Pincer loads the content when you open the notification.
@@ -37,7 +89,7 @@ Pincer doesn't come with a relay, and there's no shared one. Pushes have to be s
 
 The encryption keys are separate for each gateway and stored in the Keychain as *this device only*. Removing a gateway from Pincer unsubscribes it and deletes its keys.
 
-## Set up the relay
+### Set up the relay
 
 The relay is a Node server with no dependencies. The easiest place to run it is the gateway machine. You'll need:
 
@@ -80,21 +132,22 @@ The relay is a Node server with no dependencies. The easiest place to run it is 
 
 Other HTTPS front ends, such as Caddy or a Cloudflare Tunnel, work too. The [push relay README](https://github.com/hartra344/pincer/blob/main/push-relay/README.md) has every option.
 
-## Turn it on in Pincer
+### Turn it on in Pincer
 
 On your iPhone or iPad:
 
 1. Go to **Settings → Notifications**.
 2. Keep **Notify about replies and approvals** on, and allow notifications when iOS asks.
-3. Enter the relay's URL under **Push relay**, then tap return.
+3. Set **While Pincer is closed** to **Push relay**.
+4. Enter the relay's URL under **Push relay**, then tap return.
 
 Each gateway gets a row with its push status. It should show **Push on** within a few seconds.
 
 To test it, send a message, then close Pincer from the app switcher before the reply finishes. You should get an "OpenClaw agent finished" notification that opens the chat.
 
-The relay URL has to start with `https://`. Plain `http://` only works for `localhost`, `127.0.0.1` and `::1`. Turning off **Notify about replies and approvals** also turns push off.
+The relay URL has to start with `https://`. Plain `http://` only works for `localhost`, `127.0.0.1` and `::1`. Turning off **Notify about replies and approvals**, or choosing another mode, turns push off.
 
-## Status
+### Status
 
 | Status | What it means |
 | --- | --- |
@@ -102,26 +155,26 @@ The relay URL has to start with `https://`. Plain `http://` only works for `loca
 | **Waiting for APNs** | iOS hasn't given Pincer a device token yet. Check that notifications are allowed for Pincer in iOS Settings. |
 | **Relay must be https://** | The URL isn't `https://`. |
 | **Gateway has no Web Push** | The gateway doesn't support `push.web.subscribe`. Update OpenClaw. |
-| **Push off** | Notifications are off, or there's no relay URL yet. |
+| **Push off** | Notifications are off, the mode isn't **Push relay**, or there's no relay URL yet. |
 | **Not connected** | Pincer subscribes each time it connects. Open the gateway. |
 | Anything else | An error, such as "Push relay refused registration (…)". Usually the phone can't reach the relay. |
 
 To check the relay from your phone, open `https://…:8443/healthz` in Safari. It should show `{"ok":true}`.
 
-## Approving from a push
+### Approving from a push
 
 Approval pushes have the same actions as Pincer's own notifications: **Allow once**, **Always allow** and **Deny**. A push doesn't know whether **Always allow** is permitted, so it always offers it. If it isn't, you get a follow-up saying "Always allow isn't available for this command." with **Allow once** and **Deny**. See [Answering from a notification](../approvals-and-notifications/#answering-from-a-notification).
 
 If a push can't be decrypted, for example because you removed the gateway, iOS shows a generic "New notification" alert instead.
 
-## No double alerts
+### No double alerts
 
 Once push is working for a gateway, you won't get the same notification twice:
 
 - while Pincer is in the background, it stops posting its own notifications for that gateway and leaves it to push;
 - while Pincer is open and connected to that gateway, pushes from it are hidden.
 
-## Managing the relay
+### Managing the relay
 
 ```sh
 ./install-service.sh --print        # show the service definition
