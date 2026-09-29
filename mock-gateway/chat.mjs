@@ -210,7 +210,7 @@ export async function simulateRun(state, run, params, replyMeta = {}) {
         content.push(imageBlock(artifactId, attachment.fileName ?? 'Uploaded image'));
       }
     }
-    const userMsg = makeMessage('user', content, { openclaw: { runId: run.runId, idempotencyKey: params.idempotencyKey, ...replyMeta } });
+    const userMsg = makeMessage('user', content, { openclaw: { runId: run.runId, idempotencyKey: `${params.idempotencyKey}:user`, ...replyMeta } });
     transcript.push(userMsg);
     row.hasActiveRun = true;
     row.activeRunIds = [...new Set([...row.activeRunIds, run.runId])];

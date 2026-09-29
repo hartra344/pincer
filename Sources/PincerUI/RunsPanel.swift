@@ -66,7 +66,7 @@ private struct RunsToolbarButton: View {
                     .foregroundStyle(running > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                     .symbolEffect(.pulse, isActive: running > 0)
             }
-            .keyboardShortcut("r", modifiers: [.command, .option])
+            .shortcut(.showRuns)
             .help(running == 0 ? L("Runs") : running == 1 ? L("Runs — 1 helper running") : L("Runs — \(running) helpers running"))
             .accessibilityValue(running > 0 ? L("\(running) running") : "")
         }

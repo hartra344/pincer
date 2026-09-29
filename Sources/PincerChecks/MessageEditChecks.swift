@@ -68,6 +68,9 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
             && chat.items.last?.role == .assistant
     }
     check(edited, "the transcript shows the cut path plus the edited message (\(chat.items.map(\.plainText)))")
+    await chat.load(force: true)
+    check(!chat.items.contains { $0.isPending } && !gateway.outbox.entries.contains { $0.sessionKey == whole },
+          "no send stays pending after the edit and a reload (#429)")
     let cached = await TranscriptCache.load(gatewayId: gateway.id, sessionKey: whole)
     check(cached?.items.contains { $0.plainText.contains("Make it shade tolerant; it only gets four hours") } != true, "the cache dropped the old message")
 
@@ -86,6 +89,7 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
             && chat.items.last?.role == .assistant
     }
     check(again, "regenerate resends the same message without duplicating it (\(chat.items.map(\.plainText)))")
+    check(!chat.items.contains { $0.isPending }, "no send stays pending after regenerate (#429)")
     gateway.selectedKey = garden
     let forks = [userFork, assistantFork, whole].compactMap { $0 }
     await gateway.sessionManager.load(filter: .all)

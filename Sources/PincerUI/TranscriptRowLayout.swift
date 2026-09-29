@@ -484,7 +484,7 @@ struct TranscriptLayoutBuilder {
                                            time: item.timestamp?.chatTimestamp, isPending: item.isAwaitingDelivery)
         let text = item.plainText
         let messageId = item.isReplyable ? item.transcriptId : nil
-        let contentWidth = max(layout.width - TranscriptMetrics.contentX - TranscriptMetrics.sidePadding, 40)
+        let contentWidth = TranscriptMetrics.contentWidth(rowWidth: layout.width)
         let quote = layout.decoration.quote.map {
             self.replyQuote($0, isLocating: layout.decoration.isLocating, width: min(contentWidth, TranscriptMetrics.maxCardWidth))
         }
@@ -666,7 +666,7 @@ struct TranscriptLayoutBuilder {
     {
         let metrics = TranscriptMetrics.self
         let x = metrics.contentX
-        let contentWidth = max(layout.width - x - metrics.sidePadding, 40)
+        let contentWidth = metrics.contentWidth(rowWidth: layout.width)
         let top = metrics.verticalPadding
         let headerHeight = TranscriptStyle.lineHeight(self.style.headline)
         layout.parts.append(.init(part: .avatar(avatar), frame: CGRect(x: metrics.sidePadding, y: top, width: metrics.avatar, height: metrics.avatar)))
@@ -715,23 +715,23 @@ struct TranscriptLayoutBuilder {
         // A streaming message is split into frozen chunks and a tail; a committed one is one cached list.
         let pieces: [TranscriptText.LiveSegment] = live
             ? TranscriptText.liveMarkdown(source, tone: tone, row: layout.id, owner: self.context.chat.map(ObjectIdentifier.init))
-            : TranscriptText.markdown(source, tone: tone).map { .init(segment: $0, isFrozen: false, extraSpacing: 0) }
+            : TranscriptText.markdown(source, tone: tone, dark: self.settings.dark).map { .init(segment: $0, isFrozen: false, extraSpacing: 0) }
         for piece in pieces {
             let spacing = TranscriptMetrics.blockSpacing + piece.extraSpacing
             switch piece.segment {
             case let .text(source):
                 let (text, match) = self.marks.mark(source, section)
                 let size = live ? TranscriptText.liveSize(text, width: width, frozen: piece.isFrozen && text === source, exact: true)
-                    : TranscriptText.size(text, width: width)
+                    : TranscriptText.size(text, width: width, memoized: text === source)
                 stack.add(.text(text), height: size.height, spacing: spacing)
                 self.marks.place(match, in: text, width: width, stack: stack, into: &layout)
             case let .quote(source):
                 let (text, match) = self.marks.mark(source, section)
-                let quoteWidth = max(width - 11, 20)
+                let quoteWidth = TranscriptText.quoteWidth(for: width)
                 let size = live ? TranscriptText.liveSize(text, width: quoteWidth, frozen: piece.isFrozen && text === source, exact: false)
-                    : TranscriptText.size(text, width: quoteWidth)
+                    : TranscriptText.size(text, width: quoteWidth, memoized: text === source)
                 stack.add(.quote(text), height: size.height, spacing: spacing)
-                self.marks.place(match, in: text, width: max(width - 11, 20), stack: stack, into: &layout)
+                self.marks.place(match, in: text, width: quoteWidth, stack: stack, into: &layout)
             case .rule:
                 stack.add(.rule, height: 1)
             case let .code(language, code, source):
@@ -765,7 +765,7 @@ struct TranscriptLayoutBuilder {
                 let isSVG = SVGSource.inlineSource(language: language, code: code) != nil || RichBlock.kind(language: language) != nil
                 let (text, match) = isSVG ? (source, nil) : self.marks.mark(source, section)
                 let size = live ? TranscriptText.liveSize(text, width: .greatestFiniteMagnitude, frozen: piece.isFrozen && text === source, exact: false)
-                    : TranscriptText.size(text, width: .greatestFiniteMagnitude)
+                    : TranscriptText.size(text, width: .greatestFiniteMagnitude, memoized: text === source)
                 let part = TranscriptPart.Code(language: language, code: code, text: text, textSize: size, headerHeight: headerHeight)
                 stack.add(.code(part), height: headerHeight + 1 + 10 + size.height + 10)
                 self.marks.place(match, in: text, width: .greatestFiniteMagnitude, stack: stack, offset: headerHeight + 11, into: &layout)
@@ -780,7 +780,7 @@ struct TranscriptLayoutBuilder {
                     }
                 }
                 let table = TranscriptText.Table(cells: cells, alignments: source.alignments, plainText: source.plainText)
-                let part = self.table(table, width: width)
+                let part = self.table(table, original: source, width: width)
                 stack.add(.table(part), height: part.contentSize.height, width: part.contentSize.width)
                 if found, let frame = stack.parts.last?.frame { layout.matchY = frame.minY + min(frame.height, 40) }
             }
@@ -809,29 +809,19 @@ struct TranscriptLayoutBuilder {
 
     /// Columns share the width when each can keep a readable minimum; otherwise the table keeps
     /// its natural column widths and scrolls sideways.
-    private func table(_ table: TranscriptText.Table, width available: CGFloat) -> TranscriptPart.Table {
+    private func table(_ table: TranscriptText.Table, original: TranscriptText.Table, width available: CGFloat) -> TranscriptPart.Table {
         let columns = table.cells.first?.count ?? 0
-        let minimumColumn: CGFloat = 72, maximumColumn: CGFloat = 320, padding: CGFloat = 20
-        var ideals = Array(repeating: CGFloat(0), count: columns)
-        for row in table.cells {
+        let padding = TranscriptTableMetrics.padding
+        var naturals = Array(repeating: CGFloat(0), count: columns)
+        for (rowIndex, row) in table.cells.enumerated() {
             for (column, cell) in row.enumerated() {
-                ideals[column] = max(ideals[column], TranscriptText.naturalWidth(cell) + padding)
+                naturals[column] = max(naturals[column], TranscriptText.naturalWidth(cell, memoized: cell === original.cells[rowIndex][column]))
             }
         }
-        ideals = ideals.map { min($0, maximumColumn) }
-        let minimums = ideals.map { min($0, minimumColumn) }
-        var widths = ideals
-        let idealTotal = ideals.reduce(0, +), minimumTotal = minimums.reduce(0, +)
-        if idealTotal > available, minimumTotal <= available {
-            let slack = available - minimumTotal
-            let flexible = idealTotal - minimumTotal
-            widths = zip(ideals, minimums).map { ideal, minimum in
-                floor(flexible > 0 ? minimum + (ideal - minimum) / flexible * slack : minimum)
-            }
-        }
-        let heights = table.cells.map { row in
+        let widths = TranscriptTableMetrics.columnWidths(naturals: naturals, available: available)
+        let heights = table.cells.enumerated().map { rowIndex, row in
             row.enumerated().map { column, cell in
-                TranscriptText.size(cell, width: max(widths[column] - padding, 1)).height
+                TranscriptText.size(cell, width: max(widths[column] - padding, 1), memoized: cell === original.cells[rowIndex][column]).height
             }.max().map { max($0, TranscriptStyle.lineHeight(self.style.body)) + 10 } ?? 0
         }
         return TranscriptPart.Table(cells: table.cells, columnWidths: widths, rowHeights: heights, plainText: table.plainText)
