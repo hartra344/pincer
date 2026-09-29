@@ -83,6 +83,7 @@ func runMemoryProbe20k() async {
     await TranscriptCache.flush(gatewayId: gateway.id)
     malloc_zone_pressure_relief(nil, 0)
     let baseline = memoryUsage()
+    let baselineHeap = heapInUse()
 
     let chat = gateway.chat(for: key)
     await chat.restoreFromCache()
@@ -90,6 +91,7 @@ func runMemoryProbe20k() async {
     gateway.selectedKey = key
     try? await Task.sleep(for: .milliseconds(500))
     let opened = memoryUsage()
+    let openedHeap = heapInUse()
     let openedCount = chat.items.count
     malloc_zone_pressure_relief(nil, 0)
     let openedRelieved = memoryUsage()
@@ -98,13 +100,31 @@ func runMemoryProbe20k() async {
     await chat.trimToWindow()
     try? await Task.sleep(for: .milliseconds(500))
     let left = memoryUsage()
+    let leftHeap = heapInUse()
     let leftCount = chat.items.count
     malloc_zone_pressure_relief(nil, 0)
     let leftRelieved = memoryUsage()
 
-    print("  · \(count)-item chat, cache only: footprint \(mb(Int64(baseline.footprint)))")
-    print("  · opened: \(openedCount) items in memory, footprint \(mb(Int64(opened.footprint))) (after pressure relief \(mb(Int64(openedRelieved.footprint))))")
-    print("  · left:   \(leftCount) items in memory, footprint \(mb(Int64(left.footprint))) (after pressure relief \(mb(Int64(leftRelieved.footprint))))")
+    // Find in chat pages the whole cached history in; leaving the chat trims it back.
+    gateway.selectedKey = key
+    await chat.loadAllCached()
+    try? await Task.sleep(for: .milliseconds(500))
+    let searched = memoryUsage()
+    let searchedHeap = heapInUse()
+    let searchedCount = chat.items.count
+    gateway.selectedKey = "agent:main:dashboard:other"
+    await chat.trimToWindow()
+    try? await Task.sleep(for: .milliseconds(500))
+    malloc_zone_pressure_relief(nil, 0)
+    let trimmedAgain = memoryUsage()
+    let trimmedAgainHeap = heapInUse()
+    let trimmedCount = chat.items.count
+
+    print("  · \(count)-item chat, cache only: footprint \(mb(Int64(baseline.footprint))), live heap \(baselineHeap)")
+    print("  · opened: \(openedCount) items in memory, footprint \(mb(Int64(opened.footprint))), live heap \(openedHeap) (after pressure relief \(mb(Int64(openedRelieved.footprint))))")
+    print("  · left:   \(leftCount) items in memory, footprint \(mb(Int64(left.footprint))), live heap \(leftHeap) (after pressure relief \(mb(Int64(leftRelieved.footprint))))")
+    print("  · find (loadAllCached): \(searchedCount) items in memory, footprint \(mb(Int64(searched.footprint))), live heap \(searchedHeap)")
+    print("  · left again (trim): \(trimmedCount) items in memory, footprint \(mb(Int64(trimmedAgain.footprint))), live heap \(trimmedAgainHeap) (after pressure relief)")
     chat.stopCaching()
     await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: key)
 }
@@ -113,4 +133,11 @@ func runMemoryProbe20k() async {
 private func saveSyntheticChat(count: Int, gatewayId: UUID, key: String) async {
     let snapshot = TranscriptCache.Snapshot(items: Synthetic.items(chat: 0, count: count), complete: true, activityMs: 5)
     await TranscriptCache.save(snapshot, gatewayId: gatewayId, sessionKey: key)
+}
+
+/// Bytes live in malloc: falls when items are freed, unlike the footprint, which keeps pages the allocator holds on to.
+private func heapInUse() -> String {
+    var stats = malloc_statistics_t()
+    malloc_zone_statistics(nil, &stats)
+    return mb(Int64(stats.size_in_use))
 }

@@ -448,7 +448,7 @@ struct TranscriptWindowTests {
     }
 
     @Test func windowSaveAfterAHeadlessFillOfIdlessMessagesKeepsOlderHistory() async {
-        let (chat, gateway) = self.makeStore()
+        let (chat, gateway) = self.makeStore(headless: true)
         defer {
             chat.stopCaching()
             TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)

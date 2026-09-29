@@ -157,6 +157,7 @@ enum Suites {
         LiveSection("Quick Capture (live)") { url, token in await runQuickCaptureLive(url: url, token: token) },
         LiveSection("Replies & reactions (live)") { url, token in await runLiveReactionsReply(url: url, token: token) },
         LiveSection("Transcript cache recovery (live)") { url, token in await runLiveCacheRecovery(url: url, token: token) },
+        LiveSection("Transcript window (live)") { url, token in await runLiveTranscriptWindow(url: url, token: token) },
         LiveSection(nil) { url, token in await runLiveCacheRefill(url: url, token: token) },
         LiveSection("Setup wizard (live)") { url, token in await runLiveSetup(url: url, token: token) },
         LiveSection("Deep links (live)") { url, token in await runLiveDeepLinks(url: url, token: token) },
