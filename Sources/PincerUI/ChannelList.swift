@@ -9,6 +9,7 @@ struct ChannelList: View {
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.openAutomations) private var openAutomations
     @Environment(\.searchMessages) private var searchMessages
+    @Environment(\.openChatWindow) private var openChatWindow
     /// Called when the reader picks a chat, so compact layouts can show it.
     var openChat: () -> Void = {}
     @State private var search = ""
@@ -169,7 +170,8 @@ struct ChannelList: View {
             },
             setCollapsed: { id, collapsed in self.gateway.setSectionCollapsed(id, collapsed) },
             refresh: { await self.gateway.refreshSessions() },
-            openAutomations: { self.openAutomations(self.gateway) })
+            openAutomations: { self.openAutomations(self.gateway) },
+            openInNewWindow: self.openChatWindow.isAvailable ? { self.openChatWindow(self.gateway, key: $0) } : nil)
     }
 }
 
