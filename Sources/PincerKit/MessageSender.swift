@@ -33,15 +33,15 @@ public struct MessageSender: Hashable, Codable, Sendable {
 
     /// Fallback name when the source agent isn't known.
     public static var unknownAgentName: String {
-        String(localized: "Another agent", comment: "Sender of a forwarded message whose agent isn't known")
+        L("Another agent", comment: "Sender of a forwarded message whose agent isn't known")
     }
 
     public static var automationName: String {
-        String(localized: "Automation", comment: "Sender of a message an automation (cron run) sent to a chat")
+        L("Automation", comment: "Sender of a message an automation (cron run) sent to a chat")
     }
 
     public static var helperName: String {
-        String(localized: "Helper", comment: "Sender of a message a helper (subagent) sent to a chat")
+        L("Helper", comment: "Sender of a message a helper (subagent) sent to a chat")
     }
 
     /// The sending agent, when it's one of `agents`.
@@ -74,17 +74,17 @@ public struct MessageSender: Hashable, Codable, Sendable {
         switch self.kind {
         case .agent:
             if let agentId, agentId == receivingAgentId {
-                return String(localized: "from another chat", comment: "Forwarded message marker: sent from another chat of the same agent")
+                return L("from another chat", comment: "Forwarded message marker: sent from another chat of the same agent")
             }
             if self.agentId == nil {
-                return String(localized: "from another agent", comment: "Forwarded message marker: the sending agent isn't known")
+                return L("from another agent", comment: "Forwarded message marker: the sending agent isn't known")
             }
             let name = self.displayName(agents: agents)
-            return String(localized: "from \(name)’s chat", comment: "Forwarded message marker: the agent whose chat sent it, e.g. from Kiko’s chat")
+            return L("from \(name)’s chat", comment: "Forwarded message marker: the agent whose chat sent it, e.g. from Kiko’s chat")
         case .automation:
-            return String(localized: "from an automation", comment: "Forwarded message marker: sent by an automation (cron run)")
+            return L("from an automation", comment: "Forwarded message marker: sent by an automation (cron run)")
         case .helper:
-            return String(localized: "from a helper", comment: "Forwarded message marker: sent by a helper (subagent)")
+            return L("from a helper", comment: "Forwarded message marker: sent by a helper (subagent)")
         }
     }
 

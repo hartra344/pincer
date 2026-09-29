@@ -415,8 +415,7 @@ public final class GatewayLogsModel {
     /// Responses with more lines than this are parsed off the main actor.
     nonisolated static let backgroundParseThreshold = 500
 
-    public nonisolated static let missingScopeMessage =
-        "Gateway Logs needs the operator.read scope. Approve it for this device on the Gateway host, then try again."
+    public nonisolated static var missingScopeMessage: String { L("Gateway Logs needs the operator.read scope. Approve it for this device on the Gateway host, then try again.") }
 
     public typealias Request = @MainActor (_ method: String, _ params: JSONValue) async throws -> JSONValue
 

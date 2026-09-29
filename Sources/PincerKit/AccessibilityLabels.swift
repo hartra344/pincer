@@ -2,13 +2,13 @@ import Foundation
 
 /// VoiceOver labels, values and announcements, composed from plain parts so they can be unit tested.
 ///
-/// Localization: PincerKit ships no resource bundle, so these builders compose **English** text.
-/// Callers pass names, titles and message text as data (already in the user's language, or not
-/// language-specific), and dates as a string the caller has already formatted for the current locale.
-/// When a translation is added, move the fixed phrases into PincerUI's `Localizable.xcstrings` and
-/// pass them in; the composition rules here (order, separators, truncation) stay the same.
+/// Localization: the fixed phrases ("Pinned", "3 unread", "Result 2 of 5") are keys in PincerUI's
+/// String Catalog, looked up with `L(…)` (see `PincerStrings`); without a registered bundle, as in
+/// unit tests, they're the English keys. Callers pass names, titles and message text as data
+/// (already in the user's language, or not language-specific), and dates as a string the caller has
+/// already formatted for the current locale.
 ///
-/// Every builder is a pure function: no `Date()`, no locale lookups, no global state.
+/// Every builder is otherwise a pure function: no `Date()` and no state beyond the catalog lookup.
 public enum AccessibilityText {
     /// Longest message excerpt spoken for a transcript row before it's cut with an ellipsis.
     public static let defaultSummaryLimit = 240
@@ -22,7 +22,7 @@ public enum AccessibilityText {
 
     /// Label for a sidebar section's show/hide chevron: `Collapse Moki`, `Expand Moki`.
     public static func sectionToggle(title: String, isCollapsed: Bool) -> String {
-        "\(isCollapsed ? "Expand" : "Collapse") \(title)"
+        isCollapsed ? L("Expand \(title)") : L("Collapse \(title)")
     }
 
     /// `1 tool call`, `3 tool calls`. Returns nil for zero so it drops out of a `join`.
@@ -63,10 +63,10 @@ public enum AccessibilityText {
             return author
         }
         switch role {
-        case .user: return "You"
-        case .assistant: return "Assistant"
-        case .toolResult: return "Tool result"
-        case .system, .marker: return "System"
+        case .user: return L("You")
+        case .assistant: return L("Assistant")
+        case .toolResult: return L("Tool result")
+        case .system, .marker: return L("System")
         }
     }
 
@@ -94,13 +94,13 @@ public enum AccessibilityText {
         let body = Self.summary(text, limit: summaryLimit)
         return Self.join([
             Self.speaker(role: role, author: author),
-            via.map { "via \($0)" },
-            isStreaming ? "Responding" : nil,
-            isError ? "Error" : nil,
-            isPending ? "Sending" : nil,
-            body.isEmpty ? (isStreaming ? nil : "No text") : body,
-            Self.count(toolCount, singular: "tool call", plural: "tool calls"),
-            Self.count(attachmentCount, singular: "attachment", plural: "attachments"),
+            via.map { L("via \($0)") },
+            isStreaming ? L("Responding") : nil,
+            isError ? L("Error") : nil,
+            isPending ? L("Sending") : nil,
+            body.isEmpty ? (isStreaming ? nil : L("No text")) : body,
+            toolCount > 0 ? (toolCount == 1 ? L("1 tool call") : L("\(toolCount) tool calls")) : nil,
+            attachmentCount > 0 ? (attachmentCount == 1 ? L("1 attachment") : L("\(attachmentCount) attachments")) : nil,
             timestamp,
         ])
     }
@@ -125,32 +125,32 @@ public enum AccessibilityText {
         previewLimit: Int = 80) -> String
     {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let unread: String? = unreadCount > 0 ? "\(unreadCount) unread" : (isUnread ? "Unread" : nil)
+        let unread: String? = unreadCount > 0 ? L("\(unreadCount) unread") : (isUnread ? L("Unread") : nil)
         return Self.join([
-            trimmedTitle.isEmpty ? "Untitled session" : trimmedTitle,
+            trimmedTitle.isEmpty ? L("Untitled session") : trimmedTitle,
             agentName,
-            isPinned ? "Pinned" : nil,
-            isArchived ? "Archived" : nil,
-            isRunning ? (workingLabel.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } ?? "Working") : nil,
-            hasError ? "Last run failed" : nil,
+            isPinned ? L("Pinned") : nil,
+            isArchived ? L("Archived") : nil,
+            isRunning ? (workingLabel.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } ?? L("Working")) : nil,
+            hasError ? L("Last run failed") : nil,
             unread,
             preview.map { Self.summary($0, limit: previewLimit) },
         ])
     }
 
     /// Accessibility label for the composer's context meter.
-    public static let contextMeterLabel = "Context window"
+    public static var contextMeterLabel: String { L("Context window") }
 
     /// Accessibility value for the context meter, e.g. `86 percent used, 172k of 200k tokens`,
     /// `About 40 percent used, …` for a stale total, and `, nearly full` / `, almost full` past the
     /// warning and critical thresholds.
     public static func contextMeterValue(_ usage: ContextUsage) -> String {
-        let percent = "\(usage.isApproximate ? "About " : "")\(usage.percent) percent used"
-        let tokens = "\(TokenCount.format(usage.used)) of \(TokenCount.format(usage.limit)) tokens"
+        let percent = usage.isApproximate ? L("About \(usage.percent) percent used") : L("\(usage.percent) percent used")
+        let tokens = L("\(TokenCount.format(usage.used)) of \(TokenCount.format(usage.limit)) tokens")
         let level: String? = switch usage.level {
         case .normal: nil
-        case .warning: "nearly full"
-        case .critical: "almost full"
+        case .warning: L("nearly full")
+        case .critical: L("almost full")
         }
         return Self.join([percent, tokens, level])
     }
@@ -159,19 +159,19 @@ public enum AccessibilityText {
     public static func replyFinishedAnnouncement(author: String?, text: String, limit: Int = 120) -> String {
         let name = Self.speaker(role: .assistant, author: author)
         let body = Self.summary(text, limit: limit)
-        return body.isEmpty ? "\(name) replied" : "\(name) replied: \(body)"
+        return body.isEmpty ? L("\(name) replied") : L("\(name) replied: \(body)")
     }
 
     /// Spoken when a run fails, e.g. `Claude: reply failed`.
     public static func replyFailedAnnouncement(author: String?) -> String {
-        "\(Self.speaker(role: .assistant, author: author)): reply failed"
+        L("\(Self.speaker(role: .assistant, author: author)): reply failed")
     }
 
     /// Transcript find status, e.g. `Result 2 of 5`, `No results`.
     public static func findStatus(current: Int?, total: Int) -> String {
-        guard total > 0 else { return "No results" }
-        guard let current, current >= 1 else { return total == 1 ? "1 result" : "\(total) results" }
-        return "Result \(min(current, total)) of \(total)"
+        guard total > 0 else { return L("No results") }
+        guard let current, current >= 1 else { return total == 1 ? L("1 result") : L("\(total) results") }
+        return L("Result \(min(current, total)) of \(total)")
     }
 
     /// An SF Symbol name as words, e.g. `bubble.left.and.bubble.right.fill` → `Bubble left and bubble right`.
@@ -202,8 +202,8 @@ public enum AccessibilityText {
     /// A tool-call card, e.g. `Tool exec, running, ls -la` or `Tool read, failed`.
     public static func toolCall(name: String, summary: String? = nil, isRunning: Bool, isError: Bool) -> String {
         Self.join([
-            "Tool \(name)",
-            isRunning ? "running" : (isError ? "failed" : "finished"),
+            L("Tool \(name)"),
+            isRunning ? L("running") : (isError ? L("failed") : L("finished")),
             summary.map { Self.summary($0, limit: 80) },
         ])
     }

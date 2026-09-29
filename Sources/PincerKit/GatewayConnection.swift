@@ -12,13 +12,13 @@ public enum GatewayError: Error, LocalizedError, Sendable, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case let .invalidURL(url): "“\(url)” isn’t a valid Gateway address. Use wss://host.tailnet.ts.net or ws://100.x.y.z:18789."
-        case let .insecureURL(host): "Refusing unencrypted ws:// to public host \(host). Use wss:// (Tailscale Serve) or a tailnet IP."
-        case .notConnected: "Not connected to the Gateway."
-        case let .timeout(what): "Timed out waiting for \(what)."
-        case let .closed(reason): "Connection closed: \(reason)"
+        case let .invalidURL(url): L("“\(url)” isn’t a valid Gateway address. Use wss://host.tailnet.ts.net or ws://100.x.y.z:18789.")
+        case let .insecureURL(host): L("Refusing unencrypted ws:// to public host \(host). Use wss:// (Tailscale Serve) or a tailnet IP.")
+        case .notConnected: L("Not connected to the Gateway.")
+        case let .timeout(what): L("Timed out waiting for \(what).")
+        case let .closed(reason): L("Connection closed: \(reason)")
         case let .rpc(code, message, details): "\(message) [\(details?["code"]?.string ?? code)]"
-        case let .protocolViolation(message): "Unexpected Gateway response: \(message)"
+        case let .protocolViolation(message): L("Unexpected Gateway response: \(message)")
         }
     }
 

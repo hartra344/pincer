@@ -280,18 +280,23 @@ public struct ToolFileEdit: Hashable, Sendable {
 
     /// "Edited foo.swift, 3 added, at least 12 removed"; a running write is "Writing foo.swift".
     public func accessibilitySummary(isRunning: Bool) -> String {
-        let verb: String = switch self.files.count == 1 ? self.files[0].operation : .update {
-        case _ where isRunning && self.kind == .write: "Writing"
-        case .add: "Created"
-        case .delete: "Deleted"
-        case .move: "Moved"
-        case .update: self.kind == .write ? "Wrote" : "Edited"
+        let title = self.title.replacingOccurrences(
+            of: "→", with: L("to", comment: "File edit summary: the arrow in a move, as in “a.swift to b.swift”"))
+        let action: String = switch self.files.count == 1 ? self.files[0].operation : .update {
+        case _ where isRunning && self.kind == .write: L("Writing \(title)")
+        case .add: L("Created \(title)")
+        case .delete: L("Deleted \(title)")
+        case .move: L("Moved \(title)")
+        case .update: self.kind == .write ? L("Wrote \(title)") : L("Edited \(title)")
         }
-        let title = self.title.replacingOccurrences(of: "→", with: "to")
-        let counts = [(self.additions, self.additionsBound, "added"), (self.deletions, self.deletionsBound, "removed")]
-            .filter { $0.0 > 0 && $0.1 != .unknown }
-            .map { ($0.1 == .atLeast ? "at least " : "") + "\($0.0) \($0.2)" }
-        return ([verb + " " + title] + counts).joined(separator: ", ")
+        var counts: [String] = []
+        if self.additions > 0, self.additionsBound != .unknown {
+            counts.append(self.additionsBound == .atLeast ? L("at least \(self.additions) added") : L("\(self.additions) added"))
+        }
+        if self.deletions > 0, self.deletionsBound != .unknown {
+            counts.append(self.deletionsBound == .atLeast ? L("at least \(self.deletions) removed") : L("\(self.deletions) removed"))
+        }
+        return ([action] + counts).joined(separator: ", ")
     }
 
     /// Every row, in order.

@@ -576,15 +576,14 @@ public final class ApprovalHistoryModel {
         return message.lowercased().contains("cursor") || details?["reason"]?.text?.lowercased().contains("cursor") == true
     }
 
-    public nonisolated static let missingScopeMessage =
-        "Approval History needs the operator.approvals scope. Approve it for this device on the Gateway host, then try again."
+    public nonisolated static var missingScopeMessage: String { L("Approval History needs the operator.approvals scope. Approve it for this device on the Gateway host, then try again.") }
 
     static func message(for error: Error) -> String {
         if !GatewayError.isMissingScope(error), case let GatewayError.rpc(_, _, details) = error,
            details?["reason"]?.text == "APPROVAL_NOT_FOUND"
         {
-            return "This approval is no longer on the Gateway."
+            return L("This approval is no longer on the Gateway.")
         }
-        return GatewayError.message(for: error, scope: Self.missingScopeMessage)
+        return GatewayError.message(for: error, scope: Self.missingScopeMessage, unavailable: L("approval history"))
     }
 }

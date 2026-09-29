@@ -31,11 +31,11 @@ public enum SessionManager {
     public static let previewMaxChars = 240
     public static let rewindHistoryLimit = 60
 
-    public static let needsAdminMessage = "Turn on Full Management under Connection, then approve this device on the Gateway host."
-    public static let unsupportedMessage = "Session Management Isn't Available. Update OpenClaw to manage sessions here."
-    public static let branchesUnsupportedMessage = "Branches need a newer Gateway."
-    public static let deleteMessage = "This permanently deletes the transcript on the Gateway and can't be undone."
-    public static let mixedDeleteMessage = "Only archived sessions can be deleted without Full Management."
+    public static var needsAdminMessage: String { L("Turn on Full Management under Connection, then approve this device on the Gateway host.") }
+    public static var unsupportedMessage: String { L("Session Management Isn't Available. Update OpenClaw to manage sessions here.") }
+    public static var branchesUnsupportedMessage: String { L("Branches need a newer Gateway.") }
+    public static var deleteMessage: String { L("This permanently deletes the transcript on the Gateway and can't be undone.") }
+    public static var mixedDeleteMessage: String { L("Only archived sessions can be deleted without Full Management.") }
 
     public static func deleteTitle(count: Int) -> String {
         count == 1 ? "Delete 1 session?" : "Delete \(count) sessions?"
@@ -48,9 +48,9 @@ public enum SessionManager {
     }
 
     public static func rewindTitle(_ sessionTitle: String) -> String { "Rewind “\(sessionTitle)”?" }
-    public static let rewindMessage = "Messages after this point move to a new branch. The message you rewind to goes back into the composer."
+    public static var rewindMessage: String { L("Messages after this point move to a new branch. The message you rewind to goes back into the composer.") }
     public static func switchTitle(_ branch: String) -> String { "Switch to branch “\(branch)”?" }
-    public static let switchMessage = "The chat continues from that branch. The current branch is kept and you can switch back."
+    public static var switchMessage: String { L("The chat continues from that branch. The current branch is kept and you can switch back.") }
 
     /// Rows for `filter` whose title, key, label, agent or channel contain `search` (ignoring case),
     /// most recently active first.

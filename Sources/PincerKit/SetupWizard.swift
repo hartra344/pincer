@@ -489,8 +489,7 @@ public final class SetupWizardModel {
     public func needsFullManagement(_ step: SetupStep) -> Bool { step.hasAdminActions && !self.hasAdmin }
 
     public nonisolated static let fullManagementTitle = "Needs Full Management"
-    public nonisolated static let fullManagementMessage =
-        "This device can view but not change this. Open Connection to request Full Management."
+    public nonisolated static var fullManagementMessage: String { L("This device can view but not change this. Open Connection to request Full Management.") }
 
     /// Called once per successful connection: offers the wizard the first time.
     public func connected() {
