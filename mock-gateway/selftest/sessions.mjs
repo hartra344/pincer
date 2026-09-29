@@ -184,6 +184,23 @@ export async function run() {
     assert.equal(branches[0].active, true);
     assert.equal(branches[0].messageCount, 2, 'the active leaf is listed even when it is not a tip');
     assert.equal(branches.filter((b) => !b.active).length, 3, 'all three follow-ups remain as branches');
+    // sessions.fork (write scope): a new chat holding the path before the user message.
+    const firstQuestion = afterSwitch[0];
+    assert.equal(firstQuestion.role, 'user');
+    assert.equal((await writer.call('sessions.fork', { sessionKey: garden, entryId: afterSwitch[1].__openclaw.id })).error.message,
+      `entry is not a user message: ${afterSwitch[1].__openclaw.id}`);
+    assert.equal((await writer.call('sessions.fork', { sessionKey: garden, entryId: 'nope' })).error.message, 'message entry not found: nope');
+    const forkEvent = writer.waitEvent('sessions.changed', (p) => p.reason === 'fork');
+    const forked = await writer.send('sessions.fork', { sessionKey: garden, entryId: firstQuestion.__openclaw.id });
+    assert.equal(forked.editorText, 'Plan a spring vegetable bed for a 4×8 ft raised bed.');
+    assert.match(forked.sessionKey, /^agent:main:dashboard:/);
+    assert.equal((await forkEvent).sessionKey, forked.sessionKey);
+    assert.equal((await writer.send('chat.history', { sessionKey: forked.sessionKey })).messages.length, 0);
+    assert.equal((await writer.send('chat.history', { sessionKey: garden })).messages.length, 2, 'the parent is untouched');
+    // sessions.create fork: the whole chat through the last assistant message.
+    const whole = await writer.send('sessions.create', { agentId: 'main', parentSessionKey: garden, fork: true, forkFrom: 'last-completed' });
+    assert.equal(whole.session.forkedFromParent, true);
+    assert.equal((await writer.send('chat.history', { sessionKey: whole.key })).messages.length, 2);
     // Busy chats refuse both.
     const busy = 'agent:coder:dashboard:ci-fix';
     // `approve` holds the run on an exec approval.

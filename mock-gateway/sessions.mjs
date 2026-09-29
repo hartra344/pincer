@@ -32,6 +32,7 @@ export const SESSION_MANAGER_METHODS = [
   'sessions.branches.list',
   'sessions.branches.switch',
   'sessions.rewind',
+  'sessions.fork',
   'sessions.recover',
   'sessions.delete',
   'sessions.patchMany',
@@ -128,6 +129,7 @@ function paramsProblem(method, params) {
     'sessions.branches.list': ['sessionKey', 'agentId'],
     'sessions.branches.switch': ['sessionKey', 'agentId', 'leafEntryId'],
     'sessions.rewind': ['sessionKey', 'agentId', 'entryId'],
+    'sessions.fork': ['sessionKey', 'agentId', 'entryId'],
     'sessions.recover': ['key', 'agentId'],
     'sessions.delete': ['key', 'agentId', 'deleteTranscript', 'expectedSessionId', 'expectedLifecycleRevision', 'expectedSessionUpdatedAt', 'emitLifecycleHooks', 'archivedOnly'],
     'sessions.patchMany': ['targets', 'patch'],
@@ -140,6 +142,7 @@ function paramsProblem(method, params) {
     'sessions.branches.list': ['sessionKey'],
     'sessions.branches.switch': ['sessionKey', 'leafEntryId'],
     'sessions.rewind': ['sessionKey', 'entryId'],
+    'sessions.fork': ['sessionKey', 'entryId'],
     'sessions.recover': ['key'],
     'sessions.delete': ['key'],
     'sessions.patchMany': ['targets', 'patch'],
@@ -490,6 +493,45 @@ export function handleSessionManagerRequest(state, conn, msg, helpers) {
       const editorText = messageText(target);
       sendRes(conn, id, editorText ? { editorText } : {});
       changed(key, 'rewind', { agentId: row.agentId ?? sessionAgentId(key), session: clone(row) });
+      return true;
+    }
+    case 'sessions.fork': {
+      const key = params.sessionKey.trim();
+      const entryId = params.entryId.trim();
+      const row = state.sessions.get(key);
+      if (!row) return invalid(`session not found: ${key}`);
+      const active = state.transcripts.get(key) ?? [];
+      const index = active.findIndex((message) => messageId(message) === entryId);
+      if (index < 0) return invalid(`message entry not found: ${entryId}`);
+      const target = active[index];
+      if (target.role !== 'user') return invalid(`entry is not a user message: ${entryId}`);
+      const agentId = row.agentId ?? sessionAgentId(key);
+      const newKey = `agent:${agentId}:dashboard:${crypto.randomUUID().slice(0, 8)}`;
+      const kept = clone(active.slice(0, index));
+      const child = {
+        ...clone(row),
+        key: newKey,
+        sessionId: crypto.randomUUID(),
+        pinned: false,
+        archived: false,
+        unread: false,
+        status: 'idle',
+        hasActiveRun: false,
+        activeRunIds: [],
+        parentSessionKey: key,
+        spawnedBy: undefined,
+        forkedFromParent: true,
+        activeLeafEntryId: messageId(kept[kept.length - 1]) ?? null,
+        lastMessagePreview: kept.length ? messageText(kept[kept.length - 1])?.slice(0, 120) : undefined,
+        updatedAt: Date.now(),
+        lastActivityAt: Date.now(),
+      };
+      for (const field of ['archivedAt', 'archiveReason', 'archivedBy', 'lastRunError', 'startedAt', 'endedAt', 'runtimeMs']) delete child[field];
+      state.sessions.set(newKey, child);
+      state.transcripts.set(newKey, kept);
+      const editorText = messageText(target);
+      sendRes(conn, id, editorText ? { sessionKey: newKey, editorText } : { sessionKey: newKey });
+      changed(newKey, 'fork', { agentId, session: clone(child) });
       return true;
     }
     case 'sessions.recover': {

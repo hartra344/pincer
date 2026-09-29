@@ -147,6 +147,14 @@ public final class ChatStore: Identifiable {
     }
     /// The message the composer is replying to. Per chat, in memory only.
     public var replyTarget: ReplyTarget?
+    /// The user message being edited (Edit & Resend). Per chat, in memory only.
+    public var editTarget: MessageEditTarget?
+    /// The chat's transcript tips (`sessions.branches.list`), oldest first; see `refreshBranches()`.
+    public internal(set) var branches: [SessionBranch] = []
+    /// An Edit & Resend is in flight (rewind, then send); Send is off meanwhile.
+    public internal(set) var isSendingEdit = false
+    @ObservationIgnored var branchRefreshGeneration = 0
+    @ObservationIgnored var branchRefreshTask: Task<Void, Never>?
     /// A passing, non-error note for the chat's notice bar (not a send failure).
     public var notice: String?
     /// The quoted message being looked for in older history, while paging.

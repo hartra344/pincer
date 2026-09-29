@@ -108,6 +108,13 @@ protocol TranscriptRowActions: AnyObject {
     func quickLook(_ file: FileRef) async -> Bool
     /// Starts a reply to the message in the composer.
     func reply(to messageId: String)
+    /// Branch from Here, Edit & Resend and Regenerate (each only offered when the chat can do it).
+    func canBranch(from messageId: String) -> Bool
+    func canEdit(_ messageId: String) -> Bool
+    func canRegenerate(_ messageId: String) -> Bool
+    func branch(from messageId: String)
+    func edit(_ messageId: String)
+    func regenerate(_ messageId: String)
     /// Copies a link that opens the chat scrolled to the message.
     func copyLink(to messageId: String)
     /// Bookmarks the message, or removes its bookmark.
@@ -615,6 +622,24 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     func reply(to messageId: String) {
         self.context.reply(messageId)
+    }
+
+    func canBranch(from messageId: String) -> Bool { self.context.chat?.canBranch(from: messageId) ?? false }
+    func canEdit(_ messageId: String) -> Bool { self.context.chat?.canEdit(messageId) ?? false }
+    func canRegenerate(_ messageId: String) -> Bool { self.context.chat?.canRegenerate(messageId) ?? false }
+
+    func branch(from messageId: String) {
+        guard let chat = self.context.chat else { return }
+        Task { await chat.branch(from: messageId) }
+    }
+
+    func edit(_ messageId: String) {
+        _ = self.context.chat?.beginEdit(messageId)
+    }
+
+    func regenerate(_ messageId: String) {
+        guard let chat = self.context.chat else { return }
+        Task { await chat.regenerate(messageId) }
     }
 
     func toggleReaction(_ emoji: String, on messageId: String) {
