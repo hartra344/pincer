@@ -270,6 +270,29 @@ struct TranscriptPremeasureHostedTests {
         #endif
     }
 
+    @Test func streamingUpdatesAndUnchangedHighlightDoNotStallThePrefetch() async {
+        let host = await Self.makeHost()
+        var rows = Self.rows(count: 1500, salt: "s4")
+        rows.append(Self.assistant("live", text: "Streaming", streaming: true, at: rows.count))
+        host.coordinator.update(rows: rows, context: host.context, insets: (0, 0))
+        // updateNSView re-applies the (unchanged) highlight on every flush; the flushes must not cancel the worker.
+        for step in 0..<60 {
+            rows[rows.count - 1] = Self.assistant("live", text: "Streaming " + String(repeating: "token ", count: step + 1),
+                                                  streaming: true, at: rows.count - 1)
+            host.coordinator.update(rows: rows, context: host.context, insets: (0, 0))
+            host.coordinator.apply(TranscriptHighlight())
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        await Self.idle(host)
+        let stats = host.coordinator.premeasureStats
+        print("\nTranscriptPremeasure streaming: premeasureStats \(stats)")
+        #expect(stats.adopted > 0, "results were adopted while the last row streamed")
+        #expect(Self.driver(host.coordinator).inFlightCount == 0)
+        #if DEBUG
+        #expect(!Self.driver(host.coordinator).offloadedIds.contains("a-live"))
+        #endif
+    }
+
     @Test func workerMeasuresOffMainWithoutMainTextKit() async {
         // `TranscriptPremeasurer.measure` asserts `.notOnQueue(.main)` in DEBUG, and only it bumps `offMainLayouts`.
         let off = TranscriptPremeasurer.offMainLayouts.withLock { $0 }
