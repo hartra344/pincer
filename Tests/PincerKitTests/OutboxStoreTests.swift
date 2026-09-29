@@ -167,4 +167,39 @@ struct OutboxStoreTests {
         let json = try JSONSerialization.jsonObject(with: Data(contentsOf: try self.file(temp))) as? [String: Any]
         #expect(json?["version"] as? Int == OutboxStore.currentVersion)
     }
+
+    // #414: a store started right after another stopped must read the other's last write.
+
+    @Test func loadWaitsForQueuedWrites() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        var box = Outbox()
+        box.enqueue(OutboxEntry(id: "trigger", sessionKey: "agent:main:main", text: "t", createdAt: self.created, state: .sending, attempts: 1))
+        OutboxStore.enqueueSave(box, gatewayId: self.gateway, root: temp.url)
+        box.enqueue(OutboxEntry(id: "queued", sessionKey: "agent:main:main", text: "q", createdAt: self.created))
+        OutboxStore.enqueueSave(box, gatewayId: self.gateway, root: temp.url)
+        let loaded = await OutboxStore.load(gatewayId: self.gateway, root: temp.url).outbox
+        #expect(loaded?.entries.map(\.id) == ["trigger", "queued"], "not the first write alone")
+    }
+
+    @Test func saveNowWinsOverQueuedWrites() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        var box = self.sample()
+        OutboxStore.enqueueSave(box, gatewayId: self.gateway, root: temp.url)
+        box.markSent(id: "k1")
+        OutboxStore.saveNow(box, gatewayId: self.gateway, root: temp.url)
+        await OutboxStore.flushWrites(gatewayId: self.gateway, root: temp.url)
+        #expect(await OutboxStore.load(gatewayId: self.gateway, root: temp.url).outbox?.entries.map(\.id) == ["k2", "k3"],
+                "the older queued write never lands after the quit-time save")
+    }
+
+    @Test func removeWinsOverQueuedWrites() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        OutboxStore.enqueueSave(self.sample(), gatewayId: self.gateway, root: temp.url)
+        OutboxStore.remove(gatewayId: self.gateway, root: temp.url)
+        await OutboxStore.flushWrites(gatewayId: self.gateway, root: temp.url)
+        #expect(!temp.exists(try self.file(temp)), "a removed Gateway's outbox isn't written back")
+    }
 }

@@ -8,5 +8,9 @@ public final class NotificationAppDelegate: NSObject, NSApplicationDelegate {
     public func applicationWillFinishLaunching(_ notification: Notification) {
         Notifier.shared.activate()
     }
+
+    public func applicationWillTerminate(_ notification: Notification) {
+        MainActor.assumeIsolated { AppModel.shared.saveOutboxesNow() }
+    }
 }
 #endif

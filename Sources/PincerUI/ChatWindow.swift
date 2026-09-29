@@ -196,6 +196,7 @@ struct AppActivityTracking: ViewModifier {
         content
             .onChange(of: self.scenePhase, initial: true) { _, phase in
                 self.app.appIsActive = phase == .active
+                if phase == .background { Task { await self.app.flushOutboxWrites() } }
             }
         #endif
     }
