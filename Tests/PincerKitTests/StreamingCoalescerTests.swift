@@ -63,7 +63,7 @@ struct StreamingCoalescerTests {
 
     @Test func burstIsCoalescedThenTrailingFlushPublishes() async {
         defer { self.scratch.remove() }
-        await self.withInterval(0.15) {
+        await self.withInterval(0.5) {
             let chat = self.chat()
             self.delta(chat, "A", full: "A")
             #expect(self.liveText(chat) == "A")
@@ -71,8 +71,12 @@ struct StreamingCoalescerTests {
             for c in ["B", "C", "D", "E"] { full += c; self.delta(chat, c, full: full) }
             // Within the interval: stored but not yet published.
             #expect(self.liveText(chat) == "A")
-            let published = await eventually(timeout: .seconds(3)) { self.liveText(chat) == "ABCDE" }
-            #expect(published)
+            // Await the scheduled trailing flush itself rather than a wall-clock deadline: on a starved
+            // runner the main actor may not get to it for seconds.
+            let trailing = chat.pendingFlush
+            #expect(trailing != nil, "a trailing flush is scheduled")
+            await trailing?.value
+            #expect(self.liveText(chat) == "ABCDE")
         }
     }
 
