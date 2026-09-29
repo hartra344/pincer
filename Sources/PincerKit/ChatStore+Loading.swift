@@ -126,16 +126,11 @@ extension ChatStore {
     private func mergeCached(_ snapshot: TranscriptCache.Snapshot, outcome: TranscriptCache.LoadOutcome) {
         defer { self.cacheUnreadable = false }
         let loaded = Set(self.items.map(\.id))
-        let older = snapshot.items.filter { !loaded.contains($0.id) }
+        // Without an overlap, messages may be missing between the cache and the loaded page, so
+        // nothing is spliced in: the Gateway pages older history and the next save replaces the cache.
         guard let firstLoaded = self.items.first(where: { !$0.isPending }),
               let cut = snapshot.items.firstIndex(where: { $0.id == firstLoaded.id })
-        else {
-            // No overlap to anchor on: keep only the cached items that precede the loaded page in time.
-            guard let start = self.items.first(where: { !$0.isPending })?.timestamp else { return }
-            let before = older.filter { ($0.timestamp ?? .distantFuture) < start }
-            self.prependCached(before, snapshot: snapshot)
-            return
-        }
+        else { return }
         self.prependCached(Array(snapshot.items[..<cut]).filter { !loaded.contains($0.id) }, snapshot: snapshot)
     }
 

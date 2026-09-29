@@ -31,10 +31,10 @@ struct ForwardedSenderMigrationTests {
         #expect(items[1].toolDetails == nil, "v6 tool results were already marked; they aren't touched again")
     }
 
-    @Test func v5ChainsThroughV6ToV7() throws {
+    @Test func v5ChainsThroughV6AndV7ToCurrent() throws {
         let tool = ChatItem(id: "t1", role: .toolResult, blocks: [.text("ok")])
         let (snapshot, outcome) = TranscriptCache.decode(try self.v5File([self.forwarded(), tool]))
-        #expect(outcome == .migrated(from: 5) && snapshot?.version == 7)
+        #expect(outcome == .migrated(from: 5) && snapshot?.version == TranscriptCache.Snapshot.currentVersion)
         let items = try #require(snapshot?.items)
         #expect(items[0].role == .assistant && items[0].sender?.agentId == "kiko" && items[0].plainText == "Hi Lumi!")
         #expect(items[1].toolDetails == TranscriptCache.unknownToolDetails, "the v5 → v6 step still runs first")

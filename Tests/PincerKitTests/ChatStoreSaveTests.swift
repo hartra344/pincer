@@ -105,6 +105,27 @@ struct ChatStoreSaveTests {
         #expect(saved.items.count == 401 && saved.items.first?.id == all.first?.id)
     }
 
+    @Test func retryWithoutOverlapSplicesNothing() async throws {
+        let (chat, gateway) = self.makeStore()
+        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        let cached = V8.items(100)
+        await TranscriptCache.save(V8.snapshot(cached), gatewayId: gateway.id, sessionKey: self.key)
+        await TranscriptCache.flush(gatewayId: gateway.id)
+        let url = self.manifest(gateway)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path) }
+
+        await chat.restoreFromCache()
+        // The newest page starts well after the cache ends: messages in between are unknown.
+        let page = V8.items(20, from: 500)
+        chat.items = page
+        chat.hasLoaded = true
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+        await chat.restoreFromCache()
+        #expect(chat.cacheOutcome == .loaded)
+        #expect(chat.items.map(\.id) == page.map(\.id))
+    }
+
     @Test func snapshotMarksRetainedWhenCutAtMaxItems() {
         let items = V8.items(50)
         let cut = ChatStore.snapshot(items: items, hasMoreHistory: true, activityMs: nil, maxItems: 30)
