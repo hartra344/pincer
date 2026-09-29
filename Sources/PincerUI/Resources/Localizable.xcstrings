@@ -2173,6 +2173,16 @@
         }
       }
     },
+    "Choose a branch": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a branch"
+          }
+        }
+      }
+    },
     "Choose a category.": {
       "localizations": {
         "en": {
@@ -3419,6 +3429,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t edit: %@"
+          }
+        }
+      }
+    },
+    "Couldn’t edit: the previous edit is still being sent.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t edit: the previous edit is still being sent."
           }
         }
       }

@@ -42,7 +42,7 @@ struct Composer: View {
                     .foregroundStyle(.secondary)
                     .accessibilityElement(children: .combine)
             }
-            if self.chat.canSwitchBranches, self.chat.branches.count > 1 {
+            if self.chat.canSwitchBranches, self.chat.branches.count > 1, !self.chat.isRunning {
                 BranchSwitcher(branches: self.chat.branches) { branch in
                     Task { await self.chat.switchBranch(to: branch.leafEntryId) }
                 }
@@ -237,6 +237,7 @@ struct Composer: View {
     }
 
     private var canSend: Bool {
+        guard !self.chat.isSendingEdit else { return false }
         guard !self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty else { return false }
         // Offline, plain messages queue in the outbox; attachments and commands need the Gateway.
         return self.gateway.state.isConnected || (self.attachments.isEmpty && !self.isTypingCommand)
@@ -273,15 +274,15 @@ struct Composer: View {
         guard self.canSend else { return }
         let text = SlashCommand.outgoingText(self.text, commands: self.gateway.slashCommands(for: self.chat.sessionKey))
         let attachments = self.attachments
-        let draft = self.chat.draft
         if self.chat.editTarget != nil, !self.isTypingCommand {
             self.attachmentError = nil
             Task {
-                // On failure the edit stays in progress with the text still in the composer.
+                // The store restores the pre-edit draft on success; on failure the edit stays in progress.
                 _ = await self.chat.sendEdit(text, attachments: attachments)
             }
             return
         }
+        let draft = self.chat.draft
         // Commands aren't replies; the reply stays set for the next message.
         let replyTo = self.isTypingCommand ? nil : self.chat.replyTarget
         self.chat.draft = ComposerDraft()

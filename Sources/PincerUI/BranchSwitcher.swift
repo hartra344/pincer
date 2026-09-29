@@ -2,6 +2,7 @@ import PincerKit
 import SwiftUI
 
 /// "Branch 2 of 3 ‹ ›" above the composer when the chat's history has other paths (from an edit or rewind).
+/// The label is a menu of every branch; the arrows step through them in the same order.
 struct BranchSwitcher: View {
     let branches: [SessionBranch]
     let onSwitch: (SessionBranch) -> Void
@@ -14,9 +15,28 @@ struct BranchSwitcher: View {
             Image(systemName: "arrow.triangle.branch")
                 .foregroundStyle(self.theme.accent)
             self.step("chevron.left", label: L("Previous branch"), offset: -1)
-            Text("Branch \(self.activeIndex + 1) of \(self.branches.count)", bundle: .module)
-                .font(.caption)
-                .monospacedDigit()
+            Menu {
+                ForEach(self.branches) { branch in
+                    let title = [branch.title, L("\(String(branch.messageCount)) messages")].joined(separator: " · ")
+                    Button {
+                        self.onSwitch(branch)
+                    } label: {
+                        if branch.active {
+                            Label(title, systemImage: "checkmark")
+                        } else {
+                            Text(verbatim: title)
+                        }
+                    }
+                }
+            } label: {
+                Text("Branch \(self.activeIndex + 1) of \(self.branches.count)", bundle: .module)
+                    .font(.caption)
+                    .monospacedDigit()
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .fixedSize()
+            .accessibilityHint(Text("Choose a branch", bundle: .module))
             self.step("chevron.right", label: L("Next branch"), offset: 1)
             Spacer(minLength: 0)
         }
@@ -34,7 +54,7 @@ struct BranchSwitcher: View {
         }
         .buttonStyle(.plain)
         .disabled(target == nil)
-        .help(target?.headline ?? label)
+        .help(target?.title ?? label)
         .accessibilityLabel(label)
     }
 }

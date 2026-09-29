@@ -24,12 +24,12 @@ On the last assistant reply, **Regenerate** rewinds to the message before it and
 
 ## Switching between branches
 
-When a chat has more than one path, a **Branch 1 of 2** control with previous and next arrows appears above the composer. Use the arrows to switch the chat to another path; the transcript reloads to show it. Nothing is deleted by switching, and you can still manage every branch in the [Session Manager](../sessions/). Switching needs Full Management (admin) access.
+When a chat has more than one path, a **Branch 1 of 2** control with previous and next arrows appears above the composer. Use the arrows to step to the previous or next path, or click the label for a menu that lists every branch (with its message count and a checkmark on the current one); the transcript reloads to show it. The switcher is hidden while a reply is streaming. Nothing is deleted by switching, and you can still manage every branch in the [Session Manager](../sessions/). Switching needs Full Management (admin) access.
 
 ## What you need
 
 - **Branch from Here** needs write access to the Gateway.
-- **Edit & Resend** and **Regenerate** rewind the chat, which is an admin operation, so they need Full Management (admin) access.
+- **Edit & Resend** and **Regenerate** aren't available while a reply is streaming. They rewind the chat, which is an admin operation, so they need Full Management (admin) access.
 - **Switching branches** also needs Full Management (admin) access.
 
 ## Try it in the Demo
