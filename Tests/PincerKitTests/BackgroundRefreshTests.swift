@@ -300,6 +300,50 @@ struct BackgroundRefreshTests {
 
     // MARK: Run
 
+    /// Ends a run's budget on cue; waiters arriving after `expire()` return at once.
+    final class BudgetGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var expired: Bool
+        private var waiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+
+        init(expired: Bool = false) { self.expired = expired }
+
+        var timer: @Sendable (TimeInterval) async -> Void { { [self] _ in await wait() } }
+
+        func wait() async {
+            let id = UUID()
+            await withTaskCancellationHandler {
+                await withCheckedContinuation { register(id, $0) }
+            } onCancel: {
+                resume(id)
+            }
+        }
+
+        func expire() {
+            lock.lock()
+            expired = true
+            let all = waiters.values
+            waiters = [:]
+            lock.unlock()
+            for waiter in all { waiter.resume() }
+        }
+
+        private func register(_ id: UUID, _ continuation: CheckedContinuation<Void, Never>) {
+            lock.lock()
+            let now = expired || Task.isCancelled
+            if !now { waiters[id] = continuation }
+            lock.unlock()
+            if now { continuation.resume() }
+        }
+
+        private func resume(_ id: UUID) {
+            lock.lock()
+            let waiter = waiters.removeValue(forKey: id)
+            lock.unlock()
+            waiter?.resume()
+        }
+    }
+
     @MainActor
     final class Posts {
         var batches: [[UNNotificationRequest]] = []
@@ -362,12 +406,13 @@ struct BackgroundRefreshTests {
             defaults.set(notifications, forKey: "pincer.notifications")
         }
 
-        func refresher(unreachable: Bool = false) -> BackgroundRefresh {
+        func refresher(unreachable: Bool = false, timer: (@Sendable (TimeInterval) async -> Void)? = nil) -> BackgroundRefresh {
             var connector = FakeConnector(connections: [profile.id: connection])
             if unreachable { connector.unreachable = [profile.id] }
             let posts = self.posts
             return BackgroundRefresh(profiles: { [profile] in [profile] }, connector: connector, cursors: cursors, defaults: defaults,
-                                     post: { posts.batches.append($0) })
+                                     post: { posts.batches.append($0) },
+                                     timer: timer ?? { try? await Task.sleep(for: .seconds($0)) })
         }
     }
 
@@ -447,15 +492,18 @@ struct BackgroundRefreshTests {
         rig.cursors.save(saved, for: rig.profile.id)
         rig.connection.sessions = [Self.row(Self.key(1), activity: 5000)]
         rig.connection.approvals = [Self.approvalJSON("a1")]
-        rig.connection.delay = .seconds(5)
-        let started = ContinuousClock.now
-        let report = await rig.refresher().run(budget: 1.5)
-        #expect(ContinuousClock.now - started < .seconds(15))
+        rig.connection.delay = .seconds(3600)
+        let gate = BudgetGate()
+        let refresher = rig.refresher(timer: gate.timer)
+        let task = Task { @MainActor in await refresher.run(budget: 25) }
+        #expect(await Self.eventually(timeout: .seconds(30)) { !rig.connection.methods.isEmpty })
+        gate.expire()
+        let report = await task.value
         #expect(report.aborted.contains(rig.profile.id))
         #expect(report.posted == 0 && rig.posts.batches.isEmpty)
         #expect(rig.cursors.cursor(for: rig.profile.id) == saved)
         // The abandoned fetch unwinds and releases its connection.
-        let closed = await Self.eventually { rig.connection.closed }
+        let closed = await Self.eventually(timeout: .seconds(30)) { rig.connection.closed }
         #expect(closed)
     }
 
@@ -464,8 +512,8 @@ struct BackgroundRefreshTests {
         let saved = BackgroundRefreshCursor(activityMs: 100, approvalIds: [], questionIds: [])
         rig.cursors.save(saved, for: rig.profile.id)
         rig.connection.sessions = [Self.row(Self.key(1), activity: 5000)]
-        rig.connection.delay = .seconds(5)
-        let report = await rig.refresher().run(budget: 0.2)
+        rig.connection.delay = .seconds(3600)
+        let report = await rig.refresher(timer: BudgetGate(expired: true).timer).run(budget: 25)
         #expect(report.aborted == [rig.profile.id] && report.posted == 0 && rig.posts.batches.isEmpty)
         #expect(rig.cursors.cursor(for: rig.profile.id) == saved)
     }
@@ -485,10 +533,10 @@ struct BackgroundRefreshTests {
         let saved = BackgroundRefreshCursor(activityMs: 100, approvalIds: [], questionIds: [])
         rig.cursors.save(saved, for: rig.profile.id)
         rig.connection.sessions = [Self.row(Self.key(1), activity: 5000)]
-        rig.connection.delay = .seconds(5)
+        rig.connection.delay = .seconds(3600)
         let refresher = rig.refresher()
         let task = Task { @MainActor in await refresher.run() }
-        try? await Task.sleep(for: .milliseconds(150))
+        #expect(await Self.eventually(timeout: .seconds(30)) { !rig.connection.methods.isEmpty })
         task.cancel()
         let report = await task.value
         #expect(report.aborted.contains(rig.profile.id))
@@ -514,7 +562,7 @@ struct BackgroundRefreshTests {
         let slow = GatewayProfile(name: "Slow", url: "wss://slow.example", authMode: .token)
         let fast = GatewayProfile(name: "Fast", url: "wss://fast.example", authMode: .token)
         let slowConnection = FakeConnection(), fastConnection = FakeConnection()
-        slowConnection.delay = .seconds(60)
+        slowConnection.delay = .seconds(3600)
         slowConnection.sessions = [Self.row(Self.key(1), activity: 5000)]
         fastConnection.sessions = [Self.row(Self.key(2), activity: 5000)]
         let cursors = BackgroundRefreshCursorStore(defaults: defaults)
@@ -522,15 +570,16 @@ struct BackgroundRefreshTests {
         cursors.save(saved, for: slow.id)
         cursors.save(saved, for: fast.id)
         let posts = Posts()
+        let gate = BudgetGate()
         let refresher = BackgroundRefresh(
             profiles: { [slow, fast] },
             connector: FakeConnector(connections: [slow.id: slowConnection, fast.id: fastConnection]),
-            cursors: cursors, defaults: defaults, post: { posts.batches.append($0) })
+            cursors: cursors, defaults: defaults, post: { posts.batches.append($0) }, timer: gate.timer)
 
-        let started = ContinuousClock.now
-        // Generous: the fast gateway must finish even when the full suite keeps the main actor busy.
-        let report = await refresher.run(budget: 6)
-        #expect(ContinuousClock.now - started < .seconds(30))
+        let task = Task { @MainActor in await refresher.run(budget: 25) }
+        #expect(await Self.eventually(timeout: .seconds(30)) { fastConnection.closed && !slowConnection.methods.isEmpty })
+        gate.expire()
+        let report = await task.value
         #expect(report.aborted == [slow.id] && report.failed.isEmpty && report.posted == 1)
         #expect(posts.identifiers == ["reply:\(Self.key(2)):5000"])
         #expect(cursors.cursor(for: slow.id) == saved)
