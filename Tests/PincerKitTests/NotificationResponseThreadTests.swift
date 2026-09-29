@@ -71,6 +71,28 @@ struct NotificationResponseThreadTests {
         #expect(opened == [Notifier.Target(gatewayId: gateway, sessionKey: "agent:main:telegram")])
     }
 
+    @Test func foregroundPresentationCompletesOnMainThread() async throws {
+        let notifier = Notifier()
+        let response = try Self.tapResponse(gateway: UUID(), session: "agent:main:main")
+        let selector = NSSelectorFromString("userNotificationCenter:willPresentNotification:withCompletionHandler:")
+        typealias WillPresent = @convention(c) (
+            AnyObject, Selector, AnyObject?, UNNotification,
+            @escaping @convention(block) (UNNotificationPresentationOptions) -> Void
+        ) -> Void
+        let implementation = unsafeBitCast(notifier.method(for: selector), to: WillPresent.self)
+        nonisolated(unsafe) let target = notifier
+        nonisolated(unsafe) let notification = response.notification
+        let (onMain, options) = await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                implementation(target, selector, nil, notification) {
+                    continuation.resume(returning: (Thread.isMainThread, $0))
+                }
+            }
+        }
+        #expect(onMain)
+        #expect(options == [.banner, .list, .sound])
+    }
+
     @Test func unroutableTapStillCompletesOnMainThread() async throws {
         let notifier = Notifier()
         let content = UNMutableNotificationContent()
