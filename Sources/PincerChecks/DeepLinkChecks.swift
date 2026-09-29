@@ -79,6 +79,13 @@ func runDemoDeepLinks() async {
     check(ready, "deep-link demo connected")
     guard ready else { return }
 
+    // Opening home-lab marks it read (a sessions.patch that bumps its activity). Settle that first, so a
+    // late mark-read isn't mistaken for activity caused by the links below.
+    let lab = demo.chat(for: homeLab)
+    _ = await waitFor("home-lab history") { lab.hasLoaded }
+    await demo.markRead(homeLab)
+    let read = await waitFor("home-lab read") { demo.sessions[homeLab]?.isUnread == false }
+    check(read, "opening home-lab marks it read")
     demo.selectedKey = main
     app.updateVisible()
     let approvalsBefore = demo.approvals.map(\.id)
@@ -99,7 +106,6 @@ func runDemoDeepLinks() async {
           "opening the demo link selects home-lab and records history")
     let jump = app.takeMessageJump(for: target)
     check(jump?.messageId == "demo-lab-sensor" && app.takeMessageJump(for: target) == nil, "the message jump is taken once")
-    let lab = demo.chat(for: homeLab)
     let loaded = await waitFor("home-lab history") { lab.hasLoaded }
     check(loaded && lab.entries.contains { $0.id.hasSuffix("demo-lab-sensor") },
           "the linked message is in home-lab's transcript")
