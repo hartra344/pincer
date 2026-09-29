@@ -47,6 +47,13 @@ public final class AppModel {
 
     public static let selectedGatewayKey = "pincer.selectedGateway"
 
+    /// Whether the main window shows its selected chat to the user right now: the scene is active
+    /// and focused and, on iPhone, the chat is pushed. Set by the main window; chats shown there
+    /// are marked read as messages arrive (#374).
+    public var mainChatVisible = false {
+        didSet { if self.mainChatVisible != oldValue { self.updateVisible() } }
+    }
+
     /// The app's model. Created on first use, by the scene or, when iOS launches Pincer in the
     /// background for a notification action, by `Notifier` before any scene exists.
     public static let shared = AppModel()
@@ -159,6 +166,10 @@ public final class AppModel {
 
     /// Call whenever the selected session changes so notifications for it are suppressed.
     public func updateVisible() {
+        for gateway in self.gateways {
+            let shown = gateway.id == self.selectedGatewayId && self.mainChatVisible ? gateway.selectedKey : nil
+            gateway.setVisibleChat(shown, viewer: GatewayStore.mainViewer)
+        }
         guard let gateway = self.selectedGateway, let key = gateway.selectedKey else {
             self.notifier.visible = nil
             return

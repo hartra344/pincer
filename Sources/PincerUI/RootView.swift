@@ -166,6 +166,7 @@ struct RootView: View {
             self.app.appIsActive = phase == .active
         }
         .modifier(CompactColumnRouting(column: self.$compactColumn))
+        .modifier(MainChatVisibility(compactColumn: self.compactColumn))
         .background { UnreadBadgeSync() }
         #if os(macOS)
         .modifier(MainWindowFronting())

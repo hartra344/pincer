@@ -42,7 +42,13 @@ public final class GatewayStore: Identifiable {
         self.sortedRowsCache = nil
         self.subagentTrees = [:]
         self.settleRunTimeline()
+        self.markVisibleChatsRead()
     }
+    /// The chat each viewer (the main window, later chat windows) shows on screen right now, in an
+    /// active, focused scene. See `setVisibleChat(_:viewer:)`.
+    @ObservationIgnored var visibleChatsByViewer: [String: String] = [:]
+    /// Keys with a `sessions.patch unread=false` in flight, so a burst of row changes sends one.
+    @ObservationIgnored var markingRead: Set<String> = []
     @ObservationIgnored private var sessionStorage: [String: SessionRow] = [:]
     @ObservationIgnored var sortedRowsCache: [SessionRow]?
     /// `subagentTree(rootKey:)` per root and connection state, until the rows change.
@@ -989,7 +995,10 @@ public final class GatewayStore: Identifiable {
     }
 
     public func markRead(_ key: String) async {
-        guard let row = self.sessions[key], row.isUnread, self.state.isConnected else { return }
+        guard let row = self.sessions[key], row.isUnread, self.state.isConnected,
+              !self.markingRead.contains(key) else { return }
+        self.markingRead.insert(key)
+        defer { self.markingRead.remove(key) }
         _ = try? await self.connection.request("sessions.patch", ["key": .string(key), "unread": false])
     }
 
