@@ -12,6 +12,8 @@ struct DecodedImageCache {
     private var clock = 0
     private(set) var totalBytes = 0
     var byteLimit: Int
+    /// Keys that are never evicted (images currently on screen); the budget may be exceeded to honour this.
+    var protectedKeys: Set<String> = []
 
     init(byteLimit: Int) {
         self.byteLimit = byteLimit
@@ -55,7 +57,7 @@ struct DecodedImageCache {
     mutating func trim(toBytes bytes: Int) -> [String] {
         var evicted: [String] = []
         guard self.totalBytes > bytes else { return evicted }
-        for (key, entry) in self.entries.sorted(by: { $0.value.stamp < $1.value.stamp }) {
+        for (key, entry) in self.entries.sorted(by: { $0.value.stamp < $1.value.stamp }) where !self.protectedKeys.contains(key) {
             guard self.totalBytes > bytes else { break }
             self.entries.removeValue(forKey: key)
             self.totalBytes -= entry.cost
@@ -65,10 +67,9 @@ struct DecodedImageCache {
     }
 
     @discardableResult
-    mutating func removeAll() -> [String] {
-        let keys = Array(self.entries.keys)
-        self.entries.removeAll()
-        self.totalBytes = 0
+    mutating func removeAll(keepingProtected: Bool = false) -> [String] {
+        let keys = self.entries.keys.filter { !keepingProtected || !self.protectedKeys.contains($0) }
+        for key in keys { self.remove(key) }
         return keys
     }
 
@@ -80,7 +81,7 @@ struct DecodedImageCache {
         guard self.totalBytes > self.byteLimit, self.entries.count > 1 else { return [] }
         // The entry just inserted has the highest stamp, so it is evicted last; stop before it.
         var evicted: [String] = []
-        for (other, entry) in self.entries.sorted(by: { $0.value.stamp < $1.value.stamp }) where other != key {
+        for (other, entry) in self.entries.sorted(by: { $0.value.stamp < $1.value.stamp }) where other != key && !self.protectedKeys.contains(other) {
             guard self.totalBytes > self.byteLimit else { break }
             self.entries.removeValue(forKey: other)
             self.totalBytes -= entry.cost

@@ -1,5 +1,9 @@
 import Foundation
 
+enum MediaError: Error {
+    case tooLarge
+}
+
 /// HTTP transport for media (images, files) served by one Gateway, or by the public web.
 /// Keeps one pinned, ephemeral session and one Keychain read per Gateway profile instead of
 /// creating both for every download.
@@ -61,7 +65,7 @@ final class GatewayMediaClient {
         self.session = nil
     }
 
-    /// Fetches with Gateway auth and the profile's TLS pin. Returns nil for non-200 or oversized responses.
+    /// Fetches with Gateway auth and the profile's TLS pin. Returns nil for non-200 responses and throws `MediaError.tooLarge` past the size cap.
     func fetchGateway(_ url: URL) async throws -> Data? {
         for attempt in 0..<2 {
             guard let (session, authorization) = self.prepare() else { return nil }
@@ -73,6 +77,7 @@ final class GatewayMediaClient {
                 self.reset()
                 continue
             }
+            if result.tooLarge { throw MediaError.tooLarge }
             return status == 200 ? result.data : nil
         }
         return nil
@@ -84,6 +89,7 @@ final class GatewayMediaClient {
         request.setValue("Pincer/0.1 (OpenClaw client; +https://github.com/openclaw/openclaw)", forHTTPHeaderField: "User-Agent")
         request.setValue(accept, forHTTPHeaderField: "Accept")
         let result = try await BoundedDownload.run(session: Self.publicSession, request: request, limit: self.maxBytes)
+        if result.tooLarge { throw MediaError.tooLarge }
         guard let http = result.response, http.statusCode == 200,
               let finalHost = http.url?.host, http.url?.scheme == "https", ArtifactImageLoader.isPublicHost(finalHost)
         else { return nil }

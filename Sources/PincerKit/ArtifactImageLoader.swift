@@ -2,6 +2,17 @@ import Foundation
 import ImageIO
 import Observation
 import UniformTypeIdentifiers
+#if canImport(UIKit)
+import UIKit
+#endif
+
+/// Why an image couldn't be loaded.
+public enum ImageLoadFailure: Sendable, Equatable {
+    /// Larger than the 25 MiB download cap.
+    case tooLarge
+    /// Missing, refused or unreachable. Retried after `ArtifactImageLoader.retryInterval`.
+    case unavailable
+}
 
 /// Resolves transcript images (inline base64, artifact ids, or URLs) into `CGImage`s.
 /// Artifacts are fetched through `artifacts.download` on the same authenticated socket,
@@ -18,22 +29,41 @@ public final class ArtifactImageLoader {
     #else
     public static var defaultByteBudget: Int { 160 * 1024 * 1024 }
     #endif
-    /// The largest transcript image is 400 pt wide; 1200 px covers 3x displays.
-    public static let transcriptMaxPixel = 1200
+    /// The widest transcript image is 400 pt (TranscriptRowLayout), so thumbnails need 400 pt × screen scale:
+    /// 800 px on a Mac or iPad, 1200 px on a 3x iPhone.
+    public static var transcriptMaxPixel: Int { Int((400 * Self.screenScale).rounded()) }
     /// Cap for the sharp full-size preview.
-    static let previewMaxPixel = 2400
+    static let fullImageMaxPixel = 4096
+    /// How long an `.unavailable` failure stays before `load` tries again.
+    static let retryInterval: TimeInterval = 60
+
+    private static var screenScale: CGFloat {
+        #if canImport(UIKit)
+        UIScreen.main.scale
+        #else
+        2
+        #endif
+    }
     static let maxConcurrentDownloads = 4
 
     weak var gateway: GatewayStore?
     public private(set) var images: [String: CGImage] = [:]
-    public private(set) var failures: Set<String> = []
+    private var failureRecords: [String: FailureRecord] = [:]
     @ObservationIgnored private var inFlight: Set<String> = []
     @ObservationIgnored private var cache: DecodedImageCache
     @ObservationIgnored private let limiter = DownloadLimiter(limit: ArtifactImageLoader.maxConcurrentDownloads)
     @ObservationIgnored private var pressureMonitor: MemoryPressureMonitor?
-    @ObservationIgnored private var previewSlot: (key: String, image: CGImage)?
+    @ObservationIgnored private var pins: [ObjectIdentifier: Set<String>] = [:]
     @ObservationIgnored private var dataSlot: (key: String, data: Data)?
     @ObservationIgnored lazy var media = GatewayMediaClient(profile: { [weak self] in self?.gateway?.profile })
+
+    private struct FailureRecord {
+        let reason: ImageLoadFailure
+        let date: Date
+    }
+
+    /// Keys of images with a recorded failure.
+    public var failures: Set<String> { Set(self.failureRecords.keys) }
 
     public init(byteBudget: Int = ArtifactImageLoader.defaultByteBudget) {
         self.cache = DecodedImageCache(byteLimit: byteBudget)
@@ -64,52 +94,88 @@ public final class ArtifactImageLoader {
         self.fetch(ref, sessionKey: sessionKey)
     }
 
-    public func hasFailed(_ ref: ImageRef) -> Bool { self.failures.contains(ref.cacheKey) }
+    public func hasFailed(_ ref: ImageRef) -> Bool { self.failureRecords[ref.cacheKey] != nil }
+
+    public func failure(_ ref: ImageRef) -> ImageLoadFailure? { self.failureRecords[ref.cacheKey]?.reason }
+
+    /// Forgets `.unavailable` failures so those images load again, e.g. after a reconnect.
+    public func retryUnavailable() {
+        for (key, record) in self.failureRecords where record.reason == .unavailable {
+            self.failureRecords.removeValue(forKey: key)
+        }
+    }
+
+    /// Declares which images are on screen for `owner`. Those are marked recently used and are
+    /// never evicted while listed, so a full screen of images can't evict itself.
+    public func setVisible(_ keys: Set<String>, owner: ObjectIdentifier) {
+        if keys.isEmpty { self.pins.removeValue(forKey: owner) } else { self.pins[owner] = keys }
+        self.cache.protectedKeys = self.pins.values.reduce(into: Set<String>()) { $0.formUnion($1) }
+        for key in keys { _ = self.cache.value(for: key) }
+    }
 
     /// Warning trims the cache to a quarter of the budget; critical drops everything.
     func handleMemoryPressure(critical: Bool) {
-        let evicted = critical ? self.cache.removeAll() : self.cache.trim(toBytes: self.cache.byteLimit / 4)
-        self.previewSlot = nil
+        let evicted = critical ? self.cache.removeAll(keepingProtected: true) : self.cache.trim(toBytes: self.cache.byteLimit / 4)
         self.dataSlot = nil
         self.forget(evicted)
     }
 
     /// Raw bytes for "Save image…" / sharing. The last result is kept so the preview sheet doesn't download twice.
     public func data(for ref: ImageRef, sessionKey: String) async -> Data? {
-        if let base64 = ref.base64 { return Self.decodeBase64(base64) }
+        if let base64 = ref.base64 { return try? Self.decodeCapped(base64) }
         if let slot = self.dataSlot, slot.key == ref.cacheKey { return slot.data }
         guard let data = try? await self.download(ref, sessionKey: sessionKey) else { return nil }
         self.dataSlot = (ref.cacheKey, data)
         return data
     }
 
-    /// Full-resolution decode for the preview sheet. Kept outside the byte budget, one image at a time.
-    public func previewImage(for ref: ImageRef, sessionKey: String) async -> CGImage? {
-        if let slot = self.previewSlot, slot.key == ref.cacheKey { return slot.image }
+    /// Full-resolution decode for the preview sheet. The caller owns the result; it never enters the budgeted cache.
+    public func fullImage(_ ref: ImageRef, sessionKey: String) async -> CGImage? {
         guard let data = await self.data(for: ref, sessionKey: sessionKey) else { return nil }
-        let image = await Self.decode(data, maxPixel: Self.previewMaxPixel)
-        if let image { self.previewSlot = (ref.cacheKey, image) }
-        return image
+        return await Self.decode(data, maxPixel: Self.fullImageMaxPixel)
     }
 
     private func fetch(_ ref: ImageRef, sessionKey: String) {
         let key = ref.cacheKey
-        guard !self.inFlight.contains(key), !self.failures.contains(key) else { return }
+        if let record = self.failureRecords[key], record.reason == .unavailable,
+           Date().timeIntervalSince(record.date) >= Self.retryInterval
+        {
+            self.failureRecords.removeValue(forKey: key)
+        }
+        guard !self.inFlight.contains(key), self.failureRecords[key] == nil else { return }
         self.inFlight.insert(key)
         Task {
             defer { self.inFlight.remove(key) }
-            let data: Data? = if let base64 = ref.base64 {
-                Self.decodeBase64(base64)
-            } else {
-                try? await self.download(ref, sessionKey: sessionKey)
+            let data: Data?
+            do {
+                data = if let base64 = ref.base64 {
+                    try Self.decodeCapped(base64)
+                } else {
+                    try await self.download(ref, sessionKey: sessionKey)
+                }
+            } catch is MediaError {
+                self.fail(key, .tooLarge)
+                return
+            } catch {
+                // Cancelled work isn't a verdict on the image; the next `load` tries again.
+                if !Self.isCancellation(error) { self.fail(key, .unavailable) }
+                return
             }
             let image = if let data { await Self.decode(data, maxPixel: Self.transcriptMaxPixel) } else { CGImage?.none }
             if let image {
                 self.store(image, key: key)
             } else {
-                self.failures.insert(key)
+                self.fail(key, .unavailable)
             }
         }
+    }
+
+    private func fail(_ key: String, _ reason: ImageLoadFailure) {
+        self.failureRecords[key] = FailureRecord(reason: reason, date: Date())
+    }
+
+    private static func isCancellation(_ error: any Error) -> Bool {
+        error is CancellationError || (error as? URLError)?.code == .cancelled
     }
 
     // Decoding a large image takes long enough to drop frames, so it stays off the main thread.
@@ -138,7 +204,7 @@ public final class ArtifactImageLoader {
             }
             let result = try await gateway.connection.request("artifacts.download", .object(params), timeout: 60)
             if let data = result["data"]?.string ?? result["content"]?.string {
-                return Self.decodeBase64(data)
+                return try Self.decodeCapped(data)
             }
             if let url = result["url"]?.text { return try await self.fetchURL(url, sessionKey: sessionKey, accept: accept) }
             return nil
@@ -160,7 +226,7 @@ public final class ArtifactImageLoader {
     /// - public `https` URLs are fetched directly, without credentials.
     private func fetchURL(_ string: String, sessionKey: String, accept: String) async throws -> Data? {
         if string.hasPrefix("data:") {
-            return string.split(separator: ",", maxSplits: 1).last.flatMap { Self.decodeBase64(String($0)) }
+            return try string.split(separator: ",", maxSplits: 1).last.flatMap { try Self.decodeCapped(String($0)) }
         }
         guard let gateway, let gatewayURL = try? gateway.profile.resolvedURL(), let base = Self.httpBase(for: gatewayURL) else { return nil }
         if Self.isGatewayLocalSource(string) {
@@ -222,6 +288,12 @@ public final class ArtifactImageLoader {
     static func decodeBase64(_ value: String, maxBytes: Int = GatewayMediaClient.defaultMaxBytes) -> Data? {
         let payload = self.stripDataURL(value)
         guard payload.utf8.count / 4 * 3 <= maxBytes else { return nil }
+        return Data(base64Encoded: payload)
+    }
+
+    private static func decodeCapped(_ value: String) throws -> Data? {
+        let payload = self.stripDataURL(value)
+        guard payload.utf8.count / 4 * 3 <= GatewayMediaClient.defaultMaxBytes else { throw MediaError.tooLarge }
         return Data(base64Encoded: payload)
     }
 
