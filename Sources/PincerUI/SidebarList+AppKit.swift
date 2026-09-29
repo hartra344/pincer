@@ -39,13 +39,12 @@ struct SidebarList: NSViewRepresentable {
         private var model = SidebarModel()
         private var hasLoaded = false
         private var nodes: [String: Node] = [:]
-        private let controller = SidebarController()
-        private var headers: [String: SidebarModel.Header] { self.controller.headers }
-        private var entries: [String: SidebarModel.Entry] { self.controller.entries }
+        private var headers: [String: SidebarModel.Header] = [:]
+        private var entries: [String: SidebarModel.Entry] = [:]
         private var children: [String: [Node]] = [:]
         private var roots: [Node] = []
         private var selectedKey: String?
-        private var isProgrammatic: Bool { self.controller.isProgrammatic }
+        private var isProgrammatic = false
         /// NSOutlineView won't expand or collapse a row without an outline cell, so headers
         /// report one only while we change their expansion.
         private var allowsHeaderOutlineCell = false
@@ -140,11 +139,14 @@ struct SidebarList: NSViewRepresentable {
                 nodes[id] = node
                 return node
             }
-            self.controller.index(self.model)
+            self.headers = [:]
+            self.entries = [:]
             self.children = [:]
             self.roots = self.model.groups.map { group in
                 let header = node(group.header.id)
+                self.headers[group.header.id] = group.header
                 self.children[group.header.id] = group.entries.map { entry in
+                    self.entries[entry.id] = entry
                     return node(entry.id)
                 }
                 return header
@@ -205,7 +207,7 @@ struct SidebarList: NSViewRepresentable {
 
         private func syncSelection() {
             guard let outline else { return }
-            let row = SidebarController.selectionTarget(selectedKey: self.selectedKey).flatMap { self.nodes[$0] }.map { outline.row(forItem: $0) } ?? -1
+            let row = self.selectedKey.flatMap { self.nodes[SidebarModel.entryId($0)] }.map { outline.row(forItem: $0) } ?? -1
             guard row != outline.selectedRow else { return }
             self.programmatic {
                 if row >= 0 {
@@ -218,7 +220,10 @@ struct SidebarList: NSViewRepresentable {
         }
 
         private func programmatic(_ body: () -> Void) {
-            self.controller.programmatic(body)
+            let was = self.isProgrammatic
+            self.isProgrammatic = true
+            body()
+            self.isProgrammatic = was
         }
 
         // MARK: Data source
