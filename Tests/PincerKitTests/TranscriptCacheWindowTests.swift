@@ -149,3 +149,27 @@ struct TranscriptCacheWindowTests {
         #expect(await self.loadAll(temp.url)?.items == items + extra)
     }
 }
+
+extension TranscriptCacheWindowTests {
+    @Test func tailAppendDoesNotDecodeOlderSegments() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let items = V8.items(6000)
+        await V8.save(V8.snapshot(items), self.gateway, self.key, temp.url)
+        await Cache.flush(gatewayId: self.gateway, root: temp.url)
+
+        let window = Array(items[4800...])
+        let before = Cache.segmentDecodeCount
+        let extra = V8.items(1, from: 6000)
+        let result = await Cache.saveReturningStats(
+            V8.snapshot(window + extra), gatewayId: self.gateway, sessionKey: self.key, keepingOlder: true, root: temp.url)
+        await Cache.flush(gatewayId: self.gateway, root: temp.url)
+        #expect(!result.unchanged)
+        #expect(Cache.segmentDecodeCount - before <= 2, "decoded \(Cache.segmentDecodeCount - before) segments")
+
+        let index = MessageIndex.shared(gatewayId: self.gateway, root: temp.url)
+        #expect(index.lastIndexStats.path == .tail)
+        #expect(!(try await index.search("question 0")).isEmpty)
+        #expect(await self.loadAll(temp.url)?.items == items + extra)
+    }
+}

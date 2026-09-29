@@ -487,16 +487,23 @@ public enum TranscriptCache {
             self.deleteDirectory(gatewayId: gatewayId, root: root)
             return result
         }
-        var indexed = snapshot
-        if let older = result.older {
-            // The index counts positions in the whole transcript, so it's given all of it.
-            guard let items = await self.items(of: older, url: url) else { return result }
-            indexed = Snapshot(version: snapshot.version, items: items + result.boundaryKept + snapshot.items,
-                               complete: result.complete ?? snapshot.complete, activityMs: snapshot.activityMs,
-                               retained: snapshot.retained)
+        let change = result.change ?? .full(token: nil)
+        let index = MessageIndex.shared(gatewayId: gatewayId, root: root)
+        guard let older = result.older else {
+            await index.index(sessionKey: sessionKey, snapshot: snapshot, fileMtime: written, change: change)
+            return result
         }
-        await MessageIndex.shared(gatewayId: gatewayId, root: root)
-            .index(sessionKey: sessionKey, snapshot: indexed, fileMtime: written, change: result.change ?? .full(token: nil))
+        // The index counts positions in the whole transcript. It's first given only what's at
+        // hand (the boundary segment's older items and the window) and asks for the rest if it
+        // needs it.
+        let olderCount = older.reduce(0) { $0 + $1.count }
+        let slice = result.boundaryKept + snapshot.items
+        let outcome = await index.index(sessionKey: sessionKey, items: slice, itemOffset: olderCount,
+                                        totalCount: olderCount + slice.count, fileMtime: written, change: change)
+        guard outcome == .needsEarlierItems, let items = await self.items(of: older, url: url) else { return result }
+        let whole = Snapshot(version: snapshot.version, items: items + slice, complete: result.complete ?? snapshot.complete,
+                             activityMs: snapshot.activityMs, retained: snapshot.retained)
+        await index.index(sessionKey: sessionKey, snapshot: whole, fileMtime: written, change: change)
         return result
     }
 
