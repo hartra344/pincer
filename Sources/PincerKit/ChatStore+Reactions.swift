@@ -54,7 +54,7 @@ extension ChatStore {
         self.locatingReplyId = id
         defer { self.locatingReplyId = nil }
         while self.olderInCache, !Task.isCancelled {
-            guard await self.loadOlder(cachePageSize: Self.lookupCachePageSize) else { return false }
+            guard await self.loadOlder(cachePageSize: Int.max, stopAt: id) else { return false }
             if self.message(withId: id) != nil { return true }
         }
         for _ in 0..<40 where self.hasMoreHistory {

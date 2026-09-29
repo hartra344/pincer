@@ -337,13 +337,13 @@ extension ChatStore {
         await self.loadOlder(cachePageSize: Self.olderCachePageSize)
     }
 
-    func loadOlder(cachePageSize: Int) async -> Bool {
+    func loadOlder(cachePageSize: Int, stopAt targetId: String? = nil) async -> Bool {
         // Concurrent callers share the in-flight page rather than returning early and spinning.
         if let inFlight = self.olderTask { return await inFlight.value }
         guard self.hasOlderItems else { return true }
         self.isLoadingOlder = true
         let task = Task {
-            let ok = self.olderInCache ? await self.loadCachedOlderPage(limit: cachePageSize) : await self.fetchOlderPage()
+            let ok = self.olderInCache ? await self.loadCachedOlderPage(limit: cachePageSize, stopAt: targetId) : await self.fetchOlderPage()
             // Cleared by the task itself so every waiter sees it finished.
             self.olderTask = nil
             self.isLoadingOlder = false
@@ -356,34 +356,48 @@ extension ChatStore {
     /// Pages the whole cached transcript into memory (find in chat).
     public func loadAllCached() async {
         while self.olderInCache, !Task.isCancelled {
-            guard await self.loadOlder(cachePageSize: Self.lookupCachePageSize) else { return }
+            guard await self.loadOlder(cachePageSize: Int.max) else { return }
         }
     }
 
-    private func loadCachedOlderPage(limit: Int) async -> Bool {
+    /// Reads up to `limit` older cached items (in lookup-sized reads, stopping once `targetId` is among
+    /// them) and prepends them in one go, so a long read costs one rebuild rather than one per page.
+    private func loadCachedOlderPage(limit: Int, stopAt targetId: String?) async -> Bool {
         guard let first = self.items.first(where: { !$0.isPending }) else {
             self.olderInCache = false
             return true
         }
-        let page = await TranscriptCache.loadOlder(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
-                                                   before: first.id, limit: limit, root: self.cacheRoot)
-        guard self.olderInCache, !self.cachingStopped else { return true }
-        switch page.outcome {
-        case .loaded, .migrated:
-            break
-        case .unavailable:
-            return false
-        default:
-            // The cache lost its older part: the Gateway supplies it from the loaded start back.
-            self.olderInCache = false
-            self.hasMoreHistory = true
-            self.hasPagedOlder = true
-            self.olderOffset = self.committedCount
-            return true
+        let pageSize = targetId == nil ? limit : min(limit, Self.lookupCachePageSize)
+        var collected: [ChatItem] = []
+        var reachedStart = false
+        var cursor = first.id
+        while true {
+            let page = await TranscriptCache.loadOlder(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
+                                                       before: cursor, limit: pageSize, root: self.cacheRoot)
+            guard self.olderInCache, !self.cachingStopped else { return true }
+            switch page.outcome {
+            case .loaded, .migrated:
+                break
+            case .unavailable:
+                return false
+            default:
+                // The cache lost its older part: the Gateway supplies it from the loaded start back.
+                self.olderInCache = false
+                self.hasMoreHistory = true
+                self.hasPagedOlder = true
+                self.olderOffset = self.committedCount
+                return true
+            }
+            collected = page.items + collected
+            reachedStart = page.reachedStart
+            guard !reachedStart, let oldest = page.items.first, collected.count < limit, !Task.isCancelled,
+                  !(targetId.map { id in page.items.contains { $0.id == id || $0.transcriptId == id } } ?? false)
+            else { break }
+            cursor = oldest.id
         }
         let known = Set(self.items.map(\.id))
-        let fresh = page.items.filter { !known.contains($0.id) }
-        self.olderInCache = !page.reachedStart && !fresh.isEmpty
+        let fresh = collected.filter { !known.contains($0.id) }
+        self.olderInCache = !reachedStart && !fresh.isEmpty
         self.hasPagedOlder = true
         if !self.olderInCache { self.olderOffset = self.committedCount + fresh.count }
         if !fresh.isEmpty { self.items = fresh + self.items }
