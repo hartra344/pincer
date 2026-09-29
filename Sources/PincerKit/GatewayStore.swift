@@ -766,7 +766,7 @@ public final class GatewayStore: Identifiable {
             self.applySessionChange(payload)
         case "users.prefs.changed":
             let keys = payload["keys"]?.array?.compactMap(\.string)
-            let maps = self.syncedMaps.filter { keys?.contains($0.pref) ?? true }
+            let maps = self.syncedMaps.filter { keys?.contains($0.pref) ?? true && !self.consumeOwnWrite($0.pref) }
             if !maps.isEmpty { Task { await self.pullMaps(maps) } }
         case "chat":
             guard let key = payload["sessionKey"]?.text else { return }
@@ -1453,7 +1453,22 @@ public final class GatewayStore: Identifiable {
         }
     }
 
+    /// Prefs we just wrote, whose `users.prefs.changed` echo needs no read back.
+    @ObservationIgnored private var ownPrefWrites: [String: ContinuousClock.Instant] = [:]
+
+    private func consumeOwnWrite(_ pref: String) -> Bool {
+        guard let at = self.ownPrefWrites.removeValue(forKey: pref) else { return false }
+        return ContinuousClock.now - at < .seconds(3)
+    }
+
     private func writeRemoteMap(_ key: String, _ names: [String: String], expected: [String: String]?) async -> Bool {
+        self.ownPrefWrites[key] = .now
+        let ok = await self.sendRemoteMap(key, names, expected: expected)
+        if !ok { self.ownPrefWrites.removeValue(forKey: key) }
+        return ok
+    }
+
+    private func sendRemoteMap(_ key: String, _ names: [String: String], expected: [String: String]?) async -> Bool {
         let entries: JSONValue = .object([key: names.isEmpty ? .null : Self.json(names)])
         if self.prefsSupportsExpected {
             let params: JSONValue = ["entries": entries, "expectedEntries": .object([key: expected.map(Self.json) ?? .null])]
