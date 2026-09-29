@@ -197,6 +197,8 @@ enum TranscriptPart {
         enum State { case loading, loaded(CGImage), failed }
         let ref: ImageRef
         let state: State
+        /// Drawn without the photo frame (border, rounded clip): rendered math.
+        var plain = false
     }
 
     case avatar(Avatar)
@@ -345,6 +347,8 @@ struct TranscriptSettings: Equatable {
     var reasoningOff = false
     /// Colors are baked into layouts (avatars) and drawn by row views, so a theme change redoes them.
     var theme = AppTheme()
+    /// Dark Mode, for the palette baked into rendered diagrams and math.
+    var dark = false
     /// The agent's companion, when animated avatars are on.
     var avatarStyle: AvatarStyle?
     /// Every agent's companion by id, for messages other agents sent here.
@@ -357,6 +361,7 @@ struct TranscriptSettings: Equatable {
             reactionsEnabled: ReactionFeature.isEnabled,
             reasoningOff: context.gateway.sessions[context.sessionKey]?.reasoningLevel == "off",
             theme: AppTheme.current,
+            dark: RichBlock.isDark,
             avatarStyle: animated ? AvatarSettings.style(for: context.agent) : nil,
             agentStyles: animated
                 ? Dictionary(context.gateway.agents.map { ($0.id, AvatarSettings.style(for: $0)) }) { first, _ in first }
@@ -721,7 +726,20 @@ struct TranscriptLayoutBuilder {
             case .rule:
                 stack.add(.rule, height: 1)
             case let .code(language, code, source):
-                if let ref = Self.inlineSVG(language: language, code: code),
+                // Mid-stream, a diagram stays code until its chunk is final, so it isn't redrawn per token.
+                if !live || piece.isFrozen,
+                   let rendered = RichBlock.render(language: language, code: code, dark: self.settings.dark),
+                   !self.context.gateway.images.hasFailed(rendered.ref)
+                {
+                    self.richBlock(rendered, into: &stack, layout: &layout)
+                    let key = "\(rendered.kind.rawValue)-source:\(layout.id):\(rendered.ref.cacheKey)"
+                    let expanded = self.context.disclosure.isExpanded(key, default: false)
+                    let headerHeight = max(TranscriptStyle.lineHeight(self.style.calloutMedium), TranscriptMetrics.iconBox)
+                    stack.add(.thinkingHeader(.init(key: key, title: rendered.kind.sourceTitle, isStreaming: false, isExpanded: expanded,
+                                                     symbol: "chevron.left.forwardslash.chevron.right")),
+                              height: headerHeight, width: min(width, TranscriptMetrics.maxCardWidth), spacing: 6)
+                    guard expanded else { continue }
+                } else if let ref = Self.inlineSVG(language: language, code: code),
                    !self.context.gateway.images.hasFailed(ref)
                 {
                     self.images([ref], into: &stack, layout: &layout)
@@ -734,8 +752,8 @@ struct TranscriptLayoutBuilder {
                     guard expanded else { continue }
                 }
                 let headerHeight = 6 + max(TranscriptStyle.lineHeight(self.style.caption), TranscriptMetrics.iconBox) + 6
-                // Find skips SVG source, which is usually shown as the image.
-                let isSVG = SVGSource.inlineSource(language: language, code: code) != nil
+                // Find skips SVG, diagram and math source, which is usually shown drawn.
+                let isSVG = SVGSource.inlineSource(language: language, code: code) != nil || RichBlock.kind(language: language) != nil
                 let (text, match) = isSVG ? (source, nil) : self.marks.mark(source, section)
                 let size = live ? TranscriptText.liveSize(text, width: .greatestFiniteMagnitude, frozen: piece.isFrozen && text === source, exact: false)
                     : TranscriptText.size(text, width: .greatestFiniteMagnitude)
@@ -758,6 +776,19 @@ struct TranscriptLayoutBuilder {
                 if found, let frame = stack.parts.last?.frame { layout.matchY = frame.minY + min(frame.height, 40) }
             }
         }
+    }
+
+    /// A rendered diagram or formula at its own size, scaled down to fit the width and a height cap.
+    private func richBlock(_ rendered: RichBlock.Rendered, into stack: inout Stack, layout: inout TranscriptRowLayout) {
+        let ref = rendered.ref
+        layout.images.append(ref)
+        let maxHeight: CGFloat = rendered.kind == .math ? 320 : 640
+        let scale = min(1, stack.width / rendered.size.width, maxHeight / rendered.size.height)
+        let size = CGSize(width: max((rendered.size.width * scale).rounded(), 1), height: max((rendered.size.height * scale).rounded(), 1))
+        let loader = self.context.gateway.images
+        let state: TranscriptPart.Image.State = if let image = loader.cached(ref) { .loaded(image) }
+            else if loader.hasFailed(ref) { .failed } else { .loading }
+        stack.add(.image(.init(ref: ref, state: state, plain: rendered.kind == .math)), height: size.height, width: size.width)
     }
 
     /// A complete fenced SVG (```svg, or any fence holding a whole `<svg>…</svg>`) drawn as an image.
