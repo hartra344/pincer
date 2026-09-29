@@ -160,6 +160,43 @@ public enum MarkdownBlock: Equatable, Sendable {
         return blocks
     }
 
+    /// Cut points that split streaming text into chunks whose blocks never change as more text
+    /// arrives, so `parse(chunk)` for each chunk (and the tail) concatenates to `parse(text)`.
+    ///
+    /// `parse` resets all block state on a blank line, except inside a fenced code block, so a cut
+    /// is only placed at the start of the line after a completed blank line outside a fence.
+    /// Whether a cut exists depends only on the text before it, so it never moves as text grows.
+    /// A cut is made once the pending chunk holds at least `minimumChunk` UTF-16 units.
+    public static func streamingFreezePoints(_ text: String, minimumChunk: Int = 1024) -> [String.Index] {
+        self.streamingFreezePoints(text, from: text.startIndex, minimumChunk: minimumChunk)
+    }
+
+    /// The cut points at or after `start`, which must be `text.startIndex` or an earlier cut point:
+    /// cuts are stable, so a caller that kept the earlier ones only scans the text since the last.
+    public static func streamingFreezePoints(_ text: String, from start: String.Index, minimumChunk: Int = 1024) -> [String.Index] {
+        let utf8 = text.utf8
+        var points: [String.Index] = []
+        var chunkUnits = 0
+        var lineStart = start
+        var inFence = false
+        var i = start
+        while i < utf8.endIndex {
+            guard utf8[i] == 0x0A else { i = utf8.index(after: i); continue }
+            let next = utf8.index(after: i)
+            let trimmed = String(decoding: utf8[lineStart..<i], as: UTF8.self).trimmingCharacters(in: .whitespaces)
+            chunkUnits += text[lineStart..<next].utf16.count
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                inFence.toggle()
+            } else if trimmed.isEmpty, !inFence, next < utf8.endIndex, chunkUnits >= minimumChunk {
+                points.append(next)
+                chunkUnits = 0
+            }
+            lineStart = next
+            i = next
+        }
+        return points
+    }
+
     static func tableCells(_ line: String) -> [String] {
         var body = Substring(line.trimmingCharacters(in: .whitespaces))
         if body.hasPrefix("|") { body = body.dropFirst() }

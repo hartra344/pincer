@@ -53,6 +53,8 @@ struct TranscriptList: UIViewRepresentable {
         /// Top of each row in content coordinates, and the total content height.
         fileprivate private(set) var tops: [CGFloat] = []
         fileprivate private(set) var contentHeight: CGFloat = 0
+        /// Ids whose height value changed since the offsets were last built.
+        private var dirtyHeights = Set<String>()
         private var anchor = Anchor.bottom
         private var isAdjusting = false
         private var isScrollingToTop = false
@@ -129,6 +131,15 @@ struct TranscriptList: UIViewRepresentable {
             }
             var seen = Set<String>()
             let unique = newRows.filter { seen.insert($0.id).inserted }
+            // Streaming: same ids, only the last row differs. One pass, no diffing.
+            if let last = unique.last, self.rows.count == unique.count, self.rows.last?.id == last.id,
+               self.rows.dropLast() == unique.dropLast() {
+                guard self.rows[self.rows.count - 1] != last else { return }
+                self.rows[self.rows.count - 1] = last
+                self.heights[last.id]?.measured = false
+                self.settle()
+                return
+            }
             guard unique != self.rows else { return }
             let oldRows = self.rows
             self.rows = unique
@@ -240,7 +251,10 @@ struct TranscriptList: UIViewRepresentable {
             let layout = self.renderer.layout(for: self.rows[row], width: width)
             let old = self.heights[id]?.value
             self.heights[id] = Height(value: max(1, layout.height), width: width, measured: true)
-            if old.map({ abs($0 - layout.height) > 0.5 }) ?? true { self.applyHeights() }
+            if old.map({ abs($0 - layout.height) > 0.5 }) ?? true {
+                self.dirtyHeights.insert(id)
+                self.applyHeights()
+            }
             let insets = view.adjustedContentInset
             let visible = max(view.bounds.height - insets.top - insets.bottom, 1)
             let y = min(layout.matchY ?? 0, layout.height)
@@ -282,6 +296,7 @@ struct TranscriptList: UIViewRepresentable {
             }
             self.tops = tops
             self.contentHeight = y
+            self.dirtyHeights.removeAll()
         }
 
         fileprivate func frame(at row: Int) -> CGRect {
@@ -302,6 +317,22 @@ struct TranscriptList: UIViewRepresentable {
         }
 
         private func applyHeights() {
+            // Only the last row moved (a streaming reply): nothing above it shifts, so adjust the
+            // content height and invalidate that one item.
+            if self.dirtyHeights.count == 1, let last = self.rows.last, self.dirtyHeights.contains(last.id),
+               self.tops.count == self.rows.count, let top = self.tops.last {
+                let new = self.height(at: self.rows.count - 1)
+                let delta = new - (self.contentHeight - top)
+                self.contentHeight += delta
+                self.dirtyHeights.removeAll()
+                if let layout = self.collectionView?.collectionViewLayout {
+                    let context = UICollectionViewLayoutInvalidationContext()
+                    context.invalidateItems(at: [IndexPath(item: self.rows.count - 1, section: 0)])
+                    context.contentSizeAdjustment = CGSize(width: 0, height: delta)
+                    layout.invalidateLayout(with: context)
+                }
+                return
+            }
             self.rebuildOffsets()
             self.collectionView?.collectionViewLayout.invalidateLayout()
         }
@@ -312,7 +343,9 @@ struct TranscriptList: UIViewRepresentable {
             let old = self.heights[item.id]?.value
             let value = max(1, self.renderer.layout(for: item, width: width).height)
             self.heights[item.id] = Height(value: value, width: width, measured: true)
-            return old.map { abs($0 - value) > 0.5 } ?? true
+            let moved = old.map { abs($0 - value) > 0.5 } ?? true
+            if moved { self.dirtyHeights.insert(item.id) }
+            return moved
         }
 
         /// Measures unmeasured rows from a screen above the viewport to a screen below it, so rows

@@ -113,6 +113,23 @@ func runDemo() async {
         check(false, "demo reply carries a chart")
     }
 
+    let longBefore = chat.entries.count
+    await chat.send("long")
+    var sawLiveStreaming = false
+    let longDone = await waitFor("long reply", timeout: 30, every: 10) {
+        if case let .assistant(turn)? = chat.entries.last, turn.id.hasPrefix("live-"), turn.isStreaming { sawLiveStreaming = true }
+        return !chat.isRunning && chat.entries.count > longBefore
+    }
+    check(longDone, "long reply finished")
+    check(sawLiveStreaming, "long reply streamed as a live entry")
+    if case let .assistant(turn)? = chat.entries.last {
+        check(turn.body.count > 3000 && turn.body.contains("## Building a quiet home lab")
+              && turn.body.contains("```swift") && turn.body.contains("| Service | Host | Idle power |"),
+              "long reply has heading, code fence and table (\(turn.body.count) chars)")
+    } else {
+        check(false, "long reply is an assistant turn")
+    }
+
     await gateway.loadModels(agentId: "main")
     check(!(gateway.modelCatalogs["main"] ?? []).isEmpty, "demo model catalog")
     await gateway.setModel(key, to: "openai/gpt-5.6-sol")

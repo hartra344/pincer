@@ -102,10 +102,17 @@ public final class ChatStore: Identifiable {
     public private(set) var entries: [TranscriptEntry] = []
     public private(set) var live: LiveRun? {
         didSet {
-            self.rebuild(itemsChanged: false)
+            self.liveChanged(from: oldValue)
             if (oldValue == nil) != (self.live == nil) { self.updateIsRunning() }
         }
     }
+    /// Minimum time between published transcripts while text or thinking streams in (~30 Hz).
+    nonisolated(unsafe) static var liveFlushInterval: TimeInterval = 1.0 / 30
+    @ObservationIgnored private var lastPublishAt = Date.distantPast
+    @ObservationIgnored private var pendingFlush: Task<Void, Never>?
+    @ObservationIgnored private var hasPendingLive = false
+    /// True while `entries` is `committedEntries` plus a trailing live tail.
+    @ObservationIgnored private var entriesTrackCommitted = false
     /// Whether a run is in progress here, streamed or reported by the session row. Stored, and only
     /// written on transitions, so views reading it don't re-render on every streamed token.
     public private(set) var isRunning = false
@@ -888,6 +895,7 @@ public final class ChatStore: Identifiable {
                 run.text = payload["replace"]?.bool == true ? delta : run.text + delta
             }
             self.live = run
+            if payload["replace"]?.bool == true { self.flushLive() }
         case "final", "aborted", "error":
             self.noteOutcome(runId, state == "final" ? .success : state == "error" ? .error : .none)
             if state == "error" {
@@ -1095,6 +1103,7 @@ public final class ChatStore: Identifiable {
     }
 
     private func finishRun(_ runId: String) {
+        self.flushLive()
         guard self.live == nil || self.live?.runId == runId else { return }
         self.reloadTask?.cancel()
         self.reloadTask = Task { [weak self] in
@@ -1106,8 +1115,52 @@ public final class ChatStore: Identifiable {
 
     // MARK: Presentation
 
+    /// Only the reply text or reasoning grew: everything else about the run is unchanged.
+    private static func isTextGrowth(from old: LiveRun?, to new: LiveRun?) -> Bool {
+        guard let old, let new, old.runId == new.runId else { return false }
+        return old.tools == new.tools && old.images == new.images && old.phase == new.phase
+            && old.isCompacting == new.isCompacting && old.startedAt == new.startedAt
+            && old.model == new.model && old.provider == new.provider
+    }
+
+    private func liveChanged(from old: LiveRun?) {
+        if Self.isTextGrowth(from: old, to: self.live) {
+            self.publishLiveCoalesced()
+        } else {
+            self.rebuild(itemsChanged: false)
+        }
+    }
+
+    private func publishLiveCoalesced() {
+        let interval = Self.liveFlushInterval
+        let elapsed = Date().timeIntervalSince(self.lastPublishAt)
+        if elapsed >= interval {
+            self.rebuild(itemsChanged: false)
+            return
+        }
+        self.hasPendingLive = true
+        guard self.pendingFlush == nil else { return }
+        let remaining = interval - elapsed
+        self.pendingFlush = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(remaining))
+            guard !Task.isCancelled else { return }
+            self?.flushLive()
+        }
+    }
+
+    /// Publishes any coalesced live update now.
+    func flushLive() {
+        guard self.hasPendingLive else { return }
+        self.rebuild(itemsChanged: false)
+    }
+
     private func rebuild(itemsChanged: Bool) {
+        self.pendingFlush?.cancel()
+        self.pendingFlush = nil
+        self.hasPendingLive = false
+        self.lastPublishAt = Date()
         if itemsChanged {
+            self.entriesTrackCommitted = false
             self.committedEntries = TranscriptBuilder.build(self.items)
             var byId: [String: ChatItem] = [:]
             for item in self.items where item.isReplyable {
@@ -1120,7 +1173,7 @@ public final class ChatStore: Identifiable {
                 self.sawThinking = self.items.contains { $0.thinkingText != nil }
             }
         }
-        var entries = self.committedEntries
+        var entries: [TranscriptEntry] = []
         if let live {
             var turn = AssistantTurn(id: "live-\(live.runId)", timestamp: live.startedAt)
             if let thinking = live.thinking { turn.thinking = [thinking] }
@@ -1146,10 +1199,19 @@ public final class ChatStore: Identifiable {
         } else if self.compaction?.isRunning == true {
             entries.append(.marker(id: "live-compaction", label: "Compacting context…"))
         }
-        if entries != self.entries { self.entries = entries }
+        let committedCount = self.committedEntries.count
+        if self.entriesTrackCommitted, self.entries.count >= committedCount {
+            if !self.entries[committedCount...].elementsEqual(entries) {
+                self.entries.replaceSubrange(committedCount..., with: entries)
+            }
+        } else {
+            let all = self.committedEntries + entries
+            if all != self.entries { self.entries = all }
+            self.entriesTrackCommitted = true
+        }
     }
 
-    var liveRunId: String? { self.live?.runId }
+    public var liveRunId: String? { self.live?.runId }
 
     // MARK: Replies
 

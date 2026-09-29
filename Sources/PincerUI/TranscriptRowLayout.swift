@@ -357,6 +357,12 @@ struct TranscriptLayoutBuilder {
 
     func layout(_ row: TranscriptRow, width: CGFloat) -> TranscriptRowLayout {
         var layout = TranscriptRowLayout(id: row.id, width: width)
+        var streamingReply = false
+        if case let .entry(.assistant(turn)) = row { streamingReply = turn.isStreaming }
+        if let chat = self.context.chat, !streamingReply {
+            // A reply that commits (or a run that ends) leaves its live memo behind: drop what this chat no longer streams.
+            TranscriptText.endLive(owner: ObjectIdentifier(chat), keeping: chat.liveRunId.map { "live-\($0)" })
+        }
         layout.decoration = self.decoration(for: row)
         self.marks.reset(row: row.id, highlight: self.highlight)
         switch row {
@@ -487,6 +493,13 @@ struct TranscriptLayoutBuilder {
         }
     }
 
+    /// The end of a streaming reply, so the spoken label costs the same however long the reply has grown.
+    private static func spokenTail(of body: String, limit: Int = 1200) -> String {
+        guard body.utf8.count > limit else { return body }
+        let start = body.utf8.index(body.endIndex, offsetBy: -limit, limitedBy: body.startIndex) ?? body.startIndex
+        return String(body[start...].drop { !$0.isNewline && $0 != " " })
+    }
+
     private func assistant(_ turn: AssistantTurn, into layout: inout TranscriptRowLayout) {
         let agent = self.context.agent
         let from = turn.sender.map { self.sender($0) }
@@ -495,10 +508,12 @@ struct TranscriptLayoutBuilder {
                                            time: turn.timestamp?.chatTimestamp, isPending: false)
         header.link = from?.source
         let thinking = turn.thinking.joined(separator: "\n\n")
-        layout.copyItems = [.init(title: "Copy Reply", text: turn.body)]
+        let body = turn.body
+        layout.copyItems = [.init(title: "Copy Reply", text: body)]
         if !thinking.isEmpty { layout.copyItems.append(.init(title: "Copy Thinking", text: thinking)) }
         layout.accessibilityLabel = AccessibilityText.messageRow(
-            role: .assistant, author: AccessibilityText.join([header.name, from?.marker]), text: turn.body, timestamp: header.time,
+            role: .assistant, author: AccessibilityText.join([header.name, from?.marker]),
+            text: turn.isStreaming ? Self.spokenTail(of: body) : body, timestamp: header.time,
             toolCount: turn.tools.count, attachmentCount: turn.images.count + turn.files.count,
             isStreaming: turn.isStreaming, isError: turn.isError, summaryLimit: 0)
         let reasoning = self.settings.reasoningOff ? "" : thinking
@@ -537,7 +552,8 @@ struct TranscriptLayoutBuilder {
             for (index, message) in turn.text.enumerated() {
                 if index > 0 { stack.y += TranscriptMetrics.messageSpacing - TranscriptMetrics.blockSpacing }
                 start = stack.isEmpty ? stack.y : stack.y + TranscriptMetrics.blockSpacing
-                self.markdown(message, tone: turn.isError ? .error : .primary, section: .message(index), into: &stack, layout: &layout)
+                self.markdown(message, tone: turn.isError ? .error : .primary, section: .message(index), live: turn.isStreaming,
+                              into: &stack, layout: &layout)
                 guard index < last else { continue }
                 let id = Self.messageId(turn, index)
                 if let chipId = Self.chipId(turn, index) {
@@ -636,19 +652,29 @@ struct TranscriptLayoutBuilder {
 
     // MARK: Content
 
-    private func markdown(_ source: String, tone: TranscriptText.Tone, section: TranscriptSearch.Section,
+    private func markdown(_ source: String, tone: TranscriptText.Tone, section: TranscriptSearch.Section, live: Bool = false,
                           into stack: inout Stack, layout: inout TranscriptRowLayout)
     {
         let width = stack.width
-        for segment in TranscriptText.markdown(source, tone: tone) {
-            switch segment {
+        // A streaming message is split into frozen chunks and a tail; a committed one is one cached list.
+        let pieces: [TranscriptText.LiveSegment] = live
+            ? TranscriptText.liveMarkdown(source, tone: tone, row: layout.id, owner: self.context.chat.map(ObjectIdentifier.init))
+            : TranscriptText.markdown(source, tone: tone).map { .init(segment: $0, isFrozen: false, extraSpacing: 0) }
+        for piece in pieces {
+            let spacing = TranscriptMetrics.blockSpacing + piece.extraSpacing
+            switch piece.segment {
             case let .text(source):
                 let (text, match) = self.marks.mark(source, section)
-                stack.add(.text(text), height: TranscriptText.size(text, width: width).height)
+                let size = live ? TranscriptText.liveSize(text, width: width, frozen: piece.isFrozen && text === source, exact: true)
+                    : TranscriptText.size(text, width: width)
+                stack.add(.text(text), height: size.height, spacing: spacing)
                 self.marks.place(match, in: text, width: width, stack: stack, into: &layout)
             case let .quote(source):
                 let (text, match) = self.marks.mark(source, section)
-                stack.add(.quote(text), height: TranscriptText.size(text, width: max(width - 11, 20)).height)
+                let quoteWidth = max(width - 11, 20)
+                let size = live ? TranscriptText.liveSize(text, width: quoteWidth, frozen: piece.isFrozen && text === source, exact: false)
+                    : TranscriptText.size(text, width: quoteWidth)
+                stack.add(.quote(text), height: size.height, spacing: spacing)
                 self.marks.place(match, in: text, width: max(width - 11, 20), stack: stack, into: &layout)
             case .rule:
                 stack.add(.rule, height: 1)
@@ -669,7 +695,8 @@ struct TranscriptLayoutBuilder {
                 // Find skips SVG source, which is usually shown as the image.
                 let isSVG = SVGRasterizer.inlineSource(language: language, code: code) != nil
                 let (text, match) = isSVG ? (source, nil) : self.marks.mark(source, section)
-                let size = TranscriptText.size(text, width: .greatestFiniteMagnitude)
+                let size = live ? TranscriptText.liveSize(text, width: .greatestFiniteMagnitude, frozen: piece.isFrozen && text === source, exact: false)
+                    : TranscriptText.size(text, width: .greatestFiniteMagnitude)
                 let part = TranscriptPart.Code(language: language, code: code, text: text, textSize: size, headerHeight: headerHeight)
                 stack.add(.code(part), height: headerHeight + 1 + 10 + size.height + 10)
                 self.marks.place(match, in: text, width: .greatestFiniteMagnitude, stack: stack, offset: headerHeight + 11, into: &layout)

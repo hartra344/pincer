@@ -23,5 +23,7 @@ let package = Package(
         .executableTarget(name: "PincerChecks", dependencies: ["PincerKit", "PincerPush"]),
         // Unit tests (`swift test`): pure logic only, no sockets, Keychain or shared defaults.
         .testTarget(name: "PincerKitTests", dependencies: ["PincerKit"]),
+        // UI-layer tests (streaming probe, transcript rendering). macOS-hosted like the kit tests.
+        .testTarget(name: "PincerUITests", dependencies: ["PincerUI", "PincerKit"]),
     ]
 )
