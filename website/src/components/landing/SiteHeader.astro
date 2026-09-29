@@ -1,0 +1,33 @@
+---
+import Icon from '../Icon.astro';
+import logo from '../../assets/logo.svg';
+
+interface Props {
+	href: (path: string) => string;
+	repo: string;
+}
+const { href, repo } = Astro.props;
+---
+
+<header class="keyshelf">
+	<a class="brand" href={href('/')}>
+		<img src={logo.src} alt="" width="28" height="28" />
+		<span>Pincer</span>
+	</a>
+	<nav aria-label="Primary">
+		<a class="wide" href="#features">Features</a>
+		<a class="wide" href="#security">Security</a>
+		<a href={href('getting-started/introduction/')}>Docs</a>
+		<a class="icon-link" href={repo} aria-label="Pincer on GitHub"><Icon name="github" size={20} /></a>
+		<button class="icon-link" type="button" id="theme-toggle" aria-label="Switch to light theme" hidden>
+			<svg class="sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+				<circle cx="12" cy="12" r="4"></circle>
+				<path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+			</svg>
+			<svg class="moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
+			</svg>
+		</button>
+		<a class="btn lamp install" href={href('getting-started/install/')}>Install</a>
+	</nav>
+</header>
