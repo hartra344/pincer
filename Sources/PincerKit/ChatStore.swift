@@ -101,8 +101,17 @@ public final class ChatStore: Identifiable {
     }
     public private(set) var entries: [TranscriptEntry] = []
     public private(set) var live: LiveRun? {
-        didSet { self.rebuild(itemsChanged: false) }
+        didSet {
+            self.rebuild(itemsChanged: false)
+            if (oldValue == nil) != (self.live == nil) { self.updateIsRunning() }
+        }
     }
+    /// Whether a run is in progress here, streamed or reported by the session row. Stored, and only
+    /// written on transitions, so views reading it don't re-render on every streamed token.
+    public private(set) var isRunning = false
+    /// This chat's session row, kept in step by `GatewayStore` and only written when that row changes,
+    /// so views reading it don't re-render when some other session changes.
+    public private(set) var sessionRow: SessionRow?
     /// Transcript built from committed items; streaming only re-adds the live turn on top.
     @ObservationIgnored private var committedEntries: [TranscriptEntry] = []
     public private(set) var isLoading = false
@@ -184,10 +193,19 @@ public final class ChatStore: Identifiable {
         self.gateway = gateway
         self.gatewayId = gateway.id
         self.headless = headless
+        self.sessionRow = gateway.sessions[sessionKey]
+        self.isRunning = self.sessionRow?.hasActiveRun == true
     }
 
-    public var isRunning: Bool {
-        self.live != nil || (self.gateway?.sessions[self.sessionKey]?.hasActiveRun ?? false)
+    func syncSessionRow(_ row: SessionRow?) {
+        guard row != self.sessionRow else { return }
+        self.sessionRow = row
+        self.updateIsRunning()
+    }
+
+    private func updateIsRunning() {
+        let running = self.live != nil || self.sessionRow?.hasActiveRun == true
+        if running != self.isRunning { self.isRunning = running }
     }
 
     // MARK: Loading

@@ -695,8 +695,7 @@ struct TranscriptLayoutBuilder {
     /// Unfinished ones, mid-stream, stay code until their closing tag arrives.
     static func inlineSVG(language: String, code: String) -> ImageRef? {
         guard let trimmed = SVGRasterizer.inlineSource(language: language, code: code) else { return nil }
-        return ImageRef(artifactId: nil, base64: Data(trimmed.utf8).base64EncodedString(), url: nil,
-                        mimeType: "image/svg+xml", alt: "SVG image", width: nil, height: nil)
+        return InlineSVGCache.ref(for: trimmed)
     }
 
     /// Columns share the width when each can keep a readable minimum; otherwise the table keeps
@@ -1119,5 +1118,23 @@ extension TranscriptLayoutBuilder {
         let addFrame = groups.isEmpty || !canAdd ? nil : place(height + 14)
         stack.add(.reactions(.init(messageId: messageId, chips: chips, addFrame: addFrame)), height: y + height, width: width,
                   spacing: 6)
+    }
+}
+
+/// Small bounded cache so re-laying-out a row doesn't base64-encode and re-hash the same SVG.
+private enum InlineSVGCache {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var refs: [String: ImageRef] = [:]
+    private static let limit = 32
+
+    static func ref(for source: String) -> ImageRef {
+        lock.lock()
+        defer { lock.unlock() }
+        if let hit = refs[source] { return hit }
+        let ref = ImageRef(artifactId: nil, base64: Data(source.utf8).base64EncodedString(), url: nil,
+                           mimeType: "image/svg+xml", alt: "SVG image", width: nil, height: nil)
+        if refs.count >= limit { refs.removeAll(keepingCapacity: true) }
+        refs[source] = ref
+        return ref
     }
 }

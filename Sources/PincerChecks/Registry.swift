@@ -56,6 +56,7 @@ enum Suites {
             Section("Payload & identity") { runIdentityChecks() },
             Section("URL policy") { runURLPolicyChecks() },
             Section("Session rows") { runSessionRowChecks() },
+            Section("Invalidation perf") { runInvalidationPerfChecks() },
             Section("Media directives") { await runMediaDirectiveChecks() },
             Section("Transcript") { await runTranscriptChecks() },
             Section("Models") { runModelChecks() },
