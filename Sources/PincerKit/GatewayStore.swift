@@ -763,7 +763,7 @@ public final class GatewayStore: Identifiable {
         }
     }
 
-    private func applySessionChange(_ payload: JSONValue) {
+    func applySessionChange(_ payload: JSONValue) {
         self.sessionManager.handleSessionsChanged(payload)
         if let reason = payload["reason"]?.text, SessionManager.transcriptChangingReasons.contains(reason),
            let key = payload["session"]?["key"]?.text ?? payload["sessionKey"]?.text ?? payload["key"]?.text
