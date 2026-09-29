@@ -55,7 +55,6 @@ public struct PincerScene: Scene {
         // Restored on relaunch, unlike the settings windows below (#48).
         WindowGroup(L("Chat"), id: ChatWindow.sceneId, for: ChatWindowRef.self) { $ref in
             ChatWindow(ref: ref)
-                .deepLinkRouting()
                 .environment(self.app)
                 .themed()
         }
