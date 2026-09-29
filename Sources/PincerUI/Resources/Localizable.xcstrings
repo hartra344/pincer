@@ -3803,6 +3803,16 @@
         }
       }
     },
+    "Diagram source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagram source"
+          }
+        }
+      }
+    },
     "Didn't work?": {
       "localizations": {
         "en": {
@@ -5143,6 +5153,16 @@
         }
       }
     },
+    "HTML Preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HTML Preview"
+          }
+        }
+      }
+    },
     "HTTP %lld": {
       "localizations": {
         "en": {
@@ -6173,12 +6193,42 @@
         }
       }
     },
+    "Math expression": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Math expression"
+          }
+        }
+      }
+    },
+    "Math source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Math source"
+          }
+        }
+      }
+    },
     "Menu Bar": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Menu Bar"
+          }
+        }
+      }
+    },
+    "Mermaid diagram": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mermaid diagram"
           }
         }
       }
@@ -10019,6 +10069,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scopes"
+          }
+        }
+      }
+    },
+    "Scripts and network access are off in this preview.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scripts and network access are off in this preview."
           }
         }
       }
