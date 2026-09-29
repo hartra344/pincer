@@ -20,48 +20,49 @@ struct NotificationSettingsSection: View {
                     self.app.syncPush()
                 }
             #if os(iOS)
-            Picker("While Pincer is closed", selection: self.$delivery) {
-                ForEach(ClosedAppDelivery.allCases) { Text($0.label).tag($0) }
-            }
-            .onChange(of: self.delivery) { _, value in
-                ClosedAppDelivery.set(value)
-                self.app.syncPush()
-            }
-            if self.delivery == .pushRelay {
-                TextField("Push relay", text: self.$pushRelay, prompt: Text("https://relay.example.com"))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .onSubmit { self.app.syncPush() }
-                ForEach(self.app.gateways.filter { !$0.profile.isDemo }) { gateway in
-                    LabeledContent(gateway.profile.name, value: self.pushStatus(gateway))
+            Group {
+                Picker("While Pincer is closed", selection: self.$delivery) {
+                    ForEach(ClosedAppDelivery.allCases) { Text($0.label).tag($0) }
                 }
-            }
-            if self.delivery == .backgroundRefresh {
-                let lastRun = UserDefaults.standard.object(forKey: "pincer.refresh.lastRun") as? Date
-                let lastResult = UserDefaults.standard.string(forKey: "pincer.refresh.lastResult") ?? ""
-                LabeledContent("Last checked") {
-                    if let lastRun {
-                        Text(lastRun, format: .relative(presentation: .named))
-                    } else {
-                        Text("Not yet")
+                .onChange(of: self.delivery) { _, value in
+                    ClosedAppDelivery.set(value)
+                    self.app.syncPush()
+                }
+                if self.delivery == .pushRelay {
+                    TextField("Push relay", text: self.$pushRelay, prompt: Text("https://relay.example.com"))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .onSubmit { self.app.syncPush() }
+                    ForEach(self.app.gateways.filter { !$0.profile.isDemo }) { gateway in
+                        LabeledContent(gateway.profile.name, value: self.pushStatus(gateway))
                     }
                 }
-                if lastRun != nil, !lastResult.isEmpty {
-                    LabeledContent("Result", value: lastResult)
-                }
-                if UIApplication.shared.backgroundRefreshStatus != .available {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label("Background App Refresh is off for Pincer", systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.orange)
-                        Button("Open Settings") {
-                            if let url = URL(string: UIApplication.openSettingsURLString) {
-                                UIApplication.shared.open(url)
+                if self.delivery == .backgroundRefresh {
+                    let lastRun = UserDefaults.standard.object(forKey: "pincer.refresh.lastRun") as? Date
+                    let lastResult = UserDefaults.standard.string(forKey: "pincer.refresh.lastResult") ?? ""
+                    LabeledContent("Last checked") {
+                        if let lastRun {
+                            let when = lastRun.formatted(.relative(presentation: .named))
+                            Text(lastResult.isEmpty ? when : "\(when) · \(lastResult)")
+                        } else {
+                            Text("Not yet")
+                        }
+                    }
+                    if UIApplication.shared.backgroundRefreshStatus != .available {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Background App Refresh is off for Pincer", systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
+                            Button("Open Settings") {
+                                if let url = URL(string: UIApplication.openSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
                             }
                         }
                     }
                 }
             }
+            .disabled(!self.notifications)
             #endif
         } header: {
             Text("Notifications")
@@ -82,7 +83,7 @@ struct NotificationSettingsSection: View {
         case .pushRelay:
             "To get notified while Pincer is closed, enter a Pincer push relay. Your gateway encrypts each notification to this device, so the relay can't read it. The gateway needs Web Push (push.web.subscribe)."
         case .backgroundRefresh:
-            "Pincer checks your gateways in the background, no server needed. iOS decides when: often every 15 minutes to a few hours, depending on how much you use Pincer, battery and Low Power Mode. It doesn't run after you swipe Pincer away in the app switcher."
+            "Pincer checks your gateways in the background, with no server needed. iOS decides when, usually 15 minutes to a few hours apart, depending on how often you use Pincer and your battery. It pauses in Low Power Mode, and stops after you swipe Pincer away in the app switcher until you open it again."
         case .off:
             "You're notified only while Pincer is open."
         }
