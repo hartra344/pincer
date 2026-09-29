@@ -339,6 +339,8 @@ private struct TranscriptPane: View {
     let reasoningOff: Bool
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
+    /// Not observed: only the list's bottom-anchor callback and Find's toggle drive it.
+    @State private var findTrim = TranscriptFindTrim()
 
     private var agent: AgentSummary {
         self.gateway.agent(self.chat.sessionRow?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main")
@@ -351,7 +353,8 @@ private struct TranscriptPane: View {
         self.content
             .onAppear { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
             .onChange(of: self.find.isPresented) { _, shown in
-                if shown { Task { await self.chat.loadAllCached() } } else { Task { await self.chat.trimWhenIdle() } }
+                if shown { Task { await self.chat.loadAllCached() } }
+                self.findTrim.findChanged(isPresented: shown, chat: self.chat)
             }
             .onChange(of: self.chat.entries) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
             .onChange(of: self.reasoningOff) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
@@ -413,7 +416,10 @@ private struct TranscriptPane: View {
                 bottomInset: self.bottomInset,
                 topInset: self.topInset,
                 highlight: self.find.highlight,
-                jump: self.jump)
+                jump: self.jump,
+                bottomAnchorChanged: { [findTrim = self.findTrim, chat = self.chat] in
+                    findTrim.bottomAnchorChanged($0, chat: chat)
+                })
                 .ignoresSafeArea(.container, edges: [.top, .bottom])
         }
     }
