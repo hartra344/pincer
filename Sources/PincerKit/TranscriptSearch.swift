@@ -107,7 +107,7 @@ public enum TranscriptSearch {
             current += paragraph
         }
         func inline(_ text: String) -> String {
-            MarkdownBlock.softBreaks(String(MarkdownBlock.inline(text).characters))
+            MarkdownBlock.softBreaks(InlineMath.plainText(text))
         }
         for block in MarkdownBlock.parse(source) {
             switch block {

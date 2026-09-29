@@ -63,8 +63,10 @@ enum MathLayout {
         var base: CGFloat
         var depth: Int
         var face: MathFace?
+        /// Text style (inline math): big operators stay small with side limits, fractions shrink.
+        var inline = false
         var axis: CGFloat { size * 0.25 }
-        func script() -> Ctx { Ctx(size: max(size * 0.7, base * 0.5), base: base, depth: depth + 1, face: face) }
+        func script() -> Ctx { Ctx(size: max(size * 0.7, base * 0.5), base: base, depth: depth + 1, face: face, inline: inline) }
     }
 
     // MARK: Measurement
@@ -211,7 +213,7 @@ enum MathLayout {
     }
 
     static func bigOpGlyph(_ g: String, _ ctx: Ctx) -> MathBox {
-        if ctx.depth > 0 { return textBox(g, ctx, .roman) }
+        if ctx.depth > 0 || ctx.inline { return textBox(g, ctx, .roman) }
         let scale: CGFloat = g == "∫" || g == "∬" || g == "∭" || g == "∮" ? 1.5 : 1.4
         let size = ctx.size * scale
         let m = measure(g, size: size, face: .roman)
@@ -229,11 +231,11 @@ enum MathLayout {
         switch base {
         case .bigop(let g, let l):
             baseBox = bigOpGlyph(g, ctx)
-            limits = l && ctx.depth == 0
+            limits = l && ctx.depth == 0 && !ctx.inline
             isIntegral = ["∫", "∬", "∭", "∮"].contains(g)
         case .fn(let name, let l):
             baseBox = textBox(name, ctx, .roman)
-            limits = l && ctx.depth == 0
+            limits = l && ctx.depth == 0 && !ctx.inline
         default:
             baseBox = layout(base, ctx)
         }
@@ -289,7 +291,7 @@ enum MathLayout {
         switch mode {
         case "t": c.size = ctx.size * 0.8
         case "d": break
-        default: c.size = ctx.depth == 0 ? ctx.size : max(ctx.size * 0.75, ctx.base * 0.5)
+        default: c.size = ctx.depth == 0 && !ctx.inline ? ctx.size : max(ctx.size * 0.75, ctx.base * 0.5)
         }
         let s = ctx.size
         let num = layout(a, c), den = layout(b, c)
