@@ -178,6 +178,42 @@ struct BackgroundRefreshTests {
         #expect(Self.plan(Self.snapshot(rows), cursor: result.cursor).requests.isEmpty)
     }
 
+    @Test func capAppliesToRepliesOnly() {
+        let rows = (1...12).map { Self.row(Self.key($0), activity: Double(1000 + $0 * 10)) }
+        let approvals = (1...12).map { Self.approval("a\($0)") }
+        let questions = (1...3).map { Self.question("q\($0)") }
+        let result = Self.plan(Self.snapshot(rows, approvals: approvals, questions: questions), cursor: Self.base)
+        let ids = result.requests.map(\.identifier)
+        #expect(ids.filter { $0.hasPrefix("reply:") }.count == 10)
+        #expect(ids.filter { $0.hasPrefix("approval:") }.count == 12)
+        #expect(result.requests.count == 25)
+        #expect(result.cursor.questionIds.count == 3)
+    }
+
+    @Test func advanceMovesAnExistingCursorForward() {
+        let store = BackgroundRefreshCursorStore(defaults: Self.defaults())
+        let id = UUID()
+        store.advance(gatewayId: id, activityMs: 5, approvalId: "a", questionId: "q")
+        #expect(store.cursor(for: id) == nil)
+
+        store.save(Self.base, for: id)
+        store.advance(gatewayId: id, activityMs: 500)
+        #expect(store.cursor(for: id)?.activityMs == 1000)
+        store.advance(gatewayId: id, activityMs: 2500, approvalId: "a1", questionId: "q1")
+        store.advance(gatewayId: id, approvalId: "a1")
+        store.advance(gatewayId: id, approvalId: "a2")
+        #expect(store.cursor(for: id) == BackgroundRefreshCursor(activityMs: 2500, approvalIds: ["a1", "a2"], questionIds: ["q1"]))
+    }
+
+    @Test func advanceKeepsIdListsBounded() {
+        let store = BackgroundRefreshCursorStore(defaults: Self.defaults())
+        let id = UUID()
+        store.save(Self.base, for: id)
+        for n in 0..<250 { store.advance(gatewayId: id, approvalId: "a\(n)") }
+        let ids = store.cursor(for: id)?.approvalIds ?? []
+        #expect(ids.count == 200 && ids.last == "a249")
+    }
+
     // MARK: Filters
 
     @Test func subagentsAndArchivedNeverNotify() {
@@ -468,6 +504,74 @@ struct BackgroundRefreshTests {
         rig.connection.sessions = [Self.row(Self.key(1), activity: 6000)]
         _ = await refresher.run()
         #expect(rig.defaults.string(forKey: "pincer.refresh.lastResult") == "1 new")
+    }
+
+    @Test @MainActor func slowGatewayAbortsWhileFastOneCommits() async {
+        let defaults = Self.defaults()
+        ClosedAppDelivery.set(.backgroundRefresh, defaults)
+        let slow = GatewayProfile(name: "Slow", url: "wss://slow.example", authMode: .token)
+        let fast = GatewayProfile(name: "Fast", url: "wss://fast.example", authMode: .token)
+        let slowConnection = FakeConnection(), fastConnection = FakeConnection()
+        slowConnection.delay = .seconds(10)
+        slowConnection.sessions = [Self.row(Self.key(1), activity: 5000)]
+        fastConnection.sessions = [Self.row(Self.key(2), activity: 5000)]
+        let cursors = BackgroundRefreshCursorStore(defaults: defaults)
+        let saved = BackgroundRefreshCursor(activityMs: 100, approvalIds: [], questionIds: [])
+        cursors.save(saved, for: slow.id)
+        cursors.save(saved, for: fast.id)
+        let posts = Posts()
+        let refresher = BackgroundRefresh(
+            profiles: { [slow, fast] },
+            connector: FakeConnector(connections: [slow.id: slowConnection, fast.id: fastConnection]),
+            cursors: cursors, defaults: defaults, post: { posts.batches.append($0) })
+
+        let started = ContinuousClock.now
+        let report = await refresher.run(budget: 1.5)
+        #expect(ContinuousClock.now - started < .seconds(5))
+        #expect(report.aborted == [slow.id] && report.failed.isEmpty && report.posted == 1)
+        #expect(posts.identifiers == ["reply:\(Self.key(2)):5000"])
+        #expect(cursors.cursor(for: slow.id) == saved)
+        #expect(cursors.cursor(for: fast.id)?.activityMs == 5000)
+        #expect(defaults.string(forKey: "pincer.refresh.lastResult") == "1 new · Couldn't reach Slow")
+    }
+
+    @Test @MainActor func resultStrings() async {
+        let a = GatewayProfile(name: "Alpha", url: "wss://a.example", authMode: .token)
+        let b = GatewayProfile(name: "Beta", url: "wss://b.example", authMode: .token)
+        let defaults = Self.defaults()
+        ClosedAppDelivery.set(.backgroundRefresh, defaults)
+        let cursors = BackgroundRefreshCursorStore(defaults: defaults)
+        let connections = [a.id: FakeConnection(), b.id: FakeConnection()]
+        func run(unreachable: Set<UUID> = []) async -> String? {
+            var connector = FakeConnector(connections: connections)
+            connector.unreachable = unreachable
+            let refresher = BackgroundRefresh(profiles: { [a, b] }, connector: connector, cursors: cursors, defaults: defaults, post: { _ in })
+            _ = await refresher.run()
+            return defaults.string(forKey: "pincer.refresh.lastResult")
+        }
+        connections[a.id]!.sessions = [Self.row(Self.key(1), activity: 1000)]
+        connections[b.id]!.sessions = [Self.row(Self.key(2), activity: 1000)]
+        _ = await run()
+        #expect(await run() == "Up to date")
+        #expect(await run(unreachable: [b.id]) == "Couldn't reach Beta")
+        #expect(await run(unreachable: [a.id, b.id]) == "Couldn't reach Alpha, Beta")
+        connections[a.id]!.sessions = [Self.row(Self.key(1), activity: 2000), Self.row(Self.key(3), activity: 2100)]
+        #expect(await run(unreachable: [b.id]) == "2 new · Couldn't reach Beta")
+        connections[a.id]!.sessions = [Self.row(Self.key(1), activity: 3000)]
+        #expect(await run() == "1 new")
+    }
+
+    @Test @MainActor func skippedRunKeepsTheLastStatus() async {
+        let rig = Rig()
+        rig.connection.sessions = [Self.row(Self.key(1), activity: 5000)]
+        _ = await rig.refresher().run()
+        let ran = rig.defaults.object(forKey: "pincer.refresh.lastRun") as? Date
+        #expect(ran != nil)
+        ClosedAppDelivery.set(.off, rig.defaults)
+        let report = await rig.refresher().run()
+        #expect(report.skipped)
+        #expect(rig.defaults.object(forKey: "pincer.refresh.lastRun") as? Date == ran)
+        #expect(rig.defaults.string(forKey: "pincer.refresh.lastResult") == "Up to date")
     }
 
     @Test @MainActor func constants() {

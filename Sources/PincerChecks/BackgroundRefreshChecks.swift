@@ -26,6 +26,16 @@ func runBackgroundRefreshLive(url: String, token: String) async {
                                     cursors: BackgroundRefreshCursorStore(defaults: defaults), defaults: defaults,
                                     post: { posted += $0 })
 
+    // Seeding never moves a cursor backwards, and creates one at the live state.
+    let store = BackgroundRefreshCursorStore(defaults: defaults)
+    refresh.seed(from: [gateway])
+    let live = gateway.sessions.values.map(\.activityMs).max() ?? 0
+    check(store.cursor(for: profile.id)?.activityMs == live, "seed baselines at the live state")
+    store.save(BackgroundRefreshCursor(activityMs: live + 1_000_000, approvalIds: [], questionIds: []), for: profile.id)
+    refresh.seed(from: [gateway])
+    check(store.cursor(for: profile.id)?.activityMs == live + 1_000_000, "seed never moves the cursor backwards")
+    store.remove(for: profile.id)
+
     let baseline = await refresh.run()
     check(!baseline.skipped && baseline.posted == 0 && posted.isEmpty && baseline.failed.isEmpty && baseline.aborted.isEmpty,
           "baseline run posts nothing (\(baseline))")
