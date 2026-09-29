@@ -32,8 +32,11 @@ struct TranscriptCacheTests {
         let temp = TempDir()
         defer { temp.remove() }
         let old = TranscriptCache.Snapshot(version: TranscriptCache.oldestMigratableVersion - 1, items: [item("a")], complete: true)
-        await TranscriptCache.save(old, gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
-        #expect(await TranscriptCache.load(gatewayId: self.gateway, sessionKey: self.key, root: temp.url) == nil)
+        let url = try! #require(TranscriptCache.file(gatewayId: self.gateway, sessionKey: self.key, root: temp.url))
+        try! FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try! JSONEncoder().encode(old).write(to: url)
+        let (snapshot, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(snapshot == nil && outcome == .outdated(version: old.version))
     }
 
     @Test func corruptFilesAreIgnored() async throws {
