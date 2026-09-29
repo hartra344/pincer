@@ -693,7 +693,7 @@ struct TranscriptLayoutBuilder {
                 }
                 let headerHeight = 6 + max(TranscriptStyle.lineHeight(self.style.caption), TranscriptMetrics.iconBox) + 6
                 // Find skips SVG source, which is usually shown as the image.
-                let isSVG = SVGRasterizer.inlineSource(language: language, code: code) != nil
+                let isSVG = SVGSource.inlineSource(language: language, code: code) != nil
                 let (text, match) = isSVG ? (source, nil) : self.marks.mark(source, section)
                 let size = live ? TranscriptText.liveSize(text, width: .greatestFiniteMagnitude, frozen: piece.isFrozen && text === source, exact: false)
                     : TranscriptText.size(text, width: .greatestFiniteMagnitude)
@@ -721,7 +721,7 @@ struct TranscriptLayoutBuilder {
     /// A complete fenced SVG (```svg, or any fence holding a whole `<svg>…</svg>`) drawn as an image.
     /// Unfinished ones, mid-stream, stay code until their closing tag arrives.
     static func inlineSVG(language: String, code: String) -> ImageRef? {
-        guard let trimmed = SVGRasterizer.inlineSource(language: language, code: code) else { return nil }
+        guard let trimmed = SVGSource.inlineSource(language: language, code: code) else { return nil }
         return InlineSVGCache.ref(for: trimmed)
     }
 

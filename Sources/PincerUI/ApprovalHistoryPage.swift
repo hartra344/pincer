@@ -40,7 +40,7 @@ struct ApprovalHistoryPage: View {
         Group {
             if !model.supported {
                 ContentUnavailableView(L("Approval History Isn't Available"), systemImage: "clock.badge.xmark",
-                                       description: Text("This gateway doesn't keep an approval history. Update OpenClaw to see past decisions.", bundle: .module))
+                                       description: Text("This Gateway doesn't keep an approval history. Update OpenClaw to see past decisions.", bundle: .module))
             } else {
                 self.list(model, connected: connected)
             }
@@ -100,7 +100,7 @@ struct ApprovalHistoryPage: View {
             .labelsHidden()
             .disabled(!connected)
             .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.vertical, Theme.Spacing.md)
             .background(.bar)
         }
         .overlay { self.state(model, connected: connected) }
@@ -129,7 +129,7 @@ struct ApprovalHistoryPage: View {
         if model.items.isEmpty {
             if !connected, !model.loadState.isRunning {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see its approval history.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see its approval history.", bundle: .module))
             } else if !model.hasLoaded || model.loadState.isRunning {
                 ProgressView()
             } else if let error = model.loadState.error {
@@ -158,9 +158,9 @@ private struct ApprovalRow: View {
     @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Theme.Spacing.lg) {
             ApprovalKindIcon(kind: self.record.kind)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(self.record.displayTitle)
                     .font(self.record.commandText != nil ? .body.monospaced() : .body)
                     .lineLimit(1)
@@ -173,7 +173,7 @@ private struct ApprovalRow: View {
                 }
             }
             Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 2) {
+            VStack(alignment: .trailing, spacing: Theme.Spacing.xxs) {
                 ApprovalStatusCapsule(record: self.record)
                 if let resolved = self.record.resolvedAt {
                     Text(resolved.formatted(.relative(presentation: .named)))
@@ -183,7 +183,7 @@ private struct ApprovalRow: View {
                 }
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, Theme.Spacing.xxs)
     }
 }
 
@@ -215,7 +215,7 @@ private struct ApprovalStatusCapsule: View {
             .font(.caption.weight(.medium))
             .lineLimit(1)
             .padding(.horizontal, 7)
-            .padding(.vertical, 2)
+            .padding(.vertical, Theme.Spacing.xxs)
             .foregroundStyle(self.color)
             .background(self.color.opacity(0.15), in: Capsule())
     }
@@ -271,7 +271,7 @@ struct ApprovalDetailPage: View {
                 ProgressView()
             } else if !self.gateway.state.isConnected {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see this approval.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see this approval.", bundle: .module))
             } else {
                 ContentUnavailableView(L("Approval Not Found"), systemImage: "checkmark.shield",
                                        description: Text(model.detailState[self.approvalId]?.error
@@ -319,7 +319,7 @@ struct ApprovalDetailPage: View {
         Section(L("Request")) {
             LabeledContent(L("Kind"), value: record.kind.label)
             if let command = record.commandText ?? record.commandPreview {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Text(command)
                         .font(.body.monospaced())
                         .textSelection(.enabled)

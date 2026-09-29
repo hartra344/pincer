@@ -67,7 +67,7 @@ struct DevicesPage: View {
             .disabled(self.renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             Button(L("Cancel"), role: .cancel) {}
         } message: { _ in
-            Text("The name is shown to every operator of this gateway (up to \(DeviceManagementModel.maxLabelLength) characters).", bundle: .module)
+            Text("The name is shown to every operator of this Gateway (up to \(DeviceManagementModel.maxLabelLength) characters).", bundle: .module)
         }
         .overlay(alignment: .bottom) { DeviceNotice(model: model) }
     }
@@ -130,8 +130,8 @@ private struct PendingDeviceRow: View {
 
     var body: some View {
         let operation = self.model.operation(for: self.request)
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
                 Text(self.request.title).font(.headline).lineLimit(1)
                 if self.request.isRepair { DeviceTag(text: "Scope upgrade", color: .orange) }
                 if self.model.isSelf(self.request) { DeviceTag(text: DevicesUI.thisDeviceLabel, color: .accentColor) }
@@ -173,10 +173,10 @@ private struct PendingDeviceRow: View {
                 Spacer()
                 self.buttons(busy: operation.isRunning)
             }
-            .padding(.top, 4)
+            .padding(.top, Theme.Spacing.xs)
             #endif
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Theme.Spacing.xs)
         .contextMenu {
             Button(L("Copy Device ID"), systemImage: "doc.on.doc") { Clipboard.copy(self.request.deviceId) }
             Button(L("Copy Request ID"), systemImage: "number") { Clipboard.copy(self.request.requestId) }
@@ -207,8 +207,8 @@ private struct PairedDeviceRow: View {
     var body: some View {
         let operation = self.model.operation(for: self.device)
         let isSelf = self.model.isSelf(self.device)
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
                 Text(self.device.title).font(.headline).lineLimit(1)
                 if isSelf { DeviceTag(text: DevicesUI.thisDeviceLabel, color: .accentColor) }
                 if self.device.isNode { DeviceTag(text: "Node", color: .purple) }
@@ -243,7 +243,7 @@ private struct PairedDeviceRow: View {
                 Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.red)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Theme.Spacing.xs)
         .contextMenu { self.actions(isSelf: isSelf) }
     }
 
@@ -279,8 +279,8 @@ private struct DeviceTag: View {
     var body: some View {
         Text(self.text)
             .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 1)
+            .padding(.horizontal, Theme.Spacing.sm)
+            .padding(.vertical, Theme.Spacing.hairline)
             .background(self.color.opacity(0.15), in: Capsule())
             .foregroundStyle(self.color)
     }
@@ -346,7 +346,7 @@ private struct AccessChips: View {
                 Text(scope)
                     .font(.caption2.monospaced())
                     .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
+                    .padding(.vertical, Theme.Spacing.hairline)
                     .background(Color.secondary.opacity(0.12), in: Capsule())
                     .foregroundStyle(scope == GatewayConnection.adminScope ? Color.orange : Color.secondary)
             }
@@ -403,11 +403,11 @@ private struct DeviceEmptyRow: View {
     let detail: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
             Text(self.title).foregroundStyle(.secondary)
             if let detail { Text(detail).font(.caption).foregroundStyle(.tertiary) }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, Theme.Spacing.xxs)
     }
 }
 
@@ -448,11 +448,11 @@ private struct DeviceNotice: View {
             Text(notice.text)
                 .font(.callout)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.horizontal, Theme.Spacing.xxl)
+                .padding(.vertical, Theme.Spacing.lg)
                 .glassSurface(in: Capsule())
                 .padding(.horizontal)
-                .padding(.bottom, 20)
+                .padding(.bottom, Theme.Spacing.section)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .onTapGesture { withAnimation { self.model.clearNotice() } }
                 .task(id: notice.id) {
@@ -472,7 +472,7 @@ private struct DeviceAccessNeeded: View {
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 Label(DeviceManagementModel.needsAccessTitle, systemImage: "lock.shield")
                     .font(.callout.weight(.medium))
                 Text(self.message).font(.caption).foregroundStyle(.secondary)
@@ -485,7 +485,7 @@ private struct DeviceAccessNeeded: View {
                 }
                 Button(L("Open Connection")) { self.navigator.destination = .connection }
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, Theme.Spacing.xs)
         }
     }
 }
@@ -608,8 +608,8 @@ private struct NodeRow: View {
 
     var body: some View {
         let operation = self.model.operation(for: self.node)
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
                 Text(self.node.title).font(.headline).lineLimit(1)
                 if self.node.active { DeviceTag(text: "Active", color: .green) }
                 if self.node.gatewayLocal { DeviceTag(text: "Gateway Host", color: .blue) }
@@ -636,7 +636,7 @@ private struct NodeRow: View {
                 Label(error, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.red)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Theme.Spacing.xs)
         .contextMenu {
             Button(L("Copy Node ID"), systemImage: "doc.on.doc") { Clipboard.copy(self.node.nodeId) }
             if self.model.canRenameNodes { Button(L("Rename…"), systemImage: "pencil", action: self.rename) }

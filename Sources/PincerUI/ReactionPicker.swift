@@ -14,8 +14,8 @@ struct ReactionPicker: View {
     private let columns = Array(repeating: GridItem(.fixed(32), spacing: 4), count: 8)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
+            HStack(spacing: Theme.Spacing.sm) {
                 ForEach(self.quick, id: \.self) { emoji in
                     self.button(emoji, size: 24)
                 }
@@ -27,7 +27,7 @@ struct ReactionPicker: View {
                 }
             }
         }
-        .padding(12)
+        .padding(Theme.Spacing.xl)
         .fixedSize()
     }
 
@@ -104,7 +104,7 @@ private struct QuickReactionsRow: View {
     let onPick: (String) -> Void
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: Theme.Spacing.xxs) {
             ForEach(Reactions.quickBar(recent: Reactions.recent), id: \.self) { emoji in
                 Button {
                     self.onPick(emoji)
@@ -118,8 +118,8 @@ private struct QuickReactionsRow: View {
                 .accessibilityLabel(L("React \(emoji)"))
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 2)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.xxs)
     }
 }
 #endif

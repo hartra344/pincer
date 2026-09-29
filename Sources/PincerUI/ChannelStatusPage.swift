@@ -210,13 +210,13 @@ struct ChannelStatusPage: View {
     @ViewBuilder private func footerSection(_ snapshot: ChannelsStatusSnapshot, model: ChannelsModel) -> some View {
         Section {
             if model.isProbing {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.md) {
                     ProgressView().controlSize(.small)
                     Text("Probing channels…", bundle: .module).foregroundStyle(.secondary)
                 }
             }
             if snapshot.partial {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                     Label(L("Some channels didn't answer in time."), systemImage: "clock.badge.exclamationmark")
                         .foregroundStyle(.orange)
                     ForEach(snapshot.warnings.prefix(5), id: \.self) { warning in
@@ -240,10 +240,10 @@ struct ChannelStatusPage: View {
             Label(notice.text, systemImage: notice.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                 .foregroundStyle(notice.isError ? Color.red : Color.green)
                 .font(.callout)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.horizontal, Theme.Spacing.xxl)
+                .padding(.vertical, Theme.Spacing.lg)
                 .glassSurface(in: Capsule())
-                .padding(.bottom, 20)
+                .padding(.bottom, Theme.Spacing.section)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .onTapGesture { withAnimation { model.clearNotice() } }
                 .task(id: notice.id) {
@@ -301,9 +301,9 @@ private struct ChannelAccountRow: View {
         let state = ChannelRules.state(of: self.account, issues: self.issues)
         let operation = self.model.operation(for: self.key)
         let managing = !self.readOnly && self.model.canManage
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                     Text(self.name)
                     if self.key.accountId != "default", let name = self.account.name, name != self.key.accountId {
                         Text(self.key.accountId).font(.caption).foregroundStyle(.secondary)
@@ -329,7 +329,7 @@ private struct ChannelAccountRow: View {
                     .onTapGesture { self.errorExpanded.toggle() }
             }
             ForEach(self.issues, id: \.self) { issue in
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                     Text(issue.message).font(.caption)
                     if let fix = issue.fix { Text(fix).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                 }
@@ -345,7 +345,7 @@ private struct ChannelAccountRow: View {
                     .disabled(!self.model.canLogIn(self.key) || self.model.isBusy(self.key))
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, Theme.Spacing.xxs)
         .contentShape(Rectangle())
         .contextMenu { if managing { self.menuItems(state) } }
         #if os(iOS)
@@ -382,7 +382,7 @@ private struct ChannelAccountRow: View {
     }
 
     @ViewBuilder private func times(_ state: ChannelAccountState) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Theme.Spacing.lg) {
             if let activity = self.account.lastActivityAt {
                 Text("Last message \(Text(activity, style: .relative)) ago", bundle: .module)
             } else if state != .disabled, state != .notConfigured {
@@ -488,7 +488,7 @@ struct ChannelQRLoginSheet: View {
         let state = self.model.qr.state(channel: self.key.channel, accountId: self.key.accountId)
         let linked = self.model.state(of: self.key).isHealthy
         NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                 ChannelQRLoginView(state: state, channelLabel: self.channelLabel, linked: linked,
                                    canStart: self.model.canLogIn(self.key),
                                    offersRelinkWhenLinked: false,
@@ -499,7 +499,7 @@ struct ChannelQRLoginSheet: View {
                                    })
                 Spacer(minLength: 0)
             }
-            .padding(20)
+            .padding(Theme.Spacing.section)
             .frame(maxWidth: .infinity, alignment: .leading)
             .navigationTitle(L("Link \(self.channelLabel)"))
             #if os(iOS)

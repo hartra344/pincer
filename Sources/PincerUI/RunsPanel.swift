@@ -98,7 +98,7 @@ struct RunsPanel: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .padding(10)
+            .padding(Theme.Spacing.lg)
             Divider()
             if let key = self.gateway.selectedKey {
                 let tree = self.gateway.subagentTree(rootKey: key)

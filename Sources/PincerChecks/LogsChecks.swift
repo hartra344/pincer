@@ -124,7 +124,7 @@ func checkGatewayLogsLive(_ gateway: GatewayStore) async {
     check(markers().last == "Log file was rotated or truncated. Reading from the start.", "truncation adds a reset marker")
     await trigger("break the log [mock:logs-unavailable]")
     await logs.poll()
-    check(logs.failure?.isUnavailable == true && logs.failure?.message.hasPrefix("Couldn't read the gateway log: EACCES") == true,
+    check(logs.failure?.isUnavailable == true && logs.failure?.message.hasPrefix("Couldn't read the Gateway log: EACCES") == true,
           "log read failure is reported")
     await logs.poll()
     await logs.poll()

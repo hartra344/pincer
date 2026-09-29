@@ -22,7 +22,6 @@ Because the strings are in the package bundle, always look them up with `bundle:
 ```swift
 // SwiftUI text
 Text("Send", bundle: .module)
-Text(l: "Send")                          // shorthand from Localization.swift
 
 // Anywhere a String is needed: labels, help, accessibility, alerts
 String(localized: "Copy message", bundle: .module)
@@ -32,18 +31,18 @@ L("Copy message")                        // shorthand from Localization.swift
 .help(L("Stop the current run"))
 ```
 
-`L()` and `Text(l:)` are defined in `Sources/PincerUI/Localization.swift`.
+`L()` is defined in `Sources/PincerUI/Localization.swift`.
 
 Some tips:
 
 - Interpolate values rather than joining strings, so translators can reorder them: `L("Show \(count) subagent runs")`.
 - Don't build sentences from fragments like `"Show " + title`. Word order differs between languages.
-- Names, titles, message text and anything else from the gateway are data. Don't localize them.
+- Names, titles, message text and anything else from the Gateway are data. Don't localize them.
 - `PincerKit` has no resource bundle. Its VoiceOver text builders (`AccessibilityText` in `Sources/PincerKit/AccessibilityLabels.swift`) compose English phrases from parts. When a language is added, pass the fixed phrases in from PincerUI's catalog.
 
 ## Adding or updating strings
 
-1. Use the string in code with `bundle: .module`, or `L()` / `Text(l:)`.
+1. Use the string in code with `bundle: .module`, or `L()`.
 2. Regenerate the catalog:
 
    ```sh

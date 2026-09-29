@@ -37,7 +37,7 @@ struct ChannelQRLoginView: View {
         case .starting:
             ProgressView(L("Getting a QR code…")).controlSize(.small)
         case let .showing(qr, message):
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 QRCodeImage(data: qr, label: L("QR code for \(self.channelLabel)"))
                     .equatable()
                     .frame(width: 200, height: 200)

@@ -46,14 +46,14 @@ struct RunTimelineView: View {
                 let axis = Self.axis(entries, now: now, connected: connected)
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 14) {
+                        LazyVStack(alignment: .leading, spacing: Theme.Spacing.row) {
                             ForEach(entries) { entry in
                                 self.row(entry, axis: axis, now: now, connected: connected,
                                          isFocused: entry.id == focusId)
                                     .id(entry.id)
                             }
                         }
-                        .padding(12)
+                        .padding(Theme.Spacing.xl)
                     }
                     .onAppear { proxy.scrollTo(focusId, anchor: .center) }
                 }
@@ -69,7 +69,7 @@ struct RunTimelineView: View {
                         isConnected: connected, isFocused: isFocused, selection: self.$selectedSpan,
                         open: lane.sessionKey.map { key in { self.gateway.selectedKey = key } })
         case let .placeholder(node, title):
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 HStack {
                     RunStatusLabel(status: node.status)
                     Text(title).lineLimit(1)
@@ -135,7 +135,7 @@ private struct RunLaneView: View {
         let status = self.lane.isRunning && !self.isConnected ? .unknown : SubagentStatus(self.lane.status)
         let duration = RunDuration.format(self.lane.duration(now: self.now))
         VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
+            HStack(spacing: Theme.Spacing.sm) {
                 RunStatusLabel(status: status)
                 Text(self.title).lineLimit(1).fontWeight(self.isFocused ? .semibold : .regular)
                 Spacer(minLength: 4)
@@ -148,7 +148,7 @@ private struct RunLaneView: View {
                 let spans = self.lane.spans(axisStart: self.axis.lowerBound, axisEnd: self.axis.upperBound,
                                             width: geometry.size.width, now: self.now)
                 ZStack(alignment: .topLeading) {
-                    RoundedRectangle(cornerRadius: 3).fill(.quaternary.opacity(0.5))
+                    RoundedRectangle(cornerRadius: Theme.Radius.tiny).fill(.quaternary.opacity(0.5))
                     ForEach(spans) { span in
                         self.spanView(span, height: geometry.size.height)
                     }
@@ -163,7 +163,7 @@ private struct RunLaneView: View {
                 }
             }
             .frame(height: 16)
-            .padding(.vertical, 2)
+            .padding(.vertical, Theme.Spacing.xxs)
             .background(self.isFocused ? AnyShapeStyle(.tint.opacity(0.08)) : AnyShapeStyle(.clear))
             if self.isConnected, let caption = self.lane.currentActivity {
                 Text(LocalizedStringKey(caption)).font(.caption).foregroundStyle(.tint)
@@ -199,7 +199,7 @@ private struct RunLaneView: View {
                     .frame(width: 10, height: height)
                     .offset(x: span.x - 5)
             default:
-                RoundedRectangle(cornerRadius: 2)
+                RoundedRectangle(cornerRadius: Theme.Radius.hairline)
                     .fill(Self.color(span))
                     .frame(width: span.width, height: height)
                     .offset(x: span.x)

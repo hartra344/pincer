@@ -47,7 +47,8 @@ for key, entry in sorted(catalog["strings"].items(), key=lambda item: item[0].lo
         continue
     entry.pop("extractionState", None)
     english = entry.setdefault("localizations", {}).setdefault("en", {"stringUnit": {"value": key}})
-    english["stringUnit"]["state"] = "translated"
+    if "stringUnit" in english:
+        english["stringUnit"]["state"] = "translated"
     strings[key] = entry
 catalog["strings"] = strings
 with open(path, "w") as out:

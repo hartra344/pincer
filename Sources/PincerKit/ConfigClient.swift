@@ -156,7 +156,7 @@ struct GatewayConfigClient {
     func snapshot() async throws -> ConfigSnapshot {
         do {
             return ConfigSnapshot(response: try await self.connection.request("config.get", [:], timeout: 20))
-        } catch let error where Self.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             throw Unsupported.method
         }
     }
@@ -193,7 +193,7 @@ struct GatewayConfigClient {
             let result = try await self.connection.request("plugins.list", [:], timeout: 20)
             return (result["plugins"]?.array ?? []).compactMap(PluginInfo.init)
                 .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        } catch let error where Self.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             throw Unsupported.method
         }
     }
@@ -207,10 +207,5 @@ struct GatewayConfigClient {
 
     func pluginChange(_ method: String, _ params: [String: JSONValue], timeout: TimeInterval) async throws -> JSONValue {
         try await self.connection.request(method, .object(params), timeout: timeout)
-    }
-
-    static func isUnknownMethod(_ error: Error) -> Bool {
-        guard case let GatewayError.rpc(code, message, _) = error else { return false }
-        return code == "UNKNOWN_METHOD" || code == "METHOD_NOT_FOUND" || message.lowercased().contains("unknown method")
     }
 }

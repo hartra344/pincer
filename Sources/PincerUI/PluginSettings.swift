@@ -48,7 +48,7 @@ struct PluginRow: View {
         HStack {
             Image(systemName: "puzzlepiece.extension")
                 .foregroundStyle(self.plugin.enabled ? self.theme.color(.agentAvatar) : .secondary)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(self.plugin.name)
                 if let description = self.plugin.description {
                     Text(description).font(.caption).foregroundStyle(.secondary).lineLimit(1)

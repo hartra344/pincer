@@ -25,11 +25,11 @@ struct SessionUsagePage: View {
         Group {
             if !connected, detail?.totals.value == nil, detail?.timeseries.value == nil, detail?.logs.value == nil {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see this session's usage.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see this session's usage.", bundle: .module))
             } else {
                 Form {
                     Section {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                             Text(title).font(.title3.weight(.semibold)).lineLimit(2).textSelection(.enabled)
                             Text(subtitle).font(.callout).foregroundStyle(.secondary)
                         }
@@ -102,7 +102,7 @@ private struct SessionTotalsSection: View {
         let usage = self.detail.row?.usage
         let totals = usage?.totals ?? .zero
         Section {
-            UsageSectionBody(status: status, unsupported: "This gateway doesn't report usage by session.", height: 120) {
+            UsageSectionBody(status: status, unsupported: "This Gateway doesn't report usage by session.", height: 120) {
                 if totals.isEmpty {
                     Text("No usage in this range.", bundle: .module)
                         .font(.callout)
@@ -121,12 +121,12 @@ private struct SessionTotalsSection: View {
             Section(L("Models")) {
                 ForEach(Array(usage.modelUsage.enumerated()), id: \.offset) { _, item in
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                             Text(UsageNames.model(item.model))
                             Text(UsageNames.provider(item.provider)).font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
+                        VStack(alignment: .trailing, spacing: Theme.Spacing.xxs) {
                             UsageCostText(totals: item.totals)
                             Text("\(UsageFormat.tokens(item.totals.totalTokens)) tokens", bundle: .module)
                                 .font(.caption.monospacedDigit())
@@ -167,7 +167,7 @@ private struct SessionCategoryGrid: View {
         Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
             ForEach(UsageCategory.allCases) { category in
                 GridRow {
-                    HStack(spacing: 6) {
+                    HStack(spacing: Theme.Spacing.sm) {
                         Circle().fill(category.color).frame(width: 8, height: 8).accessibilityHidden(true)
                         Text(category.label)
                     }
@@ -207,7 +207,7 @@ private struct SessionTimeseriesSection: View {
         let unpriced = self.detail.isUnpriced
         let metric = self.metric ?? (unpriced ? .tokens : UsageMetric.preferred(self.detail.row?.usage?.totals))
         Section {
-            UsageSectionBody(status: status, unsupported: "This gateway doesn't report usage over time.",
+            UsageSectionBody(status: status, unsupported: "This Gateway doesn't report usage over time.",
                              isEmpty: points.isEmpty, empty: "No usage recorded for this session yet.", height: 180) {
                 Picker(L("Metric"), selection: Binding(get: { metric }, set: { self.metric = $0 })) {
                     ForEach(UsageMetric.allCases) { Text($0.label).tag($0) }
@@ -248,13 +248,13 @@ private struct SessionTimeseriesChart: View {
                 RuleMark(x: .value("Time", point.timestamp))
                     .foregroundStyle(Color.secondary.opacity(0.3))
                     .annotation(position: .top, spacing: 4, overflowResolution: .init(x: .fit(to: .chart), y: .disabled)) {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                             Text(point.timestamp.formatted(date: .abbreviated, time: .shortened)).font(.caption.weight(.semibold))
                             Text(self.unpriced ? "Cost unknown" : UsageFormat.currency(point.cumulativeCost)).font(.caption.monospacedDigit())
                             Text("\(UsageFormat.tokens(point.cumulativeTokens)) tokens", bundle: .module).font(.caption.monospacedDigit())
                         }
-                        .padding(6)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .padding(Theme.Spacing.sm)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
                     }
                     .accessibilityHidden(true)
             }
@@ -271,7 +271,7 @@ private struct SessionTimeseriesChart: View {
             }
         }
         .frame(height: 180)
-        .padding(.top, 20)
+        .padding(.top, Theme.Spacing.section)
     }
 
     private func value(_ point: UsagePoint) -> Double {
@@ -300,7 +300,7 @@ private struct SessionLogsSection: View {
         let status = UsageSectionStatus(self.detail.logs) { [model] in await model.loadLogs(key) }
         let logs = self.detail.logs.value ?? []
         Section {
-            UsageSectionBody(status: status, unsupported: "This gateway doesn't report session logs.",
+            UsageSectionBody(status: status, unsupported: "This Gateway doesn't report session logs.",
                              isEmpty: logs.isEmpty, empty: "No log entries for this session yet.", emptySymbol: "text.alignleft",
                              height: 120) {
                 ForEach(logs) { SessionLogRow(entry: $0, unpriced: self.detail.isUnpriced) }
@@ -322,14 +322,14 @@ private struct SessionLogRow: View {
 
     var body: some View {
         let entry = self.entry
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             Button { self.expanded.toggle() } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
                     Image(systemName: Self.symbol(entry.role))
                         .foregroundStyle(.secondary)
                         .frame(width: 18)
                         .accessibilityLabel(entry.role.label)
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                         HStack {
                             Text(entry.role.label).font(.caption.weight(.semibold))
                             if let timestamp = entry.timestamp {
@@ -346,7 +346,7 @@ private struct SessionLogRow: View {
                         }
                     }
                     Spacer(minLength: 8)
-                    VStack(alignment: .trailing, spacing: 2) {
+                    VStack(alignment: .trailing, spacing: Theme.Spacing.xxs) {
                         if let tokens = entry.tokens {
                             Text("\(UsageFormat.tokens(tokens)) tokens", bundle: .module).font(.caption.monospacedDigit())
                         }

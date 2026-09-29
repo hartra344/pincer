@@ -70,7 +70,7 @@ private struct AvatarCharacterRow: View {
                 Text(creature.rawValue.capitalized).tag(creature.rawValue)
             }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Spacing.md) {
                 AgentAvatarView(state: .idle, style: style, size: 28, seed: self.agent.id)
                     .accessibilityHidden(true)
                 Text(self.agent.name)

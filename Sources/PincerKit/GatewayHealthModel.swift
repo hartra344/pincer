@@ -563,7 +563,7 @@ public final class GatewayHealthModel {
                 self.beginRestarting(expectedMs: nil)
                 return
             }
-            if Self.isMissingScope(error) {
+            if GatewayError.isMissingScope(error) {
                 self.restartState = .failed(ConfigWriteError.adminRequired.message)
             } else if Self.isUnavailableMethod(error) {
                 self.unavailable.insert(.restart)
@@ -576,22 +576,12 @@ public final class GatewayHealthModel {
 
     // MARK: Errors
 
-    static func isMissingScope(_ error: Error) -> Bool {
-        guard case let GatewayError.rpc(code, message, details) = error else { return false }
-        return code == "MISSING_SCOPE" || details?["code"]?.text == "MISSING_SCOPE"
-            || message.lowercased().contains("missing scope")
-    }
-
     /// UNKNOWN_METHOD, or FORBIDDEN that isn't about a scope this device could get.
-    static func isUnavailableMethod(_ error: Error) -> Bool {
-        if GatewayConfigClient.isUnknownMethod(error) { return true }
-        guard case let GatewayError.rpc(code, _, _) = error else { return false }
-        return code == "FORBIDDEN" && !Self.isMissingScope(error)
-    }
+    static func isUnavailableMethod(_ error: Error) -> Bool { GatewayError.isUnavailable(error) }
 
     public static func message(for error: Error) -> String {
         guard case let GatewayError.rpc(code, message, _) = error else { return error.localizedDescription }
-        if Self.isMissingScope(error) { return ConfigWriteError.adminRequired.message }
+        if GatewayError.isMissingScope(error) { return ConfigWriteError.adminRequired.message }
         switch code {
         case "RATE_LIMITED": return "The Gateway limits how often it restarts. Try again in a minute."
         case "INVALID_REQUEST": return "The Gateway refused the restart: \(message)"
