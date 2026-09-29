@@ -6463,6 +6463,16 @@
         }
       }
     },
+    "Main chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Main chat"
+          }
+        }
+      }
+    },
     "Make them the command owner": {
       "localizations": {
         "en": {

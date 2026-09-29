@@ -140,7 +140,7 @@ private struct MainWindowForLinks: ViewModifier {
 #endif
 
 #if os(macOS)
-/// File ▸ Open Chat in New Window (⌥⌘N) for the main window's chat.
+/// File ▸ Open Chat in New Window (⌥⌘N) for the main window's focused chat.
 struct ChatWindowCommands: Commands {
     let app: AppModel
     @Environment(\.openWindow) private var openWindow
@@ -148,8 +148,10 @@ struct ChatWindowCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .newItem) {
             Button(L("Open Chat in New Window")) {
-                guard let gateway = self.app.selectedGateway, let key = gateway.selectedKey else { return }
+                // The focused side of the split view (#404); opening it in a window closes the split.
+                guard let gateway = self.app.selectedGateway, let key = gateway.focusedKey else { return }
                 ChatWindowOpener.window(self.openWindow)(gateway, key: key)
+                if key == gateway.visibleSplitKey { gateway.closeSplit() }
             }
             .keyboardShortcut("n", modifiers: [.command, .option])
             .disabled(self.app.selectedGateway?.selectedKey == nil)

@@ -1,24 +1,35 @@
 import PincerKit
 import SwiftUI
 
-/// The main window's split view (#48): the selected chat on the left with the window's title and
-/// toolbar, and a second chat on the right with a small header of its own. The left chat keeps its
-/// place in the view tree whether or not the split shows, so opening or closing it doesn't reload it.
+/// The main window's split view (#48): the selected chat on the left and a second chat on the right.
+/// While the split shows, each side has a header of its own with the chat's controls (#427), and the
+/// side that last had focus is the one menu commands act on (#404). The left chat keeps its place in
+/// the view tree whether or not the split shows, so opening or closing it doesn't reload it.
 struct ChatSplitHost: ViewModifier {
     let gateway: GatewayStore
     @AppStorage("pincer.splitFraction") private var fraction = 0.5
-    #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var sizeClass
-    #endif
+    @Environment(\.showsChatSplit) private var showsSplit
+    @FocusedValue(\.chatPane) private var focusedPane
+    @State private var mainHandles = ChatPaneHandles()
 
     func body(content: Content) -> some View {
         GeometryReader { proxy in
             HStack(spacing: 0) {
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if let key = self.splitKey, proxy.size.width >= Self.minWidth * 2 + 1 {
+                VStack(spacing: 0) {
+                    if self.splitKey != nil, let key = self.gateway.selectedKey {
+                        ChatPaneHeader(gateway: self.gateway, key: key, side: .main,
+                                       isFocused: !self.gateway.splitPaneFocused, handles: self.mainHandles)
+                        Divider()
+                    }
+                    content
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .environment(\.chatPaneHandles, self.mainHandles)
+                .environment(\.chatPaneIsActive, self.splitKey == nil || !self.gateway.splitPaneFocused)
+                .focusedValue(\.chatPane, .main)
+                if let key = self.splitKey {
                     SplitDivider(fraction: self.$fraction, totalWidth: proxy.size.width)
-                    SplitChatPane(gateway: self.gateway, key: key)
+                    SplitChatPane(gateway: self.gateway, key: key, isFocused: self.gateway.splitPaneFocused)
                         .id("\(self.gateway.id)|split|\(key)")
                         .frame(width: max(Self.minWidth, proxy.size.width * self.clampedFraction(proxy.size.width)))
                 }
@@ -28,14 +39,17 @@ struct ChatSplitHost: ViewModifier {
         .onChange(of: self.gateway.selectedKey) { old, new in
             if let new, new == self.gateway.splitKey { self.gateway.splitKey = old }
         }
+        // Focus elsewhere (the sidebar, a sheet) leaves the last focused side in charge.
+        .onChange(of: self.focusedPane) { _, pane in
+            guard let pane, self.splitKey != nil else { return }
+            self.gateway.splitPaneFocused = pane == .split
+        }
+        .onChange(of: self.splitKey == nil) { _, hidden in
+            if hidden { self.gateway.splitPaneFocused = false }
+        }
     }
 
-    private var splitKey: String? {
-        #if os(iOS)
-        guard self.sizeClass == .regular else { return nil }
-        #endif
-        return self.gateway.visibleSplitKey
-    }
+    private var splitKey: String? { self.showsSplit ? self.gateway.visibleSplitKey : nil }
 
     static let minWidth: CGFloat = 320
 
@@ -93,14 +107,16 @@ private struct SplitDivider: View {
 private struct SplitChatPane: View {
     let gateway: GatewayStore
     let key: String
+    let isFocused: Bool
     @Environment(AppModel.self) private var app
     @Environment(\.appTheme) private var theme
+    @State private var handles = ChatPaneHandles()
 
     private var ref: ChatWindowRef { ChatWindowRef(gatewayId: self.gateway.id, sessionKey: self.key) }
 
     var body: some View {
         VStack(spacing: 0) {
-            SplitPaneHeader(gateway: self.gateway, key: self.key)
+            ChatPaneHeader(gateway: self.gateway, key: self.key, side: .split, isFocused: self.isFocused, handles: self.handles)
             Divider()
             ZStack {
                 ChatView(chat: self.gateway.chat(for: self.key))
@@ -109,47 +125,11 @@ private struct SplitChatPane: View {
         }
         .background { self.theme.background(.chatBackground)?.ignoresSafeArea() }
         .environment(\.chatWindowKey, self.key)
+        .environment(\.chatPaneHandles, self.handles)
+        .environment(\.chatPaneIsActive, self.isFocused)
+        .focusedValue(\.chatPane, .split)
         .onAppear { self.app.chatWindowOpened(self.ref) }
         .onDisappear { self.app.chatWindowClosed(self.ref) }
         .modifier(ChatWindowVisibility(gateway: self.gateway, key: self.key))
-    }
-}
-
-private struct SplitPaneHeader: View {
-    let gateway: GatewayStore
-    let key: String
-    @Environment(\.openChatWindow) private var openChatWindow
-
-    var body: some View {
-        let row = self.gateway.sessions[self.key]
-        HStack(spacing: Theme.Spacing.md) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(row?.title ?? SessionKey.agentId(from: self.key) ?? L("Chat"))
-                    .font(.headline)
-                    .lineLimit(1)
-                Text(self.gateway.agent(row?.agentId ?? SessionKey.agentId(from: self.key) ?? "main").name)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: Theme.Spacing.md)
-            Button(L("Swap Chats"), systemImage: "arrow.left.arrow.right") { self.gateway.swapSplit() }
-                .help(L("Swap Chats"))
-            if self.openChatWindow.isAvailable {
-                Button(L("Open in New Window"), systemImage: "macwindow.badge.plus") {
-                    self.openChatWindow(self.gateway, key: self.key)
-                    self.gateway.closeSplit()
-                }
-                .help(L("Open in New Window"))
-            }
-            Button(L("Close Split View"), systemImage: "xmark") { self.gateway.closeSplit() }
-                .help(L("Close Split View"))
-        }
-        .labelStyle(.iconOnly)
-        .buttonStyle(.borderless)
-        .padding(.horizontal, Theme.Spacing.lg)
-        .padding(.vertical, Theme.Spacing.md)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(L("Split view chat"))
     }
 }

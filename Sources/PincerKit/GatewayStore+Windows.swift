@@ -45,14 +45,43 @@ extension GatewayStore {
         self.splitKey = key
     }
 
-    /// Swaps the two chats of the split view.
+    /// Swaps the two chats of the split view. Focus stays with the chat, so it moves sides too.
     public func swapSplit() {
         guard let split = self.visibleSplitKey, let selected = self.selectedKey else { return }
+        let rightFocused = self.splitPaneFocused
         self.splitKey = selected
         self.selectedKey = split
+        self.splitPaneFocused = !rightFocused
     }
 
-    public func closeSplit() { self.splitKey = nil }
+    public func closeSplit() {
+        self.splitKey = nil
+        self.splitPaneFocused = false
+    }
+
+    /// The chat that menu commands and the window's chat controls act on (#404): the split view's
+    /// right-hand chat while it has focus, else the selected chat.
+    public var focusedKey: String? {
+        if self.splitPaneFocused, let split = self.visibleSplitKey { return split }
+        return self.selectedKey
+    }
+
+    /// A chat's title as last seen, for headers shown before the sessions list arrives (#407).
+    public func cachedTitle(for key: String) -> String? {
+        (self.defaults.dictionary(forKey: self.titleCacheKey) as? [String: String])?[key]
+    }
+
+    /// Remembers the titles of the chats on screen in the main window; only those are kept.
+    public func rememberTitle(_ title: String, for key: String) {
+        var titles = (self.defaults.dictionary(forKey: self.titleCacheKey) as? [String: String]) ?? [:]
+        guard titles[key] != title else { return }
+        let keep: Set<String> = [key, self.selectedKey, self.splitKey].reduce(into: []) { if let k = $1 { $0.insert(k) } }
+        titles = titles.filter { keep.contains($0.key) }
+        titles[key] = title
+        self.defaults.set(titles, forKey: self.titleCacheKey)
+    }
+
+    private var titleCacheKey: String { "pincer.paneTitles.\(self.id.uuidString)" }
 }
 
 extension AppModel {

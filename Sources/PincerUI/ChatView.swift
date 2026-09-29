@@ -34,6 +34,8 @@ struct ChatView: View {
     @State private var find = TranscriptFind()
     @State private var jump: TranscriptJump?
     @State private var exportState = ChatExportState()
+    @Environment(\.chatPaneIsActive) private var paneIsActive
+    @Environment(\.chatPaneHandles) private var paneHandles
     #if os(iOS)
     @State private var sharedFile: SharedFile?
     #endif
@@ -111,8 +113,13 @@ struct ChatView: View {
         .task(id: self.chat.sessionKey) {
             await self.chat.load()
         }
-        .focusedSceneValue(\.transcriptFind, self.find)
-        .focusedSceneValue(\.chatExport, self.exportState)
+        // In the split view only the focused side answers menu commands (#404).
+        .focusedSceneValue(\.transcriptFind, self.paneIsActive ? self.find : nil)
+        .focusedSceneValue(\.chatExport, self.paneIsActive ? self.exportState : nil)
+        .onAppear {
+            self.paneHandles?.find = self.find
+            self.paneHandles?.export = self.exportState
+        }
         .sheet(isPresented: self.$exportState.showExport) {
             ExportSheet(chat: self.chat, title: self.row?.title ?? L("Chat"), agentName: self.agent.name,
                         agents: self.gateway.agents) { name, data in
@@ -133,7 +140,7 @@ struct ChatView: View {
                 self.jump = TranscriptJump(id: UUID(), messageId: bookmark.messageId)
             }
         }
-        .focusedSceneValue(\.replyToLast, ReplyToLast(chat: self.chat, agentName: self.agent.name))
+        .focusedSceneValue(\.replyToLast, self.paneIsActive ? ReplyToLast(chat: self.chat, agentName: self.agent.name) : nil)
         .task(id: self.chat.notice) {
             guard self.chat.notice != nil else { return }
             try? await Task.sleep(for: .seconds(4))
@@ -437,9 +444,17 @@ private struct QuestionsAnimation: ViewModifier {
 /// The selected chat's title and toolbar items. Applied outside `ChatView`'s per-chat `.id`:
 /// when they come and go with it, macOS rebuilds the window toolbar on every chat switch and all
 /// of its buttons flash, the sidebar's included.
+///
+/// While the main window shows its split view, each side's header has its chat's controls (#427):
+/// the toolbar items stay but show nothing, and the title follows the focused side (#404).
 struct ChatChrome: ViewModifier {
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.chatWindowKey) private var windowKey
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+    /// Whether the window is wide enough for both sides of the split view.
+    @State private var fitsSplit = false
     /// Per window, and kept across chat switches.
     @State private var showRuns = false
     /// The "Tools & Policy…" sheet. Held here, not on the toolbar menu, so a menu re-render or the
@@ -450,33 +465,51 @@ struct ChatChrome: ViewModifier {
     /// empty the title and toolbar items. Only ever a row of the selected chat, never a previous one.
     @State private var lastRow: SessionRow?
 
-    private var key: String? { self.windowKey ?? self.gateway.selectedKey }
+    private var key: String? { self.windowKey ?? self.gateway.focusedKey }
     private var row: SessionRow? {
         if let key, let current = self.gateway.sessions[key] { return current }
         return self.lastRow.flatMap { $0.key == self.key ? $0 : nil }
     }
 
+    private var showsSplit: Bool {
+        guard self.windowKey == nil else { return false }
+        #if os(iOS)
+        let regular = self.sizeClass == .regular
+        #else
+        let regular = true
+        #endif
+        return regular && self.fitsSplit && self.gateway.visibleSplitKey != nil
+    }
+
     func body(content: Content) -> some View {
+        let split = self.showsSplit
         content
-            .navigationTitle(self.row?.title ?? self.key.flatMap(SessionKey.agentId(from:)) ?? "Chat")
+            .environment(\.showsChatSplit, split)
+            .environment(\.chatChromeActions, ChatChromeActions(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector))
+            .onGeometryChange(for: Bool.self) { $0.size.width >= ChatSplitHost.minWidth * 2 + 1 } action: { self.fitsSplit = $0 }
+            .navigationTitle(self.key.map { chatTitle(self.gateway, key: $0, row: self.row) } ?? L("Chat"))
             #if os(macOS)
-            .navigationSubtitle(self.subtitle)
+            .navigationSubtitle(split ? "" : self.subtitle)
             #else
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            // Each side's header has its title instead (#427).
+            .toolbar(removing: split ? .title : nil)
             .toolbar {
                 #if os(macOS)
-                ToolbarItem(placement: .navigation) { ChatHeaderAvatar() }
+                ToolbarItem(placement: .navigation) { if !split { ChatHeaderAvatar() } }
                 #else
-                ToolbarItem(placement: .topBarLeading) { ChatHeaderAvatar() }
+                ToolbarItem(placement: .topBarLeading) { if !split { ChatHeaderAvatar() } }
                 #endif
-                ToolbarItem(placement: .primaryAction) { ChatModelItem(row: self.row) }
-                ToolbarItem(placement: .primaryAction) { ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector, row: self.row) }
+                ToolbarItem(placement: .primaryAction) { ChatModelItem(row: split ? nil : self.row) }
+                ToolbarItem(placement: .primaryAction) {
+                    ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector, row: split ? nil : self.row)
+                }
             }
             .sheet(item: self.$toolsInspector) { inspection in
                 ChatToolsInspectorSheet(model: inspection.model, scopeTitle: inspection.scopeTitle, gateway: self.gateway)
             }
-            .modifier(RunsPanelChrome(isPresented: self.$showRuns))
+            .modifier(RunsPanelChrome(isPresented: self.$showRuns, showsToolbarButton: !split))
             .onChange(of: self.key.flatMap { self.gateway.sessions[$0] }, initial: true) { _, row in
                 if let row { self.lastRow = row }
             }
@@ -503,34 +536,54 @@ private struct ChatModelItem: View {
     }
 }
 
-private struct ChatSessionMenu: View {
+/// The chat's options. In the window toolbar it acts on the focused chat; in a split view header,
+/// on that side's chat, through its `handles`.
+struct ChatSessionMenu: View {
     @Binding var showRuns: Bool
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
-    @FocusedValue(\.transcriptFind) private var find
-    @FocusedValue(\.chatExport) private var chatExport
+    @FocusedValue(\.transcriptFind) private var focusedFind
+    @FocusedValue(\.chatExport) private var focusedExport
     @Binding var toolsInspector: ChatToolsInspection?
     let row: SessionRow?
+    var handles: ChatPaneHandles?
+    /// Called before an item acts, so a split view side takes focus first.
+    var willAct: () -> Void = {}
+
+    private var find: TranscriptFind? { self.handles == nil ? self.focusedFind : self.handles?.find }
+    private var chatExport: ChatExportState? { self.handles == nil ? self.focusedExport : self.handles?.export }
 
     var body: some View {
         if let row {
             Menu {
-                Button(L("Find in Chat"), systemImage: "magnifyingglass") { self.find?.present() }
+                Button(L("Find in Chat"), systemImage: "magnifyingglass") {
+                    self.willAct()
+                    self.find?.present()
+                }
                 Divider()
                 Button(row.isPinned ? L("Unpin") : L("Pin"), systemImage: row.isPinned ? "pin.slash" : "pin") {
                     Task { await self.gateway.patch(row.key, ["pinned": .bool(!row.isPinned)]) }
                 }
                 ThinkingDisplayPicker()
                 ReasoningMenu(row: row)
-                ShowRunsButton(isPresented: self.$showRuns)
+                ShowRunsButton(isPresented: Binding(get: { self.showRuns }, set: {
+                    self.willAct()
+                    self.showRuns = $0
+                }))
                 Divider()
                 Button(L("Reload"), systemImage: "arrow.clockwise") {
                     Task { await self.gateway.chat(for: row.key).load(force: true) }
                 }
                 Button(L("Copy Session Key"), systemImage: "key") { Clipboard.copy(row.key) }
                 CopyChatLinkButton(sessionKey: row.key)
-                Button(L("Export Chat…"), systemImage: "square.and.arrow.up") { self.chatExport?.showExport = true }
-                Button(L("Bookmarks…"), systemImage: "star") { self.chatExport?.showBookmarks = true }
+                Button(L("Export Chat…"), systemImage: "square.and.arrow.up") {
+                    self.willAct()
+                    self.chatExport?.showExport = true
+                }
+                Button(L("Bookmarks…"), systemImage: "star") {
+                    self.willAct()
+                    self.chatExport?.showBookmarks = true
+                }
                 Button(L("Session Usage…"), systemImage: "chart.bar") {
                     self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
                 }

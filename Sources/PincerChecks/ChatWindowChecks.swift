@@ -35,8 +35,17 @@ func runDemoChatWindows() async {
     check(candidate != nil && candidate != main && demo.sessions[candidate ?? ""] != nil, "split candidate is another listed chat (\(candidate ?? "none"))")
     demo.openInSplit(key)
     check(demo.splitKey == key && demo.visibleSplitKey == key, "openInSplit shows the chat beside the selection")
+    check(demo.focusedKey == main, "the selected chat has focus until the split side takes it")
+    demo.splitPaneFocused = true
+    check(demo.focusedKey == key, "focusing the split side points commands at its chat (#404)")
     demo.swapSplit()
     check(demo.selectedKey == key && demo.visibleSplitKey == main, "swapSplit trades the two chats")
+    check(demo.focusedKey == key && !demo.splitPaneFocused, "swapSplit keeps focus on the same chat")
+    demo.splitPaneFocused = true
+    demo.selectedKey = main
+    check(!demo.splitPaneFocused, "picking a chat in the sidebar focuses the selected side")
+    demo.rememberTitle("Cached title", for: key)
+    check(demo.cachedTitle(for: key) == "Cached title", "a split side's title is remembered for relaunch (#407)")
     demo.closeSplit()
-    check(demo.visibleSplitKey == nil && demo.splitKey == nil, "closeSplit clears the split")
+    check(demo.visibleSplitKey == nil && demo.splitKey == nil && demo.focusedKey == demo.selectedKey, "closeSplit clears the split")
 }
