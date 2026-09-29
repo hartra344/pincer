@@ -40,13 +40,14 @@ public struct PincerScene: Scene {
                     self.app.firstRun.present()
                     QuickCaptureController.shared.showMainWindow()
                 }
+                .shortcut(.addGateway)
             }
             CommandGroup(after: .sidebar) {
                 Button(L("Next Unread Chat")) { self.app.selectNextUnread() }
-                    .keyboardShortcut(.downArrow, modifiers: [.option, .shift])
+                    .shortcut(.nextUnreadChat)
                 Divider()
                 Button(L("Reload Pincer")) { AppRelauncher.relaunch() }
-                    .keyboardShortcut("r", modifiers: .command)
+                    .shortcut(.reloadPincer)
             }
         }
         #endif
@@ -357,6 +358,9 @@ struct SettingsView: View {
             Tab("Notifications", systemImage: "bell.badge") {
                 SettingsForm(sections: SettingsForm.Section.notificationsTab)
             }
+            Tab(L("Shortcuts"), systemImage: "keyboard") {
+                SettingsForm(sections: SettingsForm.Section.shortcutsTab)
+            }
         }
         .frame(width: 520)
         #else
@@ -419,7 +423,7 @@ enum ReactionFeature {
 
 struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, sidebar, notifications, device, storage, tips
+        case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, sidebar, notifications, keyboardShortcuts, device, storage, tips
 
         /// Sections that exist on this platform.
         static var available: [Self] {
@@ -435,8 +439,9 @@ struct SettingsForm: View {
         static let appearanceTab: [Self] = [.appearance, .avatars, .colors]
         static let conversationTab: [Self] = [.conversation, .sidebar]
         static let notificationsTab: [Self] = [.notifications]
+        static let shortcutsTab: [Self] = [.keyboardShortcuts]
         /// The Settings window's tabs, in order.
-        static let macTabs = [generalTab, appearanceTab, conversationTab, notificationsTab]
+        static let macTabs = [generalTab, appearanceTab, conversationTab, notificationsTab, shortcutsTab]
         #endif
     }
 
@@ -552,6 +557,19 @@ struct SettingsForm: View {
             }
         case .notifications:
             NotificationSettingsSection()
+        case .keyboardShortcuts:
+            #if os(macOS)
+            KeyboardShortcutsSettingsSections()
+            #else
+            // iPad with a hardware keyboard; iPhone has no menu commands to rebind.
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                SwiftUI.Section {
+                    NavigationLink(L("Keyboard Shortcuts")) { KeyboardShortcutsSettingsPage() }
+                } footer: {
+                    Text("For a hardware keyboard.", bundle: .module)
+                }
+            }
+            #endif
         case .device:
             SwiftUI.Section(L("This device")) {
                 LabeledContent(L("Device ID")) {

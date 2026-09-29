@@ -94,7 +94,7 @@ struct Composer: View {
                     .buttonStyle(.plain)
                     .composerControl()
                     .help(Text("Stop the current run", bundle: .module))
-                    .keyboardShortcut(".", modifiers: .command)
+                    .shortcut(.stopRun)
                     .accessibilityLabel(Text("Stop", bundle: .module))
                     .transition(.scale.combined(with: .opacity))
                 }
