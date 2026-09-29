@@ -66,6 +66,8 @@ struct TranscriptContext {
     var chat: ChatStore?
     /// Starts a reply to a message in the composer. Provided by `ChatView`.
     var reply: (String) -> Void = { _ in }
+    /// Copies a `pincer://` link to a message. Provided by `ChatView`.
+    var copyLink: (String) -> Void = { _ in }
 
     func differs(from other: TranscriptContext) -> Bool {
         self.agent != other.agent || self.sessionKey != other.sessionKey || self.disclosure !== other.disclosure
@@ -95,6 +97,8 @@ protocol TranscriptRowActions: AnyObject {
     func saveFile(_ file: FileRef) async -> Bool
     /// Starts a reply to the message in the composer.
     func reply(to messageId: String)
+    /// Copies a link that opens the chat scrolled to the message.
+    func copyLink(to messageId: String)
     /// Adds your reaction, or removes it when it's already there.
     var reactionsEnabled: Bool { get }
     func toggleReaction(_ emoji: String, on messageId: String)
@@ -537,6 +541,10 @@ final class TranscriptRenderer: TranscriptRowActions {
         guard let data = await context.gateway.files.data(for: file, sessionKey: context.sessionKey) else { return false }
         context.saveFile(file, data)
         return true
+    }
+
+    func copyLink(to messageId: String) {
+        self.context.copyLink(messageId)
     }
 
     func reply(to messageId: String) {

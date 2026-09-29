@@ -99,9 +99,20 @@ struct CopyChatLinkButton: View {
 
     var body: some View {
         Button("Copy Link to Chat", systemImage: "link") {
-            Clipboard.copy(url: self.app.route(for: Notifier.Target(gatewayId: self.gateway.id, sessionKey: self.sessionKey)).url)
-            self.gateway.chat(for: self.sessionKey).notice = PincerRoute.Notice.linkCopied
+            Self.copyLink(app: self.app, gateway: self.gateway, sessionKey: self.sessionKey)
         }
+    }
+
+    /// Copies a link to the chat, or to one of its messages (#136), and says so in the chat.
+    @MainActor
+    static func copyLink(app: AppModel, gateway: GatewayStore, sessionKey: String, messageId: String? = nil) {
+        Clipboard.copy(url: self.link(app: app, gateway: gateway, sessionKey: sessionKey, messageId: messageId))
+        gateway.chat(for: sessionKey).notice = PincerRoute.Notice.linkCopied
+    }
+
+    @MainActor
+    static func link(app: AppModel, gateway: GatewayStore, sessionKey: String, messageId: String? = nil) -> URL {
+        app.route(for: Notifier.Target(gatewayId: gateway.id, sessionKey: sessionKey), messageId: messageId).url
     }
 }
 
