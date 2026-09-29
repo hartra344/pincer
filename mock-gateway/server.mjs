@@ -11,6 +11,7 @@ import { CONFIG_METHODS, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, handleCronRequest } from './cron.mjs';
 import { LOGS_METHODS, handleLogsRequest, logsDisabled, stopLogs } from './logs.mjs';
 import { EXEC_APPROVALS_METHODS, execApprovalsDisabled, handleExecApprovalsRequest } from './exec-approvals.mjs';
+import { TTS_METHODS, handleTtsRequest, ttsDisabled } from './tts.mjs';
 import { handleUsageRequest, USAGE_METHODS, usageDisabled } from './usage.mjs';
 import { CHANNEL_PAIRING_METHODS, addChannelPairingRequest, channelPairingDisabled, handleChannelPairingRequest } from './pairing.mjs';
 import { RATE_LIMIT_RETRY_AFTER_MS, checkConnectAuth, pairingRequiredError, rejectConnectAuth, rejectPendingDevice } from './connect-auth.mjs';
@@ -60,6 +61,7 @@ const METHODS = [
   ...APPROVAL_HISTORY_METHODS,
   ...EXEC_APPROVALS_METHODS,
   ...USAGE_METHODS,
+  ...TTS_METHODS,
   'question.list',
   'question.resolve',
   'users.prefs.get',
@@ -184,6 +186,7 @@ function advertisedMethods() {
     ...(devicePairingDisabled() ? DEVICE_PAIRING_METHODS : []),
     ...(nodesDisabled() ? NODE_METHODS : []),
     ...(usageDisabled() ? USAGE_METHODS : []),
+    ...(ttsDisabled() ? TTS_METHODS : []),
     ...(logsDisabled() ? LOGS_METHODS : []),
     ...(mcpDisabled() ? MCP_METHODS : []),
     ...hiddenSessionManagerMethods(),
@@ -218,6 +221,7 @@ const REQUEST_HANDLERS = [
   (state, conn, msg) => handleExecApprovalsRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleAgentsRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
   (state, conn, msg) => handleSkillsRequest(state, conn, msg, { sendRes, sendErr }),
+  (state, conn, msg) => handleTtsRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleUsageRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleChannelPairingRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleSetupRequest(state, conn, msg, { sendRes, sendErr, broadcast, healthSummary }),

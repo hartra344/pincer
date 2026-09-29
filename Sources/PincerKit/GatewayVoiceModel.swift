@@ -1,0 +1,183 @@
+import Foundation
+import Observation
+
+/// Gateway text-to-speech for one Gateway: `tts.status/providers/personas` for the Voice settings
+/// page, and `tts.speak` for Read Aloud. Pincer never calls `tts.convert` (it returns a path on the
+/// Gateway host, which a remote client can't read).
+@MainActor @Observable
+public final class GatewayVoiceModel {
+    public typealias Request = @MainActor (_ method: String, _ params: JSONValue) async throws -> JSONValue
+
+    public static let statusMethod = "tts.status"
+    public static let providersMethod = "tts.providers"
+    public static let personasMethod = "tts.personas"
+    public static let enableMethod = "tts.enable"
+    public static let disableMethod = "tts.disable"
+    public static let setProviderMethod = "tts.setProvider"
+    public static let setPersonaMethod = "tts.setPersona"
+    public static let speakMethod = "tts.speak"
+    public static let writeScope = "operator.write"
+
+    public private(set) var status: TTSStatus?
+    public private(set) var providers: [TTSProvider] = []
+    public private(set) var personas: [TTSPersona] = []
+    public private(set) var activePersona: String?
+    public private(set) var loadError: String?
+    public private(set) var isLoading = false
+    /// Methods the Gateway answered with unknown-method.
+    public private(set) var rejectedMethods: Set<String> = []
+
+    @ObservationIgnored private let request: Request
+    @ObservationIgnored private let methods: @MainActor () -> Set<String>?
+    @ObservationIgnored private let scopes: @MainActor () -> [String]
+    @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
+    @ObservationIgnored private var generation = 0
+
+    init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool) {
+        self.request = { method, params in try await connection.request(method, params, timeout: 30) }
+        self.methods = { hello()?.methods }
+        self.scopes = { hello()?.scopes ?? [] }
+        self.allowsWritesWithoutAdmin = allowsWritesWithoutAdmin
+    }
+
+    /// For checks and tests. `methods` is the advertised list (nil or empty when unknown).
+    public init(methods: @escaping @MainActor () -> Set<String>? = { nil },
+                scopes: @escaping @MainActor () -> [String] = { [GatewayConnection.adminScope] },
+                allowsWritesWithoutAdmin: Bool = false,
+                request: @escaping Request)
+    {
+        self.request = request
+        self.methods = methods
+        self.scopes = scopes
+        self.allowsWritesWithoutAdmin = allowsWritesWithoutAdmin
+    }
+
+    /// Whether the Gateway has `method`: advertised (or the list is unknown) and not rejected.
+    public func supports(_ method: String) -> Bool {
+        if self.rejectedMethods.contains(method) { return false }
+        guard let methods = self.methods(), !methods.isEmpty else { return true }
+        return methods.contains(method)
+    }
+
+    /// Whether the Voice settings page applies.
+    public var supportsStatus: Bool { self.supports(Self.statusMethod) }
+
+    /// `operator.write` (or admin), or the demo.
+    public var canWrite: Bool {
+        if self.allowsWritesWithoutAdmin { return true }
+        let scopes = self.scopes()
+        return scopes.contains(Self.writeScope) || scopes.contains(GatewayConnection.adminScope)
+    }
+
+    /// Whether Read Aloud's automatic mode should use the Gateway voice: `tts.speak` is available, this
+    /// connection may write, and (once status has loaded) some provider is configured.
+    public var canSpeak: Bool {
+        guard self.supports(Self.speakMethod), self.canWrite else { return false }
+        guard let status = self.status else { return true }
+        return status.providerStates.isEmpty || status.providerStates.contains { $0.configured }
+    }
+
+    public func refresh() async {
+        self.generation += 1
+        let generation = self.generation
+        self.isLoading = true
+        self.loadError = nil
+        defer { if generation == self.generation { self.isLoading = false } }
+        var firstError: String?
+        if self.supports(Self.statusMethod) {
+            do {
+                let result = try await self.call(Self.statusMethod)
+                guard generation == self.generation else { return }
+                if let status = TTSStatus(result) {
+                    self.status = status
+                    self.activePersona = status.persona
+                    if self.personas.isEmpty { self.personas = status.personas }
+                }
+            } catch { firstError = firstError ?? Self.message(error) }
+        }
+        if self.supports(Self.providersMethod) {
+            do {
+                let result = try await self.call(Self.providersMethod)
+                guard generation == self.generation else { return }
+                self.providers = result["providers"]?.array?.compactMap(TTSProvider.init) ?? []
+            } catch { firstError = firstError ?? Self.message(error) }
+        }
+        if self.supports(Self.personasMethod) {
+            do {
+                let result = try await self.call(Self.personasMethod)
+                guard generation == self.generation else { return }
+                self.personas = result["personas"]?.array?.compactMap(TTSPersona.init) ?? []
+                if let active = result["active"]?.text, !active.isEmpty { self.activePersona = active }
+            } catch { firstError = firstError ?? Self.message(error) }
+        }
+        guard generation == self.generation else { return }
+        self.loadError = firstError
+    }
+
+    /// `tts.enable` / `tts.disable`: whether the Gateway attaches spoken audio to every channel reply.
+    public func setAutoSpeakChannels(_ on: Bool) async throws {
+        let result = try await self.call(on ? Self.enableMethod : Self.disableMethod)
+        let enabled = result["enabled"]?.bool ?? on
+        if var status = self.status {
+            status.enabled = enabled
+            status.auto = enabled ? "always" : "off"
+            self.status = status
+        }
+    }
+
+    public func setProvider(_ id: String) async throws {
+        let result = try await self.call(Self.setProviderMethod, ["provider": .string(id)])
+        let provider = result["provider"]?.text ?? id
+        if var status = self.status {
+            status.provider = provider
+            self.status = status
+        }
+    }
+
+    /// `nil` clears the persona (the Gateway takes "off").
+    public func setPersona(_ id: String?) async throws {
+        let result = try await self.call(Self.setPersonaMethod, ["persona": .string(id ?? "off")])
+        let persona = result["persona"]?.text
+        self.activePersona = persona?.isEmpty == false ? persona : nil
+        if var status = self.status {
+            status.persona = self.activePersona
+            self.status = status
+        }
+    }
+
+    /// `tts.speak`. Text longer than the Gateway allows is the caller's to truncate.
+    public func speak(_ text: String) async throws -> TTSClip {
+        let result = try await self.call(Self.speakMethod, ["text": .string(text)])
+        guard let clip = TTSClip(result) else {
+            throw GatewayError.rpc(code: "UNAVAILABLE", message: "The Gateway returned no audio.", details: nil)
+        }
+        return clip
+    }
+
+    public func handleReconnect() {
+        self.generation += 1
+        self.status = nil
+        self.providers = []
+        self.personas = []
+        self.activePersona = nil
+        self.loadError = nil
+        self.isLoading = false
+        self.rejectedMethods = []
+    }
+
+    private func call(_ method: String, _ params: JSONValue = [:]) async throws -> JSONValue {
+        do {
+            return try await self.request(method, params)
+        } catch {
+            if GatewayError.isUnknownMethod(error) { self.rejectedMethods.insert(method) }
+            throw error
+        }
+    }
+
+    public static func message(_ error: Error) -> String {
+        if GatewayError.isMissingScope(error) { return L("This device needs write access to change voice settings.") }
+        if GatewayError.isUnknownMethod(error) { return L("This Gateway doesn't support voice.") }
+        if case let GatewayError.rpc(_, message, _) = error { return message }
+        return error.localizedDescription
+    }
+}

@@ -20,6 +20,7 @@ const SECTIONS = [
   'logs',
   'exec-approvals-variants',
   'usage',
+  'tts',
   'channel-pairing',
   'health',
   'setup',
