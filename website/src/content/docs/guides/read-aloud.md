@@ -7,9 +7,9 @@ Pincer can read an agent's reply out loud. It uses your gateway's text-to-speech
 
 ## Read a reply aloud
 
-Right-click a reply (Mac) or long-press it (iPhone and iPad) and choose **Read Aloud**. While it's speaking, a **Speaking** pill appears at the bottom of the chat. Tap it, or choose **Stop Reading** from the same menu, to stop.
+Right-click a reply (Mac) or long-press it (iPhone and iPad) and choose **Read Aloud**. While it's speaking, a **Speaking** pill appears at the bottom of the chat. Tap it, or choose **Stop Reading Aloud** from the same menu, to stop.
 
-On a Mac, **Read Last Reply Aloud** (<kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>R</kbd>) reads the latest reply in the chat you're looking at. Press it again to stop.
+On a Mac, **Read Last Reply Aloud** (<kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>L</kbd>) reads the latest reply in the chat you're looking at. Press it again to stop.
 
 Only one reply speaks at a time. Starting another one stops the first.
 
@@ -42,9 +42,9 @@ Sending text to the gateway's voice needs write access. If you connected with a 
 Open **Settings** and find the **Read Aloud** section. On a Mac it's on the **Conversation** tab.
 
 - **Voice**: **Automatic** uses the gateway voice when there is one. **This Device Only** always uses the device voice, so the text of replies never goes back to the gateway to be spoken.
-- **Device voice** and **Speaking rate** set the voice used when the device speaks. Pick **System Default** to follow your system language.
-- **Read new replies aloud** speaks each new reply as it finishes in the chat you have open. It doesn't read old messages, chats in the background or history loading in. It stays quiet while VoiceOver is running, so the two don't talk over each other.
-- **Test** plays a short sentence with your current settings.
+- **Device Voice** and **Speaking Rate** set the voice used when the device speaks. Pick **System Default** to follow your system language.
+- **Read New Replies Aloud** speaks an agent's final reply when a run finishes successfully in the chat you have open. It doesn't read old messages, chats in the background or history loading in. It stays quiet while VoiceOver is running, so the two don't talk over each other.
+- **Test Device Voice** plays a short sentence with your device voice and speaking rate.
 
 ## Gateway voice settings
 
@@ -52,7 +52,7 @@ The gateway's own speech settings are in **Gateway Settings → Voice**. They're
 
 - **Provider**: which text-to-speech service the gateway uses. Providers that aren't set up on the gateway are listed but can't be picked.
 - **Persona**: a named voice style set up on the gateway, or **None**.
-- **Speak replies on channels**: makes the gateway attach a spoken version to every reply it sends on your channels (Telegram, WhatsApp and so on). You don't need it for **Read Aloud** in Pincer.
+- **Speak Replies on Channels**: makes the gateway attach a spoken version to every reply it sends on your channels (Telegram, WhatsApp and so on). You don't need it for **Read Aloud** in Pincer.
 
 The page only appears if your gateway has text-to-speech, and changing it needs write access.
 
