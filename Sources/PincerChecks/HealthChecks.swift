@@ -140,6 +140,37 @@ func checkGatewayHealth() async {
     await model.refresh()
     check(Set(sent.map(\.0)) == ["health", "last-heartbeat"], "refresh skips presence")
 
+    // Quiet baseline (#219): initial issues stay out of the indicator until viewed; new ones still show.
+    final class HealthReply { var body = #"{"channels":{"telegram":{"connected":false}},"heartbeatSeconds":0}"# }
+    let quietReply = HealthReply()
+    func quietModel(_ quiet: Bool) -> GatewayHealthModel {
+        let m = GatewayHealthModel(scopes: { admin }) { method, _ in
+            switch method {
+            case "health": return json(quietReply.body)
+            case "last-heartbeat": return .null
+            default: return []
+            }
+        }
+        m.quietsInitialIssues = quiet
+        return m
+    }
+    let loud = quietModel(false)
+    await loud.load()
+    check(loud.indicator == .degraded(issues: 1) && loud.quietedIssueIds.isEmpty, "quiet flag off: indicator shows as before")
+    let quieted = quietModel(true)
+    await quieted.load()
+    check(quieted.level == .degraded && quieted.activeIssues.count == 1 && quieted.indicator == nil && quieted.quietedIssueIds.count == 1
+          && !quieted.quietsInitialIssues, "quiet baseline: degraded level, no indicator, baseline captured once")
+    quietReply.body = #"{"channels":{"telegram":{"connected":false},"discord":{"connected":false}},"heartbeatSeconds":0}"#
+    await quieted.refresh()
+    check(quieted.level == .degraded && quieted.activeIssues.count == 2 && quieted.indicator == .degraded(issues: 1),
+          "quiet baseline: a new issue counts alone (\(String(describing: quieted.indicator)))")
+    await quieted.load()
+    check(quieted.quietedIssueIds.count == 1 && quieted.indicator == .degraded(issues: 1), "baseline not recaptured on reload")
+    quieted.markIssuesViewed()
+    check(quieted.quietedIssueIds.isEmpty && quieted.indicator == .degraded(issues: 2) && quieted.level == .degraded,
+          "markIssuesViewed restores the full count")
+
     check(model.canRestart && !model.canForceRestart, "admin can restart")
     sent = []
     await model.restart()

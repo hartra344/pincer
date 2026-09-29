@@ -249,6 +249,8 @@ public enum SetupTips {
     }
 
     public static let seenKey = "pincer.tips.seen.v1"
+    /// How long the card waits after it becomes eligible, so it doesn't land on top of the first chat.
+    public static let presentationDelay: Duration = .seconds(6)
 
     public static let all: [Tip] = [
         Tip(id: "slash", text: "Type / in the composer for slash commands.", symbol: "slash.circle", usesKeyboard: false),
@@ -288,12 +290,17 @@ public final class TipsModel {
     public static let shared = TipsModel(defaults: .standard)
 
     public private(set) var isPresented = false
+    /// Eligible and waiting out the presentation delay.
+    public private(set) var isPending = false
     public private(set) var hasSeen: Bool
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let delay: Duration
     @ObservationIgnored private var shownThisLaunch = false
+    @ObservationIgnored private var pendingTask: Task<Void, Never>?
 
-    public init(defaults: UserDefaults) {
+    public init(defaults: UserDefaults, delay: Duration = SetupTips.presentationDelay) {
         self.defaults = defaults
+        self.delay = delay
         self.hasSeen = defaults.bool(forKey: SetupTips.seenKey)
     }
 
@@ -303,14 +310,41 @@ public final class TipsModel {
             if setupShowingOrPending { self.isPresented = false }
             return
         }
+        if self.isPending {
+            if setupShowingOrPending || !connected { self.cancelPending() }
+            return
+        }
         guard SetupTips.shouldShow(seen: self.hasSeen, connected: connected, setupShowingOrPending: setupShowingOrPending,
                                    isDemo: isDemo, shownThisLaunch: self.shownThisLaunch) else { return }
+        guard self.delay > .zero else {
+            self.present()
+            return
+        }
+        self.isPending = true
+        let delay = self.delay
+        self.pendingTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self, self.isPending else { return }
+            self.present()
+        }
+    }
+
+    private func present() {
+        self.pendingTask = nil
+        self.isPending = false
         self.shownThisLaunch = true
         self.isPresented = true
     }
 
+    private func cancelPending() {
+        self.pendingTask?.cancel()
+        self.pendingTask = nil
+        self.isPending = false
+    }
+
     /// "Got It".
     public func dismiss() {
+        self.cancelPending()
         self.isPresented = false
         self.hasSeen = true
         self.defaults.set(true, forKey: SetupTips.seenKey)
