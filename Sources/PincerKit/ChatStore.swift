@@ -193,28 +193,56 @@ public final class ChatStore: Identifiable {
     // MARK: Loading
 
     @ObservationIgnored private var loadInFlight = false
+    @ObservationIgnored private var subscribedEpoch: Int?
+    @ObservationIgnored private var stale = false
+    @ObservationIgnored private var finishedRunIds: [String] = []
+
+    /// True when the message subscription was sent on the current connection.
+    public var isSubscribed: Bool {
+        guard let gateway else { return false }
+        return self.subscribedEpoch == gateway.connectionEpoch
+    }
+
+    /// The next `load()` refetches history and resubscribes even if not forced.
+    public func markStale() { self.stale = true }
+
+    public func releaseSubscription() async {
+        if self.isSubscribed, let gateway, gateway.state.isConnected {
+            _ = try? await gateway.connection.request(
+                "sessions.messages.unsubscribe",
+                .object(self.params(keyName: "key")),
+                timeout: 10)
+        }
+        self.subscribedEpoch = nil
+        self.stale = true
+    }
 
     public func load(force: Bool = false) async {
         await self.restoreDraft()
         await self.restoreFromCache()
         guard let gateway, gateway.state.isConnected else { return }
-        if self.hasLoaded, !force { return }
+        if self.hasLoaded, !force, !self.stale { return }
         if self.loadInFlight, !force { return }
         self.loadInFlight = true
         defer { self.loadInFlight = false }
         self.isLoading = !self.hasLoaded
         defer { self.isLoading = false }
         do {
-            _ = try? await gateway.connection.request(
-                "sessions.messages.subscribe",
-                .object(self.params(keyName: "key")),
-                timeout: 10)
+            let epoch = gateway.connectionEpoch
+            if self.subscribedEpoch != epoch {
+                _ = try? await gateway.connection.request(
+                    "sessions.messages.subscribe",
+                    .object(self.params(keyName: "key")),
+                    timeout: 10)
+                self.subscribedEpoch = epoch
+            }
             var params = self.params(keyName: "sessionKey")
             params["limit"] = .number(Double(self.historyLimit))
             let result = try await gateway.connection.request("chat.history", .object(params), timeout: 30)
             let parsed = await Self.parseDetached(result["messages"]?.array ?? [], fallbackBase: 0)
             self.apply(history: result, parsed: parsed)
             self.hasLoaded = true
+            self.stale = false
             self.errorMessage = nil
             self.scheduleSave()
             self.startBackfill()
@@ -1078,6 +1106,9 @@ public final class ChatStore: Identifiable {
 
     private func finishRun(_ runId: String) {
         guard self.live == nil || self.live?.runId == runId else { return }
+        if self.finishedRunIds.contains(runId) { return }
+        self.finishedRunIds.append(runId)
+        if self.finishedRunIds.count > 32 { self.finishedRunIds.removeFirst(self.finishedRunIds.count - 32) }
         self.reloadTask?.cancel()
         self.reloadTask = Task { [weak self] in
             await self?.load(force: true)
