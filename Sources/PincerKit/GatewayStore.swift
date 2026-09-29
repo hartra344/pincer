@@ -442,6 +442,11 @@ public final class GatewayStore: Identifiable {
 
     @ObservationIgnored private var listReconcile: ListReconcile?
 
+    private func recordReconciledRow(_ key: String) {
+        self.listReconcile?.rows[key] = self.sessions[key]
+        self.listReconcile?.deleted.removeValue(forKey: key)
+    }
+
     private func isCurrent(_ epoch: Int) -> Bool {
         !Task.isCancelled && epoch == self.connectionEpoch
     }
@@ -461,9 +466,11 @@ public final class GatewayStore: Identifiable {
         if let list = subscribeResult?["list"] {
             self.applySnapshot(list)
             let trailing = self.listReconcile?.needsTrailingRefresh ?? false
-            self.listReconcile = nil
+            self.listReconcile = trailing ? ListReconcile() : nil
             if trailing {
+                self.refreshTask?.cancel()
                 await self.refreshSessions()
+                self.listReconcile = nil
                 guard self.isCurrent(epoch) else { return }
             }
         } else {
@@ -778,7 +785,7 @@ public final class GatewayStore: Identifiable {
             let key = payload["sessionKey"]?.text ?? payload["session"]?["key"]?.text
             if let row = payload["session"].flatMap(SessionRow.init) {
                 self.sessions[row.key] = row.keepingPreview(of: self.sessions[row.key])
-                self.listReconcile?.rows[row.key] = self.sessions[row.key]
+                self.recordReconciledRow(row.key)
             }
             if let key { self.chats[key]?.handleSessionMessage(payload) }
         case "progressCard.changed":
@@ -839,12 +846,12 @@ public final class GatewayStore: Identifiable {
         }
         for ancestor in payload["ancestorSessions"]?.array?.compactMap(SessionRow.init) ?? [] {
             self.sessions[ancestor.key] = ancestor.keepingPreview(of: self.sessions[ancestor.key])
-            self.listReconcile?.rows[ancestor.key] = self.sessions[ancestor.key]
+            self.recordReconciledRow(ancestor.key)
         }
         if let row = payload["session"].flatMap(SessionRow.init) {
             let previous = self.sessions[row.key]
             self.sessions[row.key] = row.keepingPreview(of: previous)
-            self.listReconcile?.rows[row.key] = self.sessions[row.key]
+            self.recordReconciledRow(row.key)
             if self.bootstrapped, let previous, !row.isSubagent,
                row.activityMs > previous.activityMs, row.isUnread, !row.hasActiveRun,
                previous.hasActiveRun || !previous.isUnread
@@ -860,10 +867,12 @@ public final class GatewayStore: Identifiable {
         }
         if let key = payload["key"]?.text ?? payload["sessionKey"]?.text, reason == "delete" || reason == "deleted" {
             let removedId = payload["sessionId"]?.text
-            if removedId == nil || self.sessions[key]?.sessionId == removedId {
-                self.sessions.removeValue(forKey: key)
+            if self.listReconcile != nil {
                 self.listReconcile?.rows.removeValue(forKey: key)
                 self.listReconcile?.deleted[key] = removedId
+            }
+            if removedId == nil || self.sessions[key]?.sessionId == removedId {
+                self.sessions.removeValue(forKey: key)
                 Task { await self.transcriptChanged(key: key, change: .deleted) }
                 self.discardDraft(key)
                 self.outbox.removeSession(key)
