@@ -56,6 +56,14 @@ The tests are hermetic:
 - Secrets always use an in-memory store: `Keychain` detects the test runner, so no `PINCER_KEYCHAIN=memory` is needed, and a test fails if any real Keychain call happens.
 - They can run alongside `PincerChecks` without either run affecting the other.
 
+`Tests/PincerUITests` covers the shared transcript UI on macOS: Markdown caching, how a streaming reply is split and drawn, and a streaming performance probe. The probe streams a synthetic reply to 2, 10 and 25 KB and prints the main-thread milliseconds per token and the slowest update as a table:
+
+```sh
+swift test --filter StreamingProbe
+```
+
+While a reply streams, the transcript updates about 30 times a second. Finished paragraphs are laid out once and only the paragraph being written is measured again, so the cost of each update stays flat as the reply grows.
+
 ## Self-checks
 
 `PincerChecks` is an executable harness that exercises the stores end to end. It complements the unit tests:
@@ -160,6 +168,7 @@ open --env PINCER_REQUEST_LOG=/tmp/pincer.log build/Pincer.app
 | `Sources/PincerPush` | Web Push decryption (RFC 8291), per-gateway push keys and payload parsing, shared by the app and its notification service extension. |
 | `push-relay/` | Zero-dependency Node relay from Gateway Web Push to APNs. See [Push notifications](../../guides/push-notifications/). |
 | `Tests/PincerKitTests` | Unit tests for PincerKit (`swift test`). |
+| `Tests/PincerUITests` | Unit tests and the streaming performance probe for the shared transcript UI (`swift test`). |
 | `mock-gateway/` | Node mock of the Gateway protocol for offline development. |
 | `website/` | This documentation site. |
 
