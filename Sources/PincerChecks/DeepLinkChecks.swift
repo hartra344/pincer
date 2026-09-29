@@ -209,6 +209,17 @@ func runLiveDeepLinks(url: String, token: String) async {
     }
     check(unresolved.isEmpty, "every live session key round-trips and resolves (\(keys.count) keys; failed: \(unresolved))")
 
+    // Handoff from another device (#375): its id for this gateway differs, and it reaches the
+    // gateway by another address, but the host name the gateway reports is the same.
+    let host = await waitFor("reported gateway host", timeout: 5) { gateway.gatewayHost != nil }
+    check(host && gateway.gatewayHost == "pincer-mock-gateway.local", "the gateway's own host is saved (\(gateway.gatewayHost ?? "none"))")
+    check(app.route(for: Notifier.Target(gatewayId: gateway.id, sessionKey: "agent:main:main")).handoffUserInfo[PincerRoute.Key.host]
+          == gateway.gatewayHost, "Handoff carries the gateway's host")
+    let fromPhone = PincerRoute(gateway: .id(UUID()), sessionKey: "agent:main:main",
+                                gatewayURL: "wss://pincer-mock-gateway.tail1234.ts.net", gatewayHost: "Pincer-Mock-Gateway.local.")
+    check(app.open(fromPhone) == .openChat(Notifier.Target(gatewayId: gateway.id, sessionKey: "agent:main:main"), messageId: nil),
+          "Handoff from another device, other id and address, opens the chat here")
+
     let key = "agent:main:discord:channel:123"
     gateway.selectedKey = "agent:main:main"
     app.updateVisible()

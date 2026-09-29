@@ -16,6 +16,7 @@ export async function run(ctx) {
   for (const event of ['health', 'heartbeat', 'presence', 'shutdown']) assert.ok(watcher.hello.features.events.includes(event), event);
   const helloSnap = watcher.hello.snapshot;
   assert.ok(Array.isArray(helloSnap.presence) && helloSnap.presence.some((p) => p.deviceId === device.id));
+  assert.ok(helloSnap.presence.some((p) => p.mode === 'gateway' && p.reason === 'self' && p.host), 'the gateway reports its own host');
   assert.equal(helloSnap.health.ok, true);
   assert.ok(helloSnap.uptimeMs > 86_400_000, 'mock has been up for a day');
   const healthNow = await watcher.send('health');
