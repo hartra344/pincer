@@ -1133,6 +1133,16 @@
         }
       }
     },
+    "Background": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background"
+          }
+        }
+      }
+    },
     "Bindings": {
       "localizations": {
         "en": {
@@ -2793,6 +2803,16 @@
         }
       }
     },
+    "Elevated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elevated"
+          }
+        }
+      }
+    },
     "Emoji": {
       "localizations": {
         "en": {
@@ -2979,6 +2999,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Expression"
+          }
+        }
+      }
+    },
+    "Extract mode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extract mode"
           }
         }
       }
@@ -5493,6 +5523,16 @@
         }
       }
     },
+    "Pseudo-terminal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pseudo-terminal"
+          }
+        }
+      }
+    },
     "Publisher": {
       "localizations": {
         "en": {
@@ -6243,6 +6283,16 @@
         }
       }
     },
+    "Result count": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Result count"
+          }
+        }
+      }
+    },
     "Results": {
       "localizations": {
         "en": {
@@ -6779,6 +6829,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Send to %@"
+          }
+        }
+      }
+    },
+    "Server": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
           }
         }
       }
@@ -7933,6 +7993,16 @@
         }
       }
     },
+    "Timeout": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timeout"
+          }
+        }
+      }
+    },
     "Times": {
       "localizations": {
         "en": {
@@ -8453,6 +8523,16 @@
         }
       }
     },
+    "Working directory": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working directory"
+          }
+        }
+      }
+    },
     "Working…": {
       "localizations": {
         "en": {
@@ -8623,6 +8703,26 @@
         }
       }
     },
+    "approval pending": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "approval pending"
+          }
+        }
+      }
+    },
+    "approval unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "approval unavailable"
+          }
+        }
+      }
+    },
     "at +%@": {
       "localizations": {
         "en": {
@@ -8649,6 +8749,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "collapsed"
+          }
+        }
+      }
+    },
+    "command not found": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "command not found"
           }
         }
       }
@@ -8733,6 +8843,16 @@
         }
       }
     },
+    "no output timeout": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "no output timeout"
+          }
+        }
+      }
+    },
     "or send `/reasoning on`": {
       "localizations": {
         "en": {
@@ -8763,6 +8883,16 @@
         }
       }
     },
+    "signal %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "signal %@"
+          }
+        }
+      }
+    },
     "start": {
       "localizations": {
         "en": {
@@ -8779,6 +8909,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "stop"
+          }
+        }
+      }
+    },
+    "timed out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "timed out"
           }
         }
       }

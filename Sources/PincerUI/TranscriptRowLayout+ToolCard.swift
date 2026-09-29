@@ -359,7 +359,7 @@ extension TranscriptLayoutBuilder {
             card.decor.append(.symbol(ToolSymbols.chipSymbol(chip.symbol), CGRect(x: rect.minX + 6, y: rect.minY, width: 10, height: height), .secondary))
             card.decor.append(.label(chip.value, CGPoint(x: rect.minX + 20, y: rect.minY + 2), width: max(width - 26, 1),
                                      .caption, .secondary, truncation: .byTruncatingMiddle))
-            card.spoken.append("\(chip.label) \(chip.value)")
+            card.spoken.append("\(Self.chipLabel(chip.label)) \(chip.value)")
             x += width + 6
         }
         card.y += height
@@ -444,8 +444,8 @@ extension TranscriptLayoutBuilder {
             if kind == .webFetch, let code = Int(status) {
                 badges.append((L("HTTP \(code)"), (200..<300).contains(code) ? .ok : code >= 400 ? .failure : .strongFill, L("HTTP status \(code)")))
             } else {
-                let pending = ["running", "approval pending", "approval unavailable"].contains(status)
-                badges.append((status, pending ? .strongFill : .failure, status.prefix(1).uppercased() + status.dropFirst()))
+                let text = Self.statusText(status)
+                badges.append((text, .strongFill, text.prefix(1).uppercased() + text.dropFirst()))
             }
         }
         if let ms = output.durationMs {
@@ -504,6 +504,35 @@ extension TranscriptLayoutBuilder {
                                      truncation: .byTruncatingTail))
             card.spoken.append(output.imageCount == 1 ? L("1 image, shown in the reply") : L("\(output.imageCount) images, shown in the reply"))
             card.y += height
+        }
+    }
+
+    private static func chipLabel(_ label: String) -> String {
+        switch label {
+        case "Working directory": L("Working directory")
+        case "Timeout": L("Timeout")
+        case "Background": L("Background")
+        case "Pseudo-terminal": L("Pseudo-terminal")
+        case "Elevated": L("Elevated")
+        case "Extract mode": L("Extract mode")
+        case "Result count": L("Result count")
+        case "Server": L("Server")
+        default: label
+        }
+    }
+
+    /// The kit's fixed English exec statuses, localized.
+    private static func statusText(_ status: String) -> String {
+        switch status {
+        case "timed out": return L("timed out")
+        case "no output timeout": return L("no output timeout")
+        case "command not found": return L("command not found")
+        case "running": return L("running")
+        case "approval pending": return L("approval pending")
+        case "approval unavailable": return L("approval unavailable")
+        default:
+            if status.hasPrefix("signal ") { return L("signal \(String(status.dropFirst(7)))") }
+            return status
         }
     }
 
