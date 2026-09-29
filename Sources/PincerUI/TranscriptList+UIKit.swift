@@ -381,7 +381,10 @@ struct TranscriptList: UIViewRepresentable {
 
         private func measure(_ row: Int, width: CGFloat) -> Bool {
             let item = self.rows[row]
-            if let height = self.heights[item.id], height.measured, height.width == width { return false }
+            if let height = self.heights[item.id], height.measured, height.width == width {
+                self.queue.markMeasured(row)
+                return false
+            }
             let old = self.heights[item.id]?.value
             let value = max(1, self.renderer.layout(for: item, width: width).height)
             self.heights[item.id] = Height(value: value, width: width, measured: true)
@@ -538,11 +541,13 @@ struct TranscriptList: UIViewRepresentable {
             while !remaining {
                 let batch = self.queue.next(center: window.center, window: window.range, limit: 8)
                 if batch.isEmpty { break }
+                let before = self.queue.count
                 for row in batch {
                     if measured > 0, Date() >= deadline { remaining = true; break }
                     if self.measure(row, width: width) { changed = true }
                     measured += 1
                 }
+                if self.queue.count == before { break }
             }
             if changed {
                 self.isAdjusting = true

@@ -277,7 +277,7 @@ final class TranscriptRenderer: TranscriptRowActions {
             let key = ref.cacheKey
             self.imageRefs[key] = ref
             self.imageRows[key, default: []].insert(row.id)
-            self.imageStates[key] = loader.cached(ref) != nil ? .loaded : loader.hasFailed(ref) ? .failed : .loading
+            self.imageStates[key] = loader.images[ref.cacheKey] != nil ? .loaded : loader.hasFailed(ref) ? .failed : .loading
         }
         let files = self.context.gateway.files
         for file in layout.files {
@@ -364,7 +364,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         var stale: Set<String> = []
         for (key, old) in self.imageStates {
             guard let rows = self.imageRows[key], let ref = self.imageRefs[key] else { continue }
-            let now: ImageState = loader.cached(ref) != nil ? .loaded : loader.hasFailed(ref) ? .failed : .loading
+            let now: ImageState = loader.images[ref.cacheKey] != nil ? .loaded : loader.hasFailed(ref) ? .failed : .loading
             if now != old {
                 self.imageStates[key] = now
                 stale.formUnion(rows)
