@@ -283,8 +283,8 @@ extension GatewayStore {
 
     /// Drops a chat's cached transcript and its messages from search; a refetch re-adds both.
     private func forgetTranscript(_ key: String) async {
-        await TranscriptCache.remove(gatewayId: self.id, sessionKey: key)
-        if MessageIndex.status(gatewayId: self.id) != .unavailable {
+        await TranscriptCache.remove(gatewayId: self.id, sessionKey: key, root: self.cacheRoot)
+        if MessageIndex.status(gatewayId: self.id, root: self.cacheRoot) != .unavailable {
             await self.messageIndex.remove(sessionKey: key)
         }
     }

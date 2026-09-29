@@ -178,6 +178,8 @@ public final class ChatStore: Identifiable {
     static let olderCachePageSize = 200
     static let lookupCachePageSize = 2_000
     @ObservationIgnored let gatewayId: UUID
+    /// Where this chat's transcript is cached; tests give each chat its own folder.
+    @ObservationIgnored var cacheRoot: URL? = TranscriptCache.root
     /// Background cache filler: no UI, no live subscription.
     @ObservationIgnored let headless: Bool
     @ObservationIgnored var cacheChecked = false
@@ -225,6 +227,7 @@ public final class ChatStore: Identifiable {
         self.agentId = agentId
         self.gateway = gateway
         self.gatewayId = gateway.id
+        self.cacheRoot = gateway.cacheRoot
         self.headless = headless
         self.sessionRow = gateway.sessions[sessionKey]
         self.isRunning = self.sessionRow?.hasActiveRun == true

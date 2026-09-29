@@ -89,7 +89,7 @@ extension ChatStore {
         let state = self.currentCacheState
         guard state != self.savedState else { return }
         await TranscriptCache.save(self.snapshot(), gatewayId: self.gatewayId, sessionKey: self.sessionKey,
-                                   keepingOlder: self.olderInCache || self.hasMoreHistory)
+                                   keepingOlder: self.olderInCache || self.hasMoreHistory, root: self.cacheRoot)
         self.savedState = state
     }
 
@@ -97,7 +97,7 @@ extension ChatStore {
         guard !self.cacheChecked else { return }
         self.cacheChecked = true
         let loaded = await TranscriptCache.loadNewest(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
-                                                      limit: self.windowLimit + Self.windowExtension)
+                                                      limit: self.windowLimit + Self.windowExtension, root: self.cacheRoot)
         let (windowed, moreInCache) = Self.window(loaded.items, limit: self.windowLimit)
         let cached = (items: windowed, complete: loaded.complete, outcome: loaded.outcome)
         let outcome = cached.outcome
@@ -292,8 +292,8 @@ extension ChatStore {
     /// if it was cut short. A cache that is current or already holds its retained maximum is left alone.
     func startBackfill() {
         guard self.hasMoreHistory, !self.headless, !self.cachingStopped, let gateway = self.gateway else { return }
-        Task { [weak self, sessionKey, agentId, gatewayId] in
-            let meta = await TranscriptCache.meta(gatewayId: gatewayId, sessionKey: sessionKey)
+        Task { [weak self, sessionKey, agentId, gatewayId, cacheRoot = self.cacheRoot] in
+            let meta = await TranscriptCache.meta(gatewayId: gatewayId, sessionKey: sessionKey, root: cacheRoot)
             let activityMs = gateway.sessions[sessionKey]?.activityMs ?? .infinity
             guard meta?.retained != true, !GatewayStore.prefetchIsFresh(meta, activityMs: activityMs),
                   let self, self.hasMoreHistory, !self.cachingStopped else { return }
@@ -313,7 +313,7 @@ extension ChatStore {
         }
         if !self.olderInCache, let first = self.items.first(where: { !$0.isPending }) {
             let older = await TranscriptCache.loadOlder(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
-                                                        before: first.id, limit: 1)
+                                                        before: first.id, limit: 1, root: self.cacheRoot)
             guard current(), !self.olderInCache else { return }
             if Self.cacheReadable(older.outcome), !older.items.isEmpty {
                 self.olderInCache = true
@@ -321,7 +321,7 @@ extension ChatStore {
                 self.olderOffset = nil
             }
         }
-        let meta = await TranscriptCache.meta(gatewayId: self.gatewayId, sessionKey: self.sessionKey)
+        let meta = await TranscriptCache.meta(gatewayId: self.gatewayId, sessionKey: self.sessionKey, root: self.cacheRoot)
         guard current(), !self.cacheUnreadable else { return }
         if let meta { self.hasMoreHistory = !meta.complete }
         self.saveTask?.cancel()
@@ -366,7 +366,7 @@ extension ChatStore {
             return true
         }
         let page = await TranscriptCache.loadOlder(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
-                                                   before: first.id, limit: limit)
+                                                   before: first.id, limit: limit, root: self.cacheRoot)
         guard self.olderInCache, !self.cachingStopped else { return true }
         switch page.outcome {
         case .loaded, .migrated:
@@ -447,7 +447,7 @@ extension ChatStore {
         let state = self.residencySnapshot
         guard !self.headless, self.isHydrated, !self.cachingStopped, !self.cacheUnreadable, self.olderTask == nil,
               !state.isSelected, !state.isRunning, !state.isLocatingReply, !state.isLoadingOlder,
-              TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: self.sessionKey) != nil
+              TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: self.sessionKey, root: self.cacheRoot) != nil
         else { return false }
         return true
     }

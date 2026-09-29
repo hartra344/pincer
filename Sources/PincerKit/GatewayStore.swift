@@ -141,7 +141,9 @@ public final class GatewayStore: Identifiable {
     /// don't keep rebuilding it (each rebuild re-runs the search).
     @ObservationIgnored private var lastFailureReconcile: ContinuousClock.Instant?
     /// Full-text index of this Gateway's cached transcripts, for message search.
-    public var messageIndex: MessageIndex { MessageIndex.shared(gatewayId: self.id) }
+    /// Where this Gateway's transcripts and search index are cached; tests give each store its own folder.
+    @ObservationIgnored var cacheRoot: URL? = TranscriptCache.root
+    public var messageIndex: MessageIndex { MessageIndex.shared(gatewayId: self.id, root: self.cacheRoot) }
     /// Whether message search is ready, still indexing cached chats, or off (no transcript cache).
     public private(set) var messageIndexProgress: MessageIndex.Status = .ready
     @ObservationIgnored weak var notifier: Notifier?
@@ -363,7 +365,7 @@ public final class GatewayStore: Identifiable {
     public func settlePrefetch() async {
         await self.prefetchTask?.value
         for fill in self.headlessFills.values { await fill.task.value }
-        await TranscriptCache.flush(gatewayId: self.id)
+        await TranscriptCache.flush(gatewayId: self.id, root: self.cacheRoot)
     }
 
     /// `stop()` for a store that won't be started again, returning once the connection is torn
@@ -372,7 +374,7 @@ public final class GatewayStore: Identifiable {
         self.stop()
         await self.connection.stop()
         for chat in self.chats.values { await chat.finishCaching() }
-        await TranscriptCache.flush(gatewayId: self.id)
+        await TranscriptCache.flush(gatewayId: self.id, root: self.cacheRoot)
     }
 
     /// Whether this connection can see and answer agent questions (`operator.questions`).
@@ -547,7 +549,7 @@ public final class GatewayStore: Identifiable {
     /// Indexes cached transcripts the message index hasn't seen yet (caches from before it
     /// existed, or after it was rebuilt), in the background.
     private func reconcileMessageIndex() {
-        guard MessageIndex.status(gatewayId: self.id) != .unavailable else {
+        guard MessageIndex.status(gatewayId: self.id, root: self.cacheRoot) != .unavailable else {
             self.messageIndexProgress = .unavailable
             return
         }
@@ -641,7 +643,7 @@ public final class GatewayStore: Identifiable {
                 guard !Task.isCancelled, let self, self.state.isConnected, self.appIsActive,
                       fetched < Self.prefetchBudget else { return }
                 if let chat = self.chats[row.key], !chat.isDehydrated { continue }
-                let meta = await TranscriptCache.meta(gatewayId: self.id, sessionKey: row.key)
+                let meta = await TranscriptCache.meta(gatewayId: self.id, sessionKey: row.key, root: self.cacheRoot)
                 if Self.prefetchIsFresh(meta, activityMs: row.activityMs) { continue }
                 fetched += 1
                 await self.startHeadlessFill(sessionKey: row.key, agentId: row.agentId).value

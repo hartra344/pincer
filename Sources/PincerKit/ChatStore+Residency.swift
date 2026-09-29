@@ -23,7 +23,7 @@ extension ChatStore {
     /// The store keeps its identity, draft, live run and unsent messages, and reloads through `load()`.
     func dehydrate() async {
         guard !self.headless, self.isHydrated, !self.cachingStopped,
-              TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: self.sessionKey) != nil
+              TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: self.sessionKey, root: self.cacheRoot) != nil
         else { return }
         self.saveTask?.cancel()
         // Writes nothing when the cache already holds what's loaded.
