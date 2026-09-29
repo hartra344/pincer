@@ -227,9 +227,9 @@ private struct AutomationRow: View {
     let job: CronJob
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.lg) {
             AutomationHealthIcon(health: self.job.health)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(self.job.name)
                     .lineLimit(1)
                     .foregroundStyle(self.job.enabled ? .primary : .secondary)
@@ -243,7 +243,7 @@ private struct AutomationRow: View {
                     .lineLimit(1)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, Theme.Spacing.xxs)
     }
 
     private var subtitle: String {
@@ -331,8 +331,8 @@ private struct AutomationDetail: View {
         let operation = model.operation(for: job.id)
         Form {
             Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    HStack(spacing: Theme.Spacing.md) {
                         AutomationHealthIcon(health: job.health)
                         Text(job.name).font(.title3.weight(.semibold))
                     }
@@ -340,7 +340,7 @@ private struct AutomationDetail: View {
                         Text(description).foregroundStyle(.secondary)
                     }
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, Theme.Spacing.xxs)
                 self.actions(operation: operation)
                 if let error = operation.error {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).font(.callout)
@@ -372,7 +372,7 @@ private struct AutomationDetail: View {
                     }
                 }
                 if let error = job.lastError, job.lastStatus == .error {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                         Text(job.consecutiveErrors > 1 ? L("Failed \(job.consecutiveErrors) times in a row") : L("Last error"))
                             .font(.callout.weight(.medium))
                         Text(error)
@@ -510,10 +510,10 @@ private struct RunRow: View {
     let openChat: (String) -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.lg) {
             RunOutcomeIcon(status: self.run.status)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text(self.run.startedAt.formatted(date: .abbreviated, time: .shortened))
                     if let duration = self.run.durationMs {
                         Text(Self.duration(duration)).foregroundStyle(.secondary)

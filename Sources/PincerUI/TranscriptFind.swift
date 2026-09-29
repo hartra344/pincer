@@ -268,7 +268,7 @@ struct TranscriptFindBar: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Theme.Spacing.md) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
@@ -332,12 +332,12 @@ struct TranscriptFindBar: View {
                 .glassButton()
                 .controlSize(.small)
         }
-        .padding(.leading, 14)
-        .padding(.trailing, 8)
-        .padding(.vertical, 6)
+        .padding(.leading, Theme.Spacing.row)
+        .padding(.trailing, Theme.Spacing.md)
+        .padding(.vertical, Theme.Spacing.sm)
         .glassSurface(in: Capsule())
-        .padding(.horizontal, 14)
-        .padding(.top, 8)
+        .padding(.horizontal, Theme.Spacing.row)
+        .padding(.top, Theme.Spacing.md)
         .onAppear {
             self.focused = true
             // Again after the views appearing with it (a chat's composer) have claimed focus.

@@ -36,7 +36,7 @@ private struct RouteNoticeBar: View {
     var body: some View {
         Group {
             if let notice = self.app.routeNotice {
-                HStack(spacing: 10) {
+                HStack(spacing: Theme.Spacing.lg) {
                     Label(notice.message, systemImage: "info.circle.fill")
                         .font(.callout)
                     Button {
@@ -48,12 +48,12 @@ private struct RouteNoticeBar: View {
                     .controlSize(.small)
                     .accessibilityLabel("Dismiss")
                 }
-                .padding(.leading, 14)
-                .padding(.trailing, 10)
-                .padding(.vertical, 8)
+                .padding(.leading, Theme.Spacing.row)
+                .padding(.trailing, Theme.Spacing.lg)
+                .padding(.vertical, Theme.Spacing.md)
                 .glassSurface(in: Capsule())
-                .padding(.horizontal, 14)
-                .padding(.top, 10)
+                .padding(.horizontal, Theme.Spacing.row)
+                .padding(.top, Theme.Spacing.lg)
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .task(id: notice.id) {
                     try? await Task.sleep(for: .seconds(5))

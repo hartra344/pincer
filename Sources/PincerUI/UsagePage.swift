@@ -209,7 +209,7 @@ struct UsageDailyChart: View {
             }
         }
         .frame(height: 200)
-        .padding(.top, 20)
+        .padding(.top, Theme.Spacing.section)
     }
 
     private var selected: (date: Date, day: UsageDay)? {
@@ -241,7 +241,7 @@ struct UsageDailyChart: View {
     }
 
     private func annotation(_ day: UsageDay) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
             Text(UsageFormat.day(day.date)).font(.caption.weight(.semibold))
             Text(UsageFormat.cost(day.totals).text).font(.caption.monospacedDigit())
             Text("\(UsageFormat.tokens(day.totals.totalTokens)) tokens", bundle: .module).font(.caption.monospacedDigit())
@@ -253,8 +253,8 @@ struct UsageDailyChart: View {
                 }
             }
         }
-        .padding(6)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .padding(Theme.Spacing.sm)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
     }
 }
 
@@ -372,16 +372,16 @@ private struct UsageBreakdownRow: View {
     let share: Double
 
     var body: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(self.item.title).lineLimit(1).truncationMode(.middle)
                 if let subtitle = self.item.subtitle {
                     Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 2) {
-                HStack(spacing: 4) {
+            VStack(alignment: .trailing, spacing: Theme.Spacing.xxs) {
+                HStack(spacing: Theme.Spacing.xs) {
                     if self.item.totals.missingCostEntries > 0 {
                         Image(systemName: "exclamationmark.circle")
                             .foregroundStyle(.orange)
@@ -448,7 +448,7 @@ private struct UsageSessionsSection: View {
                 #endif
             }
         } footer: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 if let result, result.sessionCount > result.sessions.count {
                     Text("Showing top \(result.sessions.count) of \(result.sessionCount) sessions.", bundle: .module)
                 }
@@ -530,8 +530,8 @@ private struct UsageSessionsSection: View {
     private func list(_ rows: [SessionUsageRow]) -> some View {
         ForEach(self.sort.sorted(rows).map(self.item)) { item in
             Button { self.open(item.row) } label: {
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: Theme.Spacing.md) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                         Text(item.title).lineLimit(1).truncationMode(.middle)
                         Text(UsageNames.subtitle(agentId: item.row.agentId, model: item.row.model, gateway: self.gateway))
                             .font(.caption)
@@ -539,7 +539,7 @@ private struct UsageSessionsSection: View {
                             .lineLimit(1)
                     }
                     Spacer(minLength: 8)
-                    VStack(alignment: .trailing, spacing: 2) {
+                    VStack(alignment: .trailing, spacing: Theme.Spacing.xxs) {
                         if let totals = item.row.usage?.totals {
                             UsageCostText(totals: totals)
                             Text("\(UsageFormat.tokens(totals.totalTokens)) tokens", bundle: .module)
@@ -579,7 +579,7 @@ private struct UsageRateLimitsSection: View {
                              isEmpty: providers.isEmpty && summary?.refreshing != true,
                              empty: "No providers report quota information.", emptySymbol: "gauge.with.dots.needle.33percent") {
                 if providers.isEmpty {
-                    HStack(spacing: 8) {
+                    HStack(spacing: Theme.Spacing.md) {
                         ProgressView().controlSize(.small)
                         Text("Refreshing…", bundle: .module).foregroundStyle(.secondary)
                     }
@@ -597,8 +597,8 @@ private struct UsageProviderView: View {
 
     var body: some View {
         let provider = self.provider
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text(provider.displayName).font(.headline)
                 let secondary = [provider.plan, provider.accountEmail].compactMap(\.self)
                 if !secondary.isEmpty {
@@ -623,7 +623,7 @@ private struct UsageProviderView: View {
                 UsageBillingView(billing: billing)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Theme.Spacing.xs)
     }
 }
 

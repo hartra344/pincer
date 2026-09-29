@@ -71,7 +71,7 @@ private struct AgentRowLabel: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(self.agent.title)
                 Text(self.detail)
                     .font(.caption)
@@ -103,7 +103,7 @@ private struct AgentDeletionReportView: View {
 
     var body: some View {
         HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Label(L("Deleted “\(self.report.agentName)”. \(self.report.result.summary)"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                 ForEach(self.report.result.failed, id: \.self) { failure in
@@ -134,7 +134,7 @@ struct AgentReadOnlyNotice: View {
     var body: some View {
         if !self.model.managementSupported {
             Label {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                     Text("Agent Management Isn't Available", bundle: .module).font(.callout.weight(.medium))
                     Text(AgentManagement.unsupportedMessage).font(.caption).foregroundStyle(.secondary)
                 }
@@ -142,7 +142,7 @@ struct AgentReadOnlyNotice: View {
                 Image(systemName: "person.crop.circle.badge.exclamationmark")
             }
         } else if !self.model.hasAdmin {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 Label(L("Editing agents needs Full Management"), systemImage: "lock.shield")
                     .font(.callout.weight(.medium))
                 Text("You can view agents and their files. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module)
@@ -164,7 +164,7 @@ private struct AgentFilesReadOnlyNotice: View {
             if self.model.hasAdmin {
                 Label(reason, systemImage: "lock").foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Label(L("Editing agents needs Full Management"), systemImage: "lock.shield")
                         .font(.callout.weight(.medium))
                     Text("You can read this file. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module)
@@ -308,10 +308,10 @@ struct AgentPage: View {
                 Label(L("Agent saved"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.callout)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, Theme.Spacing.xxl)
+                    .padding(.vertical, Theme.Spacing.lg)
                     .glassSurface(in: Capsule())
-                    .padding(.bottom, 20)
+                    .padding(.bottom, Theme.Spacing.section)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -400,7 +400,7 @@ struct AgentPage: View {
                     }
                 }
             } else if let error = self.filesState.error {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                     Button(L("Try Again")) { Task { await self.loadFiles() } }
                 }
@@ -493,7 +493,7 @@ private struct AgentFileRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(self.file.name).font(.body.monospaced())
                 Text(self.detail)
                     .font(.caption)
@@ -509,8 +509,8 @@ private struct AgentFileRow: View {
             if self.file.missing {
                 Text(self.file.expectedAbsent ? L("Not Created") : L("Missing"))
                     .font(.caption2.weight(.medium))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, Theme.Spacing.xxs)
                     .foregroundStyle(self.file.expectedAbsent ? Color.secondary : Color.orange)
                     .background((self.file.expectedAbsent ? Color.secondary : Color.orange).opacity(0.15), in: Capsule())
             }
@@ -851,7 +851,7 @@ struct AgentFileEditorPage: View {
 
     @ViewBuilder private func content(_ editor: AgentFileEditorModel) -> some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 AgentFilesReadOnlyNotice(model: self.model)
                 if let conflict = editor.conflict {
                     self.conflictBanner(conflict, editor: editor)
@@ -910,7 +910,7 @@ struct AgentFileEditorPage: View {
                     .autocorrectionDisabled()
                     .agentPlainTextInput()
                     .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, Theme.Spacing.md)
                     .disabled(editor.isSaving || !self.gateway.state.isConnected)
             }
         }
@@ -919,17 +919,17 @@ struct AgentFileEditorPage: View {
                 Label(L("\(self.name) saved"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.callout)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, Theme.Spacing.xxl)
+                    .padding(.vertical, Theme.Spacing.lg)
                     .glassSurface(in: Capsule())
-                    .padding(.bottom, 20)
+                    .padding(.bottom, Theme.Spacing.section)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }
 
     private func conflictBanner(_ conflict: AgentFileConflict, editor: AgentFileEditorModel) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Label(conflict.theirsMissing
                 ? "\(self.name) was removed on the gateway since you opened it."
                 : "\(self.name) changed on the gateway since you opened it.",
@@ -947,9 +947,9 @@ struct AgentFileEditorPage: View {
             .buttonStyle(.bordered)
             .disabled(!self.gateway.state.isConnected || editor.isSaving)
         }
-        .padding(10)
+        .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
     }
 
     private func sizeText(_ editor: AgentFileEditorModel) -> String {
@@ -1031,7 +1031,7 @@ private struct AgentFileCompareSheet: View {
     }
 
     private func column(_ title: String, _ text: String?) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text(title).font(.headline).padding([.horizontal, .top])
             ScrollView {
                 Text(text ?? "(The file doesn't exist on the gateway.)")
@@ -1052,7 +1052,7 @@ private struct AgentMarkdownPreview: View {
 
     var body: some View {
         let blocks = MarkdownBlock.parse(self.text)
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             if blocks.isEmpty {
                 Text("Nothing to preview.", bundle: .module).foregroundStyle(.secondary)
             }
@@ -1071,9 +1071,9 @@ private struct AgentMarkdownPreview: View {
             Text(MarkdownBlock.inline(text))
                 .font(level <= 1 ? .title2.bold() : level == 2 ? .title3.bold() : .headline)
         case let .list(items, ordered):
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
                         Text(ordered ? "\(index + 1)." : "•").foregroundStyle(.secondary)
                         Text(MarkdownBlock.inline(item.text))
                     }
@@ -1083,18 +1083,18 @@ private struct AgentMarkdownPreview: View {
         case let .quote(text):
             Text(MarkdownBlock.inline(text))
                 .foregroundStyle(.secondary)
-                .padding(.leading, 10)
+                .padding(.leading, Theme.Spacing.lg)
                 .overlay(alignment: .leading) { Rectangle().fill(.tertiary).frame(width: 3) }
         case let .code(_, code):
             Text(code)
                 .font(.callout.monospaced())
-                .padding(8)
+                .padding(Theme.Spacing.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                .background(.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: Theme.Radius.small))
         case .rule:
             Divider()
         case let .table(header, _, rows):
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(header.joined(separator: " | ")).bold()
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     Text(row.joined(separator: " | "))

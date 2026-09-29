@@ -14,7 +14,7 @@ struct TipsOverlay: ViewModifier {
             .overlay(alignment: .bottomTrailing) {
                 if self.tips.isPresented {
                     TipsCard { self.tips.dismiss() }
-                        .padding(20)
+                        .padding(Theme.Spacing.section)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
@@ -46,7 +46,7 @@ private struct TipsCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
             Label(L("Tips"), systemImage: "lightbulb").font(.headline)
             ForEach(self.tips, id: \.tip.id) { entry in
                 Label {
@@ -63,9 +63,9 @@ private struct TipsCard: View {
                     .buttonStyle(.borderedProminent)
             }
         }
-        .padding(16)
+        .padding(Theme.Spacing.xxl)
         .frame(maxWidth: 360)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous))
         .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
         .accessibilityElement(children: .contain)
     }

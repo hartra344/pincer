@@ -59,7 +59,7 @@ struct ToolsInspectorView: View {
                 }
             } else if let error = model.error {
                 Section {
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                         Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).textSelection(.enabled)
                         Button(L("Retry")) { Task { await model.load() } }
                     }
@@ -90,13 +90,13 @@ private struct ToolInspectorRow: View {
     let tool: InspectedTool
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.lg) {
             Image(systemName: ToolSymbols.symbol(for: self.tool.id))
                 .frame(width: 20)
                 .foregroundStyle(self.tool.isAllowed ? Color.accentColor : Color.secondary)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text(self.tool.label).font(.body.weight(.medium))
                     SkillBadge(text: self.tool.sourceLabel)
                     if self.tool.risk == "high" { SkillBadge(text: "High risk", tint: .orange) }
