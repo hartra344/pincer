@@ -73,4 +73,15 @@ struct GatewayMediaClientTests {
         #expect((client.keychainReads, client.sessionsCreated) == (5, 5))
     }
 
+    @Test func resetWhileRequestsAreInFlightNeverTouchesAnInvalidatedSession() async throws {
+        let profile = Self.profile()
+        let client = GatewayMediaClient(profile: { profile }, secretReader: { _ in "secret" })
+        let fetches = (0..<30).map { _ in Task { @MainActor in _ = try? await client.fetchGateway(Self.url()) } }
+        for _ in 0..<30 {
+            client.reset()
+            await Task.yield()
+        }
+        for fetch in fetches { await fetch.value }
+        #expect(client.sessionsCreated >= 1)
+    }
 }

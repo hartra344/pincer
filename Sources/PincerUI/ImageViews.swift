@@ -89,6 +89,7 @@ struct ImagePreview: View {
         .task(id: self.gateway.images.images[self.ref.cacheKey] == nil) {
             self.gateway.images.load(self.ref, sessionKey: self.sessionKey)
         }
+        .onDisappear { self.gateway.images.releaseData(for: self.ref) }
         .task {
             self.exportData = await self.gateway.images.data(for: self.ref, sessionKey: self.sessionKey)
             guard !self.isVector else { return }

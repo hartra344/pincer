@@ -60,7 +60,9 @@ final class GatewayMediaClient {
         self.session?.finishTasksAndInvalidate()
     }
 
-    /// Drops the cached credentials and session; the next request rebuilds them.
+    /// Drops the cached credentials and session; the next request rebuilds them. Requests already
+    /// started keep running: `finishTasksAndInvalidate` lets them finish, and tasks are only ever created
+    /// on the main actor right after `prepare()`, so nothing can start on an invalidated session.
     func reset() {
         self.credentials = nil
         self.session?.finishTasksAndInvalidate()
@@ -76,7 +78,8 @@ final class GatewayMediaClient {
             let result = try await BoundedDownload.run(session: session, request: request, limit: maxBytes ?? self.maxBytes)
             let status = result.response?.statusCode
             if attempt == 0, status == 401 || status == 403, authorization != nil {
-                self.reset()
+                // Concurrent 401s only reset once: later ones find a newer session already in place.
+                if self.session === session { self.reset() }
                 continue
             }
             if result.tooLarge { throw MediaError.tooLarge }
@@ -142,6 +145,8 @@ final class BoundedDownload: NSObject, URLSessionDataDelegate, @unchecked Sendab
         self.limit = limit
     }
 
+    /// Main-actor isolated so the task is created and resumed before the caller can be interleaved with a `reset()`.
+    @MainActor
     static func run(session: URLSession, request: URLRequest, limit: Int) async throws -> Result {
         let download = BoundedDownload(limit: limit)
         let task = session.dataTask(with: request)

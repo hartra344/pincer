@@ -94,6 +94,9 @@ public final class ArtifactImageLoader {
         self.fetch(ref, sessionKey: sessionKey)
     }
 
+    /// Lookup that leaves the LRU order alone, for state checks that aren't display.
+    public func peek(_ ref: ImageRef) -> CGImage? { self.images[ref.cacheKey] }
+
     public func hasFailed(_ ref: ImageRef) -> Bool { self.failureRecords[ref.cacheKey] != nil }
 
     public func failure(_ ref: ImageRef) -> ImageLoadFailure? { self.failureRecords[ref.cacheKey]?.reason }
@@ -127,6 +130,11 @@ public final class ArtifactImageLoader {
         guard let data = try? await self.download(ref, sessionKey: sessionKey, limit: GatewayMediaClient.explicitMaxBytes) else { return nil }
         self.dataSlot = (ref.cacheKey, data)
         return data
+    }
+
+    /// Frees the file kept for the preview sheet (up to 200 MiB); call when the sheet closes.
+    public func releaseData(for ref: ImageRef) {
+        if self.dataSlot?.key == ref.cacheKey { self.dataSlot = nil }
     }
 
     /// Full-resolution decode for the preview sheet. The caller owns the result; it never enters the budgeted cache.
