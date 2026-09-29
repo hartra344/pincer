@@ -218,32 +218,72 @@ public final class ChatStore: Identifiable {
     // MARK: Loading
 
     @ObservationIgnored private var loadInFlight = false
+    @ObservationIgnored private var subscribedEpoch: Int?
+    @ObservationIgnored private var stale = false
+    @ObservationIgnored private var loadCount = 0
+    @ObservationIgnored private var finishedRunIds: [String] = []
+
+    /// True when the message subscription was sent on the current connection.
+    public var isSubscribed: Bool {
+        guard let gateway else { return false }
+        return self.subscribedEpoch == gateway.connectionEpoch
+    }
+
+    /// The next `load()` refetches history and resubscribes even if not forced.
+    public func markStale() { self.stale = true }
+
+    public func releaseSubscription() async {
+        let wasSubscribed = self.isSubscribed
+        self.subscribedEpoch = nil
+        self.stale = true
+        if wasSubscribed, let gateway, gateway.state.isConnected {
+            _ = try? await gateway.connection.request(
+                "sessions.messages.unsubscribe",
+                .object(self.params(keyName: "key")),
+                timeout: 10)
+        }
+    }
 
     public func load(force: Bool = false) async {
         await self.restoreDraft()
         await self.restoreFromCache()
         guard let gateway, gateway.state.isConnected else { return }
-        if self.hasLoaded, !force { return }
+        if self.hasLoaded, !force, !self.stale { return }
         if self.loadInFlight, !force { return }
         self.loadInFlight = true
         defer { self.loadInFlight = false }
         self.isLoading = !self.hasLoaded
         defer { self.isLoading = false }
         do {
-            _ = try? await gateway.connection.request(
-                "sessions.messages.subscribe",
-                .object(self.params(keyName: "key")),
-                timeout: 10)
+            let epoch = gateway.connectionEpoch
+            if self.subscribedEpoch != epoch {
+                self.subscribedEpoch = epoch
+                do {
+                    _ = try await gateway.connection.request(
+                        "sessions.messages.subscribe",
+                        .object(self.params(keyName: "key")),
+                        timeout: 10)
+                } catch is CancellationError {
+                    if self.subscribedEpoch == epoch { self.subscribedEpoch = nil }
+                    return
+                } catch {
+                    if self.subscribedEpoch == epoch { self.subscribedEpoch = nil }
+                }
+            }
             var params = self.params(keyName: "sessionKey")
             params["limit"] = .number(Double(self.historyLimit))
             let result = try await gateway.connection.request("chat.history", .object(params), timeout: 30)
             let parsed = await Self.parseDetached(result["messages"]?.array ?? [], fallbackBase: 0)
             self.apply(history: result, parsed: parsed)
             self.hasLoaded = true
+            self.stale = false
+            self.loadCount += 1
             self.errorMessage = nil
             self.scheduleSave()
             self.startBackfill()
             self.refreshProgressCard()
+        } catch is CancellationError {
+            return
         } catch {
             self.errorMessage = error.localizedDescription
         }
@@ -1105,9 +1145,25 @@ public final class ChatStore: Identifiable {
     private func finishRun(_ runId: String) {
         self.flushLive()
         guard self.live == nil || self.live?.runId == runId else { return }
+        if self.finishedRunIds.contains(runId) { return }
+        guard self.isSubscribed else {
+            // A background chat: reload when it is opened instead of resubscribing.
+            self.markStale()
+            if self.live?.runId == runId { self.live = nil }
+            return
+        }
+        self.finishedRunIds.append(runId)
+        if self.finishedRunIds.count > 32 { self.finishedRunIds.removeFirst(self.finishedRunIds.count - 32) }
         self.reloadTask?.cancel()
         self.reloadTask = Task { [weak self] in
+            let before = self?.loadCount
             await self?.load(force: true)
+            guard !Task.isCancelled else { return }
+            // A failed or cancelled reload must not swallow the run's only history read.
+            if let self, self.loadCount == before {
+                self.finishedRunIds.removeAll { $0 == runId }
+                self.stale = true
+            }
             if self?.live?.runId == runId { self?.live = nil }
             await self?.finishCompaction(runId: runId)
         }

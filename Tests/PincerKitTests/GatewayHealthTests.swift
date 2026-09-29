@@ -624,3 +624,31 @@ struct GatewayHealthDismissalMoreTests {
         #expect(scratch.defaults.object(forKey: "pincer.healthDismissals.\(id)") == nil)
     }
 }
+
+@Suite("Gateway health staleness fallback")
+struct GatewayHealthStalenessTests {
+    private final class Calls: @unchecked Sendable {
+        private let lock = NSLock()
+        private var methods: [String] = []
+        func note(_ method: String) { lock.lock(); methods.append(method); lock.unlock() }
+        func count(_ method: String) -> Int { lock.lock(); defer { lock.unlock() }; return methods.filter { $0 == method }.count }
+    }
+
+    @MainActor
+    @Test func refreshIfStaleSkipsAfterARecentHealthEvent() async {
+        let calls = Calls()
+        let model = GatewayHealthModel { method, _ in calls.note(method); return .null }
+        model.connectionChanged(.connected, hello: nil)
+        model.handle(event: "health", payload: Fixtures.json(#"{"ok":true,"ts":1700000000000,"channels":{}}"#))
+        #expect(model.lastHealthEventAt != nil)
+        await model.refreshIfStale()
+        #expect(calls.count("health") == 0)
+
+        // Long after the last event the fallback polls once, and the poll itself counts as fresh.
+        let later = Date().addingTimeInterval(Double(GatewayHealthModel.refreshInterval.components.seconds) + 5)
+        await model.refreshIfStale(now: later)
+        #expect(calls.count("health") == 1)
+        await model.refreshIfStale()
+        #expect(calls.count("health") == 1)
+    }
+}

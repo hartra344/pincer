@@ -43,7 +43,7 @@ struct GatewayHealthPage: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: GatewayHealthModel.refreshInterval)
                 guard !Task.isCancelled else { return }
-                await model.refresh()
+                await model.refreshIfStale()
             }
         }
         .confirmationDialog(L("Restart Gateway?"), isPresented: self.$confirmRestart, titleVisibility: .visible) {

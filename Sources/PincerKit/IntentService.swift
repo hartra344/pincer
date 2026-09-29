@@ -292,7 +292,11 @@ final class OneShotConnection: IntentConnection {
     }
 
     private func start(timeout: TimeInterval) async throws {
-        let (stream, continuation) = AsyncStream<Inbound>.makeStream()
+        let continuation = CoalescingEventBuffer<Inbound>(replaceKey: { inbound in
+            if case let .event(event) = inbound { return event.coalescingKey }
+            return nil
+        })
+        let stream = continuation
         self.pump = Task { [weak self] in
             for await inbound in stream {
                 guard let self else { return }
@@ -305,7 +309,8 @@ final class OneShotConnection: IntentConnection {
             }
         }
         let connection = self.connection
-        try await withCheckedThrowingContinuation { (waiter: CheckedContinuation<Void, Error>) in
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (waiter: CheckedContinuation<Void, Error>) in
             self.waiter = waiter
             self.timeoutTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(timeout))
@@ -318,6 +323,9 @@ final class OneShotConnection: IntentConnection {
                     onState: { state, _ in continuation.yield(.state(state)) })
                 await connection.start()
             }
+            }
+        } onCancel: {
+            Task { @MainActor in self.finishWaiting(.failure(CancellationError())) }
         }
     }
 
@@ -924,10 +932,17 @@ func withBound<T: Sendable>(seconds: TimeInterval, _ body: @escaping @MainActor 
     let once = BoundOnce<T>()
     return await withCheckedContinuation { continuation in
         once.continuation = continuation
-        Task { @MainActor in once.finish(await body()) }
-        Task { @MainActor in
+        let timer = Task { @MainActor in
             try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            // Cancelling lets the body's connection unwind and close instead of running on.
+            once.work?.cancel()
             once.finish(nil)
+        }
+        once.work = Task { @MainActor in
+            let value = await body()
+            timer.cancel()
+            once.finish(value)
         }
     }
 }
@@ -935,6 +950,7 @@ func withBound<T: Sendable>(seconds: TimeInterval, _ body: @escaping @MainActor 
 @MainActor
 private final class BoundOnce<T: Sendable> {
     var continuation: CheckedContinuation<T?, Never>?
+    var work: Task<Void, Never>?
 
     func finish(_ value: T?) {
         self.continuation?.resume(returning: value)

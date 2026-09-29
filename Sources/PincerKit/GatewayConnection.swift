@@ -118,7 +118,9 @@ public actor GatewayConnection {
     private var task: URLSessionWebSocketTask?
     private var generation = 0
     private var pending: [String: CheckedContinuation<JSONValue, Error>] = [:]
+    private var timeoutTasks: [String: Task<Void, Never>] = [:]
     private var challengeWaiter: CheckedContinuation<(String, Int64), Error>?
+    private var challengeTimeout: Task<Void, Never>?
     private var bufferedChallenge: (String, Int64)?
     private var shouldRun = false
     private var attempt = 0
@@ -536,9 +538,13 @@ public actor GatewayConnection {
         self.generation += 1
         let waiters = self.pending
         self.pending.removeAll()
+        self.timeoutTasks.values.forEach { $0.cancel() }
+        self.timeoutTasks.removeAll()
         for (_, continuation) in waiters {
             continuation.resume(throwing: GatewayError.closed(reason))
         }
+        self.challengeTimeout?.cancel()
+        self.challengeTimeout = nil
         self.challengeWaiter?.resume(throwing: GatewayError.closed(reason))
         self.challengeWaiter = nil
     }
@@ -553,23 +559,33 @@ public actor GatewayConnection {
             throw GatewayError.rpc(code: "PAYLOAD_TOO_LARGE", message: "Message is larger than the Gateway allows (\(hello.maxPayload / 1_048_576) MB).", details: nil)
         }
         let text = String(decoding: data, as: UTF8.self)
-        return try await withCheckedThrowingContinuation { continuation in
-            self.pending[id] = continuation
-            Task {
-                do {
-                    try await task.send(.string(text))
-                } catch {
-                    self.fail(id: id, error: GatewayError.closed(error.localizedDescription))
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                self.pending[id] = continuation
+                self.timeoutTasks[id] = Task {
+                    try? await Task.sleep(for: .seconds(timeout))
+                    guard !Task.isCancelled else { return }
+                    self.fail(id: id, error: GatewayError.timeout(method))
+                }
+                Task {
+                    do {
+                        try await task.send(.string(text))
+                    } catch {
+                        self.fail(id: id, error: GatewayError.closed(error.localizedDescription))
+                    }
                 }
             }
-            Task {
-                try? await Task.sleep(for: .seconds(timeout))
-                self.fail(id: id, error: GatewayError.timeout(method))
-            }
+        } onCancel: {
+            Task { await self.fail(id: id, error: CancellationError()) }
         }
     }
 
     private func fail(id: String, error: Error) {
+        self.timeoutTasks.removeValue(forKey: id)?.cancel()
         self.pending.removeValue(forKey: id)?.resume(throwing: error)
     }
 
@@ -581,8 +597,9 @@ public actor GatewayConnection {
         let generation = self.generation
         return try await withCheckedThrowingContinuation { continuation in
             self.challengeWaiter = continuation
-            Task {
+            self.challengeTimeout = Task {
                 try? await Task.sleep(for: .seconds(timeout))
+                guard !Task.isCancelled else { return }
                 if self.generation == generation, let waiter = self.challengeWaiter {
                     self.challengeWaiter = nil
                     waiter.resume(throwing: GatewayError.timeout("connect.challenge"))
@@ -632,11 +649,14 @@ public actor GatewayConnection {
         guard let frame = Self.inboundFrame(data) else { return }
         switch frame {
         case let .response(id, result):
+            self.timeoutTasks.removeValue(forKey: id)?.cancel()
             guard let continuation = self.pending.removeValue(forKey: id) else { return }
             continuation.resume(with: result)
         case let .challenge(nonce, ts):
             if let waiter = self.challengeWaiter {
                 self.challengeWaiter = nil
+                self.challengeTimeout?.cancel()
+                self.challengeTimeout = nil
                 waiter.resume(returning: (nonce, ts))
             } else {
                 self.bufferedChallenge = (nonce, ts)

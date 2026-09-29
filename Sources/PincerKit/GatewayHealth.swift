@@ -751,6 +751,9 @@ public final class GatewayHealthModel {
     public private(set) var heartbeat: GatewayHeartbeat?
     /// `last-heartbeat` answered, so a nil heartbeat means "No heartbeat yet".
     public private(set) var heartbeatLoaded = false
+    /// When the last `health` event arrived; polling is only a fallback for when these go quiet.
+    public private(set) var lastHealthEventAt: Date?
+    private var lastRefreshAt: Date?
     public private(set) var presence: [GatewayPresenceEntry] = []
     public private(set) var serverVersion: String?
     /// `snapshot.uptimeMs` from the last hello, and when it arrived.
@@ -1035,6 +1038,7 @@ public final class GatewayHealthModel {
         case "health":
             if let summary = GatewayHealthSummary(payload) {
                 self.health = summary
+                self.lastHealthEventAt = Date()
                 self.healthFailure = nil
                 if payload.object?.isEmpty == false { self.prune(.health) }
             }
@@ -1129,8 +1133,17 @@ public final class GatewayHealthModel {
     }
 
     /// The periodic refresh: `health` and `last-heartbeat`.
+    /// Polls only if neither a `health` event nor a refresh landed within `refreshInterval`.
+    public func refreshIfStale(now: Date = Date()) async {
+        let interval = Double(GatewayHealthModel.refreshInterval.components.seconds)
+        let last = [self.lastHealthEventAt, self.lastRefreshAt].compactMap { $0 }.max()
+        if let last, now.timeIntervalSince(last) < interval { return }
+        await self.refresh()
+    }
+
     public func refresh() async {
         guard self.connection == .connected else { return }
+        self.lastRefreshAt = Date()
         self.generation += 1
         let generation = self.generation
         async let health: Void = self.loadHealth(generation)

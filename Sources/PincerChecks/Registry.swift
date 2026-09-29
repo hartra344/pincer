@@ -161,6 +161,11 @@ enum Suites {
         LiveSection("First-run wizard (live)") { url, token in await runLiveFirstRun(url: url, token: token) },
     ]
 
+    /// Reconnect and bootstrap behaviour (#202); needs a fresh mock.
+    static let liveReconnect: [LiveSection] = [
+        LiveSection(title: { "Reconnect & bootstrap (live, \($0))" }) { url, token in await runLiveReconnect(url: url, token: token) },
+    ]
+
     /// A Gateway without usage (mock with MOCK_NO_USAGE=1).
     static let liveNoUsage: [LiveSection] = [
         LiveSection(title: { "Gateway without usage at \($0)" }) { url, token in await runLiveNoUsage(url: url, token: token) },

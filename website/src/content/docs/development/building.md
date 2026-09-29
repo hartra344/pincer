@@ -119,13 +119,14 @@ CI runs it every night (`.github/workflows/launch-cpu.yml`), with the menu bar o
 3. **Swift build and checks** (macOS, `PINCER_KEYCHAIN=memory`):
    - Restores the cached `.build` folder
    - `swift build --build-tests`
-   - `scripts/run-checks.sh`, which starts four mocks, waits until they all listen (it checks every 50 ms and fails with a mock's log if it exits or isn't up within 30 seconds), and then runs these **at the same time**:
+   - `scripts/run-checks.sh`, which starts five mocks, waits until they all listen (it checks every 50 ms and fails with a mock's log if it exits or isn't up within 30 seconds), and then runs these **at the same time**:
      - `swift test --skip-build --parallel`
      - `PincerChecks`
      - `PincerChecks --demo-core` and `PincerChecks --demo-extras` (with `PINCER_DEMO_DELAY_SCALE=0.2`)
      - `PincerChecks --live-core` and `PincerChecks --live-extras` (with `PINCER_DEMO_DELAY_SCALE=0.2`), each against its own mock
      - `PincerChecks --live-no-usage` against a mock started with `MOCK_NO_USAGE=1`
      - `PincerChecks --live-no-reply-to` against a mock started with `MOCK_NO_REPLY_TO=1`
+     - `PincerChecks --live-reconnect` (bootstrap races, overlapping reconnects and per-launch RPC counts) against its own mock
 
      Only the plain `PincerChecks` run does the Shortcuts & Siri offline checks; the others pass `--skip-intent-checks`. Because they share the CPU (CI runners have 3 cores), they all pass `--skip-perf-budgets`. After they finish, `PincerChecks --perf-smoke` runs alone and enforces the perf smoke budgets. Then the unit tests with wall-clock budgets run alone with `PINCER_STRICT_PERF=1`; in the parallel `swift test` lane they're only held to five times their budget. The script prints each run's log, then a summary with each run's time. If a run fails, CI uploads the logs.
 
@@ -133,7 +134,7 @@ CI runs it every night (`.github/workflows/launch-cpu.yml`), with the menu bar o
 
 CI passes `-Xswiftc -enable-incremental-file-hashing` to every `swift` command. Checkout gives every file a new modification time, so without it the restored build would recompile everything.
 
-To reproduce CI locally, run `npm ci` in `mock-gateway/` and `swift build --build-tests`, then `scripts/run-checks.sh`. It starts its own mocks on ports 18801–18804 (set `CHECKS_PORT_BASE` to use others) and writes logs to a temporary folder (or `CHECKS_LOG_DIR`). Each check run keeps its drafts, transcript cache and saved gateways in its own scratch folders and defaults suites, so the demo and live runs can safely run at the same time.
+To reproduce CI locally, run `npm ci` in `mock-gateway/` and `swift build --build-tests`, then `scripts/run-checks.sh`. It starts its own mocks on ports 18801–18805 (set `CHECKS_PORT_BASE` to use others) and writes logs to a temporary folder (or `CHECKS_LOG_DIR`). Each check run keeps its drafts, transcript cache and saved gateways in its own scratch folders and defaults suites, so the demo and live runs can safely run at the same time.
 
 ## Environment variables
 

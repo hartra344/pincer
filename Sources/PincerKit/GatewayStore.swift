@@ -130,6 +130,7 @@ public final class GatewayStore: Identifiable {
         didSet {
             guard oldValue != self.selectedKey, let key = self.selectedKey else { return }
             self.defaults.set(key, forKey: "pincer.selected.\(self.id.uuidString)")
+            self.noteSelected(key)
             Task { await self.openChat(key) }
         }
     }
@@ -351,12 +352,17 @@ public final class GatewayStore: Identifiable {
     }
 
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
+    @ObservationIgnored private var eventBuffer: CoalescingEventBuffer<Inbound>?
 
     public func start() {
         guard self.pumpTask == nil else { return }
         Task { await self.loadOutbox() }
         // A single ordered stream keeps chat deltas and state changes in wire order.
-        let (stream, continuation) = AsyncStream<Inbound>.makeStream()
+        let stream = CoalescingEventBuffer<Inbound> {
+            if case let .event(event) = $0 { return event.coalescingKey }
+            return nil
+        }
+        self.eventBuffer = stream
         self.pumpTask = Task { [weak self] in
             for await inbound in stream {
                 guard let self else { return }
@@ -369,8 +375,8 @@ public final class GatewayStore: Identifiable {
         let connection = self.connection
         Task {
             await connection.setHandlers(
-                onEvent: { continuation.yield(.event($0)) },
-                onState: { continuation.yield(.state($0, $1)) })
+                onEvent: { stream.yield(.event($0)) },
+                onState: { stream.yield(.state($0, $1)) })
             await connection.start()
         }
     }
@@ -379,8 +385,12 @@ public final class GatewayStore: Identifiable {
         let connection = self.connection
         self.pumpTask?.cancel()
         self.pumpTask = nil
+        self.eventBuffer?.finish()
+        self.eventBuffer = nil
         self.prefetchTask?.cancel()
         self.reconcileTask?.cancel()
+        self.bootstrapTask?.cancel()
+        self.bootstrapTask = nil
         Task { await connection.stop() }
     }
 
@@ -437,7 +447,9 @@ public final class GatewayStore: Identifiable {
         self.reactionForwardingOff = []
         self.reactionNoticeShown = []
         self.lastError = nil
-        Task { await self.bootstrap() }
+        self.bootstrapTask?.cancel()
+        let epoch = self.connectionEpoch
+        self.bootstrapTask = Task { await self.bootstrap(epoch: epoch) }
         self.execPolicy.handleReconnect()
         self.agentManagement.handleReconnect()
         self.devices.handleReconnect()
@@ -445,37 +457,68 @@ public final class GatewayStore: Identifiable {
         self.sessionManager.handleReconnect()
     }
 
-    private func bootstrap() async {
+    @ObservationIgnored private var bootstrapTask: Task<Void, Never>?
+
+    /// Row changes seen while the bootstrap's session list is being read; they win over that snapshot.
+    private struct ListReconcile {
+        var rows: [String: SessionRow] = [:]
+        var deleted: [String: String?] = [:]
+        var needsTrailingRefresh = false
+    }
+
+    @ObservationIgnored private var listReconcile: ListReconcile?
+
+    private func recordReconciledRow(_ key: String) {
+        self.listReconcile?.rows[key] = self.sessions[key]
+        self.listReconcile?.deleted.removeValue(forKey: key)
+    }
+
+    private func isCurrent(_ epoch: Int) -> Bool {
+        !Task.isCancelled && epoch == self.connectionEpoch
+    }
+
+    private func bootstrap(epoch: Int) async {
         self.bootstrapped = false
+        self.listReconcile = ListReconcile()
         async let agents = try? self.connection.request("agents.list", [:])
         async let subscribed = try? self.connection.request(
             "sessions.subscribe",
             .object(self.listParams),
             timeout: 30)
-        if let agents = await agents { self.applyAgents(agents) }
-        if let list = await subscribed?["list"] {
+        let agentsResult = await agents
+        let subscribeResult = await subscribed
+        guard self.isCurrent(epoch) else { return }
+        if let agentsResult { self.applyAgents(agentsResult) }
+        if let list = subscribeResult?["list"] {
             self.applySnapshot(list)
+            let trailing = self.listReconcile?.needsTrailingRefresh ?? false
+            self.listReconcile = trailing ? ListReconcile() : nil
+            if trailing {
+                self.refreshTask?.cancel()
+                await self.refreshSessions()
+                let invalidatedAgain = self.listReconcile?.needsTrailingRefresh ?? false
+                self.listReconcile = nil
+                if invalidatedAgain { self.scheduleRefresh() }
+                guard self.isCurrent(epoch) else { return }
+            }
         } else {
+            self.listReconcile = nil
             await self.refreshSessions()
+            guard self.isCurrent(epoch) else { return }
         }
         if let pending = try? await self.connection.request("exec.approval.list", [:]) {
+            guard self.isCurrent(epoch) else { return }
             let items = pending["approvals"]?.array ?? pending["items"]?.array ?? pending.array ?? []
             self.approvals = items.compactMap(ExecApproval.init)
         }
         await self.refreshQuestions()
+        guard self.isCurrent(epoch) else { return }
         self.bootstrapped = true
         self.setup.connected()
         Task { await PushRegistrar.shared.sync(self) }
         self.dumpSessionShapesIfRequested()
         Task { await self.loadConfiguredServerNames() }
-        Task { await self.pullServerNames() }
-        Task { await self.pullChatIcons() }
-        Task { await self.pullChatColors() }
-        Task { await self.pull(self.syncedMap(Self.chatOrderPref)) }
-        Task { await self.pull(self.syncedMap(Self.groupIconsPref)) }
-        Task { await self.pull(self.syncedMap(Reactions.prefKey)) }
-        Task { await self.pull(self.syncedMap(Self.healthDismissalsPref)) }
-        Task { await self.pullAvatarChoices() }
+        Task { await self.pullBootstrapPrefs(epoch: epoch) }
         Task { await self.loadGroups() }
         // Only pick a chat on the first connect: on iPhone, going back to the sidebar clears the
         // selection, and re-selecting on every reconnect would push a chat the user left.
@@ -484,16 +527,47 @@ public final class GatewayStore: Identifiable {
             self.selectedKey = self.defaultSessionKey
         }
         self.didPickInitialChat = true
-        // The open chat first, so it isn't stuck behind every chat visited since launch.
+        // Every other chat lost its subscription with the old socket; it reloads when opened.
+        let warm = self.warmKeys(includingLive: true)
+        for chat in self.chats.values where !warm.contains(chat.sessionKey) { chat.markStale() }
+        // The open chat first, so it isn't stuck behind the others.
         if let key = self.selectedKey, let open = self.chats[key] {
             await open.load(force: true)
+            guard self.isCurrent(epoch) else { return }
         }
-        for chat in self.chats.values where chat.sessionKey != self.selectedKey {
+        for chat in self.chats.values where chat.sessionKey != self.selectedKey && warm.contains(chat.sessionKey) {
             await chat.load(force: true)
+            guard self.isCurrent(epoch) else { return }
         }
         self.startPrefetch()
         self.reconcileMessageIndex()
         await self.flushOutbox()
+    }
+
+    // MARK: Warm chats
+
+    private static let warmChatLimit = 4
+    /// Most recently selected chats, newest first.
+    @ObservationIgnored private var recentKeys: [String] = []
+
+    /// The selected chat, the most recent ones up to the cap, and any chat with a live run.
+    private func warmKeys(includingLive: Bool) -> Set<String> {
+        var keys = Set(self.recentKeys.prefix(Self.warmChatLimit))
+        if let selected = self.selectedKey { keys.insert(selected) }
+        if includingLive {
+            for chat in self.chats.values where chat.isRunning { keys.insert(chat.sessionKey) }
+        }
+        return keys
+    }
+
+    private func noteSelected(_ key: String) {
+        self.recentKeys.removeAll { $0 == key }
+        self.recentKeys.insert(key, at: 0)
+        if self.recentKeys.count > Self.warmChatLimit { self.recentKeys.removeLast(self.recentKeys.count - Self.warmChatLimit) }
+        let warm = self.warmKeys(includingLive: true)
+        for chat in self.chats.values where !warm.contains(chat.sessionKey) && chat.isSubscribed {
+            Task { await chat.releaseSubscription() }
+        }
     }
 
     /// Indexes cached transcripts the message index hasn't seen yet (caches from before it
@@ -611,6 +685,12 @@ public final class GatewayStore: Identifiable {
         for row in list["sessions"]?.array?.compactMap(SessionRow.init) ?? [] {
             next[row.key] = row
         }
+        if let reconcile = self.listReconcile {
+            for (key, sessionId) in reconcile.deleted where sessionId == nil || next[key]?.sessionId == sessionId {
+                next.removeValue(forKey: key)
+            }
+            for (key, row) in reconcile.rows where reconcile.deleted[key] == nil { next[key] = row }
+        }
         self.addAgentHomes(to: &next)
         self.sessions = next
         if let defaults = list["defaults"], let model = defaults["model"]?.text {
@@ -622,6 +702,10 @@ public final class GatewayStore: Identifiable {
     }
 
     private func scheduleRefresh() {
+        if self.listReconcile != nil {
+            self.listReconcile?.needsTrailingRefresh = true
+            return
+        }
         self.refreshTask?.cancel()
         self.refreshTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
@@ -713,9 +797,8 @@ public final class GatewayStore: Identifiable {
             self.applySessionChange(payload)
         case "users.prefs.changed":
             let keys = payload["keys"]?.array?.compactMap(\.string)
-            for map in self.syncedMaps where keys?.contains(map.pref) ?? true {
-                Task { await self.pull(map) }
-            }
+            let maps = self.syncedMaps.filter { keys?.contains($0.pref) ?? true && !self.consumeOwnWrite($0.pref) }
+            if !maps.isEmpty { Task { await self.pullMaps(maps) } }
         case "chat":
             guard let key = payload["sessionKey"]?.text else { return }
             if let runId = payload["runId"]?.text { self.runSessions[runId] = key }
@@ -731,7 +814,10 @@ public final class GatewayStore: Identifiable {
             if let key { self.chats[key]?.handleAgent(payload) }
         case "session.message":
             let key = payload["sessionKey"]?.text ?? payload["session"]?["key"]?.text
-            if let row = payload["session"].flatMap(SessionRow.init) { self.setSession(row.keepingPreview(of: self.sessions[row.key]), for: row.key) }
+            if let row = payload["session"].flatMap(SessionRow.init) {
+                self.setSession(row.keepingPreview(of: self.sessions[row.key]), for: row.key)
+                self.recordReconciledRow(row.key)
+            }
             if let key { self.chats[key]?.handleSessionMessage(payload) }
         case "progressCard.changed":
             guard let key = payload["sessionKey"]?.text else { return }
@@ -791,10 +877,12 @@ public final class GatewayStore: Identifiable {
         }
         for ancestor in payload["ancestorSessions"]?.array?.compactMap(SessionRow.init) ?? [] {
             self.setSession(ancestor.keepingPreview(of: self.sessions[ancestor.key]), for: ancestor.key)
+            self.recordReconciledRow(ancestor.key)
         }
         if let row = payload["session"].flatMap(SessionRow.init) {
             let previous = self.sessions[row.key]
             self.setSession(row.keepingPreview(of: previous), for: row.key)
+            self.recordReconciledRow(row.key)
             if self.bootstrapped, let previous, !row.isSubagent,
                row.activityMs > previous.activityMs, row.isUnread, !row.hasActiveRun,
                previous.hasActiveRun || !previous.isUnread
@@ -805,10 +893,15 @@ public final class GatewayStore: Identifiable {
         }
         let reason = payload["reason"]?.string
         if reason == "groups" {
+            self.listReconcile?.needsTrailingRefresh = true
             Task { await self.loadGroups() }
         }
         if let key = payload["key"]?.text ?? payload["sessionKey"]?.text, reason == "delete" || reason == "deleted" {
             let removedId = payload["sessionId"]?.text
+            if self.listReconcile != nil {
+                self.listReconcile?.rows.removeValue(forKey: key)
+                self.listReconcile?.deleted[key] = removedId
+            }
             if removedId == nil || self.sessions[key]?.sessionId == removedId {
                 self.setSession(nil, for: key)
                 Task { await self.transcriptChanged(key: key, change: .deleted) }
@@ -1301,12 +1394,48 @@ public final class GatewayStore: Identifiable {
         return .some(value == nil || value == .null ? nil : Self.names(from: value))
     }
 
+    /// Reads several maps with one `users.prefs.get`; nil when there's no user profile or the read failed.
+    private func fetchRemoteMaps(_ prefs: [String]) async -> [String: [String: String]?]? {
+        guard let result = try? await self.connection.request(
+            "users.prefs.get", ["keys": .array(prefs.map(JSONValue.string))], timeout: 15),
+            result["status"]?.string == "ok"
+        else { return nil }
+        var maps: [String: [String: String]?] = [:]
+        for pref in prefs {
+            let value = result["entries"]?[pref]
+            maps[pref] = (value == nil || value == .null) ? .some(nil) : .some(Self.names(from: value))
+        }
+        return maps
+    }
+
+    private func pullMaps(_ maps: [SyncedMap], epoch: Int? = nil) async {
+        guard let fetched = await self.fetchRemoteMaps(maps.map(\.pref)) else { return }
+        if let epoch, !self.isCurrent(epoch) { return }
+        for map in maps { await self.pull(map, fetched: fetched[map.pref] ?? nil) }
+    }
+
+    /// Everything synced through `users.prefs`, except the group maps `loadGroups` owns, in one read.
+    private func pullBootstrapPrefs(epoch: Int) async {
+        let prefs: Set<String> = [
+            Self.serverNamesPref, Self.chatIconsPref, Self.chatColorsPref, Self.chatOrderPref,
+            Self.groupIconsPref, Reactions.prefKey, Self.healthDismissalsPref, AvatarPreferences.prefKey,
+        ]
+        await self.pullMaps(self.syncedMaps.filter { prefs.contains($0.pref) }, epoch: epoch)
+        let queued = self.queuedAvatarChoices
+        self.queuedAvatarChoices = [:]
+        for (entry, value) in queued { self.setAvatarChoice(value, for: entry) }
+    }
+
     func pullServerNames() async { await self.pull(self.syncedMap(Self.serverNamesPref)) }
     func pullChatIcons() async { await self.pull(self.syncedMap(Self.chatIconsPref)) }
     func pullChatColors() async { await self.pull(self.syncedMap(Self.chatColorsPref)) }
 
     private func pull(_ map: SyncedMap) async {
         guard let fetched = await self.fetchRemoteMap(map.pref) else { return }
+        await self.pull(map, fetched: fetched)
+    }
+
+    private func pull(_ map: SyncedMap, fetched: [String: String]?) async {
         let defaults = self.defaults
         if !defaults.bool(forKey: map.syncedDefaultsKey) {
             // First sync from this device: keep values already set here, remote wins on conflicts.
@@ -1365,7 +1494,22 @@ public final class GatewayStore: Identifiable {
         }
     }
 
+    /// Prefs we just wrote, whose `users.prefs.changed` echo needs no read back.
+    @ObservationIgnored private var ownPrefWrites: [String: ContinuousClock.Instant] = [:]
+
+    private func consumeOwnWrite(_ pref: String) -> Bool {
+        guard let at = self.ownPrefWrites.removeValue(forKey: pref) else { return false }
+        return ContinuousClock.now - at < .seconds(3)
+    }
+
     private func writeRemoteMap(_ key: String, _ names: [String: String], expected: [String: String]?) async -> Bool {
+        self.ownPrefWrites[key] = .now
+        let ok = await self.sendRemoteMap(key, names, expected: expected)
+        if !ok { self.ownPrefWrites.removeValue(forKey: key) }
+        return ok
+    }
+
+    private func sendRemoteMap(_ key: String, _ names: [String: String], expected: [String: String]?) async -> Bool {
         let entries: JSONValue = .object([key: names.isEmpty ? .null : Self.json(names)])
         if self.prefsSupportsExpected {
             let params: JSONValue = ["entries": entries, "expectedEntries": .object([key: expected.map(Self.json) ?? .null])]
@@ -1569,13 +1713,6 @@ public final class GatewayStore: Identifiable {
         guard self.avatarChoices[entry] != value else { return }
         self.avatarChoices[entry] = value
         Task { await self.push(self.syncedMap(AvatarPreferences.prefKey), entry, value) }
-    }
-
-    private func pullAvatarChoices() async {
-        await self.pull(self.syncedMap(AvatarPreferences.prefKey))
-        let queued = self.queuedAvatarChoices
-        self.queuedAvatarChoices = [:]
-        for (entry, value) in queued { self.setAvatarChoice(value, for: entry) }
     }
 
     // MARK: Chat icons
