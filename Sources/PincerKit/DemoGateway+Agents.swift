@@ -150,6 +150,21 @@ extension DemoGateway {
                 """,
                 "IDENTITY.md": Self.identityMarkdown(name: "Kiko", emoji: "🌕", avatar: nil),
             ], at: now - 30 * hour),
+            Self.defaultWorkspace("mochi"): workspace([
+                "AGENTS.md": """
+                # AGENTS.md - Mochi's Workspace
+
+                You plan Alex's move to New York: apartments, packing, movers and utilities.
+
+                """,
+                "SOUL.md": """
+                # SOUL.md
+
+                You're **Mochi** 📦: organized, upbeat and always a step ahead of the checklist.
+
+                """,
+                "IDENTITY.md": Self.identityMarkdown(name: "Mochi", emoji: "📦", avatar: nil),
+            ], at: now - 40 * hour),
         ]
     }
 
