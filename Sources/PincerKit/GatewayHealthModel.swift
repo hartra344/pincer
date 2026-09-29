@@ -500,12 +500,13 @@ public final class GatewayHealthModel {
         let interval = Double(GatewayHealthModel.refreshInterval.components.seconds)
         let last = [self.lastHealthEventAt, self.lastRefreshAt].compactMap { $0 }.max()
         if let last, now.timeIntervalSince(last) < interval { return }
-        await self.refresh()
+        await self.refresh(now: now)
     }
 
-    public func refresh() async {
+    /// `now` is injectable so tests don't depend on how long the refresh itself takes.
+    public func refresh(now: Date = Date()) async {
         guard self.connection == .connected else { return }
-        self.lastRefreshAt = Date()
+        self.lastRefreshAt = now
         self.generation += 1
         let generation = self.generation
         async let health: Void = self.loadHealth(generation)

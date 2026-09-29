@@ -648,7 +648,8 @@ struct GatewayHealthStalenessTests {
         let later = Date().addingTimeInterval(Double(GatewayHealthModel.refreshInterval.components.seconds) + 5)
         await model.refreshIfStale(now: later)
         #expect(calls.count("health") == 1)
-        await model.refreshIfStale()
+        // Clock injected: a slow runner mustn't make the poll itself look stale.
+        await model.refreshIfStale(now: later.addingTimeInterval(1))
         #expect(calls.count("health") == 1)
     }
 }
