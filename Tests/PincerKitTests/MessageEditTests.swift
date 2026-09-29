@@ -158,4 +158,59 @@ struct MessageEditTests {
         #expect(chat.items.last?.id != reply.id)
         await self.finish(gateway)
     }
+
+    // MARK: In-chat branch navigation
+
+    @Test func seededChatListsItsBranchesActiveFirst() async {
+        let gateway = await self.connected()
+        let chat = await self.loaded(gateway, Self.garden)
+        await chat.refreshBranches()
+        #expect(chat.branches.count == 3 && chat.hasBranches)
+        #expect(chat.branches.first?.active == true && chat.activeBranchNumber == 1)
+        #expect(chat.canListBranches && chat.canSwitchBranches)
+        await self.finish(gateway)
+    }
+
+    @Test func switchingBranchesReloadsTheTranscript() async {
+        let gateway = await self.connected()
+        let chat = await self.loaded(gateway, Self.garden)
+        await chat.refreshBranches()
+        guard let other = chat.branches.first(where: { !$0.active }) else { Issue.record("no inactive branch"); return }
+        let before = chat.items.map(\.plainText)
+        #expect(await chat.switchBranch(to: other.leafEntryId))
+        await self.settle { chat.items.map(\.plainText) != before && chat.hasLoaded }
+        #expect(chat.items.map(\.plainText) != before)
+        #expect(chat.branches.first { $0.active }?.leafEntryId == other.leafEntryId && chat.branches.count == 3)
+        #expect(!(await chat.switchBranch(to: other.leafEntryId)), "the active branch can't be switched to")
+        await self.finish(gateway)
+    }
+
+    @Test func aBranchFailureSetsTheErrorAndKeepsTheTranscript() async {
+        let gateway = await self.connected()
+        let chat = await self.loaded(gateway, Self.garden)
+        await chat.refreshBranches()
+        let before = chat.items.map(\.plainText)
+        chat.branches.append(SessionBranch(leafEntryId: "missing-leaf", headline: "gone", messageCount: 1, active: false))
+        #expect(!(await chat.switchBranch(to: "missing-leaf")))
+        #expect(chat.errorMessage?.hasPrefix("Couldn’t switch branch") == true && chat.items.map(\.plainText) == before)
+        await self.finish(gateway)
+    }
+
+    @Test func editingCreatesABranchYouCanSwitchBackTo() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        await chat.refreshBranches()
+        #expect(!chat.hasBranches)
+        let original = chat.items.map(\.plainText)
+        #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
+        _ = await chat.sendEdit("something else", attachments: [])
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 }
+        #expect(chat.branches.count == 2 && chat.activeBranchNumber == 1)
+        guard let old = chat.branches.first(where: { !$0.active }) else { return }
+        #expect(await chat.switchBranch(to: old.leafEntryId))
+        await self.settle { chat.items.map(\.plainText) == original }
+        #expect(chat.items.map(\.plainText) == original)
+        await self.finish(gateway)
+    }
 }

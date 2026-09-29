@@ -71,6 +71,8 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
     let cached = await TranscriptCache.load(gatewayId: gateway.id, sessionKey: whole)
     check(cached?.items.contains { $0.plainText.contains("Make it shade tolerant; it only gets four hours") } != true, "the cache dropped the old message")
 
+    await runBranchNavigationChecks(chat, edited: "Make it shade tolerant and add a trellis.")
+
     // Regenerate: the last reply again, from the same message.
     guard let reply = chat.items.last, chat.canRegenerate(reply.id) else {
         check(false, "regenerate is offered on the last reply")
@@ -89,4 +91,27 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
     await gateway.sessionManager.load(filter: .all)
     let cleaned = await gateway.sessionManager.delete(forks)
     check(cleaned.succeeded.count == forks.count, "forks deleted again (\(cleaned.failed.map(\.message)))")
+}
+
+/// In-chat branch navigation on a chat that was just edited: the old path is a second branch.
+@MainActor
+private func runBranchNavigationChecks(_ chat: ChatStore, edited: String) async {
+    await chat.refreshBranches()
+    check(chat.canListBranches && chat.canSwitchBranches, "branches can be listed and switched")
+    check(chat.branches.count == 2 && chat.activeBranchNumber == 1 && chat.hasBranches,
+          "the edit left two branches, the new one active (\(chat.branches.map(\.headline)))")
+    guard let old = chat.branches.first(where: { !$0.active }) else { return }
+    let switched = await chat.switchBranch(to: old.leafEntryId)
+    check(switched, "switch to the earlier branch (\(chat.errorMessage ?? ""))")
+    let onOld = await waitFor("old branch transcript", timeout: 10) {
+        chat.hasLoaded && chat.items.filter { $0.role == .user }.map(\.plainText).last?.hasPrefix("Make it shade tolerant; it only") == true
+    }
+    check(onOld && !chat.items.contains { $0.plainText == edited }, "the earlier branch's messages are shown")
+    check(chat.branches.first { $0.active }?.leafEntryId == old.leafEntryId, "the switched-to branch is now active")
+    let again = await chat.switchBranch(to: old.leafEntryId)
+    check(!again, "the active branch is not a switch target")
+    if let back = chat.branches.first(where: { !$0.active }) {
+        let returned = await chat.switchBranch(to: back.leafEntryId)
+        check(returned, "switch back (\(chat.errorMessage ?? ""))")
+    }
 }
