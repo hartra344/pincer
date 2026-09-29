@@ -250,4 +250,77 @@ struct MessageIndexTailTests {
         #expect(full.documentsBuilt > 100)
         await MessageIndex.shutdown(root: self.root)
     }
+
+    /// A windowed save hands over only the newest items; the result equals indexing them all.
+    @Test func offsetTailEqualsFullTail() async throws {
+        defer { try? FileManager.default.removeItem(at: self.root) }
+        var generator = Generator(state: 11)
+        var outcomes: [MessageIndex.IndexOutcome] = []
+        for round in 0..<10 {
+            let old = generator.items(groups: 40)
+            var new = old
+            if round % 2 == 0 { new += generator.group(3000 + round) } else { new[new.count - 1].blocks = [.text("edited alpha")] }
+            let prefix = self.firstDifference(old, new)
+            let offset = generator.next(new.count)
+            let windowed = UUID()
+            let whole = UUID()
+            for gateway in [windowed, whole] { try self.touchFile(gateway, key: self.key) }
+            let windowedIndex = MessageIndex.shared(gatewayId: windowed, root: self.root)
+            let wholeIndex = MessageIndex.shared(gatewayId: whole, root: self.root)
+            for index in [windowedIndex, wholeIndex] {
+                await index.index(sessionKey: self.key, snapshot: self.snapshot(old), fileMtime: Date(), change: .full(token: "a"))
+            }
+            let change = IndexChange.tail(unchangedPrefix: prefix, baseToken: "a", token: "b")
+            let outcome = await windowedIndex.index(sessionKey: self.key, items: Array(new[offset...]), itemOffset: offset,
+                                                    totalCount: new.count, fileMtime: Date().addingTimeInterval(1), change: change)
+            outcomes.append(outcome)
+            await wholeIndex.index(sessionKey: self.key, snapshot: self.snapshot(new), fileMtime: Date().addingTimeInterval(1),
+                                   change: change)
+            if outcome == .done {
+                #expect(await windowedIndex.lastIndexStats.path == .tail)
+                #expect(await windowedIndex.indexedRows(sessionKey: self.key) == wholeIndex.indexedRows(sessionKey: self.key))
+                #expect(await windowedIndex.chatToken(sessionKey: self.key) == "b")
+                #expect(await windowedIndex.chatInfo(sessionKey: self.key)?.itemCount == new.count)
+            } else {
+                // Nothing was written; the whole transcript still applies.
+                #expect(await windowedIndex.chatToken(sessionKey: self.key) == "a")
+                await windowedIndex.index(sessionKey: self.key, snapshot: self.snapshot(new), fileMtime: Date().addingTimeInterval(1),
+                                          change: change)
+                #expect(await windowedIndex.indexedRows(sessionKey: self.key) == wholeIndex.indexedRows(sessionKey: self.key))
+            }
+            await MessageIndex.shutdown(root: self.root)
+        }
+        #expect(outcomes.contains(.done))
+    }
+
+    @Test func offsetEntryAsksForEarlierItems() async throws {
+        defer { try? FileManager.default.removeItem(at: self.root) }
+        var generator = Generator(state: 12)
+        let items = generator.items(groups: 30)
+        let gateway = UUID()
+        try self.touchFile(gateway, key: self.key)
+        let index = MessageIndex.shared(gatewayId: gateway, root: self.root)
+        await index.index(sessionKey: self.key, snapshot: self.snapshot(items), fileMtime: Date(), change: .full(token: "a"))
+        let offset = items.count - 2
+        let window = Array(items[offset...])
+        let later = Date().addingTimeInterval(1)
+        // A full change, a stale base, a prefix before the window, and a mismatched count all need more.
+        var outcomes: [MessageIndex.IndexOutcome] = []
+        outcomes.append(await index.index(sessionKey: self.key, items: window, itemOffset: offset, totalCount: items.count,
+                                          fileMtime: later, change: .full(token: "b")))
+        outcomes.append(await index.index(sessionKey: self.key, items: window, itemOffset: offset, totalCount: items.count,
+                                          fileMtime: later, change: .tail(unchangedPrefix: items.count, baseToken: "x", token: "b")))
+        outcomes.append(await index.index(sessionKey: self.key, items: window, itemOffset: offset, totalCount: items.count,
+                                          fileMtime: later, change: .tail(unchangedPrefix: 0, baseToken: "a", token: "b")))
+        outcomes.append(await index.index(sessionKey: self.key, items: window, itemOffset: offset, totalCount: items.count + 1,
+                                          fileMtime: later, change: .tail(unchangedPrefix: items.count, baseToken: "a", token: "b")))
+        #expect(outcomes.allSatisfy { $0 == .needsEarlierItems })
+        #expect(await index.chatToken(sessionKey: self.key) == "a")
+        // Offset zero is the whole transcript.
+        let done = await index.index(sessionKey: self.key, items: items, itemOffset: 0, totalCount: items.count,
+                                     fileMtime: later, change: .full(token: "c"))
+        #expect(done == .done)
+        #expect(await index.chatToken(sessionKey: self.key) == "c")
+        await MessageIndex.shutdown(root: self.root)
+    }
 }

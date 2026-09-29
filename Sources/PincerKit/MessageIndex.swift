@@ -12,6 +12,14 @@ public enum IndexChange: Sendable, Equatable {
     case tail(unchangedPrefix: Int, baseToken: String, token: String)
 }
 
+/// What indexing a slice of a transcript came to.
+public enum IndexOutcome: Sendable, Equatable {
+    case done
+    /// The slice doesn't reach back far enough (or the change needs the whole transcript);
+    /// call again with all of it.
+    case needsEarlierItems
+}
+
 /// On-disk full-text index of one Gateway's cached transcripts (SQLite FTS5), next to the
 /// transcripts themselves. It's derived data: a file that isn't a readable index of this version
 /// (an old version, a corrupt file) is deleted and rebuilt from the transcript cache. Failures
@@ -313,13 +321,8 @@ public actor MessageIndex {
             token = newToken
             if prefix >= 0, prefix <= items.count {
                 let start = MessageSearch.rowBoundary(items: items, atOrBefore: prefix)
-                let chat = ChatState(mtime: mtime, itemCount: items.count, lastItemId: items.last?.id,
-                                     digest: "t:\(newToken)", token: newToken)
-                let tail = TailWrite(start: start, prefix: prefix, baseToken: baseToken)
-                guard await self.canTail(sessionKey: sessionKey, tail: tail, mtime: mtime) else { break }
-                let documents = Self.prepared(sessionKey: sessionKey, items: items[start...])
-                guard !self.isRemoved else { return }
-                if await self.write(sessionKey: sessionKey, chat: chat, documents: documents, tail: tail) != .needsFull { return }
+                if await self.indexTail(sessionKey: sessionKey, items: items, offset: 0, start: start, prefix: prefix,
+                                        baseToken: baseToken, token: newToken, mtime: mtime) != .fallback { return }
             }
         }
         // Hashing what the messages are built from is much cheaper than building them, so an
@@ -329,6 +332,54 @@ public actor MessageIndex {
         guard await self.write(sessionKey: sessionKey, chat: chat, documents: nil) == .needsDocuments, !self.isRemoved else { return }
         let documents = Self.prepared(sessionKey: sessionKey, items: items[...])
         await self.write(sessionKey: sessionKey, chat: chat, documents: documents)
+    }
+
+    public typealias IndexOutcome = PincerKit.IndexOutcome
+
+    /// Like `index(sessionKey:snapshot:fileMtime:change:)` for a save that has only the newest
+    /// items at hand: `items` are the transcript's from index `itemOffset` on, of `totalCount`
+    /// in all, and `change`'s `unchangedPrefix` counts from the transcript's start. Only a
+    /// `.tail` that can start within `items` is applied; anything else (a `.full`, a tail that
+    /// must start earlier, or one that can't be applied to what's indexed) does nothing and
+    /// returns `.needsEarlierItems`.
+    public nonisolated func index(sessionKey: String, items: [ChatItem], itemOffset: Int, totalCount: Int, fileMtime: Date,
+                                  change: IndexChange) async -> IndexOutcome
+    {
+        self.inFlight.begin()
+        defer { self.inFlight.end() }
+        guard itemOffset >= 0, itemOffset + items.count == totalCount else { return .needsEarlierItems }
+        if itemOffset == 0 {
+            await self.index(sessionKey: sessionKey, snapshot: TranscriptCache.Snapshot(items: items, complete: false),
+                             fileMtime: fileMtime, change: change)
+            return .done
+        }
+        guard !self.isRemoved else { return .done }
+        guard case let .tail(prefix, baseToken, token) = change, prefix >= itemOffset, prefix <= totalCount,
+              !items.isEmpty
+        else { return .needsEarlierItems }
+        let start = MessageSearch.rowBoundary(items: items, atOrBefore: prefix - itemOffset)
+        // Without a boundary in reach, the row containing the change may begin before `items`.
+        guard MessageSearch.isRowBoundary(items[start]) else { return .needsEarlierItems }
+        let result = await self.indexTail(sessionKey: sessionKey, items: items, offset: itemOffset, start: start,
+                                          prefix: prefix, baseToken: baseToken, token: token,
+                                          mtime: fileMtime.timeIntervalSinceReferenceDate)
+        return result == .fallback ? .needsEarlierItems : .done
+    }
+
+    private enum TailResult { case done, fallback }
+
+    /// Applies a tail whose rows start at `items[start]`, item `offset + start` of the transcript.
+    private nonisolated func indexTail(sessionKey: String, items: [ChatItem], offset: Int, start: Int, prefix: Int,
+                                       baseToken: String, token: String, mtime: Double) async -> TailResult
+    {
+        let chat = ChatState(mtime: mtime, itemCount: offset + items.count, lastItemId: items.last?.id,
+                             digest: "t:\(token)", token: token)
+        let tail = TailWrite(start: offset + start, prefix: prefix, baseToken: baseToken)
+        guard await self.canTail(sessionKey: sessionKey, tail: tail, mtime: mtime) else { return .fallback }
+        var documents = Self.prepared(sessionKey: sessionKey, items: items[start...])
+        if offset > 0 { for index in documents.indices { documents[index].pos += offset } }
+        guard !self.isRemoved else { return .done }
+        return await self.write(sessionKey: sessionKey, chat: chat, documents: documents, tail: tail) == .needsFull ? .fallback : .done
     }
 
     private static func prepared(sessionKey: String, items: ArraySlice<ChatItem>) -> [Prepared] {

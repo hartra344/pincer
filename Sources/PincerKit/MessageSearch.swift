@@ -177,11 +177,15 @@ public enum MessageSearch {
     static func rowBoundary(items: [ChatItem], atOrBefore prefix: Int) -> Int {
         var index = min(prefix, items.count - 1)
         while index > 0 {
-            let item = items[index]
-            if !item.isPending, item.role == .user || item.role == .marker { return index }
+            if self.isRowBoundary(items[index]) { return index }
             index -= 1
         }
         return 0
+    }
+
+    /// Whether building can start at `item`: rows always start at a committed user message or marker.
+    static func isRowBoundary(_ item: ChatItem) -> Bool {
+        !item.isPending && (item.role == .user || item.role == .marker)
     }
 
     /// Text as indexed and queried: case and accents removed.
