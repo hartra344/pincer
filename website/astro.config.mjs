@@ -53,6 +53,7 @@ export default defineConfig({
 						{ slug: 'guides/command-palette-and-navigation' },
 						{ slug: 'guides/transcript' },
 						{ slug: 'guides/search' },
+						{ slug: 'guides/export-and-bookmarks' },
 						{ slug: 'guides/composer' },
 						{ slug: 'guides/tool-calls' },
 						{ slug: 'guides/file-diffs' },

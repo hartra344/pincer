@@ -109,8 +109,8 @@ The gateway redacts tokens and other secrets before it sends log lines; Pincer d
 
 [`pincer://` links and Handoff](../../guides/deep-links-and-handoff/) only **navigate**:
 
-- Opening a link or a Handoff activity selects a gateway, opens a chat and can scroll to a message. It never sends a message, fills in the composer, answers an approval or pairing request, changes settings, or adds or edits a gateway. Parameters other than `gateway`, `session` and `message` are ignored.
-- Links carry only the gateway ID, the gateway's URL, the session key and an optional message ID. Handoff carries the same, minus the message ID. They never carry a token, password or message text, and any user name or password in the gateway URL is removed. The URL lets another of your devices find the same gateway.
+- Opening a link or a Handoff activity selects a gateway, opens a chat and can scroll to a message. It never sends a message, fills in the composer, answers an approval or pairing request, changes settings, or adds or edits a gateway. Parameters other than `gateway`, `url`, `host`, `session` and `message` are ignored.
+- Links carry only the gateway ID, the gateway's URL, the host name the gateway reports for itself, the session key and an optional message ID. Handoff carries the same, minus the message ID. They never carry a token, password or message text, and any user name or password in the gateway URL is removed. The URL and host name let another of your devices find the same gateway. Notices about a link never repeat anything from it.
 - **Links include your gateway's address**, and session keys can reveal a chat's channel, such as a Discord channel ID. If your gateway host is private, don't share links publicly.
 - Handoff activities aren't indexed by Spotlight and have no web URL, so they only reach your own devices signed in to the same Apple Account.
 - Notices for a missing gateway, chat or message use fixed text. Pincer doesn't display the link's contents.

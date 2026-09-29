@@ -31,6 +31,10 @@ struct ChatView: View {
     @State private var exporting: ExportedFile?
     @State private var find = TranscriptFind()
     @State private var jump: TranscriptJump?
+    @State private var exportState = ChatExportState()
+    #if os(iOS)
+    @State private var sharedFile: SharedFile?
+    #endif
 
     private var row: SessionRow? { self.chat.sessionRow }
     private var agent: AgentSummary { self.gateway.agent(self.row?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main") }
@@ -100,6 +104,27 @@ struct ChatView: View {
             await self.chat.load()
         }
         .focusedSceneValue(\.transcriptFind, self.find)
+        .focusedSceneValue(\.chatExport, self.exportState)
+        .sheet(isPresented: self.$exportState.showExport) {
+            ExportSheet(chat: self.chat, title: self.row?.title ?? L("Chat"), agentName: self.agent.name,
+                        agents: self.gateway.agents) { name, data in
+                #if os(iOS)
+                self.sharedFile = SharedFile.write(name: name, data: data)
+                #else
+                self.exporting = ExportedFile(name: name, data: data)
+                #endif
+            }
+        }
+        #if os(iOS)
+        .sheet(item: self.$sharedFile) { file in
+            ActivityView(url: file.url).presentationDetents([.medium, .large])
+        }
+        #endif
+        .sheet(isPresented: self.$exportState.showBookmarks) {
+            BookmarksView(store: BookmarkStore.shared(gatewayId: self.gateway.id), sessionKey: self.chat.sessionKey) { bookmark in
+                self.jump = TranscriptJump(id: UUID(), messageId: bookmark.messageId)
+            }
+        }
         .focusedSceneValue(\.replyToLast, ReplyToLast(chat: self.chat, agentName: self.agent.name))
         .task(id: self.chat.notice) {
             guard self.chat.notice != nil else { return }
@@ -363,6 +388,17 @@ private struct TranscriptPane: View {
                     copyLink: { [app = self.app, gateway = self.gateway, key = self.chat.sessionKey] in
                         CopyChatLinkButton.copyLink(app: app, gateway: gateway, sessionKey: key, messageId: $0)
                     },
+                    toggleBookmark: { [chat = self.chat, gateway = self.gateway] id in
+                        let item = chat.items.first { $0.transcriptId == id || $0.id == id }
+                        let store = BookmarkStore.shared(gatewayId: gateway.id)
+                        let added = store.toggle(Bookmark(
+                            sessionKey: chat.sessionKey, messageId: id, preview: Bookmark.preview(item?.plainText ?? ""),
+                            role: item?.role.rawValue ?? "assistant", messageDate: item?.timestamp))
+                        chat.notice = added ? L("Bookmarked") : L("Bookmark removed")
+                    },
+                    isBookmarked: { [key = self.chat.sessionKey, id = self.gateway.id] in
+                        BookmarkStore.shared(gatewayId: id).isBookmarked(sessionKey: key, messageId: $0)
+                    },
                     previewHTML: { [$previewingHTML] in $previewingHTML.wrappedValue = HTMLPreviewItem(html: $0) }),
                 bottomInset: self.bottomInset,
                 topInset: self.topInset,
@@ -455,6 +491,7 @@ private struct ChatSessionMenu: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @FocusedValue(\.transcriptFind) private var find
+    @FocusedValue(\.chatExport) private var chatExport
     @Binding var toolsInspector: ChatToolsInspection?
     let row: SessionRow?
 
@@ -475,6 +512,8 @@ private struct ChatSessionMenu: View {
                 }
                 Button(L("Copy Session Key"), systemImage: "key") { Clipboard.copy(row.key) }
                 CopyChatLinkButton(sessionKey: row.key)
+                Button(L("Export Chat…"), systemImage: "square.and.arrow.up") { self.chatExport?.showExport = true }
+                Button(L("Bookmarks…"), systemImage: "star") { self.chatExport?.showBookmarks = true }
                 Button(L("Session Usage…"), systemImage: "chart.bar") {
                     self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
                 }

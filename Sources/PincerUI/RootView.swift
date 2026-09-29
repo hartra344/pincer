@@ -33,6 +33,7 @@ public struct PincerScene: Scene {
         .defaultSize(width: 1180, height: 780)
         .commands {
             TranscriptFindCommands()
+            ExportChatCommands()
             CommandGroup(after: .newItem) {
                 Button(L("Add Gateway…")) {
                     self.app.firstRun.present()

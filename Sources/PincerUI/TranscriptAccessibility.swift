@@ -52,6 +52,9 @@ struct TranscriptRowAccessibilityAction {
         guard let messageId = layout.messages.last?.id else { return result + source }
         result.append(.init(name: L("Reply")) { [weak actions] in actions?.reply(to: messageId) })
         result.append(.init(name: L("Copy Link")) { [weak actions] in actions?.copyLink(to: messageId) })
+        result.append(.init(name: actions.isBookmarked(messageId) ? L("Remove Bookmark") : L("Bookmark")) { [weak actions] in
+            actions?.toggleBookmark(messageId)
+        })
         if actions.reactionsEnabled {
             result.append(.init(name: L("Add Reaction")) { [weak actions, weak anchor] in
                 guard let actions, let anchor else { return }

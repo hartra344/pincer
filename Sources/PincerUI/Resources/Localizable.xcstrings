@@ -643,6 +643,16 @@
         }
       }
     },
+    "(No text)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(No text)"
+          }
+        }
+      }
+    },
     "(empty file)": {
       "localizations": {
         "en": {
@@ -1623,6 +1633,16 @@
         }
       }
     },
+    "Attachment: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attachment: %@"
+          }
+        }
+      }
+    },
     "Attachments need a connection": {
       "localizations": {
         "en": {
@@ -1769,6 +1789,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "Blue"
+          }
+        }
+      }
+    },
+    "Bookmark": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bookmark"
+          }
+        }
+      }
+    },
+    "Bookmark a message from its menu to find it here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bookmark a message from its menu to find it here."
+          }
+        }
+      }
+    },
+    "Bookmark removed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bookmark removed"
+          }
+        }
+      }
+    },
+    "Bookmarked": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bookmarked"
+          }
+        }
+      }
+    },
+    "Bookmarks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bookmarks"
+          }
+        }
+      }
+    },
+    "Bookmarks…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bookmarks…"
           }
         }
       }
@@ -3333,6 +3413,16 @@
         }
       }
     },
+    "Couldn't load the full history. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't load the full history. Try again."
+          }
+        }
+      }
+    },
     "Couldn't load the full record: %@": {
       "localizations": {
         "en": {
@@ -4493,6 +4583,36 @@
         }
       }
     },
+    "Export Chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Chat"
+          }
+        }
+      }
+    },
+    "Export Chat…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export Chat…"
+          }
+        }
+      }
+    },
+    "Exported %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exported %@"
+          }
+        }
+      }
+    },
     "Export…": {
       "localizations": {
         "en": {
@@ -4809,6 +4929,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "For your security, new devices need your OK. Run this on the Gateway host:"
+          }
+        }
+      }
+    },
+    "Format": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
           }
         }
       }
@@ -5413,6 +5543,26 @@
         }
       }
     },
+    "Include thinking": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include thinking"
+          }
+        }
+      }
+    },
+    "Include tool calls": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include tool calls"
+          }
+        }
+      }
+    },
     "Indexing chats… %lld of %lld — results may be incomplete": {
       "localizations": {
         "en": {
@@ -5973,6 +6123,16 @@
         }
       }
     },
+    "Loading full history…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading full history…"
+          }
+        }
+      }
+    },
     "Loading messages": {
       "localizations": {
         "en": {
@@ -6179,6 +6339,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mark as Unread"
+          }
+        }
+      }
+    },
+    "Markdown": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markdown"
           }
         }
       }
@@ -6749,6 +6919,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No Automations"
+          }
+        }
+      }
+    },
+    "No Bookmarks": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Bookmarks"
           }
         }
       }
@@ -7873,6 +8053,16 @@
         }
       }
     },
+    "Output:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output:"
+          }
+        }
+      }
+    },
     "Overview": {
       "localizations": {
         "en": {
@@ -7899,6 +8089,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Overwrite with Mine"
+          }
+        }
+      }
+    },
+    "PDF": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF"
           }
         }
       }
@@ -8209,6 +8409,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pixel"
+          }
+        }
+      }
+    },
+    "Plain Text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plain Text"
           }
         }
       }
@@ -8869,6 +9079,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove %@?"
+          }
+        }
+      }
+    },
+    "Remove Bookmark": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Bookmark"
           }
         }
       }
@@ -12509,6 +12729,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tool result"
+          }
+        }
+      }
+    },
+    "Tool: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool: %@"
           }
         }
       }

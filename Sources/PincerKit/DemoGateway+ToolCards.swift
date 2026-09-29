@@ -102,7 +102,7 @@ extension DemoGateway {
                 Self.toolCall(Self.toolCardsExecCall, "exec", [
                     "command": .string(Self.toolCardsExecCommand), "workdir": "~/src/pincer", "timeoutSeconds": 30,
                 ]),
-            ], ago: start - 20),
+            ], id: DemoBookmarks.toolsExecMessageId, ago: start - 20),
             result(Self.toolCardsExecCall, "exec", Self.toolCardsExecOutput, ago: start - 22, details: [
                 "status": "completed", "exitCode": 0, "durationMs": 1240, "cwd": "/Users/alex/src/pincer",
                 "aggregated": .string(Self.toolCardsExecOutput),
@@ -155,7 +155,7 @@ extension DemoGateway {
             ]),
             Self.message("assistant", [Self.text("""
             \(Self.toolCardsPreview) Run `openclaw mcp auth Era` on a machine with a browser to finish the sign-in.
-            """)], ago: start - 240),
+            """)], id: DemoBookmarks.toolsSummaryMessageId, ago: start - 240),
         ]
     }
 }
