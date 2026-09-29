@@ -259,6 +259,45 @@ func checkTranscriptCacheVersioning() async {
     let (offSnapshot, offOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: UUID(), sessionKey: "k", root: nil)
     check(offUsage == 0 && offSnapshot == nil && offOutcome == .missing
           && TranscriptCache.quarantineDirectory(gatewayId: UUID(), root: nil) == nil, "cache off: usage 0, clear no-op, no quarantine")
+
+    await withScratchCache { root in await checkSegmentedCache(root: root) }
+}
+
+/// v8 (#199): a v7 single file migrates to manifest + segments, an unchanged save writes nothing,
+/// an unreadable file is kept (never quarantined), a missing segment is corrupt.
+@MainActor
+private func checkSegmentedCache(root: URL?) async {
+    let gatewayId = UUID()
+    let key = "agent:main:segmented"
+    let ids = (0..<600).map { "s\($0)" }
+    guard let url = TranscriptCache.file(gatewayId: gatewayId, sessionKey: key, root: root) else { return check(false, "cache root for v8 checks") }
+    let segments = url.deletingPathExtension().appendingPathExtension("segments")
+    let legacy = cacheData(version: 7, ids: ids)
+    writeRawCache(legacy, gatewayId: gatewayId, sessionKey: key, root: root)
+
+    let (migrated, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: key, root: root)
+    check(outcome == .migrated(from: 7) && migrated?.items.map(\.id) == ids, "v7 single file migrates to v8 (\(outcome))")
+    let saved = await waitFor("v7 saved back as v8", timeout: 5) { (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])?["version"] as? Int == 8 }
+    check(saved && fileExists(segments), "migrated v7 saved back as a v8 manifest with segments")
+
+    let snapshot = TranscriptCache.Snapshot(items: migrated?.items ?? [], complete: true, activityMs: 5)
+    let mtime = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+    let again = await TranscriptCache.saveReturningStats(snapshot, gatewayId: gatewayId, sessionKey: key, root: root)
+    let mtimeAfter = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+    check(again.unchanged && again.bytesWritten == 0 && mtime == mtimeAfter, "identical save writes nothing (\(again.bytesWritten) bytes)")
+
+    try? FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
+    let (_, locked) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: key, root: root)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+    let deniedReads = !FileManager.default.isReadableFile(atPath: url.path) || { if case .unavailable = locked { true } else { false } }()
+    check(deniedReads && !locked.discarded && quarantineCount(gatewayId, root: root) == 0, "unreadable manifest is unavailable, not quarantined (\(locked))")
+
+    if let first = (try? FileManager.default.contentsOfDirectory(atPath: segments.path))?.first {
+        try? FileManager.default.removeItem(at: segments.appendingPathComponent(first))
+        let (_, missing) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: key, root: root)
+        check(isCorrupt(missing) && quarantineCount(gatewayId, root: root) == 1, "missing segment → corrupt, quarantined (\(missing))")
+    }
+    TranscriptCache.removeAll(gatewayId: gatewayId, root: root)
 }
 
 /// Live: a chat whose cache file was corrupted between launches still loads its history.
