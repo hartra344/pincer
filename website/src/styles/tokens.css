@@ -3,7 +3,7 @@
  * Coral (the Lobster accent) means "lit": primary action, active line, needs attention.
  * Shared by the landing page and the Starlight theme (docs.css). Type is the Apple system stack
  * throughout (SF Pro on Apple devices), matching the native app; no web fonts.
- * Contrast (WCAG): text/bg ≥ 13:1, muted/bg ≥ 5.3:1, lamp-text/bg ≥ 4.9:1 in both modes.
+ * Contrast (WCAG): text/bg ≥ 13:1, muted/bg ≥ 5.3:1, lamp-text ≥ 5.3:1 on bg and panel in both modes.
  */
 :root {
 	--font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
@@ -55,7 +55,7 @@
 	--pc-muted: #4a5a54;
 	--pc-lamp: #b33a25;
 	--pc-lamp-ink: #ffffff;
-	--pc-lamp-text: #b33a25;
+	--pc-lamp-text: #a02e1c;
 	--pc-lamp-glow: rgb(214 70 45 / 0.35);
 	--pc-lamp-off: #b7c3bd;
 	--pc-brass: #7a5c22;
