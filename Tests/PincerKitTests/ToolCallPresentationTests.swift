@@ -163,4 +163,36 @@ struct ToolCallPresentationTests {
         let t = tool("web_fetch", args: #"{"url":"u","maxChars":9}"#, result: "body")
         #expect(TranscriptSearch.toolTexts(t, limit: 100) == p.searchTexts)
     }
+
+    private func execStatus(_ details: String) -> String? {
+        let r = #"{"content":[{"type":"text","text":"x"}],"details":\#(details)}"#
+        return ToolCallPresentation.make(tool("exec", args: #"{"command":"x"}"#, result: r)).output?.status
+    }
+
+    @Test func execStatusOmitsCompletedAndFailed() {
+        #expect(execStatus(#"{"status":"completed","exitCode":0}"#) == nil)
+        #expect(execStatus(#"{"status":"failed","exitCode":1}"#) == nil)
+    }
+
+    @Test func execStatusHumanizesStates() {
+        #expect(execStatus(#"{"status":"running"}"#) == "running")
+        #expect(execStatus(#"{"status":"approval-pending"}"#) == "approval pending")
+        #expect(execStatus(#"{"status":"approval-unavailable"}"#) == "approval unavailable")
+    }
+
+    @Test func execStatusFromFailureKind() {
+        #expect(execStatus(#"{"status":"failed","failureKind":"no-output-timeout"}"#) == "no output timeout")
+        #expect(execStatus(#"{"status":"failed","failureKind":"overall-timeout"}"#) == "timed out")
+        #expect(execStatus(#"{"status":"failed","failureKind":"shell-command-not-found"}"#) == "command not found")
+        #expect(execStatus(#"{"failureKind":"overall-timeout","exitSignal":"SIGKILL"}"#) == "signal SIGKILL")
+    }
+
+    @Test func chipLabelsAreStableEnglishKeys() {
+        let args = #"{"command":"x","workdir":"/a","timeoutSeconds":3,"background":true,"pty":true,"elevated":true}"#
+        let p = ToolCallPresentation.make(tool("exec", args: args))
+        #expect(p.chips.map(\.label) == ["Working directory", "Timeout", "Background", "Pseudo-terminal", "Elevated"])
+        let w = ToolCallPresentation.make(tool("web_fetch", args: #"{"url":"u","extractMode":"text"}"#))
+        #expect(w.chips.map(\.label) == ["Extract mode"])
+        #expect(ToolCallPresentation.make(tool("a__b")).chips.map(\.label) == ["Server"])
+    }
 }

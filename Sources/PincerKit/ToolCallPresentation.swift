@@ -219,8 +219,18 @@ public struct ToolCallPresentation: Hashable, Sendable {
                 if let text = signal.text { return "signal \(text)" }
                 if let number = signal.int { return "signal \(number)" }
             }
-            if let status = details["status"]?.text, status != "completed" { return status }
-            return nil
+            switch details["failureKind"]?.text {
+            case "no-output-timeout": return "no output timeout"
+            case "overall-timeout": return "timed out"
+            case "shell-command-not-found": return "command not found"
+            default: break
+            }
+            switch details["status"]?.text {
+            case "running": return "running"
+            case "approval-pending": return "approval pending"
+            case "approval-unavailable": return "approval unavailable"
+            default: return nil
+            }
         case .webFetch:
             return details["status"]?.int.map(String.init)
         default:
