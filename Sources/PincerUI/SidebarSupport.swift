@@ -22,11 +22,18 @@ struct SidebarModel: Equatable {
         /// the still pose it holds for what the agent's chats are doing.
         var avatar: AvatarStyle?
         var avatarState = AvatarState.idle
+        /// Name of the agent a nested group sits under.
+        var agentName: String?
 
         /// A group nested under an agent (by-agent mode).
         var isSubsection: Bool {
             if case .agentGroup = self.section.kind { return true }
             return false
+        }
+
+        var addAccessibilityLabel: String {
+            guard self.isSubsection else { return "New chat" }
+            return self.agentName.map { "New chat in \(self.section.title) with \($0)" } ?? "New chat in \(self.section.title)"
         }
 
         /// What the header's + does: a new chat with the agent, and the group when this is one.
@@ -39,7 +46,7 @@ struct SidebarModel: Equatable {
 
         /// VoiceOver label for a nested group header, which has no avatar or agent name to lean on.
         var subsectionAccessibilityLabel: String {
-            var parts = ["\(self.section.title) group"]
+            var parts = [self.agentName.map { "\(self.section.title) group in \($0)" } ?? "\(self.section.title) group"]
             if self.isCollapsed {
                 let unread = self.section.unreadCount
                 if unread > 0 { parts.append("\(unread) unread") }
@@ -57,7 +64,7 @@ struct SidebarModel: Equatable {
             lhs.id == rhs.id && lhs.isCollapsed == rhs.isCollapsed && lhs.newChatAgent == rhs.newChatAgent && lhs.icon == rhs.icon
                 && lhs.section.title == rhs.section.title && lhs.section.emoji == rhs.section.emoji
                 && lhs.section.kind == rhs.section.kind && lhs.section.unreadCount == rhs.section.unreadCount
-                && lhs.avatar == rhs.avatar && lhs.avatarState == rhs.avatarState
+                && lhs.agentName == rhs.agentName && lhs.avatar == rhs.avatar && lhs.avatarState == rhs.avatarState
         }
     }
 
@@ -180,6 +187,7 @@ struct SidebarModel: Equatable {
             }
             var header = Header(id: self.headerId(section.id), section: section,
                                 isCollapsed: collapsed.contains(section.id), newChatAgent: newChatAgent, icon: icon)
+            if depth > 0, let agentId = section.agentId { header.agentName = gateway.agent(agentId).name }
             if avatarsOn, case let .agent(agentId) = section.kind {
                 header.avatar = AvatarSettings.style(for: gateway.agent(agentId))
                 let rows = section.allChannels.flatMap { [$0.row] + $0.threads }
@@ -406,11 +414,16 @@ enum SidebarMenus {
         case let .agentGroup(agent, name):
             return self.groupMenu(name, agent: agent, gateway: gateway, actions: actions)
         case let .agent(agent):
-            let groups = section.subsections.compactMap(\.groupName)
-            guard !groups.isEmpty else { return [] }
-            return [.submenu("New Chat in Group", image: "square.and.pencil", groups.map { name in
+            guard gateway.organization == .agent else { return [] }
+            // Every group, so an agent's first chat in a group can start here.
+            var groups: [SidebarMenuItem] = gateway.groupNames.map { name in
                 .action(name) { actions.newChatInGroup(name, agent) }
-            })]
+            }
+            if !groups.isEmpty { groups.append(.divider) }
+            groups.append(.action("New Group…") {
+                self.newGroup(gateway: gateway, actions: actions) { name in actions.newChatInGroup(name, agent) }
+            })
+            return [.submenu("New Chat in Group", image: "square.and.pencil", groups)]
         case .automations:
             return [.action("Manage Automations…", image: "clock.arrow.circlepath") { actions.openAutomations() }]
         case .other where section.id == "group:":
@@ -459,8 +472,9 @@ enum SidebarMenus {
                 }
                 actions.confirm(ConfirmPrompt(
                     title: "Delete “\(name)”?",
-                    message: count == 1 ? "Its chat won’t be deleted; it just won’t be in a group."
-                        : "Its \(count) chats won’t be deleted; they just won’t be in a group.",
+                    message: (count == 1 ? "Its chat won’t be deleted; it just won’t be in a group."
+                        : "Its \(count) chats won’t be deleted; they just won’t be in a group.")
+                        + (agent == nil ? "" : " This group is shared by all agents."),
                     action: "Delete Group") {
                     Task { await gateway.deleteGroup(name) }
                 })

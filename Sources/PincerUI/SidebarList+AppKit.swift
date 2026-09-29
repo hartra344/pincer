@@ -754,7 +754,8 @@ private final class SidebarHeaderCell: NSTableCellView {
         self.add.isEnabled = canAdd
         self.add.setAccessibilityElement(canAdd)
         self.onAdd = header.addAction(actions)
-        self.add.toolTip = header.isSubsection ? "New chat in \(section.title)" : "New chat"
+        self.add.toolTip = header.addAccessibilityLabel
+        self.add.setAccessibilityLabel(header.addAccessibilityLabel)
         if header.isSubsection {
             self.setAccessibilityLabel(header.subsectionAccessibilityLabel)
         } else {

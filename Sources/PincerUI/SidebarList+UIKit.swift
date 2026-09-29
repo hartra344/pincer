@@ -674,6 +674,7 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
         }
         if let add = header.addAction(actions) {
             self.onAdd = add
+            self.add.accessibilityLabel = header.addAccessibilityLabel
             accessories.append(.customView(configuration: .init(customView: self.add, placement: .trailing(),
                                                                 reservedLayoutWidth: .actual, maintainsFixedSize: true)))
         }
