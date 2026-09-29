@@ -102,6 +102,9 @@ struct TranscriptList: UIViewRepresentable {
             layout.coordinator = self
             let view = TranscriptCollectionView(frame: .zero, collectionViewLayout: layout)
             view.coordinator = self
+            view.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (_: UICollectionView, _) in
+                self?.renderer.appearanceChanged()
+            }
             view.backgroundColor = .clear
             view.allowsSelection = false
             view.keyboardDismissMode = .interactive

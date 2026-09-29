@@ -205,6 +205,10 @@ final class TranscriptRenderer: TranscriptRowActions {
                 self?.invalidateAll()
             }
         })
+        // A light/dark flip made while backgrounded is picked up on return (#369).
+        self.observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.appearanceChanged() }
+        })
         #endif
     }
 
@@ -519,6 +523,16 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.flash = messageId
         self.invalidate(Set([old, messageId].compactMap { $0 }.compactMap(self.rowId(containing:))))
     }
+
+    #if os(iOS)
+    /// The list's light/dark style changed: rich blocks (diagrams, math) are drawn per appearance,
+    /// so rebuild rows if the rendered palette differs. iOS renders app-switcher snapshots in both
+    /// styles while backgrounded; those flips are skipped and re-checked on becoming active.
+    func appearanceChanged() {
+        guard UIApplication.shared.applicationState != .background else { return }
+        self.settingsChanged()
+    }
+    #endif
 
     @discardableResult private func settingsChanged() -> Bool {
         let settings = TranscriptSettings.current(for: self.context)
