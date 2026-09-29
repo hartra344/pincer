@@ -184,7 +184,11 @@ struct DemoMCPState {
     }
 
     var hash: String {
-        SHA256.hash(data: Data(self.config.compactString().utf8)).map { String(format: "%02x", $0) }.joined().prefix(32).description
+        // Sorted keys: dictionary order isn't stable, and the hash must match between config.get and config.patch.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let data = (try? encoder.encode(self.config)) ?? Data()
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined().prefix(32).description
     }
 
     /// The first problem with the servers map, as the Gateway would word it.

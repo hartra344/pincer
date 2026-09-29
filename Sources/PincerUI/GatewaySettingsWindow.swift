@@ -149,7 +149,7 @@ private struct GatewaySettingsRoot: View {
                     self.closeAfterConfig()
                 }
             }
-            .disabled(settings.saveBlocker != nil || !settings.canEdit)
+            .disabled(settings.saveBlocker != nil || !settings.canSave)
             Button("Discard Changes", role: .destructive) {
                 settings.discardChanges()
                 Task { @MainActor in
@@ -531,7 +531,8 @@ private struct SettingsChrome: ViewModifier {
             .toolbar {
                 #if os(macOS)
                 ToolbarItemGroup(placement: .primaryAction) {
-                    if settings.hasLoaded, !settings.canEdit {
+                    if settings.hasLoaded, !settings.canEdit,
+                       !(self.navigator.destination == .mcpServers && settings.canEdit(root: "mcp")) {
                         Button { self.navigator.destination = .connection } label: {
                             Label("Read Only", systemImage: "lock")
                                 .labelStyle(.titleAndIcon)
@@ -544,7 +545,7 @@ private struct SettingsChrome: ViewModifier {
                     }
                     Button("Save") { Task { await settings.save() } }
                         .keyboardShortcut("s", modifiers: .command)
-                        .disabled(!settings.hasChanges || settings.isSaving || !settings.canEdit)
+                        .disabled(!settings.hasChanges || settings.isSaving || !settings.canSave)
                         .help(settings.saveBlocker ?? "Save changes to the Gateway")
                 }
                 #else
@@ -553,7 +554,7 @@ private struct SettingsChrome: ViewModifier {
                         ProgressView()
                     } else {
                         Button("Save") { Task { await settings.save() } }
-                            .disabled(!settings.hasChanges || !settings.canEdit)
+                            .disabled(!settings.hasChanges || !settings.canSave)
                     }
                 }
                 if settings.hasChanges {
@@ -606,7 +607,7 @@ struct ReviewChangesSheet: View {
                         Button("Save") {
                             Task { if await settings.save() { self.dismiss() } }
                         }
-                        .disabled(!settings.hasChanges || settings.saveBlocker != nil || !settings.canEdit)
+                        .disabled(!settings.hasChanges || settings.saveBlocker != nil || !settings.canSave)
                     }
                 }
                 ToolbarItem(placement: .destructiveAction) {

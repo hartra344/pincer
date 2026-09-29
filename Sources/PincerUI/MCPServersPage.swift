@@ -432,7 +432,8 @@ struct MCPServerPage: View {
             .mcpSignIn(self.flow, model: model)
             .onChange(of: status.auth?.state) { self.flow.reconcile(server.name, state: status.auth?.state) }
             .task(id: self.gateway.state.isConnected) { if self.gateway.state.isConnected { await model.load() } }
-            .onDisappear { Task { await self.flow.cancel(model: model) } }
+            // A sign-in moved to the browser outlives the page; the Gateway's event or the attempt's expiry ends it.
+            .onDisappear { if !self.flow.handedOff { Task { await self.flow.cancel(model: model) } } }
         } else {
             ContentUnavailableView(L("Server Removed"), systemImage: "point.3.connected.trianglepath.dotted")
         }

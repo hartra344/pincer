@@ -26,7 +26,7 @@ final class MCPSignInFlow {
 
     private var session: ASWebAuthenticationSession?
     private let presenter = MCPWebAuthPresenter()
-    private var handedOff = false
+    private(set) var handedOff = false
     private var expiry: Task<Void, Never>?
 
     func isSigningIn(_ name: String) -> Bool {
