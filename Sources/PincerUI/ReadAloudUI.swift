@@ -49,7 +49,7 @@ enum ReadAloudSupport {
 }
 
 #if os(macOS)
-/// Edit ▸ Read Last Reply Aloud (⌥⌘R) for the focused chat; "Stop Speaking" while it speaks.
+/// Edit ▸ Read Last Reply Aloud (⌥⌘L) for the focused chat; "Stop Reading Aloud" while it reads.
 struct ReadAloudCommands: Commands {
     @FocusedValue(\.readAloud) private var readAloud
 
@@ -65,8 +65,8 @@ private struct ReadAloudCommandButton: View {
 
     var body: some View {
         let speaking = ReadAloudController.shared.isActive
-        Button(speaking ? L("Stop Speaking") : L("Read Last Reply Aloud")) { self.state?.toggleLastReply() }
-            .keyboardShortcut("r", modifiers: [.command, .option])
+        Button(speaking ? L("Stop Reading Aloud") : L("Read Last Reply Aloud")) { self.state?.toggleLastReply() }
+            .keyboardShortcut("l", modifiers: [.command, .option])
             .disabled(self.state?.isEnabled != true)
     }
 }
@@ -97,7 +97,8 @@ struct ReadAloudPill: View {
                 .overlay(Capsule().strokeBorder(.separator))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(L("Stop Speaking"))
+            .accessibilityLabel(L("Stop Reading Aloud"))
+            .accessibilityValue(phase == .idle ? "" : { if case .preparing = phase { L("Preparing") } else { L("Speaking") } }())
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }

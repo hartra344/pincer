@@ -26,7 +26,7 @@ public enum ReadAloudSettings {
     public static let sourceDevice = "device"
     public static let rateRange: ClosedRange<Float> = 0.3 ... 0.7
     public static let gatewayTextLimit = 4000
-    public static let gatewayTimeout: Duration = .seconds(30)
+    public static let gatewayTimeout: Duration = .seconds(15)
 }
 
 @MainActor @Observable
@@ -118,6 +118,8 @@ public final class ReadAloudController {
 
     private func run(messageId: String, text: String, gateway: GatewayVoiceModel?, generation: Int) async {
         defer { if generation == self.generation { self.phase = .idle } }
+        if self.usesGatewayVoice, let gateway { await gateway.loadStatusIfNeeded() }
+        guard generation == self.generation, !Task.isCancelled else { return }
         if self.usesGatewayVoice, let gateway, gateway.canSpeak {
             let limited = SpeechText.truncated(text, limit: ReadAloudSettings.gatewayTextLimit)
             if let clip = await self.fetchClip(limited, from: gateway), !clip.isHeaderless, generation == self.generation {
@@ -191,6 +193,8 @@ enum ReadAloudAudioSession {
 @MainActor
 final class AVClipPlayer: NSObject, ReadAloudClipPlaying, AVAudioPlayerDelegate {
     private var player: AVAudioPlayer?
+    /// The player whose callbacks count; a stopped player's late callbacks must not end a newer clip.
+    private var playerId: ObjectIdentifier?
     private var continuation: CheckedContinuation<Bool, Never>?
 
     func play(_ clip: TTSClip) async -> Bool {
@@ -199,6 +203,7 @@ final class AVClipPlayer: NSObject, ReadAloudClipPlaying, AVAudioPlayerDelegate 
         ReadAloudAudioSession.activate()
         player.delegate = self
         self.player = player
+        self.playerId = ObjectIdentifier(player)
         guard player.prepareToPlay(), player.play() else {
             self.player = nil
             ReadAloudAudioSession.deactivate()
@@ -210,6 +215,7 @@ final class AVClipPlayer: NSObject, ReadAloudClipPlaying, AVAudioPlayerDelegate 
     }
 
     func stop() {
+        self.playerId = nil
         self.player?.stop()
         self.player = nil
         self.finish(true)
@@ -222,24 +228,29 @@ final class AVClipPlayer: NSObject, ReadAloudClipPlaying, AVAudioPlayerDelegate 
         continuation.resume(returning: success)
     }
 
-    nonisolated func audioPlayerDidFinishPlaying(_: AVAudioPlayer, successfully flag: Bool) {
-        Task { @MainActor in
-            self.player = nil
-            self.finish(flag)
-        }
+    private func ended(_ id: ObjectIdentifier, success: Bool) {
+        guard id == self.playerId else { return }
+        self.playerId = nil
+        self.player = nil
+        self.finish(success)
     }
 
-    nonisolated func audioPlayerDecodeErrorDidOccur(_: AVAudioPlayer, error _: Error?) {
-        Task { @MainActor in
-            self.player = nil
-            self.finish(false)
-        }
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        let id = ObjectIdentifier(player)
+        Task { @MainActor in self.ended(id, success: flag) }
+    }
+
+    nonisolated func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error _: Error?) {
+        let id = ObjectIdentifier(player)
+        Task { @MainActor in self.ended(id, success: false) }
     }
 }
 
 @MainActor
 final class AVLocalSpeaker: NSObject, ReadAloudLocalSpeaking, AVSpeechSynthesizerDelegate {
     private let synthesizer = AVSpeechSynthesizer()
+    /// The utterance whose callbacks count; a stopped utterance's late didCancel must not end a newer one.
+    private var currentUtterance: ObjectIdentifier?
     private var continuation: CheckedContinuation<Bool, Never>?
 
     override init() {
@@ -259,11 +270,13 @@ final class AVLocalSpeaker: NSObject, ReadAloudLocalSpeaking, AVSpeechSynthesize
         ReadAloudAudioSession.activate()
         return await withCheckedContinuation { continuation in
             self.continuation = continuation
+            self.currentUtterance = ObjectIdentifier(utterance)
             self.synthesizer.speak(utterance)
         }
     }
 
     func stop() {
+        self.currentUtterance = nil
         if self.synthesizer.isSpeaking || self.synthesizer.isPaused { self.synthesizer.stopSpeaking(at: .immediate) }
         self.finish(true)
     }
@@ -275,11 +288,19 @@ final class AVLocalSpeaker: NSObject, ReadAloudLocalSpeaking, AVSpeechSynthesize
         continuation.resume(returning: success)
     }
 
-    nonisolated func speechSynthesizer(_: AVSpeechSynthesizer, didFinish _: AVSpeechUtterance) {
-        Task { @MainActor in self.finish(true) }
+    private func ended(_ id: ObjectIdentifier) {
+        guard id == self.currentUtterance else { return }
+        self.currentUtterance = nil
+        self.finish(true)
     }
 
-    nonisolated func speechSynthesizer(_: AVSpeechSynthesizer, didCancel _: AVSpeechUtterance) {
-        Task { @MainActor in self.finish(true) }
+    nonisolated func speechSynthesizer(_: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        let id = ObjectIdentifier(utterance)
+        Task { @MainActor in self.ended(id) }
+    }
+
+    nonisolated func speechSynthesizer(_: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        let id = ObjectIdentifier(utterance)
+        Task { @MainActor in self.ended(id) }
     }
 }

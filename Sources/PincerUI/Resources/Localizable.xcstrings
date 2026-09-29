@@ -4773,6 +4773,16 @@
         }
       }
     },
+    "Faster": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faster"
+          }
+        }
+      }
+    },
     "File": {
       "localizations": {
         "en": {
@@ -8613,6 +8623,16 @@
         }
       }
     },
+    "Preparing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing"
+          }
+        }
+      }
+    },
     "Preparing…": {
       "localizations": {
         "en": {
@@ -8943,12 +8963,12 @@
         }
       }
     },
-    "Read Aloud uses this voice when your device is allowed to use it. Change the voice source under Settings → Conversation.": {
+    "Read Aloud uses this voice when this device is allowed to and the Gateway has a voice set up. To always use this device's own voice, change the Voice option in the Read Aloud section of Settings.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Read Aloud uses this voice when your device is allowed to use it. Change the voice source under Settings → Conversation."
+            "value": "Read Aloud uses this voice when this device is allowed to and the Gateway has a voice set up. To always use this device's own voice, change the Voice option in the Read Aloud section of Settings."
           }
         }
       }
@@ -11483,6 +11503,16 @@
         }
       }
     },
+    "Slower": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slower"
+          }
+        }
+      }
+    },
     "Some Files Weren't Copied": {
       "localizations": {
         "en": {
@@ -11539,6 +11569,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speak Replies on Channels"
+          }
+        }
+      }
+    },
+    "Speaking": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaking"
           }
         }
       }
@@ -11683,22 +11723,12 @@
         }
       }
     },
-    "Stop Reading": {
+    "Stop Reading Aloud": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stop Reading"
-          }
-        }
-      }
-    },
-    "Stop Speaking": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stop Speaking"
+            "value": "Stop Reading Aloud"
           }
         }
       }
@@ -11893,12 +11923,12 @@
         }
       }
     },
-    "Test": {
+    "Test Device Voice": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Test"
+            "value": "Test Device Voice"
           }
         }
       }
@@ -11929,6 +11959,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "That link points to a Gateway that isn’t set up on this device."
+          }
+        }
+      }
+    },
+    "That provider isn't configured on the Gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That provider isn't configured on the Gateway."
           }
         }
       }
@@ -14529,6 +14569,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "pairing requests"
+          }
+        }
+      }
+    },
+    "percent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "percent"
           }
         }
       }

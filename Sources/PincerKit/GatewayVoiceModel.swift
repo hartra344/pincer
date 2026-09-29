@@ -32,6 +32,7 @@ public final class GatewayVoiceModel {
     @ObservationIgnored private let scopes: @MainActor () -> [String]
     @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var statusAttempted = false
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool) {
         self.request = { method, params in try await connection.request(method, params, timeout: 30) }
@@ -75,6 +76,19 @@ public final class GatewayVoiceModel {
         guard self.supports(Self.speakMethod), self.canWrite else { return false }
         guard let status = self.status else { return true }
         return status.providerStates.isEmpty || status.providerStates.contains { $0.configured }
+    }
+
+    /// Loads `tts.status` once per connection (no-op when it's cached, unsupported, or already failed), so
+    /// `canSpeak` knows whether a provider is configured without the Voice page being opened.
+    public func loadStatusIfNeeded() async {
+        guard self.status == nil, !self.statusAttempted, self.supports(Self.statusMethod), self.supports(Self.speakMethod),
+              self.canWrite else { return }
+        self.statusAttempted = true
+        let generation = self.generation
+        guard let result = try? await self.call(Self.statusMethod), generation == self.generation,
+              let status = TTSStatus(result), self.status == nil else { return }
+        self.status = status
+        self.activePersona = status.persona
     }
 
     public func refresh() async {
@@ -126,6 +140,10 @@ public final class GatewayVoiceModel {
     }
 
     public func setProvider(_ id: String) async throws {
+        let configured = self.providers.first { $0.id == id }?.configured ?? self.status?.providerStates.first { $0.id == id }?.configured
+        if configured == false {
+            throw GatewayError.rpc(code: "INVALID_REQUEST", message: L("That provider isn't configured on the Gateway."), details: nil)
+        }
         let result = try await self.call(Self.setProviderMethod, ["provider": .string(id)])
         let provider = result["provider"]?.text ?? id
         if var status = self.status {
@@ -156,6 +174,7 @@ public final class GatewayVoiceModel {
 
     public func handleReconnect() {
         self.generation += 1
+        self.statusAttempted = false
         self.status = nil
         self.providers = []
         self.personas = []

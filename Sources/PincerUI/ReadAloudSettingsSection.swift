@@ -17,6 +17,12 @@ struct ReadAloudSettingsSection: View {
             .sorted { ($0.quality.rawValue, $1.name) > ($1.quality.rawValue, $0.name) }
     }
 
+    private var rateDescription: String {
+        let range = ReadAloudSettings.rateRange
+        let fraction = (Float(self.rate) - range.lowerBound) / (range.upperBound - range.lowerBound)
+        return "\(Int((fraction * 100).rounded())) \(L("percent"))"
+    }
+
     var body: some View {
         SwiftUI.Section {
             Picker(L("Voice"), selection: self.$source) {
@@ -28,11 +34,18 @@ struct ReadAloudSettingsSection: View {
                 ForEach(self.voices, id: \.identifier) { Text($0.name).tag($0.identifier) }
             }
             LabeledContent(L("Speaking Rate")) {
-                Slider(value: self.$rate, in: Double(ReadAloudSettings.rateRange.lowerBound) ... Double(ReadAloudSettings.rateRange.upperBound))
-                    .frame(maxWidth: 200)
+                Slider(value: self.$rate, in: Double(ReadAloudSettings.rateRange.lowerBound) ... Double(ReadAloudSettings.rateRange.upperBound)) {
+                    Text("Speaking Rate", bundle: .module)
+                } minimumValueLabel: {
+                    Text("Slower", bundle: .module)
+                } maximumValueLabel: {
+                    Text("Faster", bundle: .module)
+                }
+                .frame(maxWidth: 260)
+                .accessibilityValue(self.rateDescription)
             }
             Toggle(L("Read New Replies Aloud"), isOn: self.$autoRead)
-            Button(self.controller.isActive ? L("Stop") : L("Test")) {
+            Button(self.controller.isActive ? L("Stop") : L("Test Device Voice")) {
                 if self.controller.isActive {
                     self.controller.stop()
                 } else {

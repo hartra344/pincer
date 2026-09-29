@@ -9,10 +9,12 @@ extension ChatStore {
         let state = payload["state"]?.string ?? ""
         switch state {
         case "status":
+            self.awaitingFinalReply = false
             var run = self.live?.runId == runId ? self.live! : LiveRun(runId: runId)
             run.phase = payload["phase"]?.string
             self.live = run
         case "delta":
+            self.awaitingFinalReply = false
             var run = self.live?.runId == runId ? self.live! : LiveRun(runId: runId)
             run.phase = nil
             if let snapshot = payload["message"], snapshot.object != nil,
@@ -302,6 +304,8 @@ extension ChatStore {
                 self.stale = true
             }
             if self?.live?.runId == runId { self?.live = nil }
+            // The final reply had until now to arrive; a later message isn't this run's.
+            self?.awaitingFinalReply = false
             await self?.finishCompaction(runId: runId)
         }
     }

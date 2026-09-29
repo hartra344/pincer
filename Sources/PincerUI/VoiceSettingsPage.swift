@@ -30,7 +30,7 @@ struct VoiceSettingsPage: View {
                 } header: {
                     Text("Gateway Voice", bundle: .module)
                 } footer: {
-                    Text("Read Aloud uses this voice when your device is allowed to use it. Change the voice source under Settings → Conversation.", bundle: .module)
+                    Text("Read Aloud uses this voice when this device is allowed to and the Gateway has a voice set up. To always use this device's own voice, change the Voice option in the Read Aloud section of Settings.", bundle: .module)
                 }
                 Section {
                     Toggle(L("Speak Replies on Channels"), isOn: Binding(get: { status.enabled }, set: { on in self.apply { try await model.setAutoSpeakChannels(on) } }))

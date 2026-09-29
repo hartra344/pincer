@@ -22,6 +22,7 @@ public enum SpeechText {
             line = self.inline(line)
             if line.hasPrefix("|") || line.contains(" | ") || line.hasSuffix("|") {
                 line = line.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: ", ")
+                if !line.isEmpty { line += "." }
             }
             line = line.trimmingCharacters(in: .whitespaces)
             if line.isEmpty { continue }
@@ -69,10 +70,10 @@ public enum SpeechText {
         s = s.replacingOccurrences(of: #"\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
         s = s.replacingOccurrences(of: #"\[([^\]]*)\]\[[^\]]*\]"#, with: "$1", options: .regularExpression)
         s = s.replacingOccurrences(of: #"<(https?://[^>]+)>"#, with: "", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"<[^>\n]+>"#, with: "", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"</?[A-Za-z][A-Za-z0-9-]*(\s[^<>]*)?/?>"#, with: "", options: .regularExpression)
         s = s.replacingOccurrences(of: #"\b(https?://|www\.)\S+"#, with: "", options: [.regularExpression, .caseInsensitive])
         s = s.replacingOccurrences(of: #"`+([^`]*)`+"#, with: "$1", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"\$([^$\n]+)\$"#, with: "$1", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"(?<!\$)\$(?![\d\s$])([^$\n]*[^$\s\n])\$(?![\d$])"#, with: "$1", options: .regularExpression)
         s = s.replacingOccurrences(of: #"(\*\*|__)(.+?)\1"#, with: "$2", options: .regularExpression)
         s = s.replacingOccurrences(of: #"~~(.+?)~~"#, with: "$1", options: .regularExpression)
         s = s.replacingOccurrences(of: #"(?<![\w*])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![\w*])"#, with: "$1", options: .regularExpression)
