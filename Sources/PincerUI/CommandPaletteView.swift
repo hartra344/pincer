@@ -373,8 +373,9 @@ struct CommandPaletteView: View {
             guard let gateway, let messages, messages.gatewayId == gateway.id else { return [] }
             return messages.items
         }
-        let ranked = Array(PaletteMatcher.rank(items, query: self.query).prefix(80))
+        var ranked = Array(PaletteMatcher.rank(items, query: self.query).prefix(80))
         guard self.page == .root else { return ranked }
+        ranked += PaletteMatcher.rank(CommandPalette.bookmarkItems(gateways: self.app.gateways), query: self.query).prefix(10)
         return CommandPalette.addingSearchMessages(to: ranked, query: self.query, gatewaySelected: self.gateway != nil)
     }
 
@@ -539,6 +540,9 @@ struct CommandPaletteView: View {
         case let .openMessage(target, query, match):
             self.close()
             self.app.open(self.app.route(for: target), find: query, match: match)
+        case let .openBookmark(target, messageId):
+            self.close()
+            _ = self.app.open(self.app.route(for: target, messageId: messageId), verifySession: false)
         case let .findInChat(target, query):
             self.close()
             self.app.open(self.app.route(for: target), find: query, match: nil)
