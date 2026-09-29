@@ -1,10 +1,12 @@
 import crypto from 'node:crypto';
+import http from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { seedLongChat } from './long-chat.mjs';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, handleApprovalHistoryRequest } from './approvals.mjs';
 import { AGENT_MANAGEMENT_METHODS, agentManagementDisabled, handleAgentsRequest } from './agents.mjs';
 import { SKILLS_METHODS, TOOLS_METHODS, handleSkillsRequest, skillsDisabled, toolsDisabled } from './skills.mjs';
+import { MCP_EVENTS, MCP_METHODS, handleMcpHttp, handleMcpRequest, mcpDisabled } from './mcp.mjs';
 import { CONFIG_METHODS, handleConfigRequest } from './config.mjs';
 import { CRON_METHODS, handleCronRequest } from './cron.mjs';
 import { LOGS_METHODS, handleLogsRequest, logsDisabled, stopLogs } from './logs.mjs';
@@ -66,6 +68,7 @@ const METHODS = [
   'progressCard.get',
   'progressCard.put',
   ...CONFIG_METHODS,
+  ...MCP_METHODS,
   ...CRON_METHODS,
   ...LOGS_METHODS,
   ...CHANNEL_PAIRING_METHODS,
@@ -89,6 +92,7 @@ const EVENTS = [
   'question.resolved',
   'users.prefs.changed',
   'plugins.changed',
+  ...MCP_EVENTS,
   'progressCard.changed',
   'cron',
   ...DEVICE_PAIRING_EVENTS,
@@ -181,6 +185,7 @@ function advertisedMethods() {
     ...(nodesDisabled() ? NODE_METHODS : []),
     ...(usageDisabled() ? USAGE_METHODS : []),
     ...(logsDisabled() ? LOGS_METHODS : []),
+    ...(mcpDisabled() ? MCP_METHODS : []),
     ...hiddenSessionManagerMethods(),
   ];
   return METHODS.filter((m) => !hidden.includes(m));
@@ -205,6 +210,7 @@ function makeHelloPayload(state, params, connId, deviceId) {
 
 const REQUEST_HANDLERS = [
   (state, conn, msg) => handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
+  (state, conn, msg) => handleMcpRequest(state, conn, msg, { sendRes, sendErr, broadcast }),
   (state, conn, msg) => handleCronRequest(state, conn, msg, { sendRes, sendErr, broadcast, postToSession }),
   (state, conn, msg) => handleWebPushRequest(state, conn, msg, { sendRes, sendErr }),
   (state, conn, msg) => handleApprovalHistoryRequest(state, conn, msg, { sendRes, sendErr }),
@@ -375,13 +381,21 @@ export async function startServer(opts = {}) {
   state.authLockedUntil = 0;
   setupManualPairing(state, options.pairing === 'manual' && opts.stdin !== false);
 
-  const wss = new WebSocketServer({ host: options.host, port: options.port });
-  const ready = new Promise((resolve, reject) => {
-    wss.once('listening', resolve);
-    wss.once('error', reject);
+  // The same port also serves the mock MCP OAuth consent pages.
+  const httpServer = http.createServer((req, res) => {
+    if (mcpDisabled() || !handleMcpHttp(state, req, res, broadcast)) {
+      res.writeHead(404, { 'content-type': 'text/plain' });
+      res.end('not found');
+    }
   });
+  const wss = new WebSocketServer({ server: httpServer });
+  const ready = new Promise((resolve, reject) => {
+    httpServer.once('listening', resolve);
+    httpServer.once('error', reject);
+  });
+  httpServer.listen(options.port, options.host);
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', (ws, req) => {
     // A simulated restart is under way: the Gateway isn't accepting connections yet.
     if (isRestarting(state)) {
       ws.close(1013, 'gateway restarting');
@@ -395,6 +409,7 @@ export async function startServer(opts = {}) {
       sessionSubscribed: false,
       messageSubs: new Set(),
       tickTimer: undefined,
+      baseUrl: req.headers.host ? `http://${req.headers.host}` : undefined,
     };
     state.connections.add(conn);
     // MOCK_CHALLENGE=off: a WebSocket server that isn't a Gateway (never sends the challenge).
@@ -454,12 +469,13 @@ export async function startServer(opts = {}) {
     ? setInterval(() => addFailedDelivery(state, broadcast), options.failedDeliveryEvery * 1000)
     : undefined;
   await ready;
-  console.log(`mock OpenClaw Gateway listening on ws://${options.host}:${wss.address().port}`);
+  state.httpBaseUrl = `http://${['0.0.0.0', '::'].includes(options.host) ? '127.0.0.1' : options.host}:${httpServer.address().port}`;
+  console.log(`mock OpenClaw Gateway listening on ws://${options.host}:${httpServer.address().port}`);
 
   return {
     wss,
     state,
-    address: () => wss.address(),
+    address: () => httpServer.address(),
     close: () =>
       new Promise((resolve) => {
         if (backgroundTimer) clearInterval(backgroundTimer);
@@ -469,7 +485,8 @@ export async function startServer(opts = {}) {
         stopLogs(state.logsState);
         cancelPendingRestart(state);
         for (const conn of state.connections) conn.ws.close(1001, 'server closing');
-        wss.close(() => resolve());
+        wss.close(() => httpServer.close(() => resolve()));
+        httpServer.closeAllConnections?.();
       }),
   };
 }

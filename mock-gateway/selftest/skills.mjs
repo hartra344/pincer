@@ -188,8 +188,8 @@ export async function run() {
     assert.deepEqual(eff.groups.map((g) => g.source), ['core', 'plugin', 'mcp']);
     const effIds = eff.groups.flatMap((g) => g.tools.map((t) => t.id));
     assert.ok(effIds.includes('exec') && effIds.includes('read') && !effIds.includes('x_search') && !effIds.includes('browser'));
-    const mcpTool = eff.groups.find((g) => g.source === 'mcp').tools[0];
-    assert.equal(mcpTool.mcpServer, 'home-assistant');
+    const mcpTool = eff.groups.find((g) => g.source === 'mcp').tools.find((t) => t.mcpServer === 'home-assistant');
+    assert.equal(mcpTool.mcpToolName, 'get_state');
     for (const tool of eff.groups.flatMap((g) => g.tools)) assert.equal(typeof tool.rawDescription, 'string');
     const access = Object.fromEntries(eff.toolAccess.tools.map((t) => [t.id, t]));
     assert.equal(eff.toolAccess.checked, 'live-session');

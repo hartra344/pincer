@@ -28,6 +28,7 @@ const SECTIONS = [
   'subagents',
   'devices',
   'skills',
+  'mcp',
   'first-run',
   'sessions',
   'large-media',

@@ -2,6 +2,7 @@
 // config.get / config.schema / config.patch / config.apply and plugins.list / inspect /
 // setEnabled / install / uninstall. Writes need operator.admin, like the real Gateway.
 import crypto from 'node:crypto';
+import { seedMcpServers, syncMcpFromConfig } from './mcp.mjs';
 
 export const REDACTED = '__OPENCLAW_REDACTED__';
 export const ADMIN_SCOPE = 'operator.admin';
@@ -29,6 +30,7 @@ export function createConfigState() {
       agents: { defaults: { model: 'anthropic/claude-sonnet-4-5', thinkingDefault: 'low', timeoutSeconds: 600 } },
       channels: { discord: { enabled: true, token: 'discord-bot-secret', dmPolicy: 'pairing' } },
       tools: { allow: ['exec', 'read', 'write'] },
+      mcp: { servers: seedMcpServers() },
       plugins: {
         enabled: true,
         entries: {
@@ -112,6 +114,7 @@ function buildSchema(state) {
         },
       },
       tools: { type: 'object', properties: { allow: { type: 'array', items: { type: 'string' } } } },
+      mcp: { type: 'object', properties: { servers: { type: 'object', additionalProperties: { type: 'object' } } } },
       plugins: {
         type: 'object',
         properties: {
@@ -148,10 +151,14 @@ function sensitive(path) {
   return Boolean(UI_HINTS[key]?.sensitive);
 }
 
+// mcp.servers.<name>.env.* and .headers.* hold credentials, like the Gateway's redaction.
+const isMcpSecret = (path) => path[0] === 'mcp' && path[1] === 'servers' && path.length === 5 && (path[3] === 'env' || path[3] === 'headers');
+const MCP_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
 function redact(value, path = []) {
   if (Array.isArray(value)) return value.map((item, index) => redact(item, [...path, String(index)]));
   if (isObject(value)) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redact(v, [...path, k])]));
-  if (typeof value === 'string' && sensitive(path)) return REDACTED;
+  if (typeof value === 'string' && (sensitive(path) || isMcpSecret(path))) return REDACTED;
   return value;
 }
 
@@ -218,6 +225,11 @@ function validate(state, config) {
   // A plugin missing required settings shows as "needs setup" instead of invalidating the config.
   for (let i = issues.length - 1; i >= 0; i--) {
     if (/^plugins\.entries\.[^.]+\.config\./.test(issues[i].path) && issues[i].message === 'required') issues.splice(i, 1);
+  }
+  for (const [name, server] of Object.entries(config.mcp?.servers ?? {})) {
+    const path = `mcp.servers.${name}`;
+    if (!MCP_NAME.test(name) || name === '__proto__') issues.push({ path, message: 'invalid MCP server name' });
+    if (isObject(server) && 'disabled' in server) issues.push({ path: `${path}.disabled`, message: 'unknown key; use "enabled": false', fixHint: 'Set enabled to false instead.' });
   }
   for (const id of Object.keys(config.plugins?.entries ?? {})) {
     if (!state.catalog.has(id)) issues.push({ path: `plugins.entries.${id}`, message: `unknown plugin "${id}"`, fixHint: 'Install the plugin first.' });
@@ -302,6 +314,7 @@ export function handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadc
       ...(partial ? { changedPaths: changed } : {}),
       ...(restart ? { restart: { coalesced: false, delayMs: 2000 } } : {}),
     });
+    if (changed.some((path) => path.startsWith('mcp.'))) syncMcpFromConfig(state, broadcast);
     if (changed.some((path) => path.startsWith('plugins.'))) {
       cfg.generation += 1;
       broadcast(state, 'plugins.changed', { generation: cfg.generation });
