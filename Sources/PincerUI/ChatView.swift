@@ -250,7 +250,7 @@ private struct ReasoningHint: View {
         {
             HStack(spacing: 8) {
                 Image(systemName: "brain").foregroundStyle(.purple)
-                Text("Thinking isn’t being saved for this session.", bundle: .module)
+                Text("Thinking isn’t being saved for this chat.", bundle: .module)
                     .font(.callout)
                 Button(L("Turn On")) {
                     Task { await self.gateway.patch(self.chat.sessionKey, ["reasoningLevel": "on"]) }
@@ -315,7 +315,7 @@ private struct TranscriptPane: View {
             // Until history has loaded once (cache still reading, or the Gateway reconnecting after
             // the app was suspended), an empty chat isn't known to be empty.
             VStack(spacing: 8) {
-                ProgressView()
+                ChatLoadingSkeleton()
                 if !self.gateway.state.isConnected {
                     Text("Connecting…", bundle: .module).font(.callout).foregroundStyle(.secondary)
                 }
@@ -408,13 +408,28 @@ struct ChatChrome: ViewModifier {
     }
 }
 
-private struct ChatModelItem: View {
+/// The selected chat's row, or the last one seen while it briefly goes away (refresh, reconnect),
+/// so a toolbar item keeps its content rather than collapsing to nothing and being rebuilt.
+private struct LastKnownRow<Content: View>: View {
     @Environment(GatewayStore.self) private var gateway
+    @State private var last: SessionRow?
+    @ViewBuilder let content: (SessionRow) -> Content
+
+    private var current: SessionRow? { self.gateway.selectedKey.flatMap { self.gateway.sessions[$0] } }
 
     var body: some View {
-        if let key = self.gateway.selectedKey, let row = self.gateway.sessions[key] {
-            ModelPicker(row: row)
+        Group {
+            if let row = self.current ?? self.last { self.content(row) }
         }
+        .onChange(of: self.current, initial: true) { _, row in
+            if let row { self.last = row }
+        }
+    }
+}
+
+private struct ChatModelItem: View {
+    var body: some View {
+        LastKnownRow { ModelPicker(row: $0) }
     }
 }
 
@@ -426,7 +441,7 @@ private struct ChatSessionMenu: View {
     @Binding var toolsInspector: ChatToolsInspection?
 
     var body: some View {
-        if let key = self.gateway.selectedKey, let row = self.gateway.sessions[key] {
+        LastKnownRow { row in
             Menu {
                 Button(L("Find in Chat"), systemImage: "magnifyingglass") { self.find?.present() }
                 Divider()
@@ -438,7 +453,7 @@ private struct ChatSessionMenu: View {
                 ShowRunsButton(isPresented: self.$showRuns)
                 Divider()
                 Button(L("Reload"), systemImage: "arrow.clockwise") {
-                    Task { await self.gateway.chat(for: key).load(force: true) }
+                    Task { await self.gateway.chat(for: row.key).load(force: true) }
                 }
                 Button(L("Copy Session Key"), systemImage: "key") { Clipboard.copy(row.key) }
                 CopyChatLinkButton(sessionKey: row.key)
@@ -453,11 +468,11 @@ private struct ChatSessionMenu: View {
                 if self.gateway.supportsToolsEffective {
                     Button(L("Tools & Policy…"), systemImage: "wrench.and.screwdriver") {
                         self.toolsInspector = ChatToolsInspection(model: self.gateway.toolsInspector(sessionKey: row.key),
-                                                                  scopeTitle: "Session: \(row.title)")
+                                                                  scopeTitle: L("Chat: \(row.title)"))
                     }
                 }
             } label: {
-                Label(L("Session"), systemImage: Theme.moreSymbol)
+                Label(L("Chat"), systemImage: Theme.moreSymbol)
             }
         }
     }
@@ -613,4 +628,30 @@ struct ReplyToLast: Equatable {
 
 extension FocusedValues {
     @Entry var replyToLast: ReplyToLast?
+}
+
+/// Placeholder bubbles shown while a chat's history loads. Static, so Reduce Motion needs no special case.
+struct ChatLoadingSkeleton: View {
+    private static let rows: [(leading: Bool, width: CGFloat, height: CGFloat)] = [
+        (true, 220, 44), (false, 160, 32), (true, 280, 68), (false, 200, 32),
+    ]
+
+    var body: some View {
+        VStack(spacing: 12) {
+            ForEach(Self.rows.indices, id: \.self) { index in
+                let row = Self.rows[index]
+                HStack {
+                    if !row.leading { Spacer(minLength: 0) }
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.quaternary)
+                        .frame(width: row.width, height: row.height)
+                    if row.leading { Spacer(minLength: 0) }
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .frame(maxWidth: 520)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Loading chat", bundle: .module))
+    }
 }

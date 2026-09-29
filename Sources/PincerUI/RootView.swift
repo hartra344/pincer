@@ -8,6 +8,7 @@ public struct PincerScene: Scene {
     @State private var app = AppModel.shared
 
     public init() {
+        SVGRasterizer.install()
         #if os(macOS)
         QuickCaptureController.shared.install(app: AppModel.shared)
         #endif
@@ -285,8 +286,8 @@ private struct GatewayDetail: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .modifier(ChatChrome())
                 } else if gateway.state.isConnected {
-                    ContentUnavailableView("Pick a chat", systemImage: "bubble.left.and.bubble.right",
-                                           description: Text("Choose a session from the sidebar or start a new one."))
+                    ContentUnavailableView(L("Pick a chat"), systemImage: "bubble.left.and.bubble.right",
+                                           description: Text("Choose a chat from the sidebar or start a new one.", bundle: .module))
                 } else {
                     ProgressView("Connecting to \(gateway.profile.name)…")
                 }

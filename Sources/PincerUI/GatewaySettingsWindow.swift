@@ -50,7 +50,7 @@ struct GatewaySettingsWindow: View {
                 .environment(\.closeGatewaySettings, GatewaySettingsCloser(close: self.close, closeThen: self.closeThen))
         } else {
             ContentUnavailableView("Gateway Removed", systemImage: "server.rack",
-                                   description: Text("This Gateway is no longer in Pincer."))
+                                   description: Text("This Gateway is no longer in Pincer.", bundle: .module))
                 .toolbar {
                     if let close = self.close {
                         ToolbarItem(placement: .confirmationAction) { Button("Done", action: close) }
@@ -158,7 +158,7 @@ private struct GatewaySettingsRoot: View {
             }
             Button("Keep Editing", role: .cancel) {}
         } message: {
-            Text("You have \(settings.changeCount) unsaved change\(settings.changeCount == 1 ? "" : "s").")
+            Text("You have \(settings.changeCount) unsaved change\(settings.changeCount == 1 ? "" : "s").", bundle: .module)
         }
         .confirmationDialog("Save changes to Command Policy?", isPresented: self.$confirmPolicyClose,
                             titleVisibility: .visible) {
@@ -173,7 +173,7 @@ private struct GatewaySettingsRoot: View {
             }
             Button("Keep Editing", role: .cancel) {}
         } message: {
-            Text("Your changes to the command policy haven't been saved.")
+            Text("Your changes to the command policy haven't been saved.", bundle: .module)
         }
         .confirmationDialog("Loosen command policy?", isPresented: Binding(
             get: { self.policy.pendingLoosening != nil },
@@ -206,7 +206,7 @@ private struct GatewaySettingsRoot: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your changes to agents or workspace files haven't been saved.")
+            Text("Your changes to agents or workspace files haven't been saved.", bundle: .module)
         }
         #if os(iOS)
         .interactiveDismissDisabled(settings.hasChanges || self.policy.hasChanges || self.agentManagement.hasUnsavedChanges)
@@ -259,7 +259,7 @@ private struct GatewaySettingsRoot: View {
         case .raw: RawConfigPage()
         case nil:
             ContentUnavailableView("Gateway Settings", systemImage: "gearshape.2",
-                                   description: Text("Choose a category."))
+                                   description: Text("Choose a category.", bundle: .module))
         }
     }
 
@@ -462,7 +462,7 @@ private struct SearchResults: View {
             .filter { $0.destination != .skills || self.gateway.supportsSkills }
             .filter { $0.destination != .sessions || self.gateway.supportsSessionManager }
         if results.isEmpty, pages.isEmpty {
-            Text("No settings match “\(self.query)”.").foregroundStyle(.secondary)
+            Text("No settings match “\(self.query)”.", bundle: .module).foregroundStyle(.secondary)
         }
         ForEach(pages) { page in
             Button {
@@ -641,9 +641,9 @@ struct ReviewChangesSheet: View {
                     self.conflictRow(conflict)
                 }
             } header: {
-                Text("Changed on the Gateway")
+                Text("Changed on the Gateway", bundle: .module)
             } footer: {
-                Text("Someone changed these on the Gateway while you were editing. Choose which value to keep.")
+                Text("Someone changed these on the Gateway while you were editing. Choose which value to keep.", bundle: .module)
             }
         }
     }
@@ -674,7 +674,7 @@ struct ReviewChangesSheet: View {
         let settings = self.settings
         let groups = Dictionary(grouping: settings.edits.changes) { $0.path.first ?? "" }
         if groups.isEmpty {
-            Section { Text("No unsaved changes.").foregroundStyle(.secondary) }
+            Section { Text("No unsaved changes.", bundle: .module).foregroundStyle(.secondary) }
         }
         ForEach(groups.keys.sorted(), id: \.self) { root in
             Section(ConfigPath.humanized(root)) {

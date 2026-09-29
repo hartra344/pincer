@@ -1043,6 +1043,16 @@
         }
       }
     },
+    "Changed on the Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changed on the Gateway"
+          }
+        }
+      }
+    },
     "Channel": {
       "localizations": {
         "en": {
@@ -1083,6 +1093,16 @@
         }
       }
     },
+    "Chat: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat: %@"
+          }
+        }
+      }
+    },
     "Check Again": {
       "localizations": {
         "en": {
@@ -1113,12 +1133,32 @@
         }
       }
     },
+    "Choose a category.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a category."
+          }
+        }
+      }
+    },
     "Choose a chat (⌘J or Tab)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Choose a chat (⌘J or Tab)"
+          }
+        }
+      }
+    },
+    "Choose a chat from the sidebar or start a new one.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a chat from the sidebar or start a new one."
           }
         }
       }
@@ -3283,6 +3323,16 @@
         }
       }
     },
+    "Loading chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading chat"
+          }
+        }
+      }
+    },
     "Loading models…": {
       "localizations": {
         "en": {
@@ -3903,6 +3953,16 @@
         }
       }
     },
+    "No settings match “%@”.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No settings match “%@”."
+          }
+        }
+      }
+    },
     "No settings.": {
       "localizations": {
         "en": {
@@ -3949,6 +4009,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No tools."
+          }
+        }
+      }
+    },
+    "No unsaved changes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No unsaved changes."
           }
         }
       }
@@ -4489,6 +4559,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pending Requests"
+          }
+        }
+      }
+    },
+    "Pick a chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick a chat"
           }
         }
       }
@@ -6183,6 +6263,16 @@
         }
       }
     },
+    "Someone changed these on the Gateway while you were editing. Choose which value to keep.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Someone changed these on the Gateway while you were editing. Choose which value to keep."
+          }
+        }
+      }
+    },
     "Sort By": {
       "localizations": {
         "en": {
@@ -6563,12 +6653,12 @@
         }
       }
     },
-    "Thinking isn’t being saved for this session.": {
+    "Thinking isn’t being saved for this chat.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Thinking isn’t being saved for this session."
+            "value": "Thinking isn’t being saved for this chat."
           }
         }
       }
@@ -7363,12 +7453,42 @@
         }
       }
     },
+    "You have %lld unsaved change%@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have %lld unsaved change%@."
+          }
+        }
+      }
+    },
     "You're all caught up": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "You're all caught up"
+          }
+        }
+      }
+    },
+    "Your changes to agents or workspace files haven't been saved.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your changes to agents or workspace files haven't been saved."
+          }
+        }
+      }
+    },
+    "Your changes to the command policy haven't been saved.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your changes to the command policy haven't been saved."
           }
         }
       }
