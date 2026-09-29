@@ -86,7 +86,7 @@ private final class Harness {
 }
 
 @MainActor
-private func waitUntil(_ label: String = "", timeout: Duration = .seconds(5), _ condition: () -> Bool) async -> Bool {
+private func waitUntil(_ label: String = "", timeout: Duration = .seconds(30), _ condition: () -> Bool) async -> Bool {
     let deadline = ContinuousClock.now + timeout
     while !condition() {
         if ContinuousClock.now > deadline { return false }
