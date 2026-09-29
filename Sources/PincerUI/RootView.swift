@@ -319,16 +319,16 @@ struct SettingsView: View {
         #if os(macOS)
         TabView {
             Tab("General", systemImage: "gearshape") {
-                SettingsForm(sections: [.you, .launch, .quickCapture, .menuBar, .device, .storage, .tips])
+                SettingsForm(sections: SettingsForm.Section.generalTab)
             }
             Tab("Appearance", systemImage: "paintpalette") {
-                SettingsForm(sections: [.appearance, .avatars, .colors], scrolls: true)
+                SettingsForm(sections: SettingsForm.Section.appearanceTab)
             }
             Tab("Conversation", systemImage: "bubble.left.and.text.bubble.right") {
-                SettingsForm(sections: [.conversation, .sidebar])
+                SettingsForm(sections: SettingsForm.Section.conversationTab)
             }
             Tab("Notifications", systemImage: "bell.badge") {
-                SettingsForm(sections: [.notifications])
+                SettingsForm(sections: SettingsForm.Section.notificationsTab)
             }
         }
         .frame(width: 520)
@@ -339,6 +339,48 @@ struct SettingsView: View {
     }
 }
 
+#if os(macOS)
+/// Sizes a settings tab to its content's height, capped so the window always fits the screen.
+/// Applied to every tab by `SettingsForm`, so adding sections can't push the window off screen.
+struct SettingsHeightCap: ViewModifier {
+    /// Room for the title bar and tab toolbar, plus a margin so the window never touches the Dock.
+    static let windowChrome: CGFloat = 140
+    /// Tall enough for any tab on a large display, without a towering window.
+    static let comfortableMax: CGFloat = 720
+    static let minimum: CGFloat = 240
+
+    let maxHeight: CGFloat
+
+    static func limit(visibleScreenHeight: CGFloat?) -> CGFloat {
+        guard let visibleScreenHeight else { return self.comfortableMax }
+        return max(self.minimum, min(self.comfortableMax, visibleScreenHeight - self.windowChrome))
+    }
+
+    @MainActor static func screenLimit() -> CGFloat {
+        self.limit(visibleScreenHeight: (NSApp?.keyWindow?.screen ?? NSScreen.main)?.visibleFrame.height)
+    }
+
+    func body(content: Content) -> some View {
+        CappedHeightLayout(maxHeight: self.maxHeight) { content }
+    }
+}
+
+/// Reports `min(ideal height, maxHeight)`, so short content stays compact and tall content scrolls.
+private struct CappedHeightLayout: Layout {
+    let maxHeight: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let subview = subviews.first else { return .zero }
+        let ideal = subview.sizeThatFits(ProposedViewSize(width: proposal.width, height: nil))
+        return CGSize(width: proposal.width ?? ideal.width, height: min(ideal.height, self.maxHeight))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
+}
+#endif
+
 enum ReactionFeature {
     static let enabledKey = "pincer.reactions.enabled"
     static let defaultEnabled = false
@@ -348,7 +390,7 @@ enum ReactionFeature {
     }
 }
 
-private struct SettingsForm: View {
+struct SettingsForm: View {
     enum Section: CaseIterable {
         case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, sidebar, notifications, device, storage, tips
 
@@ -360,11 +402,22 @@ private struct SettingsForm: View {
             Self.allCases.filter { $0 != .launch && $0 != .quickCapture && $0 != .menuBar }
             #endif
         }
+
+        #if os(macOS)
+        static let generalTab: [Self] = [.you, .launch, .quickCapture, .menuBar, .device, .storage, .tips]
+        static let appearanceTab: [Self] = [.appearance, .avatars, .colors]
+        static let conversationTab: [Self] = [.conversation, .sidebar]
+        static let notificationsTab: [Self] = [.notifications]
+        /// The Settings window's tabs, in order.
+        static let macTabs = [generalTab, appearanceTab, conversationTab, notificationsTab]
+        #endif
     }
 
     let sections: [Section]
-    /// Tall tabs scroll in a fixed-height window instead of growing past the screen.
-    var scrolls = false
+    #if os(macOS)
+    /// Every tab hugs its content but never grows taller than this; longer tabs scroll.
+    var maxHeight = SettingsHeightCap.screenLimit()
+    #endif
     @Environment(AppModel.self) private var app
     @AppStorage("pincer.ownerName") private var ownerName = ""
     @AppStorage(ThinkingDisplay.storageKey) private var thinkingDisplay = ThinkingDisplay.defaultValue
@@ -395,9 +448,7 @@ private struct SettingsForm: View {
         }
         .formStyle(.grouped)
         #if os(macOS)
-        .scrollDisabled(!self.scrolls)
-        .fixedSize(horizontal: false, vertical: !self.scrolls)
-        .frame(height: self.scrolls ? 520 : nil)
+        .modifier(SettingsHeightCap(maxHeight: self.maxHeight))
         #endif
         .onAppear { self.notifications = self.app.notifier.enabled }
     }
