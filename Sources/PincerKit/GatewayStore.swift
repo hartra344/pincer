@@ -89,6 +89,7 @@ public final class GatewayStore: Identifiable {
     public var selectedKey: String? {
         didSet {
             guard oldValue != self.selectedKey else { return }
+            self.splitPaneFocused = false
             if let oldValue, let left = self.chats[oldValue] { Task { await left.trimToWindow() } }
             guard let key = self.selectedKey else { return }
             self.defaults.set(key, forKey: "pincer.selected.\(self.id.uuidString)")
@@ -103,6 +104,8 @@ public final class GatewayStore: Identifiable {
             self.defaults.set(self.splitKey, forKey: "pincer.split.\(self.id.uuidString)")
         }
     }
+    /// Whether the split view's right-hand chat, not the selected one, has focus (#404). See `focusedKey`.
+    public var splitPaneFocused = false
     public var organization: SidebarOrganization {
         didSet { self.defaults.set(self.organization.rawValue, forKey: "pincer.org.v2.\(self.id.uuidString)") }
     }
@@ -133,8 +136,9 @@ public final class GatewayStore: Identifiable {
     /// Attachment bytes of outbox entries, kept for the current launch only.
     @ObservationIgnored var outboxAttachments: [String: [OutgoingAttachment]] = [:]
     @ObservationIgnored var outboxLoaded = false
+    /// The saved outbox has been read and merged in; changes are saved from here on.
+    @ObservationIgnored var outboxRestored = false
     @ObservationIgnored var outboxFlushing = false
-    @ObservationIgnored var outboxSaveTask: Task<Void, Never>?
 
     @ObservationIgnored let connection: GatewayConnection
     @ObservationIgnored internal(set) var chats: [String: ChatStore] = [:]
@@ -167,6 +171,7 @@ public final class GatewayStore: Identifiable {
     /// Full-text index of this Gateway's cached transcripts, for message search.
     /// Where this Gateway's transcripts and search index are cached; tests give each store its own folder.
     @ObservationIgnored var cacheRoot: URL? = TranscriptCache.root
+    @ObservationIgnored var outboxRoot: URL? = OutboxStore.root
     public var messageIndex: MessageIndex { MessageIndex.shared(gatewayId: self.id, root: self.cacheRoot) }
     /// Whether message search is ready, still indexing cached chats, or off (no transcript cache).
     public private(set) var messageIndexProgress: MessageIndex.Status = .ready

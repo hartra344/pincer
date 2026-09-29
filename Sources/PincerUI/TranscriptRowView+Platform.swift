@@ -124,6 +124,18 @@ class TranscriptTapView: TranscriptBaseView {
     var onTap: (() -> Void)?
     /// Only this much of the width, from the leading edge, takes clicks. Nil means all of it.
     var hitWidth: CGFloat?
+    /// Grows the touch target beyond the drawn button, for small icon-only buttons.
+    var hitOutset = CGSize.zero
+    /// Makes the control adjustable for VoiceOver (swipe up or down), like a stepper.
+    var onIncrement: (() -> Void)?
+    var onDecrement: (() -> Void)?
+    var accessibilityHintText: String? {
+        didSet {
+            #if os(iOS)
+            self.accessibilityHint = self.accessibilityHintText
+            #endif
+        }
+    }
     var accessibilityText = "" {
         didSet {
             #if os(iOS)
@@ -149,6 +161,9 @@ class TranscriptTapView: TranscriptBaseView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    /// The clickable area: the frame grown by `hitOutset`, for small icon-only buttons.
+    private var hitBounds: CGRect { self.bounds.insetBy(dx: -self.hitOutset.width, dy: -self.hitOutset.height) }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard let hitWidth, self.onTap != nil else { return super.hitTest(point) }
         let local = self.convert(point, from: self.superview)
@@ -162,19 +177,28 @@ class TranscriptTapView: TranscriptBaseView {
 
     override func mouseDragged(with event: NSEvent) {
         guard self.onTap != nil else { return super.mouseDragged(with: event) }
-        self.isPressed = self.bounds.contains(self.convert(event.locationInWindow, from: nil))
+        self.isPressed = self.hitBounds.contains(self.convert(event.locationInWindow, from: nil))
     }
 
     override func mouseUp(with event: NSEvent) {
         guard self.onTap != nil else { return super.mouseUp(with: event) }
-        let inside = self.bounds.contains(self.convert(event.locationInWindow, from: nil))
+        let inside = self.hitBounds.contains(self.convert(event.locationInWindow, from: nil))
         self.isPressed = false
         if inside { self.onTap?() }
     }
 
     override func isAccessibilityElement() -> Bool { self.onTap != nil }
-    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityRole() -> NSAccessibility.Role? { self.onIncrement == nil ? .button : .incrementor }
     override func accessibilityLabel() -> String? { self.accessibilityText }
+    override func accessibilityHelp() -> String? { self.accessibilityHintText }
+    override func accessibilityPerformIncrement() -> Bool {
+        self.onIncrement?()
+        return self.onIncrement != nil
+    }
+    override func accessibilityPerformDecrement() -> Bool {
+        self.onDecrement?()
+        return self.onDecrement != nil
+    }
     override func accessibilityPerformPress() -> Bool {
         self.onTap?()
         return self.onTap != nil
@@ -192,6 +216,9 @@ class TranscriptTapView: TranscriptBaseView {
     }
 
     @objc private func tapped() { self.onTap?() }
+
+    override func accessibilityIncrement() { self.onIncrement?() }
+    override func accessibilityDecrement() { self.onDecrement?() }
     #endif
 }
 

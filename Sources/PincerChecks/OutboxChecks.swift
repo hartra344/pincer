@@ -272,10 +272,9 @@ private func runLiveOutboxRelaunch(url: String, token: String, key: String) asyn
     check(queued == .queued, "queued while down (\(queued))")
     first.stop()
     _ = await triggerSend.value
-    let saved = await waitFor("outbox saved", timeout: 5) {
-        OutboxStore.file(gatewayId: profile.id).map { FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? false
-    }
-    check(saved, "the outbox is saved to disk")
+    // What's on disk now; the next launch reads the same, after any write still queued (#414).
+    let saved = await OutboxStore.load(gatewayId: profile.id).outbox?.entries.map(\.text) ?? []
+    check(saved.contains(text), "the outbox is saved to disk, queued message included (\(saved.count) saved)")
 
     let second = GatewayStore(profile: profile)
     second.start()

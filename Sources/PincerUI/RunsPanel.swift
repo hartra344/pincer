@@ -5,6 +5,8 @@ import SwiftUI
 /// `ChatChrome`, outside the per-chat `.id`, so the panel stays open across chat switches.
 struct RunsPanelChrome: ViewModifier {
     @Binding var isPresented: Bool
+    /// False while the split view's headers show their own Runs buttons (#427).
+    var showsToolbarButton = true
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var isCompact: Bool { self.sizeClass == .compact }
@@ -21,7 +23,9 @@ struct RunsPanelChrome: ViewModifier {
     func body(content: Content) -> some View {
         content
             .toolbar {
-                ToolbarItem(placement: .primaryAction) { RunsToolbarButton(isPresented: self.$isPresented, isCompact: self.isCompact) }
+                ToolbarItem(placement: .primaryAction) {
+                    if self.showsToolbarButton { RunsToolbarButton(isPresented: self.$isPresented, isCompact: self.isCompact) }
+                }
             }
             .inspector(isPresented: self.presented(false)) {
                 RunsPanel()
@@ -45,30 +49,50 @@ struct RunsPanelChrome: ViewModifier {
     }
 }
 
-private struct RunsToolbarButton: View {
+/// Shows and hides the Runs panel. In a split view header (#427) it's for that side's chat: pressed
+/// on the side without focus, it focuses that side and shows its runs; only the focused side's
+/// button takes ⌥⌘R.
+struct RunsToolbarButton: View {
     @Binding var isPresented: Bool
     /// Compact iPhone: the nav bar is crowded, so the button only shows while helpers run;
     /// "Show Runs" in the chat's ⋯ menu covers the rest (#180).
     let isCompact: Bool
+    var sessionKey: String?
+    var isFocused = true
+    var focus: () -> Void = {}
     @Environment(GatewayStore.self) private var gateway
     @Environment(\.chatWindowKey) private var windowKey
 
     var body: some View {
         // Kept while the panel is open, so it (and ⌥⌘R) can always close it again.
-        if let key = self.windowKey ?? self.gateway.selectedKey, self.isPresented || self.gateway.hasRuns(sessionKey: key),
+        if let key = self.sessionKey ?? self.windowKey ?? self.gateway.selectedKey,
+           (self.isPresented && self.isFocused) || self.gateway.hasRuns(sessionKey: key),
            case let running = self.gateway.subagentTree(rootKey: key).runningCount,
            RunsToolbarVisibility.shows(isCompact: self.isCompact, isPresented: self.isPresented, running: running)
         {
-            Button {
-                self.isPresented.toggle()
+            self.focusedPaneShortcut(Button {
+                if self.isFocused {
+                    self.isPresented.toggle()
+                } else {
+                    self.focus()
+                    self.isPresented = true
+                }
             } label: {
                 Label(L("Runs"), systemImage: "point.3.connected.trianglepath.dotted")
                     .foregroundStyle(running > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                     .symbolEffect(.pulse, isActive: running > 0)
-            }
-            .shortcut(.showRuns)
+            })
             .help(running == 0 ? L("Runs") : running == 1 ? L("Runs — 1 helper running") : L("Runs — \(running) helpers running"))
             .accessibilityValue(running > 0 ? L("\(running) running") : "")
+        }
+    }
+
+    @ViewBuilder private func focusedPaneShortcut(_ button: some View) -> some View {
+        if self.isFocused {
+            button
+                .shortcut(.showRuns)
+        } else {
+            button
         }
     }
 }
@@ -113,7 +137,7 @@ struct RunsPanel: View {
             .labelsHidden()
             .padding(Theme.Spacing.lg)
             Divider()
-            if let key = self.windowKey ?? self.gateway.selectedKey {
+            if let key = self.windowKey ?? self.gateway.focusedKey {
                 let tree = self.gateway.subagentTree(rootKey: key)
                 switch self.tab {
                 case .tree:
@@ -128,6 +152,6 @@ struct RunsPanel: View {
                 ContentUnavailableView(L("No chat selected"), systemImage: "bubble.left.and.bubble.right")
             }
         }
-        .onChange(of: self.windowKey ?? self.gateway.selectedKey) { self.focusedSession = nil }
+        .onChange(of: self.windowKey ?? self.gateway.focusedKey) { self.focusedSession = nil }
     }
 }

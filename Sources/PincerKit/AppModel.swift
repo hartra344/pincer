@@ -278,7 +278,10 @@ public final class AppModel {
     /// Replaces the connection; the device identity (and thus pairing) is kept.
     public func update(_ profile: GatewayProfile, secret: String?, credentialsChanged: Bool) {
         guard let index = self.gateways.firstIndex(where: { $0.id == profile.id }) else { return }
-        self.gateways[index].stop()
+        let old = self.gateways[index]
+        old.stop()
+        // The new store reads the outbox this one leaves behind.
+        old.retireOutbox()
         if credentialsChanged {
             profile.secret = secret
             profile.forgetDeviceToken()
@@ -286,6 +289,7 @@ public final class AppModel {
         let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: self.deviceIdentity())
         store.notifier = self.notifier
         store.appIsActive = self.appIsActive
+        store.outboxRoot = old.outboxRoot
         self.gateways[index] = store
         self.persist()
         store.start()
@@ -307,8 +311,9 @@ public final class AppModel {
         self.history.prune { $0.gatewayId != id }
         DraftStore.removeAll(gatewayId: id)
         ReactionStore(gatewayId: id.uuidString, defaults: self.localDefaults).removeAll()
+        store.retireOutbox(save: false)
         store.outbox = Outbox()
-        OutboxStore.remove(gatewayId: id)
+        OutboxStore.remove(gatewayId: id, root: store.outboxRoot)
         store.forgetLocalHealthDismissals()
         store.forgetGatewayHost()
         self.persist()
@@ -337,6 +342,20 @@ public final class AppModel {
         guard target != index else { return }
         self.gateways.swapAt(index, target)
         self.persist()
+    }
+
+    /// Writes every Gateway's unsent messages to disk now, on this thread: the app is quitting,
+    /// and a write still queued might not get to run.
+    public func saveOutboxesNow() {
+        for store in self.gateways { store.saveOutboxNow() }
+    }
+
+    /// Waits for queued outbox writes to land, inside a background task on iOS so a suspended
+    /// app doesn't leave the last one unwritten.
+    public func flushOutboxWrites() async {
+        let end = self.notifier.beginBackgroundActivity("Save unsent messages") {}
+        defer { end() }
+        for store in self.gateways { await OutboxStore.flushWrites(gatewayId: store.id, root: store.outboxRoot) }
     }
 
     private func persist() {

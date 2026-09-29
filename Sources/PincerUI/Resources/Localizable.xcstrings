@@ -481,6 +481,16 @@
         }
       }
     },
+    "%lld / %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / %lld"
+          }
+        }
+      }
+    },
     "%lld Change%@": {
       "localizations": {
         "en": {
@@ -6859,6 +6869,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "MCP sign-in"
+          }
+        }
+      }
+    },
+    "Main chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Main chat"
           }
         }
       }

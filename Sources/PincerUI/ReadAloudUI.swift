@@ -111,15 +111,17 @@ struct ReadAloudModifier: ViewModifier {
     let bottomInset: CGFloat
     @State private var state = ReadAloudChatState()
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.chatPaneIsActive) private var paneIsActive
     @AppStorage(ReadAloudSettings.autoReadKey) private var autoRead = false
 
     func body(content: Content) -> some View {
         content
-            .focusedSceneValue(\.readAloud, self.state)
+            // In the split view only the focused side answers the menu command and shows the pill (#404).
+            .focusedSceneValue(\.readAloud, self.paneIsActive ? self.state : nil)
             .overlay(alignment: .bottom) {
-                ReadAloudPill(controller: .shared)
+                if self.paneIsActive { ReadAloudPill(controller: .shared)
                     .padding(.bottom, self.bottomInset + 8)
-                    .animation(.snappy, value: ReadAloudController.shared.phase)
+                    .animation(.snappy, value: ReadAloudController.shared.phase) }
             }
             .onAppear { self.install() }
             .onChange(of: self.scenePhase) {
