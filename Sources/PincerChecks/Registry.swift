@@ -130,6 +130,7 @@ enum Suites {
         Section("Replies & reactions (demo)") { await runDemoReactionsReply() },
         Section("Messages from other agents (demo)") { await runDemoForwarded() },
         Section("Menu bar (demo)") { await runMenuBarDemo() },
+        Section("Scroll to bottom (demo)") { await runDemoScrollToBottom() },
     ]
 
     /// The built-in demo, second half.

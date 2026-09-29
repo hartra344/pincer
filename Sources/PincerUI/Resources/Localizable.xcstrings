@@ -7063,6 +7063,16 @@
         }
       }
     },
+    "New messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New messages"
+          }
+        }
+      }
+    },
     "Next": {
       "localizations": {
         "en": {
@@ -10569,6 +10579,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scripts and network access are off in this preview."
+          }
+        }
+      }
+    },
+    "Scroll to latest message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scroll to latest message"
           }
         }
       }
