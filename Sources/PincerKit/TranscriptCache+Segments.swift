@@ -272,7 +272,7 @@ extension TranscriptCache.Writer {
 
             let token = String(UInt64.random(in: .min ... .max))
             let manifest = Cache.Manifest(
-                version: Cache.Snapshot.currentVersion, complete: snapshot.complete, activityMs: snapshot.activityMs,
+                version: snapshot.version, complete: snapshot.complete, activityMs: snapshot.activityMs,
                 retained: snapshot.retained, token: token, segments: entries.map(\.ref))
             // The sidecar goes first and comes back only once the manifest is written, so it
             // never vouches for a transcript that isn't there.

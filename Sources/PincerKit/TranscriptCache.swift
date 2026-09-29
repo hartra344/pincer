@@ -556,7 +556,7 @@ public enum TranscriptCache {
         static let shared = Writer()
 
         /// Chats whose layout is remembered.
-        static let maxLayouts = 16
+        static let maxLayouts = 64
 
         var layouts: [URL: Layout] = [:]
         /// Least recently used first.
