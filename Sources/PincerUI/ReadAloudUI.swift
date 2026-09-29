@@ -122,7 +122,11 @@ struct ReadAloudModifier: ViewModifier {
                     .animation(.snappy, value: ReadAloudController.shared.phase)
             }
             .onAppear { self.install() }
-            .onChange(of: self.scenePhase) { self.state.isVisible = self.scenePhase == .active }
+            .onChange(of: self.scenePhase) {
+                self.state.isVisible = self.scenePhase == .active
+                // Another window showing this chat may have closed and taken the handler with it.
+                if self.state.isVisible { self.install() }
+            }
             .onChange(of: self.autoRead) { self.install() }
             .onDisappear { self.uninstall() }
     }
@@ -133,6 +137,7 @@ struct ReadAloudModifier: ViewModifier {
         self.state.isVisible = self.scenePhase == .active
         guard self.autoRead else { return self.uninstall() }
         let state = self.state
+        self.chat.onFinalAssistantReplyOwner = state
         self.chat.onFinalAssistantReply = { [weak state] item in
             guard let state, state.isVisible, !ReadAloudSupport.isVoiceOverRunning,
                   let text = SpeechText.speakableText(for: item) else { return }
@@ -140,7 +145,11 @@ struct ReadAloudModifier: ViewModifier {
         }
     }
 
-    private func uninstall() { self.chat.onFinalAssistantReply = nil }
+    private func uninstall() {
+        guard self.chat.onFinalAssistantReplyOwner === self.state || self.chat.onFinalAssistantReplyOwner == nil else { return }
+        self.chat.onFinalAssistantReply = nil
+        self.chat.onFinalAssistantReplyOwner = nil
+    }
 }
 
 extension View {
