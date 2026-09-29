@@ -164,7 +164,7 @@ struct ReadAloudControllerTests {
 
     @Test func gatewayTimeoutFallsBackToDevice() async {
         let h = Harness(timeout: .milliseconds(50))
-        h.speakDelay = .seconds(30)
+        h.speakDelay = .seconds(300)
         h.controller.toggle(messageId: "m1", text: "Slow.", gateway: h.gateway)
         #expect(await waitUntil { h.controller.phase == .idle })
         #expect(h.speaker.spoken.map(\.text) == ["Slow."] && h.player.played.isEmpty)

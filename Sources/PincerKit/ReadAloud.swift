@@ -46,6 +46,9 @@ public final class ReadAloudController {
 
     public private(set) var phase: Phase = .idle
     public private(set) var lastSource: Source?
+    /// The dictation in progress, if any. Read Aloud ends it before speaking, and auto-read stays quiet meanwhile.
+    @ObservationIgnored weak var activeDictation: DictationModel?
+    public var isDictating: Bool { self.activeDictation?.isActive == true }
 
     @ObservationIgnored private let clipPlayer: ReadAloudClipPlaying
     @ObservationIgnored private let localSpeaker: ReadAloudLocalSpeaking
@@ -84,6 +87,7 @@ public final class ReadAloudController {
     public func start(messageId: String, text: String, gateway: GatewayVoiceModel?) {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
+        self.activeDictation?.finish()
         self.cancelCurrent()
         self.generation += 1
         let generation = self.generation
@@ -141,7 +145,8 @@ public final class ReadAloudController {
         let timeout = self.gatewayTimeout
         let (stream, results) = AsyncStream.makeStream(of: TTSClip?.self)
         let speak = Task { @MainActor in results.yield(try? await gateway.speak(text)) }
-        let timer = Task {
+        // Detached so the timeout still fires while the main actor is busy.
+        let timer = Task.detached {
             try? await Task.sleep(for: timeout)
             results.yield(nil)
         }
