@@ -81,6 +81,38 @@ jobs:
       - run: npm ci
       - run: npm run selftest
 
+  # The Swift job builds for macOS only, so code behind `#if os(iOS)` would otherwise first be
+  # compiled by a TestFlight archive (#421). This mirrors that archive, minus signing.
+  ios:
+    name: iOS build
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select newest Xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Build the iOS app
+        run: |
+          xcodegen generate --quiet
+          xcodebuild build \
+            -project Pincer.xcodeproj \
+            -scheme Pincer-iOS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+          exit "${PIPESTATUS[0]}"
+
   swift:
     name: Swift build and checks
     needs: changes
