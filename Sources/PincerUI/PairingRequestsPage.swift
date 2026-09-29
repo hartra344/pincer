@@ -17,7 +17,7 @@ struct PairingRequestsPage: View {
         Group {
             if !connected {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to review pairing requests.", bundle: .module))
+                                       description: Text("Connect to the Gateway to review pairing requests.", bundle: .module))
             } else if !model.supported {
                 ContentUnavailableView(L("Pairing Requests Aren't Available"), systemImage: "person.badge.key",
                                        description: Text("This Gateway doesn't support channel pairing requests. Update OpenClaw to review them here.", bundle: .module))
@@ -134,14 +134,14 @@ struct PairingRequestsPage: View {
 
     @ViewBuilder private func noRequests(_ model: PairingInboxModel) -> some View {
         Section {
-            VStack(spacing: 6) {
+            VStack(spacing: Theme.Spacing.sm) {
                 Image(systemName: "person.badge.key").font(.largeTitle).foregroundStyle(.secondary)
                 Text(model.channelFilterLabel.map { "No Requests for \($0)" } ?? "No Pending Requests").font(.headline)
                 Text("When someone messages one of these accounts, their request shows up here.", bundle: .module)
                     .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, Theme.Spacing.xl)
         }
         Section {
             ForEach(model.visibleAccounts) { account in
@@ -178,11 +178,11 @@ struct PairingRequestsPage: View {
             Text(notice.text)
                 .font(.callout)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.horizontal, Theme.Spacing.xxl)
+                .padding(.vertical, Theme.Spacing.lg)
                 .glassSurface(in: Capsule())
                 .padding(.horizontal)
-                .padding(.bottom, 20)
+                .padding(.bottom, Theme.Spacing.section)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .onTapGesture { withAnimation { model.clearNotice() } }
                 .task(id: notice.id) {
@@ -236,7 +236,7 @@ private struct PairingRequestRow: View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             let expired = self.request.isExpired(at: context.date)
             VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
                     Text(self.request.title)
                         .font(.headline)
                         .lineLimit(1)
@@ -280,10 +280,10 @@ private struct PairingRequestRow: View {
                     Spacer()
                     self.buttons(busy: operation.isRunning, expired: expired)
                 }
-                .padding(.top, 4)
+                .padding(.top, Theme.Spacing.xs)
                 #endif
             }
-            .padding(.vertical, 4)
+            .padding(.vertical, Theme.Spacing.xs)
         }
         .contextMenu {
             Button(L("Copy Sender ID"), systemImage: "doc.on.doc") { Clipboard.copy(self.request.senderId) }

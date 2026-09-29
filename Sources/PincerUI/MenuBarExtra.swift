@@ -63,7 +63,7 @@ struct MenuBarContent: View {
         Divider()
         Section(L("Gateways")) {
             if inbox.gateways.isEmpty {
-                Button(L("No gateways yet")) {}
+                Button(L("No Gateways yet")) {}
                     .disabled(true)
             }
             ForEach(inbox.gateways) { status in

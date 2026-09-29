@@ -25,7 +25,7 @@ struct AgentManagementSection: View {
             }
             AgentReadOnlyNotice(model: model)
             if agents.isEmpty {
-                Text(connected ? L("No agents.") : L("Connect to the gateway to see its agents."))
+                Text(connected ? L("No agents.") : L("Connect to the Gateway to see its agents."))
                     .foregroundStyle(.secondary)
             }
             ForEach(agents) { agent in
@@ -71,7 +71,7 @@ private struct AgentRowLabel: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(self.agent.title)
                 Text(self.detail)
                     .font(.caption)
@@ -103,7 +103,7 @@ private struct AgentDeletionReportView: View {
 
     var body: some View {
         HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Label(L("Deleted “\(self.report.agentName)”. \(self.report.result.summary)"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                 ForEach(self.report.result.failed, id: \.self) { failure in
@@ -113,7 +113,7 @@ private struct AgentDeletionReportView: View {
                         .textSelection(.enabled)
                 }
                 if self.report.result.purgeFailed {
-                    Text("The gateway couldn't finish removing the agent's data. Deleting again retries it.", bundle: .module)
+                    Text("The Gateway couldn't finish removing the agent's data. Deleting again retries it.", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -134,7 +134,7 @@ struct AgentReadOnlyNotice: View {
     var body: some View {
         if !self.model.managementSupported {
             Label {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                     Text("Agent Management Isn't Available", bundle: .module).font(.callout.weight(.medium))
                     Text(AgentManagement.unsupportedMessage).font(.caption).foregroundStyle(.secondary)
                 }
@@ -142,7 +142,7 @@ struct AgentReadOnlyNotice: View {
                 Image(systemName: "person.crop.circle.badge.exclamationmark")
             }
         } else if !self.model.hasAdmin {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 Label(L("Editing agents needs Full Management"), systemImage: "lock.shield")
                     .font(.callout.weight(.medium))
                 Text("You can view agents and their files. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module)
@@ -164,7 +164,7 @@ private struct AgentFilesReadOnlyNotice: View {
             if self.model.hasAdmin {
                 Label(reason, systemImage: "lock").foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Label(L("Editing agents needs Full Management"), systemImage: "lock.shield")
                         .font(.callout.weight(.medium))
                     Text("You can read this file. Turn on Full Management under Connection, then approve this device on the Gateway host.", bundle: .module)
@@ -207,10 +207,10 @@ struct AgentPage: View {
                 self.form(agent)
             } else if !self.gateway.state.isConnected {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see this agent.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see this agent.", bundle: .module))
             } else {
                 ContentUnavailableView(L("Agent Not Found"), systemImage: "person.crop.circle.badge.questionmark",
-                                       description: Text("“\(self.agentId)” isn't an agent on this gateway anymore.", bundle: .module))
+                                       description: Text("“\(self.agentId)” isn't an agent on this Gateway anymore.", bundle: .module))
             }
         }
         .navigationTitle(self.agent?.title ?? self.agentId)
@@ -308,10 +308,10 @@ struct AgentPage: View {
                 Label(L("Agent saved"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.callout)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, Theme.Spacing.xxl)
+                    .padding(.vertical, Theme.Spacing.lg)
                     .glassSurface(in: Capsule())
-                    .padding(.bottom, 20)
+                    .padding(.bottom, Theme.Spacing.section)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -359,7 +359,7 @@ struct AgentPage: View {
                 Label(AgentManagement.workspaceChangeWarning, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
             } else {
-                Text("The folder on the gateway host with this agent's files.", bundle: .module)
+                Text("The folder on the Gateway host with this agent's files.", bundle: .module)
             }
         }
     }
@@ -389,7 +389,7 @@ struct AgentPage: View {
     @ViewBuilder private func filesSection(_ agent: AgentSummary) -> some View {
         Section {
             if !self.model.filesSupported {
-                Text("This gateway can't share workspace files. Update OpenClaw to edit them here.", bundle: .module)
+                Text("This Gateway can't share workspace files. Update OpenClaw to edit them here.", bundle: .module)
                     .foregroundStyle(.secondary)
             } else if let files {
                 ForEach(files.files) { file in
@@ -400,7 +400,7 @@ struct AgentPage: View {
                     }
                 }
             } else if let error = self.filesState.error {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
                     Button(L("Try Again")) { Task { await self.loadFiles() } }
                 }
@@ -493,7 +493,7 @@ private struct AgentFileRow: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(self.file.name).font(.body.monospaced())
                 Text(self.detail)
                     .font(.caption)
@@ -509,8 +509,8 @@ private struct AgentFileRow: View {
             if self.file.missing {
                 Text(self.file.expectedAbsent ? L("Not Created") : L("Missing"))
                     .font(.caption2.weight(.medium))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, Theme.Spacing.sm)
+                    .padding(.vertical, Theme.Spacing.xxs)
                     .foregroundStyle(self.file.expectedAbsent ? Color.secondary : Color.orange)
                     .background((self.file.expectedAbsent ? Color.secondary : Color.orange).opacity(0.15), in: Capsule())
             }
@@ -605,13 +605,13 @@ struct AgentEditorSheet: View {
                     AgentModelPicker(selection: self.$draft.model, agentId: nil)
                 }
                 Section {
-                    TextField(L("Folder"), text: self.$draft.workspace, prompt: Text("Default (created by gateway)", bundle: .module))
+                    TextField(L("Folder"), text: self.$draft.workspace, prompt: Text("Default (created by Gateway)", bundle: .module))
                         .font(.body.monospaced())
                         .agentPlainTextInput()
                 } header: {
                     Text("Workspace", bundle: .module)
                 } footer: {
-                    Text("Leave empty to let the gateway create a new workspace for this agent.", bundle: .module)
+                    Text("Leave empty to let the Gateway create a new workspace for this agent.", bundle: .module)
                 }
                 if case let .duplicate(source) = self.mode {
                     Section {
@@ -821,7 +821,7 @@ struct AgentFileEditorPage: View {
                 }
             } else if !self.gateway.state.isConnected {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to open \(self.name).", bundle: .module))
+                                       description: Text("Connect to the Gateway to open \(self.name).", bundle: .module))
             } else {
                 ProgressView()
             }
@@ -835,12 +835,12 @@ struct AgentFileEditorPage: View {
         }
         .onDisappear { self.model.closeEditor(editor) }
         .onChange(of: editor.lastSave) { self.showToast() }
-        .confirmationDialog(L("Overwrite \(self.name) on the gateway?"), isPresented: self.$confirmOverwrite,
+        .confirmationDialog(L("Overwrite \(self.name) on the Gateway?"), isPresented: self.$confirmOverwrite,
                             titleVisibility: .visible) {
             Button(L("Overwrite with Mine"), role: .destructive) { Task { await editor.resolveConflictOverwrite() } }
             Button(L("Cancel"), role: .cancel) {}
         } message: {
-            Text("The changes made on the gateway since you opened it will be replaced by yours.", bundle: .module)
+            Text("The changes made on the Gateway since you opened it will be replaced by yours.", bundle: .module)
         }
         .sheet(isPresented: self.$comparing) {
             if let conflict = editor.conflict {
@@ -851,7 +851,7 @@ struct AgentFileEditorPage: View {
 
     @ViewBuilder private func content(_ editor: AgentFileEditorModel) -> some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.md) {
                 AgentFilesReadOnlyNotice(model: self.model)
                 if let conflict = editor.conflict {
                     self.conflictBanner(conflict, editor: editor)
@@ -910,7 +910,7 @@ struct AgentFileEditorPage: View {
                     .autocorrectionDisabled()
                     .agentPlainTextInput()
                     .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, Theme.Spacing.md)
                     .disabled(editor.isSaving || !self.gateway.state.isConnected)
             }
         }
@@ -919,20 +919,20 @@ struct AgentFileEditorPage: View {
                 Label(L("\(self.name) saved"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.callout)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, Theme.Spacing.xxl)
+                    .padding(.vertical, Theme.Spacing.lg)
                     .glassSurface(in: Capsule())
-                    .padding(.bottom, 20)
+                    .padding(.bottom, Theme.Spacing.section)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }
 
     private func conflictBanner(_ conflict: AgentFileConflict, editor: AgentFileEditorModel) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Label(conflict.theirsMissing
-                ? "\(self.name) was removed on the gateway since you opened it."
-                : "\(self.name) changed on the gateway since you opened it.",
+                ? "\(self.name) was removed on the Gateway since you opened it."
+                : "\(self.name) changed on the Gateway since you opened it.",
                 systemImage: "arrow.triangle.2.circlepath")
                 .foregroundStyle(.orange)
             Text("Your edits are kept until you choose.", bundle: .module)
@@ -947,9 +947,9 @@ struct AgentFileEditorPage: View {
             .buttonStyle(.bordered)
             .disabled(!self.gateway.state.isConnected || editor.isSaving)
         }
-        .padding(10)
+        .padding(Theme.Spacing.lg)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
     }
 
     private func sizeText(_ editor: AgentFileEditorModel) -> String {
@@ -1031,7 +1031,7 @@ private struct AgentFileCompareSheet: View {
     }
 
     private func column(_ title: String, _ text: String?) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text(title).font(.headline).padding([.horizontal, .top])
             ScrollView {
                 Text(text ?? "(The file doesn't exist on the gateway.)")
@@ -1052,7 +1052,7 @@ private struct AgentMarkdownPreview: View {
 
     var body: some View {
         let blocks = MarkdownBlock.parse(self.text)
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             if blocks.isEmpty {
                 Text("Nothing to preview.", bundle: .module).foregroundStyle(.secondary)
             }
@@ -1071,9 +1071,9 @@ private struct AgentMarkdownPreview: View {
             Text(MarkdownBlock.inline(text))
                 .font(level <= 1 ? .title2.bold() : level == 2 ? .title3.bold() : .headline)
         case let .list(items, ordered):
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
                         Text(ordered ? "\(index + 1)." : "•").foregroundStyle(.secondary)
                         Text(MarkdownBlock.inline(item.text))
                     }
@@ -1083,18 +1083,18 @@ private struct AgentMarkdownPreview: View {
         case let .quote(text):
             Text(MarkdownBlock.inline(text))
                 .foregroundStyle(.secondary)
-                .padding(.leading, 10)
+                .padding(.leading, Theme.Spacing.lg)
                 .overlay(alignment: .leading) { Rectangle().fill(.tertiary).frame(width: 3) }
         case let .code(_, code):
             Text(code)
                 .font(.callout.monospaced())
-                .padding(8)
+                .padding(Theme.Spacing.md)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+                .background(.secondary.opacity(0.1), in: RoundedRectangle(cornerRadius: Theme.Radius.small))
         case .rule:
             Divider()
         case let .table(header, _, rows):
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(header.joined(separator: " | ")).bold()
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                     Text(row.joined(separator: " | "))

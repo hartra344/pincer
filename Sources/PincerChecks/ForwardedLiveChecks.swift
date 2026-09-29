@@ -90,7 +90,7 @@ private func checkForwardedWithOutbox(_ gateway: GatewayStore, _ chat: ChatStore
     let failedId = "forwarded-outbox-failed"
     gateway.injectOutboxEntry(OutboxEntry(
         id: failedId, sessionKey: "agent:main:main", agentId: "main", text: "Kiko, can you add the NAS drives too?",
-        createdAt: Date(), state: .failed(OutboxFailure(message: "The gateway timed out.", retryable: true)), attempts: 1))
+        createdAt: Date(), state: .failed(OutboxFailure(message: "The Gateway timed out.", retryable: true)), attempts: 1))
     defer { gateway.discardOutbox() }
     let shown = await waitFor("failed row in Claw's chat") { chat.items.contains { $0.idempotencyKey == failedId && $0.outboxState != nil } }
     check(shown, "demo: a failed message shows in Claw's chat with Kiko's messages")

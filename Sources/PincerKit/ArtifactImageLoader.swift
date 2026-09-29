@@ -188,7 +188,7 @@ public final class ArtifactImageLoader {
 
     // Decoding a large image takes long enough to drop frames, so it stays off the main thread.
     private static func decode(_ data: Data, maxPixel: Int) async -> CGImage? {
-        if SVGRasterizer.isSVG(data) { return await SVGRasterizer.rasterize(data) }
+        if SVGSource.isSVG(data) { return await SVGRasterization.rasterize(data) }
         return await Task.detached(priority: .userInitiated) { ImageCodec.decode(data, maxPixel: maxPixel) }.value
     }
 

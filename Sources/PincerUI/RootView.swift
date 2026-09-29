@@ -8,6 +8,7 @@ public struct PincerScene: Scene {
     @State private var app = AppModel.shared
 
     public init() {
+        SVGRasterizer.install()
         #if os(macOS)
         QuickCaptureController.shared.install(app: AppModel.shared)
         #endif
@@ -285,8 +286,8 @@ private struct GatewayDetail: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .modifier(ChatChrome())
                 } else if gateway.state.isConnected {
-                    ContentUnavailableView("Pick a chat", systemImage: "bubble.left.and.bubble.right",
-                                           description: Text("Choose a session from the sidebar or start a new one."))
+                    ContentUnavailableView(L("Pick a chat"), systemImage: "bubble.left.and.bubble.right",
+                                           description: Text("Choose a chat from the sidebar or start a new one.", bundle: .module))
                 } else {
                     ProgressView("Connecting to \(gateway.profile.name)…")
                 }
@@ -570,7 +571,7 @@ private struct TranscriptCacheSettingsSection: View {
                         }
                     }
                 } message: {
-                    Text("Chats are downloaded again from your gateways when you open them, and message search is rebuilt. Nothing on your gateways is deleted.")
+                    Text("Chats are downloaded again from your Gateways when you open them, and message search is rebuilt. Nothing on your Gateways is deleted.")
                 }
             LabeledContent("Outbox") {
                 Text(self.app.unsentCount == 1 ? "1 message" : "\(self.app.unsentCount.formatted()) messages")
@@ -602,7 +603,7 @@ private struct ThemePresetGrid: View {
     @Binding var selection: ThemePreset
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 10)], spacing: 10) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: Theme.Spacing.lg)], spacing: Theme.Spacing.lg) {
             ForEach(ThemePreset.allCases) { preset in
                 Button { self.selection = preset } label: { self.swatch(preset) }
                     .buttonStyle(.plain)
@@ -610,13 +611,13 @@ private struct ThemePresetGrid: View {
                     .accessibilityAddTraits(preset == self.selection ? .isSelected : [])
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Theme.Spacing.xs)
     }
 
     private func swatch(_ preset: ThemePreset) -> some View {
         let selected = preset == self.selection
         let colors = preset.swatch
-        return VStack(spacing: 6) {
+        return VStack(spacing: Theme.Spacing.sm) {
             HStack(spacing: -6) {
                 ForEach(colors.indices, id: \.self) { index in
                     Circle()
@@ -630,12 +631,12 @@ private struct ThemePresetGrid: View {
                 .foregroundStyle(selected ? .primary : .secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .padding(.vertical, Theme.Spacing.md)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
             .fill(selected ? AnyShapeStyle(colors[0].opacity(0.15)) : AnyShapeStyle(.quinary)))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
             .strokeBorder(selected ? colors[0] : .clear, lineWidth: 2))
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
     }
 }
 
@@ -657,7 +658,7 @@ private struct ThemeColorRow: View {
                     AppTheme.setOverride(color, for: self.role)
                 }
             ), supportsOpacity: false) {
-                HStack(spacing: 6) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text(self.role.label)
                     if overridden {
                         Text("Custom").font(.caption).foregroundStyle(.secondary)

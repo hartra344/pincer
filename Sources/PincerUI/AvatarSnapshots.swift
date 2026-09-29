@@ -104,7 +104,7 @@ public enum AvatarSnapshots {
 
     @MainActor
     static func tile(_ style: AvatarStyle, _ state: AvatarState, size: CGFloat, dark: Bool, label: Bool) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: Theme.Spacing.xs) {
             AgentAvatarView(state: state, style: style, size: size, animated: false)
             if label {
                 Text(self.name(state)).font(.system(size: 10)).foregroundStyle(.secondary)
@@ -125,16 +125,16 @@ public enum AvatarSnapshots {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundStyle(dark ? .white : .black)
                             .frame(width: 90, alignment: .leading)
-                            .padding(.leading, 8)
+                            .padding(.leading, Theme.Spacing.md)
                         ForEach(Array(self.states.enumerated()), id: \.offset) { _, state in
                             let style = AvatarStyle(creature: creature, palette: self.palette(for: creature), renderStyle: renderStyle)
-                            VStack(spacing: 2) {
+                            VStack(spacing: Theme.Spacing.xxs) {
                                 AgentAvatarView(state: state, style: style, size: 64, animated: false)
                                 AgentAvatarView(state: state, style: style, size: 24, animated: false)
                                 Text(self.name(state)).font(.system(size: 9)).foregroundStyle(.gray)
                             }
                             .frame(width: 84)
-                            .padding(.vertical, 6)
+                            .padding(.vertical, Theme.Spacing.sm)
                         }
                     }
                     .background(dark ? Color(white: 0.12) : Color.white)
@@ -148,7 +148,7 @@ public enum AvatarSnapshots {
     static func accessorySheet(_ renderStyle: AvatarRenderStyle) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(AvatarCreature.allCases, id: \.self) { creature in
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.md) {
                     Text("\(renderStyle.rawValue) \(creature.rawValue)").font(.system(size: 11)).frame(width: 90, alignment: .leading)
                     ForEach(AvatarAccessory.allowed(for: creature), id: \.self) { accessory in
                         ForEach(AvatarPalette.allCases, id: \.self) { palette in
@@ -159,7 +159,7 @@ public enum AvatarSnapshots {
                         Divider().frame(height: 40)
                     }
                 }
-                .padding(6)
+                .padding(Theme.Spacing.sm)
             }
         }
         .background(Color.white)

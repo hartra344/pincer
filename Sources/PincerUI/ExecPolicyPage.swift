@@ -50,7 +50,7 @@ struct ExecPolicyPage: View {
             Section(L("Recently allowed")) {
                 ForEach(recent) { item in
                     NavigationLink(value: SettingsRoute.execAgent(item.agentId)) {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                             Text(item.entry.pattern)
                                 .font(.body.monospaced())
                                 .lineLimit(1)
@@ -88,7 +88,7 @@ private struct ExecAgentRowView: View {
 
     var body: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(self.row.title)
                 Text(self.row.summary)
                     .font(.caption)
@@ -105,7 +105,7 @@ private struct ExecAgentRowView: View {
                 Text("\(self.row.badgeCount)")
                     .font(.caption.weight(.medium).monospacedDigit())
                     .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
+                    .padding(.vertical, Theme.Spacing.xxs)
                     .foregroundStyle(.secondary)
                     .background(.secondary.opacity(0.15), in: Capsule())
                     .accessibilityLabel(L("\(self.row.badgeCount) allowed"))
@@ -231,7 +231,7 @@ private struct ExecRemovableRow<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.lg) {
             if self.editing {
                 Button(role: .destructive, action: self.remove) {
                     Label(L("Remove"), systemImage: "minus.circle.fill")
@@ -306,7 +306,7 @@ private struct ExecAllowlistRow: View {
                 #endif
             }
         }
-        .padding(.vertical, 1)
+        .padding(.vertical, Theme.Spacing.hairline)
     }
 }
 
@@ -334,7 +334,7 @@ private struct ExecToolRow: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(.vertical, 1)
+        .padding(.vertical, Theme.Spacing.hairline)
     }
 }
 
@@ -348,8 +348,8 @@ private struct ExecTag: View {
             .font(.caption2.weight(.medium))
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
+            .padding(.horizontal, Theme.Spacing.sm)
+            .padding(.vertical, Theme.Spacing.xxs)
             .foregroundStyle(.tint)
             .background(.tint.opacity(0.15), in: Capsule())
     }
@@ -387,7 +387,7 @@ private struct ExecPolicyControl: View {
                 Text(option.label).tag(Choice.value(option.value))
             }
         } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(self.field.label)
                 Text(self.field.help)
                     .font(.caption)
@@ -432,7 +432,7 @@ private struct ExecPolicyStates<Content: View>: View {
     var body: some View {
         if !self.model.supported {
             ContentUnavailableView(L("Command Policy Isn't Available"), systemImage: "lock.slash",
-                                   description: Text("This gateway can't share its command policy. Update OpenClaw to manage it here.", bundle: .module))
+                                   description: Text("This Gateway can't share its command policy. Update OpenClaw to manage it here.", bundle: .module))
         } else if self.model.needsAdmin {
             ContentUnavailableView {
                 Label(L("Needs Full Management"), systemImage: "lock.shield")
@@ -445,7 +445,7 @@ private struct ExecPolicyStates<Content: View>: View {
             self.content
         } else if !self.connected, !self.model.loadState.isRunning {
             ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                   description: Text("Connect to the gateway to see its command policy.", bundle: .module))
+                                   description: Text("Connect to the Gateway to see its command policy.", bundle: .module))
         } else if let error = self.model.loadState.error {
             ContentUnavailableView {
                 Label(L("Couldn't Load Command Policy"), systemImage: "exclamationmark.triangle")
@@ -494,7 +494,7 @@ private struct ExecPolicyHeader: View {
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
         case let .failed(_, retrySave):
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                 Label(banner.message, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
@@ -521,7 +521,7 @@ private struct ExecPolicyFooter: View {
     let connected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             if let snapshot = self.model.snapshot, !snapshot.exists {
                 Text("The Gateway has no policy file yet and uses its defaults. Saving creates \(snapshot.path ?? "the policy file").")
             }

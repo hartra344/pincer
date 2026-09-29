@@ -18,9 +18,9 @@ struct SlashCommandMenu: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, 2)
+                    .padding(.horizontal, Theme.Spacing.xl)
+                    .padding(.top, Theme.Spacing.md)
+                    .padding(.bottom, Theme.Spacing.xxs)
             }
             ScrollViewReader { proxy in
                 // As tall as the rows, up to `maxHeight`; only then does it scroll.
@@ -54,7 +54,7 @@ struct SlashCommandMenu: View {
                     #endif
             }
         }
-        .padding(6)
+        .padding(Theme.Spacing.sm)
     }
 
     /// For argument suggestions: which command and argument they fill in.
@@ -70,7 +70,7 @@ private struct SlashSuggestionRow: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
             switch self.suggestion.kind {
             case let .command(command):
                 Text("/\(command.name)")
@@ -91,7 +91,7 @@ private struct SlashSuggestionRow: View {
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
+                        .padding(.vertical, Theme.Spacing.hairline)
                         .background(.quaternary, in: Capsule())
                 }
             case let .argument(choice, _, _):
@@ -113,11 +113,11 @@ private struct SlashSuggestionRow: View {
                 }
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, Theme.Spacing.md)
         .padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
                 .fill(self.isSelected ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(.clear)))
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(self.isSelected ? [.isButton, .isSelected] : .isButton)

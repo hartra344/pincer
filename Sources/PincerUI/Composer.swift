@@ -30,7 +30,7 @@ struct Composer: View {
         #if DEBUG
         let _ = BodyCounter.hit("Composer")
         #endif
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             if let attachmentError {
                 Label(attachmentError, systemImage: "exclamationmark.triangle")
                     .font(.caption)
@@ -48,7 +48,7 @@ struct Composer: View {
             }
             if !self.attachments.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: Theme.Spacing.md) {
                         ForEach(self.attachments) { attachment in
                             AttachmentThumb(attachment: attachment) {
                                 self.attachments.removeAll { $0.id == attachment.id }
@@ -57,7 +57,7 @@ struct Composer: View {
                     }
                 }
             }
-            HStack(alignment: .bottom, spacing: 8) {
+            HStack(alignment: .bottom, spacing: Theme.Spacing.md) {
                 self.attachMenu
                 ComposerTextView(
                     placeholder: self.placeholder,
@@ -99,7 +99,7 @@ struct Composer: View {
                 .accessibilityLabel(self.sendLabel)
                 .accessibilityHint(self.gateway.state.isConnected ? "" : Self.offlineHint)
             }
-            .padding(.leading, 10)
+            .padding(.leading, Theme.Spacing.lg)
             .padding(.trailing, 7)
             .glassSurface(in: RoundedRectangle(cornerRadius: Self.corner, style: .continuous))
             .overlay(
@@ -128,9 +128,9 @@ struct Composer: View {
         .onChange(of: self.chat.replyTarget) { old, new in
             if let new, new != old { self.focusRequest += 1 }
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 6)
-        .padding(.bottom, 12)
+        .padding(.horizontal, Theme.Spacing.row)
+        .padding(.top, Theme.Spacing.sm)
+        .padding(.bottom, Theme.Spacing.xl)
         .onDrop(of: [.fileURL, .image, .audiovisualContent, .pdf], isTargeted: self.$isTargeted) { providers in
             self.ingest(providers.map(PastedMedia.provider))
             return true
@@ -395,10 +395,10 @@ private struct ReplyChip: View {
     @Environment(\.appTheme) private var theme
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Theme.Spacing.md) {
             Image(systemName: "arrowshape.turn.up.left")
                 .foregroundStyle(self.theme.accent)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text("Replying to **\(self.target.senderLabel)**", bundle: .module)
                     .font(.caption)
                 Text(Replies.previewLine(self.target.preview))
@@ -416,9 +416,9 @@ private struct ReplyChip: View {
             .help(Text("Cancel reply", bundle: .module))
             .accessibilityLabel(Text("Cancel reply", bundle: .module))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .glassSurface(in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.vertical, Theme.Spacing.sm)
+        .glassSurface(in: RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous))
         .accessibilityElement(children: .contain)
     }
 }

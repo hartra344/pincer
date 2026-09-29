@@ -128,9 +128,7 @@ public enum ChannelRules {
 
     /// An RPC error as the page shows it.
     @MainActor public static func errorText(_ error: Error) -> String {
-        if GatewayHealthModel.isMissingScope(error) { return SetupWizardModel.fullManagementMessage }
-        if case let GatewayError.rpc(_, message, _) = error { return message }
-        return error.localizedDescription
+        GatewayError.message(for: error, scope: SetupWizardModel.fullManagementMessage)
     }
 
     /// The action the Gateway said a channel doesn't support ("does not support logout/start"), if any.
@@ -144,8 +142,8 @@ public enum ChannelRules {
 
     /// A lifecycle failure, with friendlier copy for what upstream reports as unsupported.
     @MainActor public static func message(for error: Error, action: ChannelsModel.Action, channelLabel: String) -> String {
-        if GatewayHealthModel.isMissingScope(error) { return SetupWizardModel.fullManagementMessage }
-        if GatewayConfigClient.isUnknownMethod(error) { return "This Gateway can't \(action.verb) channels." }
+        if GatewayError.isMissingScope(error) { return SetupWizardModel.fullManagementMessage }
+        if GatewayError.isUnknownMethod(error) { return "This Gateway can't \(action.verb) channels." }
         guard case let GatewayError.rpc(_, message, _) = error else { return error.localizedDescription }
         let lower = message.lowercased()
         if lower.contains("does not support logout") { return "\(channelLabel) doesn't support logging out." }
@@ -513,7 +511,7 @@ public final class ChannelsModel {
             } else {
                 self.loadState = .failed("The Gateway sent an unexpected channel status.")
             }
-        } catch let error where GatewayConfigClient.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             guard generation == self.generation else { return }
             self.unknownMethod = true
             self.snapshot = nil

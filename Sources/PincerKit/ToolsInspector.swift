@@ -10,7 +10,7 @@ import Foundation
 public enum ToolsPolicy {
     public static let catalogMethod = "tools.catalog"
     public static let effectiveMethod = "tools.effective"
-    public static let unsupportedMessage = "This gateway can't report tool policy. Update OpenClaw to see it here."
+    public static let unsupportedMessage = "This Gateway can't report tool policy. Update OpenClaw to see it here."
     public static let policyFootnote = "Change tool policy on the Tools & Skills settings page or in Raw Config."
 
     /// "Live policy from “Main”." — which chat an agent's inspector read `tools.effective` for.

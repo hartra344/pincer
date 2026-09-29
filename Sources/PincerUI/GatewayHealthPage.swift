@@ -108,7 +108,7 @@ struct GatewayHealthPage: View {
     private func restartBanner(_ model: GatewayHealthModel) -> some View {
         Section {
             Label {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                     Text("Restart needed to apply changes", bundle: .module)
                     if let reason = model.restartRequiredReason {
                         Text(reason).font(.caption).foregroundStyle(.secondary)
@@ -177,7 +177,7 @@ struct GatewayHealthPage: View {
                 }
                 ForEach(health.channels) { channel in
                     HStack(alignment: .firstTextBaseline) {
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                             Text(channel.label)
                             if let error = channel.lastError {
                                 Text(error).font(.caption).foregroundStyle(.secondary).lineLimit(3)
@@ -209,14 +209,14 @@ struct GatewayHealthPage: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(entries) { entry in
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                    HStack(spacing: Theme.Spacing.sm) {
                         Text(entry.displayName)
                         if model.isThisDevice(entry) {
                             Text("This device", bundle: .module)
                                 .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
+                                .padding(.horizontal, Theme.Spacing.sm)
+                                .padding(.vertical, Theme.Spacing.hairline)
                                 .background(.tint.opacity(0.15), in: Capsule())
                                 .foregroundStyle(.tint)
                         }
@@ -238,7 +238,7 @@ struct GatewayHealthPage: View {
     private func restartSection(_ model: GatewayHealthModel) -> some View {
         Section {
             if let message = model.restartState.message {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.md) {
                     if model.restartState.isInProgress {
                         ProgressView().controlSize(.small)
                     }
@@ -269,7 +269,7 @@ struct GatewayHealthPage: View {
     @ViewBuilder private func restartStatus(_ model: GatewayHealthModel, message: String) -> some View {
         switch model.restartState {
         case .restarted:
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Label(message, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 if let started = model.startedAt {
                     Text("Up for \(Text(started, style: .relative))", bundle: .module).font(.caption).foregroundStyle(.secondary)
@@ -360,7 +360,7 @@ private struct GatewayHealthIssueRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Label {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                     Text(self.issue.title)
                     if let caption = self.dismissedCaption {
                         Text(caption).font(.caption).foregroundStyle(.secondary)

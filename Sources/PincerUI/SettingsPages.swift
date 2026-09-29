@@ -158,7 +158,7 @@ private struct EntryRow: View {
         let changes = settings.changeCount(under: self.field.path)
         HStack {
             Label {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                     Text(self.field.label)
                     if let help = self.field.help {
                         Text(help).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -363,7 +363,7 @@ private struct SectionLinkLabel: View {
     var body: some View {
         let settings = self.gateway.settings
         Label {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                 Text(self.field.label)
                 if let help = self.field.help {
                     Text(help).font(.caption).foregroundStyle(.secondary).lineLimit(2)
@@ -576,7 +576,7 @@ struct RawConfigPage: View {
                         .frame(minHeight: 360)
                         .disabled(!settings.canEdit)
                 } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                         if let parseError {
                             Label(parseError, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.red)
                         }

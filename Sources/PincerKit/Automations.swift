@@ -469,7 +469,7 @@ public final class AutomationsModel {
             self.jobs = try await self.fetchJobs()
             self.supported = true
             self.loadState = .idle
-        } catch let error where Self.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             self.supported = false
             self.loadState = .idle
         } catch {
@@ -624,14 +624,11 @@ public final class AutomationsModel {
         }
     }
 
-    static func isUnknownMethod(_ error: Error) -> Bool { GatewayConfigClient.isUnknownMethod(error) }
-
     static func message(for error: Error) -> String {
-        guard case let GatewayError.rpc(_, message, details) = error else { return error.localizedDescription }
-        if details?["code"]?.string == "MISSING_SCOPE" || message.lowercased().contains("operator.admin") {
-            return "Changing automations needs Full Management access. Turn it on under Gateway Settings → Connection, then approve this device on the Gateway host."
-        }
-        if message.lowercased().contains("revision") {
+        let message = GatewayError.message(
+            for: error,
+            scope: "Changing automations needs Full Management access. Turn it on under Gateway Settings → Connection, then approve this device on the Gateway host.")
+        if !GatewayError.isMissingScope(error), message.lowercased().contains("revision") {
             return "This automation changed on the Gateway. The latest version is loaded; review it and try again."
         }
         return message

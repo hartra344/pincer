@@ -91,7 +91,7 @@ struct FirstRunStateTests {
     }
 
     @Test func demoCaption() {
-        #expect(FirstRunCopy.demoCaption == "No gateway needed. Explore sample agents and chats. Nothing leaves this device.")
+        #expect(FirstRunCopy.demoCaption == "No Gateway needed. Explore sample agents and chats. Nothing leaves this device.")
     }
 
     // MARK: Welcome, Have a gateway?, Install
@@ -581,7 +581,7 @@ struct FirstRunStateTests {
         var state = FirstRunState.at(.verify)
         let effects = state.send(.skip)
         #expect(effects.count == 2)
-        if case .addGateway? = effects.first {} else { Issue.record("adds the gateway first: \(effects)") }
+        if case .addGateway? = effects.first {} else { Issue.record("adds the Gateway first: \(effects)") }
         #expect(effects.last == .close(selecting: state.profileId))
         #expect(!effects.contains(.forgetCredentials(profileId: state.profileId)), "the saved gateway keeps its secret")
     }

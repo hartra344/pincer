@@ -114,7 +114,13 @@ final class TranscriptAvatarView: TranscriptBaseView {
         let image: CGImage?
         if let pose = self.liveFrame?.pose {
             self.key = nil
-            image = AvatarArt.image(style, pose: pose, dark: dark, accent: accent, badge: badge, size: size, scale: scale)
+            // Animated poses cycle through a few looks, so redraws reuse a bounded cache of bitmaps.
+            let key = "live|\(style)|\(state)|\(pose.hashValue)|\(dark)|\(accent?.components ?? [])|\(size.width)|\(scale)"
+            image = Self.cache[key] ?? AvatarArt.image(style, pose: pose, dark: dark, accent: accent, badge: badge, size: size, scale: scale)
+            if let image {
+                if Self.cache.count > 64 { Self.cache.removeAll() }
+                Self.cache[key] = image
+            }
         } else {
             let key = "creature|\(style)|\(state)|\(dark)|\(accent?.components ?? [])|\(size.width)|\(scale)"
             guard key != self.key else { return }

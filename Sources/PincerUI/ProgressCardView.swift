@@ -22,23 +22,23 @@ struct ProgressCardView: View {
         VStack(alignment: .leading, spacing: 0) {
             self.header
             if self.isExpanded {
-                Divider().padding(.horizontal, 12)
+                Divider().padding(.horizontal, Theme.Spacing.xl)
                 self.scrollingDetails
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassSurface(in: RoundedRectangle(cornerRadius: Self.corner, style: .continuous))
-        .padding(.horizontal, 14)
-        .padding(.top, 6)
+        .padding(.horizontal, Theme.Spacing.row)
+        .padding(.top, Theme.Spacing.sm)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Theme.Spacing.md) {
             Button {
                 withAnimation(self.reduceMotion ? nil : .snappy) { self.isExpanded.toggle() }
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: Theme.Spacing.md) {
                     self.summaryMarker
                     Text(self.isExpanded ? "Task progress" : self.summaryText)
                         .font(.callout.weight(.semibold))
@@ -78,12 +78,12 @@ struct ProgressCardView: View {
                 .accessibilityLabel(L("Dismiss progress card"))
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, Theme.Spacing.row)
+        .padding(.vertical, Theme.Spacing.lg)
     }
 
     private var details: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             if let markdown = self.card.markdown {
                 Text(Self.attributed(markdown))
                     .font(.callout)
@@ -94,7 +94,7 @@ struct ProgressCardView: View {
             if !self.card.steps.isEmpty {
                 VStack(alignment: .leading, spacing: 7) {
                     ForEach(Array(self.card.steps.enumerated()), id: \.offset) { _, step in
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
                             self.marker(for: step.status)
                                 .frame(width: 16)
                             Text(step.text)
@@ -109,9 +109,9 @@ struct ProgressCardView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
+        .padding(.horizontal, Theme.Spacing.row)
         .padding(.top, 9)
-        .padding(.bottom, 12)
+        .padding(.bottom, Theme.Spacing.xl)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.detailsHeight = $0 }
     }
 

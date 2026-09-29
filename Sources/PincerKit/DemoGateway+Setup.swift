@@ -20,7 +20,7 @@ extension DemoGateway {
     static let setupMethods = ["channels.status", "skills.status"]
     static let webLoginMethods = ["web.login.start", "web.login.wait"]
     static let whatsappNotLinked = "Not linked (no WhatsApp Web session)."
-    static let whatsappRelinkFix = "Run: openclaw channels login (scan QR on the gateway host)."
+    static let whatsappRelinkFix = "Run: openclaw channels login (scan QR on the Gateway host)."
     /// How long a demo `web.login.wait` takes, as if the user were scanning.
     static let webLoginWaitMs = 1200
 

@@ -47,7 +47,7 @@ struct FieldRow: View {
         let problem = settings.inputError(for: self.field)
             ?? (changed ? settings.validationProblems[self.field.id] : nil)
             ?? settings.issues(under: self.field.path).first?.message
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
             self.control
                 .disabled(!settings.canEdit)
             if let help = self.field.help {
@@ -62,7 +62,7 @@ struct FieldRow: View {
                     .foregroundStyle(.red)
             }
             if changed {
-                HStack(spacing: 6) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text("Edited", bundle: .module).foregroundStyle(self.theme.accent)
                     Button(L("Revert")) { self.settings.revert(self.field.path) }
                         .buttonStyle(.borderless)
@@ -105,7 +105,7 @@ struct FieldRow: View {
                 LabeledContent(self.label) { Text(Self.listSummary(settings.value(at: field.path))) }
             }
         case .json:
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text(self.label)
                 TextField(L("JSON"), text: self.textBinding, axis: .vertical)
                     .font(.body.monospaced())
@@ -180,7 +180,7 @@ private struct SecretFieldRow: View {
         let settings = self.gateway.settings
         let value = settings.value(at: self.field.path)
         let reference = value.flatMap(SecretRef.init)
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             if self.field.allowsSecretRef {
                 Picker(self.label, selection: Binding(
                     get: { reference.map { Source.reference($0.source) } ?? .value },
@@ -242,7 +242,7 @@ struct IssueRow: View {
     let issue: ConfigIssue
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
             Text(self.issue.displayPath).font(.caption.monospaced()).foregroundStyle(.secondary)
             Text(self.issue.message)
             if let hint = self.issue.fixHint {
