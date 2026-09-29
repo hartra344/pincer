@@ -17,6 +17,7 @@ Each row names the new files under `features/`; paired iPhone files use the same
 
 | Guide / files | What to capture |
 | --- | --- |
+| Homepage and README: `homepage` (macOS) | Built-in Demo → Claw → Main, light appearance with Pixel companion avatars. Expand Thinking; keep tool cards collapsed and frame the disk summary, code block and complete inline chart. Empty the composer. |
 | Sessions: `sessions`, `session-branches` | Gateway Settings → Sessions. Show run states, then Garden planner → Details → Branches and Rewind. Leave destructive actions unconfirmed. |
 | File diffs: `file-diffs` | Forge → Fix retry backoff. Expand Thinking; show the edited retry.ts card and its added/removed lines. |
 | Subagents: `run-tree`, `run-timeline` | Research: launch plan → Runs. Show nested helpers and the same activity in Timeline. The trademark failure is simulated. |
@@ -114,7 +115,7 @@ Connect the documentation app to `ws://127.0.0.1:19879` with the mock's public f
 
 Use `DocScreenshot.astro` on documentation pages. It supplies responsive optimized images, descriptive alt text, a caption, and a link to the original PNG for readable details. Pass an `ios` image to add the macOS/iOS radio selector. Use `iosAlt` and `iosCaption` when the views differ. Selection synchronizes across figures and persists across pages; keyboard arrow keys work, and both images remain available without JavaScript. Images without an iOS counterpart remain visibly labeled macOS. Use `platformNote` for availability or capture limitations. Use `narrow` for portrait settings and connection sheets. The optional `focus` rectangle is measured in source-image pixels and crops only the inline CSS presentation, so small controls remain legible. The full-size link always preserves the complete, unmodified screenshot. Keep route names stable when converting Markdown to MDX.
 
-The introduction and demo guide offer both platform views. The README and landing page retain the Mac overview. Change-review, automations, connection setup, and agent-question examples retain their original Mac capture until usable iOS counterparts are available. OS integrations (Share, Siri/Shortcuts, push notifications and the menu bar) still need dedicated captures; do not substitute unrelated app screens.
+The introduction and demo guide offer both platform views. The README and landing page use the refreshed `features/homepage.png` Mac overview with Pixel companion avatars. Change-review, automations, connection setup, and agent-question examples retain their original Mac capture until usable iOS counterparts are available. OS integrations (Share, Siri/Shortcuts, push notifications and the menu bar) still need dedicated captures; do not substitute unrelated app screens.
 
 ```sh
 cd website
