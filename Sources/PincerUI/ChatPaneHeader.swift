@@ -119,6 +119,14 @@ struct ChatPaneHeader: View {
         .padding(.horizontal, Theme.Spacing.lg)
         .padding(.vertical, Theme.Spacing.sm)
         .frame(minHeight: 44)
+        // Marks the side menu commands act on (#404).
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(.tint)
+                .frame(height: 2)
+                .opacity(self.isFocused ? 1 : 0)
+                .accessibilityHidden(true)
+        }
         .contentShape(Rectangle())
         .simultaneousGesture(TapGesture().onEnded { self.focus() })
         .onChange(of: row?.title, initial: true) { _, title in
@@ -126,6 +134,7 @@ struct ChatPaneHeader: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(self.side == .split ? L("Split view chat") : L("Main chat"))
+        .accessibilityAddTraits(self.isFocused ? .isSelected : [])
     }
 
     private func focus() {
