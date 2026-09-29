@@ -7,10 +7,13 @@ import Testing
 @Suite("Chat eviction")
 struct ChatEvictionTests {
     let scratch = ScratchDefaults()
+    let temp = TempDir()
     let profile = GatewayProfile(name: "Test", url: "ws://127.0.0.1:1", authMode: .none)
 
     func gateway() -> GatewayStore {
-        GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        let gateway = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        gateway.cacheRoot = self.temp.url
+        return gateway
     }
 
     func item(_ id: String, _ text: String = "hi") -> ChatItem {
@@ -25,9 +28,10 @@ struct ChatEvictionTests {
     func cleanup(_ gateway: GatewayStore) async {
         for key in gateway.chats.keys {
             gateway.chats[key]?.stopCaching()
-            await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: key)
+            await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: key, root: self.temp.url)
         }
         self.scratch.remove()
+        self.temp.remove()
     }
 
     func settle(_ condition: () -> Bool) async {
@@ -140,6 +144,7 @@ struct ChatEvictionTests {
         #expect(Set(chat.fullMessages.keys) == ["new"])
         #expect(chat.recoveryAttempted == ["new"])
         self.scratch.remove()
+        self.temp.remove()
     }
 
     @Test func warmChatsAreNeverVictims() async {
@@ -164,10 +169,12 @@ struct ChatEvictionTests {
         let gateway = self.gateway()
         #expect(gateway.residency.limit >= GatewayStore.warmChatLimit)
         self.scratch.remove()
+        self.temp.remove()
     }
 
     @Test func reopeningADehydratedChatReloadsOnceWithoutFlash() async {
         let gateway = GatewayStore(profile: .demo(), defaults: self.scratch.defaults, identity: Fixtures.identity())
+        gateway.cacheRoot = self.temp.url
         gateway.start()
         await self.settle { gateway.state == .connected && !gateway.sessions.isEmpty }
         #expect(gateway.state == .connected)
@@ -200,8 +207,8 @@ struct ChatEvictionTests {
         await target.load()
         #expect(target.loadCount == loadsBefore + 1)
         gateway.stop()
-        if let dir = TranscriptCache.directory(gatewayId: gateway.id) { try? FileManager.default.removeItem(at: dir) }
         self.scratch.remove()
+        self.temp.remove()
     }
     @Test func requestArrivingMidPassRunsAfterwardsWithStrictestLimit() async {
         let gateway = self.gateway()
@@ -227,13 +234,14 @@ struct ChatEvictionTests {
         await gateway.cacheCleared()
         await chat.finishCaching()
         try? await Task.sleep(for: .milliseconds(1300))
-        let (snapshot, _) = await TranscriptCache.loadWithOutcome(gatewayId: gateway.id, sessionKey: chat.sessionKey)
+        let (snapshot, _) = await TranscriptCache.loadWithOutcome(gatewayId: gateway.id, sessionKey: chat.sessionKey, root: self.temp.url)
         #expect(snapshot?.items.map(\.id) == ["m0", "m1", "m2"])
         await self.cleanup(gateway)
     }
 
     @Test func prefetchRecachesDehydratedChatsAfterCacheClear() async {
         let gateway = GatewayStore(profile: .demo(), defaults: self.scratch.defaults, identity: Fixtures.identity())
+        gateway.cacheRoot = self.temp.url
         gateway.start()
         await self.settle { gateway.state == .connected && !gateway.sessions.isEmpty }
         let key = "agent:main:dashboard:garden"
@@ -242,18 +250,18 @@ struct ChatEvictionTests {
         #expect(chat.hasLoaded)
         await chat.dehydrate()
         #expect(chat.isDehydrated)
-        await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: key)
-        #expect(await TranscriptCache.meta(gatewayId: gateway.id, sessionKey: key) == nil)
+        await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: key, root: self.temp.url)
+        #expect(await TranscriptCache.meta(gatewayId: gateway.id, sessionKey: key, root: self.temp.url) == nil)
         await gateway.cacheCleared()
         for _ in 0..<600 {
-            if await TranscriptCache.meta(gatewayId: gateway.id, sessionKey: key) != nil { break }
+            if await TranscriptCache.meta(gatewayId: gateway.id, sessionKey: key, root: self.temp.url) != nil { break }
             try? await Task.sleep(for: .milliseconds(50))
         }
-        #expect(await TranscriptCache.meta(gatewayId: gateway.id, sessionKey: key) != nil)
+        #expect(await TranscriptCache.meta(gatewayId: gateway.id, sessionKey: key, root: self.temp.url) != nil)
         #expect(chat.isDehydrated && chat.items.isEmpty)
         gateway.stop()
-        if let dir = TranscriptCache.directory(gatewayId: gateway.id) { try? FileManager.default.removeItem(at: dir) }
         self.scratch.remove()
+        self.temp.remove()
     }
 }
 
