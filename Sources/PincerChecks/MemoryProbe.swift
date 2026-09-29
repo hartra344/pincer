@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import CryptoKit
 #if DEBUG
 @testable import PincerKit
@@ -13,6 +14,10 @@ import PincerKit
 enum ChatResidencyShim {
     static func hydratedCount(_ gateway: GatewayStore) -> String { "\(gateway.chats.values.filter(\.isHydrated).count)" }
     static func enforce(_ gateway: GatewayStore) { gateway.enforceChatBudget() }
+    static func pinned(_ gateway: GatewayStore) -> Int { gateway.pinnedChatKeys().count }
+    static func loadsInFlight(_ gateway: GatewayStore) -> Int { gateway.chats.values.filter(\.loadInFlight).count }
+    static func passRunning(_ gateway: GatewayStore) -> Bool { gateway.enforcingChatBudget }
+    static func hydrated(_ gateway: GatewayStore) -> Int { gateway.chats.values.filter(\.isHydrated).count }
 }
 
 @MainActor
@@ -35,10 +40,32 @@ func runMemoryProbe() async {
         try? await Task.sleep(for: .milliseconds(300))
         peak = max(peak, memoryUsage().footprint)
     }
-    try? await Task.sleep(for: .seconds(2))
+    let settleStart = ContinuousClock.now
+    var last = -1
+    var stable = 0
+    while ContinuousClock.now - settleStart < .seconds(30) {
+        try? await Task.sleep(for: .milliseconds(250))
+        let count = ChatResidencyShim.hydrated(gateway)
+        stable = (count == last && !ChatResidencyShim.passRunning(gateway)) ? stable + 1 : 0
+        last = count
+        if stable >= 2 { break }
+    }
+    let settle = ContinuousClock.now - settleStart
     let after = memoryUsage()
-    print("  · opened \(chatCount) chats × \(perChat) items in \((ContinuousClock.now - start).formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 1))))")
+    malloc_zone_pressure_relief(nil, 0)
+    let relieved = memoryUsage()
+    print("  · opened \(chatCount) chats × \(perChat) items in \((settleStart - start).formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 1))))")
+    print("  · budget settled in \(settle.formatted(.units(allowed: [.seconds], fractionalPart: .show(length: 2))))")
     print("  · footprint \(mb(Int64(before.footprint))) → \(mb(Int64(after.footprint))) (peak \(mb(Int64(peak)))), resident \(mb(Int64(before.resident))) → \(mb(Int64(after.resident)))")
+    print("  · after malloc_zone_pressure_relief: footprint \(mb(Int64(relieved.footprint))), resident \(mb(Int64(relieved.resident)))")
     print("  · chats known: \(gateway.chats.count), hydrated: \(ChatResidencyShim.hydratedCount(gateway))")
+    print("  · pinned: \(ChatResidencyShim.pinned(gateway)), loads in flight: \(ChatResidencyShim.loadsInFlight(gateway))")
+    var trail: [Int] = []
+    for _ in 0..<6 {
+        ChatResidencyShim.enforce(gateway)
+        try? await Task.sleep(for: .milliseconds(700))
+        trail.append(ChatResidencyShim.hydrated(gateway))
+    }
+    print("  · hydrated after repeated explicit enforceChatBudget(): \(trail)")
     for chat in gateway.chats.values { chat.stopCaching() }
 }
