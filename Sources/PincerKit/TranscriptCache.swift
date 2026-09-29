@@ -564,11 +564,13 @@ public enum TranscriptCache {
                     return (Array(older.suffix(limit)), older.count <= limit, outcome)
                 }
                 let directory = Self.segmentsDirectory(of: url)
-                var collected: [ChatItem] = []
+                // Newest first; joined once at the end (prepending each segment would copy it all again).
+                var chunks: [ArraySlice<ChatItem>] = []
+                var collectedCount = 0
                 var found = false
                 var index = manifest.segments.count
                 var failure: LoadOutcome?
-                while index > 0, !found || collected.count < limit {
+                while index > 0, !found || collectedCount < limit {
                     index -= 1
                     let ref = manifest.segments[index]
                     // The id is the first item of the segment: nothing of it belongs before the id.
@@ -579,10 +581,12 @@ public enum TranscriptCache {
                     switch Self.loadSegment(ref, in: directory) {
                     case let .items(segment):
                         if found {
-                            collected = segment + collected
+                            chunks.append(segment[...])
+                            collectedCount += segment.count
                         } else if let position = segment.firstIndex(where: { $0.id == itemId }) {
                             found = true
-                            collected = Array(segment[..<position])
+                            chunks.append(segment[..<position])
+                            collectedCount += position
                         }
                     case .missing:
                         if attempts < 3, let again = try? Data(contentsOf: url), again != data { failure = .missing } else {
@@ -603,7 +607,18 @@ public enum TranscriptCache {
                     return ([], false, outcome)
                 case nil:
                     guard found else { return ([], false, .missing) }
-                    return (Array(collected.suffix(limit)), index == 0 && collected.count <= limit, .loaded)
+                    var collected: [ChatItem] = []
+                    collected.reserveCapacity(min(collectedCount, limit))
+                    var skip = max(collectedCount - limit, 0)
+                    for chunk in chunks.reversed() {
+                        if skip >= chunk.count {
+                            skip -= chunk.count
+                            continue
+                        }
+                        collected += chunk.dropFirst(skip)
+                        skip = 0
+                    }
+                    return (collected, index == 0 && collectedCount <= limit, .loaded)
                 }
             }
         }.value

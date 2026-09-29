@@ -15,6 +15,8 @@ export const HISTORY_TEXT_MAX_CHARS = 8_000;
 
 export function projectForHistory(message, maxChars = HISTORY_TEXT_MAX_CHARS) {
   const projected = clone(message);
+  // MOCK_HISTORY_NO_IDS=1: history without message ids, like a Gateway that doesn't stamp them.
+  if (process.env.MOCK_HISTORY_NO_IDS === '1' && projected.__openclaw) delete projected.__openclaw.id;
   if (!Array.isArray(projected.content)) return projected;
   let truncated = false;
   for (const block of projected.content) {

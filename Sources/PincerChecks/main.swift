@@ -25,6 +25,8 @@ import UserNotifications
 //   swift run PincerChecks --live-reconnect URL TOKEN → only the #202 reconnect/bootstrap checks (fresh mock)
 //   swift run PincerChecks --perf-smoke     → only the message index perf smoke, budgets enforced (run it alone)
 //   swift run PincerChecks --memory-probe → footprint after opening 20 chats × 5k items (numbers only)
+//   swift run PincerChecks --memory-probe-20k-fill → peak footprint of the background full fill of a 20k-item chat
+//   swift run PincerChecks --memory-probe-20k → footprint of one 20k-item chat: open, then leave (numbers only)
 //   swift run -c release PincerChecks --perf → message index at 20 chats × 20k messages
 //   add --skip-perf-budgets to only report the perf smoke timings, failing just on clearly broken
 //     ones (scripts/run-checks.sh passes it to every run it starts side by side, since they share the CPU)
@@ -80,11 +82,13 @@ let liveNoUsage = liveTarget("--live-no-usage")
 let liveNoReplyTo = liveTarget("--live-no-reply-to")
 let perf = arguments.contains("--perf")
 let memoryProbe = arguments.contains("--memory-probe")
+let memoryProbe20k = arguments.contains("--memory-probe-20k")
+let memoryProbe20kFill = arguments.contains("--memory-probe-20k-fill")
 let demoAll = arguments.contains("--demo")
 let demoCore = demoAll || arguments.contains("--demo-core")
 let demoExtras = demoAll || arguments.contains("--demo-extras")
 let modeSelected = liveCore != nil || liveExtras != nil || liveScopeUpgrade != nil || liveReconnect != nil || liveNoUsage != nil
-    || liveNoReplyTo != nil || perf || memoryProbe || demoCore || demoExtras
+    || liveNoReplyTo != nil || perf || memoryProbe || memoryProbe20k || memoryProbe20kFill || demoCore || demoExtras
 
 if !modeSelected {
     await runSections(Suites.unit(skipIntentChecks: arguments.contains("--skip-intent-checks")))
@@ -94,6 +98,8 @@ if let (url, token) = liveExtras { await runSections(Suites.liveExtras, url: url
 if let (url, token) = liveScopeUpgrade { await runSections(Suites.liveScopeUpgrade, url: url, token: token) }
 if let (url, token) = liveReconnect { await runSections(Suites.liveReconnect, url: url, token: token) }
 if perf { await runSections(Suites.perf) }
+if memoryProbe20k { await runSections([Section("Memory probe (one 20k-item chat: open, leave)") { await runMemoryProbe20k() }]) }
+if memoryProbe20kFill { await runSections([Section("Memory probe (headless full fill of a 20k-item chat)") { await runMemoryProbe20kFill() }]) }
 if memoryProbe { await runSections([Section("Memory probe (20 chats × 5k items)") { await runMemoryProbe() }]) }
 if let (url, token) = liveNoUsage { await runSections(Suites.liveNoUsage, url: url, token: token) }
 if let (url, token) = liveNoReplyTo { await runSections(Suites.liveNoReplyTo, url: url, token: token) }

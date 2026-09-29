@@ -3,7 +3,7 @@ title: Local cache
 description: What Pincer keeps on your device, how it handles old or damaged cache files, and how to clear it.
 ---
 
-Pincer keeps a copy of each chat's history on your device, so chats open instantly, scrolling up never waits for the network, and [message search](../search/) works across older history. The cache is only a copy: your gateway always has the real transcript, and anything missing from the cache is fetched again.
+Pincer keeps a copy of each chat's history on your device, so chats open instantly, scrolling up to older messages reads from your device, and [message search](../search/) works across older history. The cache is only a copy: your gateway always has the real transcript, and anything missing from the cache is fetched again.
 
 ## What's cached, and where
 
@@ -26,9 +26,18 @@ Messages you haven't sent yet aren't part of the cache: the [outbox](../offline-
 
 Files use complete file protection. Removing a gateway deletes its whole folder. Because it's in the system's Caches folder, macOS and iOS may also clear it when storage runs low; Pincer just refetches.
 
-When a session is deleted, rewound, switched to another branch or recovered (from the [Session manager](../sessions/) or anywhere else), Pincer deletes that chat's whole cached transcript, including its tool call details, and an open chat reloads from the gateway.
+When a session is deleted, rewound, switched to another branch or recovered (from the [Session manager](../sessions/) or anywhere else, including another device), Pincer deletes that chat's whole cached transcript, including its tool call details and any older history saved on disk, and removes its messages from [search](../search/). An open chat reloads from the gateway, and a history download still running in the background is stopped so it can't put the removed messages back. See [Long chats](#long-chats).
 
 To turn the cache off, set `PINCER_CACHE_DIR=off`. Nothing is written, and message search is off too (except in the demo, which keeps its index in memory). To use another folder, set it to a path. See [Security & privacy](../../reference/security/#local-cache).
+
+## Long chats
+
+Pincer doesn't keep a long chat's whole history in memory. An open chat holds the newest few thousand messages (fewer on iOS and iPadOS), and older messages page in from the cache on your device as you scroll up, without a network request or a jump in position.
+
+- **Cached chats:** scrolling up reads older history from the cache. When you reach the start of what's cached, Pincer asks the gateway for anything older.
+- **First open of a long chat that isn't cached yet:** the newest messages load from the gateway, and older history comes from the gateway as you scroll up. In the background Pincer downloads the full history into the cache, so later scrolling, and [Find](../transcript/), read from the device.
+- **Find and search:** Find in a chat covers the whole cached history, not only what's in memory, and jumps to a match even if it's far back. [Message search](../search/) covers the same cache.
+- **Leaving a chat:** a chat you're no longer viewing is trimmed back to its newest messages in memory. Nothing is lost: the older messages stay in the cache.
 
 ## Updates and old cache files
 

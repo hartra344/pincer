@@ -163,7 +163,11 @@ struct ChatView: View {
               Self.hasFindRequest(app: self.app, gateway: self.gateway, chat: self.chat),
               self.app.takeFindRequest(for: request.target) != nil
         else { return }
-        self.find.present(query: request.query, select: request.match)
+        // The whole cached history is searched, so the match can be selected wherever it is.
+        Task {
+            await self.chat.loadAllCached()
+            self.find.present(query: request.query, select: request.match)
+        }
     }
 
     /// Scrolls to a linked message once this chat's history has loaded.
@@ -306,6 +310,9 @@ private struct TranscriptPane: View {
         #endif
         self.content
             .onAppear { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
+            .onChange(of: self.find.isPresented) { _, shown in
+                if shown { Task { await self.chat.loadAllCached() } } else { Task { await self.chat.trimWhenIdle() } }
+            }
             .onChange(of: self.chat.entries) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
             .onChange(of: self.reasoningOff) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
     }
