@@ -16,7 +16,7 @@ struct ChatSplitHost: ViewModifier {
             HStack(spacing: 0) {
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if let key = self.splitKey {
+                if let key = self.splitKey, proxy.size.width >= Self.minWidth * 2 + 1 {
                     SplitDivider(fraction: self.$fraction, totalWidth: proxy.size.width)
                     SplitChatPane(gateway: self.gateway, key: key)
                         .id("\(self.gateway.id)|split|\(key)")
@@ -51,6 +51,9 @@ private struct SplitDivider: View {
     @Binding var fraction: Double
     let totalWidth: CGFloat
     @State private var start: Double?
+    #if os(macOS)
+    @State private var cursorPushed = false
+    #endif
 
     var body: some View {
         Divider()
@@ -59,9 +62,8 @@ private struct SplitDivider: View {
                     .frame(width: 8)
                     .contentShape(Rectangle())
                     #if os(macOS)
-                    .onHover { inside in
-                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-                    }
+                    .onHover { self.setCursor($0) }
+                    .onDisappear { self.setCursor(false) }
                     #endif
                     .gesture(
                         DragGesture(minimumDistance: 1, coordinateSpace: .global)
@@ -75,6 +77,15 @@ private struct SplitDivider: View {
                     .accessibilityHidden(true)
             }
     }
+
+    #if os(macOS)
+    /// Balanced, so closing the split under the pointer doesn't leave the resize cursor behind.
+    private func setCursor(_ resize: Bool) {
+        guard resize != self.cursorPushed else { return }
+        self.cursorPushed = resize
+        if resize { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+    }
+    #endif
 }
 
 /// The split view's right-hand chat. Registered like a chat window, so it stays loaded and live and

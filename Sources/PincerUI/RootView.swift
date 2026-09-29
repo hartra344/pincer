@@ -103,7 +103,6 @@ extension AppModel {
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.appTheme) private var theme
-    @Environment(\.scenePhase) private var scenePhase
     /// iOS: Gateway Settings shown as a sheet.
     @State private var settingsRequest: GatewaySettingsRequest?
     /// iOS: runs once the Gateway Settings sheet is gone (#133).
@@ -174,9 +173,7 @@ struct RootView: View {
         #if os(macOS)
         .environment(\.openChatWindow, .window(self.openWindow))
         #endif
-        .onChange(of: self.scenePhase, initial: true) { _, phase in
-            self.app.appIsActive = phase == .active
-        }
+        .modifier(AppActivityTracking())
         .modifier(CompactColumnRouting(column: self.$compactColumn))
         .background { UnreadBadgeSync() }
         #if os(macOS)

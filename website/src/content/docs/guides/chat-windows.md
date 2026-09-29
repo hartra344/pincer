@@ -41,6 +41,6 @@ The main window can show a second chat to the right of the selected one:
 
 The left chat keeps the window's title and toolbar. The right chat has a small header with its title and agent, and buttons to **Swap Chats**, **Open in New Window** (macOS) and **Close Split View** (also <kbd>⌘</kbd> <kbd>\</kbd>). Drag the divider to resize the two chats; Pincer remembers the split.
 
-Both chats have their own composer, and the right chat stays loaded and live and isn't notified, just like a chat in its own window. Selecting the right-hand chat in the sidebar moves it to the left, and the chat it replaces moves to the right.
+Both chats have their own composer, and the right chat stays loaded and live and isn't notified, just like a chat in its own window. Selecting the right-hand chat in the sidebar moves it to the left, and the chat it replaces moves to the right. Menu commands and links inside either chat act on the left chat. The split also hides on a Mac when the window is too narrow for two chats.
 
-On iPad, **Open in Split View** is in a chat's context menu in the sidebar. The split shows while the window is full width, and hides when it's narrow (for example in Slide Over), then comes back.
+On iPad, **Open in Split View** is in a chat's context menu in the sidebar. The split shows while the window is wide enough for two chats, and hides when it's too narrow (for example in Slide Over), then comes back.

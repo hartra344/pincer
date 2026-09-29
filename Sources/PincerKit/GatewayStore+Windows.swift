@@ -60,7 +60,7 @@ extension AppModel {
     /// the same Gateway, else the first other chat in the sidebar.
     public func splitCandidate(for gateway: GatewayStore) -> String? {
         let recent = self.history.recent.first { $0.gatewayId == gateway.id && $0.sessionKey != gateway.selectedKey
-            && gateway.sessions[$0.sessionKey] != nil }
+            && gateway.sessions[$0.sessionKey].map { !$0.isArchived && !$0.isSubagent } == true }
         if let recent { return recent.sessionKey }
         return gateway.sortedRows.first { $0.key != gateway.selectedKey && !$0.isArchived && !$0.isSubagent }?.key
     }
