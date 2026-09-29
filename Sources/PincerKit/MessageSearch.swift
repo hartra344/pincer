@@ -132,25 +132,56 @@ public enum MessageSearch {
     /// same rows and sections Find in Chat searches by default. Thinking, tool calls, markers and
     /// pending messages are left out.
     public static func documents(sessionKey: String, items: [ChatItem]) -> [Document] {
-        var documents: [Document] = []
-        for entry in TranscriptBuilder.build(items.filter { !$0.isPending }) {
+        self.positionedDocuments(sessionKey: sessionKey, items: items[...]).map(\.document)
+    }
+
+    /// `documents` of `items` with the index (in the array `items` is a slice of) of the item each
+    /// message's row starts at. Starting at a user message or marker gives the same rows as
+    /// building the whole transcript would from there on: they always start a new row, so no
+    /// state carries over from before them (`TranscriptBuilder` keeps none across such a
+    /// boundary), and row ids come from a row's first item, which doesn't move.
+    static func positionedDocuments(sessionKey: String, items: ArraySlice<ChatItem>) -> [(pos: Int, document: Document)] {
+        let visible = items.indices.filter { !items[$0].isPending }
+        var documents: [(pos: Int, document: Document)] = []
+        var next = 0
+        for entry in TranscriptBuilder.build(visible.map { items[$0] }) {
+            // A row's id is its first item's, after a two-character prefix.
+            let itemId = entry.id.dropFirst(2)
+            var cursor = next
+            while cursor < visible.count - 1, items[visible[cursor]].role == .system || items[visible[cursor]].id != itemId {
+                cursor += 1
+            }
+            next = cursor + 1
+            let pos = visible[cursor]
             switch entry {
             case let .user(item):
                 let text = item.plainText
                 guard !text.isEmpty else { continue }
-                documents.append(Document(sessionKey: sessionKey, entryId: entry.id, section: 0, role: .user,
-                                          via: item.via, timestamp: item.timestamp, text: text))
+                documents.append((pos, Document(sessionKey: sessionKey, entryId: entry.id, section: 0, role: .user,
+                                                via: item.via, timestamp: item.timestamp, text: text)))
             case let .assistant(turn):
                 for (index, text) in turn.text.enumerated() where !text.isEmpty {
                     let timestamp = index < turn.textTimestamps.count ? turn.textTimestamps[index] : turn.timestamp
-                    documents.append(Document(sessionKey: sessionKey, entryId: entry.id, section: index, role: .assistant,
-                                              timestamp: timestamp ?? turn.timestamp, text: text, sender: turn.sender))
+                    documents.append((pos, Document(sessionKey: sessionKey, entryId: entry.id, section: index, role: .assistant,
+                                                    timestamp: timestamp ?? turn.timestamp, text: text, sender: turn.sender)))
                 }
             case .marker:
                 continue
             }
         }
         return documents
+    }
+
+    /// Where building `items` from can start when only what follows item `prefix` changed: the
+    /// latest user message or marker at or before it, else the start.
+    static func rowBoundary(items: [ChatItem], atOrBefore prefix: Int) -> Int {
+        var index = min(prefix, items.count - 1)
+        while index > 0 {
+            let item = items[index]
+            if !item.isPending, item.role == .user || item.role == .marker { return index }
+            index -= 1
+        }
+        return 0
     }
 
     /// Text as indexed and queried: case and accents removed.
