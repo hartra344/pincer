@@ -275,8 +275,8 @@ public final class BackgroundRefresh {
         }
         let unreached = Set(report.aborted + report.failed)
         let names = profiles.filter { unreached.contains($0.id) }.map(\.name)
-        let parts = [report.posted > 0 ? "\(report.posted) new" : nil,
-                     names.isEmpty ? nil : "Couldn't reach \(names.joined(separator: ", "))"].compactMap { $0 }
+        let problem = Task.isCancelled ? "Stopped early" : names.isEmpty ? nil : "Couldn't reach \(names.joined(separator: ", "))"
+        let parts = [report.posted > 0 ? "\(report.posted) new" : nil, problem].compactMap { $0 }
         self.defaults.set(Date(), forKey: "pincer.refresh.lastRun")
         self.defaults.set(parts.isEmpty ? "Up to date" : parts.joined(separator: " · "), forKey: "pincer.refresh.lastResult")
         return report

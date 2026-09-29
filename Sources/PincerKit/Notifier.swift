@@ -114,7 +114,8 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             title: self.title(row: row, gateway: gateway),
             body: Self.clip(text ?? "New reply"),
             target: Target(gatewayId: gateway.id, sessionKey: row.key),
-            activityMs: row.activityMs)
+            // The reply finished now; sessions.changed may not arrive before suspension.
+            activityMs: max(row.activityMs, Date().timeIntervalSince1970 * 1000))
     }
 
     func notifyActivity(row: SessionRow, gateway: GatewayStore) {
@@ -127,9 +128,10 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func notifyApproval(_ approval: ExecApproval, gateway: GatewayStore) {
-        guard self.enabled, let center, !self.deferredToPush(gateway.id) else { return }
-        center.add(Self.approvalRequest(approval, gatewayId: gateway.id, gatewayName: gateway.profile.name))
+        guard self.enabled, !self.deferredToPush(gateway.id) else { return }
         self.advanceRefreshCursor(gateway.id, approvalId: approval.id)
+        guard let center else { return }
+        center.add(Self.approvalRequest(approval, gatewayId: gateway.id, gatewayName: gateway.profile.name))
     }
 
     nonisolated static func approvalRequest(_ approval: ExecApproval, gatewayId: UUID, gatewayName: String) -> UNNotificationRequest {
@@ -159,17 +161,25 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let target = Target(gatewayId: gateway.id, sessionKey: prompt.sessionKey ?? "")
         // The open chat already shows the card.
         if self.appIsActive, prompt.sessionKey != nil, self.visible == target { return }
-        guard self.enabled, let center,
-              let request = Self.questionRequest(prompt, gatewayId: gateway.id, agent: agent, chatTitle: chat)
+        guard self.enabled else { return }
+        self.advanceRefreshCursor(gateway.id, questionId: prompt.id)
+        guard let center, let request = Self.questionRequest(prompt, gatewayId: gateway.id, agent: agent, chatTitle: chat)
         else { return }
         center.add(request)
-        self.advanceRefreshCursor(gateway.id, questionId: prompt.id)
     }
 
     /// What the live app just notified about must not be notified again by the next background refresh.
     private func advanceRefreshCursor(_ gatewayId: UUID, activityMs: Double? = nil, approvalId: String? = nil, questionId: String? = nil) {
-        guard !self.appIsActive, ClosedAppDelivery.current() == .backgroundRefresh else { return }
-        BackgroundRefreshCursorStore().advance(
+        Self.advanceRefreshCursor(
+            gatewayId, activityMs: activityMs, approvalId: approvalId, questionId: questionId, appIsActive: self.appIsActive)
+    }
+
+    nonisolated static func advanceRefreshCursor(
+        _ gatewayId: UUID, activityMs: Double? = nil, approvalId: String? = nil, questionId: String? = nil,
+        appIsActive: Bool, defaults: UserDefaults = .standard)
+    {
+        guard !appIsActive, ClosedAppDelivery.current(defaults) == .backgroundRefresh else { return }
+        BackgroundRefreshCursorStore(defaults: defaults).advance(
             gatewayId: gatewayId, activityMs: activityMs, approvalId: approvalId, questionId: questionId)
     }
 
@@ -215,7 +225,9 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func post(id: String, title: String, body: String, target: Target, activityMs: Double) {
-        guard self.enabled, let center, !self.deferredToPush(target.gatewayId) else { return }
+        guard self.enabled, !self.deferredToPush(target.gatewayId) else { return }
+        self.advanceRefreshCursor(target.gatewayId, activityMs: activityMs)
+        guard let center else { return }
         if self.appIsActive, self.visible == target { return }
         let dedupeKey = id.hasPrefix("reply:") ? "\(target.sessionKey)|\(body.prefix(80))" : id
         guard !self.recent.contains(id), !self.recent.contains(dedupeKey) else { return }
@@ -223,7 +235,6 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         if self.recent.count > 200 { self.recent.removeFirst(self.recent.count - 200) }
 
         center.add(Self.replyContent(id: id, title: title, body: body, target: target))
-        self.advanceRefreshCursor(target.gatewayId, activityMs: activityMs)
     }
 
     public func clear(target: Target) {
