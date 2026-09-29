@@ -276,7 +276,8 @@ private struct GatewayDetail: View {
                     let chat = gateway.chat(for: key)
                     // The per-chat `.id` stays inside a stable, full-size container, with the title and
                     // toolbar outside it. Replacing the view under the toolbar, or the toolbar with
-                    // it, makes macOS redraw every toolbar button on each switch.
+                    // it, makes macOS redraw every toolbar button on each switch. Toolbar items need
+                    // the same care (#262); see CONTRIBUTING.md and `ToolbarStabilityCheck`.
                     ZStack {
                         ChatView(chat: chat)
                             .id("\(gateway.id)|\(key)")

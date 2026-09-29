@@ -127,6 +127,16 @@ jobs:
           CHECKS_LOG_DIR: ${{ runner.temp }}/checks
         run: scripts/run-checks.sh -Xswiftc -enable-incremental-file-hashing
 
+      # Opens a window: switching chats must not rebuild toolbar items, or the sidebar's buttons
+      # flash (#262). Kept out of run-checks.sh so local runs don't pop up windows.
+      - name: Toolbar stability on chat switch
+        timeout-minutes: 3
+        env:
+          PINCER_DEV_NAMESPACE: toolbar-check
+        run: |
+          BIN="$(swift build --show-bin-path -Xswiftc -enable-incremental-file-hashing)"
+          "$BIN/PincerMacDev" --toolbar-stability-check
+
       - name: Upload check logs
         if: failure()
         uses: actions/upload-artifact@v4
