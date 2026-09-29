@@ -416,9 +416,10 @@ extension ChatStore {
         }
     }
 
+    /// Warm chats may be trimmed too: only a selected or busy chat is left alone.
     private var canTrim: Bool {
         guard !self.headless, self.isHydrated, !self.cachingStopped, !self.cacheUnreadable, self.olderTask == nil,
-              let gateway, gateway.selectedKey != self.sessionKey, !gateway.isChatPinned(self.sessionKey),
+              !self.residencySnapshot.isPinned,
               TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: self.sessionKey) != nil
         else { return false }
         return true

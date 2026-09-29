@@ -29,8 +29,8 @@ extension GatewayStore {
         }
         let hydrated = Set(self.chats.values.filter(\.isHydrated).map(\.sessionKey))
         let victims = self.residency.victims(hydrated: hydrated, pinned: self.pinnedChatKeys(), limit: requested)
-        let pinned = self.pinnedChatKeys()
-        let trims = hydrated.subtracting(pinned).subtracting(victims)
+        let trims = Set(self.chats.values.filter { $0.isHydrated && !$0.residencySnapshot.isPinned }.map(\.sessionKey))
+            .subtracting(victims)
         guard !victims.isEmpty || !trims.isEmpty else { return }
         self.enforcingChatBudget = true
         Task { [weak self] in
