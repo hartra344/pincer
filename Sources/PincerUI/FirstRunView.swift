@@ -481,7 +481,7 @@ private struct FirstRunInstall: View {
 
     private func step(_ number: Int, _ title: String, command: String, caption: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("\(number). \(title)", bundle: .module).font(.headline)
+            Text(verbatim: "\(number). \(title)").font(.headline)
             CommandBox(command: command)
             if let caption { Text(caption).font(.caption).foregroundStyle(.secondary) }
         }
