@@ -50,7 +50,7 @@ struct SidebarList: UIViewRepresentable {
                 var configuration = UICollectionLayoutListConfiguration(
                     appearance: environment.traitCollection.horizontalSizeClass == .compact ? .insetGrouped : .sidebar)
                 configuration.headerMode = .firstItemInSection
-                configuration.backgroundColor = .clear
+                configuration.backgroundColor = MainActor.assumeIsolated { self?.listBackground(compact: environment.traitCollection.horizontalSizeClass == .compact) } ?? .clear
                 configuration.trailingSwipeActionsConfigurationProvider = { path in
                     MainActor.assumeIsolated { self?.trailingSwipe(path) }
                 }
@@ -214,8 +214,14 @@ struct SidebarList: UIViewRepresentable {
             }
         }
 
+        /// Inset-grouped cards need a grouped backdrop to show when the theme has no sidebar color.
+        private func listBackground(compact: Bool) -> UIColor {
+            compact && self.theme.platformColor(.sidebarBackground) == nil ? .systemGroupedBackground : .clear
+        }
+
         private func themeChanged() {
             self.collectionView?.tintColor = self.theme.platformColor(.accent)
+            self.collectionView?.collectionViewLayout.invalidateLayout()
             self.reconfigureVisible()
         }
 
@@ -554,6 +560,10 @@ private final class SidebarChatListCell: UICollectionViewListCell {
             // Threads sit under their channel.
             content.directionalLayoutMargins.leading += 22
         }
+        if entry.depth > 0 {
+            // Chats inside a nested group sit one level in from the group row.
+            content.directionalLayoutMargins.leading += 20
+        }
         self.contentConfiguration = content
 
         var accessories: [UICellAccessory] = []
@@ -591,7 +601,12 @@ private final class SidebarChatListCell: UICollectionViewListCell {
         self.accessibilityLabel = AccessibilityText.sessionRow(
             title: row.title, isUnread: unread, isPinned: row.isPinned, isRunning: entry.working != nil,
             workingLabel: entry.working?.label, preview: entry.preview)
-        self.accessibilityHint = ChannelRowStyle.help(for: row)
+        let help = ChannelRowStyle.help(for: row)
+        if let group = entry.groupName {
+            self.accessibilityHint = [help, L("in \(group)")].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
+        } else {
+            self.accessibilityHint = help
+        }
         self.accessibilityTraits.insert(.button)
     }
 }
@@ -640,10 +655,17 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
             content = self.traitCollection.horizontalSizeClass == .compact
                 ? UIListContentConfiguration.cell()
                 : UIListContentConfiguration.sidebarCell()
-            content.textProperties.font = .preferredFont(forTextStyle: .subheadline).withWeight(.semibold)
-            content.textProperties.color = .secondaryLabel
+            content.textProperties.font = UIFont.preferredFont(forTextStyle: .body).withWeight(.semibold)
+            content.textProperties.color = .label
             content.imageProperties.reservedLayoutSize = CGSize(width: 26, height: 0)
+            content.imageProperties.tintColor = .tintColor
+            content.imageProperties.preferredSymbolConfiguration = UIImage.SymbolConfiguration(textStyle: .body)
+        } else {
+            content.textProperties.font = .preferredFont(forTextStyle: .headline)
+            content.textProperties.color = .label
         }
+        content.textProperties.adjustsFontForContentSizeCategory = true
+        content.textProperties.lineBreakMode = .byTruncatingTail
         let title = section.emoji.map { header.avatar == nil ? "\($0)  \(section.title)" : section.title } ?? section.title
         content.text = title
         content.textProperties.numberOfLines = 1
@@ -654,8 +676,11 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
                                            side: SidebarAvatar.side, scale: scale)
             {
                 content.image = UIImage(cgImage: image, scale: scale, orientation: .up)
-                content.imageProperties.reservedLayoutSize = CGSize(width: SidebarAvatar.side, height: SidebarAvatar.side)
+                let side = header.isSubsection || self.traitCollection.horizontalSizeClass != .compact ? SidebarAvatar.side : 28
+                content.imageProperties.reservedLayoutSize = CGSize(width: side, height: side)
             }
+        } else if header.isSubsection {
+            content.image = UIImage(systemName: header.symbol ?? "folder.fill") ?? UIImage(systemName: "folder.fill")
         } else if let symbol = header.symbol {
             content.image = UIImage(systemName: symbol)
             content.imageProperties.tintColor = .secondaryLabel
@@ -664,6 +689,10 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
 
         var accessories: [UICellAccessory] = []
         let unread = header.isCollapsed ? section.unreadCount : 0
+        if header.isSubsection, unread == 0 {
+            accessories.append(.label(text: "\(header.chatCount)",
+                                      options: .init(tintColor: .tertiaryLabel, font: .preferredFont(forTextStyle: .body))))
+        }
         if unread > 0 {
             self.badge.text = "\(unread)"
             let width = max(18, ceil(self.badge.intrinsicContentSize.width) + 10)
@@ -680,7 +709,9 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
         }
         accessories.append(.outlineDisclosure(options: .init(style: .header)))
         self.accessories = accessories
-        self.accessibilityLabel = header.isSubsection ? header.subsectionAccessibilityLabel : nil
+        self.accessibilityLabel = header.isSubsection ? header.subsectionAccessibilityLabel : header.agentAccessibilityLabel
+        self.accessibilityValue = header.accessibilityValue
+        self.accessibilityTraits.insert(.header)
     }
 }
 
