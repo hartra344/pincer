@@ -159,12 +159,11 @@ public struct ToolCallPresentation: Hashable, Sendable {
         }
 
         var output: Output?
-        if let result = tool.result, let unwrapped {
+        if tool.result != nil, let unwrapped {
             var text = ToolOutputText.stripANSI(unwrapped.text)
             while let last = text.last, last.isWhitespace { text.removeLast() }
             let lineCount = text.isEmpty ? 0 : text.split(separator: "\n", omittingEmptySubsequences: false).count
             if text.count > limit { text = String(text.prefix(limit)) + "\n…" }
-            _ = result
             output = Output(text: text, lineCount: lineCount, imageCount: unwrapped.imageCount,
                             exitCode: details?["exitCode"]?.int,
                             durationMs: (kind == .webFetch || kind == .webSearch
