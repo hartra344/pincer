@@ -82,25 +82,21 @@ struct TranscriptCacheTests {
 
     /// Clear Cache: an index created while the folders are deleted would keep its connection
     /// on a deleted file, so it's inert and never registered.
+    /// Uses its own root: another suite deleting the shared default root at the same moment
+    /// would make `after` inert too (#276).
     @Test func noSearchIndexIsOpenedWhileTheCacheIsDeleted() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
         let gateway = UUID()
-        defer { MessageIndex.discard(gatewayId: gateway) }
         var during: MessageIndex?
-        MessageIndex.whileDeleting { during = MessageIndex.shared(gatewayId: gateway) }
-        let inert = try #require(during)
-        let after = MessageIndex.shared(gatewayId: gateway)
-        #expect(inert !== after && MessageIndex.shared(gatewayId: gateway) === after)
-        #expect(try await inert.search("anything").isEmpty)
-    }
-
-    /// Repro for #276: the test above uses the shared default root, so another suite deleting
-    /// that root (MessageIndexFileTests, a Clear Cache) at the same moment makes `after` inert.
-    @Test func repro276OtherSuiteDeletingTheDefaultRoot() async throws {
-        let gateway = UUID()
-        defer { MessageIndex.discard(gatewayId: gateway) }
         var after: MessageIndex?
-        MessageIndex.whileDeleting { after = MessageIndex.shared(gatewayId: gateway) }
-        #expect(MessageIndex.shared(gatewayId: gateway) === after)
+        MessageIndex.whileDeleting(root: temp.url) { during = MessageIndex.shared(gatewayId: gateway, root: temp.url) }
+        let inert = try #require(during)
+        // Another root being deleted meanwhile doesn't matter.
+        MessageIndex.whileDeleting { after = MessageIndex.shared(gatewayId: gateway, root: temp.url) }
+        #expect(inert !== after && MessageIndex.shared(gatewayId: gateway, root: temp.url) === after)
+        #expect(try await inert.search("anything").isEmpty)
+        await MessageIndex.shutdown(root: temp.url)
     }
 }
 

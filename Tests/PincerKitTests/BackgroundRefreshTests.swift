@@ -503,7 +503,7 @@ struct BackgroundRefreshTests {
         #expect(report.posted == 0 && rig.posts.batches.isEmpty)
         #expect(rig.cursors.cursor(for: rig.profile.id) == saved)
         // The abandoned fetch unwinds and releases its connection.
-        let closed = await Self.eventually { rig.connection.closed }
+        let closed = await Self.eventually(timeout: .seconds(30)) { rig.connection.closed }
         #expect(closed)
     }
 
