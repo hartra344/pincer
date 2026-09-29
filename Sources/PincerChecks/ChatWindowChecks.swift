@@ -27,4 +27,16 @@ func runDemoChatWindows() async {
     app.chatWindowClosed(ref)
     check(!demo.openWindowKeys.contains(key) && !app.notifier.windowVisible.contains(target),
           "closing the window releases the chat")
+
+    // Split view round-trip on the demo gateway.
+    let main = "agent:main:main"
+    demo.selectedKey = main
+    let candidate = app.splitCandidate(for: demo)
+    check(candidate != nil && candidate != main && demo.sessions[candidate ?? ""] != nil, "split candidate is another listed chat (\(candidate ?? "none"))")
+    demo.openInSplit(key)
+    check(demo.splitKey == key && demo.visibleSplitKey == key, "openInSplit shows the chat beside the selection")
+    demo.swapSplit()
+    check(demo.selectedKey == key && demo.visibleSplitKey == main, "swapSplit trades the two chats")
+    demo.closeSplit()
+    check(demo.visibleSplitKey == nil && demo.splitKey == nil, "closeSplit clears the split")
 }

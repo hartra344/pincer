@@ -271,6 +271,8 @@ struct SidebarActions {
     var openAutomations: () -> Void
     /// Opens a chat in a window of its own; nil where there are none (iOS).
     var openInNewWindow: ((String) -> Void)?
+    /// Shows a chat beside the selected one; nil where there's no room (iPhone).
+    var openInSplit: ((String) -> Void)?
 }
 
 // MARK: Row appearance
@@ -399,8 +401,12 @@ enum SidebarMenus {
 
         var items: [SidebarMenuItem] = []
         if let openInNewWindow = actions.openInNewWindow {
-            items += [.action(L("Open in New Window"), image: "macwindow.badge.plus") { openInNewWindow(row.key) }, .divider]
+            items.append(.action(L("Open in New Window"), image: "macwindow.badge.plus") { openInNewWindow(row.key) })
         }
+        if let openInSplit = actions.openInSplit, row.key != gateway.selectedKey {
+            items.append(.action(L("Open in Split View"), image: "rectangle.split.2x1") { openInSplit(row.key) })
+        }
+        if !items.isEmpty { items.append(.divider) }
         items += [
             .action(row.isPinned ? L("Unpin") : L("Pin"), image: row.isPinned ? "pin.slash" : "pin") {
                 patch(["pinned": .bool(!row.isPinned)])

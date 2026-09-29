@@ -2483,6 +2483,16 @@
         }
       }
     },
+    "Close Split View": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Split View"
+          }
+        }
+      }
+    },
     "Code or link": {
       "localizations": {
         "en": {
@@ -8103,6 +8113,16 @@
         }
       }
     },
+    "Open in Split View": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Split View"
+          }
+        }
+      }
+    },
     "Open in Tools Inspector": {
       "localizations": {
         "en": {
@@ -11603,6 +11623,26 @@
         }
       }
     },
+    "Split Right": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split Right"
+          }
+        }
+      }
+    },
+    "Split view chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split view chat"
+          }
+        }
+      }
+    },
     "Start Pincer when you log in, so Quick Capture is ready.": {
       "localizations": {
         "en": {
@@ -11819,6 +11859,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Succeeded"
+          }
+        }
+      }
+    },
+    "Swap Chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swap Chats"
           }
         }
       }

@@ -104,7 +104,6 @@ extension AppModel {
 struct RootView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.appTheme) private var theme
-    @Environment(\.scenePhase) private var scenePhase
     /// iOS: Gateway Settings shown as a sheet.
     @State private var settingsRequest: GatewaySettingsRequest?
     /// iOS: runs once the Gateway Settings sheet is gone (#133).
@@ -187,9 +186,7 @@ struct RootView: View {
         #if os(macOS)
         .environment(\.openChatWindow, .window(self.openWindow))
         #endif
-        .onChange(of: self.scenePhase, initial: true) { _, phase in
-            self.app.appIsActive = phase == .active
-        }
+        .modifier(AppActivityTracking())
         .modifier(CompactColumnRouting(column: self.$compactColumn))
         .modifier(MainChatVisibility(compactColumn: self.compactColumn))
         .background { UnreadBadgeSync() }
@@ -312,6 +309,7 @@ private struct GatewayDetail: View {
                             .id("\(gateway.id)|\(key)")
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .modifier(ChatSplitHost(gateway: gateway))
                     .modifier(ChatChrome())
                 } else if gateway.state.isConnected {
                     ContentUnavailableView(L("Pick a chat"), systemImage: "bubble.left.and.bubble.right",

@@ -149,6 +149,15 @@ struct ChannelList: View {
         #endif
     }
 
+    /// The split view needs a Mac or an iPad; it only shows in a regular-width window.
+    static var hasSplitView: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .pad
+        #else
+        true
+        #endif
+    }
+
     private var actions: SidebarActions {
         SidebarActions(
             select: { key in
@@ -171,7 +180,8 @@ struct ChannelList: View {
             setCollapsed: { id, collapsed in self.gateway.setSectionCollapsed(id, collapsed) },
             refresh: { await self.gateway.refreshSessions() },
             openAutomations: { self.openAutomations(self.gateway) },
-            openInNewWindow: self.openChatWindow.isAvailable ? { self.openChatWindow(self.gateway, key: $0) } : nil)
+            openInNewWindow: self.openChatWindow.isAvailable ? { self.openChatWindow(self.gateway, key: $0) } : nil,
+            openInSplit: Self.hasSplitView ? { self.gateway.openInSplit($0) } : nil)
     }
 }
 

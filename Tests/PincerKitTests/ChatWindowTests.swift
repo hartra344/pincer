@@ -124,4 +124,50 @@ struct ChatWindowTests {
         app.remove(store.id)
         await self.cleanup(store)
     }
+
+    @Test func splitOpensSwapsAndCloses() async {
+        let gateway = self.gateway()
+        gateway.selectedKey = self.a
+        gateway.openInSplit(self.a)
+        #expect(gateway.splitKey == nil && gateway.visibleSplitKey == nil)
+        gateway.swapSplit()
+        #expect(gateway.selectedKey == self.a && gateway.splitKey == nil)
+        gateway.openInSplit(self.b)
+        #expect(gateway.visibleSplitKey == self.b)
+        gateway.swapSplit()
+        #expect(gateway.selectedKey == self.b && gateway.splitKey == self.a && gateway.visibleSplitKey == self.a)
+        gateway.closeSplit()
+        #expect(gateway.splitKey == nil && gateway.visibleSplitKey == nil)
+        await self.cleanup(gateway)
+    }
+
+    @Test func splitEqualToSelectionIsHidden() async {
+        let gateway = self.gateway()
+        gateway.selectedKey = self.a
+        gateway.openInSplit(self.b)
+        gateway.selectedKey = self.b
+        #expect(gateway.visibleSplitKey == nil)
+        await self.cleanup(gateway)
+    }
+
+    @Test func splitPersistsAcrossStores() async {
+        let gateway = self.gateway()
+        gateway.selectedKey = self.a
+        gateway.openInSplit(self.b)
+        let reopened = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        #expect(reopened.splitKey == self.b)
+        reopened.closeSplit()
+        let again = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        #expect(again.splitKey == nil)
+        await self.cleanup(gateway)
+    }
+
+    @Test func splitCandidateIsNilWithoutOtherChats() async {
+        let app = AppModel(defaults: self.scratch.defaults)
+        let store = app.add(self.profile, secret: nil)
+        store.selectedKey = self.a
+        #expect(app.splitCandidate(for: store) == nil)
+        app.remove(store.id)
+        await self.cleanup(store)
+    }
 }

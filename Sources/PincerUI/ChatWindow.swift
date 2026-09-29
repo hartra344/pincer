@@ -51,6 +51,7 @@ struct ChatWindow: View {
             }
         }
         .task { self.app.start() }
+        .modifier(AppActivityTracking())
     }
 
     /// The same rule the main window uses to drop a selection: connected, sessions listed, and no
@@ -153,6 +154,49 @@ struct ChatWindowCommands: Commands {
             .keyboardShortcut("n", modifiers: [.command, .option])
             .disabled(self.app.selectedGateway?.selectedKey == nil)
         }
+        CommandGroup(after: .sidebar) {
+            if let gateway = self.app.selectedGateway, gateway.visibleSplitKey != nil {
+                Button(L("Close Split View")) { gateway.closeSplit() }
+                    .keyboardShortcut("\\", modifiers: .command)
+                Button(L("Swap Chats")) { gateway.swapSplit() }
+            } else {
+                Button(L("Split Right")) {
+                    guard let gateway = self.app.selectedGateway, gateway.selectedKey != nil,
+                          let key = self.app.splitCandidate(for: gateway) else { return }
+                    gateway.openInSplit(key)
+                }
+                .keyboardShortcut("\\", modifiers: .command)
+                .disabled(self.app.selectedGateway.flatMap { $0.selectedKey == nil ? nil : self.app.splitCandidate(for: $0) } == nil)
+            }
+        }
     }
 }
 #endif
+
+/// Keeps `AppModel.appIsActive` current. On macOS it follows the app, not one window's scene phase:
+/// with the main window minimized, a chat window in front still counts as active, so the chats on
+/// screen aren't notified (#48). On iOS the scene phase is the app's.
+struct AppActivityTracking: ViewModifier {
+    @Environment(AppModel.self) private var app
+    #if os(iOS)
+    @Environment(\.scenePhase) private var scenePhase
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+            .onAppear { self.app.appIsActive = NSApplication.shared.isActive }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                self.app.appIsActive = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+                self.app.appIsActive = false
+            }
+        #else
+        content
+            .onChange(of: self.scenePhase, initial: true) { _, phase in
+                self.app.appIsActive = phase == .active
+            }
+        #endif
+    }
+}

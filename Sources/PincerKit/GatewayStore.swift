@@ -92,6 +92,13 @@ public final class GatewayStore: Identifiable {
             Task { await self.openChat(key) }
         }
     }
+    /// The chat beside the selected one in the main window's split view (#48), or nil for none.
+    public var splitKey: String? {
+        didSet {
+            guard oldValue != self.splitKey else { return }
+            self.defaults.set(self.splitKey, forKey: "pincer.split.\(self.id.uuidString)")
+        }
+    }
     public var organization: SidebarOrganization {
         didSet { self.defaults.set(self.organization.rawValue, forKey: "pincer.org.v2.\(self.id.uuidString)") }
     }
@@ -298,6 +305,7 @@ public final class GatewayStore: Identifiable {
         self.avatarChoices = defaults.dictionary(forKey: "pincer.avatars.\(profile.id.uuidString)") as? [String: String]
             ?? AvatarPreferences.local(in: defaults)
         self.selectedKey = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)")
+        self.splitKey = defaults.string(forKey: "pincer.split.\(profile.id.uuidString)")
         self.connectedBeforeSetup = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)") != nil
         self.sectionCollapse = defaults.dictionary(forKey: "pincer.collapsed.\(profile.id.uuidString)") as? [String: Bool] ?? [:]
         let images = ArtifactImageLoader()
