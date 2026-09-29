@@ -79,6 +79,7 @@ enum MathLayout {
     }
 
     static func measure(_ s: String, size: CGFloat, face: MathFace) -> (w: CGFloat, asc: CGFloat, desc: CGFloat) {
+        _ = RichRenderSVG.fontsReady
         let font = CTFontCreateWithName(fontName(face) as CFString, size, nil)
         let str = CFAttributedStringCreate(nil, s as CFString, [kCTFontAttributeName: font] as CFDictionary)!
         let line = CTLineCreateWithAttributedString(str)

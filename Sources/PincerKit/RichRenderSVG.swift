@@ -1,6 +1,9 @@
 import CoreGraphics
 import CoreText
 import Foundation
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// Shared pieces for the natively rendered rich blocks (```mermaid diagrams, LaTeX math). They're
 /// generated as plain SVG and drawn through the #200 SVG path (`SVGSource`/`SVGRasterization`), so
@@ -45,9 +48,19 @@ public enum RichRenderSVG {
     /// Font family written into generated SVG; measurement uses Helvetica so boxes fit the text.
     public static let fontFamily = "Helvetica, Arial, sans-serif"
 
+    /// Loads AppKit's font classes before the first CoreText font. In a process that hasn't touched
+    /// `NSFont` yet (command-line checks, tests), creating a CTFont first leaves a cached typeface
+    /// that later crashes `NSFont` (`-[__NSCFType initWithTypefaceInfo:…]`). The app has AppKit up already.
+    public static let fontsReady: Void = {
+        #if canImport(AppKit)
+        _ = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        #endif
+    }()
+
     /// Rendered width of `text` in Helvetica at `size` points.
     public static func textWidth(_ text: String, size: CGFloat, bold: Bool = false, italic: Bool = false) -> CGFloat {
         guard !text.isEmpty else { return 0 }
+        _ = self.fontsReady
         let name = switch (bold, italic) {
         case (true, true): "Helvetica-BoldOblique"
         case (true, false): "Helvetica-Bold"
