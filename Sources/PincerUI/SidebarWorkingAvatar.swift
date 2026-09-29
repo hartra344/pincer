@@ -101,14 +101,16 @@ enum SidebarDance {
     /// The avatar picture for `source`: the companion in a cheerful pose, or the emoji or initial
     /// on the theme's agent-avatar disc, like `Avatar`.
     static func image(for source: SidebarWorkingIndicator.Source, companion: AvatarStyle?, dark: Bool, disc: CGColor,
-                      scale: CGFloat) -> CGImage?
+                      scale: CGFloat, mode: SidebarWorkingIndicator.Mode = .working) -> CGImage?
     {
         let side = self.artSide
         switch source {
         case .companion:
             guard let companion else { return nil }
-            return self.cached("companion|\(companion)|\(dark)|\(side)|\(scale)") {
-                AvatarArt.image(companion, pose: AvatarMotion.keyPose(for: .success), dark: dark, accent: nil,
+            // Working hops in the cheerful pose; an idle unread chat holds a still resting one.
+            let state: AvatarState = mode == .working ? .success : .idle
+            return self.cached("companion|\(state)|\(companion)|\(dark)|\(side)|\(scale)") {
+                AvatarArt.image(companion, pose: AvatarMotion.keyPose(for: state), dark: dark, accent: nil,
                                 size: CGSize(width: side, height: side), scale: scale)
             }
         case let .emoji(text):
@@ -232,12 +234,15 @@ private final class SidebarDanceLayers {
     struct Look {
         var image: CGImage?
         var badge: String?
+        /// A text-less badge (a plain circle) marking an unread chat with no helper count.
+        var unreadMark = false
         var badgeImage: CGImage?
         /// The dot and badge fill; the badge text is drawn into `badgeImage`.
         var fill: CGColor
         var ring: CGColor
         var scale: CGFloat
         var reduceMotion: Bool
+        var working = true
     }
 
     func apply(_ look: Look, in bounds: CGRect) {
@@ -253,14 +258,21 @@ private final class SidebarDanceLayers {
         self.dancer.contentsScale = look.scale
 
         let dot = SidebarDance.dotSide
-        self.dot.isHidden = !look.reduceMotion
+        self.dot.isHidden = !look.reduceMotion || !look.working
         self.dot.frame = CGRect(x: bounds.maxX - dot + 1, y: self.up > 0 ? bounds.minY - 1 : bounds.maxY - dot + 1,
                                 width: dot, height: dot)
         self.dot.backgroundColor = look.fill
         self.dot.borderColor = look.ring
 
-        self.badge.isHidden = look.badge == nil
-        if look.badge != nil, let text = look.badgeImage {
+        self.badge.isHidden = look.badge == nil && !look.unreadMark
+        if look.unreadMark, look.badge == nil {
+            let height = SidebarDance.badgeHeight
+            self.badgeText.contents = nil
+            self.badge.frame = CGRect(x: bounds.maxX - height + 4, y: self.up > 0 ? bounds.maxY - height + 5 : bounds.minY - 5,
+                                      width: height, height: height)
+            self.badge.backgroundColor = look.fill
+            self.badge.borderColor = look.ring
+        } else if look.badge != nil, let text = look.badgeImage {
             let textSize = CGSize(width: CGFloat(text.width) / look.scale, height: CGFloat(text.height) / look.scale)
             let height = SidebarDance.badgeHeight
             let width = max(height, textSize.width + 5)
@@ -343,7 +355,7 @@ final class SidebarWorkingAvatarView: NSView {
     private var isVisible: Bool { self.window != nil && !self.isHiddenOrHasHiddenAncestor }
 
     private func updateDancing() {
-        self.layers.setDancing(self.indicator != nil && self.isVisible && !SidebarDance.reduceMotion(), phase: self.phase)
+        self.layers.setDancing(self.indicator?.isWorking == true && self.isVisible && !SidebarDance.reduceMotion(), phase: self.phase)
     }
 
     private func refresh() {
@@ -356,12 +368,13 @@ final class SidebarWorkingAvatarView: NSView {
             let (fill, text) = self.isEmphasized ? (CGColor.white, tint) : (tint, CGColor.white)
             look = SidebarDanceLayers.Look(
                 image: SidebarDance.image(for: indicator.source, companion: self.companion, dark: dark,
-                                          disc: TranscriptColors.agentAvatar.cgColor, scale: scale),
+                                          disc: TranscriptColors.agentAvatar.cgColor, scale: scale, mode: indicator.mode),
                 badge: indicator.badge,
+                unreadMark: indicator.showsUnreadMark,
                 badgeImage: indicator.badge.flatMap { SidebarDance.badgeText($0, color: text, scale: scale) },
                 fill: fill,
                 ring: self.isEmphasized ? .clear : NSColor.windowBackgroundColor.cgColor,
-                scale: scale, reduceMotion: SidebarDance.reduceMotion())
+                scale: scale, reduceMotion: SidebarDance.reduceMotion(), working: indicator.isWorking)
         }
         if let look { self.layers.apply(look, in: self.bounds) }
         self.updateDancing()
@@ -461,7 +474,7 @@ final class SidebarWorkingAvatarView: UIView {
     private var isVisible: Bool { self.window != nil && !self.isHidden }
 
     private func updateDancing() {
-        self.layers.setDancing(self.indicator != nil && self.isVisible && !SidebarDance.reduceMotion(), phase: self.phase)
+        self.layers.setDancing(self.indicator?.isWorking == true && self.isVisible && !SidebarDance.reduceMotion(), phase: self.phase)
     }
 
     private func refresh() {
@@ -473,12 +486,14 @@ final class SidebarWorkingAvatarView: UIView {
         let (fill, text) = self.isEmphasized ? (white, tint) : (tint, white)
         let look = SidebarDanceLayers.Look(
             image: SidebarDance.image(for: indicator.source, companion: self.companion, dark: traits.userInterfaceStyle == .dark,
-                                      disc: TranscriptColors.agentAvatar.resolvedColor(with: traits).cgColor, scale: scale),
+                                      disc: TranscriptColors.agentAvatar.resolvedColor(with: traits).cgColor, scale: scale,
+                                      mode: indicator.mode),
             badge: indicator.badge,
+            unreadMark: indicator.showsUnreadMark,
             badgeImage: indicator.badge.flatMap { SidebarDance.badgeText($0, color: text, scale: scale) },
             fill: fill,
             ring: self.isEmphasized ? UIColor.clear.cgColor : UIColor.systemBackground.resolvedColor(with: traits).cgColor,
-            scale: scale, reduceMotion: SidebarDance.reduceMotion())
+            scale: scale, reduceMotion: SidebarDance.reduceMotion(), working: indicator.isWorking)
         self.layers.apply(look, in: self.bounds)
         self.updateDancing()
     }

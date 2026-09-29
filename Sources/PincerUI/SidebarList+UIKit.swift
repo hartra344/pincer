@@ -572,8 +572,8 @@ private final class SidebarChatListCell: UICollectionViewListCell {
             accessories.append(.customView(configuration: .init(customView: self.chip, placement: .trailing(),
                                                                 reservedLayoutWidth: .actual, maintainsFixedSize: true)))
         }
-        if let indicator = entry.working {
-            self.workingAvatar.configure(indicator, companion: entry.workingAvatar, phaseSeed: row.key)
+        if let indicator = entry.avatar {
+            self.workingAvatar.configure(indicator, companion: entry.avatarStyle, phaseSeed: row.key)
             accessories.append(.customView(configuration: .init(customView: self.workingAvatar, placement: .trailing(),
                                                                 reservedLayoutWidth: .actual, maintainsFixedSize: true)))
         } else {
