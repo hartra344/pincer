@@ -107,7 +107,7 @@ public enum TranscriptSearch {
             current += paragraph
         }
         func inline(_ text: String) -> String {
-            MarkdownBlock.softBreaks(String(MarkdownBlock.inline(text).characters))
+            MarkdownBlock.softBreaks(InlineMath.plainText(text))
         }
         for block in MarkdownBlock.parse(source) {
             switch block {
@@ -122,7 +122,11 @@ public enum TranscriptSearch {
                 texts.append(inline(text))
             case let .code(language, code):
                 flush()
-                if SVGSource.inlineSource(language: language?.isEmpty == false ? language! : "code", code: code) == nil {
+                let fence = language?.isEmpty == false ? language! : "code"
+                // SVG, diagrams and math are drawn, not shown as text, so Find skips their source.
+                if SVGSource.inlineSource(language: fence, code: code) == nil, !MermaidSource.isMermaid(language: fence),
+                   !MathSource.isMath(language: fence)
+                {
                     texts.append(code)
                 }
             case .rule:

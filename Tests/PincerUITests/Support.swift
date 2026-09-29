@@ -33,6 +33,16 @@ enum PerfBudget {
     static func limit(_ budget: Duration) -> Duration {
         self.isStrict ? budget : budget * self.sharedCPUFactor
     }
+
+    /// Wall-clock ratios between two timings (e.g. "25 KB p95 ≤ 1.5× 10 KB p95") swing with a shared
+    /// runner's noise even when run solo, so they're enforced only in the local solo perf lane
+    /// (`PINCER_STRICT_PERF=1` outside CI) or when opted in with `PINCER_WALL_CLOCK_CHECKS=1`. Elsewhere
+    /// the probes rely on their counter-based checks and just print the timings.
+    static var enforcesWallClockRatios: Bool {
+        let env = ProcessInfo.processInfo.environment
+        if env["PINCER_WALL_CLOCK_CHECKS"] == "1" { return true }
+        return self.isStrict && env["CI"] == nil
+    }
 }
 
 /// Polls `condition` on the main actor until it holds or `timeout` passes.
