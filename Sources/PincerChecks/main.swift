@@ -22,6 +22,7 @@ import UserNotifications
 //   swift run PincerChecks --live-no-reply-to URL TOKEN → a Gateway without replyToId (mock with MOCK_NO_REPLY_TO=1)
 //   swift run PincerChecks --live-scope-upgrade URL TOKEN → operator.admin upgrade fallback
 //     (mock with MOCK_PAIRING=auto MOCK_LEGACY_PAIRING=1)
+//   swift run PincerChecks --live-reconnect URL TOKEN → only the #202 reconnect/bootstrap checks (fresh mock)
 //   swift run PincerChecks --perf-smoke     → only the message index perf smoke, budgets enforced (run it alone)
 //   swift run -c release PincerChecks --perf → message index at 20 chats × 20k messages
 //   add --skip-perf-budgets to only report the perf smoke timings, failing just on clearly broken
@@ -73,13 +74,14 @@ let liveAll = liveTarget("--live")
 let liveCore = liveAll ?? liveTarget("--live-core")
 let liveExtras = liveAll ?? liveTarget("--live-extras")
 let liveScopeUpgrade = liveTarget("--live-scope-upgrade")
+let liveReconnect = liveTarget("--live-reconnect")
 let liveNoUsage = liveTarget("--live-no-usage")
 let liveNoReplyTo = liveTarget("--live-no-reply-to")
 let perf = arguments.contains("--perf")
 let demoAll = arguments.contains("--demo")
 let demoCore = demoAll || arguments.contains("--demo-core")
 let demoExtras = demoAll || arguments.contains("--demo-extras")
-let modeSelected = liveCore != nil || liveExtras != nil || liveScopeUpgrade != nil || liveNoUsage != nil
+let modeSelected = liveCore != nil || liveExtras != nil || liveScopeUpgrade != nil || liveReconnect != nil || liveNoUsage != nil
     || liveNoReplyTo != nil || perf || demoCore || demoExtras
 
 if !modeSelected {
@@ -88,6 +90,7 @@ if !modeSelected {
 if let (url, token) = liveCore { await runSections(Suites.liveCore, url: url, token: token) }
 if let (url, token) = liveExtras { await runSections(Suites.liveExtras, url: url, token: token) }
 if let (url, token) = liveScopeUpgrade { await runSections(Suites.liveScopeUpgrade, url: url, token: token) }
+if let (url, token) = liveReconnect { await runSections(Suites.liveReconnect, url: url, token: token) }
 if perf { await runSections(Suites.perf) }
 if let (url, token) = liveNoUsage { await runSections(Suites.liveNoUsage, url: url, token: token) }
 if let (url, token) = liveNoReplyTo { await runSections(Suites.liveNoReplyTo, url: url, token: token) }

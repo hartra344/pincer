@@ -33,6 +33,22 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `MOCK_NO_REPLY_TO` | off | Set to `1` to refuse `chat.send` with `replyToId`, like a gateway from before replies. Pincer then quotes the original in the text. |
 | `MOCK_FAILED_DELIVERY` | on | Set to `off` to drop the mock's one failed delivery, so Health shows Healthy. |
 | `MOCK_FAILED_DELIVERY_EVERY` | off | Seconds between new failed deliveries. Each one raises the count and sends `health`, so a dismissed issue comes back. |
+| `MOCK_DELAY_METHODS` | off | Holds back responses, e.g. `sessions.subscribe=800,chat.history=300` (milliseconds). The handler still runs at once, so a snapshot is taken then and events sent meanwhile arrive before the response. For testing bootstrap races. |
+
+## Test control (`mock.control`)
+
+Mock-only RPC, never advertised in `hello-ok` and never used by the app. Checks open a second connection and call it with `{action, …}`; its own calls aren't counted.
+
+| Action | What it does |
+| --- | --- |
+| `stats` | `{total, connections}`: RPC counts per method, and the ordered method log per connection (`connect` and `mock.control` aren't counted). |
+| `resetStats` | Starts the counters from zero. |
+| `setDelay` | `{delays: {method: ms}}` replaces the delayed-response table (`{}` clears it). |
+| `emit` | `{event, payload, subscribedOnly?}` broadcasts an event to every other connection. |
+| `patchSession` | `{key, patch, reason?}` updates a session row and broadcasts `sessions.changed` with it. |
+| `drop` | Closes every other connection (1012), like a network drop. |
+
+`swift run PincerChecks --live-reconnect ws://127.0.0.1:PORT dev-token` (against a fresh mock) uses these to check the bootstrap race, overlapping reconnects, request cancellation, and prints RPC counts per launch, reconnect and finished run.
 
 ## Message triggers
 
@@ -102,6 +118,9 @@ cd mock-gateway && npm ci && npm run selftest
 
 # in another terminal, with the mock running:
 swift run PincerChecks --live-core ws://127.0.0.1:18789 dev-token   # and --live-extras, each against a fresh mock
+
+# reconnect and bootstrap behaviour (#202), against a fresh mock:
+swift run PincerChecks --live-reconnect ws://127.0.0.1:18789 dev-token
 
 # a gateway without usage, on another port:
 MOCK_NO_USAGE=1 PORT=18790 npm start
