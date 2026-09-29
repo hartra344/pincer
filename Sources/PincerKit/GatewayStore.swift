@@ -284,6 +284,7 @@ public final class GatewayStore: Identifiable {
             allowsWritesWithoutAdmin: profile.isDemo)
         self.channels = ChannelsModel(connection: connection, hello: { nil }, allowsWritesWithoutAdmin: profile.isDemo)
         images.gateway = self
+        self.startMemoryPressureMonitor()
         self.health.hello = { [weak self] in self?.hello }
         self.devices.bind(hello: { [weak self] in self?.hello })
         self.channels.methods = { [weak self] in self?.hello?.methods }
@@ -396,6 +397,7 @@ public final class GatewayStore: Identifiable {
         }
         self.hasConnected = true
         self.hello = hello
+        self.images.retryUnavailable()
         self.health.connectionChanged(state, hello: hello)
         self.connectionEpoch += 1
         self.replyToUnsupported = false
@@ -496,17 +498,23 @@ public final class GatewayStore: Identifiable {
         }
         self.startPrefetch()
         self.reconcileMessageIndex()
+        self.enforceChatBudget()
         await self.flushOutbox()
     }
 
     // MARK: Warm chats
 
-    private static let warmChatLimit = 4
+    static let warmChatLimit = ChatResidency.warmFloor
     /// Most recently selected chats, newest first.
     @ObservationIgnored private var recentKeys: [String] = []
+    /// Recency of chat use, for dehydrating the least recently used ones (see `GatewayStore+Residency`).
+    @ObservationIgnored var residency = ChatResidency(limit: max(ChatResidency.defaultLimit, GatewayStore.warmChatLimit))
+    @ObservationIgnored var memoryPressureSource: (any DispatchSourceMemoryPressure)?
+    @ObservationIgnored var enforcingChatBudget = false
+    @ObservationIgnored var pendingChatBudgetLimit: Int?
 
     /// The selected chat, the most recent ones up to the cap, and any chat with a live run.
-    private func warmKeys(includingLive: Bool) -> Set<String> {
+    func warmKeys(includingLive: Bool) -> Set<String> {
         var keys = Set(self.recentKeys.prefix(Self.warmChatLimit))
         if let selected = self.selectedKey { keys.insert(selected) }
         if includingLive {
@@ -523,6 +531,8 @@ public final class GatewayStore: Identifiable {
         for chat in self.chats.values where !warm.contains(chat.sessionKey) && chat.isSubscribed {
             Task { await chat.releaseSubscription() }
         }
+        self.residency.touch(key)
+        self.enforceChatBudget()
     }
 
     /// Indexes cached transcripts the message index hasn't seen yet (caches from before it
@@ -621,7 +631,7 @@ public final class GatewayStore: Identifiable {
             for row in rows {
                 guard !Task.isCancelled, let self, self.state.isConnected, self.appIsActive,
                       fetched < Self.prefetchBudget else { return }
-                if self.chats[row.key] != nil { continue }
+                if let chat = self.chats[row.key], !chat.isDehydrated { continue }
                 let meta = await TranscriptCache.meta(gatewayId: self.id, sessionKey: row.key)
                 if Self.prefetchIsFresh(meta, activityMs: row.activityMs) { continue }
                 fetched += 1
@@ -889,10 +899,12 @@ public final class GatewayStore: Identifiable {
     // MARK: Chats
 
     public func chat(for key: String) -> ChatStore {
+        self.residency.touch(key)
         if let existing = self.chats[key] { return existing }
         let store = ChatStore(sessionKey: key, agentId: self.sessions[key]?.agentId, gateway: self)
         self.chats[key] = store
         store.syncOutbox(self.outbox.entries(for: key))
+        self.enforceChatBudget()
         return store
     }
 
@@ -1198,6 +1210,7 @@ public final class GatewayStore: Identifiable {
 
     public func update(profile: GatewayProfile) {
         self.profile = profile
+        self.images.media.reset()
     }
 
     public var serverNameOverrides: [String: String] {

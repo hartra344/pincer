@@ -118,7 +118,12 @@ final class TranscriptRenderer: TranscriptRowActions {
     private struct Entry {
         let row: TranscriptRow
         let layout: TranscriptRowLayout
+        var stamp: Int
     }
+
+    /// Layouts kept for rows; the least recently used go first. Heights of rows without one
+    /// live in the list, so a dropped layout only costs a relayout when the row is next drawn.
+    static let layoutCacheLimit = 800
 
     private enum ImageState: Equatable { case loading, loaded, failed }
 
@@ -142,6 +147,12 @@ final class TranscriptRenderer: TranscriptRowActions {
     /// Rows whose layout changed (nil means all of them), and a row to hold still on screen while
     /// they change, when the change came from a click in that row.
     private var serial = 0
+    private var useStamp = 0
+    /// Rows on screen, which are never evicted from the layout cache: an image or file arriving for
+    /// one must still find it.
+    var visibleRowIds: () -> Set<String> = { [] }
+    /// A row was laid out again after its layout was evicted: id, width and height.
+    var onRelayout: ((_ id: String, _ width: CGFloat, _ height: CGFloat) -> Void)?
     var onInvalidate: ((_ ids: Set<String>?, _ keepInPlace: String?) -> Void)?
     /// Scrolls a row into view the way Find does, at its `matchY`.
     var onReveal: ((_ id: String) -> Void)?
@@ -169,11 +180,24 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     isolated deinit {
+        self.context.gateway.images.setVisible([], owner: ObjectIdentifier(self))
         for observer in self.observers { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    /// Tells the image cache which images the rows on screen show, so it keeps them.
+    func pinImages(of rows: some Sequence<TranscriptRow>, width: CGFloat) {
+        var keys = Set<String>()
+        for row in rows {
+            for ref in self.layout(for: row, width: width).images { keys.insert(ref.cacheKey) }
+        }
+        self.context.gateway.images.setVisible(keys, owner: ObjectIdentifier(self))
     }
 
     func update(context: TranscriptContext) {
         let changed = context.differs(from: self.context)
+        if context.gateway !== self.context.gateway {
+            self.context.gateway.images.setVisible([], owner: ObjectIdentifier(self))
+        }
         self.context = context
         self.liveAvatar?.update(chat: context.chat)
         if changed {
@@ -232,20 +256,28 @@ final class TranscriptRenderer: TranscriptRowActions {
         }
     }
 
+    var cachedLayoutCount: Int { self.cache.count }
+
     /// The row laid out at `width`, from cache when neither has changed.
     func layout(for row: TranscriptRow, width: CGFloat) -> TranscriptRowLayout {
-        if let entry = self.cache[row.id], entry.layout.width == width, entry.row == row { return entry.layout }
+        self.useStamp += 1
+        if var entry = self.cache[row.id], entry.layout.width == width, entry.row == row {
+            entry.stamp = self.useStamp
+            self.cache[row.id] = entry
+            return entry.layout
+        }
+        let wasEvicted = self.cache[row.id] == nil
         var layout = TranscriptLayoutBuilder(context: self.context, settings: self.settings, highlight: self.highlight,
                                              flash: self.flash).layout(row, width: width)
         self.serial += 1
         layout.serial = self.serial
-        self.cache[row.id] = Entry(row: row, layout: layout)
+        self.cache[row.id] = Entry(row: row, layout: layout, stamp: self.useStamp)
         let loader = self.context.gateway.images
         for ref in layout.images {
             let key = ref.cacheKey
             self.imageRefs[key] = ref
             self.imageRows[key, default: []].insert(row.id)
-            self.imageStates[key] = loader.cached(ref) != nil ? .loaded : loader.hasFailed(ref) ? .failed : .loading
+            self.imageStates[key] = loader.images[ref.cacheKey] != nil ? .loaded : loader.hasFailed(ref) ? .failed : .loading
         }
         let files = self.context.gateway.files
         for file in layout.files {
@@ -253,7 +285,42 @@ final class TranscriptRenderer: TranscriptRowActions {
             self.filePreviews[file.cacheKey] = .some(files.preview(file))
         }
         if layout.hasSpawns { self.spawnRows.insert(row.id) } else { self.spawnRows.remove(row.id) }
+        self.evictIfNeeded()
+        if wasEvicted { self.onRelayout?(row.id, width, layout.height) }
         return layout
+    }
+
+    /// Drops the least recently used layouts (down to 90% of the limit, so this isn't a scan per
+    /// insert) along with what was tracked for them.
+    private func evictIfNeeded() {
+        guard self.cache.count > Self.layoutCacheLimit else { return }
+        let keep = self.visibleRowIds()
+        let target = Self.layoutCacheLimit * 9 / 10
+        let victims = self.cache.filter { !keep.contains($0.key) }.sorted { $0.value.stamp < $1.value.stamp }
+            .prefix(max(0, self.cache.count - target)).map(\.key)
+        guard !victims.isEmpty else { return }
+        let gone = Set(victims)
+        for id in victims { self.cache[id] = nil }
+        self.spawnRows.subtract(gone)
+        for (key, rows) in self.imageRows {
+            let left = rows.subtracting(gone)
+            if left.isEmpty {
+                self.imageRows[key] = nil
+                self.imageStates[key] = nil
+                self.imageRefs[key] = nil
+            } else if left.count != rows.count {
+                self.imageRows[key] = left
+            }
+        }
+        for (key, rows) in self.fileRows {
+            let left = rows.subtracting(gone)
+            if left.isEmpty {
+                self.fileRows[key] = nil
+                self.filePreviews[key] = nil
+            } else if left.count != rows.count {
+                self.fileRows[key] = left
+            }
+        }
     }
 
     func reset() {
@@ -297,7 +364,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         var stale: Set<String> = []
         for (key, old) in self.imageStates {
             guard let rows = self.imageRows[key], let ref = self.imageRefs[key] else { continue }
-            let now: ImageState = loader.cached(ref) != nil ? .loaded : loader.hasFailed(ref) ? .failed : .loading
+            let now: ImageState = loader.images[ref.cacheKey] != nil ? .loaded : loader.hasFailed(ref) ? .failed : .loading
             if now != old {
                 self.imageStates[key] = now
                 stale.formUnion(rows)

@@ -24,6 +24,7 @@ extension ChatStore {
     }
 
     public func load(force: Bool = false) async {
+        self.isDehydrated = false
         await self.restoreDraft()
         await self.restoreFromCache()
         guard let gateway, gateway.state.isConnected else { return }
@@ -249,14 +250,14 @@ extension ChatStore {
 
     /// The store is going away: writes what's loaded now, then nothing more is cached.
     func finishCaching() async {
-        let save = self.hasLoaded && !self.cachingStopped
+        let save = self.hasLoaded && !self.isDehydrated && !self.cachingStopped
         self.stopCaching()
         if save { await self.saveSnapshot() }
     }
 
     /// Writes what's loaded to the transcript cache now (after it was cleared).
     func saveToCache() async {
-        guard self.hasLoaded, !self.cachingStopped else { return }
+        guard self.hasLoaded, !self.isDehydrated, !self.cachingStopped else { return }
         self.saveTask?.cancel()
         // The cache was cleared, so it no longer holds what was saved.
         self.savedState = nil
@@ -264,13 +265,13 @@ extension ChatStore {
     }
 
     func scheduleSave() {
-        guard self.hasLoaded, !self.cachingStopped, !self.cacheUnreadable,
+        guard self.hasLoaded, !self.isDehydrated, !self.cachingStopped, !self.cacheUnreadable,
               self.currentCacheState != self.savedState
         else { return }
         self.saveTask?.cancel()
         self.saveTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1))
-            guard !Task.isCancelled, let self else { return }
+            guard !Task.isCancelled, let self, !self.isDehydrated else { return }
             await self.saveSnapshot()
         }
     }
@@ -374,6 +375,7 @@ extension ChatStore {
         }
         let merged = older + parsed + pending
         if merged != self.items { self.items = merged }
+        self.pruneRecoveryState(keeping: parsed)
         self.recoverCappedMessages()
 
         if let inFlight = history["inFlightRun"], let runId = inFlight["runId"]?.text {
