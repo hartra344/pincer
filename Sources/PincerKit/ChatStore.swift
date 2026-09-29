@@ -195,6 +195,7 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored private var loadInFlight = false
     @ObservationIgnored private var subscribedEpoch: Int?
     @ObservationIgnored private var stale = false
+    @ObservationIgnored private var loadCount = 0
     @ObservationIgnored private var finishedRunIds: [String] = []
 
     /// True when the message subscription was sent on the current connection.
@@ -243,10 +244,13 @@ public final class ChatStore: Identifiable {
             self.apply(history: result, parsed: parsed)
             self.hasLoaded = true
             self.stale = false
+            self.loadCount += 1
             self.errorMessage = nil
             self.scheduleSave()
             self.startBackfill()
             self.refreshProgressCard()
+        } catch is CancellationError {
+            return
         } catch {
             self.errorMessage = error.localizedDescription
         }
@@ -1111,7 +1115,13 @@ public final class ChatStore: Identifiable {
         if self.finishedRunIds.count > 32 { self.finishedRunIds.removeFirst(self.finishedRunIds.count - 32) }
         self.reloadTask?.cancel()
         self.reloadTask = Task { [weak self] in
+            let before = self?.loadCount
             await self?.load(force: true)
+            // A failed or cancelled reload must not swallow the run's only history read.
+            if let self, self.loadCount == before {
+                self.finishedRunIds.removeAll { $0 == runId }
+                self.stale = true
+            }
             if self?.live?.runId == runId { self?.live = nil }
             await self?.finishCompaction(runId: runId)
         }
