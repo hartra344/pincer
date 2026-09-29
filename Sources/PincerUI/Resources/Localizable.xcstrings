@@ -261,6 +261,26 @@
         }
       }
     },
+    "%lld images": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld images"
+          }
+        }
+      }
+    },
+    "%lld lines": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld lines"
+          }
+        }
+      }
+    },
     "%lld messages queued": {
       "localizations": {
         "en": {
@@ -369,6 +389,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 dismissed issue"
+          }
+        }
+      }
+    },
+    "1 image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 image"
           }
         }
       }
@@ -939,6 +969,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Approving new senders? See Pairing Requests."
+          }
+        }
+      }
+    },
+    "Arguments": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arguments"
           }
         }
       }
@@ -1963,12 +2003,32 @@
         }
       }
     },
+    "Copy command": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy command"
+          }
+        }
+      }
+    },
     "Copy diff": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Copy diff"
+          }
+        }
+      }
+    },
+    "Copy error": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy error"
           }
         }
       }
@@ -1989,6 +2049,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy message"
+          }
+        }
+      }
+    },
+    "Copy output": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy output"
           }
         }
       }
@@ -2793,6 +2863,16 @@
         }
       }
     },
+    "Exit code %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exit code %lld"
+          }
+        }
+      }
+    },
     "Expand": {
       "localizations": {
         "en": {
@@ -3049,6 +3129,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Folder"
+          }
+        }
+      }
+    },
+    "Formatted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formatted"
           }
         }
       }
@@ -4973,6 +5063,16 @@
         }
       }
     },
+    "Output": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Output"
+          }
+        }
+      }
+    },
     "Overview": {
       "localizations": {
         "en": {
@@ -5469,6 +5569,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Raw Config"
+          }
+        }
+      }
+    },
+    "Raw JSON": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Raw JSON"
           }
         }
       }
@@ -6833,6 +6943,16 @@
         }
       }
     },
+    "Show formatted arguments": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show formatted arguments"
+          }
+        }
+      }
+    },
     "Show in Channel Status": {
       "localizations": {
         "en": {
@@ -6849,6 +6969,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show last message under each chat"
+          }
+        }
+      }
+    },
+    "Show raw JSON arguments": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show raw JSON arguments"
           }
         }
       }
@@ -7803,6 +7933,16 @@
         }
       }
     },
+    "Took %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took %@"
+          }
+        }
+      }
+    },
     "Tool": {
       "localizations": {
         "en": {
@@ -8439,6 +8579,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "e.g. Morning briefing"
+          }
+        }
+      }
+    },
+    "exit %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "exit %lld"
           }
         }
       }
