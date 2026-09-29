@@ -94,6 +94,7 @@ public final class ChatStore: Identifiable {
 
     public internal(set) var items: [ChatItem] = [] {
         didSet {
+            if self.items != oldValue { self.contentRevision += 1 }
             guard !self.headless else { return }
             self.rebuild(itemsChanged: true)
             self.scheduleSave()
@@ -165,6 +166,14 @@ public final class ChatStore: Identifiable {
     /// Background cache filler: no UI, no live subscription.
     @ObservationIgnored let headless: Bool
     @ObservationIgnored var cacheChecked = false
+    /// Bumped whenever `items` actually changes, so saves can tell a real change from a refresh
+    /// that fetched the same transcript again.
+    @ObservationIgnored var contentRevision = 0
+    /// What the transcript cache holds, as of the last save or restore of this store.
+    @ObservationIgnored var savedState: CacheState?
+    /// The last restore couldn't read the cache (`.unavailable`); saving now would replace the
+    /// older history on disk with only what's loaded, so nothing is written until a restore succeeds.
+    @ObservationIgnored var cacheUnreadable = false
     /// The session was deleted, so its transcript is never cached again.
     @ObservationIgnored var cachingStopped = false
     /// What restoring from the transcript cache found; nil until it's been tried.

@@ -71,11 +71,38 @@ extension ChatStore {
     /// Shows the cached transcript before the Gateway answers; the newest page is merged over it.
     /// Without a usable one (missing, or discarded as corrupt, outdated or from a newer app)
     /// nothing is shown: the chat stays loading until the Gateway's history arrives.
+    struct CacheState: Equatable {
+        var revision: Int
+        var hasMoreHistory: Bool
+        var activityMs: Double?
+    }
+
+    var currentCacheState: CacheState {
+        CacheState(revision: self.contentRevision, hasMoreHistory: self.hasMoreHistory,
+                   activityMs: self.gateway?.sessions[self.sessionKey]?.activityMs)
+    }
+
+    /// Saves the current snapshot unless the cache already holds this state (or can't be trusted).
+    func saveSnapshot() async {
+        guard !self.cacheUnreadable else { return }
+        let state = self.currentCacheState
+        guard state != self.savedState else { return }
+        await TranscriptCache.save(self.snapshot(), gatewayId: self.gatewayId, sessionKey: self.sessionKey)
+        self.savedState = state
+    }
+
     func restoreFromCache() async {
         guard !self.cacheChecked else { return }
         self.cacheChecked = true
         let (snapshot, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: self.gatewayId, sessionKey: self.sessionKey)
         self.cacheOutcome = outcome
+        if case .unavailable = outcome {
+            // Retried on the next load; until then a save would replace the cached history.
+            self.cacheChecked = false
+            self.cacheUnreadable = true
+            return
+        }
+        self.cacheUnreadable = false
         // Unsent messages shown before the cache arrived stay, after it.
         guard let snapshot, !snapshot.items.isEmpty, self.items.allSatisfy(\.isPending) else { return }
         // Item count never exceeds the raw message count, so this offset can only overlap (deduped
@@ -84,6 +111,7 @@ extension ChatStore {
         self.hasMoreHistory = !snapshot.complete
         self.hasPagedOlder = true
         self.items = snapshot.items + self.items
+        if outcome == .loaded, self.items == snapshot.items { self.savedState = self.currentCacheState }
     }
 
     /// Brings back the draft saved on disk, unless one was started here in the meantime.
@@ -131,12 +159,15 @@ extension ChatStore {
         self.apply(history: result, parsed: parsed)
         self.live = nil
         self.hasLoaded = true
-        while self.hasMoreHistory, !Task.isCancelled {
+        // Older items past the retention limit would be dropped anyway.
+        while self.hasMoreHistory, !Task.isCancelled, self.committedCount < TranscriptCache.maxItems {
             guard await self.loadOlder() else { return }
         }
         guard !Task.isCancelled else { return }
-        await TranscriptCache.save(self.snapshot(), gatewayId: self.gatewayId, sessionKey: self.sessionKey)
+        await self.saveSnapshot()
     }
+
+    private var committedCount: Int { self.items.lazy.filter { !$0.isPending }.count }
 
     func snapshot() -> TranscriptCache.Snapshot {
         Self.snapshot(items: self.items, hasMoreHistory: self.hasMoreHistory,
@@ -149,10 +180,12 @@ extension ChatStore {
     {
         let committed = items.filter { !$0.isPending }
         let kept = committed.suffix(maxItems)
-        return TranscriptCache.Snapshot(
+        var snapshot = TranscriptCache.Snapshot(
             items: Array(kept),
             complete: !hasMoreHistory && kept.count == committed.count,
             activityMs: activityMs)
+        snapshot.retained = kept.count < committed.count
+        return snapshot
     }
 
     /// The Gateway rewrote this chat's history (rewind, branch switch, recovery): drops what's
@@ -162,6 +195,8 @@ extension ChatStore {
         self.backfillTask?.cancel()
         self.olderTask?.cancel()
         self.cacheChecked = true
+        self.cacheUnreadable = false
+        self.savedState = nil
         self.hasPagedOlder = false
         self.olderOffset = nil
         self.hasMoreHistory = false
@@ -186,23 +221,27 @@ extension ChatStore {
     func finishCaching() async {
         let save = self.hasLoaded && !self.cachingStopped
         self.stopCaching()
-        if save { await TranscriptCache.save(self.snapshot(), gatewayId: self.gatewayId, sessionKey: self.sessionKey) }
+        if save { await self.saveSnapshot() }
     }
 
     /// Writes what's loaded to the transcript cache now (after it was cleared).
     func saveToCache() async {
         guard self.hasLoaded, !self.cachingStopped else { return }
         self.saveTask?.cancel()
-        await TranscriptCache.save(self.snapshot(), gatewayId: self.gatewayId, sessionKey: self.sessionKey)
+        // The cache was cleared, so it no longer holds what was saved.
+        self.savedState = nil
+        await self.saveSnapshot()
     }
 
     func scheduleSave() {
-        guard self.hasLoaded, !self.cachingStopped else { return }
+        guard self.hasLoaded, !self.cachingStopped, !self.cacheUnreadable,
+              self.currentCacheState != self.savedState
+        else { return }
         self.saveTask?.cancel()
         self.saveTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1))
             guard !Task.isCancelled, let self else { return }
-            await TranscriptCache.save(self.snapshot(), gatewayId: self.gatewayId, sessionKey: self.sessionKey)
+            await self.saveSnapshot()
         }
     }
 

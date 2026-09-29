@@ -35,6 +35,7 @@ public final class AppModel {
     public var appIsActive = true {
         didSet {
             self.notifier.appIsActive = self.appIsActive
+            self.gateways.forEach { $0.appIsActive = self.appIsActive }
             if self.appIsActive, !oldValue { self.gateways.forEach { $0.reconnectIfNeeded() } }
             if !self.appIsActive, oldValue {
                 let gateways = self.gateways
@@ -276,11 +277,13 @@ public final class AppModel {
             store.stop()
             // A prefs pull that was in flight may have written them back.
             store.forgetLocalHealthDismissals()
+            ReactionStore(gatewayId: id.uuidString).removeAll()
         }
         store.profile.forgetCredentials()
         TranscriptCache.removeAll(gatewayId: id, permanently: true)
         self.history.prune { $0.gatewayId != id }
         DraftStore.removeAll(gatewayId: id)
+        ReactionStore(gatewayId: id.uuidString).removeAll()
         store.outbox = Outbox()
         OutboxStore.remove(gatewayId: id)
         store.forgetLocalHealthDismissals()

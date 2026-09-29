@@ -119,6 +119,13 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var didPickInitialChat = false
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
+    /// Whether the app is in the foreground, set from `AppModel.appIsActive`. Background prefetch
+    /// stops while it's false and starts again on resume.
+    public var appIsActive = true {
+        didSet { if self.appIsActive, !oldValue, self.state.isConnected { self.startPrefetch() } }
+    }
+    /// Most chats one prefetch run fetches, so a big account isn't paged through all at once.
+    static let prefetchBudget = 40
     @ObservationIgnored private var reconcileTask: Task<Void, Never>?
     /// When a failed search last asked for the index to be rebuilt; searches that keep failing
     /// don't keep rebuilding it (each rebuild re-runs the search).
@@ -253,7 +260,7 @@ public final class GatewayStore: Identifiable {
         self.groupPositions = defaults.dictionary(forKey: "pincer.groups.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.groupIcons = defaults.dictionary(forKey: "pincer.groupIcons.\(profile.id.uuidString)") as? [String: String] ?? [:]
         self.chatPositions = defaults.dictionary(forKey: "pincer.chatOrder.\(profile.id.uuidString)") as? [String: String] ?? [:]
-        self.reactions = defaults.dictionary(forKey: "pincer.reactions.\(profile.id.uuidString)") as? [String: String] ?? [:]
+        self.reactions = ReactionStore(gatewayId: profile.id.uuidString, defaults: defaults).load()
         self.healthDismissals = defaults.dictionary(forKey: "pincer.healthDismissals.\(profile.id.uuidString)") as? [String: String] ?? [:]
         // Before this Gateway's first sync, start from the choices already made on this device.
         self.avatarChoices = defaults.dictionary(forKey: "pincer.avatars.\(profile.id.uuidString)") as? [String: String]
@@ -593,21 +600,28 @@ public final class GatewayStore: Identifiable {
 
     /// Quietly caches every chat's full history, most recently active first, so opening any
     /// channel is instant. Chats that haven't changed since they were cached are skipped.
-    private func startPrefetch() {
+    /// A cached chat that holds everything it will (all of it, or the newest `maxItems`) and hasn't
+    /// seen activity since needs no fetch.
+    static func prefetchIsFresh(_ meta: TranscriptCache.Meta?, activityMs: Double) -> Bool {
+        guard let meta, meta.complete || meta.retained == true, let cached = meta.activityMs else { return false }
+        return cached >= activityMs
+    }
+
+    func startPrefetch() {
         self.prefetchTask?.cancel()
         self.prefetchTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
             guard let rows = self?.sessions.values.filter({ !$0.isSubagent && !$0.isPlaceholder })
                 .sorted(by: { $0.activityMs > $1.activityMs })
             else { return }
+            var fetched = 0
             for row in rows {
-                guard !Task.isCancelled, let self, self.state.isConnected else { return }
+                guard !Task.isCancelled, let self, self.state.isConnected, self.appIsActive,
+                      fetched < Self.prefetchBudget else { return }
                 if self.chats[row.key] != nil { continue }
-                if let meta = await TranscriptCache.meta(gatewayId: self.id, sessionKey: row.key),
-                   meta.complete, let cached = meta.activityMs, cached >= row.activityMs
-                {
-                    continue
-                }
+                let meta = await TranscriptCache.meta(gatewayId: self.id, sessionKey: row.key)
+                if Self.prefetchIsFresh(meta, activityMs: row.activityMs) { continue }
+                fetched += 1
                 let store = ChatStore(sessionKey: row.key, agentId: row.agentId, gateway: self, headless: true)
                 await store.fillCache()
             }
@@ -1204,7 +1218,7 @@ public final class GatewayStore: Identifiable {
     /// Your emoji reactions, `"<sessionKey>|<transcriptId>"` to space-separated emoji in the order
     /// added, synced through `users.prefs` (`pincer.reactions`).
     public internal(set) var reactions: [String: String] {
-        didSet { self.defaults.set(self.reactions, forKey: "pincer.reactions.\(self.id.uuidString)") }
+        didSet { ReactionStore(gatewayId: self.id.uuidString, defaults: self.defaults).apply(old: oldValue, new: self.reactions) }
     }
 
     /// This connection's Gateway rejected `chat.send`'s `replyToId`, so replies quote instead.
