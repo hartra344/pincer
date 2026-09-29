@@ -52,6 +52,8 @@ struct TranscriptPrefetchProbe {
     static let key = "agent:probe:main"
     static let rowCount = 20_000
     static let idleCap = 20.0
+    /// Tearing the table down mid-test crashes AppKit; the probe leaks its window instead.
+    static var keepAlive: [(NSWindow, TranscriptList.Coordinator)] = []
 
     static func rows(count: Int) -> [TranscriptRow] {
         let variants = (0..<16).map { StreamingProbe.reply(bytes: 150 + $0 * 90) }
@@ -95,16 +97,15 @@ struct TranscriptPrefetchProbe {
         var reachedIdle = false
     }
 
-    /// Spins the main run loop in 100 ms slices until four in a row use under 1 ms of main-thread CPU
-    /// (prefetch is idle), or `cap` seconds pass.
-    static func spinUntilIdle(cap: Double) -> Spin {
+    /// Lets the main queue run in 100 ms slices (a blocking run-loop spin can't drain it from inside a main-actor
+    /// job) until four in a row use under 1 ms of main-thread CPU (prefetch is idle), or `cap` seconds pass.
+    static func spinUntilIdle(cap: Double) async -> Spin {
         var spin = Spin()
         let startWall = ProbeMeter.wall(), startCPU = ProbeMeter.threadCPU()
         var quiet = 0
         while ProbeMeter.wall() - startWall < cap {
             let sliceCPU = ProbeMeter.threadCPU()
-            let end = Date().addingTimeInterval(0.1)
-            while Date() < end { _ = RunLoop.main.run(mode: .default, before: end) }
+            try? await Task.sleep(for: .milliseconds(100))
             quiet = ProbeMeter.threadCPU() - sliceCPU < 0.001 ? quiet + 1 : 0
             if quiet >= 4 { spin.reachedIdle = true; break }
         }
@@ -113,8 +114,7 @@ struct TranscriptPrefetchProbe {
         return spin
     }
 
-    @Test func probe() {
-        #expect(Thread.isMainThread)
+    @Test func probe() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let profile = GatewayProfile(name: "Probe", url: "ws://127.0.0.1:1", authMode: .none)
@@ -132,13 +132,13 @@ struct TranscriptPrefetchProbe {
         window.contentView = scroll
         scroll.frame = NSRect(x: 0, y: 0, width: 700, height: 900)
         window.orderBack(nil)
-        _ = Self.spinUntilIdle(cap: 0.5)
+        _ = await Self.spinUntilIdle(cap: 0.5)
 
         let rssBefore = ProbeMeter.footprintMiB()
         let feedWall = ProbeMeter.wall(), feedCPU = ProbeMeter.threadCPU()
         coordinator.update(rows: rows, context: context, insets: (0, 0))
         let feed = (wall: ProbeMeter.wall() - feedWall, cpu: ProbeMeter.threadCPU() - feedCPU)
-        let open = Self.spinUntilIdle(cap: Self.idleCap)
+        let open = await Self.spinUntilIdle(cap: Self.idleCap)
         let rssOpen = ProbeMeter.footprintMiB()
         let measuredOpen = Self.measuredRows(coordinator)
 
@@ -153,7 +153,7 @@ struct TranscriptPrefetchProbe {
         let top = scrollTo(0)
         var steps: [Double] = []
         for i in 1...20 { steps.append(scrollTo(CGFloat(i) * 400).wall * 1000) }
-        let afterScroll = Self.spinUntilIdle(cap: Self.idleCap)
+        let afterScroll = await Self.spinUntilIdle(cap: Self.idleCap)
         let rssAfter = ProbeMeter.footprintMiB()
         let measuredAfter = Self.measuredRows(coordinator)
 
@@ -177,8 +177,7 @@ struct TranscriptPrefetchProbe {
         // Sanity only: the numbers above are the point, not a budget.
         #expect(open.wall < Self.idleCap + 5)
         #expect(top.wall < 5)
-        window.contentView = nil
-        window.close()
+        Self.keepAlive.append((window, coordinator))
     }
 }
 #endif
@@ -230,10 +229,17 @@ struct ImageRSSProbe {
         try? await Task.sleep(for: .seconds(1))
         let wall = ProbeMeter.wall() - start
         let rssAfter = ProbeMeter.footprintMiB()
+        // Downscaling every retained image into a 16x16 bitmap reads all its pixels, like showing it would,
+        // so lazily-backed pages count towards the footprint.
+        let probe = CGContext(data: nil, width: 16, height: 16, bitsPerComponent: 8, bytesPerRow: 0,
+                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        probe.interpolationQuality = .medium
+        for image in Array(loader.images.values) { probe.draw(image, in: CGRect(x: 0, y: 0, width: 16, height: 16)) }
+        let rssTouched = ProbeMeter.footprintMiB()
         let bytes = Self.decodedBytes(loader)
         var line = "ImageRSSProbe: \(Self.count) images of 4000x3000 (PNG \(png.count / 1024) KiB) → retained \(loader.images.count), "
             + "decoded \(bytes / 1_048_576) MiB, failed \(loader.failures.count), wall \(String(format: "%.1f", wall)) s, "
-            + "RSS footprint \(Int(rssBefore)) → \(Int(rssAfter)) MiB"
+            + "RSS footprint \(Int(rssBefore)) → \(Int(rssAfter)) MiB (\(Int(rssTouched)) MiB after reading every pixel)"
         if let stats = PrefetchProbeShim.loaderStats { line += "; \(stats(loader))" }
         print("\n" + line)
         #expect(loader.failures.isEmpty)
