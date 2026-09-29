@@ -1363,6 +1363,16 @@
         }
       }
     },
+    "Changes stay with your other unsaved settings until you use Review & Save. Other settings for this server are kept. Edit them in Raw Config.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes stay with your other unsaved settings until you use Review & Save. Other settings for this server are kept. Edit them in Raw Config."
+          }
+        }
+      }
+    },
     "Channel": {
       "localizations": {
         "en": {
@@ -4543,6 +4553,16 @@
         }
       }
     },
+    "Name: letters, numbers, . _ - (start with a letter or number).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name: letters, numbers, . _ - (start with a letter or number)."
+          }
+        }
+      }
+    },
     "Needs Fixing": {
       "localizations": {
         "en": {
@@ -5579,6 +5599,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Other settings are kept. Edit them in Raw Config."
+          }
+        }
+      }
+    },
+    "Other settings for this server are kept. Edit them in Raw Config.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other settings for this server are kept. Edit them in Raw Config."
           }
         }
       }
@@ -9763,6 +9793,16 @@
         }
       }
     },
+    "filesystem": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "filesystem"
+          }
+        }
+      }
+    },
     "https://example.com/mcp": {
       "localizations": {
         "en": {
@@ -9779,6 +9819,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "https://relay.example.com"
+          }
+        }
+      }
+    },
+    "https://…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "https://…"
           }
         }
       }

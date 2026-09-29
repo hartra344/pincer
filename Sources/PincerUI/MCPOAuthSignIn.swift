@@ -99,6 +99,7 @@ final class MCPSignInFlow {
                 .queryItems?.first { $0.name == "state" }?.value
             if state == "denied" {
                 self.message = L("Sign-in was denied.")
+                self.fallbackServer = attempt.server
                 await model.cancelSignIn(attempt)
             } else {
                 await model.load()
@@ -129,6 +130,14 @@ final class MCPSignInFlow {
             self.simulated = nil
             await model.cancelSignIn(attempt)
         }
+    }
+
+    func denySimulated(model: MCPServersModel) async {
+        guard let attempt = self.simulated else { return }
+        self.simulated = nil
+        self.message = L("Sign-in was denied.")
+        self.fallbackServer = attempt.server
+        await model.cancelSignIn(attempt)
     }
 
     func allowSimulated(model: MCPServersModel) async {
@@ -248,6 +257,7 @@ struct MCPSimulatedConsentSheet: View {
     let attempt: MCPOAuthAttempt
     let allow: () -> Void
     let deny: () -> Void
+    let cancel: () -> Void
 
     var body: some View {
         NavigationStack {
@@ -258,7 +268,7 @@ struct MCPSimulatedConsentSheet: View {
                 Text("This is a simulated sign-in for the demo. No account is used.", bundle: .module)
                     .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 HStack {
-                    Button(L("Deny"), role: .cancel, action: self.deny)
+                    Button(L("Deny"), action: self.deny)
                     Button(L("Allow"), action: self.allow).buttonStyle(.borderedProminent)
                 }
             }
@@ -268,6 +278,9 @@ struct MCPSimulatedConsentSheet: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel"), action: self.cancel) }
+            }
         }
         .interactiveDismissDisabled()
         #if os(macOS)
@@ -284,7 +297,8 @@ extension View {
                 MCPSimulatedConsentSheet(
                     attempt: attempt,
                     allow: { Task { await flow.allowSimulated(model: model) } },
-                    deny: { Task { await flow.cancel(model: model) } })
+                    deny: { Task { await flow.denySimulated(model: model) } },
+                    cancel: { Task { await flow.cancel(model: model) } })
             }
             #if os(macOS)
             .background(MCPWindowReader { flow.window = $0 })

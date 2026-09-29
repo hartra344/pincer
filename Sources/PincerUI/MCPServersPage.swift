@@ -41,7 +41,8 @@ struct MCPStatusText {
             (self.title, self.detail, self.tone) = (title, nil, .good)
         default:
             if status.needsSignIn {
-                (self.title, self.detail, self.tone) = (auth?.isExpired == true ? L("Sign-In Expired") : L("Needs Sign-In"), nil, .warning)
+                (self.title, self.detail, self.tone) = (auth?.isExpired == true ? L("Sign-In Expired") : L("Needs Sign-In"),
+                                                        auth?.isExpired == true ? status.lastError : nil, .warning)
             } else if auth?.state == .pendingAuthorization {
                 (self.title, self.detail, self.tone) = (L("Waiting for Sign-In…"), nil, .warning)
             } else {
@@ -428,7 +429,6 @@ struct MCPServerPage: View {
             } message: {
                 Text("The server is removed when you save your changes.", bundle: .module)
             }
-            .mcpSignOutConfirmation(self.$signingOut, model: model)
             .mcpSignIn(self.flow, model: model)
             .onChange(of: status.auth?.state) { self.flow.reconcile(server.name, state: status.auth?.state) }
             .task(id: self.gateway.state.isConnected) { if self.gateway.state.isConnected { await model.load() } }
@@ -451,7 +451,7 @@ struct MCPServerPage: View {
             if status.state != .unknown {
                 LabeledContent(L("Status")) { MCPStatusLabel(status: status) }
             }
-            if let error = status.lastError, status.state == .error || status.state == .backoff {
+            if let error = MCPStatusText(status).detail {
                 Button(L("Copy Error"), systemImage: "doc.on.doc") { Clipboard.copy(error) }
             }
             if let error = operation.error {
@@ -521,6 +521,7 @@ struct MCPServerPage: View {
             }
             Button(L("Sign Out"), role: .destructive) { self.signingOut = server.name }
                 .disabled(!ready)
+                .mcpSignOutConfirmation(self.$signingOut, model: model)
         } else if self.flow.waiting?.server == server.name {
             HStack {
                 ProgressView().controlSize(.small)
@@ -530,8 +531,10 @@ struct MCPServerPage: View {
             Button(L("Paste Code or URL…"), systemImage: "doc.on.clipboard") { self.pasting = true }
             Button(L("Cancel"), role: .cancel) { Task { await self.flow.cancel(model: model) } }
         } else {
-            Text(auth?.isExpired == true ? L("Your sign-in expired.") : L("Not signed in."))
-                .foregroundStyle(.secondary)
+            if self.flow.message == nil {
+                Text(auth?.isExpired == true ? L("Your sign-in expired.") : L("Not signed in."))
+                    .foregroundStyle(.secondary)
+            }
             Button(auth?.isExpired == true ? L("Sign In Again") : L("Sign In"), systemImage: "person.badge.key") {
                 Task { await self.flow.start(server.name, model: model) }
             }
@@ -569,15 +572,13 @@ struct MCPServerPage: View {
                     Text(tool).font(.callout.monospaced()).textSelection(.enabled)
                 }
             }
-            if server.enabled, !model.isNew(server.name), model.statusSource != .none {
+            if server.enabled, !model.isNew(server.name), model.statusSource != .none, status.toolCount != 0 {
                 NavigationLink {
                     AgentToolsPage(agentId: self.gateway.defaultAgentId, mcpServer: server.name)
                 } label: {
                     Label(L("Open in Tools Inspector"), systemImage: "wrench.and.screwdriver")
                 }
             }
-        } header: {
-            Text("Tools", bundle: .module)
         }
     }
 
@@ -600,7 +601,7 @@ struct MCPServerPage: View {
         } header: {
             Text("Configuration", bundle: .module)
         } footer: {
-            Text("Other settings are kept. Edit them in Raw Config.", bundle: .module)
+            Text("Other settings for this server are kept. Edit them in Raw Config.", bundle: .module)
         }
     }
 

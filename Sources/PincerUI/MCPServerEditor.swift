@@ -31,11 +31,7 @@ struct MCPServerEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField(L("Name"), text: self.$draft.name, prompt: Text("Letters, numbers, . _ - (start with a letter or number)"))
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
+                    self.field(L("Name"), text: self.$draft.name, prompt: "filesystem")
                     self.problem(shown["name"])
                     Picker(L("Transport"), selection: self.$draft.transport) {
                         ForEach(MCPTransport.allCases, id: \.self) { Text($0.title).tag($0) }
@@ -51,6 +47,7 @@ struct MCPServerEditor: View {
                             .font(.caption).foregroundStyle(.orange)
                     }
                 } footer: {
+                    Text("Name: letters, numbers, . _ - (start with a letter or number).", bundle: .module)
                     if self.draft.isRename {
                         Text("Renaming adds a server under the new name and removes the old one. Saved secrets need to be entered again.", bundle: .module)
                     }
@@ -63,7 +60,7 @@ struct MCPServerEditor: View {
                 Section {
                     EmptyView()
                 } footer: {
-                    Text("Changes stay with your other unsaved settings until you use Review & Save. Other settings are kept. Edit them in Raw Config.", bundle: .module)
+                    Text("Changes stay with your other unsaved settings until you use Review & Save. Other settings for this server are kept. Edit them in Raw Config.", bundle: .module)
                 }
             }
             .formStyle(.grouped)
@@ -91,6 +88,20 @@ struct MCPServerEditor: View {
         #endif
     }
 
+    /// A labeled text field, so the label stays visible once there's text.
+    private func field(_ title: String, text: Binding<String>, prompt: LocalizedStringKey, url: Bool = false) -> some View {
+        LabeledContent(title) {
+            TextField(title, text: text, prompt: Text(prompt, bundle: .module))
+                .labelsHidden()
+                .multilineTextAlignment(.trailing)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .keyboardType(url ? .URL : .default)
+                #endif
+        }
+    }
+
     @ViewBuilder private func problem(_ text: String?) -> some View {
         if let text {
             Label(text, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.red)
@@ -101,17 +112,9 @@ struct MCPServerEditor: View {
 
     @ViewBuilder private func stdioSections(_ problems: [String: String]) -> some View {
         Section {
-            TextField(L("Command"), text: self.$draft.command, prompt: Text("npx"))
-                .autocorrectionDisabled()
-                #if os(iOS)
-                .textInputAutocapitalization(.never)
-                #endif
+            self.field(L("Command"), text: self.$draft.command, prompt: "npx")
             self.problem(problems["command"])
-            TextField(L("Working folder"), text: self.$draft.cwd, prompt: Text("Optional"))
-                .autocorrectionDisabled()
-                #if os(iOS)
-                .textInputAutocapitalization(.never)
-                #endif
+            self.field(L("Working folder"), text: self.$draft.cwd, prompt: "Optional")
         }
         Section {
             let secret = Set(zip(self.draft.args.indices, zip(self.draft.args, MCPServer.maskedArgs(self.draft.args)))
@@ -166,12 +169,7 @@ struct MCPServerEditor: View {
                     Button(L("Replace")) { self.draft.urlIsRedacted = false; self.draft.url = "" }
                 }
             } else {
-                TextField(L("URL"), text: self.$draft.url, prompt: Text("https://example.com/mcp"))
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                    #endif
+                self.field(L("URL"), text: self.$draft.url, prompt: "https://…", url: true)
             }
             self.problem(problems["url"])
             Toggle(L("Requires OAuth sign-in"), isOn: self.$draft.usesOAuth)
