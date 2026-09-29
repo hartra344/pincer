@@ -39,7 +39,7 @@ actor DemoGateway {
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
     ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.channelLifecycleMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
-        + DemoGateway.sessionManagerMethods
+        + DemoGateway.sessionManagerMethods + DemoGateway.mcpMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
 
@@ -118,6 +118,8 @@ actor DemoGateway {
     let acceptsReplyTo: Bool
     /// `message.action` calls received, oldest first.
     var recordedActions: [JSONValue] = []
+    /// MCP servers config and status (DemoGateway+MCP.swift).
+    var mcp = DemoMCPState()
 
     init(acceptsReplyTo: Bool = true) {
         self.acceptsReplyTo = acceptsReplyTo
@@ -222,6 +224,7 @@ actor DemoGateway {
         if let result = try self.handleAgents(method, params) { return result }
         if let result = try await self.handleChannelLifecycle(method, params) { return result }
         if let result = try self.handleDevices(method, params) { return result }
+        if let result = try self.handleMCP(method, params) { return result }
         if let result = try self.handleSkills(method, params) { return result }
         if let result = try self.handleSessionManager(method, params) { return result }
         if let result = try self.handleCatalog(method, params) { return result }

@@ -61,7 +61,7 @@ extension DemoGateway {
             if let requested = params["agentId"]?.text, requested != sessionAgent {
                 throw Self.skillsInvalid("agent id \"\(requested)\" does not match session agent \"\(sessionAgent)\"")
             }
-            return Self.seedEffectiveTools(agentId: sessionAgent)
+            return self.mcpEffective(Self.seedEffectiveTools(agentId: sessionAgent))
         default:
             return nil
         }

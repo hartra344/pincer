@@ -14,6 +14,7 @@
 // MOCK_CLAWHUB_OFFLINE=1 makes ClawHub calls (search/detail/clawhub install+update) UNAVAILABLE.
 import { ADMIN_SCOPE, REDACTED } from './config.mjs';
 import { MOCK_STATE_DIR, defaultWorkspaceDir } from './agents.mjs';
+import { mcpEffectiveTools, mcpNotices } from './mcp.mjs';
 
 export const SKILLS_METHODS = ['skills.status', 'skills.search', 'skills.detail', 'skills.install', 'skills.update'];
 export const TOOLS_METHODS = ['tools.catalog', 'tools.effective'];
@@ -582,10 +583,6 @@ const PLUGIN_TOOLS = [
   { pluginId: 'voice-call', label: 'Voice Call', tools: [{ id: 'voice_call', description: 'Place and control phone calls', optional: true, risk: 'high' }] },
   { pluginId: 'lobster', label: 'Lobster', tools: [{ id: 'lobster', description: 'Run typed workflow pipelines with resumable approvals', risk: 'medium' }] },
 ];
-const MCP_TOOLS = [
-  { server: 'home-assistant', tool: 'get_state', description: 'Read the state of a Home Assistant entity' },
-  { server: 'home-assistant', tool: 'call_service', description: 'Call a Home Assistant service', risk: 'medium' },
-];
 const PROFILE_OPTIONS = [
   { id: 'minimal', label: 'Minimal' },
   { id: 'coding', label: 'Coding' },
@@ -651,7 +648,7 @@ function inProfile(profile, profiles) {
   return profile === 'full' || profiles.includes(profile);
 }
 
-export function toolsEffectivePayload(agentId, sessionKey) {
+export function toolsEffectivePayload(agentId, sessionKey, state) {
   const policy = agentPolicy(agentId);
   const sessionDeny = new Set(SESSION_DENY[sessionKey] ?? []);
   const channel = /^agent:[^:]+:(discord|slack|telegram|whatsapp):/.exec(sessionKey)?.[1];
@@ -706,7 +703,7 @@ export function toolsEffectivePayload(agentId, sessionKey) {
       id: 'mcp',
       label: 'MCP tools',
       source: 'mcp',
-      tools: MCP_TOOLS.map((tool) => ({
+      tools: mcpEffectiveTools(state).map((tool) => ({
         id: `${tool.server}__${tool.tool}`,
         label: tool.tool,
         description: tool.description,
@@ -729,14 +726,7 @@ export function toolsEffectivePayload(agentId, sessionKey) {
         'Browser is configured, but the current tool profile does not include the browser tool. Add tools.alsoAllow: ["browser"] or agents.entries.*.tools.alsoAllow: ["browser"]; tools.subagents.tools.allow alone cannot add it back after profile filtering.',
     });
   }
-  if (agentId === 'main') {
-    notices.push({
-      id: 'mcp-quarantined',
-      severity: 'warning',
-      message: 'Some MCP tools were hidden because their schemas failed validation.',
-      servers: ['paperless'],
-    });
-  }
+  if (agentId === 'main') notices.push(...mcpNotices(state));
   return {
     agentId,
     profile: policy.profile,
@@ -915,7 +905,7 @@ export function handleSkillsRequest(state, conn, msg, { sendRes, sendErr }) {
       if (resolved.agentId && resolved.agentId !== owner) {
         return invalid(`agent id "${resolved.agentId}" does not match session agent "${owner}"`);
       }
-      sendRes(conn, id, toolsEffectivePayload(owner, params.sessionKey));
+      sendRes(conn, id, toolsEffectivePayload(owner, params.sessionKey, state));
       return true;
     }
   }

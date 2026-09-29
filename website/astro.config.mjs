@@ -77,6 +77,7 @@ export default defineConfig({
 						{ slug: 'guides/gateway-settings' },
 						{ slug: 'guides/agents' },
 						{ slug: 'guides/skills-and-tools' },
+						{ slug: 'guides/mcp-servers' },
 						{ slug: 'guides/devices' },
 						{ slug: 'guides/command-policy' },
 						{ slug: 'guides/gateway-health' },

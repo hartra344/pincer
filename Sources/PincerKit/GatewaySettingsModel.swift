@@ -44,13 +44,26 @@ public final class GatewaySettingsModel {
     @ObservationIgnored private var searchCache: (key: String, fields: [ConfigField])?
     @ObservationIgnored private var schemaGeneration = 0
 
-    init(connection: GatewayConnection, scopes: @escaping () -> [String]) {
+    /// A top-level key the demo may save without `operator.admin` (its MCP servers).
+    @ObservationIgnored private let rootWritableWithoutAdmin: String?
+
+    init(connection: GatewayConnection, scopes: @escaping () -> [String], rootWritableWithoutAdmin: String? = nil) {
         self.client = GatewayConfigClient(connection: connection)
         self.scopes = scopes
+        self.rootWritableWithoutAdmin = rootWritableWithoutAdmin
     }
 
     /// The Gateway granted `operator.admin`, which every config and plugin write needs.
     public var canEdit: Bool { self.scopes().contains(GatewayConnection.adminScope) }
+
+    /// Whether edits under the top-level `root` may be saved: with `operator.admin`, or the demo's MCP servers.
+    public func canEdit(root: String) -> Bool { self.canEdit || root == self.rootWritableWithoutAdmin }
+
+    /// Whether the unsaved edits may be saved (every change is somewhere this client may write).
+    public var canSave: Bool {
+        self.canEdit || (self.rootWritableWithoutAdmin != nil
+            && self.edits.changes.allSatisfy { $0.path.first == self.rootWritableWithoutAdmin })
+    }
     public var hasLoaded: Bool { self.snapshot != nil }
     public var isSaving: Bool { self.saveState.isRunning }
     public var config: JSONValue { self.edits.current }
@@ -160,7 +173,7 @@ public final class GatewaySettingsModel {
 
     /// Why Save is unavailable, if it is.
     public var saveBlocker: String? {
-        if !self.canEdit { return ConfigWriteError.adminRequired.message }
+        if !self.canSave { return ConfigWriteError.adminRequired.message }
         if !self.conflicts.isEmpty { return "Some values also changed on the Gateway. Choose which to keep." }
         let invalid = self.edits.inputErrors.count + self.validationProblems.count
         if invalid > 0 { return invalid == 1 ? "Fix the highlighted value first." : "Fix the \(invalid) highlighted values first." }

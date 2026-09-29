@@ -35,6 +35,8 @@ public enum ToolsPolicy {
         case "mcp-not-yet-connected": "MCP servers haven't connected yet, so their tools may be missing."
         case "mcp-not-yet-listed": "MCP servers are still listing their tools, so some may be missing."
         case "mcp-stale-catalog": "MCP tools are from an earlier listing and may be out of date."
+        case let id where id.hasPrefix("mcp-server-diagnostic:"):
+            "MCP server \(id.dropFirst("mcp-server-diagnostic:".count)) couldn't connect: \(notice.message)"
         default: notice.message
         }
     }
@@ -144,6 +146,8 @@ public struct EffectiveTool: Identifiable, Hashable, Sendable {
     public let pluginId: String?
     public let channelId: String?
     public let mcpServer: String?
+    /// The tool's name on its MCP server (without the Gateway's prefix).
+    public let mcpToolName: String?
     public let deniedBySession: Bool
     public let risk: String?
 
@@ -156,6 +160,7 @@ public struct EffectiveTool: Identifiable, Hashable, Sendable {
         self.pluginId = json["pluginId"]?.text
         self.channelId = json["channelId"]?.text
         self.mcpServer = json["mcpServer"]?.text
+        self.mcpToolName = json["mcpToolName"]?.text
         self.deniedBySession = json["deniedBySession"]?.bool ?? false
         self.risk = json["risk"]?.text
     }
@@ -327,6 +332,12 @@ public struct InspectedToolGroup: Identifiable, Hashable, Sendable {
     public let id: String
     public let label: String
     public let tools: [InspectedTool]
+
+    public init(id: String, label: String, tools: [InspectedTool]) {
+        self.id = id
+        self.label = label
+        self.tools = tools
+    }
 }
 
 public enum ToolFilter: String, CaseIterable, Hashable, Sendable {

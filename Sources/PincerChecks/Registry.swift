@@ -145,6 +145,7 @@ enum Suites {
         Section("Accessibility labels (demo)") { await runDemoAccessibility() },
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
+        Section("MCP servers (demo)") { await runDemoMCP() },
     ]
 
     /// Against a (mock) Gateway, first half.
@@ -165,6 +166,7 @@ enum Suites {
         LiveSection("Tool diffs (live)") { url, token in await runLiveToolDiffs(url: url, token: token) },
         LiveSection("Tool cards (live)") { url, token in await runLiveToolCards(url: url, token: token) },
         LiveSection("Agent avatars (live)") { url, token in await runLiveAvatars(url: url, token: token) },
+        LiveSection("MCP servers (live)") { url, token in await runLiveMCP(url: url, token: token) },
         LiveSection("Outbox & retry (live)") { url, token in await runLiveOutbox(url: url, token: token) },
         LiveSection("Background refresh (live)") { url, token in await runBackgroundRefreshLive(url: url, token: token) },
         // Last: it pairs a fresh device identity.

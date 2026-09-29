@@ -14,8 +14,11 @@ struct ToolsInspectorView: View {
     /// Where tool policy is edited, and the button's title.
     var policySettings: ToolPolicySettings?
     var openPolicySettings: ((SettingsDestination) -> Void)?
+    /// Show only this MCP server's tools.
+    var mcpServer: String?
     @State private var filter = ToolFilter.all
     @State private var search = ""
+    @State private var clearedServer = false
 
     var body: some View {
         let model = self.model
@@ -24,6 +27,15 @@ struct ToolsInspectorView: View {
                 Text(self.scopeTitle).font(.headline)
                 if let detail = self.scopeDetail {
                     Text(detail).font(.caption).foregroundStyle(.secondary)
+                }
+                if let server = self.mcpServer, !self.clearedServer {
+                    HStack {
+                        Label(L("Server: \(server)"), systemImage: "point.3.connected.trianglepath.dotted")
+                            .font(.callout)
+                        Button(L("Show all tools"), systemImage: "xmark.circle.fill") { self.clearedServer = true }
+                            .labelStyle(.iconOnly)
+                            .buttonStyle(.borderless)
+                    }
                 }
                 if let inspection = model.inspection {
                     Text(inspection.summary).foregroundStyle(.secondary)
@@ -46,7 +58,7 @@ struct ToolsInspectorView: View {
                     TextField(L("Filter tools"), text: self.$search)
                         .textFieldStyle(.roundedBorder)
                 }
-                let groups = inspection.filtered(self.filter, search: self.search)
+                let groups = self.serverGroups(inspection.filtered(self.filter, search: self.search))
                 if groups.isEmpty {
                     Section {
                         Text(inspection.totalCount == 0 ? L("No tools.") : L("No tools match.")).foregroundStyle(.secondary)
@@ -83,6 +95,16 @@ struct ToolsInspectorView: View {
             }
         }
         .task { await model.loadIfNeeded() }
+    }
+}
+
+extension ToolsInspectorView {
+    private func serverGroups(_ groups: [InspectedToolGroup]) -> [InspectedToolGroup] {
+        guard let server = self.mcpServer, !self.clearedServer else { return groups }
+        return groups.compactMap { group in
+            let tools = group.tools.filter { $0.source == .mcp && $0.sourceDetail == server }
+            return tools.isEmpty ? nil : InspectedToolGroup(id: group.id, label: group.label, tools: tools)
+        }
     }
 }
 
@@ -155,6 +177,8 @@ struct ChatToolsInspectorSheet: View {
 /// One agent's tools (`SettingsRoute.agentTools`), from Agents & Models.
 struct AgentToolsPage: View {
     let agentId: String
+    /// Show only this MCP server's tools.
+    var mcpServer: String?
     @Environment(GatewayStore.self) private var gateway
     @Environment(SettingsNavigator.self) private var navigator
     @State private var model: ToolsInspectorModel?
@@ -168,9 +192,9 @@ struct AgentToolsPage: View {
             } else if let model {
                 ToolsInspectorView(model: model, scopeTitle: "Agent: \(agent?.title ?? self.agentId)",
                                    scopeDetail: model.effective == nil ? nil : self.liveChatTitle(model).map(ToolsPolicy.livePolicyNote),
-                                   policySettings: ToolPolicySettings(self.gateway)) { destination in
-                    self.navigator.destination = destination
-                }
+                                   policySettings: ToolPolicySettings(self.gateway),
+                                   openPolicySettings: { destination in self.navigator.destination = destination },
+                                   mcpServer: self.mcpServer)
             } else {
                 ProgressView()
             }
