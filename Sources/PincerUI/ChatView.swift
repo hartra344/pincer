@@ -1,4 +1,5 @@
 import PincerKit
+import QuickLook
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -28,6 +29,7 @@ struct ChatView: View {
     @State private var disclosure = TranscriptDisclosure()
     @State private var previewing: ImageRef?
     @State private var previewingHTML: HTMLPreviewItem?
+    @State private var quickLookURL: URL?
     @State private var exporting: ExportedFile?
     @State private var find = TranscriptFind()
     @State private var jump: TranscriptJump?
@@ -46,7 +48,8 @@ struct ChatView: View {
         #endif
         TranscriptPane(
             chat: self.chat, find: self.find, jump: self.jump, disclosure: self.disclosure,
-            previewing: self.$previewing, previewingHTML: self.$previewingHTML, exporting: self.$exporting,
+            previewing: self.$previewing, previewingHTML: self.$previewingHTML, quickLookURL: self.$quickLookURL,
+            exporting: self.$exporting,
             bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
             topInset: self.topChrome + self.transcriptSafeArea.top,
             reasoningOff: self.reasoningOff)
@@ -88,6 +91,11 @@ struct ChatView: View {
         }
         .sheet(item: self.$previewingHTML) { item in
             HTMLPreviewSheet(item: item)
+        }
+        .quickLookPreview(self.$quickLookURL)
+        .onChange(of: self.quickLookURL) { _, url in
+            // The downloaded copy only lives while it's on screen.
+            if url == nil { FilePreviewFiles.clear() }
         }
         .fileExporter(
             isPresented: Binding(get: { self.exporting != nil }, set: { if !$0 { self.exporting = nil } }),
@@ -299,6 +307,7 @@ private struct TranscriptPane: View {
     let disclosure: TranscriptDisclosure
     @Binding var previewing: ImageRef?
     @Binding var previewingHTML: HTMLPreviewItem?
+    @Binding var quickLookURL: URL?
     @Binding var exporting: ExportedFile?
     let bottomInset: CGFloat
     let topInset: CGFloat
@@ -363,7 +372,8 @@ private struct TranscriptPane: View {
                     copyLink: { [app = self.app, gateway = self.gateway, key = self.chat.sessionKey] in
                         CopyChatLinkButton.copyLink(app: app, gateway: gateway, sessionKey: key, messageId: $0)
                     },
-                    previewHTML: { [$previewingHTML] in $previewingHTML.wrappedValue = HTMLPreviewItem(html: $0) }),
+                    previewHTML: { [$previewingHTML] in $previewingHTML.wrappedValue = HTMLPreviewItem(html: $0) },
+                    quickLook: { [$quickLookURL] in $quickLookURL.wrappedValue = $0 }),
                 bottomInset: self.bottomInset,
                 topInset: self.topInset,
                 highlight: self.find.highlight,

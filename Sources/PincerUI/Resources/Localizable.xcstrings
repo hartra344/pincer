@@ -8303,6 +8303,16 @@
         }
       }
     },
+    "Preview %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview %@"
+          }
+        }
+      }
+    },
     "Previous match (⇧⌘G)": {
       "localizations": {
         "en": {
