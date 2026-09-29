@@ -23,7 +23,11 @@ export default defineConfig({
 			favicon: '/favicon.svg',
 			social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/hartra344/pincer' }],
 			editLink: { baseUrl: 'https://github.com/hartra344/pincer/edit/main/website/' },
-			customCss: ['./src/styles/docs.css'],
+			customCss: ['./src/styles/tokens.css', './src/styles/docs.css'],
+			components: {
+				SocialIcons: './src/components/starlight/SocialIcons.astro',
+				Footer: './src/components/starlight/Footer.astro',
+			},
 			lastUpdated: true,
 			head: [
 				{ tag: 'meta', attrs: { name: 'theme-color', content: '#E8543D' } },

@@ -1,0 +1,65 @@
+---
+import Default from '@astrojs/starlight/components/Footer.astro';
+import logo from '../../assets/logo.svg';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const href = (path: string) => `${base}/${path.replace(/^\//, '')}`;
+---
+
+<Default {...Astro.props}><slot /></Default>
+<div class="site-footer">
+	<div class="brand">
+		<img src={logo.src} alt="" width="22" height="22" />
+		<span>Pincer · MIT License</span>
+	</div>
+	<nav aria-label="Site">
+		<a href={href('')}>Home</a>
+		<a href={href('reference/troubleshooting/')}>Troubleshooting</a>
+		<a href={href('development/building/')}>Build from source</a>
+		<a href="https://github.com/hartra344/pincer">GitHub</a>
+		<a href="https://github.com/openclaw/openclaw">OpenClaw</a>
+	</nav>
+	<p class="disclaimer">Pincer is an independent client and isn’t affiliated with the OpenClaw project.</p>
+</div>
+
+<style>
+	.site-footer {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1rem 2rem;
+		align-items: center;
+		justify-content: space-between;
+		margin-top: 2.5rem;
+		padding-top: 1.5rem;
+		border-top: 1px solid var(--pc-line);
+		color: var(--pc-muted);
+		font-size: var(--sl-text-sm);
+	}
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+	}
+	.brand img {
+		border-radius: 22%;
+	}
+	nav {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 1.3rem;
+	}
+	nav a {
+		color: var(--pc-muted);
+		text-decoration: none;
+	}
+	nav a:hover {
+		color: var(--pc-text);
+		text-decoration: underline;
+		text-underline-offset: 0.25em;
+	}
+	.disclaimer {
+		flex-basis: 100%;
+		margin: 0;
+		font-size: var(--sl-text-xs);
+	}
+</style>
