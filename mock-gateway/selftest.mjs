@@ -4,6 +4,7 @@ import { startServer } from './server.mjs';
 const SECTIONS = [
   'chat',
   'file-edits',
+  'tool-cards',
   'send-hooks',
   'replies',
   'reactions',
