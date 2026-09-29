@@ -150,6 +150,7 @@ enum Suites {
         Section("Sidebar hierarchy (demo)") { await runDemoSidebarHierarchy() },
         Section("MCP servers (demo)") { await runDemoMCP() },
         Section("Voice / Read Aloud (demo)") { await runDemoVoice() },
+        Section("Chat windows (demo)") { await runDemoChatWindows() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
     ]
 

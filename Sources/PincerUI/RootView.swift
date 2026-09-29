@@ -33,6 +33,7 @@ public struct PincerScene: Scene {
         .defaultSize(width: 1180, height: 780)
         .commands {
             TranscriptFindCommands()
+            ChatWindowCommands(app: self.app)
             ExportChatCommands()
             ReadAloudCommands()
             CommandGroup(after: .newItem) {
@@ -53,6 +54,14 @@ public struct PincerScene: Scene {
         .commands { GoCommands(app: self.app) }
 
         #if os(macOS)
+        // Restored on relaunch, unlike the settings windows below (#48).
+        WindowGroup(L("Chat"), id: ChatWindow.sceneId, for: ChatWindowRef.self) { $ref in
+            ChatWindow(ref: ref)
+                .environment(self.app)
+                .themed()
+        }
+        .defaultSize(width: 720, height: 780)
+
         WindowGroup(L("Gateway Settings"), id: "gateway-settings", for: UUID.self) { $gatewayId in
             GatewaySettingsWindow(gatewayId: gatewayId)
                 .environment(self.app)
@@ -176,6 +185,9 @@ struct RootView: View {
         .environment(\.openGatewaySettings, self.settingsOpener)
         .environment(\.openAutomations, self.automationsOpener)
         .environment(\.searchMessages, self.searchMessagesAction)
+        #if os(macOS)
+        .environment(\.openChatWindow, .window(self.openWindow))
+        #endif
         .onChange(of: self.scenePhase, initial: true) { _, phase in
             self.app.appIsActive = phase == .active
         }

@@ -2173,6 +2173,16 @@
         }
       }
     },
+    "Chat unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat unavailable"
+          }
+        }
+      }
+    },
     "Chat with your OpenClaw agents from your Mac, iPhone, and iPad.": {
       "localizations": {
         "en": {
@@ -7863,6 +7873,16 @@
         }
       }
     },
+    "Open Chat in New Window": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Chat in New Window"
+          }
+        }
+      }
+    },
     "Open Connection": {
       "localizations": {
         "en": {
@@ -7989,6 +8009,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open in Browser"
+          }
+        }
+      }
+    },
+    "Open in New Window": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in New Window"
           }
         }
       }
@@ -12679,6 +12709,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "This automation runs a %@ task, which can only be changed in the Control UI or the config."
+          }
+        }
+      }
+    },
+    "This chat was deleted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This chat was deleted."
+          }
+        }
+      }
+    },
+    "This chat's Gateway was removed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This chat's Gateway was removed."
           }
         }
       }

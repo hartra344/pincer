@@ -51,6 +51,7 @@ export default defineConfig({
 						{ slug: 'guides/organizing-chats' },
 						{ slug: 'guides/sessions' },
 						{ slug: 'guides/command-palette-and-navigation' },
+						{ slug: 'guides/chat-windows' },
 						{ slug: 'guides/transcript' },
 						{ slug: 'guides/search' },
 						{ slug: 'guides/export-and-bookmarks' },

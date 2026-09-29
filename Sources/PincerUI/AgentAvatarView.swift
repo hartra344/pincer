@@ -223,10 +223,11 @@ private struct ChatAgentAvatarContent: View, Equatable {
 /// The selected chat's agent, animated, beside the title. Nothing when animated avatars are off.
 struct ChatHeaderAvatar: View {
     @Environment(GatewayStore.self) private var gateway
+    @Environment(\.chatWindowKey) private var windowKey
     @AppStorage(AvatarSettings.animatedKey) private var enabled = true
 
     var body: some View {
-        if self.enabled, let key = self.gateway.selectedKey {
+        if self.enabled, let key = self.windowKey ?? self.gateway.selectedKey {
             let agentId = self.gateway.sessions[key]?.agentId ?? SessionKey.agentId(from: key) ?? "main"
             // The per-chat `.id` (it resets the per-agent creature and pose state) stays inside a
             // stable container. If the toolbar item's root view took the `.id`, macOS would remove

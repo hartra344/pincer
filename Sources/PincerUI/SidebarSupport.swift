@@ -269,6 +269,8 @@ struct SidebarActions {
     var setCollapsed: (String, Bool) -> Void
     var refresh: () async -> Void
     var openAutomations: () -> Void
+    /// Opens a chat in a window of its own; nil where there are none (iOS).
+    var openInNewWindow: ((String) -> Void)?
 }
 
 // MARK: Row appearance
@@ -395,7 +397,11 @@ enum SidebarMenus {
             },
         ]
 
-        var items: [SidebarMenuItem] = [
+        var items: [SidebarMenuItem] = []
+        if let openInNewWindow = actions.openInNewWindow {
+            items += [.action(L("Open in New Window"), image: "macwindow.badge.plus") { openInNewWindow(row.key) }, .divider]
+        }
+        items += [
             .action(row.isPinned ? L("Unpin") : L("Pin"), image: row.isPinned ? "pin.slash" : "pin") {
                 patch(["pinned": .bool(!row.isPinned)])
             },
