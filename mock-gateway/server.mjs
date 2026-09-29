@@ -23,6 +23,7 @@ import { handleMiscRequest } from './misc.mjs';
 import { handleQuestionRequest } from './questions.mjs';
 import { createSeedState } from './seed.mjs';
 import { broadcastSessionChanged, handleSessionListRequest, registerGroup, updateSessionRow } from './session-list.mjs';
+import { CONTROL_METHOD, handleControlRequest, initControl, noteRequest } from './control.mjs';
 import { broadcast, clone, makeMessage, nowMs, randHex, sendErr, sendEvent, sendJson, sendRes, shortId, textBlock } from './util.mjs';
 
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
@@ -232,6 +233,11 @@ const REQUEST_HANDLERS = [
 ];
 
 function handleAuthedRequest(state, conn, msg) {
+  if (msg.method === CONTROL_METHOD) {
+    handleControlRequest(state, conn, msg);
+    return;
+  }
+  noteRequest(state, conn, msg);
   for (const handle of REQUEST_HANDLERS) {
     if (handle(state, conn, msg)) return;
   }
@@ -361,6 +367,7 @@ export async function startServer(opts = {}) {
   if (!['auto', 'manual', 'off', 'reject', 'reject-once'].includes(options.pairing)) throw new Error(`unknown MOCK_PAIRING: ${options.pairing}`);
   const state = createSeedState();
   state.protocol = options.protocol;
+  initControl(state);
   state.authFailures = 0;
   state.authLockedUntil = 0;
   setupManualPairing(state, options.pairing === 'manual' && opts.stdin !== false);

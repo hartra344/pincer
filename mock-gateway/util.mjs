@@ -62,12 +62,22 @@ export function sendJson(ws, obj) {
   if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
 }
 
+// MOCK_DELAY_METHODS / mock.control setDelay hold back a request's response (see control.mjs).
+function deliverResponse(conn, id, frame) {
+  const ms = conn.delayRes?.get(id);
+  if (!ms) return sendJson(conn.ws, frame);
+  conn.delayRes.delete(id);
+  setTimeout(() => {
+    if (conn.ws.readyState === 1) sendJson(conn.ws, frame);
+  }, ms);
+}
+
 export function sendRes(conn, id, payload) {
-  sendJson(conn.ws, { type: 'res', id, ok: true, payload });
+  deliverResponse(conn, id, { type: 'res', id, ok: true, payload });
 }
 
 export function sendErr(conn, id, code, message, details = undefined) {
-  sendJson(conn.ws, { type: 'res', id, ok: false, error: { code, message, ...(details ? { details } : {}) } });
+  deliverResponse(conn, id, { type: 'res', id, ok: false, error: { code, message, ...(details ? { details } : {}) } });
 }
 
 export function sendEvent(conn, event, payload) {
