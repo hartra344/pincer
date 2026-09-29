@@ -30,6 +30,7 @@ const SECTIONS = [
   'skills',
   'first-run',
   'sessions',
+  'large-media',
 ];
 
 const server = await startServer({ host: '127.0.0.1', port: 0, pairing: 'auto', mockToken: 'dev-token' });

@@ -191,6 +191,16 @@
         }
       }
     },
+    "%@ — too large to preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — too large to preview"
+          }
+        }
+      }
+    },
     "%lld Change%@": {
       "localizations": {
         "en": {
@@ -3259,6 +3269,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Identity"
+          }
+        }
+      }
+    },
+    "Image too large to preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image too large to preview"
           }
         }
       }

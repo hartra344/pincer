@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { seedLongChat } from './long-chat.mjs';
 import { APPROVAL_HISTORY_METHODS, approvalHistoryDisabled, handleApprovalHistoryRequest } from './approvals.mjs';
 import { AGENT_MANAGEMENT_METHODS, agentManagementDisabled, handleAgentsRequest } from './agents.mjs';
 import { SKILLS_METHODS, TOOLS_METHODS, handleSkillsRequest, skillsDisabled, toolsDisabled } from './skills.mjs';
@@ -362,10 +363,12 @@ export async function startServer(opts = {}) {
     legacyPairing: opts.legacyPairing ?? process.env.MOCK_LEGACY_PAIRING === '1',
     channelPairingEvery: Number(opts.channelPairingEvery ?? process.env.MOCK_CHANNEL_PAIRING_EVERY ?? 0),
     failedDeliveryEvery: Number(opts.failedDeliveryEvery ?? process.env.MOCK_FAILED_DELIVERY_EVERY ?? 0),
+    longChat: Number(opts.longChat ?? process.env.MOCK_LONG_CHAT ?? 0),
   };
   if (!['token', 'password', 'none'].includes(options.auth)) throw new Error(`MOCK_AUTH must be token, password or none, not ${options.auth}`);
   if (!['auto', 'manual', 'off', 'reject', 'reject-once'].includes(options.pairing)) throw new Error(`unknown MOCK_PAIRING: ${options.pairing}`);
   const state = createSeedState();
+  if (options.longChat > 0) seedLongChat(state, Math.floor(options.longChat));
   state.protocol = options.protocol;
   initControl(state);
   state.authFailures = 0;

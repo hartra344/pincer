@@ -1174,6 +1174,7 @@ final class TranscriptToolSectionView: TranscriptBaseView {
 
 final class TranscriptImagePartView: TranscriptTapView {
     private var image: TranscriptPart.Image?
+    private var tooLarge = false
     private let imageLayer = CALayer()
     private let spinner = TranscriptSpinner(size: 14)
 
@@ -1192,7 +1193,11 @@ final class TranscriptImagePartView: TranscriptTapView {
     override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
         guard case let .image(image) = part else { return }
         self.image = image
-        self.accessibilityText = image.ref.alt ?? "Image"
+        self.tooLarge = false
+        if case .failed = image.state {
+            self.tooLarge = (actions as? TranscriptRenderer)?.context.gateway.images.failure(image.ref) == .tooLarge
+        }
+        self.accessibilityText = self.tooLarge ? self.tooLargeText(image.ref) : image.ref.alt ?? "Image"
         switch image.state {
         case let .loaded(cgImage):
             withoutLayerAnimations {
@@ -1215,7 +1220,8 @@ final class TranscriptImagePartView: TranscriptTapView {
                 self.imageLayer.isHidden = true
             }
             self.spinner.setAnimating(false)
-            self.onTap = nil
+            // Too large to render inline, but the preview sheet can still save or share the file.
+            self.onTap = self.tooLarge ? { [weak actions] in actions?.preview(image.ref) } : nil
         }
         self.redraw()
     }
@@ -1234,6 +1240,10 @@ final class TranscriptImagePartView: TranscriptTapView {
         self.spinner.place(center: CGPoint(x: self.bounds.midX, y: self.bounds.midY))
     }
 
+    private func tooLargeText(_ ref: ImageRef) -> String {
+        ref.alt.map { L("\($0) — too large to preview") } ?? L("Image too large to preview")
+    }
+
     override func draw(_ rect: CGRect) {
         guard let image else { return }
         if case .loaded = image.state { return }
@@ -1242,7 +1252,7 @@ final class TranscriptImagePartView: TranscriptTapView {
         PBezierPath.rounded(bounds, radius: 10).fill()
         guard case .failed = image.state else { return }
         let style = TranscriptStyle.shared
-        let text = singleLine(image.ref.alt ?? "Image unavailable", style.caption, TranscriptColors.secondary, truncation: .byTruncatingMiddle)
+        let text = singleLine(self.tooLarge ? self.tooLargeText(image.ref) : image.ref.alt ?? "Image unavailable", style.caption, TranscriptColors.secondary, truncation: .byTruncatingMiddle)
         let textWidth = min(text.lineWidth, bounds.width - 16)
         let iconHeight: CGFloat = 24
         let total = iconHeight + 4 + TranscriptStyle.lineHeight(style.caption)

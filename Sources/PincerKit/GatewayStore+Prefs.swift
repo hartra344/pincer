@@ -251,11 +251,12 @@ extension GatewayStore {
         defer { self.invalidatingTranscripts.remove(key) }
         if change == .deleted {
             self.chats.removeValue(forKey: key)?.stopCaching()
+            self.residency.forget(key)
             self.setSession(nil, for: key)
             self.outbox.removeSession(key)
             if self.selectedKey == key { self.selectedKey = self.defaultSessionKey }
             await self.forgetTranscript(key)
-        } else if let chat = self.chats[key] {
+        } else if let chat = self.chats[key], !chat.isDehydrated {
             // The whole cache entry goes (messages and tool details) before the refetch can save.
             await chat.reloadAfterHistoryChange { await self.forgetTranscript(key) }
         } else {

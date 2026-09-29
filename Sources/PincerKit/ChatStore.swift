@@ -193,6 +193,8 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var draftEdited = false
     @ObservationIgnored var draftSaveTask: Task<Void, Never>?
     @ObservationIgnored var restoringDraft = false
+    /// Heavy contents were dropped to save memory; the next `load()` restores them from the cache.
+    @ObservationIgnored var isDehydrated = false
 
     init(sessionKey: String, agentId: String?, gateway: GatewayStore, headless: Bool = false) {
         self.sessionKey = sessionKey
@@ -212,7 +214,9 @@ public final class ChatStore: Identifiable {
 
     func updateIsRunning() {
         let running = self.live != nil || self.sessionRow?.hasActiveRun == true
-        if running != self.isRunning { self.isRunning = running }
+        guard running != self.isRunning else { return }
+        self.isRunning = running
+        self.gateway?.chatRunStateChanged(self.sessionKey, running: running)
     }
 
     // MARK: Loading

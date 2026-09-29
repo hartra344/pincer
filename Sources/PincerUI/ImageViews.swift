@@ -15,23 +15,39 @@ struct ImagePreview: View {
     /// Vector images are re-rendered at exactly the preview's pixel size, only while it's open.
     @State private var vectorImage: CGImage?
     @State private var pixelBounds: CGSize = .zero
+    /// Full-resolution decode, owned by the sheet so cache eviction can't blank it.
+    @State private var fullImage: CGImage?
 
     private var isVector: Bool { self.exportData.map(SVGRasterizer.isSVG) ?? false }
+
+    /// Never upscale past the image's own pixels. A thumbnail that was itself downsampled says nothing
+    /// about the original size, so it fits the sheet until the full image replaces it.
+    private func capsAtPixelSize(_ image: CGImage) -> Bool {
+        if self.isVector { return false }
+        if self.fullImage != nil { return true }
+        return max(image.width, image.height) < ArtifactImageLoader.transcriptMaxPixel - 2
+    }
 
     var body: some View {
         NavigationStack {
             Group {
-                if let image = self.vectorImage ?? self.gateway.images.cached(self.ref) {
+                // The transcript thumbnail stands in until the full-resolution image arrives.
+                if let image = self.vectorImage ?? self.fullImage ?? self.gateway.images.cached(self.ref) {
+                    let capped = self.capsAtPixelSize(image)
                     Image(cgImage: image)
                         .resizable()
                         .interpolation(.high)
                         .antialiased(true)
                         .aspectRatio(contentMode: .fit)
                         .frame(
-                            maxWidth: self.isVector ? .infinity : CGFloat(image.width),
-                            maxHeight: self.isVector ? .infinity : CGFloat(image.height))
+                            maxWidth: capped ? CGFloat(image.width) / self.displayScale : .infinity,
+                            maxHeight: capped ? CGFloat(image.height) / self.displayScale : .infinity)
                         .padding(12)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if self.gateway.images.hasFailed(self.ref) {
+                    Image(systemName: "photo.badge.exclamationmark")
+                        .font(.largeTitle)
+                        .foregroundStyle(.secondary)
                 } else {
                     ProgressView()
                 }
@@ -69,8 +85,15 @@ struct ImagePreview: View {
             minHeight: 400, idealHeight: Self.idealSize.height, maxHeight: .infinity)
         .presentationSizing(.fitted)
         #endif
+        // Re-runs if the thumbnail is evicted or purged while the sheet is open.
+        .task(id: self.gateway.images.images[self.ref.cacheKey] == nil) {
+            self.gateway.images.load(self.ref, sessionKey: self.sessionKey)
+        }
+        .onDisappear { self.gateway.images.releaseData(for: self.ref) }
         .task {
             self.exportData = await self.gateway.images.data(for: self.ref, sessionKey: self.sessionKey)
+            guard !self.isVector else { return }
+            self.fullImage = await self.gateway.images.fullImage(self.ref, sessionKey: self.sessionKey)
         }
     }
 
