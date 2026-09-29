@@ -286,7 +286,7 @@ struct AgentManagementTests {
         let demo = DemoGateway()
         let list = try await demo.handle("agents.list", [:])
         let agents = list["agents"]?.array ?? []
-        #expect(agents.compactMap { $0["id"]?.string } == ["main", "research", "coder", "kiko"])
+        #expect(agents.compactMap { $0["id"]?.string } == ["main", "research", "coder", "kiko", "mochi"])
         #expect(agents.first?["workspace"]?.string == "/Users/demo/.openclaw/workspace")
         #expect(agents.allSatisfy { $0["workspace"]?.string?.hasPrefix("/Users/demo/.openclaw/workspace") == true })
 
