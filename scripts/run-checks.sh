@@ -63,7 +63,7 @@ wait_for_mocks() {
 
 # Mocks start just before the checks: some of their seeded data expires minutes after launch.
 start_mock core $((PORT_BASE))
-start_mock extras $((PORT_BASE + 1))
+start_mock extras $((PORT_BASE + 1)) MOCK_LONG_CHAT=400
 start_mock no-usage $((PORT_BASE + 2)) MOCK_NO_USAGE=1
 start_mock no-reply-to $((PORT_BASE + 3)) MOCK_NO_REPLY_TO=1
 start_mock reconnect $((PORT_BASE + 4))
