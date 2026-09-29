@@ -788,7 +788,6 @@ private final class TranscriptCell: NSView {
         }
     }
 }
-#endif
 
 /// Reports the window it lands in so the coordinator can watch for the end of a live resize.
 final class TranscriptScrollView: NSScrollView {
@@ -799,3 +798,4 @@ final class TranscriptScrollView: NSScrollView {
         self.onWindowChange?(self.window)
     }
 }
+#endif
