@@ -82,6 +82,11 @@ enum TranscriptPart {
             case symbol(String, CGRect, Tone)
         }
 
+        struct Note {
+            let frame: CGRect
+            let text: String
+        }
+
         /// A Copy or toggle button inside an expanded card.
         struct Control {
             enum Action {
@@ -129,8 +134,8 @@ enum TranscriptPart {
         var diff: Diff?
         var decor: [Decor] = []
         var controls: [Control] = []
-        /// Chips and badges as VoiceOver reads them, appended to the header's label.
-        var spoken: [String] = []
+        /// What VoiceOver reads for the chips, badges and captions drawn in the body.
+        var notes: [Note] = []
     }
 
     /// The line under a message: a Copy button and details such as when it was sent.

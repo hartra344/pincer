@@ -870,6 +870,7 @@ final class TranscriptToolView: TranscriptBaseView {
     private let toggleButton = TranscriptLabelButton()
     private var copiedToken = 0
     private var controlButtons: [TranscriptLabelButton] = []
+    private var noteViews: [TranscriptNoteView] = []
     private var copiedControl: String?
     private weak var actions: TranscriptRowActions?
 
@@ -923,8 +924,7 @@ final class TranscriptToolView: TranscriptBaseView {
             self.header.accessibilityText = AccessibilityText.join(
                 [parts.server.map { L("\(parts.tool) on \($0)") } ?? tool.tool.name, tool.tool.summary]
                     + [tool.tool.isRunning ? L("running") : nil, tool.tool.isError ? L("failed") : nil,
-                       tool.isExpanded ? L("expanded") : L("collapsed")]
-                    + (tool.isExpanded ? tool.spoken : []))
+                       tool.isExpanded ? L("expanded") : L("collapsed")])
         }
         if !sameTool {
             self.copiedToken += 1
@@ -932,6 +932,15 @@ final class TranscriptToolView: TranscriptBaseView {
             self.showCopy()
         }
         self.configureControls(tool.controls)
+        while self.noteViews.count < tool.notes.count {
+            let view = TranscriptNoteView()
+            self.noteViews.append(view)
+            self.addSubview(view)
+        }
+        for (index, view) in self.noteViews.enumerated() {
+            view.isHidden = index >= tool.notes.count
+            if index < tool.notes.count { view.set(tool.notes[index].text) }
+        }
         if let diff = tool.diff {
             self.copyButton.isHidden = false
             if let title = diff.toggleTitle {
@@ -1035,6 +1044,9 @@ final class TranscriptToolView: TranscriptBaseView {
     override func layoutContent() {
         guard let part else { return }
         let bounds = self.bounds
+        for (index, note) in part.notes.enumerated() where index < self.noteViews.count {
+            if self.noteViews[index].frame != note.frame { self.noteViews[index].frame = note.frame }
+        }
         for (index, control) in part.controls.enumerated() where index < self.controlButtons.count {
             let button = self.controlButtons[index]
             let size = button.buttonSize
@@ -1108,6 +1120,33 @@ final class TranscriptToolView: TranscriptBaseView {
                 .drawLine(at: CGPoint(x: 10, y: y), width: bounds.width - 20, font: style.caption)
         }
     }
+}
+
+/// An invisible, click-through element that gives drawn chips and badges a VoiceOver label.
+final class TranscriptNoteView: TranscriptBaseView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        #if os(macOS)
+        self.setAccessibilityElement(true)
+        self.setAccessibilityRole(.staticText)
+        #else
+        self.isAccessibilityElement = true
+        self.isUserInteractionEnabled = false
+        self.accessibilityTraits = .staticText
+        #endif
+    }
+
+    func set(_ text: String) {
+        #if os(macOS)
+        self.setAccessibilityLabel(text)
+        #else
+        self.accessibilityLabel = text
+        #endif
+    }
+
+    #if os(macOS)
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    #endif
 }
 
 final class TranscriptToolHeaderView: TranscriptTapView {

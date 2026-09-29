@@ -91,7 +91,7 @@ private struct ToolCardBuild {
     var sections: [TranscriptPart.Tool.Section] = []
     var decor: [TranscriptPart.Tool.Decor] = []
     var controls: [TranscriptPart.Tool.Control] = []
-    var spoken: [String] = []
+    var notes: [TranscriptPart.Tool.Note] = []
     var matchY: CGFloat?
     var placedAny = false
 
@@ -122,7 +122,7 @@ extension TranscriptLayoutBuilder {
         var diff: TranscriptPart.Tool.Diff?
         var decor: [TranscriptPart.Tool.Decor] = []
         var controls: [TranscriptPart.Tool.Control] = []
-        var spoken: [String] = []
+        var notes: [TranscriptPart.Tool.Note] = []
         var height = headerHeight
         if expanded, let edit {
             var y = headerHeight + 1 + 10
@@ -167,13 +167,13 @@ extension TranscriptLayoutBuilder {
             sections = card.sections
             decor = card.decor
             controls = card.controls
-            spoken = card.spoken
+            notes = card.notes
             toolMatchY = card.matchY
             height = card.y + 10
         }
         let part = TranscriptPart.Tool(tool: tool, key: key, isExpanded: expanded, run: run, headerHeight: headerHeight,
                                        sections: sections, runningY: runningY, edit: edit, diff: diff,
-                                       decor: decor, controls: controls, spoken: spoken)
+                                       decor: decor, controls: controls, notes: notes)
         stack.add(.tool(part), height: height, width: width, spacing: first ? TranscriptMetrics.blockSpacing : TranscriptMetrics.toolSpacing)
         if let toolMatchY, let frame = stack.parts.last?.frame { layout.matchY = frame.minY + toolMatchY }
     }
@@ -222,7 +222,7 @@ extension TranscriptLayoutBuilder {
         if let argumentsText = presentation.argumentsText, !argumentsText.isEmpty {
             card.gap(8)
             self.inputTitle(into: &card)
-            let body = self.keyValueText(presentation.arguments, text: argumentsText)
+            let body = self.keyValueText(presentation.arguments, text: argumentsText, inner: card.inner)
             card.y += self.textSection("\(tool.id):arguments", body, tool: tool, x: card.x, width: card.inner,
                                        maxHeight: TranscriptMetrics.toolOutputMaxHeight, into: &card)
         } else if presentation.rawArguments == nil, let plain = tool.arguments, !plain.isEmpty {
@@ -321,7 +321,6 @@ extension TranscriptLayoutBuilder {
             card.controls.append(.init(id: "copy-command", title: "", symbol: "doc.on.doc",
                                        frame: CGRect(x: card.x + card.inner - padX - copy.width, y: top + 7, width: copy.width, height: copy.height),
                                        action: .copy(headline), spoken: L("Copy command"), trailing: true, iconOnly: true))
-            card.spoken.append(L("Command, \(headline)"))
             card.y = top + blockHeight
         } else {
             let symbol = switch kind {
@@ -346,8 +345,11 @@ extension TranscriptLayoutBuilder {
         let font = style.caption
         let height = TranscriptStyle.lineHeight(font) + 4
         var x = card.x
+        let startY = card.y
+        var spoken: [String] = []
         for chip in chips {
-            let text = singleLine(chip.value, font, TranscriptColors.secondary)
+            let (value, said) = Self.chipText(chip)
+            let text = singleLine(value, font, TranscriptColors.secondary)
             let textWidth = min(text.lineWidth, 240)
             let width = min(6 + 10 + 4 + textWidth + 6, card.inner)
             if x > card.x, x + width > card.x + card.inner {
@@ -357,20 +359,44 @@ extension TranscriptLayoutBuilder {
             let rect = CGRect(x: x, y: card.y, width: width, height: height)
             card.decor.append(.pill(rect, .strongFill))
             card.decor.append(.symbol(ToolSymbols.chipSymbol(chip.symbol), CGRect(x: rect.minX + 6, y: rect.minY, width: 10, height: height), .secondary))
-            card.decor.append(.label(chip.value, CGPoint(x: rect.minX + 20, y: rect.minY + 2), width: max(width - 26, 1),
+            card.decor.append(.label(value, CGPoint(x: rect.minX + 20, y: rect.minY + 2), width: max(width - 26, 1),
                                      .caption, .secondary, truncation: .byTruncatingMiddle))
-            card.spoken.append("\(Self.chipLabel(chip.label)) \(chip.value)")
+            spoken.append("\(Self.chipLabel(chip.label)) \(said)")
             x += width + 6
         }
         card.y += height
+        card.notes.append(.init(frame: CGRect(x: card.x, y: startY, width: card.inner, height: card.y - startY),
+                                text: spoken.joined(separator: ", ")))
+    }
+
+    /// A chip's text as drawn and as spoken: `~` for the home folder, "30 s timeout".
+    private static func chipText(_ chip: ToolCallPresentation.Chip) -> (String, String) {
+        if chip.label == "Working directory" {
+            let home = abbreviatedHome(chip.value)
+            return (home, chip.value)
+        }
+        if chip.label == "Timeout", chip.value.hasSuffix("s"), let seconds = Int(chip.value.dropLast()) {
+            return (L("\(seconds) s timeout"), L("\(seconds) seconds"))
+        }
+        return (chip.value, chip.value)
+    }
+
+    /// `/Users/<name>` or `/home/<name>` at the start of a path, shown as `~`.
+    static func abbreviatedHome(_ path: String) -> String {
+        for prefix in ["/Users/", "/home/"] where path.hasPrefix(prefix) {
+            let rest = path.dropFirst(prefix.count)
+            let name = rest.prefix { $0 != "/" }
+            guard !name.isEmpty else { return path }
+            return "~" + rest.dropFirst(name.count)
+        }
+        return path
     }
 
     /// "key<TAB>value" lines with the keys dimmed, values aligned on a tab stop and wrapped under themselves.
-    private func keyValueText(_ arguments: [ToolCallPresentation.Argument], text: String) -> NSAttributedString {
+    private func keyValueText(_ arguments: [ToolCallPresentation.Argument], text: String, inner: CGFloat) -> NSAttributedString {
         let style = self.style
         let keyFont = style.caption
         let keyWidth = arguments.map { singleLine($0.key, keyFont, TranscriptColors.secondary).lineWidth }.max() ?? 0
-        let inner = TranscriptMetrics.maxCardWidth - 20
         let stop = min(keyWidth, inner * 0.35) + 12
         let paragraph = NSMutableParagraphStyle()
         paragraph.tabStops = [NSTextTab(textAlignment: .left, location: stop)]
@@ -408,16 +434,17 @@ extension TranscriptLayoutBuilder {
         let titleWidth = singleLine(title, titleFont, TranscriptColors.secondary).lineWidth
         card.decor.append(.label(title, CGPoint(x: card.x, y: card.y + (height - TranscriptStyle.lineHeight(titleFont)) / 2),
                                  width: titleWidth + 2, .captionSemibold, failed ? .failure : .secondary, truncation: .byClipping))
-        card.spoken.append(title)
+        var spoken = [title]
         var x = card.x + titleWidth + 8
         let limit = card.x + card.inner - copy.width - 8
-        for (text, tone, spoken) in badges {
+        for (text, tone, said) in badges {
             let width = singleLine(text, badgeFont, tone.color).lineWidth + 10
             guard x + width <= limit else { break }
             let top = card.y + (height - badgeHeight) / 2
             card.decor.append(.pill(CGRect(x: x, y: top, width: width, height: badgeHeight), tone))
-            card.decor.append(.label(text, CGPoint(x: x + 5, y: top + 1), width: width - 8, .caption2Medium, tone, truncation: .byClipping))
-            card.spoken.append(spoken)
+            card.decor.append(.label(text, CGPoint(x: x + 5, y: top + 1), width: width - 8, .caption2Medium,
+                                     tone == .strongFill ? .secondary : tone, truncation: .byClipping))
+            spoken.append(said)
             x += width + 6
         }
         if let text, !text.isEmpty {
@@ -426,6 +453,8 @@ extension TranscriptLayoutBuilder {
                                                      width: copy.width, height: copy.height),
                                        action: .copy(text), spoken: failed ? L("Copy error") : L("Copy output"), trailing: true))
         }
+        card.notes.append(.init(frame: CGRect(x: card.x, y: card.y, width: card.inner, height: height),
+                                text: spoken.joined(separator: ", ")))
         card.y += height
     }
 
@@ -502,7 +531,8 @@ extension TranscriptLayoutBuilder {
             card.decor.append(.symbol("photo", CGRect(x: card.x, y: card.y, width: 14, height: height), .secondary))
             card.decor.append(.label(caption, CGPoint(x: card.x + 20, y: card.y), width: card.inner - 20, .caption, .secondary,
                                      truncation: .byTruncatingTail))
-            card.spoken.append(output.imageCount == 1 ? L("1 image, shown in the reply") : L("\(output.imageCount) images, shown in the reply"))
+            card.notes.append(.init(frame: CGRect(x: card.x, y: card.y, width: card.inner, height: height),
+                                    text: output.imageCount == 1 ? L("1 image, shown in the reply") : L("\(output.imageCount) images, shown in the reply")))
             card.y += height
         }
     }
