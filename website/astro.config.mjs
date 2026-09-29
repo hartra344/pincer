@@ -58,6 +58,7 @@ export default defineConfig({
 						{ slug: 'guides/tool-calls' },
 						{ slug: 'guides/file-diffs' },
 						{ slug: 'guides/diagrams-and-math' },
+						{ slug: 'guides/read-aloud' },
 						{ slug: 'guides/subagents-and-runs' },
 						{ slug: 'guides/quick-capture' },
 						{ slug: 'guides/menu-bar' },

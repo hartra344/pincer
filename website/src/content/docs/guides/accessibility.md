@@ -26,6 +26,8 @@ Pincer uses native controls throughout, so the system's accessibility features w
 
 Pincer doesn't read replies token by token while they stream.
 
+To hear a whole reply spoken without VoiceOver, use [Read aloud](../read-aloud/). Its **Read New Replies Aloud** setting stays quiet while VoiceOver is running.
+
 ### Sidebar
 
 Each chat reads its title, then whether it's pinned or unread, then its preview. While a chat is running, it also says what the agent is doing, for example "Moki is working" or "Moki: 2 helper runs working". The subagent runs button reads as "Show 3 subagent runs" or "Hide subagent runs".
