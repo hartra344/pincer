@@ -81,7 +81,10 @@ public final class AppModel {
         self.localDefaults = localDefaults
         let profiles = GatewayProfileStore.load(from: sharedDefaults, legacy: localDefaults)
         SharedContainer.shareKeychainItems(for: profiles, defaults: sharedDefaults)
-        self.gateways = profiles.map { GatewayStore(profile: $0, defaults: localDefaults, identity: .loadOrCreate()) }
+        // One Keychain read at launch, however many Gateways there are.
+        let identity = profiles.isEmpty ? nil : DeviceIdentity.loadOrCreate()
+        self.identity = identity
+        self.gateways = profiles.map { GatewayStore(profile: $0, defaults: localDefaults, identity: identity!) }
         self.firstRun = FirstRunModel(defaults: localDefaults, environment: firstRunEnvironment, hasGateways: !profiles.isEmpty)
         let saved = (sharedDefaults.string(forKey: Self.selectedGatewayKey)
             ?? localDefaults.string(forKey: Self.selectedGatewayKey)).flatMap(UUID.init(uuidString:))
@@ -125,6 +128,15 @@ public final class AppModel {
     }
 
     @ObservationIgnored private var started = false
+    /// The device identity, read from the Keychain once and shared by every Gateway.
+    @ObservationIgnored private var identity: DeviceIdentity?
+
+    private func deviceIdentity() -> DeviceIdentity {
+        if let identity { return identity }
+        let loaded = DeviceIdentity.loadOrCreate()
+        self.identity = loaded
+        return loaded
+    }
 
     /// Re-registers push on every connected gateway, e.g. after the token or a setting changed.
     public func syncPush() {
@@ -219,7 +231,7 @@ public final class AppModel {
     @discardableResult
     public func add(_ profile: GatewayProfile, secret: String?) -> GatewayStore {
         profile.secret = secret
-        let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: .loadOrCreate())
+        let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: self.deviceIdentity())
         store.notifier = self.notifier
         self.gateways.append(store)
         self.persist()
@@ -248,7 +260,7 @@ public final class AppModel {
             profile.secret = secret
             profile.forgetDeviceToken()
         }
-        let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: .loadOrCreate())
+        let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: self.deviceIdentity())
         store.notifier = self.notifier
         self.gateways[index] = store
         self.persist()
