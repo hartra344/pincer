@@ -10,10 +10,12 @@ struct ChatResidencyTests {
         #expect(r.victims(hydrated: ["a", "b", "c", "d"], pinned: []) == ["b", "c"])
     }
 
-    @Test func pinnedNeverVictimsAndDoNotCountAgainstLimit() {
+    @Test func pinnedNeverVictimsButCountAgainstLimit() {
         var r = ChatResidency(limit: 1)
         for k in ["a", "b", "c"] { r.touch(k) }
-        #expect(r.victims(hydrated: ["a", "b", "c"], pinned: ["a"]) == ["b"])
+        #expect(r.victims(hydrated: ["a", "b", "c"], pinned: ["a"]) == ["b", "c"])
+        #expect(r.victims(hydrated: ["a", "b", "c"], pinned: ["a"], limit: 2) == ["b"])
+        #expect(r.victims(hydrated: ["a", "b", "c", "d"], pinned: ["a", "b", "x"], limit: 3) == ["d"])
         #expect(r.victims(hydrated: ["a", "b", "c"], pinned: ["a", "b", "c"]).isEmpty)
     }
 

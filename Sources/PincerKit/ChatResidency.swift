@@ -53,15 +53,16 @@ struct ChatResidency: Sendable {
         self.stamps[key] = nil
     }
 
-    /// Hydrated, unpinned keys beyond `limit`, least recent first. Never-touched keys count as oldest.
-    /// The limit applies to unpinned hydrated chats; pinned ones are always kept.
+    /// Unpinned hydrated keys to drop, least recent first, so that at most `limit` chats stay hydrated
+    /// (pinned ones included; pinned chats are never dropped, so they may exceed it). Never-touched keys count as oldest.
     func victims(hydrated: Set<String>, pinned: Set<String>, limit: Int? = nil) -> [String] {
         let cap = max(0, limit ?? self.limit)
         let candidates = hydrated.subtracting(pinned).sorted { a, b in
             let sa = self.stamps[a] ?? 0, sb = self.stamps[b] ?? 0
             return sa != sb ? sa < sb : a < b
         }
-        guard candidates.count > cap else { return [] }
-        return Array(candidates.prefix(candidates.count - cap))
+        let allowed = max(cap, hydrated.intersection(pinned).count)
+        guard hydrated.count > allowed else { return [] }
+        return Array(candidates.prefix(hydrated.count - allowed))
     }
 }

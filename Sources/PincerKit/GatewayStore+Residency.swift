@@ -4,7 +4,7 @@ import Foundation
 /// - **Warm** (`warmKeys`, `recentKeys`, `warmChatLimit`): the selected chat, the most recent selections and running
 ///   chats keep their message subscription. Others release it and reload when opened.
 /// - **Resident** (`residency`): hydrated chats, ranked by any use (`chat(for:)`, selection, runs). Beyond
-///   `residency.limit`, the least recently used unpinned ones are dehydrated in place.
+///   `residency.limit` (pinned chats included), the least recently used unpinned ones are dehydrated in place.
 /// Every warm chat is pinned here, and the limit is never below `warmChatLimit`, so a chat that is subscribed
 /// is never dehydrated; a chat can be resident without being warm, but not the other way around.
 extension GatewayStore {
@@ -19,11 +19,16 @@ extension GatewayStore {
         self.pinnedChatKeys().contains(key)
     }
 
-    /// Dehydrates the least recently used unpinned chats beyond the limit, one at a time.
+    /// Dehydrates the least recently used unpinned chats until at most `limit` chats (pinned included) are
+    /// hydrated, one at a time. A request that arrives mid-pass is kept (strictest limit wins) and runs afterwards.
     func enforceChatBudget(limit: Int? = nil) {
-        guard !self.enforcingChatBudget else { return }
+        let requested = limit ?? self.residency.limit
+        guard !self.enforcingChatBudget else {
+            self.pendingChatBudgetLimit = min(self.pendingChatBudgetLimit ?? requested, requested)
+            return
+        }
         let hydrated = Set(self.chats.values.filter(\.isHydrated).map(\.sessionKey))
-        let victims = self.residency.victims(hydrated: hydrated, pinned: self.pinnedChatKeys(), limit: limit)
+        let victims = self.residency.victims(hydrated: hydrated, pinned: self.pinnedChatKeys(), limit: requested)
         guard !victims.isEmpty else { return }
         self.enforcingChatBudget = true
         Task { [weak self] in
@@ -31,7 +36,12 @@ extension GatewayStore {
                 guard let self, let chat = self.chats[key], !self.isChatPinned(key) else { continue }
                 await chat.dehydrate()
             }
-            self?.enforcingChatBudget = false
+            guard let self else { return }
+            self.enforcingChatBudget = false
+            if let pending = self.pendingChatBudgetLimit {
+                self.pendingChatBudgetLimit = nil
+                self.enforceChatBudget(limit: pending)
+            }
         }
     }
 

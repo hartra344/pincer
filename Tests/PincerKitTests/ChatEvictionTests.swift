@@ -203,6 +203,20 @@ struct ChatEvictionTests {
         if let dir = TranscriptCache.directory(gatewayId: gateway.id) { try? FileManager.default.removeItem(at: dir) }
         self.scratch.remove()
     }
+    @Test func requestArrivingMidPassRunsAfterwardsWithStrictestLimit() async {
+        let gateway = self.gateway()
+        gateway.residency.limit = 3
+        let chats = ["a", "b", "c", "d", "e"].map { gateway.chat(for: "agent:main:dashboard:\($0)") }
+        for chat in chats { self.hydrate(chat) }
+        gateway.enforceChatBudget()
+        gateway.handleMemoryPressure(critical: true)
+        #expect(gateway.pendingChatBudgetLimit == 0)
+        await self.settle { chats.allSatisfy { $0.isDehydrated } }
+        #expect(chats.allSatisfy { $0.isDehydrated })
+        #expect(gateway.pendingChatBudgetLimit == nil)
+        await self.cleanup(gateway)
+    }
+
     @Test func dehydratedChatNeverWritesEmptiedStateToCache() async {
         let gateway = self.gateway()
         let chat = gateway.chat(for: "agent:main:dashboard:a")

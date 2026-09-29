@@ -501,6 +501,7 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var residency = ChatResidency(limit: max(ChatResidency.defaultLimit, GatewayStore.warmChatLimit))
     @ObservationIgnored var memoryPressureSource: (any DispatchSourceMemoryPressure)?
     @ObservationIgnored var enforcingChatBudget = false
+    @ObservationIgnored var pendingChatBudgetLimit: Int?
 
     /// The selected chat, the most recent ones up to the cap, and any chat with a live run.
     func warmKeys(includingLive: Bool) -> Set<String> {
