@@ -15,7 +15,9 @@ Paste it anywhere you keep notes: a reminder, a note, a Shortcuts action or a me
 
 ## Copy a link to a message
 
-Right-click a message on the Mac, or touch and hold it on iPhone and iPad, and choose **Copy Link**. VoiceOver users find **Copy Link** in the message's actions. Opening the link opens the chat, scrolls to that message and briefly highlights it, loading older history first if the message isn't on screen.
+Right-click a message on the Mac, or touch and hold it on iPhone and iPad, and choose **Copy Link**. Pincer copies the link and shows "Link copied". VoiceOver users find **Copy Link** in the message's actions.
+
+Opening the link opens the chat and scrolls to the message. Pincer loads older history if it needs to, then briefly highlights the message. A forwarded message links to its copy in this chat, not to the original.
 
 ## Link format
 
