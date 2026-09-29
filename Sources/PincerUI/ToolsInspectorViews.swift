@@ -14,6 +14,8 @@ struct ToolsInspectorView: View {
     /// Where tool policy is edited, and the button's title.
     var policySettings: ToolPolicySettings?
     var openPolicySettings: ((SettingsDestination) -> Void)?
+    /// Show only this MCP server's tools.
+    var mcpServer: String?
     @State private var filter = ToolFilter.all
     @State private var search = ""
 
@@ -46,7 +48,7 @@ struct ToolsInspectorView: View {
                     TextField(L("Filter tools"), text: self.$search)
                         .textFieldStyle(.roundedBorder)
                 }
-                let groups = inspection.filtered(self.filter, search: self.search)
+                let groups = self.serverGroups(inspection.filtered(self.filter, search: self.search))
                 if groups.isEmpty {
                     Section {
                         Text(inspection.totalCount == 0 ? L("No tools.") : L("No tools match.")).foregroundStyle(.secondary)
@@ -83,6 +85,16 @@ struct ToolsInspectorView: View {
             }
         }
         .task { await model.loadIfNeeded() }
+    }
+}
+
+extension ToolsInspectorView {
+    private func serverGroups(_ groups: [InspectedToolGroup]) -> [InspectedToolGroup] {
+        guard let server = self.mcpServer else { return groups }
+        return groups.compactMap { group in
+            let tools = group.tools.filter { $0.source == .mcp && $0.sourceDetail == server }
+            return tools.isEmpty ? nil : InspectedToolGroup(id: group.id, label: group.label, tools: tools)
+        }
     }
 }
 
@@ -155,6 +167,8 @@ struct ChatToolsInspectorSheet: View {
 /// One agent's tools (`SettingsRoute.agentTools`), from Agents & Models.
 struct AgentToolsPage: View {
     let agentId: String
+    /// Show only this MCP server's tools.
+    var mcpServer: String?
     @Environment(GatewayStore.self) private var gateway
     @Environment(SettingsNavigator.self) private var navigator
     @State private var model: ToolsInspectorModel?
@@ -166,11 +180,11 @@ struct AgentToolsPage: View {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
                                        description: Text("Connect to the Gateway to see this agent's tools.", bundle: .module))
             } else if let model {
-                ToolsInspectorView(model: model, scopeTitle: "Agent: \(agent?.title ?? self.agentId)",
+                ToolsInspectorView(model: model, scopeTitle: self.mcpServer.map { "MCP server: \($0)" } ?? "Agent: \(agent?.title ?? self.agentId)",
                                    scopeDetail: model.effective == nil ? nil : self.liveChatTitle(model).map(ToolsPolicy.livePolicyNote),
-                                   policySettings: ToolPolicySettings(self.gateway)) { destination in
-                    self.navigator.destination = destination
-                }
+                                   policySettings: ToolPolicySettings(self.gateway),
+                                   openPolicySettings: { destination in self.navigator.destination = destination },
+                                   mcpServer: self.mcpServer)
             } else {
                 ProgressView()
             }

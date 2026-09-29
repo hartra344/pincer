@@ -443,6 +443,16 @@
         }
       }
     },
+    "Account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        }
+      }
+    },
     "Accounts Using DM Pairing": {
       "localizations": {
         "en": {
@@ -499,6 +509,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add"
+          }
+        }
+      }
+    },
+    "Add Argument": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Argument"
           }
         }
       }
@@ -573,12 +593,32 @@
         }
       }
     },
+    "Add Server": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Server"
+          }
+        }
+      }
+    },
     "Add a Gateway in Pincer to use Quick Capture": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Add a Gateway in Pincer to use Quick Capture"
+          }
+        }
+      }
+    },
+    "Add an MCP server": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add an MCP server"
           }
         }
       }
@@ -629,6 +669,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Advanced (%lld)"
+          }
+        }
+      }
+    },
+    "After saving, sign in from the server's page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After saving, sign in from the server's page."
           }
         }
       }
@@ -719,6 +769,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Allow Once"
+          }
+        }
+      }
+    },
+    "Allow Pincer to use %@?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Pincer to use %@?"
           }
         }
       }
@@ -853,6 +913,16 @@
         }
       }
     },
+    "Apply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply"
+          }
+        }
+      }
+    },
     "Approval": {
       "localizations": {
         "en": {
@@ -939,6 +1009,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Approving new senders? See Pairing Requests."
+          }
+        }
+      }
+    },
+    "Argument": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Argument"
+          }
+        }
+      }
+    },
+    "Arguments": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arguments"
           }
         }
       }
@@ -1143,6 +1233,16 @@
         }
       }
     },
+    "Cancel Sign-In": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel Sign-In"
+          }
+        }
+      }
+    },
     "Cancel reply": {
       "localizations": {
         "en": {
@@ -1159,6 +1259,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Changed on the Gateway"
+          }
+        }
+      }
+    },
+    "Changes stay with your other unsaved settings until you use Review & Save.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changes stay with your other unsaved settings until you use Review & Save."
           }
         }
       }
@@ -1473,6 +1583,16 @@
         }
       }
     },
+    "Command": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command"
+          }
+        }
+      }
+    },
     "Command Policy": {
       "localizations": {
         "en": {
@@ -1579,6 +1699,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Config is valid"
+          }
+        }
+      }
+    },
+    "Configuration": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Configuration"
           }
         }
       }
@@ -1759,6 +1889,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connected since %@"
+          }
+        }
+      }
+    },
+    "Connected · %lld tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected · %lld tools"
+          }
+        }
+      }
+    },
+    "Connected · 1 tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected · 1 tool"
           }
         }
       }
@@ -1963,6 +2113,16 @@
         }
       }
     },
+    "Copy command": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy command"
+          }
+        }
+      }
+    },
     "Copy diff": {
       "localizations": {
         "en": {
@@ -2113,6 +2273,16 @@
         }
       }
     },
+    "Couldn't Sign In": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't Sign In"
+          }
+        }
+      }
+    },
     "Couldn't load more.": {
       "localizations": {
         "en": {
@@ -2133,12 +2303,32 @@
         }
       }
     },
+    "Couldn't open the sign-in page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't open the sign-in page."
+          }
+        }
+      }
+    },
     "Couldn't remove %@: %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't remove %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "Couldn't start sign-in.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't start sign-in."
           }
         }
       }
@@ -2413,6 +2603,16 @@
         }
       }
     },
+    "Disabled": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disabled"
+          }
+        }
+      }
+    },
     "Discard": {
       "localizations": {
         "en": {
@@ -2633,6 +2833,16 @@
         }
       }
     },
+    "Each person signs in separately.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each person signs in separately."
+          }
+        }
+      }
+    },
     "Each run starts a fresh chat under Automations in the sidebar.": {
       "localizations": {
         "en": {
@@ -2649,6 +2859,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Edit"
+          }
+        }
+      }
+    },
+    "Edit %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit %@"
           }
         }
       }
@@ -2729,6 +2949,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entire session, not limited to the range above."
+          }
+        }
+      }
+    },
+    "Environment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Environment"
           }
         }
       }
@@ -3213,6 +3443,26 @@
         }
       }
     },
+    "Header": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Header"
+          }
+        }
+      }
+    },
+    "Headers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Headers"
+          }
+        }
+      }
+    },
     "Health": {
       "localizations": {
         "en": {
@@ -3269,6 +3519,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Identity"
+          }
+        }
+      }
+    },
+    "Idle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idle"
           }
         }
       }
@@ -3379,6 +3639,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Instructions (optional)"
+          }
+        }
+      }
+    },
+    "Invalid Config": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid Config"
           }
         }
       }
@@ -3843,6 +4113,26 @@
         }
       }
     },
+    "MCP Servers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MCP Servers"
+          }
+        }
+      }
+    },
+    "MCP servers give agents extra tools. Adding, editing or removing a server is saved with your other settings; reconnecting and signing in happen right away.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MCP servers give agents extra tools. Adding, editing or removing a server is saved with your other settings; reconnecting and signing in happen right away."
+          }
+        }
+      }
+    },
     "Make them the command owner": {
       "localizations": {
         "en": {
@@ -4033,6 +4323,16 @@
         }
       }
     },
+    "Needs Sign-In": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs Sign-In"
+          }
+        }
+      }
+    },
     "Needs attention": {
       "localizations": {
         "en": {
@@ -4199,6 +4499,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No Gateways yet"
+          }
+        }
+      }
+    },
+    "No MCP servers yet. Add one to give your agents more tools.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No MCP servers yet. Add one to give your agents more tools."
           }
         }
       }
@@ -4583,6 +4893,16 @@
         }
       }
     },
+    "Not Saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Saved"
+          }
+        }
+      }
+    },
     "Not Set": {
       "localizations": {
         "en": {
@@ -4649,6 +4969,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not scheduled"
+          }
+        }
+      }
+    },
+    "Not signed in.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not signed in."
           }
         }
       }
@@ -4739,6 +5069,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Offline — messages send when you reconnect"
+          }
+        }
+      }
+    },
+    "One sign-in is shared by everyone using this Gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One sign-in is shared by everyone using this Gateway."
           }
         }
       }
@@ -4899,6 +5239,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open at Login"
+          }
+        }
+      }
+    },
+    "Open in Browser": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Browser"
+          }
+        }
+      }
+    },
+    "Open in Tools Inspector": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Tools Inspector"
           }
         }
       }
@@ -5723,12 +6083,32 @@
         }
       }
     },
+    "Remove Server…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Server…"
+          }
+        }
+      }
+    },
     "Remove Value": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Remove Value"
+          }
+        }
+      }
+    },
+    "Remove argument": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove argument"
           }
         }
       }
@@ -5749,6 +6129,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Removes this request. The sender isn't blocked and can ask again."
+          }
+        }
+      }
+    },
+    "Remove…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove…"
           }
         }
       }
@@ -5789,6 +6179,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Rename…"
+          }
+        }
+      }
+    },
+    "Renaming adds a server under the new name and removes the old one. Saved secrets need to be entered again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Renaming adds a server under the new name and removes the old one. Saved secrets need to be entered again."
           }
         }
       }
@@ -5929,6 +6329,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Requirements"
+          }
+        }
+      }
+    },
+    "Requires OAuth sign-in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requires OAuth sign-in"
           }
         }
       }
@@ -6099,6 +6509,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Retry"
+          }
+        }
+      }
+    },
+    "Retrying at %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retrying at %@"
+          }
+        }
+      }
+    },
+    "Retrying…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retrying…"
           }
         }
       }
@@ -6423,6 +6853,16 @@
         }
       }
     },
+    "Saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved"
+          }
+        }
+      }
+    },
     "Saved to the Gateway's secret store as %@": {
       "localizations": {
         "en": {
@@ -6609,6 +7049,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Send to %@"
+          }
+        }
+      }
+    },
+    "Server Removed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server Removed"
           }
         }
       }
@@ -6803,6 +7253,16 @@
         }
       }
     },
+    "Show Tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Tools"
+          }
+        }
+      }
+    },
     "Show Usage": {
       "localizations": {
         "en": {
@@ -6929,6 +7389,96 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sidebar"
+          }
+        }
+      }
+    },
+    "Sign In": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign In"
+          }
+        }
+      }
+    },
+    "Sign In Again": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign In Again"
+          }
+        }
+      }
+    },
+    "Sign Out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign Out"
+          }
+        }
+      }
+    },
+    "Sign in on the Gateway host:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in on the Gateway host:"
+          }
+        }
+      }
+    },
+    "Sign out on the Gateway host:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign out on the Gateway host:"
+          }
+        }
+      }
+    },
+    "Sign-In Expired": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-In Expired"
+          }
+        }
+      }
+    },
+    "Sign-in didn't finish.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in didn't finish."
+          }
+        }
+      }
+    },
+    "Signed in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed in"
+          }
+        }
+      }
+    },
+    "Signed in as %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signed in as %@"
           }
         }
       }
@@ -7069,6 +7619,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Status"
+          }
+        }
+      }
+    },
+    "Status Unknown": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status Unknown"
           }
         }
       }
@@ -7353,6 +7913,16 @@
         }
       }
     },
+    "The server is removed when you save your changes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server is removed when you save your changes."
+          }
+        }
+      }
+    },
     "The text arrives in the agent's main chat as a system event.": {
       "localizations": {
         "en": {
@@ -7463,6 +8033,16 @@
         }
       }
     },
+    "This Gateway can't reconnect servers from Pincer. Changes apply when you save.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't reconnect servers from Pincer. Changes apply when you save."
+          }
+        }
+      }
+    },
     "This Gateway can't share its command policy. Update OpenClaw to manage it here.": {
       "localizations": {
         "en": {
@@ -7479,6 +8059,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Gateway can't share workspace files. Update OpenClaw to edit them here."
+          }
+        }
+      }
+    },
+    "This Gateway can't sign in from Pincer. Sign in on the Gateway host with `openclaw mcp login <name>`.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't sign in from Pincer. Sign in on the Gateway host with `openclaw mcp login <name>`."
           }
         }
       }
@@ -7509,6 +8099,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Gateway doesn't offer logs.tail. Update OpenClaw to view its logs here."
+          }
+        }
+      }
+    },
+    "This Gateway doesn't report MCP status. Tools show up once an agent connects to the server.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway doesn't report MCP status. Tools show up once an agent connects to the server."
           }
         }
       }
@@ -7659,6 +8259,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This file is larger than the %@ limit, so it can't be edited here."
+          }
+        }
+      }
+    },
+    "This is a simulated sign-in for the demo. No account is used.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a simulated sign-in for the demo. No account is used."
           }
         }
       }
@@ -7853,12 +8463,32 @@
         }
       }
     },
+    "Tools show up once the server is connected.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tools show up once the server is connected."
+          }
+        }
+      }
+    },
     "Totals": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Totals"
+          }
+        }
+      }
+    },
+    "Transport": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transport"
           }
         }
       }
@@ -7933,6 +8563,16 @@
         }
       }
     },
+    "URL": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL"
+          }
+        }
+      }
+    },
     "URL, data URI or workspace path": {
       "localizations": {
         "en": {
@@ -7979,6 +8619,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unknown"
+          }
+        }
+      }
+    },
+    "Unknown transport": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown transport"
           }
         }
       }
@@ -8123,6 +8773,16 @@
         }
       }
     },
+    "Values are stored on the Gateway and hidden here once saved.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Values are stored on the Gateway and hidden here once saved."
+          }
+        }
+      }
+    },
     "Variable": {
       "localizations": {
         "en": {
@@ -8159,6 +8819,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wait for the current run to finish."
+          }
+        }
+      }
+    },
+    "Waiting for Sign-In…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for Sign-In…"
           }
         }
       }
@@ -8229,6 +8899,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Which commands your agents can run on the Gateway host, and when they have to ask."
+          }
+        }
+      }
+    },
+    "Working folder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working folder"
           }
         }
       }
@@ -8383,6 +9063,16 @@
         }
       }
     },
+    "Your sign-in expired.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your sign-in expired."
+          }
+        }
+      }
+    },
     "Yours": {
       "localizations": {
         "en": {
@@ -8463,6 +9153,26 @@
         }
       }
     },
+    "filesystem": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "filesystem"
+          }
+        }
+      }
+    },
+    "https://example.com/mcp": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "https://example.com/mcp"
+          }
+        }
+      }
+    },
     "https://relay.example.com": {
       "localizations": {
         "en": {
@@ -8499,6 +9209,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "log out"
+          }
+        }
+      }
+    },
+    "npx": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "npx"
           }
         }
       }
@@ -8569,6 +9289,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "“%@” isn't an agent on this Gateway anymore."
+          }
+        }
+      }
+    },
+    "•••• (saved)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "•••• (saved)"
           }
         }
       }

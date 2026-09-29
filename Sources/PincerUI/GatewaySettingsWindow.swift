@@ -109,6 +109,7 @@ private struct GatewaySettingsRoot: View {
                         case let .execAgent(id): ExecAgentPage(agentId: id)
                         case let .agent(id): AgentPage(agentId: id)
                         case let .agentFile(agentId, name): AgentFileEditorPage(agentId: agentId, name: name)
+                        case let .mcpServer(name): MCPServerPage(name: name)
                         case let .skill(key): SkillDetailPage(skillKey: key)
                         case .clawHub: ClawHubSearchPage()
                         case let .agentTools(id): AgentToolsPage(agentId: id)
@@ -255,6 +256,7 @@ private struct GatewaySettingsRoot: View {
         case let .page(id):
             if let page = SettingsCatalog.page(id) { CuratedPage(page: page) }
         case .plugins: PluginsPage()
+        case .mcpServers: MCPServersPage()
         case .allSettings: AllSettingsPage()
         case .raw: RawConfigPage()
         case nil:
@@ -398,6 +400,11 @@ private struct SettingsSidebar: View {
                             self.row("Plugins", symbol: "puzzlepiece.extension", .plugins,
                                      badge: settings.changeCount(under: ["plugins"]),
                                      attention: settings.pluginsNeedingAttention > 0)
+                        }
+                        if self.gateway.supportsMCPServers {
+                            self.row("MCP Servers", symbol: "point.3.connected.trianglepath.dotted", .mcpServers,
+                                     badge: settings.changeCount(under: ["mcp"]),
+                                     attention: self.gateway.mcp.needsAttention)
                         }
                     }
                     Section("Advanced") {
