@@ -84,6 +84,7 @@ struct TranscriptList: NSViewRepresentable {
             self.context = context
             self.renderer = TranscriptRenderer(context: context)
             super.init()
+            self.premeasure.currentWidth = { [weak self] in self?.width ?? 0 }
             self.renderer.onInvalidate = { [weak self] ids, keepInPlace in
                 self?.invalidate(ids, keepInPlace: keepInPlace)
             }
@@ -328,7 +329,7 @@ struct TranscriptList: NSViewRepresentable {
         }
 
         func apply(_ highlight: TranscriptHighlight) {
-            self.premeasure.cancelAll()
+            if highlight != self.renderer.highlight { self.premeasure.cancelAll() }
             guard let id = self.renderer.update(highlight: highlight) else { return }
             self.reveal(id)
         }
@@ -503,12 +504,11 @@ struct TranscriptList: NSViewRepresentable {
                 let rows = self.queue.next(center: onScreen.center, window: onScreen.range, limit: .max)
                 changed = self.measure(rows, width: width, deadline: nil).changed
             }
-            let plan = self.premeasure.split(self.queue.next(center: window.center, window: window.range, limit: .max),
-                                             all: self.rows, width: width, renderer: self.renderer)
-            self.premeasure.submit(plan.offload, width: width, env: self.renderer.textEnvironment) { [weak self] in
+            let now = self.premeasure.plan(self.queue.next(center: window.center, window: window.range, limit: .max),
+                                           all: self.rows, width: width, renderer: self.renderer, overflow: .measureNow) { [weak self] in
                 self?.scheduleScrollMeasure()
             }
-            let result = self.measure(plan.measureNow, width: width, deadline: start.addingTimeInterval(0.004))
+            let result = self.measure(now, width: width, deadline: start.addingTimeInterval(0.004))
             if result.stopped { self.scheduleScrollMeasure() }
             return changed.union(result.changed)
         }
@@ -590,12 +590,11 @@ struct TranscriptList: NSViewRepresentable {
                 let batch = self.queue.next(center: window.center, window: window.range, limit: 32 + self.premeasure.inFlightCount)
                 if batch.isEmpty { break }
                 // Rows still on the worker stay queued; its completion runs another step.
-                let plan = self.premeasure.split(batch, all: self.rows, width: width, renderer: self.renderer)
-                self.premeasure.submit(plan.offload, width: width, env: self.renderer.textEnvironment) { [weak self] in
+                let now = self.premeasure.plan(batch, all: self.rows, width: width, renderer: self.renderer, overflow: .wait) { [weak self] in
                     self?.schedulePrefetch()
                 }
-                if plan.measureNow.isEmpty { break }
-                let result = self.measure(plan.measureNow, width: width, deadline: deadline)
+                if now.isEmpty { break }
+                let result = self.measure(now, width: width, deadline: deadline)
                 changed.formUnion(result.changed)
                 if result.stopped || Date() >= deadline { remaining = true; break }
             }

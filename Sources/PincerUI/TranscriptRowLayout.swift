@@ -780,7 +780,7 @@ struct TranscriptLayoutBuilder {
                     }
                 }
                 let table = TranscriptText.Table(cells: cells, alignments: source.alignments, plainText: source.plainText)
-                let part = self.table(table, width: width)
+                let part = self.table(table, original: source, width: width)
                 stack.add(.table(part), height: part.contentSize.height, width: part.contentSize.width)
                 if found, let frame = stack.parts.last?.frame { layout.matchY = frame.minY + min(frame.height, 40) }
             }
@@ -809,19 +809,19 @@ struct TranscriptLayoutBuilder {
 
     /// Columns share the width when each can keep a readable minimum; otherwise the table keeps
     /// its natural column widths and scrolls sideways.
-    private func table(_ table: TranscriptText.Table, width available: CGFloat) -> TranscriptPart.Table {
+    private func table(_ table: TranscriptText.Table, original: TranscriptText.Table, width available: CGFloat) -> TranscriptPart.Table {
         let columns = table.cells.first?.count ?? 0
         let padding = TranscriptTableMetrics.padding
         var naturals = Array(repeating: CGFloat(0), count: columns)
-        for row in table.cells {
+        for (rowIndex, row) in table.cells.enumerated() {
             for (column, cell) in row.enumerated() {
-                naturals[column] = max(naturals[column], TranscriptText.naturalWidth(cell, memoized: true))
+                naturals[column] = max(naturals[column], TranscriptText.naturalWidth(cell, memoized: cell === original.cells[rowIndex][column]))
             }
         }
         let widths = TranscriptTableMetrics.columnWidths(naturals: naturals, available: available)
-        let heights = table.cells.map { row in
+        let heights = table.cells.enumerated().map { rowIndex, row in
             row.enumerated().map { column, cell in
-                TranscriptText.size(cell, width: max(widths[column] - padding, 1), memoized: true).height
+                TranscriptText.size(cell, width: max(widths[column] - padding, 1), memoized: cell === original.cells[rowIndex][column]).height
             }.max().map { max($0, TranscriptStyle.lineHeight(self.style.body)) + 10 } ?? 0
         }
         return TranscriptPart.Table(cells: table.cells, columnWidths: widths, rowHeights: heights, plainText: table.plainText)

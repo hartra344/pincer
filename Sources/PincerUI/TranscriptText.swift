@@ -29,11 +29,20 @@ enum TranscriptText {
 
     enum Tone: Hashable { case primary, secondary, error }
 
-    /// The appearance is part of the key because inline math bakes a resolved color into its attachments.
+    /// The appearance is part of the key only for text with inline math, which bakes a resolved color
+    /// into its attachments; other text is appearance independent, so a Dark Mode flip keeps its sizes.
     struct Key: Hashable {
         let source: String
         let tone: Tone
         let dark: Bool
+
+        init(source: String, tone: Tone, dark: Bool) {
+            self.source = source
+            self.tone = tone
+            self.dark = Self.bakesAppearance(source) ? dark : false
+        }
+
+        nonisolated static func bakesAppearance(_ source: String) -> Bool { source.contains("$") || source.contains("\\(") }
     }
 
     /// How inline text reaches Markdown parsing and inline math. Main uses the shared caches and draws
@@ -43,10 +52,10 @@ enum TranscriptText {
         var math: ((String, [Unicode.Scalar: (latex: String, source: String)], [NSAttributedString.Key: Any],
                     PFont, PColor, NSMutableAttributedString) -> Void)?
 
-        @MainActor static func main(cached: Bool) -> BuildHooks {
+        @MainActor static func main(cached: Bool, dark: Bool = RichBlock.isDark) -> BuildHooks {
             BuildHooks(parse: { cached ? MarkdownCache.inline($0) : MarkdownBlock.inline($0) },
                        math: { string, spans, attributes, font, color, result in
-                           InlineMathText.append(string, spans: spans, attributes: attributes, font: font, color: color, to: result)
+                           InlineMathText.append(string, spans: spans, attributes: attributes, font: font, color: color, dark: dark, to: result)
                        })
         }
     }
@@ -169,7 +178,7 @@ enum TranscriptText {
         self.syncGeneration()
         let key = Key(source: source, tone: tone, dark: dark)
         if let cached = self.segmentCache.value(for: key) { return cached }
-        let segments = self.build(MarkdownCache.blocks(source), tone: tone, env: .current(dark: dark), hooks: .main(cached: true))!
+        let segments = self.build(MarkdownCache.blocks(source), tone: tone, env: .current(dark: dark), hooks: .main(cached: true, dark: dark))!
         self.segmentCache.set(segments, for: key)
         return segments
     }
@@ -254,7 +263,7 @@ enum TranscriptText {
             let blocks = MarkdownBlock.parse(text)
             var heading = false
             if case .heading = blocks.first { heading = true }
-            state.chunks.append(FrozenChunk(segments: self.build(blocks, tone: tone, env: env, hooks: .main(cached: false))!, startsWithHeading: heading))
+            state.chunks.append(FrozenChunk(segments: self.build(blocks, tone: tone, env: env, hooks: .main(cached: false, dark: env.dark))!, startsWithHeading: heading))
             state.frozenText += text
         }
         self.liveStates[row] = state
@@ -281,7 +290,7 @@ enum TranscriptText {
             let blocks = MarkdownBlock.parse(String(source[start...]))
             var heading = false
             if case .heading = blocks.first { heading = true }
-            add(self.build(blocks, tone: tone, env: env, hooks: .main(cached: false))!, frozen: false, startsWithHeading: heading)
+            add(self.build(blocks, tone: tone, env: env, hooks: .main(cached: false, dark: env.dark))!, frozen: false, startsWithHeading: heading)
         }
         return result
     }

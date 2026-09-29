@@ -127,6 +127,18 @@ struct PremeasureKey: Hashable, Sendable {
     let dark: Bool
 
     var textKey: TranscriptText.Key { .init(source: self.source, tone: self.tone, dark: self.dark) }
+
+    /// Rows with inline math never reach the worker, so their appearance never keys a premeasured body.
+    init(source: String, tone: TranscriptText.Tone, styleGeneration: Int) {
+        self.init(source: source, tone: tone, styleGeneration: styleGeneration, dark: false)
+    }
+
+    init(source: String, tone: TranscriptText.Tone, styleGeneration: Int, dark: Bool) {
+        self.source = source
+        self.tone = tone
+        self.styleGeneration = styleGeneration
+        self.dark = TranscriptText.Key.bakesAppearance(source) ? dark : false
+    }
 }
 
 /// The message bodies of one row, to build and measure at one content width.
@@ -294,17 +306,38 @@ final class TranscriptPremeasureDriver {
     /// than sent again, so a result that can't warm a row never loops.
     private var adoptedRows: Set<String> = []
     var stats = PremeasureStats()
+    /// The list's width now, so results made for an older one are dropped.
+    var currentWidth: () -> CGFloat = { 0 }
     #if DEBUG
-    /// Every row id ever sent to the worker, for tests.
+    /// Row ids sent to the worker (bounded), for tests.
     private(set) var offloadedIds: Set<String> = []
     #endif
 
+    /// What to do with cold rows when the worker already holds `maxInFlight`.
+    enum Overflow {
+        /// Leave them queued for the worker's next round (idle prefetch).
+        case wait
+        /// Lay them out on main like before (scroll margin, which is held to its own budget).
+        case measureNow
+    }
+
     var inFlightCount: Int { self.inFlight.count }
 
+    /// The rows of `batch` (indexes into `all`, nearest first) to lay out now; cold ones are sent to the
+    /// worker, and `onReady` runs on main once their results are adopted. Rows on the worker are in
+    /// neither, and stay queued until then.
+    func plan(_ batch: [Int], all: [TranscriptRow], width: CGFloat, renderer: TranscriptRenderer,
+              overflow: Overflow, onReady: @escaping @MainActor () -> Void) -> [Int]
+    {
+        let split = self.split(batch, all: all, width: width, renderer: renderer, overflow: overflow)
+        self.submit(split.offload, width: width, env: renderer.textEnvironment, completion: onReady)
+        return split.measureNow
+    }
+
     /// Sorts `rows` (indexes into `all`, nearest first) into those to lay out now and jobs for the
-    /// worker. Rows on the worker, or beyond its limit, are in neither and wait for its result.
-    func split(_ rows: [Int], all: [TranscriptRow], width: CGFloat, renderer: TranscriptRenderer)
-        -> (measureNow: [Int], offload: [PremeasureJob])
+    /// worker. Rows on the worker are in neither and wait for its result.
+    func split(_ rows: [Int], all: [TranscriptRow], width: CGFloat, renderer: TranscriptRenderer,
+               overflow: Overflow = .wait) -> (measureNow: [Int], offload: [PremeasureJob])
     {
         var now: [Int] = []
         var jobs: [PremeasureJob] = []
@@ -325,7 +358,10 @@ final class TranscriptPremeasureDriver {
                 now.append(index)
                 continue
             }
-            guard self.inFlight.count + jobs.count < Self.maxInFlight else { continue }
+            guard self.inFlight.count + jobs.count < Self.maxInFlight else {
+                if overflow == .measureNow { now.append(index) }
+                continue
+            }
             jobs.append(PremeasureJob(rowId: row.id, bodies: keys, contentWidth: contentWidth, epoch: self.epoch.current))
         }
         return (now, jobs)
@@ -338,13 +374,15 @@ final class TranscriptPremeasureDriver {
         for job in jobs { self.inFlight.insert(job.rowId) }
         self.stats.offloaded += jobs.count
         #if DEBUG
+        if self.offloadedIds.count > 10_000 { self.offloadedIds.removeAll() }
         self.offloadedIds.formUnion(jobs.map(\.rowId))
         #endif
         for start in stride(from: 0, to: jobs.count, by: Self.rowsPerJob) {
             let chunk = Array(jobs[start..<min(start + Self.rowsPerJob, jobs.count)])
             TranscriptPremeasurer.shared.submit(chunk, env: env, epoch: self.epoch) { [weak self] rows in
                 guard let self else { return }
-                self.adopt(rows, width: width, epoch: epoch)
+                let now = self.currentWidth()
+                self.adopt(rows, width: now > 0 ? now : width, epoch: epoch)
                 completion()
             }
         }
@@ -363,12 +401,13 @@ final class TranscriptPremeasureDriver {
                 self.stats.discardedStale += 1
                 continue
             }
+            self.adoptedRows.insert(result.rowId)
+            if self.rejected.count > 256 { self.rejected.removeAll() }
             self.rejected.formUnion(result.rejected)
             var adopted = true
             for body in result.bodies where !TranscriptText.adopt(body) { adopted = false }
             if adopted {
                 self.stats.adopted += 1
-                self.adoptedRows.insert(result.rowId)
                 warm.insert(result.rowId)
             } else {
                 self.stats.discardedStale += 1
@@ -382,5 +421,6 @@ final class TranscriptPremeasureDriver {
         self.epoch.bump()
         self.inFlight.removeAll()
         self.adoptedRows.removeAll()
+        self.rejected.removeAll()
     }
 }

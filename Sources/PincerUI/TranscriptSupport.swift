@@ -353,24 +353,10 @@ final class TranscriptRenderer: TranscriptRowActions {
         var keys: [PremeasureKey] = []
         for (source, tone) in sources where !source.isEmpty {
             if source.contains("$") || source.contains("\\("), !InlineMath.spans(in: source).isEmpty { return nil }
-            let key = PremeasureKey(source: source, tone: tone, styleGeneration: TranscriptStyle.generation, dark: self.settings.dark)
+            let key = PremeasureKey(source: source, tone: tone, styleGeneration: TranscriptStyle.generation)
             if !keys.contains(key) { keys.append(key) }
         }
         return keys.isEmpty ? nil : keys
-    }
-
-    func premeasureJob(for row: TranscriptRow, width: CGFloat, epoch: Int) -> PremeasureJob? {
-        guard let keys = self.premeasureBodies(for: row) else { return nil }
-        return PremeasureJob(rowId: row.id, bodies: keys, contentWidth: TranscriptMetrics.contentWidth(rowWidth: width), epoch: epoch)
-    }
-
-    /// Whether laying `row` out at `width` needs no TextKit pass: its layout is cached, or its text
-    /// and sizes are.
-    func isWarm(_ row: TranscriptRow, width: CGFloat) -> Bool {
-        if self.hasLayout(for: row, width: width) { return true }
-        guard let keys = self.premeasureBodies(for: row) else { return false }
-        let contentWidth = TranscriptMetrics.contentWidth(rowWidth: width)
-        return keys.allSatisfy { TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) }
     }
 
     func hasLayout(for row: TranscriptRow, width: CGFloat) -> Bool {
