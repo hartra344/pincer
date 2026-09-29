@@ -37,8 +37,10 @@ struct SidebarModel: Equatable {
 
         /// VoiceOver label for an agent header; nil for other sections.
         var agentAccessibilityLabel: String? {
-            if case .agent = self.section.kind { return L("\(self.section.title), agent") }
-            return nil
+            guard case .agent = self.section.kind else { return nil }
+            let label = L("\(self.section.title), agent")
+            let unread = self.isCollapsed ? self.section.unreadCount : 0
+            return unread > 0 ? "\(label), \(L("\(unread) unread"))" : label
         }
 
         /// A group nested under an agent (by-agent mode).

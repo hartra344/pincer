@@ -50,7 +50,7 @@ struct SidebarList: UIViewRepresentable {
                 var configuration = UICollectionLayoutListConfiguration(
                     appearance: environment.traitCollection.horizontalSizeClass == .compact ? .insetGrouped : .sidebar)
                 configuration.headerMode = .firstItemInSection
-                configuration.backgroundColor = MainActor.assumeIsolated { self?.listBackground(compact: environment.traitCollection.horizontalSizeClass == .compact) } ?? .clear
+                configuration.backgroundColor = .clear
                 configuration.trailingSwipeActionsConfigurationProvider = { path in
                     MainActor.assumeIsolated { self?.trailingSwipe(path) }
                 }
@@ -214,14 +214,8 @@ struct SidebarList: UIViewRepresentable {
             }
         }
 
-        /// Inset-grouped cards need a grouped backdrop to show when the theme has no sidebar color.
-        private func listBackground(compact: Bool) -> UIColor {
-            compact && self.theme.platformColor(.sidebarBackground) == nil ? .systemGroupedBackground : .clear
-        }
-
         private func themeChanged() {
             self.collectionView?.tintColor = self.theme.platformColor(.accent)
-            self.collectionView?.collectionViewLayout.invalidateLayout()
             self.reconfigureVisible()
         }
 
@@ -680,7 +674,7 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
                 content.imageProperties.reservedLayoutSize = CGSize(width: side, height: side)
             }
         } else if header.isSubsection {
-            content.image = UIImage(systemName: header.symbol ?? "folder.fill") ?? UIImage(systemName: "folder.fill")
+            content.image = UIImage(systemName: header.icon ?? "folder.fill") ?? UIImage(systemName: "folder.fill")
         } else if let symbol = header.symbol {
             content.image = UIImage(systemName: symbol)
             content.imageProperties.tintColor = .secondaryLabel
