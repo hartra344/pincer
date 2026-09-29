@@ -285,7 +285,7 @@ public final class BackgroundRefresh {
     /// On entering background: what each connected gateway's live state shows is already seen.
     /// A cursor only moves forward, and only over ids still pending.
     public func seed(from gateways: [GatewayStore]) {
-        for gateway in gateways where gateway.state.isConnected && !gateway.profile.isDemo {
+        for gateway in gateways where gateway.bootstrapped && gateway.state.isConnected && !gateway.profile.isDemo {
             let live = BackgroundRefreshPlanner.cursor(for: BackgroundRefreshSnapshot(
                 sessions: Array(gateway.sessions.values), approvals: gateway.approvals, questions: gateway.questions))
             var cursor = self.cursors.cursor(for: gateway.id) ?? live
