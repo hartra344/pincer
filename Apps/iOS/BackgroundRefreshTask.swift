@@ -54,7 +54,11 @@ enum BackgroundRefreshTask {
         init(_ task: BGTask) { self.task = task }
 
         func start() {
-            BackgroundRefreshTask.schedule()
+            if ClosedAppDelivery.current() == .backgroundRefresh, Notifier.shared.enabled {
+                BackgroundRefreshTask.schedule()
+            } else {
+                BackgroundRefreshTask.cancel()
+            }
             self.task.expirationHandler = { [weak self] in
                 MainActor.assumeIsolated { self?.work?.cancel() }
             }

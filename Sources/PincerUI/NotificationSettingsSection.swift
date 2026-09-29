@@ -10,6 +10,8 @@ struct NotificationSettingsSection: View {
     @Environment(AppModel.self) private var app
     @State private var notifications = true
     @State private var delivery = ClosedAppDelivery.current()
+    @State private var refreshTick = 0
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(PushRegistrar.relayKey) private var pushRelay = ""
 
     var body: some View {
@@ -39,7 +41,8 @@ struct NotificationSettingsSection: View {
                     }
                 }
                 if self.delivery == .backgroundRefresh {
-                    let lastRun = UserDefaults.standard.object(forKey: "pincer.refresh.lastRun") as? Date
+                    let _ = self.refreshTick
+                let lastRun = UserDefaults.standard.object(forKey: "pincer.refresh.lastRun") as? Date
                     let lastResult = UserDefaults.standard.string(forKey: "pincer.refresh.lastResult") ?? ""
                     LabeledContent("Last checked") {
                         if let lastRun {
@@ -49,18 +52,24 @@ struct NotificationSettingsSection: View {
                             Text("Not yet")
                         }
                     }
-                    if UIApplication.shared.backgroundRefreshStatus != .available {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label("Background App Refresh is off for Pincer", systemImage: "exclamationmark.triangle")
-                                .foregroundStyle(.orange)
-                            Button("Open Settings") {
-                                if let url = URL(string: UIApplication.openSettingsURLString) {
-                                    UIApplication.shared.open(url)
-                                }
+                    switch UIApplication.shared.backgroundRefreshStatus {
+                case .denied:
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label("Background App Refresh is off for Pincer", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                        Button("Open Settings") {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
                             }
                         }
                     }
+                case .restricted:
+                    Label("Background App Refresh is restricted on this device", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                default:
+                    EmptyView()
                 }
+            }
             }
             .disabled(!self.notifications)
             #endif
@@ -70,6 +79,9 @@ struct NotificationSettingsSection: View {
             #if os(iOS)
             Text(self.footer)
             #endif
+        }
+        .onChange(of: self.scenePhase) { _, phase in
+            if phase == .active { self.refreshTick += 1 }
         }
         .onAppear {
             self.notifications = self.app.notifier.enabled
