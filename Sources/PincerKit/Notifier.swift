@@ -113,8 +113,7 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             id: "reply:\(dedupe ?? "\(row.key):\(row.activityMs)")",
             title: self.title(row: row, gateway: gateway),
             body: Self.clip(text ?? "New reply"),
-            target: Target(gatewayId: gateway.id, sessionKey: row.key),
-            category: "reply")
+            target: Target(gatewayId: gateway.id, sessionKey: row.key))
     }
 
     func notifyActivity(row: SessionRow, gateway: GatewayStore) {
@@ -122,24 +121,27 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
             id: "reply:\(row.key):\(Int(row.activityMs))",
             title: self.title(row: row, gateway: gateway),
             body: Self.clip(row.preview ?? "New activity"),
-            target: Target(gatewayId: gateway.id, sessionKey: row.key),
-            category: "reply")
+            target: Target(gatewayId: gateway.id, sessionKey: row.key))
     }
 
     func notifyApproval(_ approval: ExecApproval, gateway: GatewayStore) {
         guard self.enabled, let center, !self.deferredToPush(gateway.id) else { return }
+        center.add(Self.approvalRequest(approval, gatewayId: gateway.id, gatewayName: gateway.profile.name))
+    }
+
+    nonisolated static func approvalRequest(_ approval: ExecApproval, gatewayId: UUID, gatewayName: String) -> UNNotificationRequest {
         let content = UNMutableNotificationContent()
-        content.title = "Approval needed · \(gateway.profile.name)"
+        content.title = "Approval needed · \(gatewayName)"
         content.body = Self.clip(approval.command)
         content.sound = .default
         content.categoryIdentifier = Self.category(for: approval)
         content.interruptionLevel = .timeSensitive
         content.userInfo = [
-            "gateway": gateway.id.uuidString,
+            "gateway": gatewayId.uuidString,
             "session": approval.sessionKey ?? "",
             "approval": approval.id,
         ]
-        center.add(UNNotificationRequest(identifier: Self.approvalIdentifier(approval.id), content: content, trigger: nil))
+        return UNNotificationRequest(identifier: Self.approvalIdentifier(approval.id), content: content, trigger: nil)
     }
 
     /// In the background the push for the same event is on its way; posting too would double it.
@@ -148,32 +150,60 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func notifyQuestion(_ prompt: QuestionPrompt, gateway: GatewayStore) {
-        guard let first = prompt.questions.first else { return }
+        guard prompt.questions.first != nil else { return }
         let agent = gateway.agent(prompt.agentId ?? prompt.sessionKey.flatMap(SessionKey.agentId(from:)) ?? gateway.defaultAgentId)
         let chat = prompt.sessionKey.flatMap { gateway.sessions[$0]?.title }
-        let title = "\(agent.emoji.map { "\($0) " } ?? "")\(agent.name) has a question" + (chat.map { " · \($0)" } ?? "")
         let target = Target(gatewayId: gateway.id, sessionKey: prompt.sessionKey ?? "")
         // The open chat already shows the card.
         if self.appIsActive, prompt.sessionKey != nil, self.visible == target { return }
-        guard self.enabled, let center else { return }
+        guard self.enabled, let center,
+              let request = Self.questionRequest(prompt, gatewayId: gateway.id, agent: agent, chatTitle: chat)
+        else { return }
+        center.add(request)
+    }
+
+    nonisolated static func questionRequest(
+        _ prompt: QuestionPrompt, gatewayId: UUID, agent: AgentSummary, chatTitle: String?) -> UNNotificationRequest?
+    {
+        guard let first = prompt.questions.first else { return nil }
         let content = UNMutableNotificationContent()
-        content.title = title
+        content.title = "\(agent.emoji.map { "\($0) " } ?? "")\(agent.name) has a question" + (chatTitle.map { " · \($0)" } ?? "")
         content.body = Self.clip(first.question)
         content.sound = .default
-        content.categoryIdentifier = "reply"
+        content.categoryIdentifier = replyCategory
         content.interruptionLevel = .timeSensitive
-        if let key = prompt.sessionKey { content.threadIdentifier = "\(gateway.id.uuidString)|\(key)" }
-        content.userInfo = ["gateway": gateway.id.uuidString, "session": prompt.sessionKey ?? ""]
-        center.add(UNNotificationRequest(identifier: "question:\(prompt.id)", content: content, trigger: nil))
+        if let key = prompt.sessionKey { content.threadIdentifier = "\(gatewayId.uuidString)|\(key)" }
+        content.userInfo = ["gateway": gatewayId.uuidString, "session": prompt.sessionKey ?? ""]
+        return UNNotificationRequest(identifier: "question:\(prompt.id)", content: content, trigger: nil)
+    }
+
+    nonisolated static func replyTitle(rowTitle: String, agent: AgentSummary) -> String {
+        "\(agent.emoji.map { "\($0) " } ?? "")\(rowTitle) · \(agent.name)"
     }
 
     private func title(row: SessionRow, gateway: GatewayStore) -> String {
-        let agent = gateway.agent(row.agentId)
-        let prefix = agent.emoji.map { "\($0) " } ?? ""
-        return "\(prefix)\(row.title) · \(agent.name)"
+        Self.replyTitle(rowTitle: row.title, agent: gateway.agent(row.agentId))
     }
 
-    private func post(id: String, title: String, body: String, target: Target, category: String) {
+    nonisolated static func replyContent(id: String, title: String, body: String, target: Target) -> UNNotificationRequest {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.categoryIdentifier = replyCategory
+        content.threadIdentifier = "\(target.gatewayId.uuidString)|\(target.sessionKey)"
+        content.userInfo = ["gateway": target.gatewayId.uuidString, "session": target.sessionKey]
+        return UNNotificationRequest(identifier: id, content: content, trigger: nil)
+    }
+
+    /// Posts what a background refresh found. The app isn't running, so there is no visible chat,
+    /// dedupe history or push to defer to; the requests' own identifiers dedupe against live ones.
+    public func postBackground(_ requests: [UNNotificationRequest]) async {
+        guard self.enabled, let center else { return }
+        for request in requests { try? await center.add(request) }
+    }
+
+    private func post(id: String, title: String, body: String, target: Target) {
         guard self.enabled, let center, !self.deferredToPush(target.gatewayId) else { return }
         if self.appIsActive, self.visible == target { return }
         let dedupeKey = id.hasPrefix("reply:") ? "\(target.sessionKey)|\(body.prefix(80))" : id
@@ -181,14 +211,7 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         self.recent.append(contentsOf: [id, dedupeKey])
         if self.recent.count > 200 { self.recent.removeFirst(self.recent.count - 200) }
 
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        content.categoryIdentifier = category
-        content.threadIdentifier = "\(target.gatewayId.uuidString)|\(target.sessionKey)"
-        content.userInfo = ["gateway": target.gatewayId.uuidString, "session": target.sessionKey]
-        center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+        center.add(Self.replyContent(id: id, title: title, body: body, target: target))
     }
 
     public func clear(target: Target) {
