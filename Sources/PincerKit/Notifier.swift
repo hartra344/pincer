@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import UserNotifications
 
 /// Local notifications for replies, background activity, exec approvals and agent questions, posted while the app
@@ -59,7 +60,13 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         self.activated = true
         center.delegate = self
         center.setNotificationCategories(Set(Self.categories()))
-        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        Task {
+            // Only a first request shows the system prompt; the tips card waits it out (#332).
+            let undecided = await center.notificationSettings().authorizationStatus == .notDetermined
+            if undecided { NotificationPrompt.shared.isShowing = true }
+            _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+            NotificationPrompt.shared.isShowing = false
+        }
     }
 
     // MARK: Categories and actions
@@ -451,4 +458,14 @@ private struct MainThreadCompletion<Value>: @unchecked Sendable {
     @MainActor func callAsFunction(_ value: Value) {
         self.handler(value)
     }
+}
+
+/// Whether the system's notification permission prompt is up, so other first-launch UI can wait for it.
+@MainActor
+@Observable
+public final class NotificationPrompt {
+    public static let shared = NotificationPrompt()
+    public internal(set) var isShowing = false
+
+    public init() {}
 }

@@ -382,6 +382,55 @@ final class SetupFakeGateway {
         #expect(!tips.isPresented && tips.hasSeen)
     }
 
+    // MARK: Notification prompt (#332)
+
+    @Test func tipsWaitForThePermissionPrompt() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let tips = TipsModel(defaults: scratch.defaults, delay: .zero)
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false, permissionPromptShowing: true)
+        #expect(!tips.isPresented && !tips.isPending, "nothing while the prompt is up")
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false, permissionPromptShowing: false)
+        #expect(tips.isPresented, "the prompt is answered")
+    }
+
+    @Test func tipsCountdownDoesNotStartDuringThePromptAndCancelsWhenItAppears() async throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let (tips, gate) = self.gatedTips(scratch)
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false, permissionPromptShowing: true)
+        #expect(!tips.isPending && tips.pendingTask == nil)
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
+        let pending = try #require(tips.pendingTask)
+        #expect(tips.isPending)
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false, permissionPromptShowing: true)
+        #expect(!tips.isPending, "a prompt appearing cancels the countdown")
+        gate.expire()
+        await pending.value
+        #expect(!tips.isPresented)
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false, permissionPromptShowing: false)
+        #expect(tips.isPending, "the countdown starts once the prompt is gone")
+    }
+
+    @Test func tipsAlreadyShownStayWhenThePromptAppears() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let tips = TipsModel(defaults: scratch.defaults, delay: .zero)
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
+        #expect(tips.isPresented)
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false, permissionPromptShowing: true)
+        #expect(tips.isPresented, "the prompt doesn't hide a card that's already up")
+        tips.evaluate(connected: true, setupShowingOrPending: true, isDemo: false, permissionPromptShowing: true)
+        #expect(!tips.isPresented, "setup still does")
+    }
+
+    @Test @MainActor func notificationPromptFlagIsSettable() {
+        let prompt = NotificationPrompt()
+        #expect(!prompt.isShowing)
+        prompt.isShowing = true
+        #expect(prompt.isShowing)
+    }
+
     @Test func tipsZeroDelayPresentsSynchronously() {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }

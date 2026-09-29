@@ -63,6 +63,7 @@ struct ChannelList: View {
                 #endif
         }
         #if os(iOS)
+        .modifier(CompactTipsHost())
         .searchable(text: self.$search, placement: .sidebar, prompt: L("Find a chat"))
         #endif
         .navigationTitle(self.gateway.profile.name)
