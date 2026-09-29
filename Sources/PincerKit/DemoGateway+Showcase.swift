@@ -463,6 +463,8 @@ extension DemoGateway {
         add(Self.fileEditsKey, agent: "coder", title: "Fix retry backoff", preview: Self.fileEditsPreview,
             age: 5 * hour * 1000, ["hasActiveRun": true, "status": "running", "activeRunIds": [.string(Self.seededRunId)]],
             messages: Self.seedFileEditsTranscript())
+        add(Self.richRenderingKey, agent: "main", title: Self.richRenderingTitle, preview: Self.richRenderingPreview,
+            age: 8 * 60_000, messages: Self.seedRichRenderingTranscript())
         add(Self.toolCardsKey, agent: "main", title: Self.toolCardsTitle, preview: Self.toolCardsPreview, age: 3 * 60_000,
             messages: Self.seedToolCardsTranscript())
         add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
