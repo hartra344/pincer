@@ -135,6 +135,8 @@ Pincer shows images inline, with a Quick Look-style preview and sharing. This co
 
 To stop Pincer from loading images from the web, turn off **Load images the agent links from the web** in Settings.
 
+To keep image-heavy chats light, the transcript keeps a smaller copy of each image sized for the screen. Opening the preview loads the full-resolution image. Pincer holds a fixed amount of image memory per gateway (about 64 MB on iPhone and iPad, 160 MB on Mac), downloads up to four images at a time, and frees images you've scrolled away from when the system runs low on memory. Freed images load again when you scroll back. Images larger than 25 MB aren't downloaded, and show **Image too large to preview** instead.
+
 ## Your messages
 
 Messages from you appear under **your own name**, even when you sent them through Discord. A small **via Discord** tag shows where they came from. Set your name in Settings. It defaults to your macOS full name.
@@ -172,5 +174,7 @@ Each reply's footer shows the model the gateway recorded for it, so earlier repl
 ## History and caching
 
 The full history of every chat loads in the background, so scrolling up never waits for the network. After connecting, Pincer caches every chat, most recently active first, and skips chats that haven't changed. Opening a chat shows the cached transcript right away, then fetches only what's new.
+
+To keep memory in check with many long chats, Pincer keeps only your most recently opened chats in memory (8 on Mac, 4 on iPhone and iPad). It keeps fewer when the system is low on memory. Older chats are saved to the cache and let go, and reopen from it instantly. The open chat, chats with a reply in progress, and chats with unsent messages are always kept. Drafts are never lost. With the cache turned off, every chat stays in memory. Long transcripts lay out the messages near where you're reading first, and fill in the rest as you scroll.
 
 [Search messages](../search/) covers everything in this cache. Where the cache lives, how it handles updates and damaged files, and how to clear it are described in [Local cache](../local-cache/).
