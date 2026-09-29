@@ -89,6 +89,8 @@ public struct MCPServer: Identifiable, Hashable, Sendable {
     public let usesOAuth: Bool
     /// `shared` or `per-requester`.
     public let oauthIdentity: String?
+    /// `oauth.authProfileId`, when the server signs in with a named auth profile.
+    public let oauthAuthProfileId: String?
     /// The whole entry, so edits keep keys Pincer doesn't know.
     public let raw: JSONValue
 
@@ -106,6 +108,7 @@ public struct MCPServer: Identifiable, Hashable, Sendable {
         self.headers = MCPKeyValue.rows(json["headers"])
         self.usesOAuth = json["auth"]?.string == "oauth"
         self.oauthIdentity = json["oauth"]?["identity"]?.text
+        self.oauthAuthProfileId = json["oauth"]?["authProfileId"]?.text
         let declared = json["transport"]?.string.flatMap(MCPTransport.init(configValue:))
         if self.command != nil {
             self.transport = .stdio
@@ -230,6 +233,10 @@ public struct MCPServerDraft: Hashable, Sendable {
 
     private var savedEnvKeys: Set<String> = []
     private var savedHeaderKeys: Set<String> = []
+    private var savedTransport: MCPTransport?
+    private var savedURL: String?
+    private var savedUsesOAuth = false
+    private var savedFields: [MCPTransport: [String]] = [:]
 
     public init() {
         self.originalName = nil
@@ -261,9 +268,35 @@ public struct MCPServerDraft: Hashable, Sendable {
         self.usesOAuth = server.usesOAuth
         self.savedEnvKeys = Set(server.env.map(\.key))
         self.savedHeaderKeys = Set(server.headers.map(\.key))
+        self.savedTransport = server.transport
+        self.savedURL = server.url
+        self.savedUsesOAuth = server.usesOAuth
+        var local: [String] = []
+        if server.command != nil { local.append("Command") }
+        if !server.args.isEmpty { local.append("Arguments") }
+        if server.cwd != nil { local.append("Working directory") }
+        if !server.env.isEmpty { local.append("Environment variables") }
+        var remote: [String] = []
+        if server.url != nil { remote.append("URL") }
+        if !server.headers.isEmpty { remote.append("Headers") }
+        if server.usesOAuth { remote.append("OAuth sign-in") }
+        self.savedFields = [.stdio: local, .streamableHTTP: remote, .sse: remote]
     }
 
     public var isRename: Bool { self.originalName != nil && self.originalName != self.trimmedName }
+
+    /// An OAuth server whose name or URL changed: saved tokens are keyed by both, so it needs to sign in again.
+    public var resetsSignIn: Bool {
+        guard self.originalName != nil, self.savedUsesOAuth, self.usesOAuth, self.transport.isRemote else { return false }
+        let url = self.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        return self.isRename || (!self.urlIsRedacted && url != (self.savedURL ?? ""))
+    }
+
+    /// Labels of saved fields that switching transport will remove.
+    public var droppedFieldsOnTransportChange: [String] {
+        guard let saved = self.savedTransport, saved.isRemote != self.transport.isRemote else { return [] }
+        return self.savedFields[saved] ?? []
+    }
 
     private var trimmedName: String { self.name.trimmingCharacters(in: .whitespaces) }
 

@@ -54,4 +54,16 @@ import Testing
         #expect(statuses["pg"]?.state == .error && statuses["pg"]?.lastError == "spawn ENOENT")
         #expect(statuses["late"]?.state == .connecting)
     }
+
+    @Test func resetsSignInAndDroppedFields() {
+        let json: JSONValue = ["url": "https://a.b/mcp", "auth": "oauth", "oauth": ["authProfileId": "p"]]
+        let server = MCPServer(name: "s", json: json)!
+        #expect(server.oauthAuthProfileId == "p")
+        var draft = MCPServerDraft(server: server)
+        #expect(!draft.resetsSignIn && draft.droppedFieldsOnTransportChange.isEmpty)
+        draft.url = "https://a.b/other"
+        #expect(draft.resetsSignIn)
+        draft.transport = .stdio
+        #expect(draft.droppedFieldsOnTransportChange == ["URL", "OAuth sign-in"])
+    }
 }

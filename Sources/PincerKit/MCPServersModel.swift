@@ -92,6 +92,16 @@ public final class MCPServersModel {
 
     public func isChanged(_ name: String) -> Bool { self.settings.isChanged(MCPServers.path + [name]) }
 
+    /// Saved, but removed in the draft.
+    public func isRemoved(_ name: String) -> Bool {
+        self.settings.savedValue(at: MCPServers.path + [name]) != nil && self.settings.value(at: MCPServers.path + [name]) == nil
+    }
+
+    /// Brings back a server removed in the draft.
+    public func undoRemove(_ name: String) {
+        self.settings.revert(MCPServers.path + [name])
+    }
+
     public func isNew(_ name: String) -> Bool {
         self.settings.savedValue(at: MCPServers.path + [name]) == nil && self.settings.value(at: MCPServers.path + [name]) != nil
     }
@@ -288,8 +298,19 @@ public final class MCPServersModel {
         guard self.canRun(attempt.server, method: MCPServers.oauthCompleteMethod) else { return false }
         self.operations[attempt.server] = .running
         var params: [String: JSONValue] = ["attemptId": .string(attempt.id)]
-        if let code { params["code"] = .string(code) }
-        if let callbackURL { params["callbackUrl"] = .string(callbackURL.absoluteString) }
+        var callbackURL = callbackURL
+        // Pasted text may be the whole redirect link rather than the bare code.
+        if callbackURL == nil, let pasted = code?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let components = URLComponents(string: pasted), components.scheme != nil, components.host != nil,
+           components.queryItems?.contains(where: { $0.name == "code" }) == true
+        {
+            callbackURL = components.url
+        }
+        if let callbackURL {
+            params["callbackUrl"] = .string(callbackURL.absoluteString)
+        } else if let code {
+            params["code"] = .string(code.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
         var succeeded = false
         do {
             let result = try await self.request(MCPServers.oauthCompleteMethod, .object(params))
@@ -326,6 +347,10 @@ public final class MCPServersModel {
             self.operations[name] = .failed(ConfigWriteError.adminRequired.message)
             return false
         }
+        if self.isNew(name) || self.isChanged(name) || self.isRemoved(name) {
+            self.operations[name] = .failed("Save your changes first.")
+            return false
+        }
         if !self.advertises(method) {
             self.operations[name] = .failed("This Gateway doesn't support that yet.")
             return false
@@ -334,6 +359,13 @@ public final class MCPServersModel {
     }
 
     private func message(for error: Error, unavailable: String) -> String {
-        GatewayError.message(for: error, scope: ConfigWriteError.adminRequired.message, unavailable: unavailable)
+        if !GatewayError.isMissingScope(error), case let .rpc(_, text, _)? = error as? GatewayError {
+            let lower = text.lowercased()
+            if lower.contains("denied") { return "Sign-in was denied." }
+            if lower.contains("expired") || lower.contains("timed out") || lower.contains("timeout") || lower.contains("unknown attempt") {
+                return "Sign-in timed out. Try again."
+            }
+        }
+        return GatewayError.message(for: error, scope: ConfigWriteError.adminRequired.message, unavailable: unavailable)
     }
 }
