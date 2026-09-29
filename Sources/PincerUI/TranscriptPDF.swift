@@ -43,6 +43,7 @@ enum TranscriptPDF {
         let mono = PFont.monospacedSystemFont(ofSize: 10, weight: .regular)
         let out = NSMutableAttributedString()
         var inCode = false
+        var thinking = false
         for line in markdown.components(separatedBy: "\n") {
             if line.hasPrefix("```") {
                 inCode.toggle()
@@ -50,6 +51,20 @@ enum TranscriptPDF {
             }
             var font = body
             var text = line
+            var gray = false
+            if !inCode, line == "---" || line == "</details>" {
+                if line == "---" { out.append(NSAttributedString(string: "\n", attributes: [.font: body])) }
+                if line == "</details>" { thinking = false }
+                continue
+            }
+            if !inCode, line.hasPrefix("<details><summary>"), line.hasSuffix("</summary>") {
+                text = String(line.dropFirst("<details><summary>".count).dropLast("</summary>".count))
+                out.append(NSAttributedString(string: text + "\n", attributes: [
+                    .font: PFont.systemFont(ofSize: 11, weight: .bold), .foregroundColor: Self.gray]))
+                thinking = true
+                continue
+            }
+            gray = thinking
             if inCode {
                 font = mono
             } else if let level = Self.headingLevel(line) {
@@ -65,10 +80,12 @@ enum TranscriptPDF {
             } else {
                 piece = NSAttributedString(string: text, attributes: [.font: font])
             }
+            let start = out.length
             out.append(piece)
             out.append(NSAttributedString(string: "\n", attributes: [.font: font]))
+            out.addAttribute(.foregroundColor, value: gray ? Self.gray : Self.black,
+                             range: NSRange(location: start, length: out.length - start))
         }
-        out.addAttribute(.foregroundColor, value: Self.black, range: NSRange(location: 0, length: out.length))
         return out
     }
 
@@ -105,7 +122,9 @@ enum TranscriptPDF {
 
     #if canImport(AppKit)
     private static let black = NSColor.black
+    private static let gray = NSColor.darkGray
     #else
     private static let black = UIColor.black
+    private static let gray = UIColor.darkGray
     #endif
 }

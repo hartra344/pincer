@@ -113,3 +113,36 @@ struct ExportChatCommands: Commands {
     }
 }
 #endif
+
+#if os(iOS)
+import UIKit
+
+/// An exported file written to a temporary folder, ready to share.
+struct SharedFile: Identifiable {
+    let id = UUID()
+    let url: URL
+
+    static func write(name: String, data: Data) -> SharedFile? {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let url = folder.appendingPathComponent(name)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            return nil
+        }
+        return SharedFile(url: url)
+    }
+}
+
+/// The system share sheet for a file.
+struct ActivityView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [self.url], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+#endif

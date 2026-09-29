@@ -31,6 +31,9 @@ struct ChatView: View {
     @State private var find = TranscriptFind()
     @State private var jump: TranscriptJump?
     @State private var exportState = ChatExportState()
+    #if os(iOS)
+    @State private var sharedFile: SharedFile?
+    #endif
 
     private var row: SessionRow? { self.chat.sessionRow }
     private var agent: AgentSummary { self.gateway.agent(self.row?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main") }
@@ -101,9 +104,18 @@ struct ChatView: View {
         .sheet(isPresented: self.$exportState.showExport) {
             ExportSheet(chat: self.chat, title: self.row?.title ?? L("Chat"), agentName: self.agent.name,
                         agents: self.gateway.agents) { name, data in
+                #if os(iOS)
+                self.sharedFile = SharedFile.write(name: name, data: data)
+                #else
                 self.exporting = ExportedFile(name: name, data: data)
+                #endif
             }
         }
+        #if os(iOS)
+        .sheet(item: self.$sharedFile) { file in
+            ActivityView(url: file.url).presentationDetents([.medium, .large])
+        }
+        #endif
         .sheet(isPresented: self.$exportState.showBookmarks) {
             BookmarksView(store: BookmarkStore.shared(gatewayId: self.gateway.id), sessionKey: self.chat.sessionKey) { bookmark in
                 self.jump = TranscriptJump(id: UUID(), messageId: bookmark.messageId)
@@ -374,8 +386,9 @@ private struct TranscriptPane: View {
                     toggleBookmark: { [chat = self.chat, gateway = self.gateway] id in
                         let item = chat.items.first { $0.transcriptId == id || $0.id == id }
                         let store = BookmarkStore.shared(gatewayId: gateway.id)
-                        let added = item.map { store.toggle($0, sessionKey: chat.sessionKey) }
-                            ?? store.toggle(Bookmark(sessionKey: chat.sessionKey, messageId: id, preview: ""))
+                        let added = store.toggle(Bookmark(
+                            sessionKey: chat.sessionKey, messageId: id, preview: Bookmark.preview(item?.plainText ?? ""),
+                            role: item?.role.rawValue ?? "assistant", messageDate: item?.timestamp))
                         chat.notice = added ? L("Bookmarked") : L("Bookmark removed")
                     },
                     isBookmarked: { [key = self.chat.sessionKey, id = self.gateway.id] in
