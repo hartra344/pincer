@@ -51,7 +51,16 @@ struct ToolDetailsCacheTests {
         #expect(ToolActivity.fileEditDetails(details) == .object(["status": "failed", "exitCode": 1, "durationMs": 1240, "cwd": "/src"]),
                 "exec badges survive a reload; the duplicated output and nested values don't")
         let write = ToolFileEdit.parse(toolName: "write", arguments: Self.writeArgs, details: .object(["status": "completed"]))
-        #expect(write?.files.first?.operation == .add, "status scalars alone aren't a write receipt")
+        #expect(write?.files.first?.operation == .update && write?.statusLabel == "Written",
+                "status scalars alone aren't a write receipt")
+    }
+
+    @Test func newestPageRefreshWithoutDetailsStillSaysWritten() throws {
+        let refreshed = Self.items(details: nil)
+        #expect(refreshed[1].toolDetails == nil)
+        let edit = try #require(Self.tool(refreshed)?.fileEdit)
+        #expect(edit.statusLabel == "Written" && edit.files[0].operation == .update)
+        #expect(edit.deletionsBound == .unknown, "a Gateway that sends no details can't prove the file is new")
     }
 
     @Test func itemsWithoutToolDetailsOmitTheKey() throws {
