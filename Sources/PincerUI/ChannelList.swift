@@ -37,8 +37,8 @@ struct ChannelList: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-            .padding(.horizontal, Theme.Spacing.xxl)
-            .padding(.vertical, Theme.Spacing.sm)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
             .accessibilityIdentifier("sidebar-search-messages")
         }
     }
@@ -49,8 +49,8 @@ struct ChannelList: View {
             #if os(macOS)
             // `.searchable(placement: .sidebar)` only shows up above a SwiftUI List on macOS.
             SidebarSearchField(text: self.$search, prompt: "Find a chat")
-                .padding(.horizontal, Theme.Spacing.lg)
-                .padding(.bottom, Theme.Spacing.sm)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 6)
             #endif
             self.searchMessagesRow
             ConnectionStatusRow()
@@ -221,7 +221,7 @@ private struct ConnectionStatusRow: View {
                 // A restart this device asked for (or announced by `shutdown`) reads as such.
                 self.padded(GatewayHealthIndicatorRow(indicator: indicator!))
             case .notBack?:
-                self.padded(VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                self.padded(VStack(alignment: .leading, spacing: 4) {
                     GatewayHealthIndicatorRow(indicator: .notBack)
                     self.status
                 })
@@ -234,8 +234,8 @@ private struct ConnectionStatusRow: View {
     private func padded(_ content: some View) -> some View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Theme.Spacing.xxl)
-            .padding(.vertical, Theme.Spacing.md)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
     }
 
     @ViewBuilder private var status: some View {
@@ -248,7 +248,7 @@ private struct ConnectionStatusRow: View {
             // A single failed first attempt (network still coming up at launch) isn't worth alarming about.
             self.connectingLabel
         case let .reconnecting(attempt, delay, reason):
-            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+            VStack(alignment: .leading, spacing: 2) {
                 if self.gateway.hasConnected {
                     Label("Reconnecting in \(delay)s (attempt \(attempt))", systemImage: "arrow.triangle.2.circlepath")
                 } else {
@@ -454,7 +454,7 @@ struct SymbolPickerSheet: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.top, Theme.Spacing.lg)
+                                .padding(.top, 10)
                         }
                     }
                 }
@@ -496,8 +496,8 @@ struct SymbolPickerSheet: View {
                 .foregroundStyle(self.tint)
                 .frame(width: 40, height: 40)
                 .background(selected ? AnyShapeStyle(.tint.opacity(0.2)) : AnyShapeStyle(.clear),
-                            in: RoundedRectangle(cornerRadius: Theme.Radius.medium))
-                .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.medium))
+                            in: RoundedRectangle(cornerRadius: 8))
+                .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .help(symbol)
@@ -568,7 +568,7 @@ struct ChatColorSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    HStack(spacing: Theme.Spacing.xl) {
+                    HStack(spacing: 12) {
                         Image(systemName: self.symbol)
                             .font(.title2)
                             .foregroundStyle(self.color)
