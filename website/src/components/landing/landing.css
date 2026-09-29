@@ -61,7 +61,7 @@ h3 {
 	font-family: var(--font-display);
 	text-wrap: balance;
 	font-weight: 700;
-	letter-spacing: -0.025em;
+	letter-spacing: -0.015em;
 	line-height: 1.05;
 }
 p {
@@ -201,7 +201,7 @@ code {
 .hero h1 {
 	font-size: clamp(2.5rem, 5.2vw, 4.5rem);
 	line-height: 1.05;
-	letter-spacing: -0.03em;
+	letter-spacing: -0.02em;
 }
 .hero .lede {
 	margin-top: var(--space-5);
