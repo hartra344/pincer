@@ -6,9 +6,10 @@ import UniformTypeIdentifiers
 struct Composer: View {
     @Bindable var chat: ChatStore
     let placeholder: String
-    /// Whether the field may focus itself when it appears.
-    var autoFocus: @MainActor () -> Bool = { true }
+    /// While Find is open the field doesn't take focus on appear; nil means it always may.
+    var find: TranscriptFind?
     @Environment(GatewayStore.self) private var gateway
+    @Environment(AppModel.self) private var app
     @Environment(\.appTheme) private var theme
     @State private var importing = false
     @State private var photoItems: [PhotosPickerItem] = []
@@ -26,6 +27,9 @@ struct Composer: View {
     static let controlHeight: CGFloat = 40
 
     var body: some View {
+        #if DEBUG
+        let _ = BodyCounter.hit("Composer")
+        #endif
         VStack(alignment: .leading, spacing: 6) {
             if let attachmentError {
                 Label(attachmentError, systemImage: "exclamationmark.triangle")
@@ -65,7 +69,10 @@ struct Composer: View {
                     onMedia: self.ingest,
                     onKey: self.menuKey,
                     onCaretAtEnd: { if self.caretAtEnd != $0 { self.caretAtEnd = $0 } },
-                    autoFocus: self.autoFocus)
+                    autoFocus: { [find = self.find, app = self.app, gateway = self.gateway, chat = self.chat] in
+                        // Opening on a message search result: the Find field keeps focus.
+                        !(find?.isPresented ?? false) && !ChatView.hasFindRequest(app: app, gateway: gateway, chat: chat)
+                    })
                     .padding(.vertical, 11)
                     .frame(minHeight: Self.controlHeight)
                 ContextMeter(chat: self.chat)
@@ -268,7 +275,7 @@ struct Composer: View {
 
     // MARK: Slash commands
 
-    private var row: SessionRow? { self.gateway.sessions[self.chat.sessionKey] }
+    private var row: SessionRow? { self.chat.sessionRow }
 
     private var agentId: String {
         self.row?.agentId ?? self.chat.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? self.gateway.defaultAgentId
