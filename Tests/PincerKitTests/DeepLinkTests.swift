@@ -215,8 +215,8 @@ struct DeepLinkTests {
 
     @Test func noticesUseTheAgreedCopy() {
         func plain(_ text: String) -> String { text.replacingOccurrences(of: "\u{2019}", with: "'") }
-        #expect(plain(PincerRoute.Notice.unknownGateway) == "That link points to a gateway that isn't set up on this device.")
-        #expect(plain(PincerRoute.Notice.unknownSession) == "That chat isn't available on this gateway anymore.")
+        #expect(plain(PincerRoute.Notice.unknownGateway) == "That link points to a Gateway that isn't set up on this device.")
+        #expect(plain(PincerRoute.Notice.unknownSession) == "That chat isn't available on this Gateway anymore.")
         #expect(plain(PincerRoute.Notice.unknownMessage) == "Couldn't find that message.")
         #expect(PincerRoute.Notice.linkCopied == "Link copied")
     }

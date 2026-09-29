@@ -662,7 +662,7 @@ public final class ExecPolicyModel {
             return "This device can view the command policy but not change it. Open Connection to request Full Management."
         }
         if !self.canWrite {
-            return "This gateway can't change its command policy. Update OpenClaw to manage it here."
+            return "This Gateway can't change its command policy. Update OpenClaw to manage it here."
         }
         return nil
     }
@@ -899,7 +899,7 @@ public final class ExecPolicyModel {
                 self.banner = .notice(ExecPolicy.needsAdminMessage)
             case .unsupported:
                 self.setRejectedAsUnknown = true
-                let message = "This gateway can't change its command policy. Update OpenClaw to manage it here."
+                let message = "This Gateway can't change its command policy. Update OpenClaw to manage it here."
                 self.saveState = .failed(message)
                 self.banner = .notice(message)
             case let .other(message):

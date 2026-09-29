@@ -374,7 +374,7 @@ public final class GatewayLogsModel {
         public var message: String {
             switch self {
             case .missingScope: GatewayLogsModel.missingScopeMessage
-            case let .unavailable(message): "Couldn't read the gateway log: \(message). Retrying…"
+            case let .unavailable(message): "Couldn't read the Gateway log: \(message). Retrying…"
             case let .other(message): message
             }
         }

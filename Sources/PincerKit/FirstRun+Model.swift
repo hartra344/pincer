@@ -100,7 +100,7 @@ public enum FirstRunCopy {
 
     /// One line from the hello snapshot's health, when it reports a problem (channels aren't setup's concern).
     /// Under Welcome's Try the Demo.
-    public static let demoCaption = "No gateway needed. Explore sample agents and chats. Nothing leaves this device."
+    public static let demoCaption = "No Gateway needed. Explore sample agents and chats. Nothing leaves this device."
 
     /// Verify's health line: plain words, with Details for the specifics (product review r1).
     public static let healthReported = "Your Gateway reported a problem. You can keep going and check it later."

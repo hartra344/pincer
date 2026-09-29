@@ -69,8 +69,8 @@ public struct PincerRoute: Hashable, Sendable {
 
     /// Fixed wording for what a route couldn't do. Never includes ids from the link.
     public enum Notice {
-        public static let unknownGateway = "That link points to a gateway that isn’t set up on this device."
-        public static let unknownSession = "That chat isn’t available on this gateway anymore."
+        public static let unknownGateway = "That link points to a Gateway that isn’t set up on this device."
+        public static let unknownSession = "That chat isn’t available on this Gateway anymore."
         public static let unknownMessage = "Couldn’t find that message."
         public static let invalidLink = "Pincer couldn’t open that link."
         public static let linkCopied = "Link copied"

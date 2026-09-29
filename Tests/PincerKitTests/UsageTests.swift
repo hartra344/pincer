@@ -530,7 +530,7 @@ struct UsageModelTests {
             }
         }
         await model.load()
-        #expect(model.status.loadState.error == "The gateway couldn't load usage." && model.status.supported)
+        #expect(model.status.loadState.error == "The Gateway couldn't load usage." && model.status.supported)
         #expect(!model.cost.isForbidden && model.cost.loadState.error == "missing scope: operator.read", "a missing scope isn't the role refusal")
         #expect(model.sessions.value?.totals.totalTokens == 9 && model.totals?.totalTokens == 9)
     }
@@ -553,7 +553,7 @@ struct UsageModelTests {
                                                   "costDaily": [["date": "2026-09-26", "input": 2, "totalTokens": 2]]]])
         let model = UsageModel(now: { now }) { method, _ in method == "usage.cost" ? cost.value : method == "sessions.usage" ? sessions.value : [:] }
         await model.load()
-        #expect(model.displayedRange.dayKeys == ["2026-09-24", "2026-09-25", "2026-09-26"], "the gateway's range")
+        #expect(model.displayedRange.dayKeys == ["2026-09-24", "2026-09-25", "2026-09-26"], "the Gateway's range")
         #expect(model.daily?.map(\.totals.totalTokens) == [1, 0, 0], "usage.cost first")
         cost.value = .string("x")
         await model.refresh()

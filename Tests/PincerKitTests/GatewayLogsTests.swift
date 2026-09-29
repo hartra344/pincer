@@ -238,7 +238,7 @@ struct GatewayLogsModelTests {
         let model = self.model(script)
         await model.poll()
         #expect(model.failure == .unavailable("EACCES: permission denied"))
-        #expect(model.failure?.message == "Couldn't read the gateway log: EACCES: permission denied. Retrying…")
+        #expect(model.failure?.message == "Couldn't read the Gateway log: EACCES: permission denied. Retrying…")
         #expect(model.nextDelay == .seconds(2))
         await model.poll()
         #expect(model.failure == .unavailable("busy") && model.nextDelay == .seconds(4))

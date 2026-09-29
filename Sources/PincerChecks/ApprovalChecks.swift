@@ -125,10 +125,10 @@ func runApprovalOutcomeChecks() async {
         check(ApprovalOutcome.allowAlwaysUnavailable.followUpBody(gatewayName: name) == "Always allow isn't available for this command.",
               "allow-always unavailable copy")
         check(ApprovalOutcome.unreachable.followUpBody(gatewayName: name) == "Couldn't reach Home Lab — the command is still waiting.",
-              "unreachable copy names the gateway")
+              "unreachable copy names the Gateway")
         check(ApprovalOutcome.notPermitted.followUpBody(gatewayName: name) == "This device can't approve commands on Home Lab. Open Pincer for details.",
-              "not permitted copy names the gateway")
-        check(ApprovalOutcome.unknownGateway.followUpBody(gatewayName: nil) == "This gateway is no longer in Pincer.", "unknown gateway copy")
+              "not permitted copy names the Gateway")
+        check(ApprovalOutcome.unknownGateway.followUpBody(gatewayName: nil) == "This Gateway is no longer in Pincer.", "unknown gateway copy")
         check(ApprovalOutcome.failed("boom").followUpBody(gatewayName: name) == "boom"
               && (ApprovalOutcome.failed(String(repeating: "x", count: 500)).followUpBody(gatewayName: name)?.count ?? 0) <= 220,
               "other errors show the clipped message")
@@ -151,7 +151,7 @@ func runApprovalOutcomeChecks() async {
         }
         check(contents.allSatisfy { $0 != nil }, "a follow-up for every stale or failed outcome")
         check(contents.compactMap(\.self).allSatisfy { !$0.body.contains(command) && !$0.title.contains(command) && $0.title.contains(name) },
-              "follow-ups name the gateway and never the command")
+              "follow-ups name the Gateway and never the command")
         check(contents.compactMap(\.self).allSatisfy {
             $0.interruptionLevel != .timeSensitive && $0.threadIdentifier == "\(gw.uuidString)|agent:main:main"
                 && $0.userInfo["gateway"] as? String == gw.uuidString && $0.userInfo["approval"] as? String == "a1"
@@ -477,7 +477,7 @@ func checkApprovalHistoryModel() async {
           && ApprovalHistoryModel.missingScopeMessage.contains("operator.approvals"), "missing scope → approve operator.approvals message")
     let failing = ApprovalHistoryModel { _, _ in throw GatewayError.rpc(code: "UNAVAILABLE", message: "ledger offline", details: nil) }
     await failing.load()
-    check(failing.loadState.error == "ledger offline" && failing.supported, "other errors show the gateway's message")
+    check(failing.loadState.error == "ledger offline" && failing.supported, "other errors show the Gateway's message")
 
     // Unsupported gateways: hello without approval.history, or UNKNOWN_METHOD.
     var requested = false

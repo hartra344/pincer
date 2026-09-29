@@ -223,13 +223,13 @@ struct SkillsToolsTests {
     }
 
     @Test func confirmationCopy() {
-        #expect(Skills.installWarning == "This downloads the skill into the default agent's workspace on the gateway host. Skills can run commands and read files with the agent's permissions. Only install skills you trust.")
+        #expect(Skills.installWarning == "This downloads the skill into the default agent's workspace on the Gateway host. Skills can run commands and read files with the agent's permissions. Only install skills you trust.")
         #expect(Skills.clawHubInstallTitle("NAS Report") == "Install “NAS Report” from ClawHub?")
         #expect(Skills.installerTitle(SkillInstallOption(id: "brew", kind: "brew", label: "Install ffmpeg (brew)"))
-            == "Run installer “Install ffmpeg (brew)” on the gateway host?")
+            == "Run installer “Install ffmpeg (brew)” on the Gateway host?")
         #expect(Skills.updateTitle("NAS Report") == "Update “NAS Report”?")
         #expect(Skills.forceReplaceMessage("Grocery List") == "Grocery List was changed locally since it was installed. Replace it anyway?")
-        #expect(Skills.installMessage().hasPrefix("This downloads the skill into the default agent's workspace on the gateway host."))
+        #expect(Skills.installMessage().hasPrefix("This downloads the skill into the default agent's workspace on the Gateway host."))
         #expect(Skills.installMessage(agentName: "Scout").contains("Scout's workspace"))
         #expect(Skills.needsAdminMessage == "You can view skills. Turn on Full Management under Connection, then approve this device on the Gateway host.")
     }

@@ -23,7 +23,7 @@ extension DemoGateway {
                 agentId: "main",
                 text: "Great, can you turn that into a shopping list grouped by aisle?",
                 createdAt: now.addingTimeInterval(-40),
-                state: .failed(OutboxFailure(message: "The gateway timed out.", retryable: true)),
+                state: .failed(OutboxFailure(message: "The Gateway timed out.", retryable: true)),
                 attempts: 1),
         ]
     }
