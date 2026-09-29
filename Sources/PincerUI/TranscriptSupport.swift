@@ -129,6 +129,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     private var cache: [String: Entry] = [:]
     private var imageRows: [String: Set<String>] = [:]
     private var imageStates: [String: ImageState] = [:]
+    private var imageRefs: [String: ImageRef] = [:]
     private var fileRows: [String: Set<String>] = [:]
     private var filePreviews: [String: FileContentLoader.Preview?] = [:]
     private var spawnRows: Set<String> = []
@@ -242,6 +243,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         let loader = self.context.gateway.images
         for ref in layout.images {
             let key = ref.cacheKey
+            self.imageRefs[key] = ref
             self.imageRows[key, default: []].insert(row.id)
             self.imageStates[key] = loader.cached(ref) != nil ? .loaded : loader.hasFailed(ref) ? .failed : .loading
         }
@@ -258,6 +260,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.cache.removeAll()
         self.imageRows.removeAll()
         self.imageStates.removeAll()
+        self.imageRefs.removeAll()
         self.fileRows.removeAll()
         self.filePreviews.removeAll()
         self.spawnRows.removeAll()
@@ -293,8 +296,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         let loader = self.context.gateway.images
         var stale: Set<String> = []
         for (key, old) in self.imageStates {
-            guard let rows = self.imageRows[key], let id = rows.first,
-                  let ref = self.cache[id]?.layout.images.first(where: { $0.cacheKey == key }) else { continue }
+            guard let rows = self.imageRows[key], let ref = self.imageRefs[key] else { continue }
             let now: ImageState = loader.cached(ref) != nil ? .loaded : loader.hasFailed(ref) ? .failed : .loading
             if now != old {
                 self.imageStates[key] = now

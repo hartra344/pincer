@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 #if os(macOS)
 import AppKit
@@ -214,7 +215,33 @@ struct AppTheme: Equatable, Sendable {
     var mode: AppearanceMode = .system
     var overrides: [ThemeRole: ThemeColor] = [:]
 
+    private struct Cache: @unchecked Sendable {
+        var value: AppTheme?
+        var observer: NSObjectProtocol?
+    }
+
+    private static let cache = LockedBox(Cache())
+
+    /// Cached; dropped whenever any UserDefaults value changes (covers @AppStorage writes too).
     static var current: AppTheme {
+        self.cache.withLock { cache in
+            if let value = cache.value { return value }
+            if cache.observer == nil {
+                cache.observer = NotificationCenter.default.addObserver(
+                    forName: UserDefaults.didChangeNotification, object: nil, queue: nil)
+                { _ in AppTheme.invalidateCache() }
+            }
+            let value = self.loadFromDefaults()
+            cache.value = value
+            return value
+        }
+    }
+
+    static func invalidateCache() {
+        self.cache.withLock { $0.value = nil }
+    }
+
+    private static func loadFromDefaults() -> AppTheme {
         let defaults = UserDefaults.standard
         var theme = AppTheme()
         theme.preset = defaults.string(forKey: self.presetKey).flatMap(ThemePreset.init) ?? .standard
@@ -292,10 +319,12 @@ struct AppTheme: Equatable, Sendable {
         } else {
             UserDefaults.standard.removeObject(forKey: role.storageKey)
         }
+        self.invalidateCache()
     }
 
     static func resetOverrides() {
         for role in ThemeRole.allCases { UserDefaults.standard.removeObject(forKey: role.storageKey) }
+        self.invalidateCache()
     }
 }
 
@@ -337,6 +366,7 @@ private struct ThemeRoot: ViewModifier {
             .preferredColorScheme(self.theme.mode.colorScheme)
             #endif
             .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in
+                AppTheme.invalidateCache()
                 let theme = AppTheme.current
                 if theme != self.theme { self.theme = theme }
             }
@@ -351,5 +381,19 @@ private struct ThemeRoot: ViewModifier {
 extension View {
     func themed() -> some View {
         self.modifier(ThemeRoot())
+    }
+}
+
+/// Minimal lock box (NSLock) so the cache is safe off-main.
+private final class LockedBox<State>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var state: State
+
+    init(_ state: State) { self.state = state }
+
+    func withLock<R>(_ body: (inout State) -> R) -> R {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return body(&self.state)
     }
 }
