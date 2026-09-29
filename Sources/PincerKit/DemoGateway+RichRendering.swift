@@ -68,13 +68,13 @@ extension DemoGateway {
             \(Self.richRenderingSequence)
             ```
 
-            The bucket refills at *r* tokens per second, up to a capacity *b*:
+            The bucket refills at $r$ tokens per second, up to a capacity $b$:
 
             $$
             \(Self.richRenderingMath)
             $$
 
-            So the largest burst in a window Δ*t*, and the sustained rate it allows, are
+            So the largest burst in a window $\\Delta t$, and the sustained rate $\\lambda$ it allows, are
 
             $$
             \(Self.richRenderingBurst)
