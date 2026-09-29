@@ -59,9 +59,10 @@ h2,
 h3 {
 	margin: 0;
 	font-family: var(--font-display);
-	text-transform: uppercase;
 	text-wrap: balance;
-	font-weight: 800;
+	font-weight: 700;
+	letter-spacing: -0.025em;
+	line-height: 1.05;
 }
 p {
 	margin: 0;
@@ -138,10 +139,8 @@ code {
 	color: var(--pc-text);
 	text-decoration: none;
 	font-family: var(--font-display);
-	font-weight: 800;
-	font-size: 1.5rem;
-	text-transform: uppercase;
-	letter-spacing: 0.02em;
+	font-weight: 700;
+	font-size: 1.25rem;
 }
 .keyshelf nav {
 	display: flex;
@@ -200,9 +199,9 @@ code {
 	padding: var(--space-8) var(--space-6) var(--space-8) 0;
 }
 .hero h1 {
-	font-size: clamp(3.25rem, 6.4vw, 6rem);
-	line-height: 0.92;
-	letter-spacing: 0;
+	font-size: clamp(2.5rem, 5.2vw, 4.5rem);
+	line-height: 1.05;
+	letter-spacing: -0.03em;
 }
 .hero .lede {
 	margin-top: var(--space-5);
@@ -350,10 +349,8 @@ code {
 }
 .strip {
 	font-family: var(--font-display);
-	font-weight: 700;
-	font-size: 1.0625rem;
-	letter-spacing: 0.07em;
-	text-transform: uppercase;
+	font-weight: 600;
+	font-size: 0.9375rem;
 	padding: 0.1rem var(--space-2);
 	background: var(--pc-panel);
 	border: 1px solid var(--pc-line-strong);
@@ -389,8 +386,8 @@ code {
 	order: 2;
 }
 .line h2 {
-	font-size: clamp(2.5rem, 4.6vw, 4.25rem);
-	line-height: 0.95;
+	font-size: clamp(2rem, 3.6vw, 3.25rem);
+	line-height: 1.05;
 }
 .line .body {
 	margin-top: var(--space-4);
@@ -444,10 +441,8 @@ code {
 	border: 1px solid var(--pc-line-strong);
 	border-radius: 4px;
 	font-family: var(--font-display);
-	font-weight: 700;
-	letter-spacing: 0.07em;
-	text-transform: uppercase;
-	font-size: 0.9375rem;
+	font-weight: 600;
+	font-size: 0.875rem;
 	line-height: 1.4;
 }
 .chips {
@@ -477,8 +472,8 @@ code {
 	align-items: end;
 }
 .security h2 {
-	font-size: clamp(2.75rem, 6vw, 5.25rem);
-	line-height: 0.92;
+	font-size: clamp(2.25rem, 4.6vw, 4rem);
+	line-height: 1.05;
 }
 .security-head p {
 	color: var(--pc-muted);
@@ -504,9 +499,8 @@ code {
 	display: flex;
 	align-items: center;
 	gap: var(--space-3);
-	font-size: 1.375rem;
-	letter-spacing: 0.06em;
-	line-height: 1.1;
+	font-size: 1.125rem;
+	line-height: 1.2;
 }
 .switches .socket {
 	width: 1.25rem;
@@ -528,8 +522,8 @@ code {
 }
 .connect h2,
 .closing h2 {
-	font-size: clamp(2.5rem, 4.6vw, 4.25rem);
-	line-height: 0.95;
+	font-size: clamp(2rem, 3.6vw, 3.25rem);
+	line-height: 1.05;
 }
 .steps {
 	list-style: none;
@@ -547,16 +541,17 @@ code {
 .steps .num {
 	display: block;
 	font-family: var(--font-display);
-	font-weight: 800;
-	font-size: clamp(5rem, 10vw, 8.5rem);
-	line-height: 0.85;
+	font-weight: 700;
+	font-size: clamp(4.5rem, 9vw, 7.5rem);
+	line-height: 0.9;
+	letter-spacing: -0.04em;
 	color: var(--pc-brass);
 	font-variant-numeric: tabular-nums;
 }
 .steps h3 {
 	margin-top: var(--space-4);
-	font-size: 1.75rem;
-	line-height: 1.05;
+	font-size: 1.375rem;
+	line-height: 1.15;
 }
 .steps p {
 	margin-top: var(--space-2);
