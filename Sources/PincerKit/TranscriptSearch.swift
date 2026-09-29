@@ -113,7 +113,7 @@ public enum TranscriptSearch {
                 texts.append(inline(text))
             case let .code(language, code):
                 flush()
-                if SVGRasterizer.inlineSource(language: language?.isEmpty == false ? language! : "code", code: code) == nil {
+                if SVGSource.inlineSource(language: language?.isEmpty == false ? language! : "code", code: code) == nil {
                     texts.append(code)
                 }
             case .rule:

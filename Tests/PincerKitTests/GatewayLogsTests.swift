@@ -597,7 +597,8 @@ struct GatewayLogsModelEdgeCaseTests {
         #expect(map("FORBIDDEN", "x", .object(["code": .string("MISSING_SCOPE")])) == .missingScope)
         #expect(map("UNAVAILABLE", "Log read failed:  ENOENT") == .unavailable("ENOENT"))
         #expect(map("UNAVAILABLE", "disk busy") == .unavailable("disk busy"))
-        #expect(map("FORBIDDEN", "operator.admin required") == .other("operator.admin required"))
+        #expect(map("FORBIDDEN", "operator.admin required") == .missingScope)
+        #expect(map("FORBIDDEN", "not allowed") == .other("not allowed"))
         #expect(GatewayLogsModel.failure(for: GatewayError.notConnected) != .missingScope)
     }
 

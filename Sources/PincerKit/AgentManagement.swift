@@ -410,12 +410,8 @@ public enum AgentManagementError: Error, Equatable, Sendable {
         if details?["type"]?.text == AgentManagement.conflictErrorType || lower.contains("changed since it was read") {
             return .conflict(currentHash: details?["currentHash"]?.text?.lowercased())
         }
-        if code == "MISSING_SCOPE" || details?["code"]?.text == "MISSING_SCOPE"
-            || lower.contains("missing scope") || lower.contains("operator.admin")
-        {
-            return .needsAdmin
-        }
-        if code == "UNKNOWN_METHOD" || code == "METHOD_NOT_FOUND" || lower.contains("unknown method") { return .unsupported }
+        if GatewayError.isMissingScope(error) { return .needsAdmin }
+        if GatewayError.isUnknownMethod(error) { return .unsupported }
         if lower.hasPrefix("agent \""), lower.hasSuffix("not found") { return .notFound(message) }
         if code == "INVALID_REQUEST" { return .validation(message) }
         return .other(message)

@@ -361,16 +361,12 @@ public enum ExecPolicyError: Equatable, Sendable {
     case other(String)
 
     public static func classify(_ error: Error) -> ExecPolicyError {
-        guard case let GatewayError.rpc(code, message, details) = error else {
+        guard case let GatewayError.rpc(code, message, _) = error else {
             return .other(error.localizedDescription)
         }
         let lower = message.lowercased()
-        if code == "MISSING_SCOPE" || details?["code"]?.text == "MISSING_SCOPE"
-            || lower.contains("missing scope") || lower.contains("operator.admin")
-        {
-            return .needsAdmin
-        }
-        if code == "UNKNOWN_METHOD" || code == "METHOD_NOT_FOUND" || lower.contains("unknown method") { return .unsupported }
+        if GatewayError.isMissingScope(error) { return .needsAdmin }
+        if GatewayError.isUnknownMethod(error) { return .unsupported }
         if lower.contains("changed since last load") || lower.contains("base hash required") { return .conflict }
         if code == "INVALID_REQUEST" { return .validation(message) }
         return .other(message)

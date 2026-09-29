@@ -315,12 +315,12 @@ public final class PairingInboxModel {
             self.apply(result)
             self.scopeDenied = false
             self.loadState = .idle
-        } catch let error where GatewayConfigClient.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             guard generation == self.generation else { return }
             self.unknownMethod = true
             self.clearList()
             self.loadState = .idle
-        } catch let error where Self.isMissingScope(error) {
+        } catch let error where GatewayError.isMissingScope(error) {
             guard generation == self.generation else { return }
             self.scopeDenied = true
             self.loadState = .failed(Self.missingScopeMessage)
@@ -485,11 +485,6 @@ public final class PairingInboxModel {
     public nonisolated static let staleMessage = "This request was already handled or expired."
     public nonisolated static let expiredMessage = "This request expired."
 
-    static func isMissingScope(_ error: Error) -> Bool {
-        guard case let GatewayError.rpc(code, _, details) = error else { return false }
-        return code == "MISSING_SCOPE" || code == "FORBIDDEN" || details?["code"]?.text == "MISSING_SCOPE"
-    }
-
     static func isStale(_ error: Error) -> Bool {
         guard case let GatewayError.rpc(code, message, _) = error, code == "INVALID_REQUEST" else { return false }
         return message.lowercased().contains("no longer exists")
@@ -501,11 +496,9 @@ public final class PairingInboxModel {
     }
 
     static func message(for error: Error) -> String {
-        guard case let GatewayError.rpc(_, message, details) = error else { return error.localizedDescription }
-        if Self.isMissingScope(error) {
-            let missing = details?["missingScope"]?.text ?? details?["scope"]?.text
-            return missing == GatewayConnection.adminScope ? Self.commandOwnerScopeMessage : Self.missingScopeMessage
-        }
-        return message
+        GatewayError.message(
+            for: error,
+            scope: GatewayError.missingScope(error) == GatewayConnection.adminScope
+                ? Self.commandOwnerScopeMessage : Self.missingScopeMessage)
     }
 }
