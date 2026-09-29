@@ -228,6 +228,11 @@ public actor GatewayConnection {
         await self.demo?.recordedActions ?? []
     }
 
+    /// Makes the built-in demo play a released Gateway whose finished replies don't mark chats unread (#426).
+    func setDemoRepliesMarkUnread(_ marks: Bool) async {
+        await self.demo?.setRepliesMarkUnread(marks)
+    }
+
     /// Handshake done and a socket to send on, so `request` won't throw `notConnected`.
     var isReady: Bool { self.hello != nil && (self.demo != nil || self.task != nil) }
 

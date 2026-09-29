@@ -160,7 +160,7 @@ extension DemoGateway {
             row["activeRunIds"] = []
             row["status"] = "idle"
             row["lastMessagePreview"] = .string(String(reply.prefix(120)))
-            row["unread"] = true
+            if self.repliesMarkUnread { row["unread"] = true }
             // Each turn grows the context snapshot, up to the window.
             if let total = row["totalTokens"]?.int {
                 let output = reply.count / 4
