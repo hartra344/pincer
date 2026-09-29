@@ -130,6 +130,16 @@ struct SidebarModel: Equatable {
             self.leadingEntries.map(\.id) + self.subgroups.flatMap { [$0.header.id] + $0.childIds } + self.entries.map(\.id)
         }
 
+        /// Every row under the header with the header it sits under, in display order. Unlike
+        /// `childIds`, this changes when a chat moves into or out of a nested group without
+        /// changing the flat order (#416).
+        var placements: [Placement] {
+            let parent = self.header.id
+            return self.leadingEntries.map { Placement(id: $0.id, parent: parent) }
+                + self.subgroups.flatMap { [Placement(id: $0.header.id, parent: parent)] + $0.placements }
+                + self.entries.map { Placement(id: $0.id, parent: parent) }
+        }
+
         var allEntries: [Entry] {
             self.leadingEntries + self.subgroups.flatMap(\.allEntries) + self.entries
         }
@@ -141,6 +151,24 @@ struct SidebarModel: Equatable {
     }
 
     var groups: [Group] = []
+
+    /// Whether the native list has to rebuild its rows rather than refresh them in place. Rows are
+    /// compared with their parent header: a chat moving into the group just above it keeps the
+    /// flat order but changes parent, and a stale outline then shows it twice (#416).
+    static func structureChanged(old: SidebarModel, new: SidebarModel) -> Bool {
+        old.placements != new.placements
+    }
+
+    /// Every header and row, in display order, each with the header it sits under.
+    var placements: [Placement] {
+        self.groups.flatMap { [Placement(id: $0.header.id, parent: nil)] + $0.placements }
+    }
+
+    /// A row and the header it sits under (`nil` for a top-level header).
+    struct Placement: Hashable {
+        let id: String
+        let parent: String?
+    }
 
     static func headerId(_ sectionId: String) -> String { "section:\(sectionId)" }
     static func entryId(_ key: String) -> String { "chat:\(key)" }

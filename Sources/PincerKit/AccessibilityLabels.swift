@@ -88,12 +88,14 @@ public enum AccessibilityText {
         isStreaming: Bool = false,
         isError: Bool = false,
         isPending: Bool = false,
+        isBookmarked: Bool = false,
         via: String? = nil,
         summaryLimit: Int = AccessibilityText.defaultSummaryLimit) -> String
     {
         let body = Self.summary(text, limit: summaryLimit)
         return Self.join([
             Self.speaker(role: role, author: author),
+            isBookmarked ? L("Bookmarked", comment: "VoiceOver: the message is bookmarked") : nil,
             via.map { L("via \($0)") },
             isStreaming ? L("Responding") : nil,
             isError ? L("Error") : nil,
