@@ -454,14 +454,14 @@ final class TranscriptSendStatusView: TranscriptBaseView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        self.retryButton.set(title: "Retry", symbol: "arrow.clockwise")
-        self.retryButton.accessibilityText = "Retry sending"
+        self.retryButton.set(title: L("Retry"), symbol: "arrow.clockwise")
+        self.retryButton.accessibilityText = L("Retry sending")
         self.retryButton.onTap = { [weak self] in
             guard let self, let id = self.status?.id else { return }
             self.actions?.retrySend(id)
         }
-        self.deleteButton.set(title: "Delete", symbol: "trash")
-        self.deleteButton.accessibilityText = "Delete unsent message"
+        self.deleteButton.set(title: L("Delete"), symbol: "trash")
+        self.deleteButton.accessibilityText = L("Delete unsent message")
         self.deleteButton.isSubdued = true
         self.deleteButton.onTap = { [weak self] in
             guard let self, let id = self.status?.id else { return }
@@ -647,7 +647,7 @@ final class TranscriptCodeView: TranscriptBaseView {
     private var identity: String?
 
     var extraCopyItems: [TranscriptRowLayout.CopyItem] {
-        self.code.map { [.init(title: "Copy Code", text: $0.code)] } ?? []
+        self.code.map { [.init(title: L("Copy Code"), text: $0.code)] } ?? []
     }
 
     override init(frame: CGRect) {
@@ -655,7 +655,7 @@ final class TranscriptCodeView: TranscriptBaseView {
         self.scroller.document.addSubview(self.textView)
         self.addSubview(self.scroller)
         self.addSubview(self.copyButton)
-        self.copyButton.set(title: "Copy", symbol: "doc.on.doc")
+        self.copyButton.set(title: L("Copy"), symbol: "doc.on.doc")
         self.copyButton.onTap = { [weak self] in self?.copy() }
     }
 
@@ -664,7 +664,7 @@ final class TranscriptCodeView: TranscriptBaseView {
         let identity = "\(row.id):\(code.code.hashValue)"
         if identity != self.identity {
             self.copiedToken += 1
-            self.copyButton.set(title: "Copy", symbol: "doc.on.doc")
+            self.copyButton.set(title: L("Copy"), symbol: "doc.on.doc")
             if self.identity?.hasPrefix(row.id + ":") != true { self.scroller.scrollToStart() }
             self.identity = identity
         }
@@ -679,12 +679,12 @@ final class TranscriptCodeView: TranscriptBaseView {
     private func copy() {
         guard let code else { return }
         Clipboard.copy(code.code)
-        self.copyButton.set(title: "Copied", symbol: "checkmark")
+        self.copyButton.set(title: L("Copied"), symbol: "checkmark")
         self.copiedToken += 1
         let token = self.copiedToken
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             guard let self, self.copiedToken == token else { return }
-            self.copyButton.set(title: "Copy", symbol: "doc.on.doc")
+            self.copyButton.set(title: L("Copy"), symbol: "doc.on.doc")
         }
     }
 
@@ -731,7 +731,7 @@ final class TranscriptMarkdownTableView: TranscriptBaseView {
     private var rowId: String?
 
     var extraCopyItems: [TranscriptRowLayout.CopyItem] {
-        self.grid.table.map { [.init(title: "Copy Table", text: $0.plainText)] } ?? []
+        self.grid.table.map { [.init(title: L("Copy Table"), text: $0.plainText)] } ?? []
     }
 
     override init(frame: CGRect) {
@@ -818,7 +818,7 @@ final class TranscriptThinkingHeaderView: TranscriptTapView {
         self.addSubview(self.spinner)
     }
 
-    private var title: String { self.thinking?.title ?? "Thinking" }
+    private var title: String { self.thinking?.title ?? L("Thinking") }
 
     private var titleWidth: CGFloat {
         singleLine(self.title, TranscriptStyle.shared.calloutMedium, TranscriptColors.secondary).lineWidth
@@ -832,7 +832,7 @@ final class TranscriptThinkingHeaderView: TranscriptTapView {
         self.spinner.setAnimating(thinking.isStreaming)
         let rowId = row.id
         self.onTap = { [weak actions] in actions?.setExpanded(thinking.key, !thinking.isExpanded, row: rowId) }
-        self.accessibilityText = (thinking.isExpanded ? "Hide " : "Show ") + thinking.title.lowercased()
+        self.accessibilityText = thinking.isExpanded ? L("Hide \(thinking.title.lowercased())") : L("Show \(thinking.title.lowercased())")
         self.hitWidth = self.contentWidth
         if changed { self.redraw() }
     }
@@ -960,7 +960,7 @@ final class TranscriptToolView: TranscriptBaseView {
             self.runButton.isHidden = false
             self.runButton.onTap = { [weak actions] in actions?.openRun(run.key) }
             #if os(macOS)
-            self.runButton.toolTip = "Open “\(run.title)” to see what this helper did"
+            self.runButton.toolTip = L("Open “\(run.title)” to see what this helper did")
             #endif
         } else {
             self.runButton.isHidden = true
@@ -1116,7 +1116,7 @@ final class TranscriptToolView: TranscriptBaseView {
                 .drawLine(at: CGPoint(x: 10, y: section.titleY), width: bounds.width - 20, font: style.captionSemibold)
         }
         if let y = part.runningY {
-            singleLine("Running…", style.caption, TranscriptColors.secondary)
+            singleLine(L("Running…"), style.caption, TranscriptColors.secondary)
                 .drawLine(at: CGPoint(x: 10, y: y), width: bounds.width - 20, font: style.caption)
         }
     }
@@ -1360,7 +1360,7 @@ final class TranscriptImagePartView: TranscriptTapView {
         if case .failed = image.state {
             self.tooLarge = (actions as? TranscriptRenderer)?.context.gateway.images.failure(image.ref) == .tooLarge
         }
-        self.accessibilityText = self.tooLarge ? self.tooLargeText(image.ref) : image.ref.alt ?? "Image"
+        self.accessibilityText = self.tooLarge ? self.tooLargeText(image.ref) : image.ref.alt ?? L("Image")
         switch image.state {
         case let .loaded(cgImage):
             withoutLayerAnimations {
@@ -1415,7 +1415,7 @@ final class TranscriptImagePartView: TranscriptTapView {
         PBezierPath.rounded(bounds, radius: 10).fill()
         guard case .failed = image.state else { return }
         let style = TranscriptStyle.shared
-        let text = singleLine(self.tooLarge ? self.tooLargeText(image.ref) : image.ref.alt ?? "Image unavailable", style.caption, TranscriptColors.secondary, truncation: .byTruncatingMiddle)
+        let text = singleLine(self.tooLarge ? self.tooLargeText(image.ref) : image.ref.alt ?? L("Image unavailable"), style.caption, TranscriptColors.secondary, truncation: .byTruncatingMiddle)
         let textWidth = min(text.lineWidth, bounds.width - 16)
         let iconHeight: CGFloat = 24
         let total = iconHeight + 4 + TranscriptStyle.lineHeight(style.caption)
@@ -1463,7 +1463,7 @@ final class TranscriptFileView: TranscriptBaseView {
 
     static var saveButtonSize: CGSize {
         let font = TranscriptStyle.shared.caption
-        return CGSize(width: 14 + 4 + singleLine("Save", font, TranscriptColors.tint).lineWidth,
+        return CGSize(width: 14 + 4 + singleLine(L("Save"), font, TranscriptColors.tint).lineWidth,
                       height: max(TranscriptStyle.lineHeight(font), 16))
     }
 
@@ -1480,7 +1480,7 @@ final class TranscriptFileView: TranscriptBaseView {
         self.addSubview(self.header)
         self.addSubview(self.saveButton)
         self.addSubview(self.section)
-        self.saveButton.set(title: "Save", symbol: "arrow.down.circle")
+        self.saveButton.set(title: L("Save"), symbol: "arrow.down.circle")
     }
 
     override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
@@ -1489,7 +1489,7 @@ final class TranscriptFileView: TranscriptBaseView {
         let sameFile = identity == self.identity
         if !sameFile {
             self.saveToken += 1
-            self.saveButton.set(title: "Save", symbol: "arrow.down.circle")
+            self.saveButton.set(title: L("Save"), symbol: "arrow.down.circle")
             self.identity = identity
         }
         self.part = file
@@ -1500,16 +1500,16 @@ final class TranscriptFileView: TranscriptBaseView {
                 if !file.isExpanded { actions?.loadFilePreview(file.ref) }
                 actions?.setExpanded(file.key, !file.isExpanded, row: rowId)
             }
-            self.header.accessibilityText = "Attachment \(file.ref.name)" + (file.isExpanded ? ", expanded" : ", collapsed")
+            self.header.accessibilityText = file.isExpanded ? L("Attachment \(file.ref.name), expanded") : L("Attachment \(file.ref.name), collapsed")
         } else if file.ref.isDownloadable {
             self.header.onTap = { [weak self, weak actions] in
                 guard let actions else { return }
                 self?.save(file.ref, actions: actions)
             }
-            self.header.accessibilityText = "Save \(file.ref.name)"
+            self.header.accessibilityText = L("Save \(file.ref.name)")
         } else {
             self.header.onTap = nil
-            self.header.accessibilityText = "Attachment \(file.ref.name)"
+            self.header.accessibilityText = L("Attachment \(file.ref.name)")
         }
         self.saveButton.isHidden = !file.ref.isDownloadable
         self.saveButton.onTap = { [weak self, weak actions] in
@@ -1517,9 +1517,9 @@ final class TranscriptFileView: TranscriptBaseView {
             self?.save(file.ref, actions: actions)
         }
         #if os(macOS)
-        self.saveButton.toolTip = "Save “\(file.ref.name)”"
+        self.saveButton.toolTip = L("Save “\(file.ref.name)”")
         #endif
-        if file.isExpanded, file.section == nil, file.note == "Loading…" { actions.loadFilePreview(file.ref) }
+        if file.isExpanded, file.section == nil, file.note == L("Loading…") { actions.loadFilePreview(file.ref) }
         if let section = file.section {
             self.section.isHidden = false
             self.section.configure(section, row: row, resetScroll: !sameFile)
@@ -1533,18 +1533,18 @@ final class TranscriptFileView: TranscriptBaseView {
     private func save(_ file: FileRef, actions: TranscriptRowActions) {
         self.saveToken += 1
         let token = self.saveToken
-        self.saveButton.set(title: "Save", symbol: "hourglass")
+        self.saveButton.set(title: L("Save"), symbol: "hourglass")
         Task { @MainActor [weak self] in
             let saved = await actions.saveFile(file)
             guard let self, self.saveToken == token else { return }
-            self.saveButton.set(title: "Save", symbol: saved ? "arrow.down.circle" : "exclamationmark.triangle")
+            self.saveButton.set(title: L("Save"), symbol: saved ? "arrow.down.circle" : "exclamationmark.triangle")
             #if os(macOS)
-            if !saved { self.saveButton.toolTip = "Couldn’t download “\(file.name)”" }
+            if !saved { self.saveButton.toolTip = L("Couldn’t download “\(file.name)”") }
             #endif
             guard !saved else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
                 guard let self, self.saveToken == token else { return }
-                self.saveButton.set(title: "Save", symbol: "arrow.down.circle")
+                self.saveButton.set(title: L("Save"), symbol: "arrow.down.circle")
             }
         }
     }
@@ -1638,10 +1638,10 @@ final class TranscriptTypingView: TranscriptBaseView {
         #if os(macOS)
         self.setAccessibilityElement(true)
         self.setAccessibilityRole(.progressIndicator)
-        self.setAccessibilityLabel("Working")
+        self.setAccessibilityLabel(L("Working"))
         #else
         self.isAccessibilityElement = true
-        self.accessibilityLabel = "Working"
+        self.accessibilityLabel = L("Working")
         #endif
     }
 
@@ -1691,7 +1691,7 @@ final class TranscriptMarkerView: TranscriptBaseView {
         guard label != self.label else { return }
         self.label = label
         #if os(macOS)
-        self.toolTip = label.hasPrefix("Context") ? "Earlier messages were summarized for the agent. They're still shown here." : nil
+        self.toolTip = label.hasPrefix("Context") ? L("Earlier messages were summarized for the agent. They're still shown here.") : nil
         self.setAccessibilityElement(true)
         self.setAccessibilityRole(.staticText)
         self.setAccessibilityLabel(label)

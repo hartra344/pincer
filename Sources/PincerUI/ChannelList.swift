@@ -31,7 +31,7 @@ struct ChannelList: View {
             Button {
                 self.searchMessages(query)
             } label: {
-                Label("Search messages for “\(query)”", systemImage: "text.magnifyingglass")
+                Label(L("Search messages for “\(query)”"), systemImage: "text.magnifyingglass")
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
@@ -48,7 +48,7 @@ struct ChannelList: View {
         VStack(spacing: 0) {
             #if os(macOS)
             // `.searchable(placement: .sidebar)` only shows up above a SwiftUI List on macOS.
-            SidebarSearchField(text: self.$search, prompt: "Find a chat")
+            SidebarSearchField(text: self.$search, prompt: L("Find a chat"))
                 .padding(.horizontal, 10)
                 .padding(.bottom, 6)
             #endif
@@ -62,46 +62,46 @@ struct ChannelList: View {
                 #endif
         }
         #if os(iOS)
-        .searchable(text: self.$search, placement: .sidebar, prompt: "Find a chat")
+        .searchable(text: self.$search, placement: .sidebar, prompt: L("Find a chat"))
         #endif
         .navigationTitle(self.gateway.profile.name)
         .toolbar {
             ToolbarItem {
                 Menu {
-                    Picker("Organize", selection: $gateway.organization) {
+                    Picker(L("Organize"), selection: $gateway.organization) {
                         ForEach(SidebarOrganization.allCases) { Text($0.label).tag($0) }
                     }
                     .pickerStyle(.inline)
-                    Toggle("Show Archived", isOn: $gateway.showArchived)
-                    Toggle("Show Automations", isOn: $gateway.showAutomations)
-                    Toggle("Show Slash Commands", isOn: $gateway.showSlashCommands)
+                    Toggle(L("Show Archived"), isOn: $gateway.showArchived)
+                    Toggle(L("Show Automations"), isOn: $gateway.showAutomations)
+                    Toggle(L("Show Slash Commands"), isOn: $gateway.showSlashCommands)
                     if self.gateway.organization == .group || self.gateway.organization == .servers {
-                        Button("New Group…") { SidebarMenus.newGroup(gateway: self.gateway, actions: self.actions) }
+                        Button(L("New Group…")) { SidebarMenus.newGroup(gateway: self.gateway, actions: self.actions) }
                             .disabled(!self.gateway.state.isConnected)
                     }
                     Divider()
-                    Button("Automations…") { self.openAutomations(self.gateway) }
-                    Button("Approval History…") { self.openGatewaySettings(self.gateway, at: .approvals) }
-                    Button("Gateway Logs…") { self.openGatewaySettings(self.gateway, at: .logs) }
-                    Button("Command Policy…") { self.openGatewaySettings(self.gateway, at: .execPolicy) }
-                    Button("Usage & Cost…") { self.openGatewaySettings(self.gateway, at: .usage) }
-                    Button("Set Up Gateway…") { self.gateway.setup.present() }
+                    Button(L("Automations…")) { self.openAutomations(self.gateway) }
+                    Button(L("Approval History…")) { self.openGatewaySettings(self.gateway, at: .approvals) }
+                    Button(L("Gateway Logs…")) { self.openGatewaySettings(self.gateway, at: .logs) }
+                    Button(L("Command Policy…")) { self.openGatewaySettings(self.gateway, at: .execPolicy) }
+                    Button(L("Usage & Cost…")) { self.openGatewaySettings(self.gateway, at: .usage) }
+                    Button(L("Set Up Gateway…")) { self.gateway.setup.present() }
                         .disabled(!self.gateway.state.isConnected)
-                    Button("Gateway Settings…") { self.openGatewaySettings(self.gateway) }
+                    Button(L("Gateway Settings…")) { self.openGatewaySettings(self.gateway) }
                         .keyboardShortcut(",", modifiers: [.command, .shift])
-                    Button("Edit Connection…") { self.openGatewaySettings(self.gateway, at: .connection) }
-                    Button("Reconnect") { self.gateway.stop(); self.gateway.start() }
+                    Button(L("Edit Connection…")) { self.openGatewaySettings(self.gateway, at: .connection) }
+                    Button(L("Reconnect")) { self.gateway.stop(); self.gateway.start() }
                     Divider()
-                    Button("Add Gateway…") { self.app.firstRun.present() }
+                    Button(L("Add Gateway…")) { self.app.firstRun.present() }
                 } label: {
-                    Label("Organize", systemImage: Theme.filterSymbol)
+                    Label(L("Organize"), systemImage: Theme.filterSymbol)
                 }
             }
             ToolbarItem {
                 Button {
                     self.newChat = NewChatRequest(agentId: self.gateway.defaultAgentId)
                 } label: {
-                    Label("New Chat", systemImage: "square.and.pencil")
+                    Label(L("New Chat"), systemImage: "square.and.pencil")
                 }
                 .keyboardShortcut("n", modifiers: .command)
                 .disabled(!self.gateway.state.isConnected)
@@ -129,20 +129,20 @@ struct ChannelList: View {
             get: { self.confirmation != nil }, set: { if !$0 { self.confirmation = nil } }
         ), titleVisibility: .visible, presenting: self.confirmation) { confirmation in
             Button(confirmation.action, role: .destructive, action: confirmation.onConfirm)
-            Button("Cancel", role: .cancel) {}
+            Button(L("Cancel"), role: .cancel) {}
         } message: { confirmation in
             Text(confirmation.message)
         }
         #if os(iOS)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button { self.showingSettings = true } label: { Label("Settings", systemImage: "gearshape") }
+                Button { self.showingSettings = true } label: { Label(L("Settings"), systemImage: "gearshape") }
             }
         }
         .sheet(isPresented: self.$showingSettings) {
             NavigationStack {
                 SettingsView()
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { self.showingSettings = false } } }
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { self.showingSettings = false } } }
             }
         }
         #endif
@@ -252,12 +252,12 @@ private struct ConnectionStatusRow: View {
         case let .reconnecting(attempt, delay, reason):
             VStack(alignment: .leading, spacing: 2) {
                 if self.gateway.hasConnected {
-                    Label("Reconnecting in \(delay)s (attempt \(attempt))", systemImage: "arrow.triangle.2.circlepath")
+                    Label(L("Reconnecting in \(delay)s (attempt \(attempt))"), systemImage: "arrow.triangle.2.circlepath")
                 } else {
-                    Label("Can't reach Gateway · retrying in \(delay)s", systemImage: "antenna.radiowaves.left.and.right.slash")
+                    Label(L("Can't reach Gateway · retrying in \(delay)s"), systemImage: "antenna.radiowaves.left.and.right.slash")
                 }
                 Text(reason).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                Button("Retry now") { self.gateway.reconnectIfNeeded() }.buttonStyle(.borderless)
+                Button(L("Retry now")) { self.gateway.reconnectIfNeeded() }.buttonStyle(.borderless)
             }
             .foregroundStyle(.orange)
         case let .awaitingPairing(requestId, deviceId):
@@ -268,7 +268,7 @@ private struct ConnectionStatusRow: View {
     }
 
     private var connectingLabel: some View {
-        Label("Connecting…", systemImage: "antenna.radiowaves.left.and.right").foregroundStyle(.secondary)
+        Label(L("Connecting…"), systemImage: "antenna.radiowaves.left.and.right").foregroundStyle(.secondary)
     }
 }
 
@@ -287,7 +287,7 @@ private struct PairingStatusRow: View {
         Button {
             self.showing = true
         } label: {
-            Label("Waiting for approval on the Gateway host", systemImage: "lock.shield").foregroundStyle(.orange)
+            Label(L("Waiting for approval on the Gateway host"), systemImage: "lock.shield").foregroundStyle(.orange)
         }
         .buttonStyle(.plain)
         .sheet(isPresented: self.$showing) {
@@ -295,7 +295,7 @@ private struct PairingStatusRow: View {
                 ScrollView { PairingView(requestId: self.requestId, deviceId: self.deviceId) }
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Close") { self.showing = false }
+                            Button(L("Close")) { self.showing = false }
                         }
                     }
             }
@@ -323,26 +323,26 @@ struct NewSessionSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Picker("Agent", selection: self.$agentId) {
+                Picker(L("Agent"), selection: self.$agentId) {
                     ForEach(self.gateway.agents) { agent in
                         Text("\(agent.emoji.map { "\($0) " } ?? "")\(agent.name)").tag(agent.id)
                     }
                 }
-                TextField("Name", text: self.$label, prompt: Text("e.g. Kitchen remodel"))
-                TextField("Group", text: self.$group, prompt: Text("Optional"))
+                TextField(L("Name"), text: self.$label, prompt: Text("e.g. Kitchen remodel", bundle: .module))
+                TextField(L("Group"), text: self.$group, prompt: Text("Optional", bundle: .module))
                 if !self.gateway.groupNames.isEmpty {
-                    Picker("Existing group", selection: self.$group) {
-                        Text("None").tag("")
+                    Picker(L("Existing group"), selection: self.$group) {
+                        Text("None", bundle: .module).tag("")
                         ForEach(self.gateway.groupNames, id: \.self) { Text($0).tag($0) }
                     }
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("New Chat")
+            .navigationTitle(L("New Chat"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { self.dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") {
+                    Button(L("Create")) {
                         self.creating = true
                         Task {
                             let key = await self.gateway.createSession(agentId: self.agentId, label: self.label, category: self.group)
@@ -373,14 +373,14 @@ struct RenameSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Name", text: self.$label)
+                TextField(L("Name"), text: self.$label)
             }
             .formStyle(.grouped)
-            .navigationTitle("Rename Chat")
+            .navigationTitle(L("Rename Chat"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { self.dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
+                    Button(L("Save")) {
                         let value = self.label.trimmingCharacters(in: .whitespaces)
                         Task {
                             await self.gateway.patch(self.row.key, ["label": value.isEmpty ? .null : .string(value)])
@@ -466,15 +466,15 @@ struct SymbolPickerSheet: View {
                     ContentUnavailableView.search(text: self.search)
                 }
             }
-            .searchable(text: self.$search, prompt: "Search symbols")
-            .navigationTitle("Change Icon")
+            .searchable(text: self.$search, prompt: L("Search symbols"))
+            .navigationTitle(L("Change Icon"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { self.dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .destructiveAction) {
-                    Button("Use Default") {
+                    Button(L("Use Default")) {
                         self.onPick(nil)
                         self.dismiss()
                     }
@@ -538,8 +538,8 @@ struct TextPromptSheet: View {
             .formStyle(.grouped)
             .navigationTitle(self.prompt.title)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { self.dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Save", action: self.save) }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
+                ToolbarItem(placement: .confirmationAction) { Button(L("Save"), action: self.save) }
             }
         }
         #if os(macOS)
@@ -578,18 +578,18 @@ struct ChatColorSheet: View {
                         Text(self.row.title)
                             .lineLimit(1)
                     }
-                    ColorPicker("Color", selection: self.$color, supportsOpacity: false)
+                    ColorPicker(L("Color"), selection: self.$color, supportsOpacity: false)
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Chat Color")
+            .navigationTitle(L("Chat Color"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { self.dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                    Button(L("Done")) {
                         if let hex = self.color.rgbHex { self.gateway.setColor(hex, for: self.row.key) }
                         self.dismiss()
                     }

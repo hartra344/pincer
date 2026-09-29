@@ -32,8 +32,8 @@ struct SidebarModel: Equatable {
         }
 
         var addAccessibilityLabel: String {
-            guard self.isSubsection else { return "New chat" }
-            return self.agentName.map { "New chat in \(self.section.title) with \($0)" } ?? "New chat in \(self.section.title)"
+            guard self.isSubsection else { return L("New chat") }
+            return self.agentName.map { L("New chat in \(self.section.title) with \($0)") } ?? L("New chat in \(self.section.title)")
         }
 
         /// What the header's + does: a new chat with the agent, and the group when this is one.
@@ -46,11 +46,11 @@ struct SidebarModel: Equatable {
 
         /// VoiceOver label for a nested group header, which has no avatar or agent name to lean on.
         var subsectionAccessibilityLabel: String {
-            var parts = [self.agentName.map { "\(self.section.title) group in \($0)" } ?? "\(self.section.title) group"]
+            var parts = [self.agentName.map { L("\(self.section.title) group in \($0)") } ?? L("\(self.section.title) group")]
             if self.isCollapsed {
                 let unread = self.section.unreadCount
-                if unread > 0 { parts.append("\(unread) unread") }
-                parts.append("collapsed")
+                if unread > 0 { parts.append(L("\(unread) unread")) }
+                parts.append(L("collapsed"))
             }
             return parts.joined(separator: ", ")
         }
@@ -282,8 +282,8 @@ enum ChannelRowStyle {
     }
 
     static func help(for row: SessionRow) -> String? {
-        if row.server != nil, !row.isChannelThread { return "\(row.server?.provider.capitalized ?? "Server") channel" }
-        if let origin = self.origin(of: row) { return "From \(origin.capitalized)" }
+        if row.server != nil, !row.isChannelThread { return L("\(row.server?.provider.capitalized ?? "Server") channel") }
+        if let origin = self.origin(of: row) { return L("From \(origin.capitalized)") }
         return nil
     }
 
@@ -347,52 +347,52 @@ enum SidebarMenus {
             }
         }
         if !groups.isEmpty { groups.append(.divider) }
-        groups.append(.action("New Group…") {
+        groups.append(.action(L("New Group…")) {
             self.newGroup(gateway: gateway, actions: actions) { name in
                 await gateway.moveChat(row.key, toGroup: name, before: nil)
             }
         })
         if row.category != nil {
-            groups.append(.action("Remove from Group") { patch(["category": .null]) })
+            groups.append(.action(L("Remove from Group")) { patch(["category": .null]) })
         }
         let custom = gateway.customColor(for: row.key)
         var colors: [SidebarMenuItem] = ["red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink"].map { color in
-            .action(color.capitalized, checked: custom == nil && row.color == color) {
+            .action(self.colorName(color), checked: custom == nil && row.color == color) {
                 gateway.setColor(nil, for: row.key)
                 patch(["color": .string(color)])
             }
         }
         colors += [
             .divider,
-            .action("Custom…", image: "eyedropper", checked: custom != nil) { actions.pickColor(row) },
-            .action("None") {
+            .action(L("Custom…"), image: "eyedropper", checked: custom != nil) { actions.pickColor(row) },
+            .action(L("None")) {
                 gateway.setColor(nil, for: row.key)
                 patch(["color": .null])
             },
         ]
 
         var items: [SidebarMenuItem] = [
-            .action(row.isPinned ? "Unpin" : "Pin", image: row.isPinned ? "pin.slash" : "pin") {
+            .action(row.isPinned ? L("Unpin") : L("Pin"), image: row.isPinned ? "pin.slash" : "pin") {
                 patch(["pinned": .bool(!row.isPinned)])
             },
-            .action(row.isUnread ? "Mark as Read" : "Mark as Unread", image: "circle.fill") {
+            .action(row.isUnread ? L("Mark as Read") : L("Mark as Unread"), image: "circle.fill") {
                 patch(["unread": .bool(!row.isUnread)])
             },
-            .action("Rename…", image: "pencil") { actions.rename(row) },
-            .action("Change Icon…", image: "face.smiling") { actions.changeIcon(row) },
+            .action(L("Rename…"), image: "pencil") { actions.rename(row) },
+            .action(L("Change Icon…"), image: "face.smiling") { actions.changeIcon(row) },
         ]
         if gateway.customIcon(for: row.key) != nil {
-            items.append(.action("Reset Icon", image: "arrow.uturn.backward") { gateway.setIcon(nil, for: row.key) })
+            items.append(.action(L("Reset Icon"), image: "arrow.uturn.backward") { gateway.setIcon(nil, for: row.key) })
         }
         items += [
-            .submenu("Move to Group", image: "folder", groups),
-            .submenu("Color", image: "paintpalette", colors),
+            .submenu(L("Move to Group"), image: "folder", groups),
+            .submenu(L("Color"), image: "paintpalette", colors),
             self.reasoning(row, gateway: gateway),
         ]
         if !row.isMain {
             items += [
                 .divider,
-                .action(row.isArchived ? "Unarchive" : "Archive", image: "archivebox") {
+                .action(row.isArchived ? L("Unarchive") : L("Archive"), image: "archivebox") {
                     patch(["archived": .bool(!row.isArchived)])
                 },
             ]
@@ -400,8 +400,22 @@ enum SidebarMenus {
         return items
     }
 
+    private static func colorName(_ color: String) -> String {
+        switch color {
+        case "red": L("Red")
+        case "orange": L("Orange")
+        case "yellow": L("Yellow")
+        case "green": L("Green")
+        case "cyan": L("Cyan")
+        case "blue": L("Blue")
+        case "purple": L("Purple")
+        case "pink": L("Pink")
+        default: color.capitalized
+        }
+    }
+
     static func reasoning(_ row: SessionRow, gateway: GatewayStore) -> SidebarMenuItem {
-        .submenu("Gateway Reasoning", image: "brain", [("on", "Save & Stream"), ("stream", "Stream Only"), ("off", "Off")].map { value, label in
+        .submenu(L("Gateway Reasoning"), image: "brain", [("on", L("Save & Stream")), ("stream", L("Stream Only")), ("off", L("Off"))].map { value, label in
             .action(label, checked: row.reasoningLevel == value) {
                 Task { await gateway.patch(row.key, ["reasoningLevel": .string(value)]) }
             }
@@ -411,8 +425,8 @@ enum SidebarMenus {
     static func header(_ section: SidebarSection, gateway: GatewayStore, actions: SidebarActions) -> [SidebarMenuItem] {
         switch section.kind {
         case let .server(server):
-            return [.action("Rename Server…", image: "pencil") {
-                actions.prompt(TextPrompt(title: "Rename Server", field: "Name", initial: section.title) { name in
+            return [.action(L("Rename Server…"), image: "pencil") {
+                actions.prompt(TextPrompt(title: L("Rename Server"), field: L("Name"), initial: section.title) { name in
                     gateway.renameServer(server, to: name)
                 })
             }]
@@ -427,14 +441,14 @@ enum SidebarMenus {
                 .action(name) { actions.newChatInGroup(name, agent) }
             }
             if !groups.isEmpty { groups.append(.divider) }
-            groups.append(.action("New Group…") {
+            groups.append(.action(L("New Group…")) {
                 self.newGroup(gateway: gateway, actions: actions) { name in actions.newChatInGroup(name, agent) }
             })
-            return [.submenu("New Chat in Group", image: "square.and.pencil", groups)]
+            return [.submenu(L("New Chat in Group"), image: "square.and.pencil", groups)]
         case .automations:
-            return [.action("Manage Automations…", image: "clock.arrow.circlepath") { actions.openAutomations() }]
+            return [.action(L("Manage Automations…"), image: "clock.arrow.circlepath") { actions.openAutomations() }]
         case .other where section.id == "group:":
-            return [.action("New Group…", image: "folder.badge.plus") { self.newGroup(gateway: gateway, actions: actions) }]
+            return [.action(L("New Group…"), image: "folder.badge.plus") { self.newGroup(gateway: gateway, actions: actions) }]
         default:
             return []
         }
@@ -446,43 +460,43 @@ enum SidebarMenus {
         let names = gateway.groupNames
         let index = names.firstIndex(of: name) ?? 0
         var items: [SidebarMenuItem] = [
-            .action("New Chat in Group…", image: "square.and.pencil") { actions.newChatInGroup(name, agent) },
-            .action("Rename Group…", image: "pencil") {
-                actions.prompt(TextPrompt(title: "Rename Group", field: "Name", initial: name) { newName in
+            .action(L("New Chat in Group…"), image: "square.and.pencil") { actions.newChatInGroup(name, agent) },
+            .action(L("Rename Group…"), image: "pencil") {
+                actions.prompt(TextPrompt(title: L("Rename Group"), field: L("Name"), initial: name) { newName in
                     Task { await gateway.renameGroup(name, to: newName) }
                 })
             },
-            .action("Change Icon…", image: "face.smiling") { actions.changeGroupIcon(name) },
+            .action(L("Change Icon…"), image: "face.smiling") { actions.changeGroupIcon(name) },
         ]
         if gateway.groupIcon(for: name) != nil {
-            items.append(.action("Reset Icon", image: "arrow.uturn.backward") { gateway.setGroupIcon(nil, for: name) })
+            items.append(.action(L("Reset Icon"), image: "arrow.uturn.backward") { gateway.setGroupIcon(nil, for: name) })
         }
         if agent == nil, index > 0 {
-            items.append(.action("Move Up", image: "arrow.up") {
+            items.append(.action(L("Move Up"), image: "arrow.up") {
                 Task { await gateway.moveGroup(name, before: names[index - 1]) }
             })
         }
         if agent == nil, index < names.count - 1 {
-            items.append(.action("Move Down", image: "arrow.down") {
+            items.append(.action(L("Move Down"), image: "arrow.down") {
                 Task { await gateway.moveGroup(name, before: index + 2 < names.count ? names[index + 2] : nil) }
             })
         }
         items += [
             .divider,
-            .action("New Group…", image: "folder.badge.plus") { self.newGroup(gateway: gateway, actions: actions) },
+            .action(L("New Group…"), image: "folder.badge.plus") { self.newGroup(gateway: gateway, actions: actions) },
             .divider,
-            .action("Delete Group…", image: "trash", destructive: true) {
+            .action(L("Delete Group…"), image: "trash", destructive: true) {
                 let count = gateway.groupOrder(name).count
                 guard count > 0 else {
                     Task { await gateway.deleteGroup(name) }
                     return
                 }
                 actions.confirm(ConfirmPrompt(
-                    title: "Delete “\(name)”?",
-                    message: (count == 1 ? "Its chat won’t be deleted; it just won’t be in a group."
-                        : "Its \(count) chats won’t be deleted; they just won’t be in a group.")
-                        + (agent == nil ? "" : " This group is shared by all agents."),
-                    action: "Delete Group") {
+                    title: L("Delete “\(name)”?"),
+                    message: (count == 1 ? L("Its chat won’t be deleted; it just won’t be in a group.")
+                        : L("Its \(count) chats won’t be deleted; they just won’t be in a group."))
+                        + (agent == nil ? "" : " " + L("This group is shared by all agents.")),
+                    action: L("Delete Group")) {
                     Task { await gateway.deleteGroup(name) }
                 })
             },
@@ -492,7 +506,7 @@ enum SidebarMenus {
 
     /// Asks for a name and creates an empty group, then runs `then` with it.
     static func newGroup(gateway: GatewayStore, actions: SidebarActions, then: (@MainActor (String) async -> Void)? = nil) {
-        actions.prompt(TextPrompt(title: "New Group", field: "Name", initial: "") { name in
+        actions.prompt(TextPrompt(title: L("New Group"), field: L("Name"), initial: "") { name in
             let value = name.trimmingCharacters(in: .whitespaces)
             guard !value.isEmpty else { return }
             Task {
