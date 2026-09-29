@@ -54,6 +54,8 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var markingRead: Set<String> = []
     /// Visible keys that changed while their patch was in flight; checked again once it lands.
     @ObservationIgnored var recheckRead: Set<String> = []
+    /// Runs whose reply was already checked for unread, so a repeated `final` sends at most one patch (#426).
+    @ObservationIgnored var markedReplyRuns: Set<String> = []
     @ObservationIgnored private var sessionStorage: [String: SessionRow] = [:]
     @ObservationIgnored var sortedRowsCache: [SessionRow]?
     /// `subagentTree(rootKey:)` per root and connection state, until the rows change.
@@ -869,6 +871,7 @@ public final class GatewayStore: Identifiable {
             self.chats[key]?.handleChat(payload)
             if payload["state"]?.string == "final" {
                 self.notifyReply(sessionKey: key, runId: payload["runId"]?.text, snapshot: payload["message"])
+                self.noteReplyLanded(key, runId: payload["runId"]?.text, message: payload["message"])
             }
         case "agent":
             guard let runId = payload["runId"]?.text else { return }
