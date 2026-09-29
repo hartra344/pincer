@@ -149,6 +149,8 @@ public final class ChatStore: Identifiable {
     public var replyTarget: ReplyTarget?
     /// The user message being edited (Edit & Resend). Per chat, in memory only.
     public var editTarget: MessageEditTarget?
+    /// The chat's transcript tips (`sessions.branches.list`), active first; see `refreshBranches()`.
+    public internal(set) var branches: [SessionBranch] = []
     /// A passing, non-error note for the chat's notice bar (not a send failure).
     public var notice: String?
     /// The quoted message being looked for in older history, while paging.
