@@ -1,48 +1,329 @@
-/* Pincer "Lobster" palette applied to Starlight. */
+/*
+ * Pincer docs: Starlight mapped onto the switchboard tokens (tokens.css).
+ * Contrast is verified against --sl-color-bg / bg-nav in both modes; see PR notes.
+ */
 :root {
-	--sl-color-accent-low: #3a1712;
-	--sl-color-accent: #f0654e;
-	--sl-color-accent-high: #ffd3c8;
-	--sl-color-white: #ffffff;
-	--sl-color-gray-1: #f4ebe8;
-	--sl-color-gray-2: #d9ccc7;
-	--sl-color-gray-3: #a8938c;
-	--sl-color-gray-4: #6e5a54;
-	--sl-color-gray-5: #3d2f2b;
-	--sl-color-gray-6: #2a1f1c;
-	--sl-color-black: #1b1311;
-	--sl-font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Segoe UI', system-ui, sans-serif;
-	--sl-font-mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+	--sl-font: var(--font-body);
+	--sl-font-mono: var(--font-mono);
+
+	--sl-color-white: #f6faf7;
+	--sl-color-gray-1: var(--pc-text);
+	--sl-color-gray-2: #cad6d0;
+	--sl-color-gray-3: var(--pc-muted);
+	--sl-color-gray-4: #7d8f87;
+	--sl-color-gray-5: #34453f;
+	--sl-color-gray-6: var(--pc-raised);
+	--sl-color-black: var(--pc-bg);
+
+	--sl-color-accent-low: #3d1a14;
+	--sl-color-accent: var(--pc-lamp);
+	--sl-color-accent-high: var(--pc-lamp-text);
+
+	--sl-color-text: var(--pc-text);
+	--sl-color-bg: var(--pc-bg);
+	--sl-color-bg-nav: var(--pc-panel);
+	--sl-color-bg-sidebar: var(--pc-panel);
+	--sl-color-bg-inline-code: var(--pc-raised);
+	--sl-color-hairline-light: var(--pc-line-strong);
+	--sl-color-hairline: var(--pc-line);
+	--sl-color-hairline-shade: var(--pc-socket);
+	--sl-color-backdrop-overlay: rgb(10 16 14 / 0.7);
+
+	/* Asides: note = sage, tip = coral, caution = amber, danger = crimson. */
+	--sl-color-blue-low: #22332d;
+	--sl-color-blue: #8fb5a5;
+	--sl-color-blue-high: #cfe3da;
+	--sl-color-purple-low: #3d1a14;
+	--sl-color-purple: #f2674f;
+	--sl-color-purple-high: #ffb8a8;
+	--sl-color-orange-low: #3a2c14;
+	--sl-color-orange: #e8a23c;
+	--sl-color-orange-high: #f8d9a0;
+	--sl-color-red-low: #3b1622;
+	--sl-color-red: #f0506e;
+	--sl-color-red-high: #ffb5c4;
+
+	--sl-content-width: 40rem;
+	--sl-text-base: 1.0625rem;
+	--sl-line-height: 1.7;
+	--sl-outline-offset-inside: -3px;
+	--pc-ring: 0 0 0 3px var(--pc-bg), 0 0 0 5px var(--pc-lamp);
+	scrollbar-color: var(--pc-line-strong) var(--pc-bg);
 }
 
 :root[data-theme='light'] {
-	--sl-color-accent-low: #ffe1d9;
-	--sl-color-accent: #c9412b;
-	--sl-color-accent-high: #5c1a0f;
-	--sl-color-white: #1b1311;
-	--sl-color-gray-1: #2a1f1c;
-	--sl-color-gray-2: #3d2f2b;
-	--sl-color-gray-3: #6e5a54;
-	--sl-color-gray-4: #a8938c;
-	--sl-color-gray-5: #e6d9d4;
-	--sl-color-gray-6: #fbefea;
-	--sl-color-gray-7: #fff8f5;
-	--sl-color-black: #ffffff;
+	--sl-color-white: #0b1512;
+	--sl-color-gray-1: var(--pc-text);
+	--sl-color-gray-2: #2b3a34;
+	--sl-color-gray-3: var(--pc-muted);
+	--sl-color-gray-4: #5f6f68;
+	--sl-color-gray-5: #b3c0b9;
+	--sl-color-gray-6: var(--pc-panel);
+	--sl-color-gray-7: var(--pc-raised);
+	--sl-color-black: var(--pc-bg);
+
+	--sl-color-accent-low: #f3d6cd;
+	--sl-color-accent: var(--pc-lamp);
+	--sl-color-accent-high: #a02e1c;
+
+	--sl-color-bg-inline-code: #d6dfda;
+	--sl-color-backdrop-overlay: rgb(20 32 28 / 0.55);
+
+	--sl-color-blue-low: #d3e6dd;
+	--sl-color-blue: #2f6b56;
+	--sl-color-blue-high: #1c4436;
+	--sl-color-purple-low: #f5d9d0;
+	--sl-color-purple: #b33a25;
+	--sl-color-purple-high: #7a2313;
+	--sl-color-orange-low: #f6e3bf;
+	--sl-color-orange: #a5610a;
+	--sl-color-orange-high: #5f3803;
+	--sl-color-red-low: #f7d3dc;
+	--sl-color-red: #b5173f;
+	--sl-color-red-high: #6d0c25;
 }
 
+::selection {
+	background: var(--pc-lamp);
+	color: var(--pc-lamp-ink);
+}
+
+:focus-visible {
+	outline: 3px solid var(--pc-lamp);
+	outline-offset: 3px;
+}
+
+* {
+	scrollbar-color: var(--pc-line-strong) transparent;
+}
+
+/* Header: panel with a hairline, display-face title, rounded logo. */
+header.header {
+	border-bottom: 1px solid var(--pc-line-strong);
+}
+.site-title {
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: 1.3rem;
+	letter-spacing: -0.02em;
+	color: var(--pc-text);
+}
 .site-title img {
 	border-radius: 22%;
 }
 
-kbd {
-	font-family: var(--sl-font);
-	font-size: 0.85em;
-	padding: 0.1em 0.45em;
-	border: 1px solid var(--sl-color-gray-5);
-	border-bottom-width: 2px;
-	border-radius: 0.35em;
-	background: var(--sl-color-gray-6);
+/* Type */
+.sl-markdown-content :is(h1, h2, h3, h4) {
+	color: var(--sl-color-white);
+}
+h1#_top {
+	font-family: var(--font-display);
+	font-weight: 700;
+	font-size: clamp(2rem, 4.5vw, 2.75rem);
+	line-height: 1.1;
+	letter-spacing: -0.02em;
+	text-wrap: balance;
+}
+.sl-markdown-content h2 {
+	font-family: var(--font-display);
+	font-weight: 650;
+	font-size: 1.6rem;
+	line-height: 1.2;
+	letter-spacing: -0.02em;
+}
+.sl-markdown-content h3 {
+	font-weight: 650;
+	font-size: 1.25rem;
+	letter-spacing: 0;
+}
+.sl-markdown-content :is(h2, h3, h4) .sl-anchor-link {
+	text-transform: none;
+}
+.sl-markdown-content a:not(:where(.not-content *)) {
+	color: var(--sl-color-text-accent);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.2em;
+}
+.sl-markdown-content a:not(:where(.not-content *)):hover {
+	text-decoration-thickness: 2px;
+}
+.sl-markdown-content :not(pre) > code {
+	border: 1px solid var(--pc-line);
+	border-radius: var(--radius-s);
+	font-size: 0.88em;
+}
+
+/* Sidebar: designation strips for groups; the current page is a lit line. */
+.sidebar-content .large {
+	font-family: var(--font-display);
+	font-weight: 650;
+	font-size: 0.875rem !important;
+	letter-spacing: 0;
+	color: var(--pc-muted);
+	padding-block: 0.3rem;
+}
+.sidebar-content summary:hover .large {
+	color: var(--pc-text);
+}
+.sidebar-content a {
+	position: relative;
+	transition: background-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+}
+.sidebar-content a:hover {
+	background: var(--pc-raised);
+	color: var(--sl-color-white);
+}
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+	background: var(--pc-raised);
+	color: var(--sl-color-white);
+	font-weight: 600;
+	padding-inline-start: calc(var(--sl-sidebar-item-padding-inline) + 1.1rem);
+}
+.sidebar-content a[aria-current='page']::before {
+	content: '';
+	position: absolute;
+	inset-inline-start: 0.55rem;
+	top: 50%;
+	width: 0.5rem;
+	height: 0.5rem;
+	margin-top: -0.25rem;
+	border-radius: 50%;
+	background: var(--pc-lamp);
+	box-shadow: 0 0 8px 1px var(--pc-lamp-glow);
+}
+.sidebar-content a:focus-visible {
+	outline: 3px solid var(--pc-lamp);
+	outline-offset: -3px;
+}
+
+/* Table of contents: the active heading is a lit line. */
+starlight-toc a[aria-current='true'],
+starlight-menu-button + * a[aria-current='true'] {
+	color: var(--pc-lamp-text);
+	font-weight: 600;
+}
+starlight-toc h2,
+mobile-starlight-toc h2 {
+	font-family: var(--font-display);
+	font-weight: 650;
+	letter-spacing: 0;
+}
+
+/* Asides */
+.starlight-aside {
+	border-radius: var(--radius-m);
+	border: 1px solid color-mix(in srgb, var(--sl-color-asides-text-accent) 45%, transparent);
+	border-inline-start-width: 1px;
+}
+.starlight-aside__title {
+	font-family: var(--font-display);
+	font-weight: 600;
+	letter-spacing: 0;
+}
+.starlight-aside__content {
+	color: var(--sl-color-text);
+}
+
+/* Tabs */
+[role='tablist'] {
+	border-bottom-color: var(--pc-line-strong) !important;
+}
+.tab > [role='tab'] {
+	font-family: var(--font-display);
+	font-size: 0.95rem;
+	font-weight: 600;
+	letter-spacing: 0;
 	white-space: nowrap;
+	padding-inline: 0.9rem;
+	color: var(--pc-muted) !important;
+}
+.tab > [role='tab']:hover {
+	color: var(--pc-text) !important;
+}
+.tab [role='tab'][aria-selected='true'] {
+	--sl-tab-color-border: var(--pc-lamp) !important;
+	color: var(--pc-text) !important;
+	font-weight: 600;
+}
+
+/* Steps */
+.sl-steps > li::before {
+	font-family: var(--font-display);
+	font-size: 0.95rem;
+	font-weight: 700;
+	letter-spacing: 0;
+	border-radius: var(--radius-s);
+	background: var(--pc-raised);
+	box-shadow: inset 0 0 0 1px var(--pc-line-strong);
+	color: var(--pc-lamp-text);
+}
+
+/* Tables */
+.sl-markdown-content table {
+	border-collapse: collapse;
+}
+.sl-markdown-content :is(th, td) {
+	padding: 0.6rem 0.9rem;
+}
+.sl-markdown-content thead th {
+	background: var(--pc-panel);
+	color: var(--sl-color-white);
+	font-family: var(--font-display);
+	font-size: 0.9rem;
+	font-weight: 600;
+	letter-spacing: 0;
+	border-block: 1px solid var(--pc-line-strong);
+}
+.sl-markdown-content :is(th, td) {
+	border-color: var(--pc-line);
+}
+.sl-markdown-content tbody tr:nth-child(even) {
+	background: color-mix(in srgb, var(--pc-panel) 45%, transparent);
+}
+
+/* Keycaps */
+kbd {
+	font-family: var(--font-body);
+	font-size: 0.82em;
+	font-weight: 600;
+	padding: 0.1em 0.5em;
+	border: 1px solid var(--pc-line-strong);
+	border-bottom-width: 2px;
+	border-radius: var(--radius-s);
+	background: var(--pc-raised);
+	color: var(--sl-color-white);
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+	white-space: nowrap;
+}
+
+/* Search, dialog and mobile menu */
+site-search button[data-open-modal] {
+	border-color: var(--pc-line-strong);
+	border-radius: var(--radius-s);
+	background: var(--pc-bg);
+}
+site-search button[data-open-modal]:hover {
+	border-color: var(--pc-lamp);
+}
+dialog[aria-label] {
+	border-color: var(--pc-line-strong);
+	border-radius: var(--radius-m);
+	box-shadow: var(--pc-shadow);
+}
+.pagination-links a {
+	border-color: var(--pc-line-strong);
+	border-radius: var(--radius-m);
+}
+.pagination-links a:hover {
+	border-color: var(--pc-lamp);
+}
+.pagination-links .link-title {
+	color: var(--pc-lamp-text);
+}
+starlight-menu-button button {
+	border-radius: var(--radius-s);
 }
 
 .swatches {
@@ -52,8 +333,8 @@ kbd {
 	margin-block: 1.25rem;
 }
 .swatch {
-	border: 1px solid var(--sl-color-gray-5);
-	border-radius: 0.75rem;
+	border: 1px solid var(--pc-line-strong);
+	border-radius: var(--radius-m);
 	overflow: hidden;
 	margin: 0 !important;
 }
@@ -77,16 +358,4 @@ kbd {
 }
 .sl-markdown-content td:first-child {
 	min-width: 7rem;
-}
-
-/* Tint "tip" asides with the theme instead of Starlight's default purple. */
-:root {
-	--sl-color-purple: #ff8a5b;
-	--sl-color-purple-low: #3a1d12;
-	--sl-color-purple-high: #ffd9c7;
-}
-:root[data-theme='light'] {
-	--sl-color-purple: #c9412b;
-	--sl-color-purple-low: #ffe7dc;
-	--sl-color-purple-high: #5c1a0f;
 }

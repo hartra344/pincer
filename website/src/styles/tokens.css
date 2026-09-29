@@ -1,0 +1,65 @@
+/*
+ * Pincer site tokens: a switchboard in telephone-gray-green enamel with coral lamps.
+ * Coral (the Lobster accent) means "lit": primary action, active line, needs attention.
+ * Shared by the landing page and the Starlight theme (docs.css). Type is the Apple system stack
+ * throughout (SF Pro on Apple devices), matching the native app; no web fonts.
+ * Contrast (WCAG): text/bg ≥ 13:1, muted/bg ≥ 5.3:1, lamp-text ≥ 5.3:1 on bg and panel in both modes.
+ */
+:root {
+	--font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+	--font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+	--font-mono: 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+
+	/* Dark enamel (default) */
+	--pc-bg: #17211e;
+	--pc-panel: #1f2b27;
+	--pc-raised: #283632;
+	--pc-line: rgb(200 230 215 / 0.13);
+	--pc-line-strong: rgb(200 230 215 / 0.24);
+	--pc-text: #e9f0ec;
+	--pc-muted: #a9b8b1;
+	--pc-lamp: #f2674f; /* fill for lit lamps and the primary button */
+	--pc-lamp-ink: #1a0e0b; /* text on a lamp fill */
+	--pc-lamp-text: #ff8a70; /* coral used as text/links on the ground */
+	--pc-lamp-glow: rgb(242 103 79 / 0.45);
+	--pc-lamp-off: #3a4a44;
+	--pc-brass: #c9a45c;
+	--pc-socket: #0e1513;
+	--pc-shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 18px 40px -12px rgb(0 0 0 / 0.55);
+
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.5rem;
+	--space-6: 2rem;
+	--space-7: 3rem;
+	--space-8: 4.5rem;
+	--space-9: 7rem;
+
+	--radius-s: 0.375rem;
+	--radius-m: 0.625rem;
+	--radius-l: 1rem;
+
+	--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+	color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+	--pc-bg: #e6ece8;
+	--pc-panel: #d6dfda;
+	--pc-raised: #f4f7f5;
+	--pc-line: rgb(20 40 32 / 0.12);
+	--pc-line-strong: rgb(20 40 32 / 0.22);
+	--pc-text: #14201c;
+	--pc-muted: #4a5a54;
+	--pc-lamp: #b33a25;
+	--pc-lamp-ink: #ffffff;
+	--pc-lamp-text: #a02e1c;
+	--pc-lamp-glow: rgb(214 70 45 / 0.35);
+	--pc-lamp-off: #b7c3bd;
+	--pc-brass: #7a5c22;
+	--pc-socket: #24302c;
+	--pc-shadow: 0 1px 2px rgb(20 40 32 / 0.12), 0 18px 40px -14px rgb(20 40 32 / 0.3);
+	color-scheme: light;
+}
