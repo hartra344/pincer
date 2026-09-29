@@ -1773,6 +1773,16 @@
         }
       }
     },
+    "Branch from Here": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branch from Here"
+          }
+        }
+      }
+    },
     "Branches need a newer Gateway.": {
       "localizations": {
         "en": {
@@ -1879,6 +1889,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cancel"
+          }
+        }
+      }
+    },
+    "Cancel edit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel edit"
           }
         }
       }
@@ -3363,12 +3383,32 @@
         }
       }
     },
+    "Couldn’t branch: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t branch: %@"
+          }
+        }
+      }
+    },
     "Couldn’t download “%@”": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t download “%@”"
+          }
+        }
+      }
+    },
+    "Couldn’t edit: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t edit: %@"
           }
         }
       }
@@ -3389,6 +3429,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t load this file."
+          }
+        }
+      }
+    },
+    "Couldn’t regenerate: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t regenerate: %@"
           }
         }
       }
@@ -4113,6 +4163,16 @@
         }
       }
     },
+    "Edit & Resend": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit & Resend"
+          }
+        }
+      }
+    },
     "Edit Automation": {
       "localizations": {
         "en": {
@@ -4179,6 +4239,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Editing agents needs Full Management. Turn it on under Connection, then approve this device on the Gateway host."
+          }
+        }
+      }
+    },
+    "Editing message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editing message"
           }
         }
       }
@@ -8699,6 +8769,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Refusing unencrypted ws:// to public host %@. Use wss:// (Tailscale Serve) or a tailnet IP."
+          }
+        }
+      }
+    },
+    "Regenerate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regenerate"
           }
         }
       }

@@ -52,6 +52,15 @@ struct TranscriptRowAccessibilityAction {
         guard let messageId = layout.messages.last?.id else { return result + source }
         result.append(.init(name: L("Reply")) { [weak actions] in actions?.reply(to: messageId) })
         result.append(.init(name: L("Copy Link")) { [weak actions] in actions?.copyLink(to: messageId) })
+        if actions.canBranch(from: messageId) {
+            result.append(.init(name: L("Branch from Here")) { [weak actions] in actions?.branch(from: messageId) })
+        }
+        if actions.canEdit(messageId) {
+            result.append(.init(name: L("Edit & Resend")) { [weak actions] in actions?.edit(messageId) })
+        }
+        if actions.canRegenerate(messageId) {
+            result.append(.init(name: L("Regenerate")) { [weak actions] in actions?.regenerate(messageId) })
+        }
         if actions.reactionsEnabled {
             result.append(.init(name: L("Add Reaction")) { [weak actions, weak anchor] in
                 guard let actions, let anchor else { return }
