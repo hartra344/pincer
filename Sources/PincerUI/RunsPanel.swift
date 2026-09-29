@@ -90,7 +90,7 @@ struct RunsToolbarButton: View {
     @ViewBuilder private func focusedPaneShortcut(_ button: some View) -> some View {
         if self.isFocused {
             button
-                .keyboardShortcut("r", modifiers: [.command, .option])
+                .shortcut(.showRuns)
         } else {
             button
         }

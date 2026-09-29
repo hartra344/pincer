@@ -120,7 +120,10 @@ struct ExportChatCommands: Commands {
     var body: some Commands {
         CommandGroup(after: .importExport) {
             Button(L("Export Chat…")) { self.chatExport?.showExport = true }
-                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .shortcut(.exportChat)
+                .disabled(self.chatExport == nil)
+            Button(L("Bookmarks…")) { self.chatExport?.showBookmarks = true }
+                .shortcut(.showBookmarks)
                 .disabled(self.chatExport == nil)
         }
     }

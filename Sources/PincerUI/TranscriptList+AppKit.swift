@@ -79,6 +79,9 @@ struct TranscriptList: NSViewRepresentable {
         private var fixesScheduled = false
         /// Time spent measuring rows in idle slices and scroll callbacks, for the probe.
         var prefetchStats: (steps: Int, rowsMeasured: Int, seconds: Double) = (0, 0, 0)
+        /// Rows prepared on the worker, and text measured there; separate from `prefetchStats`.
+        private let premeasure = TranscriptPremeasureDriver()
+        var premeasureStats: PremeasureStats { self.premeasure.stats }
         private var clipSize = CGSize.zero
         private var freeze = TranscriptWidthFreeze()
         private var thawItem: DispatchWorkItem?
@@ -96,6 +99,7 @@ struct TranscriptList: NSViewRepresentable {
             self.context = context
             self.renderer = TranscriptRenderer(context: context)
             super.init()
+            self.premeasure.currentWidth = { [weak self] in self?.width ?? 0 }
             self.renderer.onInvalidate = { [weak self] ids, keepInPlace in
                 self?.invalidate(ids, keepInPlace: keepInPlace)
             }
@@ -184,6 +188,7 @@ struct TranscriptList: NSViewRepresentable {
                 if !self.rows.isEmpty, !contextChanged { self.settle(changed: IndexSet()) }
             }
             if contextChanged {
+                self.premeasure.cancelAll()
                 self.heights.removeAll()
                 self.rows = []
             }
@@ -270,6 +275,7 @@ struct TranscriptList: NSViewRepresentable {
                     changed.insert(row)
                 }
             } else {
+                self.premeasure.cancelAll()
                 for id in self.heights.keys { self.heights[id]?.measured = false }
                 self.queue.markAllUnmeasured(count: self.rows.count)
                 changed = IndexSet(integersIn: 0..<self.rows.count)
@@ -343,6 +349,7 @@ struct TranscriptList: NSViewRepresentable {
         }
 
         func apply(_ highlight: TranscriptHighlight) {
+            if highlight != self.renderer.highlight { self.premeasure.cancelAll() }
             guard let id = self.renderer.update(highlight: highlight) else { return }
             self.reveal(id)
         }
@@ -385,6 +392,7 @@ struct TranscriptList: NSViewRepresentable {
             if let state = self.frozenSignpost { TranscriptSignposts.end("WidthFrozen", state) }
             self.frozenSignpost = nil
             TranscriptSignposts.event("Thaw")
+            self.premeasure.cancelAll()
             if let clip = self.scrollView?.contentView { self.clipSize = clip.frame.size }
             self.queueWidth = 0
             // The anchor from before the freeze is kept, so the reader stays on the same message.
@@ -395,7 +403,10 @@ struct TranscriptList: NSViewRepresentable {
             let wasFrozen = self.freeze.isFrozen
             // While frozen `old` is the live width, not the frozen one; the freeze keeps the first.
             guard self.freeze.widthChanged(from: old, to: new, at: ProcessInfo.processInfo.systemUptime) else { return }
-            if !wasFrozen { self.frozenSignpost = TranscriptSignposts.begin("WidthFrozen") }
+            if !wasFrozen {
+                self.frozenSignpost = TranscriptSignposts.begin("WidthFrozen")
+                self.premeasure.cancelAll()
+            }
             self.scheduleThaw(after: TranscriptWidthFreeze.quietInterval)
         }
 
@@ -433,6 +444,7 @@ struct TranscriptList: NSViewRepresentable {
         private func syncQueueWidth(_ width: CGFloat) {
             guard width != self.queueWidth else { return }
             self.queueWidth = width
+            self.premeasure.cancelAll()
             self.queue.markAllUnmeasured(count: self.rows.count)
         }
 
@@ -512,8 +524,11 @@ struct TranscriptList: NSViewRepresentable {
                 let rows = self.queue.next(center: onScreen.center, window: onScreen.range, limit: .max)
                 changed = self.measure(rows, width: width, deadline: nil).changed
             }
-            let rows = self.queue.next(center: window.center, window: window.range, limit: .max)
-            let result = self.measure(rows, width: width, deadline: start.addingTimeInterval(0.004))
+            let now = self.premeasure.plan(self.queue.next(center: window.center, window: window.range, limit: .max),
+                                           all: self.rows, width: width, renderer: self.renderer, overflow: .measureNow) { [weak self] in
+                self?.scheduleScrollMeasure()
+            }
+            let result = self.measure(now, width: width, deadline: start.addingTimeInterval(0.004))
             if result.stopped { self.scheduleScrollMeasure() }
             return changed.union(result.changed)
         }
@@ -592,9 +607,14 @@ struct TranscriptList: NSViewRepresentable {
             var changed = IndexSet()
             var remaining = false
             while true {
-                let batch = self.queue.next(center: window.center, window: window.range, limit: 8)
+                let batch = self.queue.next(center: window.center, window: window.range, limit: 32 + self.premeasure.inFlightCount)
                 if batch.isEmpty { break }
-                let result = self.measure(batch, width: width, deadline: deadline)
+                // Rows still on the worker stay queued; its completion runs another step.
+                let now = self.premeasure.plan(batch, all: self.rows, width: width, renderer: self.renderer, overflow: .wait) { [weak self] in
+                    self?.schedulePrefetch()
+                }
+                if now.isEmpty { break }
+                let result = self.measure(now, width: width, deadline: deadline)
                 changed.formUnion(result.changed)
                 if result.stopped || Date() >= deadline { remaining = true; break }
             }

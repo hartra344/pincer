@@ -83,6 +83,9 @@ struct TranscriptList: UIViewRepresentable {
         private var fixesScheduled = false
         /// Time spent measuring rows in idle slices and scroll callbacks, for the probe.
         var prefetchStats: (steps: Int, rowsMeasured: Int, seconds: Double) = (0, 0, 0)
+        /// Rows prepared on the worker, and text measured there; separate from `prefetchStats`.
+        private let premeasure = TranscriptPremeasureDriver()
+        var premeasureStats: PremeasureStats { self.premeasure.stats }
         let renderer: TranscriptRenderer
         private weak var collectionView: TranscriptCollectionView?
 
@@ -90,6 +93,7 @@ struct TranscriptList: UIViewRepresentable {
             self.context = context
             self.renderer = TranscriptRenderer(context: context)
             super.init()
+            self.premeasure.currentWidth = { [weak self] in self?.width ?? 0 }
             self.renderer.onInvalidate = { [weak self] ids, keepInPlace in
                 self?.invalidate(ids, keepInPlace: keepInPlace)
             }
@@ -161,6 +165,7 @@ struct TranscriptList: UIViewRepresentable {
                 if !self.rows.isEmpty, !contextChanged { self.settle() }
             }
             if contextChanged {
+                self.premeasure.cancelAll()
                 self.heights.removeAll()
                 self.rows = []
             }
@@ -234,6 +239,7 @@ struct TranscriptList: UIViewRepresentable {
                     if let row = self.index[id] { self.queue.markUnmeasured(row) }
                 }
             } else {
+                self.premeasure.cancelAll()
                 for id in self.heights.keys { self.heights[id]?.measured = false }
                 self.queue.markAllUnmeasured(count: self.rows.count)
             }
@@ -303,6 +309,7 @@ struct TranscriptList: UIViewRepresentable {
         }
 
         func apply(_ highlight: TranscriptHighlight) {
+            if highlight != self.renderer.highlight { self.premeasure.cancelAll() }
             guard let id = self.renderer.update(highlight: highlight) else { return }
             self.reveal(id)
         }
@@ -423,6 +430,7 @@ struct TranscriptList: UIViewRepresentable {
         private func syncQueueWidth(_ width: CGFloat) {
             guard width != self.queueWidth else { return }
             self.queueWidth = width
+            self.premeasure.cancelAll()
             self.queue.markAllUnmeasured(count: self.rows.count)
         }
 
@@ -482,7 +490,11 @@ struct TranscriptList: UIViewRepresentable {
                 for row in self.queue.next(center: onScreen.center, window: onScreen.range, limit: .max)
                 where self.measure(row, width: width) { changed = true }
             }
-            for row in self.queue.next(center: window.center, window: window.range, limit: .max) {
+            let now = self.premeasure.plan(self.queue.next(center: window.center, window: window.range, limit: .max),
+                                           all: self.rows, width: width, renderer: self.renderer, overflow: .measureNow) { [weak self] in
+                self?.scheduleScrollMeasure()
+            }
+            for row in now {
                 if Date() >= deadline {
                     self.scheduleScrollMeasure()
                     break
@@ -564,10 +576,15 @@ struct TranscriptList: UIViewRepresentable {
             var remaining = false
             var measured = 0
             while !remaining {
-                let batch = self.queue.next(center: window.center, window: window.range, limit: 8)
+                let batch = self.queue.next(center: window.center, window: window.range, limit: 32 + self.premeasure.inFlightCount)
                 if batch.isEmpty { break }
+                // Rows still on the worker stay queued; its completion runs another step.
+                let now = self.premeasure.plan(batch, all: self.rows, width: width, renderer: self.renderer, overflow: .wait) { [weak self] in
+                    self?.schedulePrefetch()
+                }
+                if now.isEmpty { break }
                 let before = self.queue.count
-                for row in batch {
+                for row in now {
                     if measured > 0, Date() >= deadline { remaining = true; break }
                     if self.measure(row, width: width) { changed = true }
                     measured += 1

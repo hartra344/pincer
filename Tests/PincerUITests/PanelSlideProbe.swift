@@ -25,6 +25,8 @@ struct PanelSlideProbe {
         var buildsTail = 0
         var measuredDuringFrames = 0
         var measuredAfterThaw = 0
+        var offloadedDuringFrames = 0
+        var offloadedAtThaw = 0
         var midSlideThaws = 0
         var thawed = false
         var frameCPUMax = 0.0
@@ -150,6 +152,7 @@ struct PanelSlideProbe {
             let width = from + (target - from) * CGFloat(i) / CGFloat(frames)
             let cpu = ProbeMeter.threadCPU()
             let before = builds(host), measuredBefore = host.coordinator.prefetchStats.rowsMeasured
+            let offloadedBefore = host.coordinator.premeasureStats.offloaded
             setWidth(host, width.rounded())
             try? await Task.sleep(for: .milliseconds(8))
             cpus.append(ProbeMeter.threadCPU() - cpu)
@@ -158,6 +161,7 @@ struct PanelSlideProbe {
             if host.coordinator.isWidthFrozen {
                 result.buildsDuringFrames += builds(host) - before
                 result.measuredDuringFrames += host.coordinator.prefetchStats.rowsMeasured - measuredBefore
+                result.offloadedDuringFrames += host.coordinator.premeasureStats.offloaded - offloadedBefore
             } else {
                 result.midSlideThaws += 1
             }
@@ -167,11 +171,13 @@ struct PanelSlideProbe {
 
         let settleStart = ProbeMeter.threadCPU()
         let buildsFrames = builds(host), measuredFrames = host.coordinator.prefetchStats.rowsMeasured
+        let offloadedFrames = host.coordinator.premeasureStats.offloaded
         // Await the thaw (due ~0.1 s after the last change) rather than sleeping a fixed time: it lays out
         // synchronously, so the builds seen right after it are the relayout; later ones are prefetch.
         result.thawed = await Self.waitUntilThawed(host)
         result.buildsAfterThaw = builds(host) - buildsFrames
         result.measuredAfterThaw = host.coordinator.prefetchStats.rowsMeasured - measuredFrames
+        result.offloadedAtThaw = host.coordinator.premeasureStats.offloaded - offloadedFrames
         await waitQuiet(host, minimum: 0)
         result.buildsTail = builds(host) - buildsFrames - result.buildsAfterThaw
         result.settleCPU = (ProbeMeter.threadCPU() - settleStart) * 1000
@@ -190,10 +196,10 @@ struct PanelSlideProbe {
 
     static func table(_ label: String, _ toggles: [Toggle]) {
         func f(_ v: Double) -> String { String(format: "%.1f", v) }
-        var lines = ["| toggle | builds in frames | builds at thaw | builds tail | rowsMeasured frames/thaw | frame cpu max/avg ms | settle cpu ms | anchor drift pt | stale rows | mid-slide thaws |",
-                     "|---|---|---|---|---|---|---|---|---|---|"]
+        var lines = ["| toggle | builds in frames | builds at thaw | builds tail | rowsMeasured frames/thaw | frame cpu max/avg ms | settle cpu ms | anchor drift pt | stale rows | mid-slide thaws | offloaded frames/after |",
+                     "|---|---|---|---|---|---|---|---|---|---|---|"]
         for t in toggles {
-            lines.append("| \(t.name) | \(t.buildsDuringFrames) | \(t.buildsAfterThaw) | \(t.buildsTail) | \(t.measuredDuringFrames)/\(t.measuredAfterThaw) | \(f(t.frameCPUMax))/\(f(t.frameCPUAvg)) | \(f(t.settleCPU)) | \(f(t.anchorDrift)) | \(t.staleVisibleRows)/\(t.visibleRows) | \(t.midSlideThaws) |")
+            lines.append("| \(t.name) | \(t.buildsDuringFrames) | \(t.buildsAfterThaw) | \(t.buildsTail) | \(t.measuredDuringFrames)/\(t.measuredAfterThaw) | \(f(t.frameCPUMax))/\(f(t.frameCPUAvg)) | \(f(t.settleCPU)) | \(f(t.anchorDrift)) | \(t.staleVisibleRows)/\(t.visibleRows) | \(t.midSlideThaws) | \(t.offloadedDuringFrames)/\(t.offloadedAtThaw) |")
         }
         print("\nPanelSlideProbe \(label) (20k rows, \(Int(wide))<->\(Int(narrow)), \(frames) frames @ 8 ms)\n" + lines.joined(separator: "\n"))
     }
@@ -201,6 +207,7 @@ struct PanelSlideProbe {
     static func check(_ toggles: [Toggle]) {
         for t in toggles {
             #expect(t.buildsDuringFrames <= 2, "\(t.name): layout builds during frames")
+            #expect(t.offloadedDuringFrames == 0, "\(t.name): \(t.offloadedDuringFrames) rows sent to the worker while the width was frozen")
             #expect(t.thawed, "\(t.name): the width thaws once it settles")
             #expect(t.buildsAfterThaw > 0, "\(t.name): one relayout after the width settles")
             #expect(t.buildsAfterThaw <= 120, "\(t.name): relayout bounded by ~1 screen either side of the viewport")

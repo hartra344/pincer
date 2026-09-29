@@ -78,7 +78,7 @@ final class TranscriptStyle {
         ceil(font.ascender - font.descender + font.leading)
     }
 
-    static func withTraits(_ font: PFont, bold: Bool, italic: Bool) -> PFont {
+    nonisolated static func withTraits(_ font: PFont, bold: Bool, italic: Bool) -> PFont {
         guard bold || italic else { return font }
         #if os(macOS)
         var traits = font.fontDescriptor.symbolicTraits
@@ -172,6 +172,11 @@ enum TranscriptMetrics {
     static let filePreviewMaxHeight: CGFloat = 360
 
     static var contentX: CGFloat { self.sidePadding + self.avatar + self.avatarGap }
+
+    /// The width a row's content column gets at `rowWidth`.
+    static func contentWidth(rowWidth: CGFloat) -> CGFloat {
+        max(rowWidth - self.contentX - self.sidePadding, 40)
+    }
 }
 
 extension PBezierPath {
