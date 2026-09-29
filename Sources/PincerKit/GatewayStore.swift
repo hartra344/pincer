@@ -12,6 +12,9 @@ public final class GatewayStore: Identifiable {
     /// that's still retrying apart from a connection that was lost.
     public private(set) var hasConnected = false
     public private(set) var hello: GatewayHello?
+    /// The host name this gateway last reported for itself (`GatewayHello.gatewayHost`), kept so
+    /// links and Handoff from other devices find it before it has connected (#375).
+    public private(set) var gatewayHost: String?
     public private(set) var agents: [AgentSummary] = []
     public private(set) var defaultAgentId = "main"
     /// Session rows by key. Writes that change nothing are dropped, so they don't invalidate every
@@ -42,7 +45,15 @@ public final class GatewayStore: Identifiable {
         self.sortedRowsCache = nil
         self.subagentTrees = [:]
         self.settleRunTimeline()
+        self.markVisibleChatsRead()
     }
+    /// The chat each viewer (the main window, later chat windows) shows on screen right now, in an
+    /// active, focused scene. See `setVisibleChat(_:viewer:)`.
+    @ObservationIgnored var visibleChatsByViewer: [String: String] = [:]
+    /// Keys with a `sessions.patch unread=false` in flight, so a burst of row changes sends one.
+    @ObservationIgnored var markingRead: Set<String> = []
+    /// Visible keys that changed while their patch was in flight; checked again once it lands.
+    @ObservationIgnored var recheckRead: Set<String> = []
     @ObservationIgnored private var sessionStorage: [String: SessionRow] = [:]
     @ObservationIgnored var sortedRowsCache: [SessionRow]?
     /// `subagentTree(rootKey:)` per root and connection state, until the rows change.
@@ -270,6 +281,7 @@ public final class GatewayStore: Identifiable {
         self.messageIndexProgress = MessageIndex.status(gatewayId: profile.id)
         self.identity = identity
         self.connection = GatewayConnection(profile: profile, identity: identity)
+        self.gatewayHost = profile.isDemo ? nil : defaults.string(forKey: Self.gatewayHostKey(profile.id))
         self.organization = SidebarOrganization(
             rawValue: defaults.string(forKey: "pincer.org.v2.\(profile.id.uuidString)") ?? "") ?? .servers
         self.showAutomations = defaults.bool(forKey: "pincer.showAutomations.\(profile.id.uuidString)")
@@ -401,6 +413,14 @@ public final class GatewayStore: Identifiable {
 
     // MARK: State
 
+    static func gatewayHostKey(_ id: UUID) -> String { "pincer.gatewayHost.\(id.uuidString)" }
+
+    /// Drops the saved host name, for a gateway being removed.
+    func forgetGatewayHost() {
+        self.gatewayHost = nil
+        self.defaults.removeObject(forKey: Self.gatewayHostKey(self.id))
+    }
+
     private func update(state: ConnectionState, hello: GatewayHello?) {
         self.state = state
         if case let .failed(message) = state { self.lastError = message }
@@ -416,6 +436,10 @@ public final class GatewayStore: Identifiable {
         }
         self.hasConnected = true
         self.hello = hello
+        if !self.profile.isDemo, let host = hello.gatewayHost, host != self.gatewayHost {
+            self.gatewayHost = host
+            self.defaults.set(host, forKey: Self.gatewayHostKey(self.id))
+        }
         self.images.retryUnavailable()
         self.health.connectionChanged(state, hello: hello)
         self.connectionEpoch += 1
@@ -989,8 +1013,12 @@ public final class GatewayStore: Identifiable {
     }
 
     public func markRead(_ key: String) async {
-        guard let row = self.sessions[key], row.isUnread, self.state.isConnected else { return }
-        _ = try? await self.connection.request("sessions.patch", ["key": .string(key), "unread": false])
+        guard let row = self.sessions[key], row.isUnread, self.state.isConnected,
+              !self.markingRead.contains(key) else { return }
+        self.markingRead.insert(key)
+        let sent = (try? await self.connection.request("sessions.patch", ["key": .string(key), "unread": false])) != nil
+        self.markingRead.remove(key)
+        if self.recheckRead.remove(key) != nil, sent { self.markVisibleChatsRead() }
     }
 
     // MARK: Mutations

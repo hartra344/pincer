@@ -68,8 +68,13 @@ struct TranscriptContext {
     var reply: (String) -> Void = { _ in }
     /// Copies a `pincer://` link to a message. Provided by `ChatView`.
     var copyLink: (String) -> Void = { _ in }
+    /// Stars or un-stars a message. Provided by `ChatView`.
+    var toggleBookmark: (String) -> Void = { _ in }
+    var isBookmarked: (String) -> Bool = { _ in false }
     /// Opens an ```html fence in the sandboxed preview. Provided by `ChatView`, which owns the sheet.
     var previewHTML: (String) -> Void = { _ in }
+    /// Shows a downloaded attachment in Quick Look. Provided by `ChatView`, which owns the preview.
+    var quickLook: (URL) -> Void = { _ in }
 
     func differs(from other: TranscriptContext) -> Bool {
         self.agent != other.agent || self.sessionKey != other.sessionKey || self.disclosure !== other.disclosure
@@ -99,6 +104,8 @@ protocol TranscriptRowActions: AnyObject {
     func loadFilePreview(_ file: FileRef)
     /// Downloads the file and offers to save it; false when it couldn't be downloaded.
     func saveFile(_ file: FileRef) async -> Bool
+    /// Downloads the file and shows it in Quick Look; false when it couldn't be downloaded.
+    func quickLook(_ file: FileRef) async -> Bool
     /// Starts a reply to the message in the composer.
     func reply(to messageId: String)
     /// Branch from Here, Edit & Resend and Regenerate (each only offered when the chat can do it).
@@ -110,6 +117,9 @@ protocol TranscriptRowActions: AnyObject {
     func regenerate(_ messageId: String)
     /// Copies a link that opens the chat scrolled to the message.
     func copyLink(to messageId: String)
+    /// Bookmarks the message, or removes its bookmark.
+    func toggleBookmark(_ messageId: String)
+    func isBookmarked(_ messageId: String) -> Bool
     /// Adds your reaction, or removes it when it's already there.
     var reactionsEnabled: Bool { get }
     func toggleReaction(_ emoji: String, on messageId: String)
@@ -572,8 +582,28 @@ final class TranscriptRenderer: TranscriptRowActions {
         return true
     }
 
+    func quickLook(_ file: FileRef) async -> Bool {
+        let context = self.context
+        guard let data = await context.gateway.files.data(for: file, sessionKey: context.sessionKey) else { return false }
+        let name = file.name, mimeType = file.mimeType
+        let url = await Task.detached(priority: .userInitiated) {
+            try? FilePreviewFiles.write(data, name: name, mimeType: mimeType)
+        }.value
+        guard let url else { return false }
+        context.quickLook(url)
+        return true
+    }
+
     func copyLink(to messageId: String) {
         self.context.copyLink(messageId)
+    }
+
+    func toggleBookmark(_ messageId: String) {
+        self.context.toggleBookmark(messageId)
+    }
+
+    func isBookmarked(_ messageId: String) -> Bool {
+        self.context.isBookmarked(messageId)
     }
 
     func reply(to messageId: String) {

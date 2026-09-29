@@ -61,6 +61,9 @@ struct TranscriptRowAccessibilityAction {
         if actions.canRegenerate(messageId) {
             result.append(.init(name: L("Regenerate")) { [weak actions] in actions?.regenerate(messageId) })
         }
+        result.append(.init(name: actions.isBookmarked(messageId) ? L("Remove Bookmark") : L("Bookmark")) { [weak actions] in
+            actions?.toggleBookmark(messageId)
+        })
         if actions.reactionsEnabled {
             result.append(.init(name: L("Add Reaction")) { [weak actions, weak anchor] in
                 guard let actions, let anchor else { return }

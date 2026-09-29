@@ -47,6 +47,13 @@ public final class AppModel {
 
     public static let selectedGatewayKey = "pincer.selectedGateway"
 
+    /// Whether the main window shows its selected chat to the user right now: the scene is active
+    /// and focused and, on iPhone, the chat is pushed. Set by the main window; chats shown there
+    /// are marked read as messages arrive (#374).
+    public var mainChatVisible = false {
+        didSet { if self.mainChatVisible != oldValue { self.updateVisible() } }
+    }
+
     /// The app's model. Created on first use, by the scene or, when iOS launches Pincer in the
     /// background for a notification action, by `Notifier` before any scene exists.
     public static let shared = AppModel()
@@ -159,6 +166,10 @@ public final class AppModel {
 
     /// Call whenever the selected session changes so notifications for it are suppressed.
     public func updateVisible() {
+        for gateway in self.gateways {
+            let shown = gateway.id == self.selectedGatewayId && self.mainChatVisible ? gateway.selectedKey : nil
+            gateway.setVisibleChat(shown, viewer: GatewayStore.mainViewer)
+        }
         guard let gateway = self.selectedGateway, let key = gateway.selectedKey else {
             self.notifier.visible = nil
             return
@@ -254,8 +265,11 @@ public final class AppModel {
         if let existing = self.gateways.first(where: { $0.profile.isDemo }) {
             self.selectedGatewayId = existing.id
             existing.setup.withdrawOffer()
+            DemoBookmarks.seed(into: BookmarkStore.shared(gatewayId: existing.id))
         } else {
-            self.add(.demo(), secret: nil).setup.withdrawOffer()
+            let demo = self.add(.demo(), secret: nil)
+            demo.setup.withdrawOffer()
+            DemoBookmarks.seed(into: BookmarkStore.shared(gatewayId: demo.id))
         }
     }
 
@@ -294,6 +308,7 @@ public final class AppModel {
         store.outbox = Outbox()
         OutboxStore.remove(gatewayId: id)
         store.forgetLocalHealthDismissals()
+        store.forgetGatewayHost()
         self.persist()
         if self.selectedGatewayId == id { self.selectedGatewayId = self.gateways.first?.id }
         self.firstRun.showIfNoGateways()

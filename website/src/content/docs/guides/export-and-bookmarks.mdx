@@ -1,0 +1,40 @@
+---
+title: Export & bookmarks
+description: Save a whole chat as Markdown, plain text or PDF, and bookmark messages to find again later.
+---
+
+## Export a chat
+
+Open the chat's **⋯** menu and choose **Export Chat…**, or on macOS use **File ▸ Export Chat…** (<kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>E</kbd>).
+
+Pick a format:
+
+- **Markdown**: headings per message, code fences and thinking in collapsible sections.
+- **Plain Text**: the same conversation without any markup.
+- **PDF**: a printable copy.
+
+Two switches decide what goes in beyond the messages themselves. Both are off by default:
+
+- **Include thinking** adds the agent's reasoning.
+- **Include tool calls** adds each call with its arguments and output. Long output is cut so one large file read doesn't swamp the export.
+
+Messages that haven't been sent yet are left out, and context compaction and new-session markers appear as dividers.
+
+The export covers the **whole history**, not only the part on screen. Pincer pages in the older messages first, which can take a moment in a long chat.
+
+On a Mac, Pincer opens a save panel. On iPhone and iPad it opens the share sheet, so you can save to Files, send it in Messages or hand it to another app.
+
+## Bookmark a message
+
+Right-click a message (Mac) or long-press it (iPhone and iPad) and choose **Bookmark**. Do the same and choose **Remove Bookmark** to undo it.
+
+To find your bookmarks, either:
+
+- press <kbd>⌘</kbd> <kbd>K</kbd> and look in the **Bookmarks** section of the [command palette](../command-palette-and-navigation/), or
+- open the chat's **⋯** menu and choose **Bookmarks…** to see that chat's bookmarks.
+
+Choosing a bookmark opens the chat and jumps to the message.
+
+:::note
+OpenClaw has no server-side bookmarks, so Pincer keeps them **on this device**, separately for each gateway. They don't sync to your other devices.
+:::

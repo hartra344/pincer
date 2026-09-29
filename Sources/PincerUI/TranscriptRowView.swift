@@ -165,6 +165,10 @@ final class TranscriptRowView: TranscriptBaseView {
         var items: [NSMenuItem] = [
             TranscriptMenuItem(L("Reply"), symbol: "arrowshape.turn.up.left") { [weak actions] in actions?.reply(to: id) },
             TranscriptMenuItem(L("Copy Link"), symbol: "link") { [weak actions] in actions?.copyLink(to: id) },
+            TranscriptMenuItem(actions.isBookmarked(id) ? L("Remove Bookmark") : L("Bookmark"),
+                               symbol: actions.isBookmarked(id) ? "star.slash" : "star") { [weak actions] in
+                actions?.toggleBookmark(id)
+            },
         ]
         if actions.canBranch(from: id) {
             items.append(TranscriptMenuItem(L("Branch from Here"), symbol: "arrow.triangle.branch") { [weak actions] in actions?.branch(from: id) })
@@ -212,6 +216,10 @@ final class TranscriptRowView: TranscriptBaseView {
                 },
                 UIAction(title: L("Copy Link"), image: UIImage(systemName: "link")) { [weak actions] _ in
                     actions?.copyLink(to: id)
+                },
+                UIAction(title: actions.isBookmarked(id) ? L("Remove Bookmark") : L("Bookmark"),
+                         image: UIImage(systemName: actions.isBookmarked(id) ? "star.slash" : "star")) { [weak actions] _ in
+                    actions?.toggleBookmark(id)
                 },
             ]),
         ]
