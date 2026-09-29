@@ -1,13 +1,22 @@
 import Foundation
 
+/// Two layers of "recent" stack here, warm ⊆ resident:
+/// - **Warm** (`warmKeys`, `recentKeys`, `warmChatLimit`): the selected chat, the most recent selections and running
+///   chats keep their message subscription. Others release it and reload when opened.
+/// - **Resident** (`residency`): hydrated chats, ranked by any use (`chat(for:)`, selection, runs). Beyond
+///   `residency.limit`, the least recently used unpinned ones are dehydrated in place.
+/// Every warm chat is pinned here, and the limit is never below `warmChatLimit`, so a chat that is subscribed
+/// is never dehydrated; a chat can be resident without being warm, but not the other way around.
 extension GatewayStore {
-    /// Chats that must stay hydrated: the selected one, running or busy ones, and any with unsent messages.
+    /// Chats that must stay hydrated: warm ones, the selected one, running or busy ones, and any with unsent messages.
     func pinnedChatKeys() -> Set<String> {
-        Set(self.chats.values.filter { $0.residencySnapshot.isPinned }.map(\.sessionKey))
+        self.chats.values.filter { $0.residencySnapshot.isPinned }.reduce(into: self.warmKeys(includingLive: true)) {
+            $0.insert($1.sessionKey)
+        }
     }
 
     func isChatPinned(_ key: String) -> Bool {
-        self.chats[key]?.residencySnapshot.isPinned ?? false
+        self.pinnedChatKeys().contains(key)
     }
 
     /// Dehydrates the least recently used unpinned chats beyond the limit, one at a time.

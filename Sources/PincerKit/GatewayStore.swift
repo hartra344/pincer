@@ -494,16 +494,16 @@ public final class GatewayStore: Identifiable {
 
     // MARK: Warm chats
 
-    private static let warmChatLimit = 4
+    static let warmChatLimit = ChatResidency.warmFloor
     /// Most recently selected chats, newest first.
     @ObservationIgnored private var recentKeys: [String] = []
     /// Recency of chat use, for dehydrating the least recently used ones (see `GatewayStore+Residency`).
-    @ObservationIgnored var residency = ChatResidency()
+    @ObservationIgnored var residency = ChatResidency(limit: max(ChatResidency.defaultLimit, GatewayStore.warmChatLimit))
     @ObservationIgnored var memoryPressureSource: (any DispatchSourceMemoryPressure)?
     @ObservationIgnored var enforcingChatBudget = false
 
     /// The selected chat, the most recent ones up to the cap, and any chat with a live run.
-    private func warmKeys(includingLive: Bool) -> Set<String> {
+    func warmKeys(includingLive: Bool) -> Set<String> {
         var keys = Set(self.recentKeys.prefix(Self.warmChatLimit))
         if let selected = self.selectedKey { keys.insert(selected) }
         if includingLive {

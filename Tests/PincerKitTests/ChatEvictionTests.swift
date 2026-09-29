@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 @testable import PincerKit
 
@@ -139,5 +140,83 @@ struct ChatEvictionTests {
         #expect(Set(chat.fullMessages.keys) == ["new"])
         #expect(chat.recoveryAttempted == ["new"])
         self.scratch.remove()
+    }
+
+    @Test func warmChatsAreNeverVictims() async {
+        let gateway = self.gateway()
+        let keys = ["a", "b", "c", "d", "e", "f"].map { "agent:main:dashboard:\($0)" }
+        let chats = keys.map { gateway.chat(for: $0) }
+        for chat in chats { self.hydrate(chat) }
+        for key in keys { gateway.selectedKey = key }
+        gateway.residency.limit = 0
+        let warm = gateway.warmKeys(includingLive: true)
+        #expect(warm == Set(keys.suffix(GatewayStore.warmChatLimit)))
+        #expect(warm.isSubset(of: gateway.pinnedChatKeys()))
+        let victims = gateway.residency.victims(hydrated: Set(keys), pinned: gateway.pinnedChatKeys())
+        #expect(Set(victims) == Set(keys.prefix(2)))
+        gateway.enforceChatBudget()
+        await self.settle { chats[0].isDehydrated && chats[1].isDehydrated }
+        #expect(chats.map(\.isDehydrated) == [true, true, false, false, false, false])
+        await self.cleanup(gateway)
+    }
+
+    @Test func defaultResidencyLimitCoversWarmChats() {
+        let gateway = self.gateway()
+        #expect(gateway.residency.limit >= GatewayStore.warmChatLimit)
+        self.scratch.remove()
+    }
+
+    @Test func reopeningADehydratedChatReloadsOnceWithoutFlash() async {
+        let gateway = GatewayStore(profile: .demo(), defaults: self.scratch.defaults, identity: Fixtures.identity())
+        gateway.start()
+        await self.settle { gateway.state == .connected && !gateway.sessions.isEmpty }
+        #expect(gateway.state == .connected)
+        let target = gateway.chat(for: "agent:main:dashboard:garden")
+        gateway.selectedKey = target.sessionKey
+        await self.settle { target.hasLoaded }
+        #expect(target.hasLoaded && !target.items.isEmpty)
+        let full = target.items.map(\.id)
+        // Five other selections push it out of the warm set.
+        for key in ["agent:main:main", "agent:main:dashboard:tax-2025", "agent:research:dashboard:gpu-bench",
+                    "agent:coder:dashboard:refactor", "agent:coder:dashboard:ci-fix"]
+        {
+            gateway.selectedKey = key
+            await self.settle { gateway.chat(for: key).hasLoaded }
+        }
+        #expect(!gateway.warmKeys(includingLive: true).contains(target.sessionKey))
+        await target.dehydrate()
+        #expect(target.isDehydrated && target.items.isEmpty)
+
+        let counts = CountLog(target)
+        counts.watch()
+        let loadsBefore = target.loadCount
+        gateway.selectedKey = target.sessionKey
+        await self.settle { target.hasLoaded && target.loadCount > loadsBefore }
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(target.items.map(\.id) == full)
+        #expect(!counts.values.isEmpty && !counts.values.contains(0), "cached restore never passes through an empty transcript")
+        // One chat.history fetch for the reopen; a second open doesn't refetch.
+        #expect(target.loadCount == loadsBefore + 1)
+        await target.load()
+        #expect(target.loadCount == loadsBefore + 1)
+        gateway.stop()
+        if let dir = TranscriptCache.directory(gatewayId: gateway.id) { try? FileManager.default.removeItem(at: dir) }
+        self.scratch.remove()
+    }
+}
+
+@MainActor
+final class CountLog {
+    var values: [Int] = []
+    private let chat: ChatStore
+    init(_ chat: ChatStore) { self.chat = chat }
+
+    func watch() {
+        withObservationTracking { _ = self.chat.items } onChange: {
+            Task { @MainActor in
+                self.values.append(self.chat.items.count)
+                self.watch()
+            }
+        }
     }
 }
