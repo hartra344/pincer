@@ -45,22 +45,37 @@ func runInvalidationPerfChecks() {
     check(running <= 2, "isRunning invalidates only on run start (\(running))")
     check(row == 0, "sessionRow does not invalidate while streaming (\(row))")
 
-    // Cost of one sessions.changed-style update, including the sidebar's sections().
+    // Cost of one sessions.changed event plus the sidebar's sections(); payloads are parsed up front.
     let rounds = 50
-    let start = ContinuousClock.now
-    for n in 1...rounds {
-        gateway.applySnapshot(snapshot(bump: n))
+    func event(bump: Int) -> JSONValue {
+        json(#"{"session":{"key":"agent:main:dashboard:s150","label":"Chat 150","updatedAt":\#(5000 + bump),"lastMessagePreview":"p\#(bump)"}}"#)
+    }
+    func millis(_ body: () -> Void) -> Double {
+        let start = ContinuousClock.now
+        for _ in 0..<rounds { body() }
+        let d = (ContinuousClock.now - start) / rounds
+        return Double(d.components.seconds) * 1000 + Double(d.components.attoseconds) / 1e15
+    }
+    let changes = (1...rounds).map { event(bump: $0) }
+    let same = event(bump: rounds)
+    var index = 0
+    let changedMs = millis {
+        gateway.applySessionChange(changes[index]); index += 1
         _ = gateway.sections()
     }
-    let msPerEvent = (ContinuousClock.now - start) / rounds
-    let ms = Double(msPerEvent.components.seconds) * 1000 + Double(msPerEvent.components.attoseconds) / 1e15
-    print(String(format: "  sessions update at %d sessions: %.3f ms/event (apply + sections, N=%d)", rowCount, ms, rounds))
-    check(ms < 50, "sessions update stays under 50 ms at 300 sessions")
+    let noopMs = millis {
+        gateway.applySessionChange(same)
+        _ = gateway.sections()
+    }
+    let sectionsMs = millis { _ = gateway.sections() }
+    print(String(format: "  ms/event at %d sessions (N=%d): row change+sections=%.3f  no-op event+sections=%.3f  sections alone=%.3f",
+                 rowCount, rounds, changedMs, noopMs, sectionsMs))
+    check(changedMs < 50, "sessions row event stays under 50 ms at 300 sessions")
 
     // An identical snapshot must not invalidate observers of `sessions`.
     var identical = 0
     track({ _ = gateway.sessions }, { identical += 1 })
-    gateway.applySnapshot(snapshot(bump: rounds))
+    gateway.applySessionChange(same)
     check(identical == 0, "identical sessions write does not invalidate")
     #else
     print("  skipped: needs @testable access to PincerKit (debug builds)")
