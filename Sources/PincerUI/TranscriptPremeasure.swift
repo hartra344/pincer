@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import PincerKit
+import Synchronization
 #if os(macOS)
 import AppKit
 #else
@@ -91,5 +92,241 @@ final class TranscriptTextMeasurer {
         let unaligned = NSMutableAttributedString(attributedString: string)
         unaligned.removeAttribute(.paragraphStyle, range: NSRange(location: 0, length: unaligned.length))
         return self.size(unaligned, width: .greatestFiniteMagnitude).width
+    }
+}
+
+// MARK: - Off-main premeasure
+
+/// One message body as the text cache keys it, plus the style it is built with.
+struct PremeasureKey: Hashable, Sendable {
+    let source: String
+    let tone: TranscriptText.Tone
+    let styleGeneration: Int
+    let dark: Bool
+
+    var textKey: TranscriptText.Key { .init(source: self.source, tone: self.tone, dark: self.dark) }
+}
+
+/// The message bodies of one row, to build and measure at one content width.
+struct PremeasureJob: Sendable {
+    let rowId: String
+    let bodies: [PremeasureKey]
+    let contentWidth: CGFloat
+    let epoch: Int
+}
+
+/// A measured segment: `index` is its place in the body's segments.
+struct SegmentHeight: Sendable {
+    let index: Int
+    let width: CGFloat
+    let exact: Bool
+    let height: CGFloat
+    let usedWidth: CGFloat
+}
+
+struct PremeasuredBody: @unchecked Sendable {
+    let key: PremeasureKey
+    let segments: [TranscriptText.Segment]
+    let heights: [SegmentHeight]
+}
+
+/// What the worker hands back for one row. The attributed strings inside are built on the worker
+/// and never touched by it again after hand-off, so main can share them like any cached segment.
+struct PremeasuredRow: @unchecked Sendable {
+    let rowId: String
+    let epoch: Int
+    let contentWidth: CGFloat
+    var bodies: [PremeasuredBody] = []
+    /// Bodies the worker can't build (inline math), which stay on the main path.
+    var rejected: [PremeasureKey] = []
+    /// Skipped because the epoch moved on before the worker got to it.
+    var discarded = false
+}
+
+/// A cancellation token per list: bumping it tells the worker to drop everything queued for it.
+final class TranscriptPremeasureEpoch: Sendable {
+    private let value = Mutex<Int>(0)
+
+    @discardableResult func bump() -> Int { self.value.withLock { $0 += 1; return $0 } }
+    var current: Int { self.value.withLock { $0 } }
+}
+
+/// Builds and measures message text on a background queue, so the main thread finds the text and its
+/// sizes already cached when it lays a row out. One serial utility queue serves every transcript.
+final class TranscriptPremeasurer: @unchecked Sendable {
+    static let shared = TranscriptPremeasurer()
+    /// TextKit passes run off the main thread, for tests and probes.
+    static let offMainLayouts = Mutex<Int>(0)
+
+    private let queue = DispatchQueue(label: "pincer.transcript.premeasure", qos: .utility)
+    /// Only used on `queue`.
+    private let measurer = TranscriptTextMeasurer()
+
+    nonisolated func submit(_ jobs: [PremeasureJob], env: TextBuildEnvironment, epoch: TranscriptPremeasureEpoch,
+                            completion: @escaping @MainActor @Sendable ([PremeasuredRow]) -> Void)
+    {
+        self.queue.async {
+            var rows: [PremeasuredRow] = []
+            for job in jobs {
+                rows.append(epoch.current == job.epoch ? self.measure(job, env: env, epoch: epoch)
+                    : PremeasuredRow(rowId: job.rowId, epoch: job.epoch, contentWidth: job.contentWidth, discarded: true))
+            }
+            DispatchQueue.main.async { MainActor.assumeIsolated { completion(rows) } }
+        }
+    }
+
+    /// The same builder and measurer main uses, so the sizes are what main would compute.
+    private func measure(_ job: PremeasureJob, env: TextBuildEnvironment, epoch: TranscriptPremeasureEpoch) -> PremeasuredRow {
+        #if DEBUG
+        dispatchPrecondition(condition: .notOnQueue(.main))
+        #endif
+        var row = PremeasuredRow(rowId: job.rowId, epoch: job.epoch, contentWidth: job.contentWidth)
+        let hooks = TranscriptText.BuildHooks(parse: MarkdownBlock.inline, math: nil)
+        var layouts = 0
+        for key in job.bodies {
+            if epoch.current != job.epoch { row.discarded = true; row.bodies = []; break }
+            guard let segments = TranscriptText.build(MarkdownBlock.parse(key.source), tone: key.tone, env: env, hooks: hooks) else {
+                row.rejected.append(key)
+                continue
+            }
+            var heights: [SegmentHeight] = []
+            func add(_ index: Int, _ text: NSAttributedString, width: CGFloat) {
+                guard text.length > 0 else { return }
+                let size = self.measurer.size(text, width: width)
+                layouts += 1
+                heights.append(SegmentHeight(index: index, width: width, exact: false, height: size.height, usedWidth: size.width))
+            }
+            for (index, segment) in segments.enumerated() {
+                switch segment {
+                case let .text(text): add(index, text, width: job.contentWidth)
+                case let .quote(text): add(index, text, width: TranscriptText.quoteWidth(for: job.contentWidth))
+                case let .code(_, _, text): add(index, text, width: .greatestFiniteMagnitude)
+                case .table, .rule: break
+                }
+            }
+            row.bodies.append(PremeasuredBody(key: key, segments: segments, heights: heights))
+        }
+        Self.offMainLayouts.withLock { $0 += layouts }
+        return row
+    }
+}
+
+struct PremeasureStats {
+    /// Rows sent to the worker.
+    var offloaded = 0
+    /// Rows whose text and sizes were taken into the main-thread caches.
+    var adopted = 0
+    /// Rows whose result arrived after the width, style or list moved on.
+    var discardedStale = 0
+    /// Rows a prefetch or scroll pass found already measured, so main only stacks them.
+    var warmHits = 0
+}
+
+/// What a list needs to offload row measuring, the same for AppKit and UIKit: which of a batch of
+/// rows to lay out now and which to prepare on the worker, and taking the worker's results back.
+/// Results only warm the text caches; heights still go through the list's own measure path, so
+/// anchoring and height corrections are untouched. Rows are tracked by id, so paging older
+/// messages in or out never shifts what is in flight.
+@MainActor
+final class TranscriptPremeasureDriver {
+    /// Rows waiting on the worker at once, and rows per hand-off.
+    static let maxInFlight = 64
+    static let rowsPerJob = 16
+
+    let epoch = TranscriptPremeasureEpoch()
+    private(set) var inFlight: Set<String> = []
+    private var rejected: Set<PremeasureKey> = []
+    /// Rows already adopted since the last cancel. One that is still cold is laid out on main rather
+    /// than sent again, so a result that can't warm a row never loops.
+    private var adoptedRows: Set<String> = []
+    var stats = PremeasureStats()
+    #if DEBUG
+    /// Every row id ever sent to the worker, for tests.
+    private(set) var offloadedIds: Set<String> = []
+    #endif
+
+    var inFlightCount: Int { self.inFlight.count }
+
+    /// Sorts `rows` (indexes into `all`, nearest first) into those to lay out now and jobs for the
+    /// worker. Rows on the worker, or beyond its limit, are in neither and wait for its result.
+    func split(_ rows: [Int], all: [TranscriptRow], width: CGFloat, renderer: TranscriptRenderer)
+        -> (measureNow: [Int], offload: [PremeasureJob])
+    {
+        var now: [Int] = []
+        var jobs: [PremeasureJob] = []
+        let contentWidth = TranscriptMetrics.contentWidth(rowWidth: width)
+        for index in rows {
+            let row = all[index]
+            guard !self.inFlight.contains(row.id) else { continue }
+            guard let keys = renderer.premeasureBodies(for: row), !keys.contains(where: self.rejected.contains) else {
+                now.append(index)
+                continue
+            }
+            if renderer.hasLayout(for: row, width: width) || keys.allSatisfy({ TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) }) {
+                self.stats.warmHits += 1
+                now.append(index)
+                continue
+            }
+            if self.adoptedRows.contains(row.id) {
+                now.append(index)
+                continue
+            }
+            guard self.inFlight.count + jobs.count < Self.maxInFlight else { continue }
+            jobs.append(PremeasureJob(rowId: row.id, bodies: keys, contentWidth: contentWidth, epoch: self.epoch.current))
+        }
+        return (now, jobs)
+    }
+
+    /// Sends `jobs` to the worker; `completion` runs on main after their results are adopted.
+    func submit(_ jobs: [PremeasureJob], width: CGFloat, env: TextBuildEnvironment, completion: @escaping @MainActor () -> Void) {
+        guard !jobs.isEmpty else { return }
+        let epoch = self.epoch.current
+        for job in jobs { self.inFlight.insert(job.rowId) }
+        self.stats.offloaded += jobs.count
+        #if DEBUG
+        self.offloadedIds.formUnion(jobs.map(\.rowId))
+        #endif
+        for start in stride(from: 0, to: jobs.count, by: Self.rowsPerJob) {
+            let chunk = Array(jobs[start..<min(start + Self.rowsPerJob, jobs.count)])
+            TranscriptPremeasurer.shared.submit(chunk, env: env, epoch: self.epoch) { [weak self] rows in
+                guard let self else { return }
+                self.adopt(rows, width: width, epoch: epoch)
+                completion()
+            }
+        }
+    }
+
+    /// Takes worker results into the text caches. `width` is the list's width now; results made for
+    /// another width, epoch or style are dropped. Returns the rows that are now warm.
+    @discardableResult
+    func adopt(_ results: [PremeasuredRow], width: CGFloat, epoch: Int) -> Set<String> {
+        let current = epoch == self.epoch.current
+        let contentWidth = TranscriptMetrics.contentWidth(rowWidth: width)
+        var warm: Set<String> = []
+        for result in results {
+            if current { self.inFlight.remove(result.rowId) }
+            guard current, !result.discarded, result.epoch == epoch, result.contentWidth == contentWidth else {
+                self.stats.discardedStale += 1
+                continue
+            }
+            self.rejected.formUnion(result.rejected)
+            var adopted = true
+            for body in result.bodies where !TranscriptText.adopt(body) { adopted = false }
+            if adopted {
+                self.stats.adopted += 1
+                self.adoptedRows.insert(result.rowId)
+                warm.insert(result.rowId)
+            } else {
+                self.stats.discardedStale += 1
+            }
+        }
+        return warm
+    }
+
+    /// Drops everything in flight: the width, style or rows it was made for are gone.
+    func cancelAll() {
+        self.epoch.bump()
+        self.inFlight.removeAll()
+        self.adoptedRows.removeAll()
     }
 }

@@ -718,11 +718,11 @@ struct TranscriptLayoutBuilder {
                 self.marks.place(match, in: text, width: width, stack: stack, into: &layout)
             case let .quote(source):
                 let (text, match) = self.marks.mark(source, section)
-                let quoteWidth = max(width - 11, 20)
+                let quoteWidth = TranscriptText.quoteWidth(for: width)
                 let size = live ? TranscriptText.liveSize(text, width: quoteWidth, frozen: piece.isFrozen && text === source, exact: false)
                     : TranscriptText.size(text, width: quoteWidth, memoized: text === source)
                 stack.add(.quote(text), height: size.height, spacing: spacing)
-                self.marks.place(match, in: text, width: max(width - 11, 20), stack: stack, into: &layout)
+                self.marks.place(match, in: text, width: quoteWidth, stack: stack, into: &layout)
             case .rule:
                 stack.add(.rule, height: 1)
             case let .code(language, code, source):

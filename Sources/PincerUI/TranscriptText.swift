@@ -75,6 +75,60 @@ enum TranscriptText {
 
     static func resetMeasureStats() { self.measureStats = (0, 0) }
 
+    /// Width the text of a quote block wraps at inside a content column of `width`.
+    nonisolated static func quoteWidth(for width: CGFloat) -> CGFloat { max(width - 11, 20) }
+
+    /// Whether `key`'s segments are cached and every size a row lays them out with at `contentWidth`
+    /// is remembered, so laying the row out costs no TextKit pass.
+    static func isWarm(_ key: Key, contentWidth: CGFloat) -> Bool {
+        self.syncGeneration()
+        guard let segments = self.segmentCache.value(for: key) else { return false }
+        func known(_ text: NSAttributedString, _ width: CGFloat) -> Bool {
+            text.length == 0 || self.heightMemo.value(for: MemoKey(object: ObjectIdentifier(text), width: width, exact: false)) != nil
+        }
+        for segment in segments {
+            switch segment {
+            case let .text(text): if !known(text, contentWidth) { return false }
+            case let .quote(text): if !known(text, self.quoteWidth(for: contentWidth)) { return false }
+            case let .code(_, _, text): if !known(text, .greatestFiniteMagnitude) { return false }
+            case .table, .rule: break
+            }
+        }
+        return true
+    }
+
+    /// Takes a premeasured body into the caches. When main already built the same segments it keeps
+    /// them (their identity may be on screen) and the worker's sizes are recorded against them.
+    /// False when the body can't be used: built with an older style, or not the shape main built.
+    static func adopt(_ body: PremeasuredBody) -> Bool {
+        self.syncGeneration()
+        guard body.key.styleGeneration == TranscriptStyle.generation else { return false }
+        var segments = body.segments
+        if let cached = self.segmentCache.value(for: body.key.textKey) {
+            guard cached.count == segments.count, zip(cached, segments).allSatisfy({ self.sameKind($0, $1) }) else { return false }
+            segments = cached
+        } else {
+            self.segmentCache.set(segments, for: body.key.textKey)
+        }
+        for height in body.heights where height.index < segments.count {
+            let text: NSAttributedString
+            switch segments[height.index] {
+            case let .text(string), let .quote(string), let .code(_, _, string): text = string
+            case .table, .rule: continue
+            }
+            self.heightMemo.set((text, CGSize(width: height.usedWidth, height: height.height)),
+                                for: MemoKey(object: ObjectIdentifier(text), width: height.width, exact: height.exact))
+        }
+        return true
+    }
+
+    private static func sameKind(_ a: Segment, _ b: Segment) -> Bool {
+        switch (a, b) {
+        case (.text, .text), (.quote, .quote), (.code, .code), (.table, .table), (.rule, .rule): true
+        default: false
+        }
+    }
+
     /// Drops everything built with an older style (Dynamic Type changed).
     private static func syncGeneration() {
         guard self.cacheGeneration != TranscriptStyle.generation else { return }

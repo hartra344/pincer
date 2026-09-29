@@ -333,6 +333,53 @@ final class TranscriptRenderer: TranscriptRowActions {
         return layout
     }
 
+    // MARK: Premeasure
+
+    /// What a background pass would build and measure for `row`; nil when the row has to be laid out on
+    /// main: one streaming (its text changes every flush), highlighted by Find, without text, or with
+    /// inline math (drawn from main-actor caches).
+    func premeasureBodies(for row: TranscriptRow) -> [PremeasureKey]? {
+        guard !self.highlight.rows.contains(row.id) else { return nil }
+        let sources: [(String, TranscriptText.Tone)]
+        switch row {
+        case let .entry(.user(item)):
+            sources = [(item.plainText, .primary)]
+        case let .entry(.assistant(turn)):
+            guard !turn.isStreaming else { return nil }
+            sources = turn.text.map { ($0, turn.isError ? .error : .primary) }
+        default:
+            return nil
+        }
+        var keys: [PremeasureKey] = []
+        for (source, tone) in sources where !source.isEmpty {
+            if source.contains("$") || source.contains("\\("), !InlineMath.spans(in: source).isEmpty { return nil }
+            let key = PremeasureKey(source: source, tone: tone, styleGeneration: TranscriptStyle.generation, dark: self.settings.dark)
+            if !keys.contains(key) { keys.append(key) }
+        }
+        return keys.isEmpty ? nil : keys
+    }
+
+    func premeasureJob(for row: TranscriptRow, width: CGFloat, epoch: Int) -> PremeasureJob? {
+        guard let keys = self.premeasureBodies(for: row) else { return nil }
+        return PremeasureJob(rowId: row.id, bodies: keys, contentWidth: TranscriptMetrics.contentWidth(rowWidth: width), epoch: epoch)
+    }
+
+    /// Whether laying `row` out at `width` needs no TextKit pass: its layout is cached, or its text
+    /// and sizes are.
+    func isWarm(_ row: TranscriptRow, width: CGFloat) -> Bool {
+        if self.hasLayout(for: row, width: width) { return true }
+        guard let keys = self.premeasureBodies(for: row) else { return false }
+        let contentWidth = TranscriptMetrics.contentWidth(rowWidth: width)
+        return keys.allSatisfy { TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) }
+    }
+
+    func hasLayout(for row: TranscriptRow, width: CGFloat) -> Bool {
+        guard let entry = self.cache[row.id] else { return false }
+        return entry.layout.width == width && entry.row == row
+    }
+
+    var textEnvironment: TextBuildEnvironment { .current(dark: self.settings.dark) }
+
     /// Drops the least recently used layouts (down to 90% of the limit, so this isn't a scan per
     /// insert) along with what was tracked for them.
     private func evictIfNeeded() {
