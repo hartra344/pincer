@@ -239,7 +239,13 @@ struct SidebarList: UIViewRepresentable {
             guard current != (target.map { [$0] } ?? []) else { return }
             self.programmatic {
                 for path in current where path != target { view.deselectItem(at: path, animated: false) }
-                if let target { view.selectItem(at: target, animated: false, scrollPosition: []) }
+                if let target {
+                    view.selectItem(at: target, animated: false, scrollPosition: [])
+                    view.layoutIfNeeded()
+                    if !view.indexPathsForVisibleItems.contains(target) {
+                        view.scrollToItem(at: target, at: .centeredVertically, animated: false)
+                    }
+                }
             }
         }
 
