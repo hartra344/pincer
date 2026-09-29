@@ -270,7 +270,11 @@ struct MermaidSequence {
         let boxW = participants.map { max(80, MermaidSource.maxWidth(MermaidSource.textLines($0.label), size: 14) + 28) }
 
         func textWidth(_ s: String) -> CGFloat { MermaidSource.maxWidth(MermaidSource.textLines(s), size: 12) }
-        var gaps: [CGFloat] = (0..<max(participants.count - 1, 0)).map { max((boxW[$0] + boxW[$0 + 1]) / 2 + 20, 120) }
+        var gaps: [CGFloat] = []
+        for index in 0..<max(participants.count - 1, 0) {
+            let half: CGFloat = (boxW[index] + boxW[index + 1]) / 2
+            gaps.append(max(half + 20, 120))
+        }
         func require(_ lo: Int, _ hi: Int, _ need: CGFloat) {
             guard lo < hi, hi <= gaps.count else { return }
             let have = gaps[lo..<hi].reduce(0, +)
