@@ -126,9 +126,8 @@ struct SidebarList: NSViewRepresentable {
                 let old = self.model
                 self.model = model
                 self.rebuildIndex()
-                let structure = { (model: SidebarModel) in model.groups.flatMap { [$0.header.id] + $0.childIds } }
                 self.programmatic {
-                    if !self.hasLoaded || structure(old) != structure(model) {
+                    if !self.hasLoaded || SidebarModel.structureChanged(old: old, new: model) {
                         self.hasLoaded = true
                         outline.reloadData()
                     } else {
