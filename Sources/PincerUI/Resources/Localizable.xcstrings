@@ -12943,6 +12943,16 @@
         }
       }
     },
+    "Tip %lld of %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tip %lld of %lld"
+          }
+        }
+      }
+    },
     "Tips": {
       "localizations": {
         "en": {

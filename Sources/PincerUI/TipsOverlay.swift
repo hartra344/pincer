@@ -18,19 +18,20 @@ struct TipsOverlay: ViewModifier {
         let setupBlocking = (gateway?.setup.isShowingOrPending ?? true) || self.app.firstRun.presentation != nil
         let prompting = NotificationPrompt.shared.isShowing
         content
-            .overlay(alignment: self.isCompact ? .bottom : .bottomTrailing) {
-                if self.tips.isPresented {
-                    Group {
-                        if self.isCompact {
-                            CompactTipsCard { self.tips.dismiss() }
-                                .padding(.horizontal, Theme.Spacing.xl)
-                                .padding(.bottom, Theme.Spacing.xl)
-                        } else {
-                            TipsCard { self.tips.dismiss() }
-                                .padding(Theme.Spacing.section)
-                        }
-                    }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            // iPhone: an inset, so the list, its search field and the composer move up instead of being covered (#333).
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if self.isCompact, self.tips.isPresented {
+                    CompactTipsCard { self.tips.dismiss() }
+                        .padding(.horizontal, Theme.Spacing.xl)
+                        .padding(.bottom, Theme.Spacing.md)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if !self.isCompact, self.tips.isPresented {
+                    TipsCard { self.tips.dismiss() }
+                        .padding(Theme.Spacing.section)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .animation(.snappy, value: self.tips.isPresented)
@@ -103,6 +104,7 @@ private struct CompactTipsCard: View {
                 Spacer()
                 Text(L("\(self.index + 1) of \(self.tips.count)"))
                     .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                    .accessibilityLabel(L("Tip \(self.index + 1) of \(self.tips.count)"))
             }
             Label {
                 Text(entry.text).fixedSize(horizontal: false, vertical: true)

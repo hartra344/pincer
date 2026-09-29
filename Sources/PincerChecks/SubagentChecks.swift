@@ -110,6 +110,9 @@ func runDemoSubagents(_ gateway: GatewayStore) async {
     check(streaming && runningLane?.isRunning == true && runningLane?.currentActivity?.hasPrefix("Running `") == true,
           "demo running helper streams tool calls (\(toolsBefore) → \(runningLane?.toolCount ?? 0), \(runningLane?.currentActivity ?? "nil"))")
 
+    // Compact iPhone shows the Runs button only while a helper runs (#180): the demo's flagship chat has one.
+    check(gateway.subagentTree(rootKey: root).runningCount >= 1, "demo launch plan has a running helper")
+
     let chat = gateway.chat(for: kids.running)
     await chat.load()
     check(!chat.items.isEmpty, "demo helper chat opens with a transcript")
