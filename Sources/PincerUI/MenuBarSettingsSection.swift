@@ -10,7 +10,7 @@ struct MenuBarSettingsSection: View {
         Section {
             Toggle(isOn: self.$enabled) {
                 Text("Show Pincer in the menu bar", bundle: .module)
-                Text("Quick Capture, unread chats, approvals and gateway status, one click away.", bundle: .module)
+                Text("Quick Capture, unread chats, approvals and Gateway status, one click away.", bundle: .module)
             }
         } header: {
             Text("Menu Bar", bundle: .module)

@@ -65,7 +65,7 @@ struct GatewayLogsPage: View {
         Group {
             if !model.supported {
                 ContentUnavailableView(L("Gateway Logs Aren't Available"), systemImage: "doc.text.magnifyingglass",
-                                       description: Text("This gateway doesn't offer logs.tail. Update OpenClaw to view its logs here.", bundle: .module))
+                                       description: Text("This Gateway doesn't offer logs.tail. Update OpenClaw to view its logs here.", bundle: .module))
             } else {
                 self.content(model, visible: visible, connected: connected)
             }
@@ -103,7 +103,7 @@ struct GatewayLogsPage: View {
             }
             Button(L("Cancel"), role: .cancel) {}
         } message: {
-            Text("Gateway logs are redacted by the gateway, but they can still contain hostnames, file paths and message content. Review them before sharing.", bundle: .module)
+            Text("Gateway logs are redacted by the Gateway, but they can still contain hostnames, file paths and message content. Review them before sharing.", bundle: .module)
         }
         .fileExporter(
             isPresented: Binding(get: { self.exportDocument != nil }, set: { if !$0 { self.exportDocument = nil } }),
@@ -325,7 +325,7 @@ struct GatewayLogsPage: View {
     @ViewBuilder private func emptyState(_ model: GatewayLogsModel, connected: Bool) -> some View {
         if !connected {
             ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                   description: Text("Connect to the gateway to see its logs.", bundle: .module))
+                                   description: Text("Connect to the Gateway to see its logs.", bundle: .module))
         } else if let failure = model.failure, !failure.isUnavailable {
             ContentUnavailableView {
                 Label(L("Couldn't Load Logs"), systemImage: "exclamationmark.triangle")
@@ -343,7 +343,7 @@ struct GatewayLogsPage: View {
                 if let file = model.file {
                     Text("New lines written to \(file) appear here.", bundle: .module)
                 } else {
-                    Text("New lines appear here as the gateway writes them.", bundle: .module)
+                    Text("New lines appear here as the Gateway writes them.", bundle: .module)
                 }
             }
         }

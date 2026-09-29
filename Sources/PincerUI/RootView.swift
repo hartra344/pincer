@@ -508,7 +508,7 @@ private struct SettingsForm: View {
                 Text("Notifications")
             } footer: {
                 #if os(iOS)
-                Text("To get notified while Pincer is closed, enter a Pincer push relay. Your gateway encrypts each notification to this device, so the relay can't read it. The gateway needs Web Push (push.web.subscribe).")
+                Text("To get notified while Pincer is closed, enter a Pincer push relay. Your Gateway encrypts each notification to this device, so the relay can't read it. The Gateway needs Web Push (push.web.subscribe).")
                 #endif
             }
         case .device:
@@ -556,7 +556,7 @@ private struct TranscriptCacheSettingsSection: View {
                         }
                     }
                 } message: {
-                    Text("Chats are downloaded again from your gateways when you open them, and message search is rebuilt. Nothing on your gateways is deleted.")
+                    Text("Chats are downloaded again from your Gateways when you open them, and message search is rebuilt. Nothing on your Gateways is deleted.")
                 }
             LabeledContent("Outbox") {
                 Text(self.app.unsentCount == 1 ? "1 message" : "\(self.app.unsentCount.formatted()) messages")
@@ -596,7 +596,7 @@ private struct ThemePresetGrid: View {
                     .accessibilityAddTraits(preset == self.selection ? .isSelected : [])
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Theme.Spacing.xs)
     }
 
     private func swatch(_ preset: ThemePreset) -> some View {
@@ -616,7 +616,7 @@ private struct ThemePresetGrid: View {
                 .foregroundStyle(selected ? .primary : .secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
+        .padding(.vertical, Theme.Spacing.md)
         .background(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
             .fill(selected ? AnyShapeStyle(colors[0].opacity(0.15)) : AnyShapeStyle(.quinary)))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)

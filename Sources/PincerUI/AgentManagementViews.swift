@@ -25,7 +25,7 @@ struct AgentManagementSection: View {
             }
             AgentReadOnlyNotice(model: model)
             if agents.isEmpty {
-                Text(connected ? L("No agents.") : L("Connect to the gateway to see its agents."))
+                Text(connected ? L("No agents.") : L("Connect to the Gateway to see its agents."))
                     .foregroundStyle(.secondary)
             }
             ForEach(agents) { agent in
@@ -113,7 +113,7 @@ private struct AgentDeletionReportView: View {
                         .textSelection(.enabled)
                 }
                 if self.report.result.purgeFailed {
-                    Text("The gateway couldn't finish removing the agent's data. Deleting again retries it.", bundle: .module)
+                    Text("The Gateway couldn't finish removing the agent's data. Deleting again retries it.", bundle: .module)
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -207,10 +207,10 @@ struct AgentPage: View {
                 self.form(agent)
             } else if !self.gateway.state.isConnected {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see this agent.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see this agent.", bundle: .module))
             } else {
                 ContentUnavailableView(L("Agent Not Found"), systemImage: "person.crop.circle.badge.questionmark",
-                                       description: Text("“\(self.agentId)” isn't an agent on this gateway anymore.", bundle: .module))
+                                       description: Text("“\(self.agentId)” isn't an agent on this Gateway anymore.", bundle: .module))
             }
         }
         .navigationTitle(self.agent?.title ?? self.agentId)
@@ -359,7 +359,7 @@ struct AgentPage: View {
                 Label(AgentManagement.workspaceChangeWarning, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
             } else {
-                Text("The folder on the gateway host with this agent's files.", bundle: .module)
+                Text("The folder on the Gateway host with this agent's files.", bundle: .module)
             }
         }
     }
@@ -389,7 +389,7 @@ struct AgentPage: View {
     @ViewBuilder private func filesSection(_ agent: AgentSummary) -> some View {
         Section {
             if !self.model.filesSupported {
-                Text("This gateway can't share workspace files. Update OpenClaw to edit them here.", bundle: .module)
+                Text("This Gateway can't share workspace files. Update OpenClaw to edit them here.", bundle: .module)
                     .foregroundStyle(.secondary)
             } else if let files {
                 ForEach(files.files) { file in
@@ -605,13 +605,13 @@ struct AgentEditorSheet: View {
                     AgentModelPicker(selection: self.$draft.model, agentId: nil)
                 }
                 Section {
-                    TextField(L("Folder"), text: self.$draft.workspace, prompt: Text("Default (created by gateway)", bundle: .module))
+                    TextField(L("Folder"), text: self.$draft.workspace, prompt: Text("Default (created by Gateway)", bundle: .module))
                         .font(.body.monospaced())
                         .agentPlainTextInput()
                 } header: {
                     Text("Workspace", bundle: .module)
                 } footer: {
-                    Text("Leave empty to let the gateway create a new workspace for this agent.", bundle: .module)
+                    Text("Leave empty to let the Gateway create a new workspace for this agent.", bundle: .module)
                 }
                 if case let .duplicate(source) = self.mode {
                     Section {
@@ -821,7 +821,7 @@ struct AgentFileEditorPage: View {
                 }
             } else if !self.gateway.state.isConnected {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to open \(self.name).", bundle: .module))
+                                       description: Text("Connect to the Gateway to open \(self.name).", bundle: .module))
             } else {
                 ProgressView()
             }
@@ -835,12 +835,12 @@ struct AgentFileEditorPage: View {
         }
         .onDisappear { self.model.closeEditor(editor) }
         .onChange(of: editor.lastSave) { self.showToast() }
-        .confirmationDialog(L("Overwrite \(self.name) on the gateway?"), isPresented: self.$confirmOverwrite,
+        .confirmationDialog(L("Overwrite \(self.name) on the Gateway?"), isPresented: self.$confirmOverwrite,
                             titleVisibility: .visible) {
             Button(L("Overwrite with Mine"), role: .destructive) { Task { await editor.resolveConflictOverwrite() } }
             Button(L("Cancel"), role: .cancel) {}
         } message: {
-            Text("The changes made on the gateway since you opened it will be replaced by yours.", bundle: .module)
+            Text("The changes made on the Gateway since you opened it will be replaced by yours.", bundle: .module)
         }
         .sheet(isPresented: self.$comparing) {
             if let conflict = editor.conflict {
@@ -931,8 +931,8 @@ struct AgentFileEditorPage: View {
     private func conflictBanner(_ conflict: AgentFileConflict, editor: AgentFileEditorModel) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Label(conflict.theirsMissing
-                ? "\(self.name) was removed on the gateway since you opened it."
-                : "\(self.name) changed on the gateway since you opened it.",
+                ? "\(self.name) was removed on the Gateway since you opened it."
+                : "\(self.name) changed on the Gateway since you opened it.",
                 systemImage: "arrow.triangle.2.circlepath")
                 .foregroundStyle(.orange)
             Text("Your edits are kept until you choose.", bundle: .module)

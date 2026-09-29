@@ -25,7 +25,7 @@ struct SessionUsagePage: View {
         Group {
             if !connected, detail?.totals.value == nil, detail?.timeseries.value == nil, detail?.logs.value == nil {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see this session's usage.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see this session's usage.", bundle: .module))
             } else {
                 Form {
                     Section {
@@ -102,7 +102,7 @@ private struct SessionTotalsSection: View {
         let usage = self.detail.row?.usage
         let totals = usage?.totals ?? .zero
         Section {
-            UsageSectionBody(status: status, unsupported: "This gateway doesn't report usage by session.", height: 120) {
+            UsageSectionBody(status: status, unsupported: "This Gateway doesn't report usage by session.", height: 120) {
                 if totals.isEmpty {
                     Text("No usage in this range.", bundle: .module)
                         .font(.callout)
@@ -207,7 +207,7 @@ private struct SessionTimeseriesSection: View {
         let unpriced = self.detail.isUnpriced
         let metric = self.metric ?? (unpriced ? .tokens : UsageMetric.preferred(self.detail.row?.usage?.totals))
         Section {
-            UsageSectionBody(status: status, unsupported: "This gateway doesn't report usage over time.",
+            UsageSectionBody(status: status, unsupported: "This Gateway doesn't report usage over time.",
                              isEmpty: points.isEmpty, empty: "No usage recorded for this session yet.", height: 180) {
                 Picker(L("Metric"), selection: Binding(get: { metric }, set: { self.metric = $0 })) {
                     ForEach(UsageMetric.allCases) { Text($0.label).tag($0) }
@@ -300,7 +300,7 @@ private struct SessionLogsSection: View {
         let status = UsageSectionStatus(self.detail.logs) { [model] in await model.loadLogs(key) }
         let logs = self.detail.logs.value ?? []
         Section {
-            UsageSectionBody(status: status, unsupported: "This gateway doesn't report session logs.",
+            UsageSectionBody(status: status, unsupported: "This Gateway doesn't report session logs.",
                              isEmpty: logs.isEmpty, empty: "No log entries for this session yet.", emptySymbol: "text.alignleft",
                              height: 120) {
                 ForEach(logs) { SessionLogRow(entry: $0, unpriced: self.detail.isUnpriced) }

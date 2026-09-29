@@ -186,12 +186,12 @@ struct ChatView: View {
                     .glassButton()
                     .controlSize(.small)
             }
-            .padding(.leading, 14)
-            .padding(.trailing, 8)
-            .padding(.vertical, 6)
+            .padding(.leading, Theme.Spacing.row)
+            .padding(.trailing, Theme.Spacing.md)
+            .padding(.vertical, Theme.Spacing.sm)
             .glassSurface(in: Capsule(), tint: .orange)
-            .padding(.horizontal, 14)
-            .padding(.top, 6)
+            .padding(.horizontal, Theme.Spacing.row)
+            .padding(.top, Theme.Spacing.sm)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
@@ -213,12 +213,12 @@ struct ChatView: View {
                 .controlSize(.small)
                 .accessibilityLabel(L("Dismiss"))
             }
-            .padding(.leading, 14)
-            .padding(.trailing, 10)
-            .padding(.vertical, 6)
+            .padding(.leading, Theme.Spacing.row)
+            .padding(.trailing, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.sm)
             .glassSurface(in: Capsule())
-            .padding(.horizontal, 14)
-            .padding(.top, 6)
+            .padding(.horizontal, Theme.Spacing.row)
+            .padding(.top, Theme.Spacing.sm)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
@@ -271,12 +271,12 @@ private struct ReasoningHint: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(L("Dismiss"))
             }
-            .padding(.leading, 14)
-            .padding(.trailing, 6)
-            .padding(.vertical, 6)
+            .padding(.leading, Theme.Spacing.row)
+            .padding(.trailing, Theme.Spacing.sm)
+            .padding(.vertical, Theme.Spacing.sm)
             .glassSurface(in: Capsule(), tint: .purple)
-            .padding(.horizontal, 14)
-            .padding(.top, 6)
+            .padding(.horizontal, Theme.Spacing.row)
+            .padding(.top, Theme.Spacing.sm)
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
@@ -315,12 +315,14 @@ private struct TranscriptPane: View {
             // Until history has loaded once (cache still reading, or the Gateway reconnecting after
             // the app was suspended), an empty chat isn't known to be empty.
             VStack(spacing: Theme.Spacing.md) {
-                ChatLoadingSkeleton()
+                ChatLoadingSkeleton(label: self.gateway.state.isConnected ? "Loading messages" : "Connecting…",
+                                    topInset: self.topInset)
                 if !self.gateway.state.isConnected {
                     Text("Connecting…", bundle: .module).font(.callout).foregroundStyle(.secondary)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.bottom, self.bottomInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         } else if self.chat.entries.isEmpty {
             ContentUnavailableView {
                 Label(L("Say hello to \(self.agent.name)"), systemImage: "bubble.left.and.bubble.right")
@@ -369,8 +371,15 @@ struct ChatChrome: ViewModifier {
     /// session row briefly going away (refresh, reconnect) doesn't dismiss it.
     @State private var toolsInspector: ChatToolsInspection?
 
+    /// The selected chat's row as last seen, so a refresh or reconnect that briefly drops it doesn't
+    /// empty the title and toolbar items. Only ever a row of the selected chat, never a previous one.
+    @State private var lastRow: SessionRow?
+
     private var key: String? { self.gateway.selectedKey }
-    private var row: SessionRow? { self.key.flatMap { self.gateway.sessions[$0] } }
+    private var row: SessionRow? {
+        if let key, let current = self.gateway.sessions[key] { return current }
+        return self.lastRow.flatMap { $0.key == self.key ? $0 : nil }
+    }
 
     func body(content: Content) -> some View {
         content
@@ -386,13 +395,16 @@ struct ChatChrome: ViewModifier {
                 #else
                 ToolbarItem(placement: .topBarLeading) { ChatHeaderAvatar() }
                 #endif
-                ToolbarItem(placement: .primaryAction) { ChatModelItem() }
-                ToolbarItem(placement: .primaryAction) { ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector) }
+                ToolbarItem(placement: .primaryAction) { ChatModelItem(row: self.row) }
+                ToolbarItem(placement: .primaryAction) { ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector, row: self.row) }
             }
             .sheet(item: self.$toolsInspector) { inspection in
                 ChatToolsInspectorSheet(model: inspection.model, scopeTitle: inspection.scopeTitle, gateway: self.gateway)
             }
             .modifier(RunsPanelChrome(isPresented: self.$showRuns))
+            .onChange(of: self.gateway.selectedKey.flatMap { self.gateway.sessions[$0] }, initial: true) { _, row in
+                if let row { self.lastRow = row }
+            }
     }
 
     private var subtitle: String {
@@ -408,28 +420,11 @@ struct ChatChrome: ViewModifier {
     }
 }
 
-/// The selected chat's row, or the last one seen while it briefly goes away (refresh, reconnect),
-/// so a toolbar item keeps its content rather than collapsing to nothing and being rebuilt.
-private struct LastKnownRow<Content: View>: View {
-    @Environment(GatewayStore.self) private var gateway
-    @State private var last: SessionRow?
-    @ViewBuilder let content: (SessionRow) -> Content
-
-    private var current: SessionRow? { self.gateway.selectedKey.flatMap { self.gateway.sessions[$0] } }
-
-    var body: some View {
-        Group {
-            if let row = self.current ?? self.last { self.content(row) }
-        }
-        .onChange(of: self.current, initial: true) { _, row in
-            if let row { self.last = row }
-        }
-    }
-}
-
 private struct ChatModelItem: View {
+    let row: SessionRow?
+
     var body: some View {
-        LastKnownRow { ModelPicker(row: $0) }
+        if let row { ModelPicker(row: row) }
     }
 }
 
@@ -439,9 +434,10 @@ private struct ChatSessionMenu: View {
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @FocusedValue(\.transcriptFind) private var find
     @Binding var toolsInspector: ChatToolsInspection?
+    let row: SessionRow?
 
     var body: some View {
-        LastKnownRow { row in
+        if let row {
             Menu {
                 Button(L("Find in Chat"), systemImage: "magnifyingglass") { self.find?.present() }
                 Divider()
@@ -461,7 +457,7 @@ private struct ChatSessionMenu: View {
                     self.openGatewaySettings.sessionUsage(self.gateway, key: row.key, agentId: row.agentId)
                 }
                 if self.gateway.supportsSessionManager {
-                    Button("Manage Session…", systemImage: "rectangle.stack") {
+                    Button(L("Manage Session…"), systemImage: "rectangle.stack") {
                         self.openGatewaySettings(self.gateway, at: .sessions, routes: [.sessionDetail(row.key)])
                     }
                 }
@@ -472,7 +468,7 @@ private struct ChatSessionMenu: View {
                     }
                 }
             } label: {
-                Label(L("Chat"), systemImage: Theme.moreSymbol)
+                Label(L("Chat Options"), systemImage: Theme.moreSymbol)
             }
         }
     }
@@ -494,7 +490,7 @@ struct ReasoningMenu: View {
 
     var body: some View {
         Menu(L("Gateway Reasoning"), systemImage: "brain") {
-            ForEach([("on", "Save & Stream"), ("stream", "Stream Only"), ("off", "Off")], id: \.0) { value, label in
+            ForEach([("on", L("Save & Stream")), ("stream", L("Stream Only")), ("off", L("Off"))], id: \.0) { value, label in
                 Button {
                     Task { await self.gateway.patch(self.row.key, ["reasoningLevel": .string(value)]) }
                 } label: {
@@ -530,7 +526,7 @@ struct ApprovalsBanner: View {
                                 .font(.system(.callout, design: .monospaced))
                                 .textSelection(.enabled)
                                 .lineLimit(4)
-                                .padding(.horizontal, 8)
+                                .padding(.horizontal, Theme.Spacing.md)
                                 .padding(.vertical, 5)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
@@ -559,14 +555,14 @@ struct ApprovalsBanner: View {
                             .fixedSize()
                         }
                     }
-                    .padding(12)
+                    .padding(Theme.Spacing.xl)
                     .glassSurface(in: RoundedRectangle(cornerRadius: Theme.Radius.xxLarge, style: .continuous), tint: .orange.opacity(0.35))
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
             .glassGroup()
-            .padding(.horizontal, 14)
-            .padding(.top, 8)
+            .padding(.horizontal, Theme.Spacing.row)
+            .padding(.top, Theme.Spacing.md)
             .animation(.snappy, value: approvals.map(\.id))
         }
     }
@@ -630,28 +626,78 @@ extension FocusedValues {
     @Entry var replyToLast: ReplyToLast?
 }
 
-/// Placeholder bubbles shown while a chat's history loads. Static, so Reduce Motion needs no special case.
+/// Placeholder rows shown while a chat's history loads, laid out like real transcript rows: an
+/// avatar circle, a name bar and a few text bars. Fixed shapes, so it looks the same every time.
 struct ChatLoadingSkeleton: View {
-    private static let rows: [(leading: Bool, width: CGFloat, height: CGFloat)] = [
-        (true, 220, 44), (false, 160, 32), (true, 280, 68), (false, 200, 32),
+    var label: LocalizedStringKey = "Loading messages"
+    var topInset: CGFloat = 0
+    var bottomInset: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var onscreen = false
+    @State private var dim = false
+
+    private struct Row {
+        let name: CGFloat
+        /// Widths of the text bars as fractions of the available width; the last is the short one.
+        let lines: [CGFloat]
+    }
+
+    private static let rows = [
+        Row(name: 96, lines: [0.95, 0.85, 0.6]),
+        Row(name: 84, lines: [0.9, 0.6]),
+        Row(name: 108, lines: [0.92, 0.88, 0.6]),
+        Row(name: 88, lines: [0.6]),
     ]
 
+    private var pulses: Bool { !self.reduceMotion && self.scenePhase == .active && self.onscreen }
+
     var body: some View {
-        VStack(spacing: Theme.Spacing.xl) {
+        VStack(alignment: .leading, spacing: TranscriptMetrics.messageSpacing + 2 * TranscriptMetrics.verticalPadding) {
             ForEach(Self.rows.indices, id: \.self) { index in
-                let row = Self.rows[index]
-                HStack {
-                    if !row.leading { Spacer(minLength: 0) }
-                    RoundedRectangle(cornerRadius: Theme.Radius.xLarge, style: .continuous)
-                        .fill(.quaternary)
-                        .frame(width: row.width, height: row.height)
-                    if row.leading { Spacer(minLength: 0) }
-                }
+                self.row(Self.rows[index])
             }
         }
-        .padding(.horizontal, 20)
-        .frame(maxWidth: 520)
+        .padding(.horizontal, TranscriptMetrics.sidePadding)
+        .padding(.top, self.topInset)
+        .padding(.bottom, self.bottomInset)
+        .frame(maxWidth: TranscriptMetrics.maxCardWidth + TranscriptMetrics.contentX, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .opacity(self.pulses && self.dim ? 0.55 : 1)
+        .onAppear { self.onscreen = true }
+        .onDisappear { self.onscreen = false }
+        .task(id: self.pulses) {
+            guard self.pulses else {
+                self.dim = false
+                return
+            }
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { self.dim = true }
+        }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Loading chat", bundle: .module))
+        .accessibilityLabel(Text(self.label, bundle: .module))
+    }
+
+    private func row(_ row: Row) -> some View {
+        HStack(alignment: .top, spacing: TranscriptMetrics.avatarGap) {
+            Circle().fill(Self.fill).frame(width: TranscriptMetrics.avatar, height: TranscriptMetrics.avatar)
+            VStack(alignment: .leading, spacing: TranscriptMetrics.headerGap) {
+                Self.bar(height: 10).frame(width: row.name)
+                VStack(alignment: .leading, spacing: TranscriptMetrics.blockSpacing) {
+                    ForEach(row.lines.indices, id: \.self) { line in
+                        GeometryReader { proxy in
+                            Self.bar(height: 12).frame(width: proxy.size.width * row.lines[line])
+                        }
+                        .frame(height: 12)
+                    }
+                }
+            }
+            .frame(maxWidth: TranscriptMetrics.maxCardWidth, alignment: .leading)
+        }
+    }
+
+    private static let fill = Color.primary.opacity(0.09)
+
+    private static func bar(height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous).fill(self.fill).frame(height: height)
     }
 }

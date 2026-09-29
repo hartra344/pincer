@@ -67,7 +67,7 @@ struct DevicesPage: View {
             .disabled(self.renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             Button(L("Cancel"), role: .cancel) {}
         } message: { _ in
-            Text("The name is shown to every operator of this gateway (up to \(DeviceManagementModel.maxLabelLength) characters).", bundle: .module)
+            Text("The name is shown to every operator of this Gateway (up to \(DeviceManagementModel.maxLabelLength) characters).", bundle: .module)
         }
         .overlay(alignment: .bottom) { DeviceNotice(model: model) }
     }

@@ -18,14 +18,14 @@ struct UsagePage: View {
                 ContentUnavailableView {
                     Label(L("Usage Isn't Available"), systemImage: "chart.bar.xaxis")
                 } description: {
-                    Text("This gateway doesn't report usage or cost. Update OpenClaw to see tokens, spend and rate limits.", bundle: .module)
+                    Text("This Gateway doesn't report usage or cost. Update OpenClaw to see tokens, spend and rate limits.", bundle: .module)
                 } actions: {
                     Button(L("Check Again")) { Task { await model.refresh() } }
                         .disabled(!connected || model.isLoading)
                 }
             } else if !connected, !model.hasData, !model.isLoading {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see its usage and cost.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see its usage and cost.", bundle: .module))
             } else {
                 self.form(model, connected: connected)
             }
@@ -95,7 +95,7 @@ private struct UsageSummarySection: View {
             UsageSectionStatus(model.cost) { await model.loadCost() }
         )
         Section {
-            UsageSectionBody(status: status, unsupported: "This gateway doesn't report usage totals.", height: 70) {
+            UsageSectionBody(status: status, unsupported: "This Gateway doesn't report usage totals.", height: 70) {
                 if let totals = model.totals {
                     UsageTileGrid(tiles: self.tiles(totals))
                 }
@@ -130,7 +130,7 @@ private struct UsageDailySection: View {
         let days = model.daily ?? []
         let metric = self.metric ?? UsageMetric.preferred(model.totals)
         Section {
-            UsageSectionBody(status: status, unsupported: "This gateway doesn't report daily usage.",
+            UsageSectionBody(status: status, unsupported: "This Gateway doesn't report daily usage.",
                              isEmpty: days.allSatisfy(\.totals.isEmpty), height: 200) {
                 Picker(L("Metric"), selection: Binding(get: { metric }, set: { self.metric = $0 })) {
                     ForEach(UsageMetric.allCases) { Text($0.label).tag($0) }
@@ -287,7 +287,7 @@ private struct UsageBreakdownSection: View {
         let items = self.items(model.sessions.value?.aggregates)
         let byCost = UsageMetric.preferred(model.totals) == .cost
         Section {
-            UsageSectionBody(status: status, unsupported: "This gateway doesn't break usage down by model or agent.",
+            UsageSectionBody(status: status, unsupported: "This Gateway doesn't break usage down by model or agent.",
                              isEmpty: items.allSatisfy(\.totals.isEmpty), height: 160) {
                 Picker(L("Group By"), selection: self.$kind) {
                     ForEach(UsageBreakdownKind.allCases) { Text($0.label).tag($0) }
@@ -430,7 +430,7 @@ private struct UsageSessionsSection: View {
         let result = model.sessions.value
         let rows = result?.sessions ?? []
         Section {
-            UsageSectionBody(status: status, unsupported: "This gateway doesn't report usage by session.",
+            UsageSectionBody(status: status, unsupported: "This Gateway doesn't report usage by session.",
                              isEmpty: rows.isEmpty, empty: "No sessions in this range.", emptySymbol: "bubble.left.and.bubble.right",
                              height: 120) {
                 self.list(rows)
@@ -575,7 +575,7 @@ private struct UsageRateLimitsSection: View {
         let summary = model.status.value
         let providers = summary?.providers ?? []
         Section {
-            UsageSectionBody(status: status, unsupported: "This gateway doesn't report rate limits. Update OpenClaw to see them.",
+            UsageSectionBody(status: status, unsupported: "This Gateway doesn't report rate limits. Update OpenClaw to see them.",
                              isEmpty: providers.isEmpty && summary?.refreshing != true,
                              empty: "No providers report quota information.", emptySymbol: "gauge.with.dots.needle.33percent") {
                 if providers.isEmpty {

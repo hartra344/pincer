@@ -115,7 +115,7 @@ struct SessionsPage: View {
     @ViewBuilder private func content(_ model: SessionManagerModel, rows: [SessionRow], connected: Bool) -> some View {
         if !connected {
             ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                   description: Text("Connect to the gateway to manage sessions."))
+                                   description: Text("Connect to the Gateway to manage sessions."))
         } else if !model.supportsList {
             ContentUnavailableView("Session Management Isn't Available", systemImage: "rectangle.stack",
                                    description: Text(SessionManager.unsupportedMessage))
@@ -249,7 +249,7 @@ struct SessionManagerRowView: View {
                         Label("Interrupted", systemImage: "exclamationmark.arrow.circlepath")
                             .labelStyle(.iconOnly)
                             .foregroundStyle(.orange)
-                            .help("Interrupted by a gateway restart")
+                            .help("Interrupted by a Gateway restart")
                     }
                 }
                 Text(self.subtitle)
@@ -352,7 +352,7 @@ struct SessionPreviewContent: View {
 
     var body: some View {
         if !self.model.supportsPreview {
-            Text("Previews need a newer gateway.").foregroundStyle(.secondary)
+            Text("Previews need a newer Gateway.").foregroundStyle(.secondary)
         } else if let preview = self.model.previews[self.key] {
             if preview.items.isEmpty {
                 Text(preview.emptyReason ?? "No messages yet").foregroundStyle(.secondary)
@@ -564,7 +564,7 @@ struct SessionDetailPage: View {
                 if let reason = row.raw["archiveReason"]?.text { LabeledContent("Archive Reason", value: reason) }
             }
             if SessionManager.isRecoverable(row) {
-                Label("Interrupted by a gateway restart", systemImage: "exclamationmark.arrow.circlepath")
+                Label("Interrupted by a Gateway restart", systemImage: "exclamationmark.arrow.circlepath")
                     .foregroundStyle(.orange)
             }
             LabeledContent("Key") {

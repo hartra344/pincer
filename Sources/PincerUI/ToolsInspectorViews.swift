@@ -164,7 +164,7 @@ struct AgentToolsPage: View {
         Group {
             if !self.gateway.state.isConnected {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see this agent's tools.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see this agent's tools.", bundle: .module))
             } else if let model {
                 ToolsInspectorView(model: model, scopeTitle: "Agent: \(agent?.title ?? self.agentId)",
                                    scopeDetail: model.effective == nil ? nil : self.liveChatTitle(model).map(ToolsPolicy.livePolicyNote),

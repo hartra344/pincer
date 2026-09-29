@@ -40,7 +40,7 @@ struct ApprovalHistoryPage: View {
         Group {
             if !model.supported {
                 ContentUnavailableView(L("Approval History Isn't Available"), systemImage: "clock.badge.xmark",
-                                       description: Text("This gateway doesn't keep an approval history. Update OpenClaw to see past decisions.", bundle: .module))
+                                       description: Text("This Gateway doesn't keep an approval history. Update OpenClaw to see past decisions.", bundle: .module))
             } else {
                 self.list(model, connected: connected)
             }
@@ -129,7 +129,7 @@ struct ApprovalHistoryPage: View {
         if model.items.isEmpty {
             if !connected, !model.loadState.isRunning {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see its approval history.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see its approval history.", bundle: .module))
             } else if !model.hasLoaded || model.loadState.isRunning {
                 ProgressView()
             } else if let error = model.loadState.error {
@@ -271,7 +271,7 @@ struct ApprovalDetailPage: View {
                 ProgressView()
             } else if !self.gateway.state.isConnected {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see this approval.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see this approval.", bundle: .module))
             } else {
                 ContentUnavailableView(L("Approval Not Found"), systemImage: "checkmark.shield",
                                        description: Text(model.detailState[self.approvalId]?.error

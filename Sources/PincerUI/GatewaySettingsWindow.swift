@@ -303,19 +303,19 @@ private struct GatewaySettingsRoot: View {
             Label("Command policy saved", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
                 .font(.callout)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.horizontal, Theme.Spacing.xxl)
+                .padding(.vertical, Theme.Spacing.lg)
                 .glassSurface(in: Capsule())
-                .padding(.bottom, 20)
+                .padding(.bottom, Theme.Spacing.section)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .onTapGesture { withAnimation { self.policyToast = nil } }
         } else if let toast = self.toast {
             SaveOutcomeLabel(outcome: toast.outcome)
                 .font(.callout)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.horizontal, Theme.Spacing.xxl)
+                .padding(.vertical, Theme.Spacing.lg)
                 .glassSurface(in: Capsule())
-                .padding(.bottom, 20)
+                .padding(.bottom, Theme.Spacing.section)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .onTapGesture { withAnimation { self.toast = nil } }
         }
@@ -477,7 +477,7 @@ private struct SearchResults: View {
             Button {
                 self.navigator.go(to: field.path)
             } label: {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                     Text(field.label)
                     Text(Self.breadcrumb(field.path))
                         .font(.caption)
@@ -655,7 +655,7 @@ struct ReviewChangesSheet: View {
                 ForEach(problems, id: \.path) { problem in
                     Button { self.show(problem.path) } label: {
                         Label {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                                 Text(self.label(problem.path))
                                 Text(problem.message).font(.caption).foregroundStyle(.secondary)
                             }
@@ -707,7 +707,7 @@ struct ReviewChangesSheet: View {
                     Text(SearchResults.breadcrumb(Array(change.path.dropFirst())))
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
-                HStack(spacing: 6) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text(Self.summary(change.old, secret: secret, missing: "Not set"))
                         .strikethrough(change.old != nil)
                         .foregroundStyle(.secondary)
@@ -737,7 +737,7 @@ struct ReviewChangesSheet: View {
 
     private func conflictRow(_ conflict: ConfigEdits.Conflict) -> some View {
         let secret = self.isSecret(conflict.path)
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text(self.label(conflict.path))
             LabeledContent("Yours", value: Self.summary(conflict.mine, secret: secret, missing: "Removed"))
                 .font(.caption.monospaced())

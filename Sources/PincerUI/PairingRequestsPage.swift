@@ -17,7 +17,7 @@ struct PairingRequestsPage: View {
         Group {
             if !connected {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to review pairing requests.", bundle: .module))
+                                       description: Text("Connect to the Gateway to review pairing requests.", bundle: .module))
             } else if !model.supported {
                 ContentUnavailableView(L("Pairing Requests Aren't Available"), systemImage: "person.badge.key",
                                        description: Text("This Gateway doesn't support channel pairing requests. Update OpenClaw to review them here.", bundle: .module))

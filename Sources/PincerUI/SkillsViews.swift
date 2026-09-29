@@ -75,7 +75,7 @@ struct SkillsPage: View {
 
     @ViewBuilder private func content(_ model: SkillsModel, connected: Bool) -> some View {
         if !connected {
-            Section { Text("Connect to the gateway to see skills.", bundle: .module).foregroundStyle(.secondary) }
+            Section { Text("Connect to the Gateway to see skills.", bundle: .module).foregroundStyle(.secondary) }
         } else if model.report == nil, let error = model.loadError {
             Section {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
@@ -89,7 +89,7 @@ struct SkillsPage: View {
             Section {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text("No skills found", bundle: .module).font(.callout.weight(.medium))
-                    Text(model.supportsSearch ? L("Browse ClawHub to find skills to install.") : L("Add skills to the agent's workspace on the gateway host."))
+                    Text(model.supportsSearch ? L("Browse ClawHub to find skills to install.") : L("Add skills to the agent's workspace on the Gateway host."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -234,12 +234,12 @@ struct SkillDetailPage: View {
                 self.form(skill)
             } else if !self.gateway.state.isConnected {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
-                                       description: Text("Connect to the gateway to see skills.", bundle: .module))
+                                       description: Text("Connect to the Gateway to see skills.", bundle: .module))
             } else if self.model.isLoading {
                 ProgressView()
             } else {
                 ContentUnavailableView(L("Skill Not Found"), systemImage: "wand.and.stars",
-                                       description: Text("“\(self.skillKey)” isn't a skill on this gateway anymore.", bundle: .module))
+                                       description: Text("“\(self.skillKey)” isn't a skill on this Gateway anymore.", bundle: .module))
             }
         }
         .navigationTitle(self.model.skill(key: self.skillKey)?.name ?? self.skillKey)
@@ -321,7 +321,7 @@ struct SkillDetailPage: View {
                 } header: {
                     Text("Installers", bundle: .module)
                 } footer: {
-                    Text("Installers run on the gateway host to add what the skill needs.", bundle: .module)
+                    Text("Installers run on the Gateway host to add what the skill needs.", bundle: .module)
                 }
             }
             if skill.isClawHubTracked, self.model.supportsUpdate {
@@ -345,13 +345,13 @@ struct SkillDetailPage: View {
             }
             Button(L("Cancel"), role: .cancel) {}
         } message: { _ in
-            Text("It runs with the gateway's permissions.", bundle: .module)
+            Text("It runs with the Gateway's permissions.", bundle: .module)
         }
         .confirmationDialog(Skills.updateTitle(skill.name), isPresented: self.$confirmUpdate, titleVisibility: .visible) {
             Button(L("Update")) { Task { await self.update(skill, force: false) } }
             Button(L("Cancel"), role: .cancel) {}
         } message: {
-            Text("This downloads the latest version from ClawHub onto the gateway host.", bundle: .module)
+            Text("This downloads the latest version from ClawHub onto the Gateway host.", bundle: .module)
         }
         .confirmationDialog(Skills.forceReplaceMessage(skill.name), isPresented: self.$confirmForce, titleVisibility: .visible) {
             Button(L("Replace"), role: .destructive) { Task { await self.update(skill, force: true) } }
@@ -446,7 +446,7 @@ struct ClawHubSearchPage: View {
                 SkillsReadOnlyNotice(model: model)
                 SkillsMessages(model: model)
             } footer: {
-                Text("Skills install into \(self.agentName)'s workspace on the gateway host.", bundle: .module)
+                Text("Skills install into \(self.agentName)'s workspace on the Gateway host.", bundle: .module)
             }
             self.results(model)
         }
@@ -635,7 +635,7 @@ private struct ClawHubSkillSheet: View {
                 Button(L("Update")) { Task { await self.update(force: false) } }
                 Button(L("Cancel"), role: .cancel) {}
             } message: {
-                Text("This downloads the latest version from ClawHub onto the gateway host.", bundle: .module)
+                Text("This downloads the latest version from ClawHub onto the Gateway host.", bundle: .module)
             }
             .confirmationDialog(Skills.reinstallTitle(self.result.displayName), isPresented: self.$confirmReinstall,
                                 titleVisibility: .visible) {
