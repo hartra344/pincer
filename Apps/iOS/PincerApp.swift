@@ -33,6 +33,7 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate {
         notifier.beginBackgroundActivity = { name, expired in BackgroundActivity(name: name, expired: expired).end }
         notifier.activate()
         application.registerForRemoteNotifications()
+        BackgroundRefreshTask.register()
         return true
     }
 
