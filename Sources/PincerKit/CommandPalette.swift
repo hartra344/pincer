@@ -76,10 +76,12 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
         case openMessage(Notifier.Target, query: String, match: TranscriptSearch.Match)
         /// Opens a chat with Find in Chat showing `query`, its newest match selected.
         case findInChat(Notifier.Target, query: String)
+        /// Opens a chat scrolled to a bookmarked message.
+        case openBookmark(Notifier.Target, messageId: String)
     }
 
     public enum Section: Int, Comparable, Sendable {
-        case chats, newChat, commands, models, messages
+        case chats, newChat, commands, models, messages, bookmarks
 
         public var title: String {
             switch self {
@@ -88,6 +90,7 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
             case .commands: "Commands"
             case .models: "Models"
             case .messages: "Messages"
+            case .bookmarks: "Bookmarks"
             }
         }
 
