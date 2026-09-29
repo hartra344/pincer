@@ -394,7 +394,13 @@ struct BackgroundRefreshTests {
     }
 
     @MainActor
+    final class Badges {
+        var values: [Int] = []
+    }
+
+    @MainActor
     struct Rig {
+        let badges = Badges()
         let defaults = BackgroundRefreshTests.defaults()
         let profile = GatewayProfile(name: "Home", url: "wss://home.example", authMode: .token)
         let connection = FakeConnection()
@@ -409,9 +415,9 @@ struct BackgroundRefreshTests {
         func refresher(unreachable: Bool = false, timer: (@Sendable (TimeInterval) async -> Void)? = nil) -> BackgroundRefresh {
             var connector = FakeConnector(connections: [profile.id: connection])
             if unreachable { connector.unreachable = [profile.id] }
-            let posts = self.posts
+            let posts = self.posts, badges = self.badges
             return BackgroundRefresh(profiles: { [profile] in [profile] }, connector: connector, cursors: cursors, defaults: defaults,
-                                     post: { posts.batches.append($0) },
+                                     post: { posts.batches.append($0) }, setBadge: { badges.values.append($0) },
                                      timer: timer ?? { try? await Task.sleep(for: .seconds($0)) })
         }
     }
@@ -646,6 +652,130 @@ struct BackgroundRefreshTests {
             #expect(connection.observerCalls == 0)
             #expect(connection.closed && connection.closeCount == 2)
         }
+    }
+
+    // MARK: Sound and badge (#291)
+
+    static func content(sound: Bool) -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+        content.title = "T"
+        content.body = "B"
+        content.userInfo = ["k": "v"]
+        if sound { content.sound = .default }
+        return content
+    }
+
+    static func requests(_ ids: [String], sound: Bool = true) -> [UNNotificationRequest] {
+        ids.map { UNNotificationRequest(identifier: $0, content: content(sound: sound), trigger: nil) }
+    }
+
+    @Test func quietedKeepsOnlyTheFirstSound() {
+        let input = Self.requests(["a", "b", "c"])
+        let output = BackgroundRefresh.quieted(input, firstMaySound: true)
+        #expect(output.map(\.identifier) == ["a", "b", "c"])
+        #expect(output.map { $0.content.sound != nil } == [true, false, false])
+        #expect(output.allSatisfy { $0.content.title == "T" && $0.content.body == "B" && $0.content.userInfo["k"] as? String == "v" })
+    }
+
+    @Test func quietedSilencesEverythingWhenTheRunAlreadySounded() {
+        let output = BackgroundRefresh.quieted(Self.requests(["a", "b"]), firstMaySound: false)
+        #expect(output.map(\.identifier) == ["a", "b"])
+        #expect(output.allSatisfy { $0.content.sound == nil })
+        #expect(BackgroundRefresh.quieted([], firstMaySound: true).isEmpty)
+    }
+
+    @Test func quietedLeavesSilentRequestsAlone() {
+        let input = Self.requests(["a", "b"], sound: false)
+        let output = BackgroundRefresh.quieted(input, firstMaySound: true)
+        #expect(output.map(\.identifier) == ["a", "b"] && output.allSatisfy { $0.content.sound == nil })
+    }
+
+    @Test @MainActor func onlyTheFirstRequestOfARunSoundsAcrossGateways() async {
+        let defaults = Self.defaults()
+        ClosedAppDelivery.set(.backgroundRefresh, defaults)
+        defaults.set(true, forKey: "pincer.notifications")
+        let one = GatewayProfile(name: "One", url: "wss://one.example", authMode: .token)
+        let two = GatewayProfile(name: "Two", url: "wss://two.example", authMode: .token)
+        let first = FakeConnection(), second = FakeConnection()
+        first.sessions = [Self.row(Self.key(1), activity: 5000), Self.row(Self.key(2), activity: 6000)]
+        second.sessions = [Self.row(Self.key(3), activity: 7000)]
+        let cursors = BackgroundRefreshCursorStore(defaults: defaults)
+        for profile in [one, two] { cursors.save(Self.base, for: profile.id) }
+        let posts = Posts()
+        let refresher = BackgroundRefresh(
+            profiles: { [one, two] }, connector: FakeConnector(connections: [one.id: first, two.id: second]),
+            cursors: cursors, defaults: defaults, post: { posts.batches.append($0) }, setBadge: { _ in })
+        let report = await refresher.run()
+        #expect(report.posted == 3)
+        let all = posts.batches.flatMap { $0 }
+        #expect(all.count == 3)
+        #expect(all.map { $0.content.sound != nil } == [true, false, false], "one sound for the whole run")
+    }
+
+    static func badgeRows() -> [SessionRow] {
+        [Self.row(Self.key(1), activity: 100),
+         Self.row(Self.key(2), activity: 100, unread: false),
+         Self.row(Self.key(3), activity: 100, extra: #""archived":true"#),
+         Self.row("agent:main:subagent:s1", activity: 100),
+         Self.row("agent:main:cron:job1", activity: 100),
+         Self.row("agent:main:slash:x", activity: 100)]
+    }
+
+    @Test func unreadCountFollowsTheFilter() {
+        let rows = Self.badgeRows()
+        #expect(BackgroundRefresh.unreadCount(rows, filter: .init()) == 1)
+        #expect(BackgroundRefresh.unreadCount(rows, filter: .init(showAutomations: true)) == 2)
+        #expect(BackgroundRefresh.unreadCount(rows, filter: .init(showAutomations: true, showSlashCommands: true)) == 3)
+        #expect(BackgroundRefresh.unreadCount([], filter: .init()) == 0)
+    }
+
+    @Test @MainActor func badgeIsSetOnceToTheSumAcrossGateways() async {
+        let defaults = Self.defaults()
+        ClosedAppDelivery.set(.backgroundRefresh, defaults)
+        defaults.set(true, forKey: "pincer.notifications")
+        let one = GatewayProfile(name: "One", url: "wss://one.example", authMode: .token)
+        let two = GatewayProfile(name: "Two", url: "wss://two.example", authMode: .token)
+        defaults.set(true, forKey: "pincer.showAutomations.\(two.id.uuidString)")
+        let first = FakeConnection(), second = FakeConnection()
+        first.sessions = Self.badgeRows() + [Self.row(Self.key(9), activity: 100)]
+        second.sessions = Self.badgeRows()
+        let badges = Badges()
+        let refresher = BackgroundRefresh(
+            profiles: { [one, two] }, connector: FakeConnector(connections: [one.id: first, two.id: second]),
+            cursors: BackgroundRefreshCursorStore(defaults: defaults), defaults: defaults, post: { _ in },
+            setBadge: { badges.values.append($0) })
+        let report = await refresher.run()
+        #expect(badges.values == [4])
+        #expect(report.badge == 4)
+    }
+
+    @Test @MainActor func noUnreadClearsTheBadgeToZero() async {
+        let rig = Rig()
+        rig.connection.sessions = [Self.row(Self.key(1), activity: 100, unread: false)]
+        let report = await rig.refresher().run()
+        #expect(rig.badges.values == [0] && report.badge == 0)
+    }
+
+    @Test @MainActor func badgeIsLeftAloneWhenAGatewayFails() async {
+        let rig = Rig()
+        rig.connection.sessions = [Self.row(Self.key(1), activity: 100)]
+        let report = await rig.refresher(unreachable: true).run()
+        #expect(report.failed == [rig.profile.id])
+        #expect(rig.badges.values.isEmpty && report.badge == nil)
+    }
+
+    @Test @MainActor func badgeIsLeftAloneWhenAGatewayAborts() async {
+        let rig = Rig()
+        rig.connection.sessions = [Self.row(Self.key(1), activity: 100)]
+        rig.connection.delay = .seconds(3600)
+        let gate = BudgetGate()
+        let refresher = rig.refresher(timer: gate.timer)
+        let task = Task { @MainActor in await refresher.run(budget: 25) }
+        #expect(await Self.eventually(timeout: .seconds(30)) { !rig.connection.methods.isEmpty })
+        gate.expire()
+        let report = await task.value
+        #expect(report.aborted == [rig.profile.id])
+        #expect(rig.badges.values.isEmpty && report.badge == nil)
     }
 
     @Test @MainActor func constants() {
