@@ -373,6 +373,7 @@ public final class GatewayHealthModel {
         if let health = snapshot["health"], let object = health.object, !object.isEmpty {
             self.health = GatewayHealthSummary(health)
             self.prune(.health)
+            self.quietInitialIssuesIfNeeded()
         }
     }
 
@@ -387,6 +388,7 @@ public final class GatewayHealthModel {
                 self.lastHealthEventAt = Date()
                 self.healthFailure = nil
                 if payload.object?.isEmpty == false { self.prune(.health) }
+                self.quietInitialIssuesIfNeeded()
             }
         case "heartbeat":
             if let beat = GatewayHeartbeat(payload) {
@@ -475,11 +477,15 @@ public final class GatewayHealthModel {
         _ = await (health, heartbeat, presence)
         guard generation == self.generation else { return }
         if self.loadState.isRunning { self.loadState = .idle }
-        if !self.hasLoaded, self.quietsInitialIssues {
-            self.quietedIssueIds = Set(self.activeIssues.map(\.id))
-            self.quietsInitialIssues = false
-        }
+        self.quietInitialIssuesIfNeeded()
         self.hasLoaded = true
+    }
+
+    /// The first health the model gets (hello snapshot, event or load) sets the quiet issues, once.
+    private func quietInitialIssuesIfNeeded() {
+        guard self.quietsInitialIssues, self.health != nil else { return }
+        self.quietedIssueIds = Set(self.activeIssues.map(\.id))
+        self.quietsInitialIssues = false
     }
 
     /// The Health page was opened: the sidebar indicator counts every issue again.
