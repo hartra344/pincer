@@ -101,13 +101,7 @@ public final class ChatStore: Identifiable {
     }
     public private(set) var entries: [TranscriptEntry] = []
     public private(set) var live: LiveRun? {
-        didSet {
-            if Self.isTextGrowth(from: oldValue, to: self.live) {
-                self.publishLiveCoalesced()
-            } else {
-                self.rebuild(itemsChanged: false)
-            }
-        }
+        didSet { self.liveChanged(from: oldValue) }
     }
     /// Minimum time between published transcripts while text or thinking streams in (~30 Hz).
     nonisolated(unsafe) static var liveFlushInterval: TimeInterval = 1.0 / 30
@@ -1109,6 +1103,14 @@ public final class ChatStore: Identifiable {
         return old.tools == new.tools && old.images == new.images && old.phase == new.phase
             && old.isCompacting == new.isCompacting && old.startedAt == new.startedAt
             && old.model == new.model && old.provider == new.provider
+    }
+
+    private func liveChanged(from old: LiveRun?) {
+        if Self.isTextGrowth(from: old, to: self.live) {
+            self.publishLiveCoalesced()
+        } else {
+            self.rebuild(itemsChanged: false)
+        }
     }
 
     private func publishLiveCoalesced() {
