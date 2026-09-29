@@ -151,6 +151,8 @@ final class TranscriptRenderer: TranscriptRowActions {
     /// Rows whose layout changed (nil means all of them), and a row to hold still on screen while
     /// they change, when the change came from a click in that row.
     private var serial = 0
+    /// Layouts built (cache misses), for regression checks.
+    private(set) var layoutBuildCount = 0
     private var useStamp = 0
     /// Rows on screen, which are never evicted from the layout cache: an image or file arriving for
     /// one must still find it.
@@ -271,8 +273,11 @@ final class TranscriptRenderer: TranscriptRowActions {
             return entry.layout
         }
         let wasEvicted = self.cache[row.id] == nil
-        var layout = TranscriptLayoutBuilder(context: self.context, settings: self.settings, highlight: self.highlight,
-                                             flash: self.flash).layout(row, width: width)
+        self.layoutBuildCount += 1
+        var layout = TranscriptSignposts.measure("RowLayout") {
+            TranscriptLayoutBuilder(context: self.context, settings: self.settings, highlight: self.highlight,
+                                    flash: self.flash).layout(row, width: width)
+        }
         self.serial += 1
         layout.serial = self.serial
         self.cache[row.id] = Entry(row: row, layout: layout, stamp: self.useStamp)

@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import os
 import PincerKit
 import SwiftUI
 
@@ -64,6 +65,14 @@ struct TranscriptList: NSViewRepresentable {
         /// Time spent measuring rows in idle slices and scroll callbacks, for the probe.
         var prefetchStats: (steps: Int, rowsMeasured: Int, seconds: Double) = (0, 0, 0)
         private var clipSize = CGSize.zero
+        private var freeze = TranscriptWidthFreeze()
+        private var thawItem: DispatchWorkItem?
+        private var frozenSignpost: OSSignpostIntervalState?
+        private weak var observedWindow: NSWindow?
+        private var windowObserver: NSObjectProtocol?
+
+        /// Whether layout is holding the previous width while the clip view's width animates.
+        var isWidthFrozen: Bool { self.freeze.isFrozen }
         let renderer: TranscriptRenderer
         private weak var scrollView: NSScrollView?
         private weak var table: NSTableView?
@@ -113,7 +122,8 @@ struct TranscriptList: NSViewRepresentable {
             table.dataSource = self
             table.delegate = self
 
-            let scroll = NSScrollView()
+            let scroll = TranscriptScrollView()
+            scroll.onWindowChange = { [weak self] window in self?.observe(window) }
             scroll.documentView = table
             scroll.drawsBackground = false
             scroll.hasVerticalScroller = true
@@ -257,7 +267,11 @@ struct TranscriptList: NSViewRepresentable {
         /// Measures rows around the viewport, applies any height changes and puts the reader back
         /// where they were.
         private func settle(changed: IndexSet) {
+            let signpost = TranscriptSignposts.begin("Settle")
+            defer { TranscriptSignposts.end("Settle", signpost) }
             guard let table else { return }
+            // Remember the size layout starts from, so the first width change can freeze at it.
+            if self.clipSize == .zero, let clip = self.scrollView?.contentView { self.clipSize = clip.frame.size }
             self.isAdjusting = true
             defer { self.isAdjusting = false }
             // Jump to the anchor first so the rows measured are the ones about to be on screen.
@@ -266,12 +280,17 @@ struct TranscriptList: NSViewRepresentable {
             // yet, so go again until the rows on screen are all measured.
             var resized = changed
             for _ in 0..<4 {
-                resized.formUnion(self.measureAroundViewport())
+                // Frozen: the rows around the viewport are measured once, at the final width.
+                if !self.freeze.isFrozen { resized.formUnion(self.measureAroundViewport()) }
                 if resized.isEmpty { break }
                 self.withoutAnimation { table.noteHeightOfRows(withIndexesChanged: resized) }
                 resized = []
                 self.restore(self.anchor)
             }
+            // The table's frame catches up with the new row heights lazily; without this the last
+            // restore clamps against stale content height and a bottom anchor ends short.
+            table.layoutSubtreeIfNeeded()
+            self.restore(self.anchor)
             self.refreshVisibleCells()
             self.schedulePrefetch()
         }
@@ -333,7 +352,58 @@ struct TranscriptList: NSViewRepresentable {
 
         /// The table's single column always spans the clip view.
         private var width: CGFloat {
-            self.scrollView?.contentView.bounds.width ?? 0
+            self.freeze.frozenWidth ?? self.scrollView?.contentView.bounds.width ?? 0
+        }
+
+        // MARK: Width freeze
+
+        /// Thaws right away, running the one relayout at the real width. For tests.
+        func thawWidthNow() {
+            self.thawItem?.cancel()
+            self.thawItem = nil
+            guard self.freeze.thaw() != nil else { return }
+            if let state = self.frozenSignpost { TranscriptSignposts.end("WidthFrozen", state) }
+            self.frozenSignpost = nil
+            TranscriptSignposts.event("Thaw")
+            if let clip = self.scrollView?.contentView { self.clipSize = clip.frame.size }
+            self.queueWidth = 0
+            // The anchor from before the freeze is kept, so the reader stays on the same message.
+            self.settle(changed: IndexSet())
+        }
+
+        private func widthDidChange(from old: CGFloat, to new: CGFloat) {
+            let wasFrozen = self.freeze.isFrozen
+            // While frozen `old` is the live width, not the frozen one; the freeze keeps the first.
+            guard self.freeze.widthChanged(from: old, to: new, at: ProcessInfo.processInfo.systemUptime) else { return }
+            if !wasFrozen { self.frozenSignpost = TranscriptSignposts.begin("WidthFrozen") }
+            self.scheduleThaw(after: TranscriptWidthFreeze.quietInterval)
+        }
+
+        private func scheduleThaw(after delay: TimeInterval) {
+            self.thawItem?.cancel()
+            let item = DispatchWorkItem { [weak self] in
+                guard let self, self.freeze.isFrozen else { return }
+                let now = ProcessInfo.processInfo.systemUptime
+                if self.freeze.isQuiet(at: now) {
+                    self.thawWidthNow()
+                } else {
+                    self.scheduleThaw(after: self.freeze.remainingQuiet(at: now))
+                }
+            }
+            self.thawItem = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+        }
+
+        fileprivate func observe(_ window: NSWindow?) {
+            guard window !== self.observedWindow else { return }
+            if let old = self.windowObserver { NotificationCenter.default.removeObserver(old) }
+            self.windowObserver = nil
+            self.observedWindow = window
+            guard let window else { return }
+            self.windowObserver = NotificationCenter.default.addObserver(
+                forName: NSWindow.didEndLiveResizeNotification, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.thawWidthNow() }
+            }
         }
 
         private func measure(_ row: TranscriptRow, width: CGFloat) -> CGFloat {
@@ -412,7 +482,7 @@ struct TranscriptList: NSViewRepresentable {
         /// milliseconds. Whatever doesn't fit waits for the next turn of the run loop.
         private func measureNearViewport() -> IndexSet {
             let width = self.width
-            guard width > 40, let window = self.window(screens: 0.5) else { return [] }
+            guard width > 40, !self.freeze.isFrozen, let window = self.window(screens: 0.5) else { return [] }
             self.syncQueueWidth(width)
             let start = Date()
             defer { self.prefetchStats.seconds += Date().timeIntervalSince(start) }
@@ -491,7 +561,7 @@ struct TranscriptList: NSViewRepresentable {
             self.prefetchScheduled = false
             guard !self.isLiveScrolling, let table, !self.queue.isEmpty else { return }
             let width = self.width
-            guard width > 40, let window = self.window(screens: CGFloat(TranscriptMeasureQueue.screensAhead)) else { return }
+            guard width > 40, !self.freeze.isFrozen, let window = self.window(screens: CGFloat(TranscriptMeasureQueue.screensAhead)) else { return }
             self.syncQueueWidth(width)
             let start = Date()
             defer {
@@ -556,15 +626,21 @@ struct TranscriptList: NSViewRepresentable {
         @objc private func clipChanged() {
             guard let clip = self.scrollView?.contentView else { return }
             if clip.frame.size != self.clipSize {
-                // Window resize or the composer growing: keep the same message in view, and
-                // re-measure what's on screen at the new width.
+                // Window resize, a panel sliding or the composer growing: keep the same message in
+                // view. A width change freezes layout at the old width until it settles.
+                let old = self.clipSize
                 self.clipSize = clip.frame.size
+                if old.width != clip.frame.width, old.width > 0 {
+                    self.widthDidChange(from: old.width, to: clip.frame.width)
+                }
                 self.settle(changed: IndexSet())
                 return
             }
             let offset = clip.bounds.minY
             defer { self.lastOffset = offset }
             guard !self.isAdjusting else { return }
+            // Mid-slide clip state must not become the anchor; only a real scroll moves it.
+            if self.freeze.isFrozen, abs(offset - self.lastOffset) <= 0.5 { return }
             // Scrolling up leaves the bottom right away; only scrolling down re-sticks early.
             let movingUp = offset < self.lastOffset - 0.5
             self.anchor = self.currentAnchor(stickDistance: movingUp ? 1 : TranscriptLayout.stickToBottomDistance)
@@ -710,6 +786,16 @@ private final class TranscriptCell: NSView {
                 return true
             }
         }
+    }
+}
+
+/// Reports the window it lands in so the coordinator can watch for the end of a live resize.
+final class TranscriptScrollView: NSScrollView {
+    var onWindowChange: ((NSWindow?) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        self.onWindowChange?(self.window)
     }
 }
 #endif
