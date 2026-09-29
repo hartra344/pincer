@@ -14,6 +14,7 @@ struct BranchSwitcher: View {
         HStack(spacing: Theme.Spacing.sm) {
             Image(systemName: "arrow.triangle.branch")
                 .foregroundStyle(self.theme.accent)
+                .accessibilityHidden(true)
             self.step("chevron.left", label: L("Previous branch"), offset: -1)
             Menu {
                 ForEach(self.branches) { branch in

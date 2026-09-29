@@ -11,6 +11,7 @@ struct MessageEditChip: View {
         HStack(spacing: Theme.Spacing.md) {
             Image(systemName: "pencil")
                 .foregroundStyle(self.theme.accent)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                 Text("Editing message", bundle: .module)
                     .font(.caption)
