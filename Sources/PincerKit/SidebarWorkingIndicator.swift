@@ -13,6 +13,12 @@ public struct SidebarWorkingIndicator: Hashable, Sendable {
         case initials(String)
     }
 
+    /// Whether the avatar shows a working dance or the still idle "unread" pose.
+    public enum Mode: Hashable, Sendable { case working, unread }
+
+    public let mode: Mode
+    /// The chat is unread; shows the unread mark when there is no helper badge.
+    public let isUnread: Bool
     public let agentId: String
     public let agentName: String
     public let source: Source
@@ -25,16 +31,29 @@ public struct SidebarWorkingIndicator: Hashable, Sendable {
     /// The indicator for a row, or `nil` when the row isn't working. A row is working exactly
     /// when the old spinner showed: its own run, or running helper runs the sidebar doesn't list.
     public static func resolve(hasActiveRun: Bool, runningSubagents: Int, showSubagentRuns: Bool,
-                               agent: AgentSummary, companionsEnabled: Bool) -> SidebarWorkingIndicator?
+                               agent: AgentSummary, companionsEnabled: Bool,
+                               isUnread: Bool = false) -> SidebarWorkingIndicator?
     {
         let helpers = hasActiveRun || showSubagentRuns ? 0 : max(runningSubagents, 0)
         guard hasActiveRun || helpers > 0 else { return nil }
         let name = agent.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayName = name.isEmpty ? agent.id : name
         return SidebarWorkingIndicator(
-            agentId: agent.id, agentName: displayName,
+            mode: .working, isUnread: isUnread, agentId: agent.id, agentName: displayName,
             source: self.source(for: agent, displayName: displayName, companionsEnabled: companionsEnabled),
             helperRuns: helpers, label: self.label(agentName: displayName, helperRuns: helpers))
+    }
+
+    /// The indicator for an idle unread chat: nil unless unread, not a subagent row, and avatars are on.
+    public static func resolveUnread(isUnread: Bool, isSubagent: Bool, agent: AgentSummary,
+                                     companionsEnabled: Bool) -> SidebarWorkingIndicator?
+    {
+        guard isUnread, !isSubagent, companionsEnabled else { return nil }
+        let name = agent.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = name.isEmpty ? agent.id : name
+        return SidebarWorkingIndicator(
+            mode: .unread, isUnread: true, agentId: agent.id, agentName: displayName, source: .companion,
+            helperRuns: 0, label: String(localized: "Unread", comment: "Sidebar: idle unread chat avatar tooltip"))
     }
 
     public static func source(for agent: AgentSummary, displayName: String, companionsEnabled: Bool) -> Source {
@@ -52,6 +71,9 @@ public struct SidebarWorkingIndicator: Hashable, Sendable {
                         comment: "Sidebar: several subagent runs are working")
         }
     }
+
+    public var showsUnreadMark: Bool { self.isUnread && self.badge == nil }
+    public var isWorking: Bool { self.mode == .working }
 
     /// The badge text for helper runs, or `nil` for the chat's own run.
     public var badge: String? {
