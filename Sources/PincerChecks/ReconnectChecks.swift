@@ -107,6 +107,7 @@ func runLiveReconnect(url: String, token: String) async {
     await runBootstrapRace(url: url, token: token, control: control)
     await runOverlappingReconnects(url: url, token: token, control: control)
     await runRequestCancellation(profile: profile, control: control)
+    await runChatSubscriptionChecks(url: url, token: token, control: control)
 }
 
 // MARK: (c) RPC counts per launch and per reconnect
@@ -205,7 +206,8 @@ private func runBootstrapRace(url: String, token: String, control: MockControl) 
           "row changed during the delayed subscribe survives the stale snapshot (\(gateway.sessions[key]?.raw["label"]?.text ?? "nil"))")
 
     // An event that only invalidates the list: exactly one trailing sessions.list on top of the baseline.
-    await control.setDelays(["sessions.subscribe": 900])
+    // A short delay: the 400 ms scheduleRefresh debounce mustn't fire on its own before the snapshot lands.
+    await control.setDelays(["sessions.subscribe": 300])
     await control.call("resetStats")
     await control.call("drop")
     let sawSecond = await waitForSubscribe(control)
@@ -303,4 +305,76 @@ private func runRequestCancellation(profile: GatewayProfile, control: MockContro
     await control.setDelays([:])
     let after = try? await connection.request("sessions.list", [:], timeout: 10)
     check(after?["sessions"]?.array?.isEmpty == false, "connection still works after the late response for a cancelled request")
+}
+
+// MARK: Chat subscription lifecycle
+
+@MainActor
+private func settled(_ control: MockControl, quiet: Double = 1.5) async {
+    var last = -1, since = Date()
+    while Date().timeIntervalSince(since) < quiet {
+        try? await Task.sleep(for: .milliseconds(200))
+        let now = await control.stats().total.values.reduce(0, +)
+        if now != last { last = now; since = Date() }
+    }
+}
+
+@MainActor
+private func runChatSubscriptionChecks(url: String, token: String, control: MockControl) async {
+    print("Chat subscription lifecycle")
+    guard let gateway = await connectedStore(url: url, token: token) else { check(false, "subscription store connects"); return }
+    defer { gateway.stop() }
+    gateway.selectedKey = "agent:main:main"
+    _ = await waitFor("initial chat") { gateway.chat(for: "agent:main:main").hasLoaded }
+    // The launch prefetch of other chats' history must be over before anything is counted.
+    await settled(control, quiet: 3)
+
+    // A failed subscribe (the mock refuses an unknown session) isn't remembered: the next load sends it again.
+    let ghost = gateway.chat(for: "agent:main:dashboard:no-such-session-\(UUID().uuidString.prefix(6))")
+    await control.call("resetStats")
+    await ghost.load()
+    var stats = await control.stats()
+    check(stats.count("sessions.messages.subscribe") == 1 && !ghost.isSubscribed,
+          "failed subscribe: sent once, not marked subscribed (\(stats.count("sessions.messages.subscribe")), \(ghost.isSubscribed))")
+    await ghost.load(force: true)
+    stats = await control.stats()
+    check(stats.count("sessions.messages.subscribe") == 2, "failed subscribe is retried on the next load (\(stats.count("sessions.messages.subscribe")))")
+
+    // A delayed subscribe still counts as subscribed once answered; a second load doesn't send another.
+    let key = gateway.sessions.keys.sorted().first { $0 != "agent:main:main" && !$0.contains("subagent") } ?? "agent:main:main"
+    let chat = gateway.chat(for: key)
+    await control.setDelays(["sessions.messages.subscribe": 500])
+    await control.call("resetStats")
+    await chat.load()
+    await chat.load()
+    await control.setDelays([:])
+    stats = await control.stats()
+    check(chat.isSubscribed && stats.count("sessions.messages.subscribe") == 1,
+          "delayed subscribe: one subscribe for two loads (\(stats.count("sessions.messages.subscribe")))")
+
+    // release, then load: one unsubscribe, then one subscribe and one history read.
+    await control.call("resetStats")
+    await chat.releaseSubscription()
+    check(!chat.isSubscribed, "released chat is not subscribed")
+    await chat.load()
+    stats = await control.stats()
+    let log = stats.connections.last ?? []
+    check(stats.count("sessions.messages.unsubscribe") == 1 && stats.count("sessions.messages.subscribe") == 1 && stats.count("chat.history") == 1,
+          "release then load: unsubscribe=1 subscribe=1 chat.history=1 (\(log))")
+    check(log.firstIndex(of: "sessions.messages.unsubscribe") ?? 99 < log.firstIndex(of: "sessions.messages.subscribe") ?? -1,
+          "the unsubscribe comes before the subscribe")
+
+    // A run finishing on an unsubscribed chat reads no history and leaves no live run behind.
+    await chat.releaseSubscription()
+    await control.call("resetStats")
+    await chat.send("unsubscribed run: say hi")
+    _ = await waitFor("send accepted", timeout: 10) { !chat.isSending }
+    _ = await waitFor("run finished", timeout: 20) { chat.live == nil }
+    await settled(control, quiet: 3)
+    stats = await control.stats()
+    check(stats.count("chat.history") == 0 && stats.count("sessions.messages.subscribe") == 0,
+          "finished run on an unsubscribed chat: no chat.history, no resubscribe (\(stats.count("chat.history")), \(stats.count("sessions.messages.subscribe")))")
+    check(chat.live == nil, "and its live run is cleared (live: \(chat.live?.runId ?? "nil"), phase \(chat.live?.phase ?? "-"), running \(chat.isRunning))")
+    await chat.load()
+    check(chat.isSubscribed, "opening it again resubscribes")
 }
