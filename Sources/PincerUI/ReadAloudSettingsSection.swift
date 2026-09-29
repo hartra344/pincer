@@ -1,0 +1,48 @@
+import AVFoundation
+import PincerKit
+import SwiftUI
+
+/// Settings → Read Aloud: where the voice comes from, the device voice and speed, and auto-read.
+struct ReadAloudSettingsSection: View {
+    @AppStorage(ReadAloudSettings.sourceKey) private var source = ReadAloudSettings.sourceAutomatic
+    @AppStorage(ReadAloudSettings.deviceVoiceKey) private var deviceVoice = ""
+    @AppStorage(ReadAloudSettings.rateKey) private var rate = Double(AVSpeechUtteranceDefaultSpeechRate)
+    @AppStorage(ReadAloudSettings.autoReadKey) private var autoRead = false
+    private let controller = ReadAloudController.shared
+
+    private var voices: [AVSpeechSynthesisVoice] {
+        let language = AVSpeechSynthesisVoice.currentLanguageCode().prefix(2)
+        return AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.hasPrefix(language) }
+            .sorted { ($0.quality.rawValue, $1.name) > ($1.quality.rawValue, $0.name) }
+    }
+
+    var body: some View {
+        SwiftUI.Section {
+            Picker(L("Voice"), selection: self.$source) {
+                Text("Automatic — Gateway when available", bundle: .module).tag(ReadAloudSettings.sourceAutomatic)
+                Text("This device only", bundle: .module).tag(ReadAloudSettings.sourceDevice)
+            }
+            Picker(L("Device voice"), selection: self.$deviceVoice) {
+                Text("System Default", bundle: .module).tag("")
+                ForEach(self.voices, id: \.identifier) { Text($0.name).tag($0.identifier) }
+            }
+            LabeledContent(L("Speaking rate")) {
+                Slider(value: self.$rate, in: Double(ReadAloudSettings.rateRange.lowerBound) ... Double(ReadAloudSettings.rateRange.upperBound))
+                    .frame(maxWidth: 200)
+            }
+            Toggle(L("Read new replies aloud"), isOn: self.$autoRead)
+            Button(self.controller.isActive ? L("Stop") : L("Test")) {
+                if self.controller.isActive {
+                    self.controller.stop()
+                } else {
+                    self.controller.testDeviceVoice(L("This is how Pincer will read your replies aloud."))
+                }
+            }
+        } header: {
+            Text("Read Aloud", bundle: .module)
+        } footer: {
+            Text("Speaks a reply from its context menu. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on.", bundle: .module)
+        }
+    }
+}

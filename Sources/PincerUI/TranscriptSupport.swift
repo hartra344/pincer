@@ -109,6 +109,11 @@ protocol TranscriptRowActions: AnyObject {
     /// Bookmarks the message, or removes its bookmark.
     func toggleBookmark(_ messageId: String)
     func isBookmarked(_ messageId: String) -> Bool
+    /// Read Aloud: speaks the message (or stops it when it's already being read).
+    func readAloud(_ messageId: String)
+    func isReadingAloud(_ messageId: String) -> Bool
+    /// Whether the message has anything worth speaking.
+    func canReadAloud(_ messageId: String) -> Bool
     /// Adds your reaction, or removes it when it's already there.
     var reactionsEnabled: Bool { get }
     func toggleReaction(_ emoji: String, on messageId: String)
@@ -585,6 +590,21 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     func reply(to messageId: String) {
         self.context.reply(messageId)
+    }
+
+    private func speakableText(_ messageId: String) -> String? {
+        self.context.chat?.message(withId: messageId).flatMap(SpeechText.speakableText)
+    }
+
+    func canReadAloud(_ messageId: String) -> Bool { self.speakableText(messageId) != nil }
+
+    func isReadingAloud(_ messageId: String) -> Bool { ReadAloudController.shared.isActive(messageId) }
+
+    func readAloud(_ messageId: String) {
+        let controller = ReadAloudController.shared
+        if controller.isActive(messageId) { return controller.stop() }
+        guard let text = self.speakableText(messageId) else { return }
+        controller.start(messageId: messageId, text: text, gateway: self.context.gateway.voice)
     }
 
     func toggleReaction(_ emoji: String, on messageId: String) {

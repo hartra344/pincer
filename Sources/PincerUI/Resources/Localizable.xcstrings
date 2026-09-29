@@ -1683,6 +1683,16 @@
         }
       }
     },
+    "Automatic — Gateway when available": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic — Gateway when available"
+          }
+        }
+      }
+    },
     "Automation": {
       "localizations": {
         "en": {
@@ -2773,6 +2783,16 @@
         }
       }
     },
+    "Connect to the Gateway to see its voice settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to the Gateway to see its voice settings."
+          }
+        }
+      }
+    },
     "Connect to the Gateway to see skills.": {
       "localizations": {
         "en": {
@@ -3859,6 +3879,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Device name"
+          }
+        }
+      }
+    },
+    "Device voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device voice"
           }
         }
       }
@@ -5103,6 +5133,16 @@
         }
       }
     },
+    "Gateway Voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway Voice"
+          }
+        }
+      }
+    },
     "Gateway address": {
       "localizations": {
         "en": {
@@ -6269,6 +6309,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Make them the command owner"
+          }
+        }
+      }
+    },
+    "Makes the Gateway attach spoken audio to every reply it sends on channels like Discord or Telegram. It doesn't affect Read Aloud in Pincer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Makes the Gateway attach spoken audio to every reply it sends on channels like Discord or Telegram. It doesn't affect Read Aloud in Pincer."
           }
         }
       }
@@ -7443,6 +7493,16 @@
         }
       }
     },
+    "Not configured": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not configured"
+          }
+        }
+      }
+    },
     "Not connected": {
       "localizations": {
         "en": {
@@ -8243,6 +8303,16 @@
         }
       }
     },
+    "Persona": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persona"
+          }
+        }
+      }
+    },
     "Pick a chat": {
       "localizations": {
         "en": {
@@ -8503,6 +8573,16 @@
         }
       }
     },
+    "Preparing…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing…"
+          }
+        }
+      }
+    },
     "Preview": {
       "localizations": {
         "en": {
@@ -8589,6 +8669,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Prompt Budget"
+          }
+        }
+      }
+    },
+    "Provider": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider"
           }
         }
       }
@@ -8793,12 +8883,52 @@
         }
       }
     },
+    "Read Aloud": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read Aloud"
+          }
+        }
+      }
+    },
+    "Read Aloud uses this voice when your device is allowed to use it. Change the voice source under Settings → Conversation.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read Aloud uses this voice when your device is allowed to use it. Change the voice source under Settings → Conversation."
+          }
+        }
+      }
+    },
+    "Read Last Reply Aloud": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read Last Reply Aloud"
+          }
+        }
+      }
+    },
     "Read Only": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Read Only"
+          }
+        }
+      }
+    },
+    "Read new replies aloud": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read new replies aloud"
           }
         }
       }
@@ -11353,6 +11483,46 @@
         }
       }
     },
+    "Speak replies on channels": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speak replies on channels"
+          }
+        }
+      }
+    },
+    "Speaking rate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaking rate"
+          }
+        }
+      }
+    },
+    "Speaking…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaking…"
+          }
+        }
+      }
+    },
+    "Speaks a reply from its context menu. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaks a reply from its context menu. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on."
+          }
+        }
+      }
+    },
     "Start Pincer when you log in, so Quick Capture is ready.": {
       "localizations": {
         "en": {
@@ -11459,6 +11629,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop"
+          }
+        }
+      }
+    },
+    "Stop Reading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop Reading"
+          }
+        }
+      }
+    },
+    "Stop Speaking": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop Speaking"
           }
         }
       }
@@ -11583,6 +11773,16 @@
         }
       }
     },
+    "System Default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System Default"
+          }
+        }
+      }
+    },
     "TLS certificate SHA-256": {
       "localizations": {
         "en": {
@@ -11639,6 +11839,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tell them they were approved"
+          }
+        }
+      }
+    },
+    "Test": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test"
           }
         }
       }
@@ -12293,6 +12503,16 @@
         }
       }
     },
+    "This Gateway doesn't support voice.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway doesn't support voice."
+          }
+        }
+      }
+    },
     "This Gateway has no channel accounts. Pincer talks to your agents directly, so you don't need any.": {
       "localizations": {
         "en": {
@@ -12393,12 +12613,42 @@
         }
       }
     },
+    "This device doesn't have write access, so voice settings are read-only.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device doesn't have write access, so voice settings are read-only."
+          }
+        }
+      }
+    },
     "This device isn't allowed to answer questions yet. Approve its request on the Gateway host, then try again. You can also answer in the Control UI or the channel the chat came from.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This device isn't allowed to answer questions yet. Approve its request on the Gateway host, then try again. You can also answer in the Control UI or the channel the chat came from."
+          }
+        }
+      }
+    },
+    "This device needs write access to change voice settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device needs write access to change voice settings."
+          }
+        }
+      }
+    },
+    "This device only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device only"
           }
         }
       }
@@ -12469,6 +12719,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This is a simulated sign-in for the demo. No account is used."
+          }
+        }
+      }
+    },
+    "This is how Pincer will read your replies aloud.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is how Pincer will read your replies aloud."
           }
         }
       }
@@ -13299,6 +13559,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Viewing and changing the command policy needs Full Management access. Turn it on under Connection, then approve this device on the Gateway host."
+          }
+        }
+      }
+    },
+    "Voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice"
           }
         }
       }

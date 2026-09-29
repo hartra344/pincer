@@ -249,6 +249,7 @@ private struct GatewaySettingsRoot: View {
         case .skills: SkillsPage()
         case .sessions: SessionsPage()
         case .usage: UsagePage()
+        case .voice: VoiceSettingsPage()
         case .pairing: PairingRequestsPage()
         case .channelStatus: ChannelStatusPage()
         case .devices: DevicesPage()
@@ -382,6 +383,9 @@ private struct SettingsSidebar: View {
                         self.row(L("Sessions"), symbol: "rectangle.stack", .sessions)
                     }
                     self.row(L("Usage"), symbol: "chart.bar.xaxis", .usage)
+                    if self.gateway.voice.supportsStatus {
+                        self.row(L("Voice"), symbol: "speaker.wave.2", .voice)
+                    }
                     self.row(L("Pairing Requests"), symbol: "person.badge.key", .pairing,
                              badge: self.gateway.state.isConnected ? self.gateway.pairingInbox.pendingCount(at: self.now) : 0)
                     self.row(L("Devices"), symbol: "laptopcomputer.and.iphone", .devices,

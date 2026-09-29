@@ -20,6 +20,8 @@ public enum SettingsDestination: Hashable, Codable, Sendable {
     case mcpServers
     /// Usage & cost: tokens, spend and provider quotas.
     case usage
+    /// Voice: the Gateway's text-to-speech provider and persona (`tts.*`).
+    case voice
     /// Pairing Requests: senders waiting to DM the agents on a pairing-policy channel.
     case pairing
     /// Channel Status: each channel account's connection, and start, stop, log out, reconnect and QR login.

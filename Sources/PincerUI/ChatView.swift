@@ -105,6 +105,7 @@ struct ChatView: View {
         }
         .focusedSceneValue(\.transcriptFind, self.find)
         .focusedSceneValue(\.chatExport, self.exportState)
+        .readAloud(chat: self.chat, gateway: self.gateway, bottomInset: self.bottomChrome)
         .sheet(isPresented: self.$exportState.showExport) {
             ExportSheet(chat: self.chat, title: self.row?.title ?? L("Chat"), agentName: self.agent.name,
                         agents: self.gateway.agents) { name, data in
