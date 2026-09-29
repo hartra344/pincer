@@ -49,7 +49,10 @@ func runLiveTranscriptWindow(url: String, token: String) async {
     check(all.count > 150 && Set(all).count == all.count && stamps.count == all.count && zip(stamps, stamps.dropFirst()).allSatisfy { $0 < $1 },
           "the long chat pages in whole from the Gateway (\(all.count) items, \(pages) pages, no duplicates, in order)")
 
-    // A cache holding only the newest 150 items; the rest is on the Gateway only.
+    // A cache holding only the newest 150 items; the rest is on the Gateway only. The reference's
+    // own save must land first, or it can overwrite this cache with the whole transcript.
+    await reference.finishCaching()
+    await TranscriptCache.flush(gatewayId: gateway.id)
     await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: longChatKey)
     let cachedCount = 150
     await TranscriptCache.save(TranscriptCache.Snapshot(items: Array(reference.items.suffix(cachedCount)), complete: false, activityMs: nil),
@@ -76,6 +79,8 @@ func runLiveTranscriptWindow(url: String, token: String) async {
     // Without message ids (MOCK_HISTORY_NO_IDS=1) the overlap can't be deduped by id.
     var thinned = Array(reference.items.suffix(cachedCount))
     for index in stride(from: thinned.count - 5, to: 10, by: -12) { thinned.remove(at: index) }
+    await reopened.finishCaching()
+    await TranscriptCache.flush(gatewayId: gateway.id)
     await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: longChatKey)
     await TranscriptCache.save(TranscriptCache.Snapshot(items: thinned, complete: false, activityMs: nil),
                                gatewayId: gateway.id, sessionKey: longChatKey)
