@@ -57,7 +57,7 @@ extension DemoGateway {
             content.append(Self.image(artifactId, alt: attachment["fileName"]?.string ?? "Uploaded image"))
         }
         self.append(key, Self.message("user", content, runId: runId,
-                                      idempotencyKey: params["idempotencyKey"]?.string,
+                                      idempotencyKey: params["idempotencyKey"]?.string.map { "\($0):user" },
                                       openclaw: self.replyFacts(key, params["replyToId"]?.text)))
         self.updateRow(key, reason: "send") { row in
             row["hasActiveRun"] = true

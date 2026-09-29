@@ -217,6 +217,24 @@ struct MessageEditTests {
         await self.finish(gateway)
     }
 
+    /// #429: the rewind reload can land before the live echo; neither may leave the edit pending.
+    @Test func editBranchReplyLeavesNothingPending() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let key = await source.branch(from: self.messages(source, .assistant).last!.id) ?? ""
+        let chat = await self.loaded(gateway, key)
+        #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
+        _ = await chat.sendEdit("edited while a reload races", attachments: [])
+        await chat.load(force: true)
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 }
+        #expect(chat.branches.count == 2)
+        #expect(!chat.items.contains { $0.isPending })
+        await chat.load(force: true)
+        #expect(!chat.items.contains { $0.isPending })
+        #expect(!gateway.outbox.entries.contains { $0.sessionKey == key })
+        await self.finish(gateway)
+    }
+
     // MARK: Review fixes
 
     func editableFork(_ gateway: GatewayStore) async -> (chat: ChatStore, user: ChatItem) {
