@@ -148,6 +148,8 @@ enum TranscriptPart {
         var messageId: String?
         /// Shows the filled star (#384), which removes the bookmark when tapped.
         var isBookmarked = false
+        /// The `‹ 2 / 2 ›` switcher, on the message where the chat's branches fork.
+        var branch: BranchPosition?
     }
 
     /// Where an unsent message is: queued, or failed with Retry and Delete.
@@ -330,6 +332,14 @@ struct TranscriptRowLayout {
     }
 }
 
+/// "2 / 2" in a message's footer: the active branch's 1-based number, how many there are, and
+/// whether they can be switched right now (the controls stay, dimmed, when not).
+struct BranchPosition: Equatable {
+    let number: Int
+    let count: Int
+    let canSwitch: Bool
+}
+
 /// What a row shows besides its own content: its quote card, reaction chips, the 👀 while the
 /// agent works, and the flash after a jump. Rows are laid out again when it changes.
 struct TranscriptDecoration: Equatable {
@@ -338,6 +348,8 @@ struct TranscriptDecoration: Equatable {
     var reactions: [String: [ReactionGroup]] = [:]
     /// The row's messages you've bookmarked.
     var bookmarks: Set<String> = []
+    /// The active branch's place among the chat's branches, on the message they fork at.
+    var branch: BranchPosition?
     var ack: String?
     var flash: String?
 }
@@ -458,6 +470,10 @@ struct TranscriptLayoutBuilder {
             if item.isReplyable, let id = item.transcriptId {
                 ids = [id]
                 if self.settings.reactionsEnabled, chat.ackMessageId == id { decoration.ack = id }
+                if chat.hasBranches, chat.branchAnchorId == id, let number = chat.activeBranchNumber {
+                    decoration.branch = BranchPosition(number: number, count: chat.branches.count,
+                                                       canSwitch: chat.canSwitchBranches && !chat.isRunning)
+                }
             }
         case let .assistant(turn):
             ids = turn.textIds.compactMap(\.self)
@@ -1070,7 +1086,8 @@ extension TranscriptLayoutBuilder {
         let bookmarked = messageId.map { layout.decoration.bookmarks.contains($0) } ?? false
         let details = [model, time?.messageDetailTimestamp].compactMap(\.self).joined(separator: " · ")
         let height = max(TranscriptStyle.lineHeight(self.style.caption), 16)
-        stack.add(.footer(.init(key: key, copyText: text, details: details, messageId: messageId, isBookmarked: bookmarked)),
+        stack.add(.footer(.init(key: key, copyText: text, details: details, messageId: messageId, isBookmarked: bookmarked,
+                                branch: layout.decoration.branch)),
                   height: height,
                   spacing: TranscriptMetrics.footerSpacing)
     }

@@ -217,6 +217,26 @@ struct MessageEditTests {
         await self.finish(gateway)
     }
 
+    @Test func branchAnchorIsTheLastUserMessageOnceThereAreBranches() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        await chat.refreshBranches()
+        #expect(!chat.hasBranches && chat.branchAnchorId == nil)
+        #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
+        _ = await chat.sendEdit("something else", attachments: [])
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 }
+        #expect(chat.hasBranches)
+        let edited = self.messages(chat, .user).last?.transcriptId
+        #expect(chat.branchAnchorId != nil && chat.branchAnchorId == edited)
+        // A later message on the branch doesn't move the switcher off the edited one, even after a reload.
+        _ = await chat.sendMessage("and a follow-up")
+        await self.settle { !chat.isRunning && self.messages(chat, .user).count == 3 && chat.items.last?.role == .assistant }
+        await chat.load(force: true)
+        #expect(self.messages(chat, .user).count == 3 && chat.branchAnchorId == edited)
+        await self.finish(gateway)
+    }
+
     /// #429: the rewind reload can land before the live echo; neither may leave the edit pending.
     @Test func editBranchReplyLeavesNothingPending() async {
         let gateway = await self.connected()

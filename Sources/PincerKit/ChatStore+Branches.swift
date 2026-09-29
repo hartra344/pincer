@@ -27,6 +27,18 @@ extension ChatStore {
         self.branches.firstIndex { $0.active }.map { $0 + 1 }
     }
 
+    /// The message whose footer carries the branch switcher. `sessions.branches.list` reports only
+    /// branch tips, not where they fork, so this is the message the latest Edit & Resend or Regenerate
+    /// sent while it's on the active path, else the last committed user message. Nil without branches.
+    public var branchAnchorId: String? {
+        guard self.hasBranches else { return nil }
+        let users = self.items.filter { $0.role == .user && $0.isReplyable && $0.transcriptId != nil }
+        if let key = self.branchAnchorKey, let anchor = users.last(where: { $0.idempotencyKey == key }) {
+            return anchor.transcriptId
+        }
+        return users.last?.transcriptId
+    }
+
     /// Reloads `branches` (`sessions.branches.list`, read scope). Failures leave the list empty:
     /// branches are an extra, never an error banner. Overlapping calls apply only the newest
     /// response; an older caller returns once that one has landed.

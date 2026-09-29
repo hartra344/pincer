@@ -147,7 +147,17 @@ extension ChatStore {
         }
         self.editTarget = nil
         self.draft = target.savedDraft
-        return await self.sendMessage(text, attachments: attachments + outcome.attachments)
+        return await self.sendMarkingBranchAnchor { await self.sendMessage(text, attachments: attachments + outcome.attachments) }
+    }
+
+    /// Sends, then remembers the sent message's key as the place the chat's branches fork.
+    private func sendMarkingBranchAnchor(_ send: () async -> SendOutcome) async -> SendOutcome {
+        let before = Set(self.items.compactMap(\.idempotencyKey))
+        let outcome = await send()
+        if let key = self.items.last(where: { $0.role == .user && $0.idempotencyKey.map { !before.contains($0) } == true })?.idempotencyKey {
+            self.branchAnchorKey = key
+        }
+        return outcome
     }
 
     // MARK: Regenerate
@@ -160,7 +170,7 @@ extension ChatStore {
         do {
             let outcome = try await self.rewind(to: entryId)
             let text = outcome.editorText ?? user.plainText
-            switch await self.sendMessage(text, attachments: outcome.attachments) {
+            switch await self.sendMarkingBranchAnchor({ await self.sendMessage(text, attachments: outcome.attachments) }) {
             case .failed(let message), .failedInline(let message):
                 self.errorMessage = L("Couldn’t regenerate: \(message)")
                 return false

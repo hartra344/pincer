@@ -50,6 +50,10 @@ struct TranscriptRowAccessibilityAction {
             [TranscriptRowAccessibilityAction(name: chat.title) { [weak actions] in actions?.openChat(chat.sessionKey) }]
         } ?? []
         guard let messageId = layout.messages.last?.id else { return result + source }
+        if let branch = layout.decoration.branch, branch.canSwitch {
+            if branch.number > 1 { result.append(.init(name: L("Previous branch")) { [weak actions] in actions?.stepBranch(-1) }) }
+            if branch.number < branch.count { result.append(.init(name: L("Next branch")) { [weak actions] in actions?.stepBranch(1) }) }
+        }
         result.append(.init(name: L("Reply")) { [weak actions] in actions?.reply(to: messageId) })
         result.append(.init(name: L("Copy Link")) { [weak actions] in actions?.copyLink(to: messageId) })
         if actions.canBranch(from: messageId) {

@@ -406,12 +406,59 @@ final class TranscriptLabelButton: TranscriptTapView {
     private var symbol = ""
     /// Draws in the secondary label color instead of the accent, for buttons that sit on every row.
     var isSubdued = false
-    /// Grows the touch target beyond the drawn button (iOS), for small icon-only buttons.
-    var hitOutset = CGSize.zero
+
+    /// Icon or text alone, with `padding` either side, instead of the icon-and-title layout. Used by
+    /// the branch switcher's chevrons and "2 / 2".
+    var isCompact = false
+    var padding: CGFloat = 0
+    var titleFont: PFont?
+    /// Dimmed and inert, but still drawn so the row's layout doesn't change.
+    var isDisabled = false {
+        didSet {
+            guard oldValue != self.isDisabled else { return }
+            self.viewAlpha = self.isDisabled ? 0.5 : 1
+            #if os(macOS)
+            self.window?.invalidateCursorRects(for: self)
+            #else
+            self.isEnabled = !self.isDisabled
+            #endif
+        }
+    }
 
     #if os(iOS)
+    /// Items of the menu a tap opens; nil for buttons that just act.
+    var menuProvider: (() -> [UIMenuElement])?
+
+    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
+                                         configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration?
+    {
+        guard let menuProvider else { return super.contextMenuInteraction(interaction, configurationForMenuAtLocation: location) }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in UIMenu(children: menuProvider()) }
+    }
+
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
         self.bounds.insetBy(dx: -self.hitOutset.width, dy: -self.hitOutset.height).contains(point)
+    }
+    #else
+    var showsHover = false
+    private var isHovered = false {
+        didSet { if oldValue != self.isHovered { self.redraw() } }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in self.trackingAreas { self.removeTrackingArea(area) }
+        guard self.showsHover else { return }
+        self.addTrackingArea(NSTrackingArea(rect: self.bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                            owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { self.isHovered = !self.isDisabled }
+    override func mouseExited(with event: NSEvent) { self.isHovered = false }
+
+    override func resetCursorRects() {
+        guard self.showsHover, !self.isDisabled else { return }
+        self.addCursorRect(self.bounds, cursor: .pointingHand)
     }
     #endif
 
@@ -423,7 +470,12 @@ final class TranscriptLabelButton: TranscriptTapView {
         self.redraw()
     }
 
-    var buttonSize: CGSize { Self.size(title: self.title) }
+    var buttonSize: CGSize {
+        guard self.isCompact else { return Self.size(title: self.title) }
+        let font = self.titleFont ?? TranscriptStyle.shared.caption
+        let content = self.symbol.isEmpty ? singleLine(self.title, font, TranscriptColors.tint).lineWidth : 14
+        return CGSize(width: content + 2 * self.padding, height: max(TranscriptStyle.lineHeight(font), 16))
+    }
 
     static func size(title: String) -> CGSize {
         let font = TranscriptStyle.shared.caption
@@ -432,10 +484,28 @@ final class TranscriptLabelButton: TranscriptTapView {
     }
 
     override func draw(_ rect: CGRect) {
-        let font = TranscriptStyle.shared.caption
+        let font = self.titleFont ?? TranscriptStyle.shared.caption
         let base = self.isSubdued ? TranscriptColors.secondary : TranscriptColors.tint
         let color = self.isPressed ? base.withAlphaComponent(0.5) : base
         let height = self.bounds.height
+        #if os(macOS)
+        if self.isHovered, !self.isDisabled {
+            TranscriptColors.fill.setFill()
+            PBezierPath(roundedRect: self.bounds, xRadius: 4, yRadius: 4).fill()
+        }
+        #endif
+        if self.isCompact {
+            let x = self.padding
+            if self.symbol.isEmpty {
+                singleLine(self.title, font, color)
+                    .drawLine(at: CGPoint(x: x, y: (height - TranscriptStyle.lineHeight(font)) / 2),
+                              width: self.bounds.width - x, font: font)
+            } else {
+                TranscriptSymbols.draw(self.symbol, in: CGRect(x: x, y: 0, width: 14, height: height), size: font.pointSize,
+                                       weight: .semibold, color: color)
+            }
+            return
+        }
         TranscriptSymbols.draw(self.symbol, in: CGRect(x: 0, y: 0, width: 14, height: height), size: font.pointSize, color: color)
         let text = singleLine(self.title, font, color)
         text.drawLine(at: CGPoint(x: 18, y: (height - TranscriptStyle.lineHeight(font)) / 2), width: self.bounds.width - 18, font: font)
@@ -537,7 +607,7 @@ final class TranscriptSendStatusView: TranscriptBaseView {
     #endif
 }
 
-/// The line under a message: Copy, Reply and React, then details such as the time it was sent
+/// The line under a message: the branch switcher when its branches fork here, Copy, Reply and React, then details such as the time it was sent
 /// and its model.
 final class TranscriptFooterView: TranscriptBaseView {
     private var footer: TranscriptPart.Footer?
@@ -545,11 +615,147 @@ final class TranscriptFooterView: TranscriptBaseView {
     private let replyButton = TranscriptLabelButton()
     private let reactButton = TranscriptLabelButton()
     private let bookmarkButton = TranscriptLabelButton()
+    private let previousBranchButton = TranscriptLabelButton()
+    private let branchLabel = TranscriptLabelButton()
+    private let nextBranchButton = TranscriptLabelButton()
     private weak var actions: TranscriptRowActions?
     private var copiedToken = 0
 
+    private var branchControls: [TranscriptLabelButton] { [self.previousBranchButton, self.branchLabel, self.nextBranchButton] }
+
+    /// Smallest comfortable touch or click target for the branch controls.
+    private static var minimumTarget: CGSize {
+        #if os(iOS)
+        CGSize(width: 44, height: 44)
+        #else
+        CGSize(width: 28, height: 28)
+        #endif
+    }
+
+    private func setUpBranchControls() {
+        self.previousBranchButton.set(title: "", symbol: "chevron.left")
+        self.nextBranchButton.set(title: "", symbol: "chevron.right")
+        self.previousBranchButton.accessibilityText = L("Previous branch")
+        self.nextBranchButton.accessibilityText = L("Next branch")
+        var digits = TranscriptStyle.shared.caption
+        #if os(macOS)
+        digits = NSFont.monospacedDigitSystemFont(ofSize: digits.pointSize, weight: .regular)
+        #else
+        digits = UIFont.monospacedDigitSystemFont(ofSize: digits.pointSize, weight: .regular)
+        #endif
+        self.branchLabel.titleFont = digits
+        for button in self.branchControls {
+            button.isSubdued = true
+            button.isCompact = true
+            button.padding = button === self.branchLabel ? 4 : 3
+            button.isHidden = true
+            #if os(macOS)
+            button.showsHover = true
+            #endif
+            self.addSubview(button)
+        }
+        self.previousBranchButton.onTap = { [weak self] in self?.stepBranch(-1) }
+        self.nextBranchButton.onTap = { [weak self] in self?.stepBranch(1) }
+        #if os(macOS)
+        self.branchLabel.onTap = { [weak self] in self?.showBranchMenu() }
+        #endif
+        self.branchLabel.onIncrement = { [weak self] in self?.stepBranch(1) }
+        self.branchLabel.onDecrement = { [weak self] in self?.stepBranch(-1) }
+        self.branchLabel.accessibilityHintText = L("Choose a branch")
+        #if os(iOS)
+        self.branchLabel.accessibilityTraits = .adjustable
+        #endif
+        #if os(iOS)
+        self.branchLabel.showsMenuAsPrimaryAction = true
+        self.branchLabel.isContextMenuInteractionEnabled = true
+        self.branchLabel.menuProvider = { [weak self] in self?.branchMenuElements() ?? [] }
+        #endif
+    }
+
+    private func stepBranch(_ offset: Int) {
+        guard let branch = footer?.branch, branch.canSwitch else { return }
+        self.actions?.stepBranch(offset)
+    }
+
+    #if os(macOS)
+    private func showBranchMenu() {
+        guard let branch = footer?.branch, branch.canSwitch, let actions else { return }
+        let menu = NSMenu()
+        for entry in actions.branchEntries {
+            let item = NSMenuItem(title: entry.title, action: #selector(self.pickBranch(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = entry.leafEntryId
+            item.state = entry.isActive ? .on : .off
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: CGPoint(x: 0, y: self.branchLabel.bounds.height + 2), in: self.branchLabel)
+    }
+
+    @objc private func pickBranch(_ item: NSMenuItem) {
+        guard let id = item.representedObject as? String else { return }
+        self.actions?.switchBranch(to: id)
+    }
+    #else
+    private func branchMenuElements() -> [UIMenuElement] {
+        guard footer?.branch?.canSwitch == true, let actions else { return [] }
+        return actions.branchEntries.map { entry in
+            UIAction(title: entry.title, image: entry.isActive ? UIImage(systemName: "checkmark") : nil,
+                     state: entry.isActive ? .on : .off) { [weak actions] _ in actions?.switchBranch(to: entry.leafEntryId) }
+        }
+    }
+    #endif
+
+    /// Where each visible branch control takes taps: its frame grown to the minimum target (never
+    /// left of the footer), with overlaps between neighbours, and with the next button, split at the midpoint.
+    private func branchHitFrames() -> [(control: TranscriptLabelButton, frame: CGRect)] {
+        let controls = self.branchControls.filter { !$0.isHidden }
+        guard !controls.isEmpty else { return [] }
+        let target = Self.minimumTarget
+        var frames = controls.map { control -> CGRect in
+            let f = control.frame
+            let grown = f.insetBy(dx: -max((target.width - f.width) / 2, 0), dy: -max((target.height - f.height) / 2, 0))
+            return grown.minX < 0 ? CGRect(x: 0, y: grown.minY, width: grown.maxX, height: grown.height) : grown
+        }
+        for index in frames.indices {
+            let next: CGRect? = index + 1 < controls.count
+                ? controls[index + 1].frame
+                : [self.bookmarkButton, self.copyButton, self.replyButton, self.reactButton].first { !$0.isHidden }?.frame
+            guard let next else { continue }
+            let mid = (controls[index].frame.maxX + next.minX) / 2
+            frames[index].size.width = max(min(frames[index].maxX, mid) - frames[index].minX, 0)
+            if index + 1 < controls.count {
+                let right = frames[index + 1]
+                frames[index + 1] = CGRect(x: max(right.minX, mid), y: right.minY, width: max(right.maxX - max(right.minX, mid), 0),
+                                           height: right.height)
+            }
+        }
+        return Array(zip(controls, frames))
+    }
+
+    private func branchControl(at point: CGPoint) -> TranscriptLabelButton? {
+        self.branchHitFrames().first { $0.frame.contains(point) }?.control
+    }
+
+    #if os(macOS)
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = self.convert(point, from: self.superview)
+        if let control = self.branchControl(at: local) { return control }
+        return super.hitTest(point)
+    }
+    #else
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        self.branchControl(at: point) != nil || super.point(inside: point, with: event)
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        if let control = self.branchControl(at: point) { return control }
+        return super.hitTest(point, with: event)
+    }
+    #endif
+
     override init(frame: CGRect) {
         super.init(frame: frame)
+        self.setUpBranchControls()
         for button in [self.copyButton, self.replyButton, self.reactButton] {
             button.isSubdued = true
             self.addSubview(button)
@@ -587,7 +793,18 @@ final class TranscriptFooterView: TranscriptBaseView {
         self.replyButton.isHidden = footer.messageId == nil
         self.reactButton.isHidden = footer.messageId == nil || !actions.reactionsEnabled
         self.bookmarkButton.isHidden = footer.messageId == nil || !footer.isBookmarked
-        if old?.isBookmarked != footer.isBookmarked {
+        if old?.branch != footer.branch {
+            let branch = footer.branch
+            for button in self.branchControls { button.isHidden = branch == nil }
+            if let branch {
+                self.branchLabel.set(title: L("\(branch.number) / \(branch.count)"), symbol: "")
+                self.branchLabel.accessibilityText = L("Branch \(branch.number) of \(branch.count)")
+                self.previousBranchButton.isDisabled = !branch.canSwitch || branch.number <= 1
+                self.nextBranchButton.isDisabled = !branch.canSwitch || branch.number >= branch.count
+                self.branchLabel.isDisabled = !branch.canSwitch
+            }
+        }
+        if old?.isBookmarked != footer.isBookmarked || old?.branch != footer.branch {
             #if os(macOS)
             self.needsLayout = true
             #else
@@ -625,16 +842,23 @@ final class TranscriptFooterView: TranscriptBaseView {
     private var detailsX: CGFloat = 0
 
     override func layoutContent() {
-        var x: CGFloat = 0
+        // The chevron's glyph is narrower than its box; this lines its ink up with the icons above and below.
+        var x: CGFloat = self.previousBranchButton.isHidden ? 0 : -4
         var moved = false
-        for button in [self.bookmarkButton, self.copyButton, self.replyButton, self.reactButton] where !button.isHidden {
+        for button in self.branchControls + [self.bookmarkButton, self.copyButton, self.replyButton, self.reactButton]
+        where !button.isHidden {
             let size = button.buttonSize
             let frame = CGRect(x: x, y: (self.bounds.height - size.height) / 2, width: size.width, height: size.height)
+            if self.branchControls.contains(where: { $0 === button }) {
+                let target = Self.minimumTarget
+                button.hitOutset = CGSize(width: max((target.width - size.width) / 2, 0), height: max((target.height - size.height) / 2, 0))
+            }
             if button.frame != frame {
                 button.frame = frame
                 moved = true
             }
-            x = frame.maxX + 10
+            x = frame.maxX + (button === self.previousBranchButton || button === self.branchLabel ? 0
+                : button === self.nextBranchButton ? 3 : 10)
         }
         if moved || x != self.detailsX {
             self.detailsX = x

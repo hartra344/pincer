@@ -481,6 +481,16 @@
         }
       }
     },
+    "%lld / %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / %lld"
+          }
+        }
+      }
+    },
     "%lld Change%@": {
       "localizations": {
         "en": {
