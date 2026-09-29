@@ -220,7 +220,7 @@ struct AppTheme: Equatable, Sendable {
         var observer: NSObjectProtocol?
     }
 
-    private static let cache = OSAllocatedUnfairLockShim(Cache())
+    private static let cache = LockedBox(Cache())
 
     /// Cached; dropped whenever any UserDefaults value changes (covers @AppStorage writes too).
     static var current: AppTheme {
@@ -384,8 +384,8 @@ extension View {
     }
 }
 
-/// Minimal lock box (os_unfair_lock via NSLock) so the cache is safe off-main.
-private final class OSAllocatedUnfairLockShim<State>: @unchecked Sendable {
+/// Minimal lock box (NSLock) so the cache is safe off-main.
+private final class LockedBox<State>: @unchecked Sendable {
     private let lock = NSLock()
     private var state: State
 
