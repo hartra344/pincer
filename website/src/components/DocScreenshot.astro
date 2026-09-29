@@ -18,6 +18,14 @@ const shots = [
   { platform: 'macos', label: 'macOS', src, alt, caption, focus },
   ...(ios ? [{ platform: 'ios', label: 'iOS', src: ios, alt: iosAlt ?? alt, caption: iosCaption ?? caption, focus: undefined }] : []),
 ];
+const imageSizes = (shot: typeof shots[number]) => {
+  const width = shot.platform === 'ios' ? 390 : narrow ? 520 : 800;
+  const breakpoint = shot.platform === 'ios' ? 480 : narrow ? 600 : 900;
+  // A focused image extends beyond its visible frame. Request enough source pixels
+  // for that enlarged image, so code and small controls remain sharp.
+  const scale = shot.focus ? shot.src.width / shot.focus.width : 1;
+  return `(max-width: ${breakpoint}px) ${Math.ceil(100 * scale)}vw, ${Math.ceil(width * scale)}px`;
+};
 ---
 <platform-screenshot class="doc-screenshot">
   {ios && <fieldset hidden>
@@ -27,7 +35,7 @@ const shots = [
   {shots.map(shot => <figure data-platform={shot.platform} class:list={{ narrow, phone: shot.platform === 'ios' }}>
     <p class="platform-label">{shot.label}</p>
     <a class:list={{ focused: !!shot.focus }} style={shot.focus ? `aspect-ratio:${shot.focus.width}/${shot.focus.height};--shot-width:${shot.src.width / shot.focus.width * 100}%;--shot-left:${-shot.focus.x / shot.focus.width * 100}%;--shot-top:${-shot.focus.y / shot.focus.height * 100}%;` : undefined} href={shot.src.src} aria-label={`Open full-size ${shot.label} screenshot: ${shot.alt}`}>
-      <Image src={shot.src} alt={shot.alt} widths={[640, 960, shot.src.width]} sizes={shot.platform === 'ios' ? '(max-width: 480px) 100vw, 390px' : narrow ? '(max-width: 600px) 100vw, 520px' : '(max-width: 900px) 100vw, 800px'} loading="lazy" />
+      <Image src={shot.src} alt={shot.alt} widths={[640, 960, shot.src.width]} sizes={imageSizes(shot)} loading="lazy" />
     </a>
     <figcaption>{shot.caption} <span>Open image for full size.</span></figcaption>
   </figure>)}

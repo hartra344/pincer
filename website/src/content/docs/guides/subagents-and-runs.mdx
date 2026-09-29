@@ -3,6 +3,12 @@ title: Subagents & run timeline
 description: See every helper run an agent started as a live tree, and follow each run's thinking, tool calls and errors on a timeline.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotRunTree from '../../../assets/screenshots/features/run-tree.png';
+import shotRunTreeIOS from '../../../assets/screenshots/features/ios/run-tree.png';
+import shotRunTimeline from '../../../assets/screenshots/features/run-timeline.png';
+import shotRunTimelineIOS from '../../../assets/screenshots/features/ios/run-timeline.png';
+
 When an agent delegates work, it spawns **helper (subagent) runs**, and those can spawn helpers of their own. Helpers stay out of the sidebar by default, so the **Runs** panel is where you see them: a tree of everything the chat started, with live status, and a timeline of what each run did.
 
 ## Opening the Runs panel
@@ -19,6 +25,8 @@ The button appears when the chat has started a helper run or has run activity of
 - **iPhone:** it's a sheet titled **Runs**. Drag it to half or full height, and tap **Done** to close it.
 
 At the top of the panel, switch between **Tree** and **Timeline**.
+
+<DocScreenshot src={shotRunTree} alt="Runs tree with nested helpers and done, stopped, failed and running statuses." caption="macOS, built-in demo. Research: launch plan includes nested helpers and a simulated failed trademark lookup." ios={shotRunTreeIOS} iosAlt="Runs tree with nested helpers and done, stopped, failed and running statuses. iPhone view." iosCaption="iOS, built-in demo. Research: launch plan includes nested helpers and a simulated failed trademark lookup." narrow focus={{ x: 1640, y: 110, width: 720, height: 840 }} />
 
 ## Subagent tree
 
@@ -79,6 +87,8 @@ Hover over a segment on the Mac to see its name, when it started, how long it to
 To open a run's chat from the timeline, double-click its lane header on the Mac or tap it on iPhone and iPad. You can also Control-click or touch and hold the header and choose **Open**. With VoiceOver, use the **Open** action. This works on "Activity not captured" rows too.
 
 The timeline is built from the activity the gateway streams while Pincer is connected. It keeps the 50 most recent runs. A helper with no captured run shows **Activity not captured — only live runs are recorded**, with its total duration taken from the session when the gateway provides it.
+
+<DocScreenshot src={shotRunTimeline} alt="Run timeline with thinking segments, tool calls and a red error marker." caption="macOS, built-in demo. The same demo run in Timeline: parallel activity appears in separate lanes, with a red marker for the failed lookup." ios={shotRunTimelineIOS} iosAlt="Run timeline with thinking segments, tool calls and a red error marker. iPhone view." iosCaption="iOS, built-in demo. The same demo run in Timeline: parallel activity appears in separate lanes, with a red marker for the failed lookup." narrow focus={{ x: 1640, y: 110, width: 720, height: 840 }} />
 
 ## When there's nothing to show
 

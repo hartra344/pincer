@@ -3,6 +3,12 @@ title: Session manager
 description: Browse every session on your OpenClaw Gateway with previews, details and run status, archive or delete them in bulk, and switch branches, rewind or recover a session.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotSessions from '../../../assets/screenshots/features/sessions.png';
+import shotSessionsIOS from '../../../assets/screenshots/features/ios/sessions.png';
+import shotSessionBranches from '../../../assets/screenshots/features/session-branches.png';
+import shotSessionBranchesIOS from '../../../assets/screenshots/features/ios/session-branches.png';
+
 The **Sessions** page lists every session on your gateway, not just the chats in your sidebar. You can preview a session, see its details and run status, archive or delete several at once, switch between a session's branches, rewind it to an earlier message, or recover a session a gateway restart interrupted.
 
 ## Opening Sessions
@@ -12,6 +18,8 @@ The **Sessions** page lists every session on your gateway, not just the chats in
 - A chat's ⋯ menu → **Manage Session…** opens that chat's details.
 
 If the gateway doesn't offer `sessions.list`, **Sessions** isn't in Gateway Settings and the menu items are hidden. Update OpenClaw to manage sessions here.
+
+<DocScreenshot src={shotSessions} alt="Session manager listing demo chats with agent names and run statuses." caption="macOS, built-in demo. Browse active sessions and compare their latest run states." ios={shotSessionsIOS} iosAlt="Session manager listing demo chats with agent names and run statuses. iPhone view." iosCaption="iOS, built-in demo. Browse active sessions and compare their latest run states." />
 
 ## Browsing sessions
 
@@ -52,6 +60,8 @@ Without it, those buttons are turned off and the page shows **Needs Full Managem
 When earlier messages are edited, retried or rewound, the gateway keeps each version of the conversation as a branch. The **Branches** section lists them with a headline, message count and when each was last updated. The current branch has a checkmark.
 
 Choose **Switch…** on another branch, then **Switch Branch** to confirm. The chat continues from that branch, and the one you left is kept, so you can switch back.
+
+<DocScreenshot src={shotSessionBranches} alt="Garden planner session with three branches and messages available to rewind." caption="macOS, built-in demo. Garden planner has three fictional branches. The checkmark marks the current branch; Rewind keeps later messages on another branch." ios={shotSessionBranchesIOS} iosAlt="Garden planner session with three branches and messages available to rewind. iPhone view." iosCaption="iOS, built-in demo. Garden planner has three fictional branches. The checkmark marks the current branch; Rewind keeps later messages on another branch." />
 
 ## Rewinding
 

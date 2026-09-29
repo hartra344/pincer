@@ -3,6 +3,10 @@ title: Channel Status
 description: See whether each Discord, Telegram, WhatsApp or other channel account is connected, and reconnect, start, stop, log out or log in with a QR code from Pincer.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotChannelStatus from '../../../assets/screenshots/features/channel-status.png';
+import shotChannelStatusIOS from '../../../assets/screenshots/features/ios/channel-status.png';
+
 **Channel Status** shows every channel account on your gateway (Discord, Telegram, WhatsApp and the rest) and whether it's working. You can reconnect, start, stop or log out an account, and link WhatsApp with a QR code, without a terminal.
 
 This page is about whether accounts are connected. Their settings are on the **Channels** settings page, and letting a new person message your agents is under [Pairing Requests](../gateway-settings/#pairing-requests).
@@ -31,6 +35,8 @@ Accounts are grouped by channel. Each one shows its state, its last error if it 
 Channels are optional: Pincer talks to your agents directly. If none is set up, the page just says **No Channels** (with **Open Channels Settings**); it's never flagged as a problem. If your gateway doesn't report channel status, the page says **Unavailable on this Gateway** and shows the channels from Health, read-only. While Pincer isn't connected, it shows the last list it had, dimmed.
 
 At the bottom, **Approving new senders? See Pairing Requests.** opens [Pairing Requests](../gateway-settings/#pairing-requests).
+
+<DocScreenshot src={shotChannelStatus} alt="Channel Status with connected Discord, degraded Telegram and logged-out WhatsApp." caption="macOS, built-in demo. The demo contrasts a healthy account, a simulated Telegram polling conflict and an unlinked WhatsApp account." ios={shotChannelStatusIOS} iosAlt="Channel Status with connected Discord, degraded Telegram and logged-out WhatsApp. iPhone view." iosCaption="iOS, built-in demo. The demo contrasts a healthy account, a simulated Telegram polling conflict and an unlinked WhatsApp account." />
 
 ## Refreshing and probing
 

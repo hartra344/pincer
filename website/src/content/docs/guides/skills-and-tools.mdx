@@ -3,6 +3,12 @@ title: Skills & tools
 description: Browse your gateway's skills, install new ones from ClawHub, and see which tools a chat or agent can use before it runs.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotSkills from '../../../assets/screenshots/features/skills.png';
+import shotSkillsIOS from '../../../assets/screenshots/features/ios/skills.png';
+import shotEffectiveTools from '../../../assets/screenshots/features/effective-tools.png';
+import shotEffectiveToolsIOS from '../../../assets/screenshots/features/ios/effective-tools.png';
+
 Skills teach your agents new tricks, and tools are what they call to act. Pincer shows you both: which skills each agent has and why some can't be used yet, and which tools a chat is allowed to call before you send anything.
 
 ## Skills
@@ -20,6 +26,8 @@ If the gateway has more than one agent, pick one with **Agent** at the top. Its 
 | **Disabled** | The skill is turned off. |
 
 Each row shows where the skill comes from (**Bundled** with OpenClaw, the agent's **Workspace**, **Managed**, **Extra** or **ClawHub**). Type in **Filter skills** to narrow the list, and **Refresh** reloads it.
+
+<DocScreenshot src={shotSkills} alt="Skills page listing ready skills with source, requirements and enabled status." caption="macOS, built-in demo. Ready skills are grouped separately from skills that need setup." ios={shotSkillsIOS} iosAlt="Skills page listing ready skills with source, requirements and enabled status. iPhone view." iosCaption="iOS, built-in demo. Ready skills are grouped separately from skills that need setup." />
 
 ### Skill details
 
@@ -62,6 +70,8 @@ Tools are grouped the way the gateway groups them. Each row shows the tool, wher
 A chat's list is the gateway's preview for that chat's saved settings. If MCP servers haven't connected or listed their tools yet, Pincer says so, and their tools may be missing until they do.
 
 The inspector is read-only and needs only `operator.read`. To change tool policy, choose **Tool Settings…** to open the **Tools & Skills** settings page. If your gateway's config has no such page, the button is **Raw Config…** instead.
+
+<DocScreenshot src={shotEffectiveTools} ios={shotEffectiveToolsIOS} iosAlt="Tools and Policy for Garden planner on iPhone, showing the coding profile and policy warnings." iosCaption="iOS, local mock. The coding profile allows 20 of 28 tools; diagnostics explain why some tools are unavailable." alt="Tools and Policy sheet showing the coding profile and allowed tools for Garden planner." caption="macOS, built-in demo. Inspect the effective tools for a session, including the profile and policy decision for each tool." narrow />
 
 ## Older gateways
 

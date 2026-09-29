@@ -3,6 +3,10 @@ title: Devices & Nodes
 description: Approve, reject, rename and revoke the devices, and see the nodes, paired with your OpenClaw Gateway, from Pincer.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotDevices from '../../../assets/screenshots/features/devices.png';
+import shotDevicesIOS from '../../../assets/screenshots/features/ios/devices.png';
+
 Every app that connects to your gateway, such as Pincer on each Mac, iPhone and iPad, the Control UI, the `openclaw` CLI on another machine, or a node app, is a **device** with its own key. The gateway has to approve each one before it can connect. **Devices** in [Gateway Settings](../gateway-settings/) lists the devices waiting for approval and the ones already paired, so you can manage them without running `openclaw devices` on the gateway host.
 
 **Devices** is different from **Pairing Requests**, which lets in people who message your agents on a channel. See [Gateway Settings → Pairing Requests](../gateway-settings/#pairing-requests).
@@ -24,6 +28,8 @@ In [Gateway Settings](../gateway-settings/), choose **Devices** in the sidebar, 
 | **Status** | **Connected**, **Last seen** for paired devices, or **Requested** for waiting ones. |
 
 The device Pincer itself connects with is tagged **This Mac**, **This iPhone** or **This iPad**. A request from a device that's already paired and asks for more access, for example after you switch it to **Full Management**, is tagged **Scope upgrade**. A request that asks for the `node` role says so, since approving it lets agents run commands on that device.
+
+<DocScreenshot src={shotDevices} alt="Devices page with a fictional iPad pairing request and a Mac scope upgrade." caption="macOS, built-in demo. Pending requests show the device fingerprint and requested scopes. All identities here are synthetic." ios={shotDevicesIOS} iosAlt="Devices page with a fictional iPad pairing request and a Mac scope upgrade. iPhone view." iosCaption="iOS, built-in demo. Pending requests show the device fingerprint and requested scopes. All identities here are synthetic." />
 
 ## Approving and rejecting
 

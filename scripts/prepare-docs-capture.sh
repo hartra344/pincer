@@ -21,6 +21,7 @@ info['LSEnvironment'] = {
     'PINCER_KEYCHAIN': 'memory',
     'PINCER_CACHE_DIR': 'off',
     'PINCER_DRAFTS_DIR': 'off',
+    'PINCER_OUTBOX_DIR': 'off',
 }
 with open(path, 'wb') as f:
     plistlib.dump(info, f)

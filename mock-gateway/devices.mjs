@@ -100,10 +100,10 @@ export function createDevicePairingState(base = Date.now()) {
     },
   }, base);
   const pairedDevices = new Map([studio, pixel, macMini].map((d) => [d.deviceId, d]));
-  const ipad = seededIdentity('travis-ipad');
+  const ipad = seededIdentity('demo-ipad');
   const pendingPairing = new Map([
     ['pair_ipad', {
-      requestId: 'pair_ipad', deviceId: ipad.deviceId, publicKey: ipad.publicKey, displayName: "Travis's iPad", platform: 'ipados',
+      requestId: 'pair_ipad', deviceId: ipad.deviceId, publicKey: ipad.publicKey, displayName: "Alex's iPad", platform: 'ipados',
       deviceFamily: 'tablet', clientId: 'openclaw-ios', clientMode: 'ui', role: OPERATOR_ROLE, roles: [OPERATOR_ROLE],
       scopes: ['operator.read', 'operator.write', 'operator.approvals', 'operator.questions'], remoteIp: '192.168.1.31',
       silent: false, isRepair: false, ts: base - 2 * 60_000,

@@ -3,7 +3,13 @@ title: File edit diffs
 description: How Pincer shows the agent's file writes, edits and patches as colour-coded diffs in tool cards.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotFileDiffs from '../../../assets/screenshots/features/file-diffs.png';
+import shotFileDiffsIOS from '../../../assets/screenshots/features/ios/file-diffs.png';
+
 When an agent changes a file, its tool card shows the change as a diff instead of the tool's raw JSON arguments. You see which file changed, how many lines were added and removed, and the lines themselves.
+
+<DocScreenshot src={shotFileDiffs} focus={{ x: 650, y: 290, width: 1370, height: 620 }} alt="Expanded retry.ts tool card with green additions and a red removed line." caption="macOS, built-in demo. Expand Thinking to read the actual file changes in the tool card. This demo caps retry attempts and adds a test." ios={shotFileDiffsIOS} iosAlt="Expanded retry.ts tool card with green additions and a red removed line. iPhone view." iosCaption="iOS, built-in demo. Expand Thinking to read the actual file changes in the tool card. This demo caps retry attempts and adds a test." />
 
 ## Which tools get a diff
 

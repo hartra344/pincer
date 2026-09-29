@@ -3,6 +3,9 @@ title: Transcript, thinking & tools
 description: Streaming replies, thinking, tool cards, images, models and message details in Pincer.
 ---
 
+import shotForwardedMessages from '../../../assets/screenshots/features/forwarded-messages.png';
+import shotForwardedMessagesIOS from '../../../assets/screenshots/features/ios/forwarded-messages.png';
+
 import DocScreenshot from '../../../components/DocScreenshot.astro';
 import toolsIOS from '../../../assets/screenshots/ios/tool-details.png';
 import overviewIOS from '../../../assets/screenshots/ios/transcript.png';
@@ -157,6 +160,8 @@ Pincer hides the headers the Gateway adds for the model, such as `[Inter-session
 Chats cached by an older Pincer are updated to show the sender, and the message search index is rebuilt once.
 
 In the [demo](../../getting-started/try-the-demo/), open **Claw → Main** and scroll up to see Kiko, a finance agent, introduce herself to Claw.
+
+<DocScreenshot src={shotForwardedMessages} ios={shotForwardedMessagesIOS} iosCaption="iOS, local mock. Automation and forwarded messages show their source beside the sender’s name." alt="Claw transcript with messages from Kiko and an automation, each labeled with its source." caption="macOS, local mock. Local mock: Kiko\u2019s forwarded messages retain her name and link back to her chat. The morning briefing is labeled as an automation." />
 
 ## Models
 
