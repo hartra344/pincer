@@ -502,19 +502,6 @@ private final class SidebarOutlineView: NSOutlineView {
     override func frameOfOutlineCell(atRow row: Int) -> NSRect {
         self.hidesOutlineCell?(row) == true ? .zero : super.frameOfOutlineCell(atRow: row)
     }
-
-    /// Nested rows are inset from the trailing edge; a nested header reaches out to its agent
-    /// header's right edge so its + and chevron sit in the same slots and stay clickable.
-    override func frameOfCell(atColumn column: Int, row: Int) -> NSRect {
-        var frame = super.frameOfCell(atColumn: column, row: row)
-        guard column >= 0, row >= 0, self.hidesOutlineCell?(row) == true, let item = self.item(atRow: row) else { return frame }
-        var top: Any = item
-        while let parent = self.parent(forItem: top) { top = parent }
-        let topRow = self.row(forItem: top)
-        guard topRow >= 0, topRow != row else { return frame }
-        frame.size.width = max(frame.width, super.frameOfCell(atColumn: column, row: topRow).maxX - frame.minX)
-        return frame
-    }
 }
 
 private extension Array {
@@ -692,6 +679,7 @@ private final class SidebarHeaderCell: NSTableCellView {
     private var onAdd: (() -> Void)?
     private var onToggle: (() -> Void)?
     private var leading: NSLayoutConstraint?
+    private(set) var isNested = false
     /// Width of each trailing button slot. Every header keeps both slots, so + and the chevron
     /// line up across sections and never move.
     static let buttonSlot: CGFloat = 22
@@ -763,7 +751,9 @@ private final class SidebarHeaderCell: NSTableCellView {
     @MainActor
     func configure(_ header: SidebarModel.Header, actions: SidebarActions, toggle: @escaping () -> Void) {
         let section = header.section
+        self.isNested = header.isSubsection
         self.leading?.constant = header.isSubsection ? 2 + SidebarChatCell.indentPerDepth : 2
+        self.superview?.needsLayout = true
         self.onToggle = toggle
         self.avatar = header.avatar.map { ($0, header.avatarState) }
         self.drawAvatar()
@@ -908,6 +898,31 @@ struct SidebarSearchField: NSViewRepresentable {
 /// Draws the selection in the theme's accent when it sets one; otherwise the system's source-list
 /// highlight.
 private final class SidebarRowView: NSTableRowView {
+    /// The outline draws nested rows inset from the trailing edge. A nested group header's cell
+    /// reaches out to where its agent header's cell ends, so its + and chevron sit in the same
+    /// slots and stay inside the cell (clickable).
+    override func layout() {
+        super.layout()
+        guard let cell = self.subviews.lazy.compactMap({ $0 as? SidebarHeaderCell }).first, cell.isNested else { return }
+        var ancestor = self.superview
+        while let view = ancestor, !(view is NSOutlineView) { ancestor = view.superview }
+        guard let outline = ancestor as? NSOutlineView else { return }
+        let row = outline.row(for: self)
+        guard row >= 0, var top = outline.item(atRow: row) else { return }
+        while let parent = outline.parent(forItem: top) { top = parent }
+        let topRow = outline.row(forItem: top)
+        guard topRow >= 0, topRow != row else { return }
+        let topEdge: CGFloat
+        if let topCell = outline.view(atColumn: 0, row: topRow, makeIfNecessary: false) {
+            topEdge = outline.convert(topCell.bounds, from: topCell).maxX
+        } else {
+            topEdge = outline.frameOfCell(atColumn: 0, row: topRow).maxX
+        }
+        let edge = self.convert(NSPoint(x: topEdge, y: 0), from: outline).x
+        let width = max(cell.frame.width, edge - cell.frame.minX)
+        if cell.frame.width != width { cell.frame.size.width = width }
+    }
+
     override func drawSelection(in dirtyRect: NSRect) {
         guard let accent = AppTheme.current.platformColor(.accent) else {
             super.drawSelection(in: dirtyRect)
