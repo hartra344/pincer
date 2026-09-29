@@ -379,10 +379,8 @@ public enum ExecPolicy {
     public static let getMethod = "exec.approvals.get"
     public static let setMethod = "exec.approvals.set"
 
-    public static let conflictMessage =
-        "The command policy changed on the Gateway, so your changes weren't saved. The latest version is shown. Make your changes again."
-    public static let needsAdminMessage =
-        "Viewing and changing the command policy needs Full Management access. Turn it on under Connection, then approve this device on the Gateway host."
+    public static var conflictMessage: String { L("The command policy changed on the Gateway, so your changes weren't saved. The latest version is shown. Make your changes again.") }
+    public static var needsAdminMessage: String { L("Viewing and changing the command policy needs Full Management access. Turn it on under Connection, then approve this device on the Gateway host.") }
 
     /// The Gateway's default for a field, from `resolvedDefaults`, when the saved file doesn't set it.
     /// (Once `defaults` sets a field, `resolvedDefaults` echoes that value, not the built-in one.)

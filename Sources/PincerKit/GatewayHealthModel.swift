@@ -85,7 +85,7 @@ public final class GatewayHealthModel {
 
     public nonisolated static let restartReason = "Pincer: Restart Gateway"
     public nonisolated static let refreshInterval: Duration = .seconds(30)
-    public nonisolated static let adminRequiredMessage = "Restarting needs Full Management access."
+    public nonisolated static var adminRequiredMessage: String { L("Restarting needs Full Management access.") }
 
     public private(set) var health: GatewayHealthSummary?
     public private(set) var heartbeat: GatewayHeartbeat?
@@ -586,10 +586,10 @@ public final class GatewayHealthModel {
                 return
             }
             if GatewayError.isMissingScope(error) {
-                self.restartState = .failed(ConfigWriteError.adminRequired.message)
+                self.restartState = .failed(GatewayError.missingScopeMessage(for: error))
             } else if Self.isUnavailableMethod(error) {
                 self.unavailable.insert(.restart)
-                self.restartState = .failed("Restarting isn't available on this Gateway.")
+                self.restartState = .failed(L("Restarting isn't available on this Gateway."))
             } else {
                 self.restartState = .failed(Self.message(for: error))
             }
@@ -602,11 +602,12 @@ public final class GatewayHealthModel {
     static func isUnavailableMethod(_ error: Error) -> Bool { GatewayError.isUnavailable(error) }
 
     public static func message(for error: Error) -> String {
+        if GatewayError.isMissingScope(error) { return GatewayError.missingScopeMessage(for: error) }
+        if GatewayError.isUnknownMethod(error) { return GatewayError.message(for: error, unavailable: L("health reports")) }
         guard case let GatewayError.rpc(code, message, _) = error else { return error.localizedDescription }
-        if GatewayError.isMissingScope(error) { return ConfigWriteError.adminRequired.message }
         switch code {
-        case "RATE_LIMITED": return "The Gateway limits how often it restarts. Try again in a minute."
-        case "INVALID_REQUEST": return "The Gateway refused the restart: \(message)"
+        case "RATE_LIMITED": return L("The Gateway limits how often it restarts. Try again in a minute.")
+        case "INVALID_REQUEST": return L("The Gateway refused the restart: \(message)")
         default: return message
         }
     }

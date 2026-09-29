@@ -210,7 +210,7 @@ func checkGatewayHealth() async {
 
     for (code, details, expected) in [
         ("RATE_LIMITED", JSONValue?.none, "The Gateway limits how often it restarts. Try again in a minute."),
-        ("FORBIDDEN", json(#"{"code":"MISSING_SCOPE"}"#), ConfigWriteError.adminRequired.message),
+        ("FORBIDDEN", json(#"{"code":"MISSING_SCOPE"}"#), GatewayError.missingScopeMessage(for: GatewayError.rpc(code: "FORBIDDEN", message: "bad reason", details: json(#"{"code":"MISSING_SCOPE"}"#)))),
         ("INVALID_REQUEST", nil, "The Gateway refused the restart: bad reason"),
     ] {
         restartReply.next = { throw GatewayError.rpc(code: code, message: "bad reason", details: details) }

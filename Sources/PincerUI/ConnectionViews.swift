@@ -61,8 +61,8 @@ struct ConnectionFields: View {
 
     var body: some View {
         Section {
-            TextField("Name", text: self.$draft.name)
-            TextField("Gateway URL", text: self.$draft.url, prompt: Text("wss://home.tailnet-name.ts.net"))
+            TextField(L("Name"), text: self.$draft.name)
+            TextField(L("Gateway URL"), text: self.$draft.url, prompt: Text("wss://home.tailnet-name.ts.net", bundle: .module))
                 .autocorrectionDisabled()
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
@@ -71,25 +71,25 @@ struct ConnectionFields: View {
             if let error = self.draft.urlError {
                 Text(error).font(.caption).foregroundStyle(.red)
             } else if self.draft.url.lowercased().hasPrefix("ws://"), self.draft.url.lowercased().contains(".ts.net") {
-                Text("Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port.")
+                Text("Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port.", bundle: .module)
                     .font(.caption).foregroundStyle(.orange)
             }
         } footer: {
-            Text("Use your Tailscale Serve name (wss://…ts.net) or tailnet IP (ws://100.x.y.z:18789). Plain ws:// is only allowed for Tailscale, LAN and loopback addresses.")
+            Text("Use your Tailscale Serve name (wss://…ts.net) or tailnet IP (ws://100.x.y.z:18789). Plain ws:// is only allowed for Tailscale, LAN and loopback addresses.", bundle: .module)
         }
 
-        Section("Authentication") {
-            Picker("Method", selection: self.$draft.authMode) {
+        Section(L("Authentication")) {
+            Picker(L("Method"), selection: self.$draft.authMode) {
                 ForEach(GatewayProfile.AuthMode.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             if self.draft.authMode != .none {
-                SecureField(self.draft.authMode == .token ? "Gateway token" : "Gateway password", text: self.$draft.secret,
-                    prompt: Text(self.hasSavedSecret && !self.draft.secretEdited ? "Saved in Keychain" : "Required for first pairing"))
+                SecureField(self.draft.authMode == .token ? L("Gateway token") : L("Gateway password"), text: self.$draft.secret,
+                    prompt: Text(self.hasSavedSecret && !self.draft.secretEdited ? L("Saved in Keychain") : L("Required for first pairing")))
             }
         }
 
         Section {
-            Picker("Access", selection: self.$draft.access) {
+            Picker(L("Access"), selection: self.$draft.access) {
                 ForEach(GatewayProfile.AccessLevel.allCases) { Text($0.label).tag($0) }
             }
             #if os(iOS)
@@ -98,19 +98,19 @@ struct ConnectionFields: View {
             .pickerStyle(.radioGroup)
             #endif
         } header: {
-            Text("Access")
+            Text("Access", bundle: .module)
         } footer: {
             Text(self.draft.access.detail)
         }
 
         Section {
-            TextField("TLS certificate SHA-256", text: self.$draft.fingerprint, prompt: Text("Optional pin, hex"))
+            TextField(L("TLS certificate SHA-256"), text: self.$draft.fingerprint, prompt: Text("Optional pin, hex", bundle: .module))
                 .font(.body.monospaced())
                 .autocorrectionDisabled()
         } header: {
-            Text("Security")
+            Text("Security", bundle: .module)
         } footer: {
-            Text("Pincer connects as an operator only. It never runs a Gateway, never registers as a node, and stores secrets in the Keychain.")
+            Text("Pincer connects as an operator only. It never runs a Gateway, never registers as a node, and stores secrets in the Keychain.", bundle: .module)
         }
     }
 }
@@ -131,20 +131,20 @@ struct ConnectionSheet: View {
             Form {
                 ConnectionFields(draft: self.$draft, hasSavedSecret: false)
                 Section {
-                    Button("Try the Demo", systemImage: "play.circle") {
+                    Button(L("Try the Demo"), systemImage: "play.circle") {
                         self.app.openDemo()
                         self.dismiss()
                     }
                 } footer: {
-                    Text("No Gateway yet? Explore Pincer with sample agents and chats. Nothing leaves this device.")
+                    Text("No Gateway yet? Explore Pincer with sample agents and chats. Nothing leaves this device.", bundle: .module)
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle("Add Gateway")
+            .navigationTitle(L("Add Gateway"))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { self.dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Connect", action: self.save).disabled(!self.draft.canSave)
+                    Button(L("Connect"), action: self.save).disabled(!self.draft.canSave)
                 }
             }
         }
@@ -178,38 +178,38 @@ struct ConnectionPage: View {
             self.statusSection
             if profile.isDemo {
                 Section {
-                    Text("The demo runs a simulated Gateway on this device, with sample agents, chats and replies. Nothing is sent anywhere.")
+                    Text("The demo runs a simulated Gateway on this device, with sample agents, chats and replies. Nothing is sent anywhere.", bundle: .module)
                 }
             } else {
                 ConnectionFields(draft: self.$draft, hasSavedSecret: profile.secret != nil)
             }
             Section {
-                Button("Reconnect") { self.gateway.stop(); self.gateway.start() }
-                Button("Remove Gateway…", role: .destructive) { self.confirmRemove = true }
+                Button(L("Reconnect")) { self.gateway.stop(); self.gateway.start() }
+                Button(L("Remove Gateway…"), role: .destructive) { self.confirmRemove = true }
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Connection")
+        .navigationTitle(L("Connection"))
         .toolbar {
             if !profile.isDemo {
                 #if os(macOS)
                 ToolbarItemGroup(placement: .primaryAction) {
                     if edited {
-                        Button("Revert") { self.draft = ConnectionDraft(profile) }
+                        Button(L("Revert")) { self.draft = ConnectionDraft(profile) }
                     }
-                    Button("Apply", action: self.requestApply)
+                    Button(L("Apply"), action: self.requestApply)
                         .keyboardShortcut("s", modifiers: .command)
                         .disabled(!edited || !self.draft.canSave)
-                        .help("Save the connection on this device and reconnect")
+                        .help(L("Save the connection on this device and reconnect"))
                 }
                 #else
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Apply", action: self.requestApply)
+                    Button(L("Apply"), action: self.requestApply)
                         .disabled(!edited || !self.draft.canSave)
                 }
                 if edited {
                     ToolbarItem(placement: .bottomBar) {
-                        Button("Revert") { self.draft = ConnectionDraft(profile) }
+                        Button(L("Revert")) { self.draft = ConnectionDraft(profile) }
                     }
                 }
                 #endif
@@ -217,29 +217,29 @@ struct ConnectionPage: View {
         }
         .onAppear(perform: self.sync)
         .onChange(of: profile) { self.sync() }
-        .confirmationDialog("Remove \(profile.name)?", isPresented: self.$confirmRemove) {
-            Button("Remove", role: .destructive) {
+        .confirmationDialog(L("Remove \(profile.name)?"), isPresented: self.$confirmRemove) {
+            Button(L("Remove"), role: .destructive) {
                 self.app.remove(profile.id)
                 self.dismiss()
             }
         } message: {
-            Text("The saved token and device pairing token are deleted from this device.")
+            Text("The saved token and device pairing token are deleted from this device.", bundle: .module)
         }
-        .confirmationDialog("Reconnect and discard unsaved settings?", isPresented: self.$confirmApply) {
-            Button("Discard \(self.gateway.settings.changeCount) Changes & Reconnect", role: .destructive, action: self.apply)
+        .confirmationDialog(L("Reconnect and discard unsaved settings?"), isPresented: self.$confirmApply) {
+            Button(L("Discard \(self.gateway.settings.changeCount) Changes & Reconnect"), role: .destructive, action: self.apply)
         } message: {
-            Text("Reconnecting to the Gateway starts over from its saved settings.")
+            Text("Reconnecting to the Gateway starts over from its saved settings.", bundle: .module)
         }
     }
 
     @ViewBuilder private var statusSection: some View {
         let settings = self.gateway.settings
         Section {
-            LabeledContent("Status") { ConnectionStateText(state: self.gateway.state) }
+            LabeledContent(L("Status")) { ConnectionStateText(state: self.gateway.state) }
             if case let .awaitingPairing(requestId, _) = self.gateway.state {
                 ApprovalInstructions(requestId: requestId)
             } else if self.gateway.profile.access == .admin, self.gateway.state.isConnected, !settings.canEdit {
-                Text("The Gateway hasn't granted Full Management to this device yet.")
+                Text("The Gateway hasn't granted Full Management to this device yet.", bundle: .module)
                     .foregroundStyle(.orange)
                 ApprovalInstructions(requestId: nil)
             }
@@ -277,12 +277,12 @@ struct ApprovalInstructions: View {
     var body: some View {
         let command = self.requestId.map { "openclaw devices approve \($0)" } ?? "openclaw devices list\nopenclaw devices approve <requestId>"
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Approve this device on the Gateway host:").font(.callout).foregroundStyle(.secondary)
+            Text("Approve this device on the Gateway host:", bundle: .module).font(.callout).foregroundStyle(.secondary)
             Text(command)
                 .font(.callout.monospaced())
                 .textSelection(.enabled)
             HStack {
-                Button(self.copied ? "Copied" : "Copy Command", systemImage: self.copied ? "checkmark" : "doc.on.doc") {
+                Button(self.copied ? L("Copied") : L("Copy Command"), systemImage: self.copied ? L("checkmark") : L("doc.on.doc")) {
                     Clipboard.copy(command)
                     self.copied = true
                     Task {
@@ -293,7 +293,7 @@ struct ApprovalInstructions: View {
                 .buttonStyle(.borderless)
                 Spacer()
                 ProgressView().controlSize(.small)
-                Text("Checking…").font(.caption).foregroundStyle(.secondary)
+                Text("Checking…", bundle: .module).font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -319,9 +319,9 @@ struct PairingView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.orange)
                 .symbolEffect(.pulse)
-            Text("Approve Pincer on your Gateway host")
+            Text("Approve Pincer on your Gateway host", bundle: .module)
                 .font(.title2.bold())
-            Text("For your security, new devices must be approved on the machine running OpenClaw. Run this there:")
+            Text("For your security, new devices must be approved on the machine running OpenClaw. Run this there:", bundle: .module)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 440)
@@ -335,12 +335,12 @@ struct PairingView: View {
                 .frame(maxWidth: 440)
                 .glassSurface(in: RoundedRectangle(cornerRadius: Theme.Radius.xLarge, style: .continuous))
                 .contextMenu {
-                    Button("Copy Command", systemImage: "doc.on.doc") { self.copy(command) }
+                    Button(L("Copy Command"), systemImage: "doc.on.doc") { self.copy(command) }
                 }
             Button {
                 self.copy(command)
             } label: {
-                Label(self.copied ? "Copied" : "Copy Command",
+                Label(self.copied ? L("Copied") : L("Copy Command"),
                       systemImage: self.copied ? "checkmark" : "doc.on.doc")
             }
             .glassProminentButton()
@@ -348,14 +348,14 @@ struct PairingView: View {
             .tint(self.copied ? .green : self.theme.accent)
             .contentTransition(.symbolEffect(.replace))
             VStack(spacing: Theme.Spacing.xs) {
-                Text("Device ID").font(.caption).foregroundStyle(.secondary)
+                Text("Device ID", bundle: .module).font(.caption).foregroundStyle(.secondary)
                 Text(self.deviceId.prefix(16) + "…")
                     .font(.caption.monospaced())
                     .textSelection(.enabled)
             }
             HStack(spacing: Theme.Spacing.sm) {
                 ProgressView().controlSize(.small)
-                Text("Checking every few seconds…").font(.callout).foregroundStyle(.secondary)
+                Text("Checking every few seconds…", bundle: .module).font(.callout).foregroundStyle(.secondary)
             }
         }
         .padding(Theme.Spacing.hero)
@@ -381,14 +381,14 @@ struct FailedView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("Can’t connect to \(self.gateway.profile.name)", systemImage: "exclamationmark.octagon")
+            Label(L("Can’t connect to \(self.gateway.profile.name)"), systemImage: "exclamationmark.octagon")
         } description: {
             Text(self.message)
         } actions: {
             HStack {
-                Button("Edit Connection…", action: self.edit)
+                Button(L("Edit Connection…"), action: self.edit)
                     .glassButton()
-                Button("Try Again") {
+                Button(L("Try Again")) {
                     self.gateway.stop()
                     self.gateway.start()
                 }

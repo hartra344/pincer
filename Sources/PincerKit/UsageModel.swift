@@ -63,7 +63,7 @@ public final class UsageModel {
 
     public nonisolated static let methods = ["usage.status", "usage.cost", "sessions.usage", "sessions.usage.timeseries",
                                              "sessions.usage.logs"]
-    public nonisolated static let decodeFailure = "The Gateway sent usage data Pincer couldn't read."
+    public nonisolated static var decodeFailure: String { L("The Gateway sent usage data Pincer couldn't read.") }
 
     @ObservationIgnored private let request: Request
     @ObservationIgnored private let methods: @MainActor () -> Set<String>?
@@ -310,7 +310,10 @@ public final class UsageModel {
 
     static func message(for error: Error) -> String {
         if error is DecodingError { return Self.decodeFailure }
+        if GatewayError.isMissingScope(error) || GatewayError.isUnknownMethod(error) {
+            return GatewayError.message(for: error, unavailable: L("usage reports"))
+        }
         guard case let GatewayError.rpc(_, message, _) = error else { return error.localizedDescription }
-        return message.isEmpty ? "The Gateway couldn't load usage." : message
+        return message.isEmpty ? L("The Gateway couldn't load usage.") : message
     }
 }

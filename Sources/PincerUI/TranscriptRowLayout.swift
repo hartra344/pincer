@@ -411,7 +411,7 @@ struct TranscriptLayoutBuilder {
         case .loadingOlder:
             layout.parts = [.init(part: .loading, frame: CGRect(x: 0, y: 0, width: width, height: 36))]
             layout.height = 36
-            layout.accessibilityLabel = "Loading earlier messages"
+            layout.accessibilityLabel = L("Loading earlier messages")
         case let .entry(.marker(_, label)):
             let height = 8 + TranscriptStyle.lineHeight(self.style.caption) + 8
             let frame = CGRect(x: TranscriptMetrics.sidePadding, y: 0,
@@ -469,7 +469,7 @@ struct TranscriptLayoutBuilder {
     // MARK: Rows
 
     private func user(_ item: ChatItem, into layout: inout TranscriptRowLayout) {
-        let header = TranscriptPart.Header(name: Owner.displayName, badge: item.via.map { "via \($0)" },
+        let header = TranscriptPart.Header(name: Owner.displayName, badge: item.via.map { L("via \($0)") },
                                            time: item.timestamp?.chatTimestamp, isPending: item.isAwaitingDelivery)
         let text = item.plainText
         let messageId = item.isReplyable ? item.transcriptId : nil
@@ -480,14 +480,14 @@ struct TranscriptLayoutBuilder {
         let sendStatus = Self.sendStatus(item)
         layout.sendStatus = sendStatus
         layout.alpha = item.isPending && sendStatus?.isFailed != true ? 0.7 : 1
-        layout.copyItems = [.init(title: "Copy Text", text: text)]
+        layout.copyItems = [.init(title: L("Copy Text"), text: text)]
         let attachments = item.blocks.filter { if case .image = $0 { true } else if case .file = $0 { true } else { false } }.count
         layout.accessibilityLabel = AccessibilityText.messageRow(
             role: .user, text: text, timestamp: header.time, attachmentCount: attachments,
             isPending: item.isPending && sendStatus == nil, via: item.via, summaryLimit: 0)
         if let sendStatus { layout.accessibilityLabel += ". \(sendStatus.spoken)" }
         if let quote {
-            layout.accessibilityLabel = "In reply to \(quote.sender ?? "a message"): \(quote.preview.string). " + layout.accessibilityLabel
+            layout.accessibilityLabel = L("In reply to \(quote.sender ?? L("a message")): \(quote.preview.string). ") + layout.accessibilityLabel
         }
         self.scaffold(avatar: .init(text: Owner.initials, emoji: nil, color: TranscriptColors.ownerAvatar),
                       header: header, into: &layout) { stack, layout in
@@ -522,16 +522,16 @@ struct TranscriptLayoutBuilder {
         guard item.isPending, let state = item.outboxState, let id = item.idempotencyKey else { return nil }
         switch state {
         case .queued:
-            return .init(id: id, text: "Queued", isFailed: false, canRetry: false, canDelete: true, spoken: "Not sent yet, queued.")
+            return .init(id: id, text: L("Queued"), isFailed: false, canRetry: false, canDelete: true, spoken: L("Not sent yet, queued."))
         case .sending:
-            return .init(id: id, text: "Sending…", isFailed: false, canRetry: false, canDelete: false, spoken: "Sending.")
+            return .init(id: id, text: L("Sending…"), isFailed: false, canRetry: false, canDelete: false, spoken: L("Sending."))
         case let .failed(failure):
             let prefix = "Couldn’t send: "
             let reason = failure.message.hasPrefix(prefix) ? String(failure.message.dropFirst(prefix.count)) : failure.message
             let sentence = reason.hasSuffix(".") ? reason : reason + "."
-            return .init(id: id, text: reason.isEmpty ? "Failed" : "Failed — \(reason)", isFailed: true,
+            return .init(id: id, text: reason.isEmpty ? L("Failed") : L("Failed — \(reason)"), isFailed: true,
                          canRetry: failure.retryable, canDelete: true, detail: failure.message,
-                         spoken: reason.isEmpty ? "Failed to send." : "Failed to send: \(sentence)")
+                         spoken: reason.isEmpty ? L("Failed to send.") : L("Failed to send: \(sentence)"))
         }
     }
 
@@ -551,8 +551,8 @@ struct TranscriptLayoutBuilder {
         header.link = from?.source
         let thinking = turn.thinking.joined(separator: "\n\n")
         let body = turn.body
-        layout.copyItems = [.init(title: "Copy Reply", text: body)]
-        if !thinking.isEmpty { layout.copyItems.append(.init(title: "Copy Thinking", text: thinking)) }
+        layout.copyItems = [.init(title: L("Copy Reply"), text: body)]
+        if !thinking.isEmpty { layout.copyItems.append(.init(title: L("Copy Thinking"), text: thinking)) }
         layout.accessibilityLabel = AccessibilityText.messageRow(
             role: .assistant, author: AccessibilityText.join([header.name, from?.marker]),
             text: turn.isStreaming ? Self.spokenTail(of: body) : body, timestamp: header.time,
@@ -728,7 +728,7 @@ struct TranscriptLayoutBuilder {
                     let key = "svg-source:\(layout.id):\(ref.cacheKey)"
                     let expanded = self.context.disclosure.isExpanded(key, default: false)
                     let headerHeight = max(TranscriptStyle.lineHeight(self.style.calloutMedium), TranscriptMetrics.iconBox)
-                    stack.add(.thinkingHeader(.init(key: key, title: "SVG source", isStreaming: false, isExpanded: expanded,
+                    stack.add(.thinkingHeader(.init(key: key, title: L("SVG source"), isStreaming: false, isExpanded: expanded,
                                                      symbol: "chevron.left.forwardslash.chevron.right")),
                               height: headerHeight, width: min(width, TranscriptMetrics.maxCardWidth), spacing: 6)
                     guard expanded else { continue }
@@ -805,7 +805,7 @@ struct TranscriptLayoutBuilder {
         let expanded = self.context.disclosure.isExpanded(key, default: streaming)
         let width = min(stack.width, TranscriptMetrics.maxCardWidth)
         let headerHeight = max(TranscriptStyle.lineHeight(self.style.calloutMedium), TranscriptMetrics.iconBox)
-        let title = streaming ? "Thinking…" : "Thinking"
+        let title = streaming ? L("Thinking…") : L("Thinking")
         stack.add(.thinkingHeader(.init(key: key, title: title, isStreaming: streaming, isExpanded: expanded)), height: headerHeight, width: width)
         if expanded { self.thinkingBody(text, width: width, into: &stack, layout: &layout) }
     }
@@ -816,9 +816,9 @@ struct TranscriptLayoutBuilder {
         let expanded = self.context.disclosure.isExpanded(key, default: false)
         let width = min(stack.width, TranscriptMetrics.maxCardWidth)
         let headerHeight = max(TranscriptStyle.lineHeight(self.style.calloutMedium), TranscriptMetrics.iconBox)
-        var title = "Thinking"
+        var title = L("Thinking")
         let count = turn.tools.count
-        if count > 0 { title += " · \(count) tool call\(count == 1 ? "" : "s")" }
+        if count > 0 { title += " · " + (count == 1 ? L("1 tool call") : L("\(count) tool calls")) }
         stack.add(.thinkingHeader(.init(key: key, title: title, isStreaming: false, isExpanded: expanded)), height: headerHeight, width: width)
         guard expanded else { return }
         if !text.isEmpty { self.thinkingBody(text, width: width, into: &stack, layout: &layout) }
@@ -848,7 +848,7 @@ struct TranscriptLayoutBuilder {
         let showsAll = finding || self.context.disclosure.isExpanded(key, default: false)
         let (rows, hidden) = edit.rows(collapsed: !showsAll)
         let inner = max(width - 20, 20)
-        let copySize = TranscriptLabelButton.size(title: "Copied")
+        let copySize = TranscriptLabelButton.size(title: L("Copied"))
         let titleRow = max(TranscriptStyle.lineHeight(self.style.captionSemibold), copySize.height)
         var y = top
         let copyFrame = CGRect(x: width - 10 - copySize.width, y: y + (titleRow - copySize.height) / 2,
@@ -858,7 +858,7 @@ struct TranscriptLayoutBuilder {
         let (text, match) = self.marks.mark(TranscriptDiffText.text(rows), .tool(tool.id))
         let contentHeight = TranscriptText.size(text, width: inner).height
         let visible = min(contentHeight, TranscriptMetrics.diffMaxHeight)
-        let section = TranscriptPart.Tool.Section(title: "Changes", titleY: titleY, text: text,
+        let section = TranscriptPart.Tool.Section(title: L("Changes"), titleY: titleY, text: text,
                                                   frame: CGRect(x: 10, y: y, width: inner, height: visible), contentHeight: contentHeight)
         y += visible
         var toggleTitle: String?
@@ -908,7 +908,7 @@ struct TranscriptLayoutBuilder {
                 TranscriptImageSizes.note(image, for: ref)
                 cells.append((.image(.init(ref: ref, state: .loaded(image))), self.fit(TranscriptImageSizes.size(for: ref), column: columnWidth, maxHeight: maxHeight)))
             } else if loader.hasFailed(ref), let link = Self.webLink(ref) {
-                let title = ref.alt ?? link.host ?? "Open image"
+                let title = ref.alt ?? link.host ?? L("Open image")
                 let textWidth = TranscriptText.naturalWidth(TranscriptText.plain(title, font: self.style.callout, color: TranscriptColors.link))
                 cells.append((.imageLink(title: title, url: link), CGSize(width: min(columnWidth, 10 + 16 + 6 + textWidth + 10), height: linkHeight)))
             } else {
@@ -973,16 +973,16 @@ struct TranscriptLayoutBuilder {
         var noteY = y
         switch self.context.gateway.files.preview(ref) {
         case nil:
-            note = "Loading…"
+            note = L("Loading…")
             y += noteHeight
         case .failed:
-            note = "Couldn’t load this file."
+            note = L("Couldn’t load this file.")
             y += noteHeight
         case .binary:
-            note = "This file isn’t text. Save it to open it."
+            note = L("This file isn’t text. Save it to open it.")
             y += noteHeight
         case let .text(content, truncated):
-            let text = TranscriptText.plain(content.isEmpty ? "(empty file)" : content, font: self.style.captionMono,
+            let text = TranscriptText.plain(content.isEmpty ? L("(empty file)") : content, font: self.style.captionMono,
                                             color: content.isEmpty ? TranscriptColors.secondary : TranscriptColors.label)
             let contentHeight = TranscriptText.size(text, width: inner).height
             let visible = min(contentHeight, TranscriptMetrics.filePreviewMaxHeight)
@@ -992,7 +992,7 @@ struct TranscriptLayoutBuilder {
             if truncated {
                 y += 8
                 noteY = y
-                note = "Showing the start of the file. Save it to see the rest."
+                note = L("Showing the start of the file. Save it to see the rest.")
                 y += noteHeight
             }
         }
@@ -1058,7 +1058,7 @@ extension TranscriptLayoutBuilder {
         let style = self.style
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byWordWrapping
-        let preview = NSAttributedString(string: quote.text ?? "Original message", attributes: [
+        let preview = NSAttributedString(string: quote.text ?? L("Original message"), attributes: [
             .font: style.callout, .foregroundColor: TranscriptColors.secondary, .paragraphStyle: paragraph,
         ])
         let lineHeight = TranscriptStyle.lineHeight(style.callout)
@@ -1115,7 +1115,7 @@ extension TranscriptLayoutBuilder {
                 reactors: group.reactorsText, accessibilityLabel: group.accessibilityLabel)
         }
         if showsAck {
-            let working = "\(self.context.agent.name) is working on this"
+            let working = L("\(self.context.agent.name) is working on this")
             chips.append(.init(emoji: Reactions.ackEmoji, count: 1, includesYou: false, isAck: true,
                                frame: place(Self.chipWidth(emoji: Reactions.ackEmoji, count: 1)),
                                reactors: working, accessibilityLabel: working))
@@ -1137,7 +1137,7 @@ private enum InlineSVGCache {
         defer { lock.unlock() }
         if let hit = refs[source] { return hit }
         let ref = ImageRef(artifactId: nil, base64: Data(source.utf8).base64EncodedString(), url: nil,
-                           mimeType: "image/svg+xml", alt: "SVG image", width: nil, height: nil)
+                           mimeType: "image/svg+xml", alt: L("SVG image"), width: nil, height: nil)
         if refs.count >= limit { refs.removeAll(keepingCapacity: true) }
         refs[source] = ref
         return ref
