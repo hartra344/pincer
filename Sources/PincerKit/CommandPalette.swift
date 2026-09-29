@@ -306,18 +306,19 @@ public enum CommandPalette {
     }
 
     /// "Search Messages for “q”" on the root page, once the query is long enough to search.
-    public static func searchMessagesItem(query: String) -> PaletteItem? {
+    public static func searchMessagesItem(query: String, shortcut: String? = "⇧⌘F") -> PaletteItem? {
         let query = TranscriptSearch.normalized(query)
         guard query.count >= MessageSearch.minimumQueryLength else { return nil }
         return PaletteItem(
             id: "command:searchMessages", title: "Search Messages for “\(query)”", symbol: "text.magnifyingglass",
-            shortcut: "⇧⌘F", section: .commands, action: .searchMessages(query))
+            shortcut: shortcut, section: .commands, action: .searchMessages(query))
     }
 
     /// Ranked root-page results with "Search Messages for “q”" right after the last chat (first
     /// when no chat matches), so Return on a query that names no chat searches messages.
-    public static func addingSearchMessages(to ranked: [PaletteItem], query: String, gatewaySelected: Bool) -> [PaletteItem] {
-        guard gatewaySelected, let item = self.searchMessagesItem(query: query) else { return ranked }
+    public static func addingSearchMessages(to ranked: [PaletteItem], query: String, gatewaySelected: Bool,
+                                            shortcut: String? = "⇧⌘F") -> [PaletteItem] {
+        guard gatewaySelected, let item = self.searchMessagesItem(query: query, shortcut: shortcut) else { return ranked }
         var items = ranked
         let position = items.lastIndex { $0.section == .chats }.map { $0 + 1 } ?? 0
         items.insert(item, at: position)

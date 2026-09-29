@@ -9,7 +9,7 @@ Pincer can read an agent's reply out loud. It uses your gateway's text-to-speech
 
 Right-click a reply (Mac) or long-press it (iPhone and iPad) and choose **Read Aloud**. While it's speaking, a **Speaking** pill appears at the bottom of the chat. Tap it, or choose **Stop Reading Aloud** from the same menu, to stop.
 
-On a Mac, **Read Last Reply Aloud** (<kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>L</kbd>) reads the latest reply in the chat you're looking at. Press it again to stop.
+On a Mac, **Read Last Reply Aloud** (<kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>L</kbd>) reads the latest reply in the chat you're looking at. Press it again to stop. You can change the shortcut in [Settings → Shortcuts](../../reference/keyboard-shortcuts/#change-a-shortcut).
 
 Only one reply speaks at a time. Starting another one stops the first.
 

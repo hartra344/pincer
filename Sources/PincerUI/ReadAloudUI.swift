@@ -66,7 +66,7 @@ private struct ReadAloudCommandButton: View {
     var body: some View {
         let speaking = ReadAloudController.shared.isActive
         Button(speaking ? L("Stop Reading Aloud") : L("Read Last Reply Aloud")) { self.state?.toggleLastReply() }
-            .keyboardShortcut("l", modifiers: [.command, .option])
+            .shortcut(.readAloud)
             .disabled(self.state?.isEnabled != true)
     }
 }

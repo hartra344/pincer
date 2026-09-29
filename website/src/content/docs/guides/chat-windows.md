@@ -37,9 +37,9 @@ Chat windows come back when Pincer relaunches, using macOS window restoration. I
 The main window can show a second chat to the right of the selected one:
 
 - Right-click a chat in the sidebar and choose **Open in Split View**.
-- Or choose **View → Split Right** (<kbd>⌘</kbd> <kbd>\</kbd>) to open the chat you visited most recently next to the current one.
+- Or choose **View → Split Right** (<kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>\</kbd>) to open the chat you visited most recently next to the current one. You can change the shortcut in [Settings → Shortcuts](../../reference/keyboard-shortcuts/#change-a-shortcut).
 
-The left chat keeps the window's title and toolbar. The right chat has a small header with its title and agent, and buttons to **Swap Chats**, **Open in New Window** (macOS) and **Close Split View** (also <kbd>⌘</kbd> <kbd>\</kbd>). Drag the divider to resize the two chats; Pincer remembers the split.
+The left chat keeps the window's title and toolbar. The right chat has a small header with its title and agent, and buttons to **Swap Chats**, **Open in New Window** (macOS) and **Close Split View** (also <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>\</kbd>). Drag the divider to resize the two chats; Pincer remembers the split.
 
 Both chats have their own composer, and the right chat stays loaded and live and isn't notified, just like a chat in its own window. Selecting the right-hand chat in the sidebar moves it to the left, and the chat it replaces moves to the right. Menu commands and links inside either chat act on the left chat. The split also hides on a Mac when the window is too narrow for two chats.
 

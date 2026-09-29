@@ -352,15 +352,15 @@ struct TranscriptFindBar: View {
 
     private var previousButton: some View {
         Button { self.find.previous() } label: { self.stepLabel(L("Find previous"), systemImage: "chevron.up") }
-            .keyboardShortcut("g", modifiers: [.command, .shift])
-            .help(L("Previous match (⇧⌘G)"))
+            .shortcut(.findPrevious)
+            .help(ShortcutCommand.findPrevious.displayShortcut.map { L("Previous match (\($0))") } ?? L("Previous match"))
             .accessibilityIdentifier("find-previous")
     }
 
     private var nextButton: some View {
         Button { self.find.next() } label: { self.stepLabel(L("Find next"), systemImage: "chevron.down") }
-            .keyboardShortcut("g", modifiers: .command)
-            .help(L("Next match (⌘G)"))
+            .shortcut(.findNext)
+            .help(ShortcutCommand.findNext.displayShortcut.map { L("Next match (\($0))") } ?? L("Next match"))
             .accessibilityIdentifier("find-next")
     }
 
@@ -385,19 +385,45 @@ struct TranscriptFindCommands: Commands {
             Button(self.find == nil && self.logsSearch != nil ? L("Find in Logs…") : L("Find in Chat…")) {
                 if let find = self.find { find.present() } else { self.logsSearch?.wrappedValue = true }
             }
-                .keyboardShortcut("f", modifiers: .command)
+                .shortcut(.findInChat)
                 .disabled(self.find == nil && self.logsSearch == nil)
             Button(L("Find Next")) { self.find?.next() }
-                .keyboardShortcut("g", modifiers: .command)
+                .shortcut(.findNext)
                 .disabled(self.find == nil)
             Button(L("Find Previous")) { self.find?.previous() }
-                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .shortcut(.findPrevious)
                 .disabled(self.find == nil)
             Divider()
             Button(L("Reply to Last Message")) { self.replyToLast?.perform() }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .shortcut(.replyToLastMessage)
                 .disabled(self.replyToLast?.isAvailable != true)
+            Button(L("Edit Last Message")) { self.replyToLast?.editLast() }
+                .shortcut(.editLastMessage)
+                .disabled(self.replyToLast?.canRewrite != true)
+            Button(L("Regenerate Last Reply")) { self.replyToLast?.regenerateLast() }
+                .shortcut(.regenerateLastReply)
+                .disabled(self.replyToLast?.canRewrite != true)
         }
     }
 }
 #endif
+
+extension ReplyToLast {
+    /// Only whether the Gateway allows rewinding, so streaming doesn't rebuild the main menu; the
+    /// actions below check the transcript when run and do nothing if no message qualifies.
+    var canRewrite: Bool { self.chat.canRewindMessages }
+
+    /// Edit & Resend on the newest message you can edit.
+    func editLast() {
+        guard let item = self.chat.items.last(where: { self.chat.canEdit($0.id) }) else { return }
+        _ = self.chat.beginEdit(item.id)
+    }
+
+    /// Regenerate on the last reply, when it can be.
+    func regenerateLast() {
+        guard let item = self.chat.items.last(where: { $0.role == .assistant && !$0.isPending }),
+              self.chat.canRegenerate(item.id) else { return }
+        let chat = self.chat
+        Task { await chat.regenerate(item.id) }
+    }
+}
