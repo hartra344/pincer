@@ -44,7 +44,7 @@ $$
 
 Pincer understands the LaTeX that agents usually write: Greek letters and common symbols, superscripts and subscripts, fractions, roots, sums, products and integrals with limits, `\left` and `\right` brackets, accents like `\hat` and `\vec`, `\text`, `\mathbb` and `\mathbf`, and matrices, `cases` and `aligned` rows. An unknown command is shown by name in red, like other LaTeX renderers do. A formula with unbalanced braces stays as source.
 
-Inline math between single dollar signs, like `$x^2$`, is shown as written for now.
+Inline math is drawn in the line of text when it's between single dollar signs, like `$x^2$`, or between `\(` and `\)`. It's drawn a little more compactly than display math, so sums and fractions don't stretch the line. To keep prices and shell variables as text, Pincer only treats a dollar sign as math when the opening `$` is followed by a non-space and the closing `$` follows a non-space and isn't followed by a letter or digit. So "$5 and $10" and `$HOME/$USER` stay as written. Math inside `code` spans is never drawn, and `\$` is always a dollar sign. An inline formula with an unknown command is shown as written.
 
 ## HTML preview
 
@@ -63,7 +63,7 @@ To run the page for real, copy the code and open it in a browser.
 - Tap or click a diagram or formula to open it full size, where you can zoom, save or share it.
 - Choose **Diagram source** or **Math source** under it to show the source it was drawn from, with a **Copy** button.
 - **Copy** on the message still copies the original Markdown, with the source.
-- [Find in chat](../search/) searches the text around a diagram, but not its source.
+- [Find in chat](../search/) searches the text around a diagram or formula, but not its source, including inline math.
 - While a reply is still streaming, a diagram or formula shows as code until its block is complete, and then it's drawn once.
 - VoiceOver reads a diagram as "Mermaid diagram" and a formula as "Math expression". Open the source to hear it.
 
