@@ -93,7 +93,7 @@ actor DemoGateway {
     var prefs: [String: JSONValue] = [:]
     var voice = DemoVoiceState()
     /// Custom group catalog in display order; groups stay until deleted, even when empty.
-    var groups = ["Home", "Personal", "Work", "Preparations", "Day of move"]
+    var groups = ["Home", "Personal", "Reading", "Work", "Preparations", "Day of move"]
     var progressCards: [String: JSONValue] = [:]
     var idempotency: [String: String] = [:]
     var runs: [String: Run] = [:]
@@ -145,6 +145,7 @@ actor DemoGateway {
         self.demoNodes = Self.seedNodes()
         self.artifacts["demo-chart"] = ("image/png", Self.chartPNG())
         self.artifacts["demo-script"] = ("text/x-shellscript", Data(Self.diskScript.utf8))
+        self.artifacts[Self.richRenderingPDFId] = ("application/pdf", Self.richRenderingPDF())
     }
 
     /// A small `commands.list` answer, shaped like the Gateway's `scope: "text"` catalog.

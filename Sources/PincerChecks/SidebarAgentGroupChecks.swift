@@ -85,3 +85,37 @@ func runDemoSidebarAgentGroups() async {
     }
     _ = inMove
 }
+
+/// #372: the demo shows the agent → group → chat tree for more than one agent.
+@MainActor
+func runDemoSidebarHierarchy() async {
+    let gateway = GatewayStore(profile: .demo())
+    gateway.start()
+    gateway.reconnectIfNeeded()
+    let connected = await waitFor("demo for sidebar hierarchy") {
+        gateway.state.isConnected && !gateway.sessions.isEmpty && !gateway.agents.isEmpty
+    }
+    check(connected, "sidebar hierarchy: demo connected")
+    guard connected else { return }
+    defer { gateway.stop() }
+    _ = await waitFor("demo group catalog") { gateway.groupCatalog.contains("Day of move") }
+
+    gateway.organization = .agent
+    let nested = gateway.sections().filter { section in
+        guard case .agent = section.kind else { return false }
+        return section.subsections.contains { !$0.channels.isEmpty }
+    }
+    check(nested.count >= 2, "sidebar hierarchy: ≥2 agents with nested groups holding chats (\(nested.map(\.id)))")
+    for section in nested {
+        check(section.subsections.allSatisfy { sub in
+            if case let .agentGroup(agent, _) = sub.kind { return agent == section.agentId }
+            return false
+        }, "sidebar hierarchy: \(section.id) subsections belong to that agent")
+    }
+
+    // The top of the list (Claw, Scout) shows a nested tree above the fold.
+    for id in ["main", "research"] {
+        let groups = gateway.sections().first { $0.kind == .agent(id) }?.subsections.filter { !$0.channels.isEmpty }.count ?? 0
+        check(groups >= 2, "sidebar hierarchy: \(id) has ≥2 nested groups with chats (\(groups))")
+    }
+}

@@ -24,6 +24,24 @@ struct SidebarModel: Equatable {
         var avatarState = AvatarState.idle
         /// Name of the agent a nested group sits under.
         var agentName: String?
+        /// Chats in a nested group (threads and subagent runs excluded).
+        var chatCount = 0
+
+        /// Outline depth: 0 for an agent or plain section, 1 for a group nested under an agent.
+        var level: Int { self.isSubsection ? 1 : 0 }
+
+        /// VoiceOver value for the disclosure state, which a custom label would otherwise hide.
+        func accessibilityValue(isCollapsed: Bool) -> String { isCollapsed ? L("Collapsed") : L("Expanded") }
+
+        var accessibilityValue: String { self.accessibilityValue(isCollapsed: self.isCollapsed) }
+
+        /// VoiceOver label for an agent header; nil for other sections.
+        var agentAccessibilityLabel: String? {
+            guard case .agent = self.section.kind else { return nil }
+            let label = L("\(self.section.title), agent")
+            let unread = self.isCollapsed ? self.section.unreadCount : 0
+            return unread > 0 ? "\(label), \(L("\(unread) unread"))" : label
+        }
 
         /// A group nested under an agent (by-agent mode).
         var isSubsection: Bool {
@@ -46,11 +64,13 @@ struct SidebarModel: Equatable {
 
         /// VoiceOver label for a nested group header, which has no avatar or agent name to lean on.
         var subsectionAccessibilityLabel: String {
-            var parts = [self.agentName.map { L("\(self.section.title) group in \($0)") } ?? L("\(self.section.title) group")]
+            let title = self.section.title
+            let count = self.chatCount
+            var parts = [self.agentName.map { count == 1 ? L("\(title), group in \($0), 1 chat") : L("\(title), group in \($0), \(count) chats") }
+                ?? (count == 1 ? L("\(title), group, 1 chat") : L("\(title), group, \(count) chats"))]
             if self.isCollapsed {
                 let unread = self.section.unreadCount
                 if unread > 0 { parts.append(L("\(unread) unread")) }
-                parts.append(L("collapsed"))
             }
             return parts.joined(separator: ", ")
         }
@@ -64,7 +84,7 @@ struct SidebarModel: Equatable {
             lhs.id == rhs.id && lhs.isCollapsed == rhs.isCollapsed && lhs.newChatAgent == rhs.newChatAgent && lhs.icon == rhs.icon
                 && lhs.section.title == rhs.section.title && lhs.section.emoji == rhs.section.emoji
                 && lhs.section.kind == rhs.section.kind && lhs.section.unreadCount == rhs.section.unreadCount
-                && lhs.agentName == rhs.agentName && lhs.avatar == rhs.avatar && lhs.avatarState == rhs.avatarState
+                && lhs.agentName == rhs.agentName && lhs.chatCount == rhs.chatCount && lhs.avatar == rhs.avatar && lhs.avatarState == rhs.avatarState
         }
     }
 
@@ -92,6 +112,8 @@ struct SidebarModel: Equatable {
         let avatarStyle: AvatarStyle?
         /// Nesting under the section header: 1 for chats inside a group nested under an agent.
         var depth = 0
+        /// Name of the nested group the chat sits in, if any.
+        var groupName: String?
     }
 
     struct Group: Equatable {
@@ -143,7 +165,7 @@ struct SidebarModel: Equatable {
                 isUnread: row.isUnread, isSubagent: row.isSubagent, agent: agent, companionsEnabled: avatarsOn)
             return (indicator, avatar, avatar != nil && avatarsOn ? AvatarSettings.style(for: agent) : nil)
         }
-        func entries(_ channels: [SidebarChannel], depth: Int) -> [Entry] {
+        func entries(_ channels: [SidebarChannel], depth: Int, groupName: String? = nil) -> [Entry] {
             var entries: [Entry] = []
             for channel in channels {
                 let expanded = expandedThreads.contains(channel.row.key)
@@ -162,7 +184,7 @@ struct SidebarModel: Equatable {
                     threadsExpanded: expanded,
                     showSubagentRuns: showSubagentRuns,
                     preview: showPreviews ? channel.row.preview : nil,
-                    working: channelWorking.0, avatar: channelWorking.1, avatarStyle: channelWorking.2, depth: depth))
+                    working: channelWorking.0, avatar: channelWorking.1, avatarStyle: channelWorking.2, depth: depth, groupName: groupName))
                 // Like Discord, helper runs live inside the conversation (as "Open run" on their
                 // tool call) unless the sidebar is set to list them.
                 let visible: [SessionRow]
@@ -181,7 +203,7 @@ struct SidebarModel: Equatable {
                                          runningSubagents: 0, hiddenUnreadThreads: 0, threadsExpanded: false,
                                          showSubagentRuns: showSubagentRuns,
                                          preview: showPreviews ? thread.preview : nil,
-                                         working: threadWorking.0, avatar: threadWorking.1, avatarStyle: threadWorking.2, depth: depth))
+                                         working: threadWorking.0, avatar: threadWorking.1, avatarStyle: threadWorking.2, depth: depth, groupName: groupName))
                 }
             }
             return entries
@@ -195,6 +217,8 @@ struct SidebarModel: Equatable {
             var header = Header(id: self.headerId(section.id), section: section,
                                 isCollapsed: collapsed.contains(section.id), newChatAgent: newChatAgent, icon: icon)
             if depth > 0, let agentId = section.agentId { header.agentName = gateway.agent(agentId).name }
+            let nestedName: String? = depth > 0 ? section.title : nil
+            if depth > 0 { header.chatCount = section.channels.count }
             if avatarsOn, case let .agent(agentId) = section.kind {
                 header.avatar = AvatarSettings.style(for: gateway.agent(agentId))
                 let rows = section.allChannels.flatMap { [$0.row] + $0.threads }
@@ -205,12 +229,12 @@ struct SidebarModel: Equatable {
                 }
             }
             if section.subsections.isEmpty {
-                return Group(header: header, entries: entries(section.channels, depth: depth))
+                return Group(header: header, entries: entries(section.channels, depth: depth, groupName: nestedName))
             }
             let leading = min(section.leadingChannelCount, section.channels.count)
             return Group(header: header,
-                         entries: entries(Array(section.channels[leading...]), depth: depth),
-                         leadingEntries: entries(Array(section.channels[..<leading]), depth: depth),
+                         entries: entries(Array(section.channels[leading...]), depth: depth, groupName: nestedName),
+                         leadingEntries: entries(Array(section.channels[..<leading]), depth: depth, groupName: nestedName),
                          subgroups: section.subsections.map { group($0, depth: depth + 1) })
         }
         var model = SidebarModel()
