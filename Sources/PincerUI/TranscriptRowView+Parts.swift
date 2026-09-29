@@ -643,8 +643,10 @@ final class TranscriptCodeView: TranscriptBaseView {
     private let scroller = TranscriptScroller(axis: .horizontal)
     private let textView = TranscriptTextView(wraps: false)
     private let copyButton = TranscriptLabelButton()
+    private let previewButton = TranscriptLabelButton()
     private var copiedToken = 0
     private var identity: String?
+    private weak var actions: TranscriptRowActions?
 
     var extraCopyItems: [TranscriptRowLayout.CopyItem] {
         self.code.map { [.init(title: L("Copy Code"), text: $0.code)] } ?? []
@@ -657,6 +659,17 @@ final class TranscriptCodeView: TranscriptBaseView {
         self.addSubview(self.copyButton)
         self.copyButton.set(title: L("Copy"), symbol: "doc.on.doc")
         self.copyButton.onTap = { [weak self] in self?.copy() }
+        self.addSubview(self.previewButton)
+        self.previewButton.set(title: L("Preview"), symbol: "eye")
+        self.previewButton.onTap = { [weak self] in
+            guard let self, let code = self.code else { return }
+            self.actions?.previewHTML(code.code)
+        }
+        self.previewButton.isHidden = true
+    }
+
+    private var showsPreview: Bool {
+        self.code.map { HTMLPreview.isPreviewable(language: $0.language, code: $0.code) } ?? false
     }
 
     override func configure(_ part: TranscriptPart, row: TranscriptRowLayout, actions: TranscriptRowActions) {
@@ -670,6 +683,9 @@ final class TranscriptCodeView: TranscriptBaseView {
         }
         let redraw = self.code?.language != code.language || self.code?.headerHeight != code.headerHeight
         self.code = code
+        self.actions = actions
+        let preview = self.showsPreview
+        if self.previewButton.isHidden == preview { self.previewButton.isHidden = !preview }
         self.textView.copyItems = row.copyItems
         self.textView.extraItems = self.extraCopyItems
         self.textView.set(code.text, identity: row.id)
@@ -694,6 +710,11 @@ final class TranscriptCodeView: TranscriptBaseView {
         let button = self.copyButton.buttonSize
         self.copyButton.frame = CGRect(x: bounds.width - 10 - button.width, y: (code.headerHeight - button.height) / 2,
                                        width: button.width, height: button.height)
+        if !self.previewButton.isHidden {
+            let preview = self.previewButton.buttonSize
+            self.previewButton.frame = CGRect(x: self.copyButton.frame.minX - 6 - preview.width, y: (code.headerHeight - preview.height) / 2,
+                                              width: preview.width, height: preview.height)
+        }
         let top = code.headerHeight + 1
         self.scroller.frame = CGRect(x: 1, y: top, width: max(bounds.width - 2, 1), height: max(bounds.height - top - 1, 1))
         self.scroller.setContentSize(CGSize(width: code.textSize.width + 20, height: code.textSize.height + 19))
@@ -715,7 +736,8 @@ final class TranscriptCodeView: TranscriptBaseView {
         let font = TranscriptStyle.shared.captionMono
         let label = singleLine(code.language, font, TranscriptColors.secondary)
         label.drawLine(at: CGPoint(x: 10, y: (code.headerHeight - TranscriptStyle.lineHeight(font)) / 2),
-                       width: bounds.width - 30 - self.copyButton.buttonSize.width, font: font)
+                       width: bounds.width - 30 - self.copyButton.buttonSize.width
+                           - (self.showsPreview ? self.previewButton.buttonSize.width + 6 : 0), font: font)
     }
 
     #if os(macOS)
@@ -1357,6 +1379,13 @@ final class TranscriptImagePartView: TranscriptTapView {
         guard case let .image(image) = part else { return }
         self.image = image
         self.tooLarge = false
+        if self.imageLayer.masksToBounds == image.plain {
+            withoutLayerAnimations {
+                self.imageLayer.masksToBounds = !image.plain
+                self.imageLayer.cornerRadius = image.plain ? 0 : 10
+                self.imageLayer.borderWidth = image.plain ? 0 : 1
+            }
+        }
         if case .failed = image.state {
             self.tooLarge = (actions as? TranscriptRenderer)?.context.gateway.images.failure(image.ref) == .tooLarge
         }
