@@ -128,6 +128,7 @@ struct TranscriptList: UIViewRepresentable {
                 self.revealPending()
                 self.loadOlderIfShown()
             }
+            if newRows.count != self.rows.count { self.olderRowWasVisible = false }
             guard let view = self.collectionView else { return }
             let top = TranscriptLayout.verticalInset + max(0, insets.top)
             let bottom = TranscriptLayout.verticalInset + max(0, insets.bottom)
@@ -607,10 +608,17 @@ struct TranscriptList: UIViewRepresentable {
             self.loadOlderIfShown()
         }
 
+        private var olderRowWasVisible = false
+
+        /// Pages older history in when the loading row comes into view (once per appearance; a
+        /// prepend resets it, so a short transcript keeps loading).
         private func loadOlderIfShown() {
-            guard case .loadingOlder? = self.rows.first, let view = self.collectionView,
-                  view.indexPathsForVisibleItems.contains(where: { $0.item == 0 })
-            else { return }
+            var visible = false
+            if case .loadingOlder? = self.rows.first, let view = self.collectionView {
+                visible = view.indexPathsForVisibleItems.contains { $0.item == 0 }
+            }
+            defer { self.olderRowWasVisible = visible }
+            guard visible, !self.olderRowWasVisible else { return }
             self.renderer.loadOlderIfShown()
         }
 
@@ -650,8 +658,11 @@ struct TranscriptList: UIViewRepresentable {
             guard let view = self.collectionView, !self.rows.isEmpty else { return .bottom }
             let offset = view.contentOffset.y
             if self.maxOffset - offset <= stickDistance { return .bottom }
-            if allowTop, offset - self.minOffset <= 1 { return .top }
-            guard let row = self.row(at: offset + view.bounds.height / 2) else { return .bottom }
+            // The loading row is never the anchor: history prepended above it would move the reader.
+            let loadingFirst: Bool = if case .loadingOlder = self.rows[0] { true } else { false }
+            if allowTop, !loadingFirst, offset - self.minOffset <= 1 { return .top }
+            guard var row = self.row(at: offset + view.bounds.height / 2) else { return .bottom }
+            if loadingFirst, row == 0, self.rows.count > 1 { row = 1 }
             return .row(self.rows[row].id, self.tops[row] - offset)
         }
 

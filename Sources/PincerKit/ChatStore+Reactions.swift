@@ -62,7 +62,7 @@ extension ChatStore {
             if self.message(withId: id) != nil { return true }
         }
         if self.message(withId: id) != nil { return true }
-        self.notice = self.hasMoreHistory
+        self.notice = self.hasOlderItems
             ? "The original message is too far back to show."
             : "The original message isn't in this chat's history anymore."
         return false

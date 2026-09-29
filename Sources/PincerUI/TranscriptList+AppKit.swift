@@ -148,6 +148,7 @@ struct TranscriptList: NSViewRepresentable {
                 self.revealPending()
                 self.loadOlderIfShown()
             }
+            if newRows.count != self.rows.count { self.olderRowWasVisible = false }
             guard let table, let scroll = self.scrollView else { return }
             let top = TranscriptLayout.verticalInset + max(0, insets.top)
             let bottom = TranscriptLayout.verticalInset + max(0, insets.bottom)
@@ -193,10 +194,15 @@ struct TranscriptList: NSViewRepresentable {
             if oldIds != newIds {
                 var removals = IndexSet()
                 var insertions = IndexSet()
-                for change in newIds.difference(from: oldIds) {
-                    switch change {
-                    case let .remove(offset, _, _): removals.insert(offset)
-                    case let .insert(offset, _, _): insertions.insert(offset)
+                if newIds.count > oldIds.count, newIds.suffix(oldIds.count).elementsEqual(oldIds) {
+                    // Older history arrived above: no need to diff thousands of rows.
+                    insertions = IndexSet(integersIn: 0..<(newIds.count - oldIds.count))
+                } else {
+                    for change in newIds.difference(from: oldIds) {
+                        switch change {
+                        case let .remove(offset, _, _): removals.insert(offset)
+                        case let .insert(offset, _, _): insertions.insert(offset)
+                        }
                     }
                 }
                 if insertions.contains(where: { newRows[$0].isPendingSend }) { self.anchor = .bottom }
@@ -567,9 +573,18 @@ struct TranscriptList: NSViewRepresentable {
             self.loadOlderIfShown()
         }
 
+        private var olderRowWasVisible = false
+
+        /// Pages older history in when the loading row comes into view (once per appearance; a
+        /// prepend resets it, so a short transcript keeps loading).
         private func loadOlderIfShown() {
-            guard case .loadingOlder? = self.rows.first, let table, table.rows(in: table.visibleRect).location == 0
-            else { return }
+            var visible = false
+            if case .loadingOlder? = self.rows.first, let table {
+                let range = table.rows(in: table.visibleRect)
+                visible = range.length > 0 && range.location == 0
+            }
+            defer { self.olderRowWasVisible = visible }
+            guard visible, !self.olderRowWasVisible else { return }
             self.renderer.loadOlderIfShown()
         }
 
@@ -601,9 +616,12 @@ struct TranscriptList: NSViewRepresentable {
             let bounds = clip.bounds
             let range = self.offsetRange()
             if range.upperBound - bounds.minY <= stickDistance { return .bottom }
-            if allowTop, bounds.minY - range.lowerBound <= 1 { return .top }
+            // The loading row is never the anchor: history prepended above it would move the reader.
+            let loadingFirst: Bool = if case .loadingOlder = self.rows[0] { true } else { false }
+            if allowTop, !loadingFirst, bounds.minY - range.lowerBound <= 1 { return .top }
             var row = table.row(at: NSPoint(x: 1, y: bounds.midY))
             if row < 0 { row = bounds.midY < 0 ? 0 : self.rows.count - 1 }
+            if loadingFirst, row == 0, self.rows.count > 1 { row = 1 }
             return .row(self.rows[row].id, table.rect(ofRow: row).minY - bounds.minY)
         }
 

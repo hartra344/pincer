@@ -96,8 +96,10 @@ extension ChatStore {
     func restoreFromCache() async {
         guard !self.cacheChecked else { return }
         self.cacheChecked = true
-        let cached = await TranscriptCache.loadNewest(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
-                                                      limit: self.windowLimit)
+        let loaded = await TranscriptCache.loadNewest(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
+                                                      limit: self.windowLimit + Self.windowExtension)
+        let (windowed, moreInCache) = Self.window(loaded.items, limit: self.windowLimit)
+        let cached = (items: windowed, complete: loaded.complete, outcome: loaded.outcome)
         let outcome = cached.outcome
         self.cacheOutcome = outcome
         if case .unavailable = outcome {
@@ -111,8 +113,6 @@ extension ChatStore {
             self.cacheUnreadable = false
             return
         }
-        // A full window may have older items behind it (or exactly end at the start; the first page finds out).
-        let moreInCache = cached.items.count >= self.windowLimit
         guard self.items.allSatisfy(\.isPending) else {
             self.mergeCached(cached.items, complete: cached.complete, moreInCache: moreInCache)
             return
@@ -120,7 +120,7 @@ extension ChatStore {
         self.cacheUnreadable = false
         // With the whole cache in memory, item count never exceeds the raw message count, so this
         // offset can only overlap (deduped by id), never skip; the first older page's `nextOffset`
-        // makes it exact again. Behind a window the offset is set once paging reaches the cache start.
+        // makes it exact again. Behind a window the offset is unset until paging reaches the cache start.
         self.olderOffset = moreInCache ? nil : cached.items.count
         self.olderInCache = moreInCache
         self.hasMoreHistory = !cached.complete
@@ -140,7 +140,6 @@ extension ChatStore {
               let cut = cachedItems.firstIndex(where: { $0.id == firstLoaded.id })
         else { return }
         let older = Array(cachedItems[..<cut]).filter { !loaded.contains($0.id) }
-        // The window's own start has more cached behind it only if it wasn't cut at the overlap.
         let more = moreInCache
         guard !older.isEmpty || more else { return }
         let committed = self.items.filter { !$0.isPending }.count
@@ -186,30 +185,33 @@ extension ChatStore {
     }
 
     /// Brings the on-disk cache up to date with the full history, without touching the UI.
-    func fillCache() async {
+    /// `generation` is the cache generation this fill started under; a rewind or delete since
+    /// then makes it discard what it fetched instead of saving it.
+    func fillCache(generation: Int? = nil) async {
         await self.restoreFromCache()
         guard !self.cacheUnreadable, let gateway, gateway.state.isConnected else { return }
         var params = self.params(keyName: "sessionKey")
         params["limit"] = .number(Double(self.historyLimit))
         guard let result = try? await gateway.connection.request("chat.history", .object(params), timeout: 30) else { return }
         let parsed = await Self.parseDetached(result["messages"]?.array ?? [], fallbackBase: 0)
+        guard !Task.isCancelled else { return }
         self.apply(history: result, parsed: parsed)
         self.live = nil
         self.hasLoaded = true
         await self.loadAllCached()
         // Older items past the retention limit would be dropped anyway.
-        while self.hasMoreHistory, !Task.isCancelled, self.committedCount < TranscriptCache.maxItems {
+        while self.hasOlderItems, !Task.isCancelled, self.committedCount < TranscriptCache.maxItems {
             guard self.gateway?.appIsActive ?? false else { return }
             guard await self.loadOlder() else { return }
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, generation.map({ gateway.cacheGeneration(of: self.sessionKey) == $0 }) ?? true else { return }
         await self.saveSnapshot()
     }
 
     var committedCount: Int { self.items.lazy.filter { !$0.isPending }.count }
 
     func snapshot() -> TranscriptCache.Snapshot {
-        Self.snapshot(items: self.items, hasMoreHistory: self.hasMoreHistory,
+        Self.snapshot(items: self.items, hasMoreHistory: self.hasMoreHistory || self.olderInCache,
                       activityMs: self.gateway?.sessions[self.sessionKey]?.activityMs)
     }
 
@@ -286,37 +288,34 @@ extension ChatStore {
     }
 
     /// Brings the whole history to disk (and the search index) right after opening, in a headless
-    /// store, so this one keeps only its window in memory. Resumes on reconnect if it was cut short.
+    /// store shared per chat, so this one keeps only its window in memory. Resumes on the next load
+    /// if it was cut short.
     func startBackfill() {
-        guard self.backfillTask == nil, self.hasMoreHistory, !self.headless, let gateway = self.gateway else { return }
-        self.backfillTask = Task { [weak self, sessionKey, agentId] in
-            let filler = ChatStore(sessionKey: sessionKey, agentId: agentId, gateway: gateway, headless: true)
-            await filler.fillCache()
-            guard !Task.isCancelled, let self else { return }
-            self.backfillTask = nil
-            await self.adoptBackfilledCache()
-        }
+        guard self.hasMoreHistory, !self.headless, !self.cachingStopped else { return }
+        self.gateway?.startHeadlessFill(sessionKey: self.sessionKey, agentId: self.agentId)
     }
 
-    /// The background fill finished: the cache may now hold items older than the loaded window.
-    private func adoptBackfilledCache() async {
-        guard !self.cachingStopped, !self.isDehydrated, !self.olderInCache,
-              let first = self.items.first(where: { !$0.isPending })
-        else { return }
-        let older = await TranscriptCache.loadOlder(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
-                                                    before: first.id, limit: 1)
-        guard !self.cachingStopped, !self.isDehydrated, !self.olderInCache,
-              Self.cacheReadable(older.outcome), !older.items.isEmpty
-        else { return }
-        self.olderInCache = true
-        self.olderOffset = nil
-        self.hasPagedOlder = true
-        if let meta = await TranscriptCache.meta(gatewayId: self.gatewayId, sessionKey: self.sessionKey), meta.complete {
-            self.hasMoreHistory = false
+    /// The background fill finished: the cache may now hold items older than the loaded window, and
+    /// says whether it is complete. The window is saved over the filler's write, keeping the older part.
+    func adoptFilledCache() async {
+        guard !self.headless, !self.cachingStopped, !self.isDehydrated, self.hasLoaded else { return }
+        if !self.olderInCache, let first = self.items.first(where: { !$0.isPending }) {
+            let older = await TranscriptCache.loadOlder(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
+                                                        before: first.id, limit: 1)
+            guard !self.cachingStopped, !self.isDehydrated, !self.olderInCache else { return }
+            if Self.cacheReadable(older.outcome), !older.items.isEmpty {
+                self.olderInCache = true
+                self.hasPagedOlder = true
+                self.olderOffset = nil
+            }
         }
-        // The filler's save may lack what this store already saved; write the window over it, keeping the older part.
+        if let meta = await TranscriptCache.meta(gatewayId: self.gatewayId, sessionKey: self.sessionKey) {
+            self.hasMoreHistory = !meta.complete
+        }
+        guard !self.cachingStopped, !self.isDehydrated, !self.cacheUnreadable else { return }
+        self.saveTask?.cancel()
         self.savedState = nil
-        self.scheduleSave()
+        await self.saveSnapshot()
     }
 
     /// Prepends the next older page, from the cache while it holds older items and then from the
@@ -331,7 +330,6 @@ extension ChatStore {
         // Concurrent callers share the in-flight page rather than returning early and spinning.
         if let inFlight = self.olderTask { return await inFlight.value }
         guard self.hasOlderItems else { return true }
-        guard self.olderInCache || self.olderOffset != nil else { return false }
         self.isLoadingOlder = true
         let task = Task {
             let ok = self.olderInCache ? await self.loadCachedOlderPage(limit: cachePageSize) : await self.fetchOlderPage()
@@ -388,8 +386,25 @@ extension ChatStore {
         let committed = items.indices.filter { !items[$0].isPending }
         guard limit >= 0, committed.count > limit else { return 0 }
         let start = limit == 0 ? items.count : committed[committed.count - limit]
-        return items[start...].firstIndex { $0.role == .user && !$0.isPending } ?? min(start, items.count)
+        return items[start...].firstIndex { $0.startsWindow } ?? min(start, items.count)
     }
+
+    /// How far back a restored window may reach for a turn start.
+    nonisolated static let windowExtension = 200
+
+    /// The newest `limit` items of what `loadNewest` returned (which asked for `limit + windowExtension`),
+    /// starting at a turn start with a transcript id, and whether more is cached before it.
+    nonisolated static func window(_ items: [ChatItem], limit: Int) -> (items: [ChatItem], more: Bool) {
+        guard items.count > limit else { return (items, false) }
+        let start = items.count - limit
+        let lower = max(0, start - windowExtension)
+        let back = (lower...start).reversed().first { items[$0].startsWindow }
+        let cut = back ?? items[start...].firstIndex { $0.startsWindow } ?? start
+        return (Array(items[cut...]), cut > 0 || items.count >= limit + windowExtension)
+    }
+
+    /// For the UI, e.g. once Find closes: trims if the chat is idle and not selected.
+    public func trimWhenIdle() async { await self.trimToWindow() }
 
     /// Drops the oldest committed items beyond `windowLimit` from a chat that isn't in use. What's
     /// dropped stays on disk and pages back in through `loadOlder`.
@@ -416,17 +431,20 @@ extension ChatStore {
         }
     }
 
-    /// Warm chats may be trimmed too: only a selected or busy chat is left alone.
+    /// Warm chats may be trimmed too: only a selected, running, locating or paging chat is left alone.
     private var canTrim: Bool {
+        let state = self.residencySnapshot
         guard !self.headless, self.isHydrated, !self.cachingStopped, !self.cacheUnreadable, self.olderTask == nil,
-              !self.residencySnapshot.isPinned,
+              !state.isSelected, !state.isRunning, !state.isLocatingReply, !state.isLoadingOlder,
               TranscriptCache.file(gatewayId: self.gatewayId, sessionKey: self.sessionKey) != nil
         else { return false }
         return true
     }
 
     func fetchOlderPage() async -> Bool {
-        guard let offset = self.olderOffset, let gateway, gateway.state.isConnected else { return false }
+        // Unset behind a window: the whole cached suffix is in memory by then, so its count is the offset.
+        let offset = self.olderOffset ?? self.committedCount
+        guard let gateway, gateway.state.isConnected else { return false }
         var params = self.params(keyName: "sessionKey")
         params["limit"] = .number(Double(self.historyLimit))
         params["offset"] = .number(Double(offset))
@@ -489,6 +507,7 @@ extension ChatStore {
             self.olderOffset = history["nextOffset"]?.int ?? messages.count
             self.olderInCache = false
             self.hasMoreHistory = history["hasMore"]?.bool ?? (messages.count >= self.historyLimit)
+            self.startBackfill()
         }
         let merged = older + parsed + pending
         if merged != self.items { self.items = merged }
@@ -573,4 +592,9 @@ extension ChatStore {
             await self?.load(force: true)
         }
     }
+}
+
+private extension ChatItem {
+    /// Where a windowed transcript may begin: a committed user message that a history refresh can match by id.
+    var startsWindow: Bool { self.role == .user && !self.isPending && self.transcriptId != nil }
 }

@@ -121,6 +121,11 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var didPickInitialChat = false
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
+    /// Background full-history fills, one per chat, shared by the prefetch and the open chat.
+    @ObservationIgnored private var headlessFills: [String: (id: UUID, task: Task<Void, Never>)] = [:]
+    /// Bumped when a chat's cached transcript is removed or rewritten by the Gateway, so a fill that
+    /// began before can't save its stale history over the new one.
+    @ObservationIgnored private var cacheGenerations: [String: Int] = [:]
     /// Whether the app is in the foreground, set from `AppModel.appIsActive`. Background prefetch
     /// stops while it's false and starts again on resume.
     public var appIsActive = true {
@@ -346,6 +351,7 @@ public final class GatewayStore: Identifiable {
         self.eventBuffer?.finish()
         self.eventBuffer = nil
         self.prefetchTask?.cancel()
+        for fill in self.headlessFills.values { fill.task.cancel() }
         self.reconcileTask?.cancel()
         self.bootstrapTask?.cancel()
         self.bootstrapTask = nil
@@ -356,6 +362,7 @@ public final class GatewayStore: Identifiable {
     /// check can clear a cached chat without it being saved back.
     public func settlePrefetch() async {
         await self.prefetchTask?.value
+        for fill in self.headlessFills.values { await fill.task.value }
         await TranscriptCache.flush(gatewayId: self.id)
     }
 
@@ -637,10 +644,42 @@ public final class GatewayStore: Identifiable {
                 let meta = await TranscriptCache.meta(gatewayId: self.id, sessionKey: row.key)
                 if Self.prefetchIsFresh(meta, activityMs: row.activityMs) { continue }
                 fetched += 1
-                let store = ChatStore(sessionKey: row.key, agentId: row.agentId, gateway: self, headless: true)
-                await store.fillCache()
+                await self.startHeadlessFill(sessionKey: row.key, agentId: row.agentId).value
             }
         }
+    }
+
+    func cacheGeneration(of key: String) -> Int { self.cacheGenerations[key, default: 0] }
+
+    /// Caches the chat's full history in a headless store, off the UI. One fill runs per chat at a
+    /// time; callers share it. When it finishes, the open chat (if any) picks up what it wrote.
+    @discardableResult
+    func startHeadlessFill(sessionKey key: String, agentId: String?) -> Task<Void, Never> {
+        if let running = self.headlessFills[key] { return running.task }
+        let generation = self.cacheGeneration(of: key)
+        let fillId = UUID()
+        let task = Task { [weak self] in
+            guard let self else { return }
+            let store = ChatStore(sessionKey: key, agentId: agentId, gateway: self, headless: true)
+            store.windowLimit = TranscriptCache.maxItems
+            await store.fillCache(generation: generation)
+            if self.headlessFills[key]?.id == fillId { self.headlessFills[key] = nil }
+            guard !Task.isCancelled, self.cacheGeneration(of: key) == generation else { return }
+            await self.chats[key]?.adoptFilledCache()
+        }
+        self.headlessFills[key] = (fillId, task)
+        return task
+    }
+
+    /// The chat's cached transcript is about to be removed or replaced (delete, rewind, branch
+    /// switch, recovery): stops its background fill, waits for it to finish, and invalidates
+    /// anything it would still write. Call before clearing the cache.
+    func cancelHeadlessFill(_ key: String) async {
+        self.cacheGenerations[key, default: 0] += 1
+        guard let fill = self.headlessFills[key] else { return }
+        fill.task.cancel()
+        await fill.task.value
+        if self.headlessFills[key]?.id == fill.id { self.headlessFills[key] = nil }
     }
 
     private var listParams: [String: JSONValue] {
