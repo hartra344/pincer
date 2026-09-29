@@ -34,8 +34,13 @@ enum TranscriptText {
         let tone: Tone
     }
 
-    private static var segmentCache: [Key: [Segment]] = [:]
+    static let segmentCapacity = 3000
+
+    private static var segmentCache = LRUCache<Key, [Segment]>(capacity: TranscriptText.segmentCapacity)
     private static var cacheGeneration = -1
+
+    /// Number of cached committed-message segment lists, for tests.
+    static var segmentCacheCount: Int { self.segmentCache.count }
 
     // MARK: Building
 
@@ -45,11 +50,110 @@ enum TranscriptText {
             self.cacheGeneration = TranscriptStyle.generation
         }
         let key = Key(source: source, tone: tone)
-        if let cached = self.segmentCache[key] { return cached }
+        if let cached = self.segmentCache.value(for: key) { return cached }
         let segments = self.build(MarkdownCache.blocks(source), tone: tone)
-        if self.segmentCache.count > 3000 { self.segmentCache.removeAll(keepingCapacity: true) }
-        self.segmentCache[key] = segments
+        self.segmentCache.set(segments, for: key)
         return segments
+    }
+
+    // MARK: Live rows
+
+    /// One piece of a streaming message. Frozen pieces are built once and keep their identity across
+    /// flushes; the tail is rebuilt every time.
+    struct LiveSegment {
+        let segment: Segment
+        let isFrozen: Bool
+        /// Extra space above, so the split reads like the single view a committed message gets.
+        let extraSpacing: CGFloat
+    }
+
+    private struct FrozenChunk {
+        let segments: [Segment]
+        let startsWithHeading: Bool
+    }
+
+    private struct HeightKey: Hashable {
+        let object: ObjectIdentifier
+        let width: CGFloat
+        let exact: Bool
+    }
+
+    private static var liveRow: String?
+    private static var liveGeneration = -1
+    private static var frozenChunks: [Key: FrozenChunk] = [:]
+    private static var frozenHeights: [HeightKey: (text: NSAttributedString, height: CGFloat)] = [:]
+
+    /// Entries in the per-live-row memos, for tests.
+    static var liveMemoCount: (chunks: Int, heights: Int) { (self.frozenChunks.count, self.frozenHeights.count) }
+
+    /// Forgets a live row's memos once it commits (or another row starts streaming).
+    static func endLive(row: String) {
+        guard self.liveRow == row else { return }
+        self.resetLive(row: nil)
+    }
+
+    private static func resetLive(row: String?) {
+        self.liveRow = row
+        self.liveGeneration = TranscriptStyle.generation
+        self.frozenChunks.removeAll()
+        self.frozenHeights.removeAll()
+    }
+
+    /// A streaming message as frozen chunks plus a fresh tail. Never touches the shared caches.
+    static func liveMarkdown(_ source: String, tone: Tone, row: String) -> [LiveSegment] {
+        if self.liveRow != row || self.liveGeneration != TranscriptStyle.generation { self.resetLive(row: row) }
+        let cuts = MarkdownBlock.streamingFreezePoints(source)
+        var result: [LiveSegment] = []
+        var previousEndsWithText = false
+        var start = source.startIndex
+        func add(_ chunk: FrozenChunk?, tail: [Segment] = [], startsWithHeading: Bool = false) {
+            let segments = chunk?.segments ?? tail
+            let heading = chunk?.startsWithHeading ?? startsWithHeading
+            for (index, segment) in segments.enumerated() {
+                var extra: CGFloat = 0
+                if index == 0, heading, previousEndsWithText, case .text = segment { extra = 2 }
+                result.append(LiveSegment(segment: segment, isFrozen: chunk != nil, extraSpacing: extra))
+            }
+            if let last = segments.last {
+                if case .text = last { previousEndsWithText = true } else { previousEndsWithText = false }
+            }
+        }
+        for cut in cuts where cut > start && cut <= source.endIndex {
+            let text = String(source[start..<cut])
+            start = cut
+            let key = Key(source: text, tone: tone)
+            let chunk: FrozenChunk
+            if let known = self.frozenChunks[key] {
+                chunk = known
+            } else {
+                let blocks = MarkdownBlock.parse(text)
+                let built = self.build(blocks, tone: tone, cached: false)
+                var heading = false
+                if case .heading = blocks.first { heading = true }
+                chunk = FrozenChunk(segments: built, startsWithHeading: heading)
+                self.frozenChunks[key] = chunk
+            }
+            add(chunk)
+        }
+        let tail = String(source[start...])
+        if !tail.isEmpty {
+            let blocks = MarkdownBlock.parse(tail)
+            var heading = false
+            if case .heading = blocks.first { heading = true }
+            add(nil, tail: self.build(blocks, tone: tone, cached: false), startsWithHeading: heading)
+        }
+        return result
+    }
+
+    /// Size of a live segment's text. Frozen text is measured once per width. Text runs report
+    /// their exact height, so many small views add up to what one committed view measures.
+    static func liveSize(_ string: NSAttributedString, width: CGFloat, frozen: Bool, exact: Bool) -> CGSize {
+        guard frozen else { return self.size(string, width: width, exact: exact) }
+        let key = HeightKey(object: ObjectIdentifier(string), width: width, exact: exact)
+        if let known = self.frozenHeights[key] { return CGSize(width: width, height: known.height) }
+        let size = self.size(string, width: width, exact: exact)
+        self.frozenHeights[key] = (string, size.height)
+        return size
     }
 
     static func color(for tone: Tone) -> PColor {
@@ -60,7 +164,7 @@ enum TranscriptText {
         }
     }
 
-    private static func build(_ blocks: [MarkdownBlock], tone: Tone) -> [Segment] {
+    private static func build(_ blocks: [MarkdownBlock], tone: Tone, cached: Bool = true) -> [Segment] {
         let style = TranscriptStyle.shared
         let color = self.color(for: tone)
         var segments: [Segment] = []
@@ -87,10 +191,10 @@ enum TranscriptText {
         for block in blocks {
             switch block {
             case let .paragraph(text):
-                append(self.inline(text, font: style.body, color: color), spacingBefore: TranscriptMetrics.blockSpacing)
+                append(self.inline(text, font: style.body, color: color, cached: cached), spacingBefore: TranscriptMetrics.blockSpacing)
             case let .heading(level, text):
                 let font = level == 1 ? style.title2 : level == 2 ? style.title3 : style.headline
-                append(self.inline(text, font: font, color: color), spacingBefore: TranscriptMetrics.blockSpacing + 2)
+                append(self.inline(text, font: font, color: color, cached: cached), spacingBefore: TranscriptMetrics.blockSpacing + 2)
             case let .list(items, ordered):
                 let markers = items.indices.map { ordered ? "\($0 + 1)." : "•" }
                 let markerAttributes: [NSAttributedString.Key: Any] = [.font: style.listMarker, .foregroundColor: TranscriptColors.secondary]
@@ -100,7 +204,7 @@ enum TranscriptText {
                     let textStart = indent + markerWidth + 6
                     let line = NSMutableAttributedString(string: markers[index], attributes: markerAttributes)
                     line.append(NSAttributedString(string: "\t", attributes: [.font: style.body]))
-                    line.append(self.inline(item.text, font: style.body, color: color))
+                    line.append(self.inline(item.text, font: style.body, color: color, cached: cached))
                     append(line, spacingBefore: index == 0 ? TranscriptMetrics.blockSpacing : 4) { paragraph in
                         paragraph.firstLineHeadIndent = indent
                         paragraph.headIndent = textStart
@@ -110,7 +214,7 @@ enum TranscriptText {
                 }
             case let .quote(text):
                 flush()
-                let quote = self.inline(text, font: style.body, color: TranscriptColors.secondary)
+                let quote = self.inline(text, font: style.body, color: TranscriptColors.secondary, cached: cached)
                 segments.append(.quote(quote))
             case let .code(language, code):
                 flush()
@@ -125,7 +229,7 @@ enum TranscriptText {
                 func row(_ cells: [String], font: PFont) -> [NSAttributedString] {
                     (0..<columns).map { column in
                         let text = column < cells.count ? cells[column] : ""
-                        let cell = self.inline(text, font: font, color: color)
+                        let cell = self.inline(text, font: font, color: color, cached: cached)
                         let alignment = column < alignments.count ? alignments[column] : .leading
                         let paragraph = NSMutableParagraphStyle()
                         paragraph.alignment = alignment == .trailing ? .right : alignment == .center ? .center : .natural
@@ -143,8 +247,8 @@ enum TranscriptText {
     }
 
     /// Inline Markdown (bold, italic, code, links, strikethrough) as attributes on `font`.
-    static func inline(_ text: String, font: PFont, color: PColor) -> NSMutableAttributedString {
-        let parsed = MarkdownCache.inline(text)
+    static func inline(_ text: String, font: PFont, color: PColor, cached: Bool = true) -> NSMutableAttributedString {
+        let parsed = cached ? MarkdownCache.inline(text) : MarkdownBlock.inline(text)
         let result = NSMutableAttributedString()
         for run in parsed.runs {
             let string = MarkdownBlock.softBreaks(String(parsed[run.range].characters))
@@ -187,7 +291,7 @@ enum TranscriptText {
     }()
 
     /// Size of `string` wrapped to `width` (unwrapped when width is infinite), rounded up to points.
-    static func size(_ string: NSAttributedString, width: CGFloat) -> CGSize {
+    static func size(_ string: NSAttributedString, width: CGFloat, exact: Bool = false) -> CGSize {
         guard string.length > 0, width > 0 else { return .zero }
         let manager = self.layoutManager
         let container = manager.textContainers[0]
@@ -195,7 +299,7 @@ enum TranscriptText {
         self.storage.setAttributedString(string)
         manager.ensureLayout(for: container)
         let used = manager.usedRect(for: container)
-        return CGSize(width: ceil(used.width), height: ceil(used.height))
+        return exact ? CGSize(width: ceil(used.width), height: used.height) : CGSize(width: ceil(used.width), height: ceil(used.height))
     }
 
     /// Width of `string` on one line, ignoring paragraph alignment.
@@ -204,6 +308,60 @@ enum TranscriptText {
         let unaligned = NSMutableAttributedString(attributedString: string)
         unaligned.removeAttribute(.paragraphStyle, range: NSRange(location: 0, length: unaligned.length))
         return self.size(unaligned, width: .greatestFiniteMagnitude).width
+    }
+}
+
+extension NSTextStorage {
+    /// Makes the storage hold `text`. When `keepingPrefix` is set and the storage's start already
+    /// matches (characters and attributes), only the rest is replaced, so TextKit re-lays out just that
+    /// part; a growing reply then costs the size of its newest text, not of the whole message.
+    @MainActor
+    func update(to text: NSAttributedString, keepingPrefix: Bool) {
+        let keep = keepingPrefix ? TranscriptText.commonPrefixLength(self, text) : 0
+        guard keep > 0 else {
+            self.setAttributedString(text)
+            return
+        }
+        let tail = NSRange(location: keep, length: text.length - keep)
+        self.beginEditing()
+        self.replaceCharacters(in: NSRange(location: keep, length: self.length - keep),
+                               with: text.attributedSubstring(from: tail))
+        self.endEditing()
+    }
+}
+
+extension TranscriptText {
+    /// UTF-16 length of the start both strings share, characters and attributes alike (to run granularity).
+    static func commonPrefixLength(_ old: NSAttributedString, _ new: NSAttributedString) -> Int {
+        let limit = min(old.length, new.length)
+        guard limit > 0 else { return 0 }
+        let a = old.string as NSString
+        let b = new.string as NSString
+        var same = 0
+        // Compare in chunks first so a long shared start costs little, then locate the exact character.
+        let step = 512
+        while same < limit {
+            let length = min(step, limit - same)
+            let range = NSRange(location: same, length: length)
+            if a.substring(with: range) != b.substring(with: range) { break }
+            same += length
+        }
+        if same < limit {
+            var low = same
+            while low < limit, a.character(at: low) == b.character(at: low) { low += 1 }
+            same = low
+        }
+        var location = 0
+        while location < same {
+            var oldRun = NSRange()
+            var newRun = NSRange()
+            let span = NSRange(location: location, length: same - location)
+            let oldAttributes = old.attributes(at: location, longestEffectiveRange: &oldRun, in: span)
+            let newAttributes = new.attributes(at: location, longestEffectiveRange: &newRun, in: span)
+            if !(oldAttributes as NSDictionary).isEqual(to: newAttributes) { return location }
+            location += min(oldRun.length, newRun.length)
+        }
+        return same
     }
 }
 

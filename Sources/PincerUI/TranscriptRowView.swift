@@ -255,7 +255,7 @@ final class TranscriptTextView: NSTextView {
         let sameRow = identity == self.identity
         self.shown = text
         self.identity = identity
-        self.backing.setAttributedString(text)
+        self.backing.update(to: text, keepingPrefix: sameRow)
         if sameRow, selection.length > 0, NSMaxRange(selection) <= text.length {
             self.setSelectedRange(selection)
         } else {
@@ -439,7 +439,7 @@ final class TranscriptTextView: UITextView, UITextViewDelegate {
         let sameRow = identity == self.identity
         self.shown = text
         self.identity = identity
-        self.backing.setAttributedString(text)
+        self.backing.update(to: text, keepingPrefix: sameRow)
         if sameRow, selection.length > 0, NSMaxRange(selection) <= text.length {
             self.selectedRange = selection
         } else if self.selectedRange.length > 0 {
