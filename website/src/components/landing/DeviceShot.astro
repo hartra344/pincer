@@ -1,0 +1,44 @@
+---
+import { Image } from 'astro:assets';
+
+interface Props {
+	mac: ImageMetadata;
+	phone?: ImageMetadata;
+	macAlt: string;
+	phoneAlt?: string;
+	eager?: boolean;
+	flip?: boolean;
+	macSizes?: string;
+	class?: string;
+}
+const { mac, phone, macAlt, phoneAlt = '', eager = false, flip = false, macSizes, class: cls = '' } = Astro.props;
+const sizes = macSizes ?? '(min-width: 1100px) 640px, (min-width: 720px) 60vw, 100vw';
+---
+
+<div class:list={['pair', flip && 'flip', cls]}>
+	<div class="mac">
+		<Image
+			src={mac}
+			alt={macAlt}
+			widths={[640, 1024, 1600]}
+			sizes={sizes}
+			loading={eager ? 'eager' : 'lazy'}
+			fetchpriority={eager ? 'high' : undefined}
+			decoding={eager ? 'sync' : 'async'}
+		/>
+	</div>
+	{
+		phone && (
+			<div class="phone">
+				<Image
+					src={phone}
+					alt={phoneAlt}
+					widths={[240, 360, 480]}
+					sizes="(min-width: 1100px) 170px, 30vw"
+					loading={eager ? 'eager' : 'lazy'}
+					decoding="async"
+				/>
+			</div>
+		)
+	}
+</div>

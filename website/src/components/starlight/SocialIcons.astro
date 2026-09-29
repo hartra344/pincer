@@ -1,0 +1,41 @@
+---
+import Default from '@astrojs/starlight/components/SocialIcons.astro';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const installHref = `${base}/getting-started/install/`;
+---
+
+<a class="install-link" href={installHref}>Install</a>
+<Default {...Astro.props}><slot /></Default>
+
+<style>
+	.install-link {
+		display: none;
+		align-items: center;
+		padding: 0.35rem 0.95rem;
+		border-radius: var(--radius-s);
+		background: var(--pc-lamp);
+		color: var(--pc-lamp-ink);
+		font-family: var(--font-display);
+		font-weight: 600;
+		font-size: 0.9375rem;
+		letter-spacing: 0;
+		text-decoration: none;
+		box-shadow: 0 0 0 1px rgb(0 0 0 / 0.2), 0 0 14px -2px var(--pc-lamp-glow);
+		transition: filter 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+	}
+	.install-link:hover {
+		filter: brightness(1.1);
+		box-shadow: 0 0 0 1px rgb(0 0 0 / 0.2), 0 0 20px 0 var(--pc-lamp-glow);
+	}
+	@media (min-width: 50rem) {
+		.install-link {
+			display: inline-flex;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.install-link {
+			transition: none;
+		}
+	}
+</style>
