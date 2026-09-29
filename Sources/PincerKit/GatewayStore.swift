@@ -79,11 +79,24 @@ public final class GatewayStore: Identifiable {
         set {
             guard newValue != self.sessionStorage else { return }
             self.withMutation(keyPath: \.sessions) { self.sessionStorage = newValue }
-            self.sortedRowsCache = nil
-            self.subagentTrees = [:]
-            self.settleRunTimeline()
+            self.sessionsDidChange()
             for (key, chat) in self.chats { chat.syncSessionRow(newValue[key]) }
         }
+    }
+
+    /// Writes one row (nil removes it) in place, skipping it when nothing changed. Cheaper than
+    /// `sessions[key] = row`, which copies and compares the whole list.
+    func setSession(_ row: SessionRow?, for key: String) {
+        guard self.sessionStorage[key] != row else { return }
+        self.withMutation(keyPath: \.sessions) { self.sessionStorage[key] = row }
+        self.sessionsDidChange()
+        self.chats[key]?.syncSessionRow(row)
+    }
+
+    private func sessionsDidChange() {
+        self.sortedRowsCache = nil
+        self.subagentTrees = [:]
+        self.settleRunTimeline()
     }
     @ObservationIgnored private var sessionStorage: [String: SessionRow] = [:]
     @ObservationIgnored private var sortedRowsCache: [SessionRow]?
@@ -718,7 +731,7 @@ public final class GatewayStore: Identifiable {
             if let key { self.chats[key]?.handleAgent(payload) }
         case "session.message":
             let key = payload["sessionKey"]?.text ?? payload["session"]?["key"]?.text
-            if let row = payload["session"].flatMap(SessionRow.init) { self.sessions[row.key] = row.keepingPreview(of: self.sessions[row.key]) }
+            if let row = payload["session"].flatMap(SessionRow.init) { self.setSession(row.keepingPreview(of: self.sessions[row.key]), for: row.key) }
             if let key { self.chats[key]?.handleSessionMessage(payload) }
         case "progressCard.changed":
             guard let key = payload["sessionKey"]?.text else { return }
@@ -777,11 +790,11 @@ public final class GatewayStore: Identifiable {
             DebugLog.write("← sessions.changed key=\(row?["key"]?.text ?? payload["key"]?.text ?? "?") reason=\(payload["reason"]?.text ?? "-") \(fields.joined(separator: " "))")
         }
         for ancestor in payload["ancestorSessions"]?.array?.compactMap(SessionRow.init) ?? [] {
-            self.sessions[ancestor.key] = ancestor.keepingPreview(of: self.sessions[ancestor.key])
+            self.setSession(ancestor.keepingPreview(of: self.sessions[ancestor.key]), for: ancestor.key)
         }
         if let row = payload["session"].flatMap(SessionRow.init) {
             let previous = self.sessions[row.key]
-            self.sessions[row.key] = row.keepingPreview(of: previous)
+            self.setSession(row.keepingPreview(of: previous), for: row.key)
             if self.bootstrapped, let previous, !row.isSubagent,
                row.activityMs > previous.activityMs, row.isUnread, !row.hasActiveRun,
                previous.hasActiveRun || !previous.isUnread
@@ -797,7 +810,7 @@ public final class GatewayStore: Identifiable {
         if let key = payload["key"]?.text ?? payload["sessionKey"]?.text, reason == "delete" || reason == "deleted" {
             let removedId = payload["sessionId"]?.text
             if removedId == nil || self.sessions[key]?.sessionId == removedId {
-                self.sessions.removeValue(forKey: key)
+                self.setSession(nil, for: key)
                 Task { await self.transcriptChanged(key: key, change: .deleted) }
                 self.discardDraft(key)
                 self.outbox.removeSession(key)
@@ -866,7 +879,7 @@ public final class GatewayStore: Identifiable {
             let result = try await self.connection.request("sessions.create", .object(params), timeout: 30)
             guard let key = result["key"]?.text ?? result["session"]?["key"]?.text else { return nil }
             if let row = result["session"].flatMap(SessionRow.init) {
-                self.sessions[key] = row
+                self.setSession(row, for: key)
             } else {
                 await self.refreshSessions()
             }
@@ -1143,14 +1156,17 @@ public final class GatewayStore: Identifiable {
         let sessions = self.sessions
         let showArchived = self.showArchived
         if let cached = self.sortedRowsCache { return cached }
+        // Sort keys are read from each row's JSON once, not on every comparison.
         let rows = sessions.values
             .filter { showArchived || !$0.isArchived }
+            .map { (row: $0, pinned: $0.isPinned, main: $0.isMain, activity: $0.activityMs, key: $0.key) }
             .sorted { lhs, rhs in
-                if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
-                if lhs.isMain != rhs.isMain { return lhs.isMain }
-                if lhs.activityMs != rhs.activityMs { return lhs.activityMs > rhs.activityMs }
+                if lhs.pinned != rhs.pinned { return lhs.pinned }
+                if lhs.main != rhs.main { return lhs.main }
+                if lhs.activity != rhs.activity { return lhs.activity > rhs.activity }
                 return lhs.key < rhs.key
             }
+            .map(\.row)
         self.sortedRowsCache = rows
         return rows
     }
@@ -1429,7 +1445,7 @@ public final class GatewayStore: Identifiable {
         defer { self.invalidatingTranscripts.remove(key) }
         if change == .deleted {
             self.chats.removeValue(forKey: key)?.stopCaching()
-            self.sessions.removeValue(forKey: key)
+            self.setSession(nil, for: key)
             self.outbox.removeSession(key)
             if self.selectedKey == key { self.selectedKey = self.defaultSessionKey }
             await self.forgetTranscript(key)
