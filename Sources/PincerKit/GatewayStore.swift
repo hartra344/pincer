@@ -325,12 +325,17 @@ public final class GatewayStore: Identifiable {
     }
 
     @ObservationIgnored private var pumpTask: Task<Void, Never>?
+    @ObservationIgnored private var eventBuffer: CoalescingEventBuffer<Inbound>?
 
     public func start() {
         guard self.pumpTask == nil else { return }
         Task { await self.loadOutbox() }
         // A single ordered stream keeps chat deltas and state changes in wire order.
-        let (stream, continuation) = AsyncStream<Inbound>.makeStream()
+        let stream = CoalescingEventBuffer<Inbound> {
+            if case let .event(event) = $0 { return event.coalescingKey }
+            return nil
+        }
+        self.eventBuffer = stream
         self.pumpTask = Task { [weak self] in
             for await inbound in stream {
                 guard let self else { return }
@@ -343,8 +348,8 @@ public final class GatewayStore: Identifiable {
         let connection = self.connection
         Task {
             await connection.setHandlers(
-                onEvent: { continuation.yield(.event($0)) },
-                onState: { continuation.yield(.state($0, $1)) })
+                onEvent: { stream.yield(.event($0)) },
+                onState: { stream.yield(.state($0, $1)) })
             await connection.start()
         }
     }
@@ -353,6 +358,8 @@ public final class GatewayStore: Identifiable {
         let connection = self.connection
         self.pumpTask?.cancel()
         self.pumpTask = nil
+        self.eventBuffer?.finish()
+        self.eventBuffer = nil
         self.prefetchTask?.cancel()
         self.reconcileTask?.cancel()
         Task { await connection.stop() }
