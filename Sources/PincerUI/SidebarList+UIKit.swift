@@ -161,9 +161,11 @@ struct SidebarList: UIViewRepresentable {
                 let id = group.header.id
                 let previous = oldGroups[id]
                 let current = dataSource.snapshot(for: id)
-                let structure = [id] + group.childIds
+                // Compare parents too: a chat moving into the group just above it keeps the flat order (#416).
+                let structure = [SidebarModel.Placement(id: id, parent: nil)] + group.placements
+                let placed = current.items.map { SidebarModel.Placement(id: $0, parent: current.parent(of: $0)) }
                 let headers = group.allHeaders
-                if current.items != structure || headers.contains(where: { current.isExpanded($0.id) == $0.isCollapsed }) {
+                if placed != structure || headers.contains(where: { current.isExpanded($0.id) == $0.isCollapsed }) {
                     var section = NSDiffableDataSourceSectionSnapshot<String>()
                     section.append([id])
                     // Groups nested under an agent are items with children of their own.

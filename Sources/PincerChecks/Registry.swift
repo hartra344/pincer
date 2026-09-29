@@ -147,6 +147,7 @@ enum Suites {
         Section("Accessibility labels (demo)") { await runDemoAccessibility() },
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
+        Section("Sidebar group moves (demo, #416)") { await runDemoSidebarGroupMoves() },
         Section("Sidebar hierarchy (demo)") { await runDemoSidebarHierarchy() },
         Section("Sidebar reveal (demo)") { await runDemoSidebarReveal() },
         Section("MCP servers (demo)") { await runDemoMCP() },
