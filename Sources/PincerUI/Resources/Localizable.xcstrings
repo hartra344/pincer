@@ -1773,6 +1773,16 @@
         }
       }
     },
+    "Branch %lld of %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branch %lld of %lld"
+          }
+        }
+      }
+    },
     "Branch from Here": {
       "localizations": {
         "en": {
@@ -3449,6 +3459,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn’t send: not connected to the Gateway."
+          }
+        }
+      }
+    },
+    "Couldn’t switch branch: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t switch branch: %@"
           }
         }
       }
@@ -6733,6 +6753,16 @@
         }
       }
     },
+    "Next branch": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next branch"
+          }
+        }
+      }
+    },
     "Next match (⌘G)": {
       "localizations": {
         "en": {
@@ -8319,6 +8349,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preview"
+          }
+        }
+      }
+    },
+    "Previous branch": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous branch"
           }
         }
       }

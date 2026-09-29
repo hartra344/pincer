@@ -22,10 +22,15 @@ When you send, the chat rewinds to before that message and your edited text is s
 
 On the last assistant reply, **Regenerate** rewinds to the message before it and sends that message again unchanged, for a fresh answer. It isn't offered while a reply is streaming.
 
+## Switching between branches
+
+When a chat has more than one path, a **Branch 1 of 2** control with previous and next arrows appears above the composer. Use the arrows to switch the chat to another path; the transcript reloads to show it. Nothing is deleted by switching, and you can still manage every branch in the [Session Manager](../sessions/). Switching needs Full Management (admin) access.
+
 ## What you need
 
 - **Branch from Here** needs write access to the Gateway.
 - **Edit & Resend** and **Regenerate** rewind the chat, which is an admin operation, so they need Full Management (admin) access.
+- **Switching branches** also needs Full Management (admin) access.
 
 ## Try it in the Demo
 

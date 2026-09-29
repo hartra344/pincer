@@ -42,6 +42,11 @@ struct Composer: View {
                     .foregroundStyle(.secondary)
                     .accessibilityElement(children: .combine)
             }
+            if self.chat.canSwitchBranches, self.chat.branches.count > 1 {
+                BranchSwitcher(branches: self.chat.branches) { branch in
+                    Task { await self.chat.switchBranch(to: branch.leafEntryId) }
+                }
+            }
             if let edit = self.chat.editTarget {
                 MessageEditChip(originalText: edit.originalText) { self.chat.cancelEdit() }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
