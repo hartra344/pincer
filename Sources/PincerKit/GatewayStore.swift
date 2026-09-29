@@ -123,6 +123,8 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
     /// Background full-history fills, one per chat, shared by the prefetch and the open chat.
     @ObservationIgnored private var headlessFills: [String: (id: UUID, task: Task<Void, Never>)] = [:]
+    /// How many background fills actually started per chat (tests).
+    @ObservationIgnored var headlessFillStarts: [String: Int] = [:]
     /// Bumped when a chat's cached transcript is removed or rewritten by the Gateway, so a fill that
     /// began before can't save its stale history over the new one.
     @ObservationIgnored private var cacheGenerations: [String: Int] = [:]
@@ -660,6 +662,7 @@ public final class GatewayStore: Identifiable {
         if let running = self.headlessFills[key] { return running.task }
         let generation = self.cacheGeneration(of: key)
         let fillId = UUID()
+        self.headlessFillStarts[key, default: 0] += 1
         let task = Task { [weak self] in
             guard let self else { return }
             let store = ChatStore(sessionKey: key, agentId: agentId, gateway: self, headless: true)

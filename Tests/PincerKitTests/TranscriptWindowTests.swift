@@ -629,6 +629,17 @@ struct TranscriptWindowTests {
     }
 
     @Test func aCappedCacheIsNotRefilledOnEveryOpenOrReconnect() async throws {
+        let starts = try await self.reopenCachedChat(retained: true)
+        #expect(starts == 0)
+    }
+
+    @Test func anUncappedIncompleteCacheIsRefilledOnOpen() async throws {
+        let starts = try await self.reopenCachedChat(retained: false)
+        #expect(starts > 0)
+    }
+
+    /// Reopens a chat whose cache is incomplete and stale; returns how many background fills started for it.
+    func reopenCachedChat(retained: Bool) async throws -> Int {
         let profile = GatewayProfile.demo()
         let key = "agent:main:dashboard:garden"
         let defaults = UserDefaults(suiteName: "TranscriptWindowTests.\(UUID().uuidString)")!
@@ -655,8 +666,8 @@ struct TranscriptWindowTests {
             item.transcriptId = item.id
             return item
         }
-        var capped = V8.snapshot(older + real, complete: false, activityMs: 1, retained: true)
-        capped.retained = true
+        var capped = V8.snapshot(older + real, complete: false, activityMs: 1, retained: retained)
+        capped.retained = retained
         await TranscriptCache.save(capped, gatewayId: first.id, sessionKey: key, root: self.temp.url)
         await TranscriptCache.flush(gatewayId: first.id, root: self.temp.url)
 
@@ -669,9 +680,12 @@ struct TranscriptWindowTests {
         await gateway.settlePrefetch()
         chat.stopCaching()
         let meta = await TranscriptCache.meta(gatewayId: gateway.id, sessionKey: key, root: self.temp.url)
-        #expect(meta?.retained == true)
-        let cached = await TranscriptCache.load(gatewayId: gateway.id, sessionKey: key, root: self.temp.url)
-        #expect(cached?.items.count == TranscriptCache.maxItems)
-        #expect(cached?.items.first?.id == older.first?.id)
+        if retained {
+            #expect(meta?.retained == true)
+            let cached = await TranscriptCache.load(gatewayId: gateway.id, sessionKey: key, root: self.temp.url)
+            #expect(cached?.items.count == TranscriptCache.maxItems)
+            #expect(cached?.items.first?.id == older.first?.id)
+        }
+        return gateway.headlessFillStarts[key, default: 0]
     }
 }
