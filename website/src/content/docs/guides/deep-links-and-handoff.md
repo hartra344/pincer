@@ -1,6 +1,6 @@
 ---
 title: Deep links & Handoff
-description: Link straight to a chat or message with pincer:// URLs, copy a link to any chat, and continue a chat on your other Apple devices with Handoff.
+description: Link straight to a chat or message with pincer:// URLs, copy a link to any chat or message, and continue a chat on your other Apple devices with Handoff.
 ---
 
 Every chat in Pincer has a link. Opening it brings Pincer to the front and opens that chat, on the right gateway. Handoff uses the same links to move the chat you're reading between your Mac and iPhone.
@@ -12,6 +12,12 @@ Links only **open** chats. They never send a message, fill in the composer or an
 In a chat, open the **⋯** menu and choose **Copy Link to Chat**. Pincer copies the link and shows "Link copied".
 
 Paste it anywhere you keep notes: a reminder, a note, a Shortcuts action or a message to yourself. Clicking or tapping it on a device where the same gateway is set up opens the chat.
+
+## Copy a link to a message
+
+Right-click a message on the Mac, or touch and hold it on iPhone and iPad, and choose **Copy Link**. Pincer copies the link and shows "Link copied". VoiceOver users find **Copy Link** in the message's actions.
+
+Opening the link opens the chat and scrolls to the message. Pincer loads older history if it needs to, then briefly highlights the message. A forwarded message links to its copy in this chat, not to the original.
 
 ## Link format
 
@@ -26,7 +32,7 @@ pincer://open?gateway=<gateway ID>&url=<gateway URL>&session=<session key>&messa
 | `session` | No | The chat's session key, such as `agent:main:main`. Without it, the link just selects the gateway. |
 | `message` | No | A message in the chat. Pincer scrolls to it and highlights it. |
 
-Values are percent-encoded. Session keys contain `:` and can contain `/`, so a key like `agent:main:discord:channel/123` is written as `agent%3Amain%3Adiscord%3Achannel%2F123`. Copy Link to Chat does this for you.
+Values are percent-encoded. Session keys contain `:` and can contain `/`, so a key like `agent:main:discord:channel/123` is written as `agent%3Amain%3Adiscord%3Achannel%2F123`. **Copy Link to Chat** and **Copy Link** do this for you.
 
 The gateway ID is the same one [Shortcuts & Siri](../shortcuts-and-siri/) uses. A chat's Shortcuts identifier, `<gateway ID>/<session key>`, splits into the `gateway` and `session` parameters.
 

@@ -299,6 +299,7 @@ private struct TranscriptPane: View {
     let topInset: CGFloat
     let reasoningOff: Bool
     @Environment(GatewayStore.self) private var gateway
+    @Environment(AppModel.self) private var app
 
     private var agent: AgentSummary {
         self.gateway.agent(self.chat.sessionRow?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main")
@@ -353,7 +354,10 @@ private struct TranscriptPane: View {
                     previewImage: { [$previewing] in $previewing.wrappedValue = $0 },
                     saveFile: { [$exporting] file, data in $exporting.wrappedValue = ExportedFile(name: file.name, data: data) },
                     chat: self.chat,
-                    reply: { [chat = self.chat, agent = self.agent] in chat.beginReply(to: $0, agentName: agent.name) }),
+                    reply: { [chat = self.chat, agent = self.agent] in chat.beginReply(to: $0, agentName: agent.name) },
+                    copyLink: { [app = self.app, gateway = self.gateway, key = self.chat.sessionKey] in
+                        CopyChatLinkButton.copyLink(app: app, gateway: gateway, sessionKey: key, messageId: $0)
+                    }),
                 bottomInset: self.bottomInset,
                 topInset: self.topInset,
                 highlight: self.find.highlight,
