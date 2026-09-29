@@ -211,19 +211,23 @@ public final class BackgroundRefresh {
     private let cursors: BackgroundRefreshCursorStore
     private let defaults: UserDefaults
     private let post: @MainActor ([UNNotificationRequest]) async -> Void
+    private let timer: @Sendable (TimeInterval) async -> Void
 
     public init(
         profiles: @escaping @MainActor () -> [GatewayProfile] = { GatewayProfileStore.load() },
         connector: any IntentConnector = GatewayIntentConnector(),
         cursors: BackgroundRefreshCursorStore = BackgroundRefreshCursorStore(),
         defaults: UserDefaults = .standard,
-        post: @escaping @MainActor ([UNNotificationRequest]) async -> Void = { await Notifier.shared.postBackground($0) })
+        post: @escaping @MainActor ([UNNotificationRequest]) async -> Void = { await Notifier.shared.postBackground($0) },
+        /// Waits out the run's budget; tests pass a gate to end it on cue.
+        timer: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) })
     {
         self.profiles = profiles
         self.connector = connector
         self.cursors = cursors
         self.defaults = defaults
         self.post = post
+        self.timer = timer
     }
 
     public static var lastRun: Date? { UserDefaults.standard.object(forKey: "pincer.refresh.lastRun") as? Date }
@@ -241,11 +245,12 @@ public final class BackgroundRefresh {
         let deadline = Date().addingTimeInterval(budget)
         let profiles = self.profiles().filter { !$0.isDemo }
         let connector = self.connector
+        let timer = self.timer
         let fetches = profiles.map { profile in
             Task { @MainActor () -> Outcome? in
                 let remaining = deadline.timeIntervalSinceNow
                 guard remaining > 0 else { return nil }
-                return await Self.bounded(seconds: remaining) {
+                return await Self.bounded(seconds: remaining, timer: timer) {
                     await Self.fetch(profile, connector: connector, timeout: remaining)
                 }
             }
@@ -323,14 +328,14 @@ public final class BackgroundRefresh {
 
     /// The body's result, or nil when `seconds` pass or the caller is cancelled first; the body is
     /// cancelled then and closes its connection as it unwinds.
-    private static func bounded<T: Sendable>(seconds: TimeInterval, _ body: @escaping @MainActor () async -> T) async -> T? {
+    private static func bounded<T: Sendable>(seconds: TimeInterval, timer wait: @escaping @Sendable (TimeInterval) async -> Void, _ body: @escaping @MainActor () async -> T) async -> T? {
         let (results, continuation) = AsyncStream<T?>.makeStream()
         let work = Task { @MainActor in
             continuation.yield(await body())
             continuation.finish()
         }
         let timer = Task {
-            try? await Task.sleep(for: .seconds(seconds))
+            await wait(seconds)
             continuation.yield(nil)
             continuation.finish()
         }

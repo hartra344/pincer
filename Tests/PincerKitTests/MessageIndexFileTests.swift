@@ -4,11 +4,12 @@ import Testing
 
 /// The file-backed message index offline (#153): discarding while files are deleted, an index
 /// deleted from under an open connection, removing one chat, and not re-adding a removed chat.
-/// The index lives under `TranscriptCache.root` and has no root of its own, so each test uses a
-/// fresh Gateway id there and deletes its folder afterwards.
-@Suite("Message index files", .serialized, .enabled(if: TranscriptCache.root != nil))
+/// Each test has its own cache root, so a deletion here never makes another suite's index inert
+/// (#276), and theirs never touch this one.
+@Suite("Message index files")
 struct MessageIndexFileTests {
     let gateway = UUID()
+    let temp = TempDir()
 
     static func message(_ id: String, _ text: String, at seconds: Double) -> ChatItem {
         var item = ChatItem(id: id, role: .user, blocks: [.text(text)], timestamp: Date(timeIntervalSince1970: seconds))
@@ -20,18 +21,19 @@ struct MessageIndexFileTests {
         TranscriptCache.Snapshot(items: [self.message(id, text, at: seconds)], complete: true)
     }
 
-    var index: MessageIndex { MessageIndex.shared(gatewayId: self.gateway) }
+    var index: MessageIndex { MessageIndex.shared(gatewayId: self.gateway, root: self.temp.url) }
 
     func hits(_ query: String) async throws -> [String] {
         try await self.index.search(query).map(\.sessionKey).sorted()
     }
 
     func cleanUp() {
-        TranscriptCache.removeAll(gatewayId: self.gateway)
+        TranscriptCache.removeAll(gatewayId: self.gateway, root: self.temp.url)
+        self.temp.remove()
     }
 
     func indexFiles() throws -> [URL] {
-        let url = try #require(MessageIndex.url(gatewayId: self.gateway))
+        let url = try #require(MessageIndex.url(gatewayId: self.gateway, root: self.temp.url))
         return ["", "-wal", "-shm", "-journal"].map { URL(filePath: url.path(percentEncoded: false) + $0) }
     }
 
@@ -39,15 +41,15 @@ struct MessageIndexFileTests {
 
     @Test func discardHandsOutAnInertStandInWhileFilesAreDeleted() async throws {
         defer { self.cleanUp() }
-        await TranscriptCache.save(Self.snapshot("a1", "aardvark before"), gatewayId: self.gateway, sessionKey: "before")
+        await TranscriptCache.save(Self.snapshot("a1", "aardvark before"), gatewayId: self.gateway, sessionKey: "before", root: self.temp.url)
         #expect(try await self.hits("aardvark") == ["before"])
         let original = self.index
-        let url = try #require(MessageIndex.url(gatewayId: self.gateway))
+        let url = try #require(MessageIndex.url(gatewayId: self.gateway, root: self.temp.url))
         var handedOut: MessageIndex?
-        MessageIndex.whileDeleting {
-            MessageIndex.discard(gatewayId: self.gateway)
+        MessageIndex.whileDeleting(root: self.temp.url) {
+            MessageIndex.discard(gatewayId: self.gateway, root: self.temp.url)
             try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
-            handedOut = MessageIndex.shared(gatewayId: self.gateway)
+            handedOut = MessageIndex.shared(gatewayId: self.gateway, root: self.temp.url)
         }
         let standIn = try #require(handedOut)
         #expect(standIn !== original)
@@ -66,7 +68,7 @@ struct MessageIndexFileTests {
         // Afterwards a real index opens again and saves are searchable.
         let fresh = self.index
         #expect(fresh !== original && fresh !== standIn && self.index === fresh)
-        await TranscriptCache.save(Self.snapshot("a2", "aardvark after"), gatewayId: self.gateway, sessionKey: "after")
+        await TranscriptCache.save(Self.snapshot("a2", "aardvark after"), gatewayId: self.gateway, sessionKey: "after", root: self.temp.url)
         #expect(try await self.hits("aardvark") == ["after"])
         #expect(await fresh.isIndexed(sessionKey: "after"))
         #expect(FileManager.default.fileExists(atPath: url.path(percentEncoded: false)))
@@ -76,27 +78,27 @@ struct MessageIndexFileTests {
 
     @Test func indexDeletedWhileOpenIsResetAndRebuilt() async throws {
         defer { self.cleanUp() }
-        await TranscriptCache.save(Self.snapshot("v1", "vicuna one"), gatewayId: self.gateway, sessionKey: "one")
+        await TranscriptCache.save(Self.snapshot("v1", "vicuna one"), gatewayId: self.gateway, sessionKey: "one", root: self.temp.url)
         #expect(try await self.hits("vicuna") == ["one"])
         for file in try self.indexFiles() { try? FileManager.default.removeItem(at: file) }
         #expect(try !FileManager.default.fileExists(atPath: self.indexFiles()[0].path(percentEncoded: false)))
 
         // The open connection now points at a deleted file. The next operations notice, reset,
         // and succeed rather than failing every call after it.
-        await TranscriptCache.save(Self.snapshot("v2", "vicuna two"), gatewayId: self.gateway, sessionKey: "two")
+        await TranscriptCache.save(Self.snapshot("v2", "vicuna two"), gatewayId: self.gateway, sessionKey: "two", root: self.temp.url)
         #expect(try await self.hits("vicuna") == ["two"])
         await self.index.reconcile(sessionKeys: ["one", "two"])
         #expect(try await self.hits("vicuna") == ["one", "two"])
         let one = await self.index.isIndexed(sessionKey: "one"), two = await self.index.isIndexed(sessionKey: "two")
         #expect(one && two)
         #expect(try FileManager.default.fileExists(atPath: self.indexFiles()[0].path(percentEncoded: false)))
-        await TranscriptCache.save(Self.snapshot("v3", "vicuna three"), gatewayId: self.gateway, sessionKey: "three")
+        await TranscriptCache.save(Self.snapshot("v3", "vicuna three"), gatewayId: self.gateway, sessionKey: "three", root: self.temp.url)
         #expect(try await self.hits("vicuna") == ["one", "three", "two"])
     }
 
     @Test func searchRightAfterTheFileVanishesDoesNotFailForever() async throws {
         defer { self.cleanUp() }
-        await TranscriptCache.save(Self.snapshot("w1", "wombat"), gatewayId: self.gateway, sessionKey: "w")
+        await TranscriptCache.save(Self.snapshot("w1", "wombat"), gatewayId: self.gateway, sessionKey: "w", root: self.temp.url)
         #expect(try await self.hits("wombat") == ["w"])
         for file in try self.indexFiles() { try? FileManager.default.removeItem(at: file) }
         // The very next call notices the file is gone and works on a fresh, empty index rather
@@ -111,8 +113,8 @@ struct MessageIndexFileTests {
 
     @Test func removeDeletesTheChatsRowsAndChatRow() async throws {
         defer { self.cleanUp() }
-        await TranscriptCache.save(Self.snapshot("r1", "raccoon gone"), gatewayId: self.gateway, sessionKey: "gone")
-        await TranscriptCache.save(Self.snapshot("r2", "raccoon kept"), gatewayId: self.gateway, sessionKey: "kept")
+        await TranscriptCache.save(Self.snapshot("r1", "raccoon gone"), gatewayId: self.gateway, sessionKey: "gone", root: self.temp.url)
+        await TranscriptCache.save(Self.snapshot("r2", "raccoon kept"), gatewayId: self.gateway, sessionKey: "kept", root: self.temp.url)
         #expect(try await self.hits("raccoon") == ["gone", "kept"])
         #expect(await self.index.chatInfo(sessionKey: "gone")?.itemCount == 1)
 
@@ -133,10 +135,10 @@ struct MessageIndexFileTests {
 
     @Test func transcriptCacheRemoveDropsTheFileAndTheIndexRows() async throws {
         defer { self.cleanUp() }
-        await TranscriptCache.save(Self.snapshot("t1", "tapir gone"), gatewayId: self.gateway, sessionKey: "gone")
-        await TranscriptCache.save(Self.snapshot("t2", "tapir kept"), gatewayId: self.gateway, sessionKey: "kept")
-        let file = try #require(TranscriptCache.file(gatewayId: self.gateway, sessionKey: "gone"))
-        await TranscriptCache.remove(gatewayId: self.gateway, sessionKey: "gone")
+        await TranscriptCache.save(Self.snapshot("t1", "tapir gone"), gatewayId: self.gateway, sessionKey: "gone", root: self.temp.url)
+        await TranscriptCache.save(Self.snapshot("t2", "tapir kept"), gatewayId: self.gateway, sessionKey: "kept", root: self.temp.url)
+        let file = try #require(TranscriptCache.file(gatewayId: self.gateway, sessionKey: "gone", root: self.temp.url))
+        await TranscriptCache.remove(gatewayId: self.gateway, sessionKey: "gone", root: self.temp.url)
         #expect(!FileManager.default.fileExists(atPath: file.path(percentEncoded: false)))
         #expect(!FileManager.default.fileExists(atPath: file.appendingPathExtension("meta").path(percentEncoded: false)))
         #expect(await self.index.isIndexed(sessionKey: "gone") == false)
@@ -149,27 +151,27 @@ struct MessageIndexFileTests {
 
     @Test func indexingAChatWhoseTranscriptIsGoneDoesNothing() async throws {
         defer { self.cleanUp() }
-        await TranscriptCache.save(Self.snapshot("k1", "koala kept"), gatewayId: self.gateway, sessionKey: "kept")
+        await TranscriptCache.save(Self.snapshot("k1", "koala kept"), gatewayId: self.gateway, sessionKey: "kept", root: self.temp.url)
         // Never cached: a direct index() is skipped.
         await self.index.index(sessionKey: "uncached", snapshot: Self.snapshot("u1", "koala uncached"), fileMtime: Date())
         #expect(await self.index.isIndexed(sessionKey: "uncached") == false)
 
         // Cached, removed, then a save that was racing the removal indexes it: still not indexed.
-        await TranscriptCache.save(Self.snapshot("g1", "koala gone"), gatewayId: self.gateway, sessionKey: "gone")
+        await TranscriptCache.save(Self.snapshot("g1", "koala gone"), gatewayId: self.gateway, sessionKey: "gone", root: self.temp.url)
         #expect(await self.index.isIndexed(sessionKey: "gone"))
-        await TranscriptCache.remove(gatewayId: self.gateway, sessionKey: "gone")
+        await TranscriptCache.remove(gatewayId: self.gateway, sessionKey: "gone", root: self.temp.url)
         await self.index.index(sessionKey: "gone", snapshot: Self.snapshot("g2", "koala racing"), fileMtime: Date())
         #expect(await self.index.isIndexed(sessionKey: "gone") == false)
         #expect(try await self.hits("koala") == ["kept"])
 
         // A chat whose file is deleted without going through the cache isn't updated either.
-        let keptFile = try #require(TranscriptCache.file(gatewayId: self.gateway, sessionKey: "kept"))
+        let keptFile = try #require(TranscriptCache.file(gatewayId: self.gateway, sessionKey: "kept", root: self.temp.url))
         try FileManager.default.removeItem(at: keptFile)
         await self.index.index(sessionKey: "kept", snapshot: Self.snapshot("k2", "koala changed"), fileMtime: Date())
         #expect(try await self.index.search("changed").isEmpty)
 
         // Saved again, the chat is indexed again.
-        await TranscriptCache.save(Self.snapshot("g3", "koala back"), gatewayId: self.gateway, sessionKey: "gone")
+        await TranscriptCache.save(Self.snapshot("g3", "koala back"), gatewayId: self.gateway, sessionKey: "gone", root: self.temp.url)
         #expect(await self.index.isIndexed(sessionKey: "gone"))
         #expect(try await self.index.search("back").map(\.sessionKey) == ["gone"])
     }
