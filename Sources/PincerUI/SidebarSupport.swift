@@ -152,10 +152,16 @@ struct SidebarModel: Equatable {
 
     var groups: [Group] = []
 
-    /// Whether the native list has to rebuild its rows rather than refresh them in place.
+    /// Whether the native list has to rebuild its rows rather than refresh them in place. Rows are
+    /// compared with their parent header: a chat moving into the group just above it keeps the
+    /// flat order but changes parent, and a stale outline then shows it twice (#416).
     static func structureChanged(old: SidebarModel, new: SidebarModel) -> Bool {
-        let structure = { (model: SidebarModel) in model.groups.flatMap { [$0.header.id] + $0.childIds } }
-        return structure(old) != structure(new)
+        old.placements != new.placements
+    }
+
+    /// Every header and row, in display order, each with the header it sits under.
+    var placements: [Placement] {
+        self.groups.flatMap { [Placement(id: $0.header.id, parent: nil)] + $0.placements }
     }
 
     /// A row and the header it sits under (`nil` for a top-level header).
