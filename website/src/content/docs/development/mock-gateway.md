@@ -33,6 +33,7 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `MOCK_NO_REPLY_TO` | off | Set to `1` to refuse `chat.send` with `replyToId`, like a gateway from before replies. Pincer then quotes the original in the text. |
 | `MOCK_FAILED_DELIVERY` | on | Set to `off` to drop the mock's one failed delivery, so Health shows Healthy. |
 | `MOCK_FAILED_DELIVERY_EVERY` | off | Seconds between new failed deliveries. Each one raises the count and sends `health`, so a dismissed issue comes back. |
+| `MOCK_LONG_CHAT` | off | Set to a number, e.g. `20000`, to seed one extra chat, **Long chat (n)**, with that many alternating user and assistant messages of mixed length (short questions, markdown sections, code blocks, long replies). It pages through `chat.history` like any chat. For testing memory and prefetch on huge transcripts. |
 | `MOCK_DELAY_METHODS` | off | Holds back responses, e.g. `sessions.subscribe=800,chat.history=300` (milliseconds). The handler still runs at once, so a snapshot is taken then and events sent meanwhile arrive before the response. For testing bootstrap races. |
 
 ## Test control (`mock.control`)
@@ -56,6 +57,8 @@ Mock-only RPC, never advertised in `hello-ok` and never used by the app. Checks 
 | --- | --- |
 | `tool`, `disk` | Streams a tool call. |
 | `image` | Streams a tool call and attaches an image. |
+| `image huge` | Replies with one image whose `artifacts.download` payload is 26 MiB, over Pincer's 25 MiB cap, so it shows "too large" instead of loading. Still a valid PNG. Instead of the usual tool call and chart. |
+| `image many` | Replies with 40 distinct 3000×2000 images (a few hundred KB each on the wire, about 24 MB decoded), for testing the image memory budget and download limit. Instead of the usual tool call and chart. |
 | `patch`, `diff` | Streams an `edit` tool call shaped like upstream's (`file_path`, `old_string`, `new_string`), shown as a [file diff](../../guides/file-diffs/). |
 | `approve` | Raises an exec approval. |
 | `approve once-only` | Raises an approval whose `allowedDecisions` leave out `allow-always`. **Always allow** then fails with `APPROVAL_ALLOW_ALWAYS_UNAVAILABLE` and the approval stays pending. |

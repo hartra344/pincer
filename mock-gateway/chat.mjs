@@ -6,6 +6,7 @@ import { rowModel } from './catalog.mjs';
 import { simulateQuestion } from './questions.mjs';
 import { makeSessionRow } from './seed.mjs';
 import { broadcastSessionChanged, broadcastSessionMessage, markRunEnded, markRunStarted, updateSessionRow } from './session-list.mjs';
+import { largeImageBlocks } from './large-media.mjs';
 import { DEFAULT_CONTEXT_TOKENS, broadcast, clone, imageBlock, makeMessage, nowMs, sendErr, sendJson, sendRes, shortId, textBlock, thinkingBlock, toolCallBlock } from './util.mjs';
 
 // Like the Gateway's history projection: text fields past the cap end in a sentinel and the
@@ -301,7 +302,9 @@ export async function simulateRun(state, run, params, replyMeta = {}) {
       if (run.aborted) return;
     }
 
-    const wantsTool = /tool|disk|image/i.test(String(text ?? ''));
+    // `image huge` (one image over the 25 MiB cap) and `image many` (40 large ones) skip the tool call.
+    const largeImages = /\bimage huge\b/i.test(String(text ?? '')) ? 'huge' : /\bimage many\b/i.test(String(text ?? '')) ? 'many' : null;
+    const wantsTool = !largeImages && /tool|disk|image/i.test(String(text ?? ''));
     if (wantsTool) {
       const toolCallId = shortId('call_');
       broadcast(state, 'agent', {
@@ -375,7 +378,8 @@ export async function simulateRun(state, run, params, replyMeta = {}) {
       });
     }
     const finalContent = [thinkingBlock(thinking), textBlock(reply)];
-    if (/image/i.test(String(text ?? ''))) finalContent.push(imageBlock('art-chart-1', 'Synthetic mock chart'));
+    if (largeImages) finalContent.push(...largeImageBlocks(state, largeImages));
+    else if (/image/i.test(String(text ?? ''))) finalContent.push(imageBlock('art-chart-1', 'Synthetic mock chart'));
     const finalMsg = makeMessage('assistant', finalContent, { openclaw: { runId: run.runId }, model: rowModel(row) });
     transcript.push(finalMsg);
     broadcastSessionMessage(state, sessionKey, finalMsg, transcript.length);
