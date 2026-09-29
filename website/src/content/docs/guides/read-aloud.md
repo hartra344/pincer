@@ -39,7 +39,7 @@ Sending text to the gateway's voice needs write access. If you connected with a 
 
 ## Settings
 
-Open **Settings → Read Aloud**:
+Open **Settings** and find the **Read Aloud** section. On a Mac it's on the **Conversation** tab.
 
 - **Voice**: **Automatic** uses the gateway voice when there is one. **This Device Only** always uses the device voice, so the text of replies never goes back to the gateway to be spoken.
 - **Device voice** and **Speaking rate** set the voice used when the device speaks. Pick **System Default** to follow your system language.
