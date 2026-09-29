@@ -97,6 +97,7 @@ struct KeyboardShortcutsTests {
         #expect(combo == KeyCombo("\\", [.option, .command]))
         #expect(combo != KeyCombo("\\", [.command]))
         #expect(combo?.displayString == "⌥⌘\\")
+        #expect(ShortcutCommand.toggleSplitView.title == "Split Right")
     }
 
     // MARK: - Store persistence
@@ -144,6 +145,25 @@ struct KeyboardShortcutsTests {
         #expect(!store.isCustomized(.newChat))
         #expect(store.combo(for: .newChat) == ShortcutCommand.newChat.defaultCombo)
         #expect(store.isCustomized(.findInChat), "reset(.newChat) must not touch other overrides")
+    }
+
+    @MainActor
+    @Test func resetTakesTheDefaultBackFromWhoeverHasIt() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+
+        let store = ShortcutStore(defaults: scratch.defaults)
+        let newChatDefault = ShortcutCommand.newChat.defaultCombo!
+        // Move newChat off its default, then give that default combo to another command.
+        store.set(KeyCombo("j", [.shift, .command]), for: .newChat)
+        store.assign(newChatDefault, to: .openChatInNewWindow)
+        #expect(store.combo(for: .openChatInNewWindow) == newChatDefault)
+
+        store.reset(.newChat)
+
+        #expect(store.combo(for: .newChat) == newChatDefault, "newChat should be back on its default")
+        #expect(store.combo(for: .openChatInNewWindow) == nil, "the other command loses the combo it took")
+        #expect(store.isCustomized(.openChatInNewWindow), "it's explicitly cleared, not just reverted")
     }
 
     @MainActor
@@ -275,6 +295,7 @@ struct KeyboardShortcutsTests {
     @MainActor
     @Test func validateWarnsOnOptionOnlyCombos() {
         let store = ShortcutStore(defaults: ScratchDefaults().defaults)
+        // A plain letter key: types a character in text fields without ⌘/⌃, so it still warns.
         let combo = KeyCombo("g", [.option])
         guard case .warning = store.validate(combo, for: .newChat) else {
             Issue.record("expected .warning")
@@ -283,10 +304,41 @@ struct KeyboardShortcutsTests {
     }
 
     @MainActor
+    @Test func validateDoesNotWarnAboutTypingForSpecialKeys() {
+        let store = ShortcutStore(defaults: ScratchDefaults().defaults)
+        // ⌥⇧↓ is nextUnreadChat's own default: an arrow key types nothing, so no "types a
+        // character" warning even with no ⌘/⌃, and it isn't a conflict with itself.
+        let ownDefault = KeyCombo(KeyCombo.Special.downArrow.rawValue, [.option, .shift])
+        #expect(store.validate(ownDefault, for: .nextUnreadChat) == .ok)
+
+        // Same for an unused arrow-key combo recorded for a different command.
+        let upOption = KeyCombo(KeyCombo.Special.upArrow.rawValue, [.option])
+        #expect(store.validate(upOption, for: .newChat) == .ok)
+    }
+
+    @MainActor
     @Test func validateOKForAnUnusedCombo() {
         let store = ShortcutStore(defaults: ScratchDefaults().defaults)
         let combo = KeyCombo("y", [.control, .command])
         #expect(store.validate(combo, for: .newChat) == .ok)
+    }
+
+    @MainActor
+    @Test func commandsUsingIgnoresUnavailableCommands() {
+        let store = ShortcutStore(defaults: ScratchDefaults().defaults)
+        // readAloud is hidden from Settings (ShortcutCommand.unavailable) but still has a
+        // default combo; it must not show up as a user of that combo.
+        let readAloudDefault = ShortcutCommand.readAloud.defaultCombo!
+        #expect(store.commands(using: readAloudDefault).isEmpty)
+    }
+
+    @MainActor
+    @Test func validateDoesNotConflictWithAnUnavailableCommandsDefault() {
+        let store = ShortcutStore(defaults: ScratchDefaults().defaults)
+        let readAloudDefault = ShortcutCommand.readAloud.defaultCombo!
+        // Recording readAloud's default (⌥⌘L) for another command is not a conflict: readAloud
+        // has no menu item or button to collide with in this build.
+        #expect(store.validate(readAloudDefault, for: .newChat) == .ok)
     }
 
     // MARK: - Recording: macOS key codes

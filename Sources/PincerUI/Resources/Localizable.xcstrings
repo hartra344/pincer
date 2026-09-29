@@ -351,12 +351,12 @@
         }
       }
     },
-    "%@ uses %@. Use it for “%@” instead? %@ will have no shortcut.": {
+    "%@ uses %@. Reassign it to “%@”, leaving %@ with no shortcut, or keep both?": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ uses %@. Use it for “%@” instead? %@ will have no shortcut."
+            "value": "%@ uses %@. Reassign it to “%@”, leaving %@ with no shortcut, or keep both?"
           }
         }
       }
@@ -6303,6 +6303,16 @@
         }
       }
     },
+    "Keep Both": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep Both"
+          }
+        }
+      }
+    },
     "Keep Editing": {
       "localizations": {
         "en": {
@@ -7443,12 +7453,22 @@
         }
       }
     },
-    "Next match (⌘G)": {
+    "Next match": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Next match (⌘G)"
+            "value": "Next match"
+          }
+        }
+      }
+    },
+    "Next match (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next match (%@)"
           }
         }
       }
@@ -9143,12 +9163,22 @@
         }
       }
     },
-    "Previous match (⇧⌘G)": {
+    "Previous match": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Previous match (⇧⌘G)"
+            "value": "Previous match"
+          }
+        }
+      }
+    },
+    "Previous match (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous match (%@)"
           }
         }
       }
@@ -9469,6 +9499,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Reason"
+          }
+        }
+      }
+    },
+    "Reassign": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reassign"
           }
         }
       }
@@ -12103,16 +12143,6 @@
         }
       }
     },
-    "Split Right / Close Split View": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Split Right / Close Split View"
-          }
-        }
-      }
-    },
     "Split view chat": {
       "localizations": {
         "en": {
@@ -12409,6 +12439,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port."
+          }
+        }
+      }
+    },
+    "Tap a shortcut, then press the new keys. Press Delete to remove it, or Esc to cancel.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap a shortcut, then press the new keys. Press Delete to remove it, or Esc to cancel."
           }
         }
       }
@@ -13993,12 +14033,12 @@
         }
       }
     },
-    "Use %@ for %@?": {
+    "Use %@ for “%@”?": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Use %@ for %@?"
+            "value": "Use %@ for “%@”?"
           }
         }
       }
@@ -14069,16 +14109,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Use at least one of ⌘, ⌃ or ⌥."
-          }
-        }
-      }
-    },
-    "Use for %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Use for %@"
           }
         }
       }
