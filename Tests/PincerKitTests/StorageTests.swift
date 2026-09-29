@@ -92,6 +92,16 @@ struct TranscriptCacheTests {
         #expect(inert !== after && MessageIndex.shared(gatewayId: gateway) === after)
         #expect(try await inert.search("anything").isEmpty)
     }
+
+    /// Repro for #276: the test above uses the shared default root, so another suite deleting
+    /// that root (MessageIndexFileTests, a Clear Cache) at the same moment makes `after` inert.
+    @Test func repro276OtherSuiteDeletingTheDefaultRoot() async throws {
+        let gateway = UUID()
+        defer { MessageIndex.discard(gatewayId: gateway) }
+        var after: MessageIndex?
+        MessageIndex.whileDeleting { after = MessageIndex.shared(gatewayId: gateway) }
+        #expect(MessageIndex.shared(gatewayId: gateway) === after)
+    }
 }
 
 @Suite("Transcript snapshot limits")
