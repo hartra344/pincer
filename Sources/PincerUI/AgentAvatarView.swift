@@ -228,9 +228,16 @@ struct ChatHeaderAvatar: View {
     var body: some View {
         if self.enabled, let key = self.gateway.selectedKey {
             let agentId = self.gateway.sessions[key]?.agentId ?? SessionKey.agentId(from: key) ?? "main"
-            // The chat already exists: the detail view made it for this key.
-            ChatAgentAvatar(chat: self.gateway.chat(for: key), agent: self.gateway.agent(agentId), size: 26, announces: true)
-                .id(key)
+            // The per-chat `.id` (it resets the per-agent creature and pose state) stays inside a
+            // stable container. If the toolbar item's root view took the `.id`, macOS would remove
+            // and re-add the item on every chat switch and redraw every toolbar button, the
+            // sidebar's included (#262). `ToolbarStabilityCheck` guards this.
+            ZStack {
+                // The chat already exists: the detail view made it for this key.
+                ChatAgentAvatar(chat: self.gateway.chat(for: key), agent: self.gateway.agent(agentId), size: 26, announces: true)
+                    .id(key)
+            }
+            .frame(width: 26, height: 26)
         }
     }
 }
