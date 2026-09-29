@@ -28,8 +28,8 @@ public enum AgentManagement {
     public static let reservedIds: Set<String> = ["openclaw", "crestodian"]
     public static let conflictErrorType = "agent_file_conflict"
 
-    public static let needsAdminMessage = "Editing agents needs Full Management. Turn it on under Connection, then approve this device on the Gateway host."
-    public static let unsupportedMessage = "This Gateway can't manage agents. Update OpenClaw to create and edit agents here."
+    public static var needsAdminMessage: String { L("Editing agents needs Full Management. Turn it on under Connection, then approve this device on the Gateway host.") }
+    public static var unsupportedMessage: String { L("This Gateway can't manage agents. Update OpenClaw to create and edit agents here.") }
     public static let workspaceChangeWarning = "Changing the workspace points this agent at a different folder. Files aren't moved."
     public static let bindingsNotCopiedNote = "Channel bindings aren't copied. The copy gets its own new workspace."
 

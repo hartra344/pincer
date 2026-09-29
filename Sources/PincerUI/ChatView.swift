@@ -429,7 +429,7 @@ struct ChatChrome: ViewModifier {
         if let server = self.row?.server {
             parts.append(self.gateway.displayName(for: server))
         } else if let origin = self.row?.originLabel {
-            parts.append("via \(origin)")
+            parts.append(L("via \(origin)"))
         }
         if let model = self.row?.model { parts.append(model) }
         return parts.joined(separator: " · ")

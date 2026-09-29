@@ -277,7 +277,7 @@ public final class MCPServersModel {
             _ = try await self.request(MCPServers.reconnectMethod, ["serverNames": [.string(name)]])
             self.operations[name] = nil
         } catch {
-            self.operations[name] = .failed(self.message(for: error, unavailable: "reconnecting MCP servers"))
+            self.operations[name] = .failed(self.message(for: error, unavailable: L("reconnecting MCP servers")))
         }
         await self.load()
     }
@@ -291,14 +291,14 @@ public final class MCPServersModel {
                 "serverName": .string(name), "redirect": "gateway", "returnUrl": .string(MCPServers.returnURL(server: name).absoluteString),
             ])
             guard let id = result["attemptId"]?.text, let link = result["authorizationUrl"]?.text.flatMap({ URL(string: $0) }) else {
-                self.operations[name] = .failed("The Gateway didn't send a sign-in link.")
+                self.operations[name] = .failed(L("The Gateway didn't send a sign-in link."))
                 return nil
             }
             self.operations[name] = nil
             return MCPOAuthAttempt(id: id, server: name, authorizationURL: link,
                                    expiresAt: result["expiresAt"]?.double.map { Date(timeIntervalSince1970: $0 / 1000) })
         } catch {
-            self.operations[name] = .failed(self.message(for: error, unavailable: "MCP sign-in"))
+            self.operations[name] = .failed(self.message(for: error, unavailable: L("MCP sign-in")))
             return nil
         }
     }
@@ -325,9 +325,9 @@ public final class MCPServersModel {
         do {
             let result = try await self.request(MCPServers.oauthCompleteMethod, .object(params))
             succeeded = result["state"]?.string.map { $0 == MCPAuthState.authorized.rawValue } ?? true
-            self.operations[attempt.server] = succeeded ? nil : .failed("The Gateway didn't accept the sign-in.")
+            self.operations[attempt.server] = succeeded ? nil : .failed(L("The Gateway didn't accept the sign-in."))
         } catch {
-            self.operations[attempt.server] = .failed(self.message(for: error, unavailable: "MCP sign-in"))
+            self.operations[attempt.server] = .failed(self.message(for: error, unavailable: L("MCP sign-in")))
         }
         await self.load()
         return succeeded
@@ -347,7 +347,7 @@ public final class MCPServersModel {
             _ = try await self.request(MCPServers.oauthLogoutMethod, ["serverName": .string(name)])
             self.operations[name] = nil
         } catch {
-            self.operations[name] = .failed(self.message(for: error, unavailable: "MCP sign-in"))
+            self.operations[name] = .failed(self.message(for: error, unavailable: L("MCP sign-in")))
         }
         await self.load()
     }
@@ -358,11 +358,11 @@ public final class MCPServersModel {
             return false
         }
         if self.isNew(name) || self.isChanged(name) || self.isRemoved(name) {
-            self.operations[name] = .failed("Save your changes first.")
+            self.operations[name] = .failed(L("Save your changes first."))
             return false
         }
         if !self.advertises(method) {
-            self.operations[name] = .failed("This Gateway doesn't support that yet.")
+            self.operations[name] = .failed(L("This Gateway doesn't support that yet."))
             return false
         }
         return true
@@ -371,9 +371,9 @@ public final class MCPServersModel {
     private func message(for error: Error, unavailable: String) -> String {
         if !GatewayError.isMissingScope(error), case let .rpc(_, text, _)? = error as? GatewayError {
             let lower = text.lowercased()
-            if lower.contains("denied") { return "Sign-in was denied." }
+            if lower.contains("denied") { return L("Sign-in was denied.") }
             if lower.contains("expired") || lower.contains("timed out") || lower.contains("timeout") || lower.contains("unknown attempt") {
-                return "Sign-in timed out. Try again."
+                return L("Sign-in timed out. Try again.")
             }
         }
         return GatewayError.message(for: error, scope: ConfigWriteError.adminRequired.message, unavailable: unavailable)
