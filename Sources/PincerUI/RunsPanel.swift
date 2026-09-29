@@ -70,7 +70,7 @@ struct RunsToolbarButton: View {
            case let running = self.gateway.subagentTree(rootKey: key).runningCount,
            RunsToolbarVisibility.shows(isCompact: self.isCompact, isPresented: self.isPresented, running: running)
         {
-            self.shortcut(Button {
+            self.focusedPaneShortcut(Button {
                 if self.isFocused {
                     self.isPresented.toggle()
                 } else {
@@ -87,7 +87,7 @@ struct RunsToolbarButton: View {
         }
     }
 
-    @ViewBuilder private func shortcut(_ button: some View) -> some View {
+    @ViewBuilder private func focusedPaneShortcut(_ button: some View) -> some View {
         if self.isFocused {
             button
                 .keyboardShortcut("r", modifiers: [.command, .option])
