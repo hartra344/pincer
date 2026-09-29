@@ -122,9 +122,9 @@ public final class ArtifactImageLoader {
 
     /// Raw bytes for "Save image…" / sharing. The last result is kept so the preview sheet doesn't download twice.
     public func data(for ref: ImageRef, sessionKey: String) async -> Data? {
-        if let base64 = ref.base64 { return try? Self.decodeCapped(base64) }
+        if let base64 = ref.base64 { return try? Self.decodeCapped(base64, limit: GatewayMediaClient.explicitMaxBytes) }
         if let slot = self.dataSlot, slot.key == ref.cacheKey { return slot.data }
-        guard let data = try? await self.download(ref, sessionKey: sessionKey) else { return nil }
+        guard let data = try? await self.download(ref, sessionKey: sessionKey, limit: GatewayMediaClient.explicitMaxBytes) else { return nil }
         self.dataSlot = (ref.cacheKey, data)
         return data
     }
@@ -186,14 +186,16 @@ public final class ArtifactImageLoader {
 
     /// Raw bytes of a non-image attachment, fetched the same way as images.
     public func data(for file: FileRef, sessionKey: String) async -> Data? {
-        try? await self.download(artifactId: file.artifactId, url: file.url, sessionKey: sessionKey, accept: "*/*")
+        try? await self.download(
+            artifactId: file.artifactId, url: file.url, sessionKey: sessionKey, accept: "*/*",
+            limit: GatewayMediaClient.explicitMaxBytes)
     }
 
-    private func download(_ ref: ImageRef, sessionKey: String) async throws -> Data? {
-        try await self.download(artifactId: ref.artifactId, url: ref.url, sessionKey: sessionKey, accept: "image/*")
+    private func download(_ ref: ImageRef, sessionKey: String, limit: Int = GatewayMediaClient.defaultMaxBytes) async throws -> Data? {
+        try await self.download(artifactId: ref.artifactId, url: ref.url, sessionKey: sessionKey, accept: "image/*", limit: limit)
     }
 
-    private func download(artifactId: String?, url: String?, sessionKey: String, accept: String) async throws -> Data? {
+    private func download(artifactId: String?, url: String?, sessionKey: String, accept: String, limit: Int) async throws -> Data? {
         guard artifactId != nil || url != nil else { return nil }
         try await self.limiter.acquire()
         defer { self.limiter.release() }
@@ -204,12 +206,12 @@ public final class ArtifactImageLoader {
             }
             let result = try await gateway.connection.request("artifacts.download", .object(params), timeout: 60)
             if let data = result["data"]?.string ?? result["content"]?.string {
-                return try Self.decodeCapped(data)
+                return try Self.decodeCapped(data, limit: limit)
             }
-            if let url = result["url"]?.text { return try await self.fetchURL(url, sessionKey: sessionKey, accept: accept) }
+            if let url = result["url"]?.text { return try await self.fetchURL(url, sessionKey: sessionKey, accept: accept, limit: limit) }
             return nil
         }
-        if let url { return try await self.fetchURL(url, sessionKey: sessionKey, accept: accept) }
+        if let url { return try await self.fetchURL(url, sessionKey: sessionKey, accept: accept, limit: limit) }
         return nil
     }
 
@@ -224,9 +226,9 @@ public final class ArtifactImageLoader {
     /// - local paths on the Gateway host (`/…`, `~/…`, `file:`, `media://inbound/…`) go through
     ///   the Gateway's `assistant-media` route, which applies its own file policy;
     /// - public `https` URLs are fetched directly, without credentials.
-    private func fetchURL(_ string: String, sessionKey: String, accept: String) async throws -> Data? {
+    private func fetchURL(_ string: String, sessionKey: String, accept: String, limit: Int) async throws -> Data? {
         if string.hasPrefix("data:") {
-            return try string.split(separator: ",", maxSplits: 1).last.flatMap { try Self.decodeCapped(String($0)) }
+            return try string.split(separator: ",", maxSplits: 1).last.flatMap { try Self.decodeCapped(String($0), limit: limit) }
         }
         guard let gateway, let gatewayURL = try? gateway.profile.resolvedURL(), let base = Self.httpBase(for: gatewayURL) else { return nil }
         if Self.isGatewayLocalSource(string) {
@@ -237,15 +239,15 @@ public final class ArtifactImageLoader {
             }
             components?.queryItems = query
             guard let url = components?.url else { return nil }
-            return try await self.media.fetchGateway(url)
+            return try await self.media.fetchGateway(url, maxBytes: limit)
         }
         guard let url = URL(string: string, relativeTo: base)?.absoluteURL, let host = url.host?.lowercased() else { return nil }
         if host == gatewayURL.host?.lowercased() {
             guard url.scheme == "https" || url.scheme == "http" else { return nil }
-            return try await self.media.fetchGateway(url)
+            return try await self.media.fetchGateway(url, maxBytes: limit)
         }
         guard Self.loadsWebImages, url.scheme == "https", Self.isPublicHost(host) else { return nil }
-        return try await self.media.fetchPublic(url, accept: accept)
+        return try await self.media.fetchPublic(url, accept: accept, maxBytes: limit)
     }
 
     /// Mirrors the Control UI's `isLocalAssistantAttachmentSource`.
@@ -291,9 +293,9 @@ public final class ArtifactImageLoader {
         return Data(base64Encoded: payload)
     }
 
-    private static func decodeCapped(_ value: String) throws -> Data? {
+    private static func decodeCapped(_ value: String, limit: Int = GatewayMediaClient.defaultMaxBytes) throws -> Data? {
         let payload = self.stripDataURL(value)
-        guard payload.utf8.count / 4 * 3 <= GatewayMediaClient.defaultMaxBytes else { throw MediaError.tooLarge }
+        guard payload.utf8.count / 4 * 3 <= limit else { throw MediaError.tooLarge }
         return Data(base64Encoded: payload)
     }
 
@@ -308,7 +310,7 @@ public final class ArtifactImageLoader {
     }
 }
 
-/// At most `limit` downloads run at once; the rest wait in FIFO order.
+/// At most `limit` downloads run at once; the newest waiter goes first, so images now on screen load before ones scrolled past.
 @MainActor
 final class DownloadLimiter {
     let limit: Int
@@ -346,7 +348,7 @@ final class DownloadLimiter {
             self.active -= 1
         } else {
             // The slot passes straight to the next waiter.
-            self.waiters.removeFirst().continuation.resume()
+            self.waiters.removeLast().continuation.resume()
         }
     }
 

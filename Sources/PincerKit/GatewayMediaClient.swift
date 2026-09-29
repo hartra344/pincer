@@ -11,6 +11,8 @@ enum MediaError: Error {
 final class GatewayMediaClient {
     /// Hard cap on any single media download.
     static let defaultMaxBytes = 25 * 1024 * 1024
+    /// Cap when the user explicitly saves or shares a file.
+    static let explicitMaxBytes = 200 * 1024 * 1024
 
     private struct Identity: Equatable {
         let id: UUID
@@ -66,12 +68,12 @@ final class GatewayMediaClient {
     }
 
     /// Fetches with Gateway auth and the profile's TLS pin. Returns nil for non-200 responses and throws `MediaError.tooLarge` past the size cap.
-    func fetchGateway(_ url: URL) async throws -> Data? {
+    func fetchGateway(_ url: URL, maxBytes: Int? = nil) async throws -> Data? {
         for attempt in 0..<2 {
             guard let (session, authorization) = self.prepare() else { return nil }
             var request = URLRequest(url: url)
             if let authorization { request.setValue(authorization, forHTTPHeaderField: "Authorization") }
-            let result = try await BoundedDownload.run(session: session, request: request, limit: self.maxBytes)
+            let result = try await BoundedDownload.run(session: session, request: request, limit: maxBytes ?? self.maxBytes)
             let status = result.response?.statusCode
             if attempt == 0, status == 401 || status == 403, authorization != nil {
                 self.reset()
@@ -84,11 +86,11 @@ final class GatewayMediaClient {
     }
 
     /// Fetches a public https URL without credentials; a redirect off public https hosts is refused.
-    func fetchPublic(_ url: URL, accept: String) async throws -> Data? {
+    func fetchPublic(_ url: URL, accept: String, maxBytes: Int? = nil) async throws -> Data? {
         var request = URLRequest(url: url)
         request.setValue("Pincer/0.1 (OpenClaw client; +https://github.com/openclaw/openclaw)", forHTTPHeaderField: "User-Agent")
         request.setValue(accept, forHTTPHeaderField: "Accept")
-        let result = try await BoundedDownload.run(session: Self.publicSession, request: request, limit: self.maxBytes)
+        let result = try await BoundedDownload.run(session: Self.publicSession, request: request, limit: maxBytes ?? self.maxBytes)
         if result.tooLarge { throw MediaError.tooLarge }
         guard let http = result.response, http.statusCode == 200,
               let finalHost = http.url?.host, http.url?.scheme == "https", ArtifactImageLoader.isPublicHost(finalHost)
