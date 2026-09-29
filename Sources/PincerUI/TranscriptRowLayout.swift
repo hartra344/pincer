@@ -146,6 +146,8 @@ enum TranscriptPart {
         let details: String
         /// The message Reply and React act on; nil hides them.
         var messageId: String?
+        /// Shows the filled star (#384), which removes the bookmark when tapped.
+        var isBookmarked = false
     }
 
     /// Where an unsent message is: queued, or failed with Retry and Delete.
@@ -334,6 +336,8 @@ struct TranscriptDecoration: Equatable {
     var quote: ReplyQuote?
     var isLocating = false
     var reactions: [String: [ReactionGroup]] = [:]
+    /// The row's messages you've bookmarked.
+    var bookmarks: Set<String> = []
     var ack: String?
     var flash: String?
 }
@@ -461,7 +465,9 @@ struct TranscriptLayoutBuilder {
         case .marker:
             break
         }
+        let bookmarks = BookmarkStore.shared(gatewayId: self.context.gateway.id)
         for id in ids {
+            if bookmarks.isBookmarked(sessionKey: self.context.sessionKey, messageId: id) { decoration.bookmarks.insert(id) }
             if self.settings.reactionsEnabled {
                 let groups = chat.reactionGroups(for: id, agentName: agent)
                 if !groups.isEmpty { decoration.reactions[id] = groups }
@@ -489,7 +495,8 @@ struct TranscriptLayoutBuilder {
         let attachments = item.blocks.filter { if case .image = $0 { true } else if case .file = $0 { true } else { false } }.count
         layout.accessibilityLabel = AccessibilityText.messageRow(
             role: .user, text: text, timestamp: header.time, attachmentCount: attachments,
-            isPending: item.isPending && sendStatus == nil, via: item.via, summaryLimit: 0)
+            isPending: item.isPending && sendStatus == nil, isBookmarked: !layout.decoration.bookmarks.isEmpty,
+            via: item.via, summaryLimit: 0)
         if let sendStatus { layout.accessibilityLabel += ". \(sendStatus.spoken)" }
         if let quote {
             layout.accessibilityLabel = L("In reply to \(quote.sender ?? L("a message")): \(quote.preview.string). ") + layout.accessibilityLabel
@@ -514,7 +521,8 @@ struct TranscriptLayoutBuilder {
                           spacing: TranscriptMetrics.footerSpacing)
             }
             if !item.isPending, !text.isEmpty || messageId != nil {
-                self.footer(key: "\(item.id):0", copy: text, time: item.timestamp, model: nil, messageId: messageId, into: &stack)
+                self.footer(key: "\(item.id):0", copy: text, time: item.timestamp, model: nil, messageId: messageId,
+                            layout: layout, into: &stack)
             }
             if let messageId {
                 layout.messages.append(.init(id: messageId, minY: TranscriptMetrics.verticalPadding, maxY: stack.y))
@@ -562,7 +570,8 @@ struct TranscriptLayoutBuilder {
             role: .assistant, author: AccessibilityText.join([header.name, from?.marker]),
             text: turn.isStreaming ? Self.spokenTail(of: body) : body, timestamp: header.time,
             toolCount: turn.tools.count, attachmentCount: turn.images.count + turn.files.count,
-            isStreaming: turn.isStreaming, isError: turn.isError, summaryLimit: 0)
+            isStreaming: turn.isStreaming, isError: turn.isError, isBookmarked: !layout.decoration.bookmarks.isEmpty,
+            summaryLimit: 0)
         let reasoning = self.settings.reasoningOff ? "" : thinking
         let hasSteps = !reasoning.isEmpty || !turn.tools.isEmpty
         let hasReply = !turn.text.isEmpty || !turn.images.isEmpty || !turn.files.isEmpty
@@ -606,7 +615,7 @@ struct TranscriptLayoutBuilder {
                 if let chipId = Self.chipId(turn, index) {
                     self.reactions(on: chipId, canAdd: id != nil, into: &stack, layout: layout)
                 }
-                if showFooters { self.messageFooter(turn, message: index, into: &stack) }
+                if showFooters { self.messageFooter(turn, message: index, layout: layout, into: &stack) }
                 if let id { layout.messages.append(.init(id: id, minY: start, maxY: stack.y)) }
             }
             self.images(turn.images, into: &stack, layout: &layout)
@@ -616,7 +625,7 @@ struct TranscriptLayoutBuilder {
                 if let chipId = Self.chipId(turn, last) {
                     self.reactions(on: chipId, canAdd: id != nil, into: &stack, layout: layout)
                 }
-                if showFooters { self.messageFooter(turn, message: last, into: &stack) }
+                if showFooters { self.messageFooter(turn, message: last, layout: layout, into: &stack) }
                 if let id { layout.messages.append(.init(id: id, minY: start, maxY: stack.y)) }
             }
             let showsActivity = steps == .live && (!reasoning.isEmpty || turn.tools.contains(where: \.isRunning))
@@ -1036,10 +1045,13 @@ struct TranscriptLayoutBuilder {
 // MARK: Message footers
 
 extension TranscriptLayoutBuilder {
-    fileprivate func messageFooter(_ turn: AssistantTurn, message index: Int, into stack: inout Stack) {
+    fileprivate func messageFooter(_ turn: AssistantTurn, message index: Int, layout: TranscriptRowLayout,
+                                   into stack: inout Stack)
+    {
         let time = turn.textTimestamps.indices.contains(index) ? turn.textTimestamps[index] : turn.timestamp
         self.footer(key: "\(turn.id):\(index)", copy: turn.text[index], time: time ?? turn.timestamp,
-                    model: self.model(of: turn, message: index), messageId: Self.messageId(turn, index), into: &stack)
+                    model: self.model(of: turn, message: index), messageId: Self.messageId(turn, index), layout: layout,
+                    into: &stack)
     }
 
     /// Transcript id of one message of a turn, when replies and reactions can target it.
@@ -1063,11 +1075,13 @@ extension TranscriptLayoutBuilder {
     }
 
     fileprivate func footer(key: String, copy text: String, time: Date?, model: String?, messageId: String?,
-                            into stack: inout Stack)
+                            layout: TranscriptRowLayout, into stack: inout Stack)
     {
+        let bookmarked = messageId.map { layout.decoration.bookmarks.contains($0) } ?? false
         let details = [model, time?.messageDetailTimestamp].compactMap(\.self).joined(separator: " · ")
         let height = max(TranscriptStyle.lineHeight(self.style.caption), 16)
-        stack.add(.footer(.init(key: key, copyText: text, details: details, messageId: messageId)), height: height,
+        stack.add(.footer(.init(key: key, copyText: text, details: details, messageId: messageId, isBookmarked: bookmarked)),
+                  height: height,
                   spacing: TranscriptMetrics.footerSpacing)
     }
 }
