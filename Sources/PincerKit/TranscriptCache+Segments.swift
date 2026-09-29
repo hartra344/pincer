@@ -148,6 +148,15 @@ extension TranscriptCache {
         return ranges
     }
 
+    /// In-memory change detector for one item: `ChatItem.hashValue` plus what `ImageRef`'s hash
+    /// leaves out although it's encoded (`base64`).
+    static func itemFingerprint(_ item: ChatItem) -> Int {
+        var hasher = Hasher()
+        hasher.combine(item)
+        for case let .image(image) in item.blocks { hasher.combine(image.base64) }
+        return hasher.finalize()
+    }
+
     static func fingerprint(_ itemFingerprints: ArraySlice<Int>) -> Int {
         var hasher = Hasher()
         hasher.combine(itemFingerprints.count)
@@ -185,7 +194,7 @@ extension TranscriptCache {
         do {
             data = try Data(contentsOf: url)
         } catch {
-            if self.isMissing(error) || !FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {
+            if self.isMissing(error) {
                 return .missing
             }
             return .unavailable("segment \(ref.file) unreadable: \(error.localizedDescription)")
@@ -219,7 +228,7 @@ extension TranscriptCache {
             case let .unavailable(reason): return .unavailable(reason)
             case let .corrupt(reason): return .corrupt(reason)
             case let .items(segment):
-                let own = segment.map(\.hashValue)
+                let own = segment.map(self.itemFingerprint)
                 entries[index].fingerprint = self.fingerprint(own[...])
                 fingerprints += own
                 items += segment
@@ -323,7 +332,7 @@ extension TranscriptCache.Writer {
                 return windowed
             }
             let items = snapshot.items
-            let fingerprints = items.map(\.hashValue)
+            let fingerprints = items.map(Cache.itemFingerprint)
 
             var baseline = self.layouts[url]
             if let known = baseline {
@@ -452,10 +461,10 @@ extension TranscriptCache.Writer {
             if reusable[fingerprint] == nil { reusable[fingerprint] = entry }
         }
         let boundaryEntry = Cache.SegmentEntry(
-            ref: stored.segments[boundary.index], fingerprint: Cache.fingerprint(boundary.items.map(\.hashValue)[...]))
+            ref: stored.segments[boundary.index], fingerprint: Cache.fingerprint(boundary.items.map(Cache.itemFingerprint)[...]))
         reusable[boundaryEntry.fingerprint ?? 0] = boundaryEntry
 
-        let fingerprints = region.map(\.hashValue)
+        let fingerprints = region.map(Cache.itemFingerprint)
         let built = try self.build(region, fingerprints: fingerprints, reusable: reusable, directory: directory, result: &result)
         let olderEntries = older.map { Cache.SegmentEntry(ref: $0, fingerprint: fingerprintsByFile[$0.file]) }
         let entries = olderEntries + built.entries
@@ -467,7 +476,7 @@ extension TranscriptCache.Writer {
            fileManager.fileExists(atPath: metaURL.path(percentEncoded: false))
         {
             self.remember(
-                Cache.Layout(token: stored.token, complete: stored.complete, activityMs: stored.activityMs,
+                Cache.Layout(token: stored.token, complete: stored.complete && !dropped, activityMs: stored.activityMs,
                              retained: stored.retained, segments: entries, itemFingerprints: fingerprints,
                              fingerprintOffset: olderCount, manifestDate: Cache.modificationDate(url)),
                 for: url)
@@ -477,17 +486,17 @@ extension TranscriptCache.Writer {
 
         let token = String(UInt64.random(in: .min ... .max))
         try self.commit(
-            Cache.Manifest(version: snapshot.version, complete: stored.complete, activityMs: snapshot.activityMs,
+            Cache.Manifest(version: snapshot.version, complete: stored.complete && !dropped, activityMs: snapshot.activityMs,
                            retained: retained, token: token, segments: entries.map(\.ref)),
             url: url, directory: directory, result: &result)
         let date = Cache.modificationDate(url)
         self.remember(
-            Cache.Layout(token: token, complete: stored.complete, activityMs: snapshot.activityMs, retained: retained,
+            Cache.Layout(token: token, complete: stored.complete && !dropped, activityMs: snapshot.activityMs, retained: retained,
                          segments: entries, itemFingerprints: fingerprints, fingerprintOffset: olderCount,
                          manifestDate: date),
             for: url)
         result.modified = date ?? Date()
-        result.complete = stored.complete
+        result.complete = stored.complete && !dropped
         result.older = older
         result.boundaryKept = kept
         result.change = dropped

@@ -173,3 +173,35 @@ extension TranscriptCacheWindowTests {
         #expect(await self.loadAll(temp.url)?.items == items + extra)
     }
 }
+
+extension TranscriptCacheWindowTests {
+    @Test func windowSaveThatDropsOldestSegmentsIsNoLongerComplete() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let items = V8.items(20500)
+        await V8.save(V8.snapshot(items, complete: true), self.gateway, self.key, temp.url)
+        let extra = V8.items(1, from: 20500)
+        await Cache.save(V8.snapshot(Array(items[19000...]) + extra, complete: true), gatewayId: self.gateway,
+                         sessionKey: self.key, keepingOlder: true, root: temp.url)
+        let loaded = try #require(await self.loadAll(temp.url))
+        #expect(loaded.items.count <= Cache.maxItems + Cache.maxSegmentItems && loaded.items.last?.id == extra[0].id)
+        #expect(!loaded.complete && loaded.retained)
+        let meta = try #require(await Cache.meta(gatewayId: self.gateway, sessionKey: self.key, root: temp.url))
+        #expect(!meta.complete)
+    }
+
+    @Test func imageBase64ChangeIsSaved() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        func item(_ data: String) -> ChatItem {
+            ChatItem(id: "img", role: .assistant,
+                     blocks: [.image(ImageRef(artifactId: "art", base64: data, url: nil, mimeType: "image/png", alt: nil, width: nil, height: nil))],
+                     timestamp: Date(timeIntervalSince1970: 1_700_000_000))
+        }
+        await V8.save(V8.snapshot([item("AAAA")]), self.gateway, self.key, temp.url)
+        let result = await V8.save(V8.snapshot([item("BBBB")]), self.gateway, self.key, temp.url)
+        #expect(!result.unchanged)
+        let loaded = try #require(await self.loadAll(temp.url))
+        #expect(loaded.items == [item("BBBB")])
+    }
+}
