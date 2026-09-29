@@ -80,7 +80,7 @@ func runDemoAvatars() async {
 
     // Distinct identities, from agents.list and agent.identity.get, and distinct seeded companions.
     let agents = gateway.agents
-    check(agents.count == 4 && Set(agents.map(\.name)).count == 4 && Set(agents.compactMap(\.emoji)).count == 4,
+    check(agents.count == 5 && Set(agents.map(\.name)).count == 5 && Set(agents.compactMap(\.emoji)).count == 5,
           "demo agents have distinct names and emoji (\(agents.map { "\($0.name) \($0.emoji ?? "-")" }))")
     await checkAgentIdentities(profile: .demo(), agents: agents, label: "demo")
     let styles = agents.map { AvatarStyle.seeded(from: AvatarStyle.identitySeed(name: $0.name, agentId: $0.id)) }

@@ -398,7 +398,7 @@ func runDemoIntents() async {
     }
 
     let agents = await service.suggestedAgents()
-    check(agents.map(\.title) == ["🦞 Claw", "🔭 Scout", "🛠️ Forge", "🌕 Kiko"] && agents.allSatisfy { $0.subtitle == nil },
+    check(agents.map(\.title) == ["🦞 Claw", "🔭 Scout", "🛠️ Forge", "🌕 Kiko", "📦 Mochi"] && agents.allSatisfy { $0.subtitle == nil },
           "demo agents suggested (\(agents.map(\.title)))")
     let chats = await service.suggestedChats()
     check(chats.contains { $0.title == "home-lab" } && chats.contains { $0.title == "Paper digest" }

@@ -16,6 +16,8 @@ func runDemoSidebarAgentGroups() async {
     guard connected else { return }
     defer { gateway.stop() }
 
+    let catalog = await waitFor("demo group catalog") { gateway.groupCatalog.contains("Day of move") }
+    check(catalog, "agent groups: demo group catalog loaded (\(gateway.groupCatalog))")
     func mochi() -> SidebarSection? { gateway.sections().first { $0.kind == .agent("mochi") } }
 
     gateway.organization = .group
