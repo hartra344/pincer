@@ -26,15 +26,20 @@ func runTranscriptWindowChecks() async {
     let defaults = UserDefaults(suiteName: "pincer.windowchecks.\(UUID().uuidString)")!
     let gateway = GatewayStore(profile: profile, defaults: defaults, identity: DeviceIdentity(privateKey: .init()))
     func makeChat() -> ChatStore {
-        let chat = ChatStore(sessionKey: key, agentId: nil, gateway: gateway, headless: true)
+        let chat = ChatStore(sessionKey: key, agentId: nil, gateway: gateway, headless: false)
         chat.windowLimit = limit
+        chats.append(chat)
         return chat
     }
     func cachedIds() async -> [String] {
         await TranscriptCache.flush(gatewayId: gateway.id)
         return await TranscriptCache.load(gatewayId: gateway.id, sessionKey: key)?.items.map(\.id) ?? []
     }
-    defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+    var chats: [ChatStore] = []
+    defer {
+        for chat in chats { chat.stopCaching() }
+        TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+    }
 
     await TranscriptCache.save(TranscriptCache.Snapshot(items: windowItems(total), complete: false, activityMs: 5),
                                gatewayId: gateway.id, sessionKey: key)
@@ -65,7 +70,7 @@ func runTranscriptWindowChecks() async {
 
     let cut = ChatStore.windowCut(windowItems(total), limit: limit)
     let cutItems = windowItems(total)
-    check(cut >= total - limit - 3 && cut <= total - limit && (cut == 0 || cutItems[cut].role == .user),
+    check(cut >= total - limit && cut <= total - limit + 3 && (cut == 0 || cutItems[cut].role == .user),
           "the window cut lands on the start of a turn (index \(cut))")
 
     let trimmed = makeChat()
@@ -74,21 +79,27 @@ func runTranscriptWindowChecks() async {
     pending.isPending = true
     trimmed.items.append(pending)
     trimmed.hasLoaded = true
-    gateway.selectedKey = key
-    await trimmed.trimToWindow()
-    check(trimmed.items.count == total + 1, "the selected chat is never trimmed")
-    gateway.selectedKey = nil
     await trimmed.trimToWindow()
     let kept = trimmed.items.filter { !$0.isPending }
-    check(kept.count <= limit && kept.first?.role == .user && kept.map(\.id) == windowIds((total - kept.count)..<total),
+    check(kept.count <= limit && kept.count >= limit - 3 && kept.first?.role == .user && kept.map(\.id) == windowIds((total - kept.count)..<total),
           "leaving a chat trims it to a turn-aligned newest window (\(kept.count) items)")
     check(trimmed.items.last?.id == "unsent", "an unsent message survives the trim")
-    check(await cachedIds() == windowIds(0..<total), "the trim kept the whole history on disk")
+    let afterTrim = await cachedIds()
+    check(afterTrim == windowIds(0..<total), "the trim kept the whole history on disk")
+
+    let selected = makeChat()
+    selected.items = windowItems(total)
+    selected.hasLoaded = true
+    gateway.selectedKey = key
+    await selected.trimToWindow()
+    check(selected.items.count == total, "the selected chat is never trimmed")
+    gateway.selectedKey = nil
 
     trimmed.items.removeLast()
     trimmed.items += windowItems(2, from: total)
     await trimmed.saveSnapshot()
-    check(await cachedIds() == windowIds(0..<(total + 2)), "a save after a trim keeps the older history and adds the new messages")
+    let afterSave = await cachedIds()
+    check(afterSave == windowIds(0..<(total + 2)), "a save after a trim keeps the older history and adds the new messages")
 
     let searching = makeChat()
     await searching.restoreFromCache()
@@ -113,7 +124,8 @@ func runTranscriptWindowChecks() async {
     await TranscriptCache.flush(gatewayId: gateway.id)
     jumping.savedState = nil
     await jumping.saveSnapshot()
-    check(await cachedIds() == windowIds(0..<(total + 3)), "a newer message saved by the visible chat survives a later full save")
+    let afterFill = await cachedIds()
+    check(afterFill == windowIds(0..<(total + 3)), "a newer message saved by the visible chat survives a later full save")
 }
 #else
 @MainActor

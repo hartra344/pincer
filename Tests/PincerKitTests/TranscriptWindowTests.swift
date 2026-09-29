@@ -10,7 +10,7 @@ struct TranscriptWindowTests {
     let total = 400
     let limit = 60
 
-    func makeStore(key: String? = nil, headless: Bool = true) -> (ChatStore, GatewayStore) {
+    func makeStore(key: String? = nil, headless: Bool = false) -> (ChatStore, GatewayStore) {
         let suite = "TranscriptWindowTests.\(UUID().uuidString)"
         let profile = GatewayProfile(id: UUID(), name: "T", url: "ws://127.0.0.1:1", authMode: .none)
         let gateway = GatewayStore(profile: profile, defaults: UserDefaults(suiteName: suite)!, identity: Fixtures.identity())
@@ -46,7 +46,10 @@ struct TranscriptWindowTests {
 
     @Test func restoreLoadsOnlyTheNewestWindow() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway)
         await chat.restoreFromCache()
         #expect(chat.cacheOutcome == .loaded)
@@ -58,7 +61,10 @@ struct TranscriptWindowTests {
 
     @Test func smallChatRestoresWholeWithNothingOlder() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway, count: 30)
         await chat.restoreFromCache()
         #expect(chat.items.count == 30)
@@ -67,9 +73,15 @@ struct TranscriptWindowTests {
 
     @Test func restoreOfExactlyWindowSizedChatHasNothingOlder() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway, count: self.limit)
         await chat.restoreFromCache()
+        #expect(chat.items.count == self.limit)
+        // A full window can't tell whether older items exist until the first page comes back empty.
+        #expect(await chat.loadOlder())
         #expect(chat.items.count == self.limit)
         #expect(!chat.olderInCache && !chat.hasOlderItems)
     }
@@ -86,7 +98,10 @@ struct TranscriptWindowTests {
 
     @Test func loadOlderPagesFromCacheWithoutGapsOrDuplicates() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway)
         await chat.restoreFromCache()
         chat.hasLoaded = true
@@ -107,7 +122,10 @@ struct TranscriptWindowTests {
 
     @Test func loadOlderKeepsRowIdentity() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway)
         await chat.restoreFromCache()
         chat.hasLoaded = true
@@ -120,7 +138,10 @@ struct TranscriptWindowTests {
 
     @Test func reachingCacheStartHandsOverToGatewayPaging() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway, complete: false)
         await chat.restoreFromCache()
         chat.hasLoaded = true
@@ -142,7 +163,10 @@ struct TranscriptWindowTests {
 
     @Test func loadOlderWithNothingOlderIsANoOp() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway, count: 20)
         await chat.restoreFromCache()
         #expect(await chat.loadOlder())
@@ -151,7 +175,10 @@ struct TranscriptWindowTests {
 
     @Test func missingCacheWhilePagingFallsBackToGateway() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway, complete: false)
         await chat.restoreFromCache()
         chat.hasLoaded = true
@@ -188,7 +215,10 @@ struct TranscriptWindowTests {
 
     @Test func trimDropsOlderItemsAtATurnBoundary() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         chat.items = V8.items(self.total)
         chat.hasLoaded = true
         await chat.trimToWindow()
@@ -201,7 +231,10 @@ struct TranscriptWindowTests {
 
     @Test func trimKeepsPendingItems() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         chat.items = V8.items(self.total)
         var pending = ChatItem(id: "p1", role: .user, blocks: [.text("unsent")], timestamp: Date(timeIntervalSince1970: 2_000_000_000))
         pending.isPending = true
@@ -215,7 +248,10 @@ struct TranscriptWindowTests {
 
     @Test func trimIsANoOpForTheSelectedChat() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         chat.items = V8.items(self.total)
         chat.hasLoaded = true
         gateway.selectedKey = self.key
@@ -226,7 +262,10 @@ struct TranscriptWindowTests {
 
     @Test func trimIsANoOpWithinTheWindow() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         chat.items = V8.items(self.limit)
         chat.hasLoaded = true
         await chat.trimToWindow()
@@ -236,7 +275,10 @@ struct TranscriptWindowTests {
 
     @Test func trimmedChatPagesBackFromTheCache() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         chat.items = V8.items(self.total)
         chat.hasLoaded = true
         await chat.trimToWindow()
@@ -252,7 +294,10 @@ struct TranscriptWindowTests {
 
     @Test func saveAfterTrimKeepsOlderOnDisk() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway)
         await chat.restoreFromCache()
         chat.hasLoaded = true
@@ -267,7 +312,10 @@ struct TranscriptWindowTests {
 
     @Test func saveOfAWindowedChatKeepsCompleteFlag() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway)
         await chat.restoreFromCache()
         chat.hasLoaded = true
@@ -283,7 +331,10 @@ struct TranscriptWindowTests {
 
     @Test func locateFindsAnItemOutsideTheWindowViaTheCache() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway)
         await chat.restoreFromCache()
         chat.hasLoaded = true
@@ -297,7 +348,10 @@ struct TranscriptWindowTests {
 
     @Test func locateOfAnUnknownIdReportsAndKeepsWhatLoaded() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway)
         await chat.restoreFromCache()
         chat.hasLoaded = true
@@ -308,7 +362,10 @@ struct TranscriptWindowTests {
 
     @Test func loadAllCachedMakesTheWholeCachedHistoryAvailable() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway)
         await chat.restoreFromCache()
         chat.hasLoaded = true
@@ -320,7 +377,10 @@ struct TranscriptWindowTests {
 
     @Test func loadAllCachedThenTrimReturnsToTheWindow() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway)
         await chat.restoreFromCache()
         chat.hasLoaded = true
@@ -335,7 +395,10 @@ struct TranscriptWindowTests {
 
     @Test func aNewerMessageSavedByTheVisibleStoreSurvivesTheFullFill() async {
         let (chat, gateway) = self.makeStore()
-        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        }
         await self.seed(gateway)
         await chat.restoreFromCache()
         chat.hasLoaded = true
