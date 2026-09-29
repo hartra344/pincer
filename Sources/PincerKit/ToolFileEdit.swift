@@ -559,8 +559,10 @@ extension ToolFileEdit {
             budget -= text.utf16.count
             shown.append(DiffLine(.addition, text, lineNumber: index + 1))
         }
-        // With details present, only `created: true` proves there was nothing to remove.
-        let isNew = details == nil || details?["created"]?.bool == true
+        // With details present, only `created: true` proves there was nothing to remove. Status
+        // scalars alone (`ToolActivity.statusDetailKeys`) say nothing about the file.
+        let statusOnly = details?.object?.keys.allSatisfy(ToolActivity.statusDetailKeys.contains) ?? true
+        let isNew = statusOnly || details?["created"]?.bool == true
         let file = FileDiff(path: path, operation: isNew ? .add : .update,
                             hunks: [DiffHunk(lines: shown, oldStart: 0, newStart: 1)], additions: all.count, deletions: 0)
         // An overwrite's additions are the new content; what it replaced isn't known.

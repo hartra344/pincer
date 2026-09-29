@@ -46,6 +46,14 @@ struct ToolDetailsCacheTests {
         #expect(edit.additions == 2 && edit.deletions == 1, "the cached receipt's diff is shown")
     }
 
+    @Test func execStatusScalarsAreKeptButNotItsOutput() {
+        let details = Fixtures.json(#"{"status":"failed","exitCode":1,"durationMs":1240,"cwd":"/src","aggregated":"boom","tail":"x","nodeInvokeFailure":{"message":"m"}}"#)
+        #expect(ToolActivity.fileEditDetails(details) == .object(["status": "failed", "exitCode": 1, "durationMs": 1240, "cwd": "/src"]),
+                "exec badges survive a reload; the duplicated output and nested values don't")
+        let write = ToolFileEdit.parse(toolName: "write", arguments: Self.writeArgs, details: .object(["status": "completed"]))
+        #expect(write?.files.first?.operation == .add, "status scalars alone aren't a write receipt")
+    }
+
     @Test func itemsWithoutToolDetailsOmitTheKey() throws {
         let data = try JSONEncoder().encode(Self.items(details: nil)[1])
         let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
