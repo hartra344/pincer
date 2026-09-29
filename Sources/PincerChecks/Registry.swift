@@ -146,6 +146,7 @@ enum Suites {
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
         Section("MCP servers (demo)") { await runDemoMCP() },
+        Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
     ]
 
     /// Against a (mock) Gateway, first half.
