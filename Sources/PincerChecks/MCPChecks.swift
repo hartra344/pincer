@@ -84,13 +84,15 @@ private func mcpLifecycle(_ gateway: GatewayStore, label: String, settleTimeout:
     mcp.setEnabled("scratch-tools", false)
     check(mcp.isChanged("scratch-tools") && mcp.server("scratch-tools")?.enabled == false && mcp.status(for: "scratch-tools").state == .disabled,
           "\(label): disable is a draft change and reads Disabled")
-    check(await settings.save(), "\(label): save disable")
+    let ok57418 = await settings.save()
+    check(ok57418, "\(label): save disable")
     check(mcp.savedServer("scratch-tools")?.enabled == false, "\(label): saved as enabled:false")
     mcp.setEnabled("scratch-tools", true)
     check(settings.value(at: ["mcp", "servers", "scratch-tools", "enabled"]) == nil, "\(label): enable removes the enabled key")
-    check(await settings.save(), "\(label): save enable")
-    check(await waitFor("\(label) re-enabled connects", timeout: settleTimeout) { mcp.status(for: "scratch-tools").state == .connected },
-          "\(label): re-enabled server connects again")
+    let ok57806 = await settings.save()
+    check(ok57806, "\(label): save enable")
+    let w101 = await waitFor("\(label) re-enabled connects", timeout: settleTimeout) { mcp.status(for: "scratch-tools").state == .connected }
+    check(w101, "\(label): re-enabled server connects again")
 
     // Rename nulls the old name.
     if let current = mcp.server("scratch-tools") {
@@ -98,23 +100,25 @@ private func mcpLifecycle(_ gateway: GatewayStore, label: String, settleTimeout:
         rename.name = "scratch-renamed"
         mcp.apply(rename)
         check(mcp.server("scratch-tools") == nil && mcp.server("scratch-renamed") != nil, "\(label): rename moves the server in the draft")
-        check(await settings.save(), "\(label): save rename")
+        let ok84013 = await settings.save()
+        check(ok84013, "\(label): save rename")
         check(mcp.savedServer("scratch-tools") == nil && mcp.savedServer("scratch-renamed") != nil, "\(label): rename saved, old name gone")
     }
 
     // Reconnect.
     if mcp.supportsReconnect {
         await mcp.reconnect("scratch-renamed")
-        check(await waitFor("\(label) reconnect settles", timeout: settleTimeout) { mcp.status(for: "scratch-renamed").state == .connected },
-              "\(label): reconnect ends connected")
+        let w102 = await waitFor("\(label) reconnect settles", timeout: settleTimeout) { mcp.status(for: "scratch-renamed").state == .connected }
+        check(w102, "\(label): reconnect ends connected")
         await mcp.reconnect("github")
-        check(await waitFor("\(label) github reconnect", timeout: settleTimeout) { mcp.status(for: "github").state == .connected },
-              "\(label): reconnect github stays connected")
+        let w103 = await waitFor("\(label) github reconnect", timeout: settleTimeout) { mcp.status(for: "github").state == .connected }
+        check(w103, "\(label): reconnect github stays connected")
     }
 
     mcp.remove("scratch-renamed")
     check(mcp.server("scratch-renamed") == nil, "\(label): remove drops it from the draft")
-    check(await settings.save(), "\(label): save remove")
+    let ok64427 = await settings.save()
+    check(ok64427, "\(label): save remove")
     check(mcp.savedServer("scratch-renamed") == nil && mcp.servers.map(\.name) == seedNames, "\(label): back to the 7 seed servers (\(mcp.servers.map(\.name)))")
 }
 
@@ -163,9 +167,8 @@ private func allowLink(in html: String, base: URL) -> URL? {
 
 @MainActor
 func runLiveMCP(url: String, token: String) async {
-    let profile = GatewayProfile(name: "Mock MCP", url: url, authMode: .token)
+    let profile = GatewayProfile(name: "Mock MCP", url: url, authMode: .token, access: .admin)
     profile.secret = token
-    profile.access = .admin
     guard let gateway = await mcpConnect(profile, "mock for MCP") else { return }
     defer { gateway.stop() }
     let settings = gateway.settings
@@ -175,7 +178,8 @@ func runLiveMCP(url: String, token: String) async {
     guard settings.canEdit else { check(false, "mock: admin scope granted for MCP"); return }
     check(mcp.supportsLiveStatus && mcp.supportsReconnect && mcp.supportsOAuth, "mock advertises mcp.status, mcp.reconnect and mcp.oauth.*")
     await mcp.load()
-    check(await waitFor("mock statuses settle", timeout: 10) { mcp.status(for: "filesystem").state == .connected }, "mock: filesystem connects")
+    let ok29241 = await waitFor("mock statuses settle", timeout: 10) { mcp.status(for: "filesystem").state == .connected }
+    check(ok29241, "mock: filesystem connects")
     mcpSeedChecks(mcp, label: "mock")
 
     // Secrets stay redacted in config.get, and an unrelated edit doesn't clobber them.
@@ -186,7 +190,8 @@ func runLiveMCP(url: String, token: String) async {
         if let index = edit.env.firstIndex(where: { $0.key == "LOG_LEVEL" }) { edit.env[index].value = "debug" }
         mcp.apply(edit)
         check(mcp.isChanged("filesystem") && !mcp.isChanged("github"), "mock: only filesystem is changed")
-        check(await settings.save(), "mock: save unrelated edit (\(settings.saveState.error ?? "ok"))")
+        let r1 = await settings.save()
+        check(r1, "mock: save unrelated edit (\(settings.saveState.error ?? "ok"))")
         check(settings.savedValue(at: ["mcp", "servers", "filesystem", "env", "LOG_LEVEL"])?.string == "debug", "mock: LOG_LEVEL saved")
         check(settings.savedValue(at: ["mcp", "servers", "github", "headers", "Authorization"])?.string == sentinel,
               "mock: github Authorization still redacted in config.get after the edit")
@@ -221,7 +226,8 @@ func runLiveMCP(url: String, token: String) async {
         }
         check(authorized && mcp.status(for: "linear").toolCount == 5, "mock: linear authorized with 5 tools after the oauth event (\(mcp.status(for: "linear").state))")
         await mcp.signOut("linear")
-        check(await waitFor("mock linear signed out", timeout: 10) { mcp.status(for: "linear").needsSignIn }, "mock: sign out → needs sign-in")
+        let ok61191 = await waitFor("mock linear signed out", timeout: 10) { mcp.status(for: "linear").needsSignIn }
+        check(ok61191, "mock: sign out → needs sign-in")
         // Deny path.
         if let denied = await mcp.startSignIn("linear"), let page = await fetch(denied.authorizationURL),
            var allow = allowLink(in: page.body, base: denied.authorizationURL), var parts = URLComponents(url: allow, resolvingAgainstBaseURL: false)
@@ -230,7 +236,8 @@ func runLiveMCP(url: String, token: String) async {
             parts.queryItems?.append(URLQueryItem(name: "error", value: "access_denied"))
             allow = parts.url ?? allow
             _ = await fetch(allow)
-            check(await waitFor("mock deny leaves linear signed out", timeout: 5) { mcp.status(for: "linear").needsSignIn }, "mock: denying leaves linear signed out")
+            let ok13947 = await waitFor("mock deny leaves linear signed out", timeout: 5) { mcp.status(for: "linear").needsSignIn }
+            check(ok13947, "mock: denying leaves linear signed out")
         }
         // Manual complete path.
         if let manual = await mcp.startSignIn("linear") {
@@ -250,6 +257,7 @@ func runLiveMCP(url: String, token: String) async {
     check(refused == nil, "mock: non-OAuth server can't sign in")
 
     await mcp.reconnect("postgres")
-    check(await waitFor("mock postgres still errors", timeout: 8) { mcp.status(for: "postgres").state == .error }, "mock: postgres stays in error after reconnect")
+    let ok4614 = await waitFor("mock postgres still errors", timeout: 8) { mcp.status(for: "postgres").state == .error }
+    check(ok4614, "mock: postgres stays in error after reconnect")
     await mcpLifecycle(gateway, label: "mock", settleTimeout: 10)
 }
