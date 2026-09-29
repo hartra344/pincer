@@ -37,6 +37,7 @@ struct ChatView: View {
     /// A built export waiting for its sheet to close: the save panel or share sheet can't open over it (#430).
     @State private var pendingExport: ExportedFile?
     @State private var exportError: String?
+    @State private var scrollToBottom = ScrollToBottomModel()
     #if os(iOS)
     @State private var sharedFile: SharedFile?
     #endif
@@ -56,7 +57,7 @@ struct ChatView: View {
         TranscriptPane(
             chat: self.chat, find: self.find, jump: self.jump, disclosure: self.disclosure,
             previewing: self.$previewing, previewingHTML: self.$previewingHTML, quickLookURL: self.$quickLookURL,
-            exporting: self.$exporting,
+            exporting: self.$exporting, scrollToBottom: self.scrollToBottom,
             bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
             topInset: self.topChrome + self.transcriptSafeArea.top,
             reasoningOff: self.reasoningOff)
@@ -88,6 +89,13 @@ struct ChatView: View {
                 }
                 .modifier(QuestionsAnimation())
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.bottomChrome = $0 }
+                // An overlay, so it doesn't change the measured height: its bottom sits just above
+                // the stack's top, centred over the Send button, and rides up with the keyboard.
+                .overlay(alignment: .topTrailing) {
+                    ScrollToBottomButton(model: self.scrollToBottom, chat: self.chat)
+                        .alignmentGuide(.top) { $0[.bottom] + Theme.Spacing.md }
+                        .padding(.trailing, ScrollToBottomButton.trailingPadding)
+                }
             }
             .animation(.snappy, value: self.chat.errorMessage)
             .animation(.snappy, value: self.chat.notice)
@@ -357,6 +365,7 @@ private struct TranscriptPane: View {
     @Binding var previewingHTML: HTMLPreviewItem?
     @Binding var quickLookURL: URL?
     @Binding var exporting: ExportedFile?
+    let scrollToBottom: ScrollToBottomModel
     let bottomInset: CGFloat
     let topInset: CGFloat
     let reasoningOff: Bool
@@ -397,6 +406,7 @@ private struct TranscriptPane: View {
             }
             .padding(.bottom, self.bottomInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .onAppear { self.scrollToBottom.reset() }
             #if os(macOS)
             // Like the transcript list: fill the pane, then add the insets once.
             .ignoresSafeArea(.container, edges: [.top, .bottom])
@@ -408,6 +418,7 @@ private struct TranscriptPane: View {
                 Text("Messages you send here go straight to your Gateway as the owner.", bundle: .module)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear { self.scrollToBottom.reset() }
         } else {
             TranscriptList(
                 rows: TranscriptRow.rows(for: self.chat),
@@ -440,6 +451,7 @@ private struct TranscriptPane: View {
                 topInset: self.topInset,
                 highlight: self.find.highlight,
                 jump: self.jump,
+                scrollToBottom: self.scrollToBottom,
                 bottomAnchorChanged: { [findTrim = self.findTrim, chat = self.chat] in
                     findTrim.bottomAnchorChanged($0, chat: chat)
                 })
