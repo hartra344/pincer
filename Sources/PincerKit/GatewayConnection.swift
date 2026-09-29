@@ -59,6 +59,9 @@ public struct GatewayHello: Sendable {
     public let tickIntervalMs: Int
     public let methods: Set<String>
     public let snapshot: JSONValue?
+    /// The host name the gateway reports for itself: its own `snapshot.presence` entry
+    /// (`mode: "gateway"`, `reason: "self"`). The same from every device, unlike its address.
+    public let gatewayHost: String?
     /// Optional scopes Pincer left out because their upgrade is waiting for approval on the Gateway host.
     public internal(set) var withheldScopes: Set<String> = []
     /// The pairing request to approve (`openclaw devices approve <id>`) to get them.
@@ -78,6 +81,9 @@ public struct GatewayHello: Sendable {
         self.tickIntervalMs = payload["policy"]?["tickIntervalMs"]?.int ?? 15000
         self.methods = Set(payload["features"]?["methods"]?.array?.compactMap(\.string) ?? [])
         self.snapshot = payload["snapshot"]
+        self.gatewayHost = payload["snapshot"]?["presence"]?.array?
+            .first { $0["mode"]?.string == "gateway" && $0["reason"]?.string == "self" }?["host"]?.string
+            .flatMap(PincerRoute.normalizedGatewayHost)
     }
 }
 

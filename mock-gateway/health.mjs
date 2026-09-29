@@ -1,5 +1,6 @@
 // Gateway health, presence and safe restart, shaped like OpenClaw's `health`, `status`,
 // `last-heartbeat`, `system-presence` and `gateway.restart.request`.
+import { randomUUID } from 'node:crypto';
 import { ADMIN_SCOPE } from './config.mjs';
 import { channelAccountSnapshots } from './setup.mjs';
 import { resetChannelsForRestart } from './channels.mjs';
@@ -93,10 +94,28 @@ export function healthSummary(state) {
   };
 }
 
-/** One presence entry per authenticated connection, plus a node that's always there. */
+/** The host name the mock reports for itself, like OpenClaw's `os.hostname()` self entry. */
+export const MOCK_GATEWAY_HOST = 'pincer-mock-gateway.local';
+const SELF_INSTANCE_ID = randomUUID();
+
+/**
+ * The Gateway's own entry (`mode: 'gateway'`, `reason: 'self'`, host from `os.hostname()`), one per
+ * authenticated connection, plus a node that's always there.
+ */
 export function presenceEntries(state) {
   const now = Date.now();
-  const entries = [];
+  const entries = [{
+    text: `Gateway: ${MOCK_GATEWAY_HOST} (127.0.0.1) · app 2026.1.0 · mode gateway · reason self`,
+    host: MOCK_GATEWAY_HOST,
+    ip: '127.0.0.1',
+    version: '2026.1.0',
+    platform: 'macos 26.0',
+    deviceFamily: 'Mac',
+    mode: 'gateway',
+    reason: 'self',
+    instanceId: SELF_INSTANCE_ID,
+    ts: now,
+  }];
   for (const conn of state.connections) {
     if (!conn.authenticated) continue;
     const client = conn.client ?? {};
