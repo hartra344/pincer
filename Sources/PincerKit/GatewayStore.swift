@@ -45,7 +45,15 @@ public final class GatewayStore: Identifiable {
         self.sortedRowsCache = nil
         self.subagentTrees = [:]
         self.settleRunTimeline()
+        self.markVisibleChatsRead()
     }
+    /// The chat each viewer (the main window, later chat windows) shows on screen right now, in an
+    /// active, focused scene. See `setVisibleChat(_:viewer:)`.
+    @ObservationIgnored var visibleChatsByViewer: [String: String] = [:]
+    /// Keys with a `sessions.patch unread=false` in flight, so a burst of row changes sends one.
+    @ObservationIgnored var markingRead: Set<String> = []
+    /// Visible keys that changed while their patch was in flight; checked again once it lands.
+    @ObservationIgnored var recheckRead: Set<String> = []
     @ObservationIgnored private var sessionStorage: [String: SessionRow] = [:]
     @ObservationIgnored var sortedRowsCache: [SessionRow]?
     /// `subagentTree(rootKey:)` per root and connection state, until the rows change.
@@ -1005,8 +1013,12 @@ public final class GatewayStore: Identifiable {
     }
 
     public func markRead(_ key: String) async {
-        guard let row = self.sessions[key], row.isUnread, self.state.isConnected else { return }
-        _ = try? await self.connection.request("sessions.patch", ["key": .string(key), "unread": false])
+        guard let row = self.sessions[key], row.isUnread, self.state.isConnected,
+              !self.markingRead.contains(key) else { return }
+        self.markingRead.insert(key)
+        let sent = (try? await self.connection.request("sessions.patch", ["key": .string(key), "unread": false])) != nil
+        self.markingRead.remove(key)
+        if self.recheckRead.remove(key) != nil, sent { self.markVisibleChatsRead() }
     }
 
     // MARK: Mutations

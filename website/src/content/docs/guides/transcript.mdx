@@ -137,6 +137,16 @@ To stop Pincer from loading images from the web, turn off **Load images the agen
 
 To keep image-heavy chats light, the transcript keeps a smaller copy of each image sized for the screen. Opening the preview loads the full-resolution image. Pincer holds a fixed amount of image memory per gateway (about 64 MB on iPhone and iPad, 160 MB on Mac), downloads up to four images at a time, and frees images you've scrolled away from when the system runs low on memory. Freed images load again when you scroll back. Images larger than 25 MB aren't downloaded, and show **Image too large to preview** instead.
 
+## Files
+
+Other files the agent sends appear as a chip with the file name and a **Save** button:
+
+- **Text and code files** expand in place when you tap or click the chip. They show the first 50,000 characters.
+- **Other files** open in Quick Look when you tap or click the chip. This includes PDFs, spreadsheets, documents, audio and video. Pincer downloads the file into a private temporary folder and deletes it when the preview closes. Quick Look shows the file on your device, and nothing is sent anywhere else.
+- **Save** downloads the whole file and asks where to keep it.
+
+Try it in the [built-in demo](../../getting-started/try-the-demo/): **Claw → Rate limiter design** ends with a PDF.
+
 ## Your messages
 
 Messages from you appear under **your own name**, even when you sent them through Discord. A small **via Discord** tag shows where they came from. Set your name in Settings. It defaults to your macOS full name.
