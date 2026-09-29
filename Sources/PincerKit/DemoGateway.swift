@@ -116,6 +116,10 @@ actor DemoGateway {
 
     /// Whether `chat.send` takes `replyToId`, like current Gateways.
     let acceptsReplyTo: Bool
+    /// Whether a finished reply turns its chat unread, like Gateways with openclaw/openclaw#155690.
+    /// Released Gateways don't (#426); tests turn it off to play one.
+    var repliesMarkUnread = true
+    func setRepliesMarkUnread(_ marks: Bool) { self.repliesMarkUnread = marks }
     /// `message.action` calls received, oldest first.
     var recordedActions: [JSONValue] = []
     /// MCP servers config and status (DemoGateway+MCP.swift).

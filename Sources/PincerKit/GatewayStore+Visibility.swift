@@ -17,6 +17,8 @@ extension GatewayStore {
     public func setVisibleChat(_ key: String?, viewer: String) {
         guard self.visibleChatsByViewer[viewer] != key else { return }
         self.visibleChatsByViewer[viewer] = key
+        // Seen now, so a reply still waiting to be marked unread (#426) was read.
+        if let key { self.pendingReplyUnread.remove(key) }
         self.markVisibleChatsRead()
     }
 
@@ -30,5 +32,46 @@ extension GatewayStore {
                 Task { await self.markRead(key) }
             }
         }
+    }
+}
+
+/// Replies that land in a chat nobody is viewing (#426). Released Gateways only turn a chat unread when
+/// the user sends (`lastInteractionAt`), and Pincer reads the chat on screen as the user sends (#374),
+/// so the reply that follows never shows. openclaw/openclaw#155690 fixes that on the Gateway; until
+/// every supported Gateway has it, Pincer marks the chat unread itself. Where the Gateway already did,
+/// the row is unread and nothing is sent.
+extension GatewayStore {
+    /// How long a finished reply waits for the Gateway's own row change (and for a window that is
+    /// opening on the chat) before Pincer marks it.
+    static var replyUnreadGrace: Duration = .milliseconds(1500)
+
+    /// Called when a run's reply finishes in `key`.
+    func noteReplyLanded(_ key: String, runId: String?, message: JSONValue?) {
+        guard self.bootstrapped, let message, !message.isNull else { return }
+        if let runId {
+            guard !self.markedReplyRuns.contains(runId) else { return }
+            if self.markedReplyRuns.count >= 200 { self.markedReplyRuns.removeAll() }
+            self.markedReplyRuns.insert(runId)
+        }
+        guard !self.visibleChatKeys.contains(key) else { return }
+        let replyAt = message["timestamp"]?.double ?? Date().timeIntervalSince1970 * 1000
+        self.pendingReplyUnread.insert(key)
+        Task { [weak self] in
+            try? await Task.sleep(for: Self.replyUnreadGrace)
+            guard let self, self.pendingReplyUnread.remove(key) != nil,
+                  self.state.isConnected, !self.visibleChatKeys.contains(key),
+                  let row = self.sessions[key], Self.shouldMarkReplyUnread(row: row, replyAt: replyAt)
+            else { return }
+            await self.patch(key, ["unread": true])
+        }
+    }
+
+    /// Whether a reply at `replyAt` (ms) should turn `row` unread: it isn't already, it's a chat of the
+    /// user's own, and nobody read it after the reply (another device, say).
+    static func shouldMarkReplyUnread(row: SessionRow, replyAt: Double) -> Bool {
+        guard !row.isUnread, !row.isSubagent, !row.isArchived else { return false }
+        let readAt = row.raw["lastReadAt"]?.double ?? 0
+        let endedAt = row.raw["endedAt"]?.double ?? 0
+        return readAt < max(replyAt, endedAt)
     }
 }

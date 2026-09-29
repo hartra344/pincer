@@ -116,6 +116,8 @@ extension DemoGateway {
         for field in ["unread", "pinned", "label", "category", "color"] {
             if let value = params[field] { row[field] = value }
         }
+        // Like the Gateway, a read is stamped server-side.
+        if params["unread"]?.bool == false { row["lastReadAt"] = .number((Date().timeIntervalSince1970 * 1000).rounded()) }
         if let archived = params["archived"]?.bool { Self.applyArchived(&row, archived) }
         self.registerGroup(params["category"]?.string)
         if let model = params["model"] {
