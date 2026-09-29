@@ -35,6 +35,8 @@ struct TranscriptList: NSViewRepresentable {
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
         private enum Anchor: Equatable {
             case bottom
+            /// The reader is at the very top, wherever the rows below end up.
+            case top
             /// Row id, and how far its top sits below the top of the viewport.
             case row(String, CGFloat)
         }
@@ -155,6 +157,10 @@ struct TranscriptList: NSViewRepresentable {
                 self.heights.removeAll()
                 self.rows = []
             }
+            if case .top = self.anchor, newRows.first?.id != self.rows.first?.id {
+                // Rows arriving above: keep reading the same row instead of following the top.
+                self.anchor = self.currentAnchor(allowTop: false)
+            }
             // Streaming: same ids, only the last row differs. One pass, no diffing.
             if let last = newRows.last, self.rows.count == newRows.count, self.rows.last?.id == last.id,
                self.rows.dropLast() == newRows.dropLast() {
@@ -247,12 +253,16 @@ struct TranscriptList: NSViewRepresentable {
             defer { self.isAdjusting = false }
             // Jump to the anchor first so the rows measured are the ones about to be on screen.
             self.restore(self.anchor)
-            var resized = self.measureAroundViewport()
-            resized.formUnion(changed)
-            if !resized.isEmpty {
+            // Measuring rows above the anchor moves the viewport over rows that weren't measured
+            // yet, so go again until the rows on screen are all measured.
+            var resized = changed
+            for _ in 0..<4 {
+                resized.formUnion(self.measureAroundViewport())
+                if resized.isEmpty { break }
                 self.withoutAnimation { table.noteHeightOfRows(withIndexesChanged: resized) }
+                resized = []
+                self.restore(self.anchor)
             }
-            self.restore(self.anchor)
             self.refreshVisibleCells()
             self.schedulePrefetch()
         }
@@ -265,10 +275,14 @@ struct TranscriptList: NSViewRepresentable {
             guard width > 40 else { return }
             let visible = table.rows(in: table.visibleRect)
             guard visible.length > 0 else { return }
-            for row in visible.location..<min(visible.location + visible.length, self.rows.count) {
+            let range = visible.location..<min(visible.location + visible.length, self.rows.count)
+            for row in range {
+                let layout = self.renderer.layout(for: self.rows[row], width: width)
+                self.correctHeight(self.rows[row].id, width: width, height: layout.height)
                 guard let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? TranscriptCell else { continue }
-                cell.apply(self.renderer.layout(for: self.rows[row], width: width), actions: self.renderer)
+                cell.apply(layout, actions: self.renderer)
             }
+            self.renderer.pinImages(of: self.rows[range], width: width)
         }
 
         /// Highlights Find's matches and scrolls the selected one into view when asked to.
@@ -341,10 +355,10 @@ struct TranscriptList: NSViewRepresentable {
         }
 
         /// The rows within `screens` viewport heights of the viewport, and the one in the middle.
-        private func window(screens: CGFloat) -> (range: ClosedRange<Int>, center: Int)? {
+        private func window(screens: CGFloat, minimum: CGFloat = 200) -> (range: ClosedRange<Int>, center: Int)? {
             guard let table, let clip = self.scrollView?.contentView, !self.rows.isEmpty else { return nil }
             let visible = clip.bounds
-            let around = visible.insetBy(dx: 0, dy: -max(visible.height * screens, 200))
+            let around = visible.insetBy(dx: 0, dy: -max(visible.height * screens, minimum))
             let range = table.rows(in: around)
             guard let window = TranscriptMeasureQueue.window(in: range.location..<(range.location + range.length),
                                                              count: self.rows.count) else { return nil }
@@ -393,10 +407,16 @@ struct TranscriptList: NSViewRepresentable {
             self.syncQueueWidth(width)
             let start = Date()
             defer { self.prefetchStats.seconds += Date().timeIntervalSince(start) }
+            // Rows on screen are always measured; only the margin is held to the budget.
+            var changed = IndexSet()
+            if let onScreen = self.window(screens: 0, minimum: 0) {
+                let rows = self.queue.next(center: onScreen.center, window: onScreen.range, limit: .max)
+                changed = self.measure(rows, width: width, deadline: nil).changed
+            }
             let rows = self.queue.next(center: window.center, window: window.range, limit: .max)
             let result = self.measure(rows, width: width, deadline: start.addingTimeInterval(0.004))
             if result.stopped { self.scheduleScrollMeasure() }
-            return result.changed
+            return changed.union(result.changed)
         }
 
         private func scheduleScrollMeasure() {
@@ -422,6 +442,12 @@ struct TranscriptList: NSViewRepresentable {
         /// A row's layout was rebuilt after being evicted from the renderer's cache. If a change
         /// (a reaction, say) made it a different height than measured, correct the table.
         private func relaidOut(_ id: String, width: CGFloat, height: CGFloat) {
+            self.correctHeight(id, width: width, height: height)
+        }
+
+        /// If a row's fresh layout is a different height than the one stored, fixes the table on
+        /// the next turn (this can run while the table is building cells).
+        private func correctHeight(_ id: String, width: CGFloat, height: CGFloat) {
             guard width == self.width, let row = self.index[id], let old = self.heights[id], old.measured,
                   old.width == width, abs(old.value - height) > 0.5 else { return }
             self.heights[id] = Height(value: max(1, height), width: width, measured: true)
@@ -508,7 +534,9 @@ struct TranscriptList: NSViewRepresentable {
             let item = self.rows[row]
             let cell = tableView.makeView(withIdentifier: TranscriptCell.reuseIdentifier, owner: nil) as? TranscriptCell
                 ?? TranscriptCell()
-            cell.apply(self.renderer.layout(for: item, width: self.width), actions: self.renderer)
+            let layout = self.renderer.layout(for: item, width: self.width)
+            self.correctHeight(item.id, width: self.width, height: layout.height)
+            cell.apply(layout, actions: self.renderer)
             return cell
         }
 
@@ -532,6 +560,15 @@ struct TranscriptList: NSViewRepresentable {
             let movingUp = offset < self.lastOffset - 0.5
             self.anchor = self.currentAnchor(stickDistance: movingUp ? 1 : TranscriptLayout.stickToBottomDistance)
             self.applyNearViewport()
+            self.pinVisibleImages()
+        }
+
+        private func pinVisibleImages() {
+            guard let table, self.width > 40 else { return }
+            let visible = table.rows(in: table.visibleRect)
+            guard visible.length > 0 else { return }
+            self.renderer.pinImages(of: self.rows[visible.location..<min(visible.location + visible.length, self.rows.count)],
+                                    width: self.width)
         }
 
         private var contentHeight: CGFloat {
@@ -548,10 +585,13 @@ struct TranscriptList: NSViewRepresentable {
 
         /// The row at the middle of the viewport, or the bottom when the reader is at the end. The
         /// middle row is used because rows entering at the edges may still change height.
-        private func currentAnchor(stickDistance: CGFloat = TranscriptLayout.stickToBottomDistance) -> Anchor {
+        private func currentAnchor(stickDistance: CGFloat = TranscriptLayout.stickToBottomDistance,
+                                   allowTop: Bool = true) -> Anchor {
             guard let table, let clip = self.scrollView?.contentView, !self.rows.isEmpty else { return .bottom }
             let bounds = clip.bounds
-            if self.offsetRange().upperBound - bounds.minY <= stickDistance { return .bottom }
+            let range = self.offsetRange()
+            if range.upperBound - bounds.minY <= stickDistance { return .bottom }
+            if allowTop, bounds.minY - range.lowerBound <= 1 { return .top }
             var row = table.row(at: NSPoint(x: 1, y: bounds.midY))
             if row < 0 { row = bounds.midY < 0 ? 0 : self.rows.count - 1 }
             return .row(self.rows[row].id, table.rect(ofRow: row).minY - bounds.minY)
@@ -564,6 +604,8 @@ struct TranscriptList: NSViewRepresentable {
             switch anchor {
             case .bottom:
                 target = range.upperBound
+            case .top:
+                target = range.lowerBound
             case let .row(id, offset):
                 guard let row = self.index[id] else {
                     self.anchor = self.currentAnchor()

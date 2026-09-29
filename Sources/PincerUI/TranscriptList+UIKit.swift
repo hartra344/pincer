@@ -36,6 +36,8 @@ struct TranscriptList: UIViewRepresentable {
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate {
         private enum Anchor: Equatable {
             case bottom
+            /// The reader is at the very top, wherever the rows below end up.
+            case top
             /// Row id, and how far its top sits below the top of the viewport.
             case row(String, CGFloat)
         }
@@ -141,6 +143,10 @@ struct TranscriptList: UIViewRepresentable {
             }
             var seen = Set<String>()
             let unique = newRows.filter { seen.insert($0.id).inserted }
+            if case .top = self.anchor, unique.first?.id != self.rows.first?.id {
+                // Rows arriving above: keep reading the same row instead of following the top.
+                self.anchor = self.currentAnchor(allowTop: false)
+            }
             // Streaming: same ids, only the last row differs. One pass, no diffing.
             if let last = unique.last, self.rows.count == unique.count, self.rows.last?.id == last.id,
                self.rows.dropLast() == unique.dropLast() {
@@ -223,7 +229,14 @@ struct TranscriptList: UIViewRepresentable {
             defer { self.isAdjusting = false }
             // Jump to the anchor first so the rows measured are the ones about to be on screen.
             self.restore(self.anchor)
-            if self.measureAroundViewport() { self.applyHeights() }
+            // Measuring rows above the anchor moves the viewport over rows that weren't measured
+            // yet, so go again until the rows on screen are all measured.
+            var passes = 0
+            while passes < 4, self.measureAroundViewport() {
+                self.applyHeights()
+                self.restore(self.anchor)
+                passes += 1
+            }
             self.restore(self.anchor)
             view.layoutIfNeeded()
             self.refreshVisibleCells()
@@ -235,9 +248,19 @@ struct TranscriptList: UIViewRepresentable {
             let width = self.width
             guard width > 40 else { return }
             for path in view.indexPathsForVisibleItems where path.item < self.rows.count {
+                let layout = self.renderer.layout(for: self.rows[path.item], width: width)
+                self.correctHeight(self.rows[path.item].id, width: width, height: layout.height)
                 guard let cell = view.cellForItem(at: path) as? TranscriptCell else { continue }
-                cell.apply(self.renderer.layout(for: self.rows[path.item], width: width), actions: self.renderer)
+                cell.apply(layout, actions: self.renderer)
             }
+            self.pinVisibleImages()
+        }
+
+        private func pinVisibleImages() {
+            guard let view = self.collectionView, !self.rows.isEmpty, self.width > 40,
+                  let first = self.row(at: view.contentOffset.y),
+                  let last = self.row(at: view.contentOffset.y + view.bounds.height) else { return }
+            self.renderer.pinImages(of: self.rows[first...last], width: self.width)
         }
 
         /// The viewport changed size: rotation, split view, the keyboard or the composer.
@@ -393,10 +416,10 @@ struct TranscriptList: UIViewRepresentable {
         }
 
         /// The rows within `screens` viewport heights of the viewport, and the one in the middle.
-        private func window(screens: CGFloat) -> (range: ClosedRange<Int>, center: Int)? {
+        private func window(screens: CGFloat, minimum: CGFloat = 200) -> (range: ClosedRange<Int>, center: Int)? {
             guard let view = self.collectionView, !self.rows.isEmpty else { return nil }
             let visible = CGRect(origin: view.contentOffset, size: view.bounds.size)
-            let around = visible.insetBy(dx: 0, dy: -max(visible.height * screens, 200))
+            let around = visible.insetBy(dx: 0, dy: -max(visible.height * screens, minimum))
             guard let first = self.row(at: around.minY), let last = self.row(at: around.maxY),
                   let center = self.row(at: visible.midY) else { return nil }
             return (first...last, center)
@@ -426,14 +449,17 @@ struct TranscriptList: UIViewRepresentable {
             defer { self.prefetchStats.seconds += Date().timeIntervalSince(start) }
             let deadline = start.addingTimeInterval(0.004)
             var changed = false
-            var measured = 0
+            // Rows on screen are always measured; only the margin is held to the budget.
+            if let onScreen = self.window(screens: 0, minimum: 0) {
+                for row in self.queue.next(center: onScreen.center, window: onScreen.range, limit: .max)
+                where self.measure(row, width: width) { changed = true }
+            }
             for row in self.queue.next(center: window.center, window: window.range, limit: .max) {
-                if measured > 0, Date() >= deadline {
+                if Date() >= deadline {
                     self.scheduleScrollMeasure()
                     break
                 }
                 if self.measure(row, width: width) { changed = true }
-                measured += 1
             }
             return changed
         }
@@ -459,6 +485,12 @@ struct TranscriptList: UIViewRepresentable {
         /// A row's layout was rebuilt after being evicted from the renderer's cache. If a change
         /// (a reaction, say) made it a different height than measured, correct the layout.
         private func relaidOut(_ id: String, width: CGFloat, height: CGFloat) {
+            self.correctHeight(id, width: width, height: height)
+        }
+
+        /// If a row's fresh layout is a different height than the one stored, fixes the layout on
+        /// the next turn (this can run while collection view is building cells).
+        private func correctHeight(_ id: String, width: CGFloat, height: CGFloat) {
             guard width == self.width, self.index[id] != nil, let old = self.heights[id], old.measured,
                   old.width == width, abs(old.value - height) > 0.5 else { return }
             self.heights[id] = Height(value: max(1, height), width: width, measured: true)
@@ -530,7 +562,10 @@ struct TranscriptList: UIViewRepresentable {
         func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: TranscriptCell.reuseIdentifier, for: indexPath)
             if let cell = cell as? TranscriptCell, indexPath.item < self.rows.count {
-                cell.apply(self.renderer.layout(for: self.rows[indexPath.item], width: self.width), actions: self.renderer)
+                let item = self.rows[indexPath.item]
+                let layout = self.renderer.layout(for: item, width: self.width)
+                self.correctHeight(item.id, width: self.width, height: layout.height)
+                cell.apply(layout, actions: self.renderer)
             }
             return cell
         }
@@ -553,10 +588,14 @@ struct TranscriptList: UIViewRepresentable {
             guard !self.isAdjusting,
                   scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating || self.isScrollingToTop
             else { return }
+            // The status-bar scroll to top is an animation that setting the offset would cut
+            // short; it finishes at the top and is settled once it gets there.
+            guard !self.isScrollingToTop else { return }
             // Scrolling up leaves the bottom right away; only scrolling down re-sticks early.
             let movingUp = offset < self.lastOffset - 0.5
             self.anchor = self.currentAnchor(stickDistance: movingUp ? 1 : TranscriptLayout.stickToBottomDistance)
             self.applyNearViewport()
+            self.pinVisibleImages()
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
@@ -567,6 +606,10 @@ struct TranscriptList: UIViewRepresentable {
             self.scrollEnded()
         }
 
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            self.isScrollingToTop = false
+        }
+
         func scrollViewShouldScrollToTop(_ scrollView: UIScrollView) -> Bool {
             self.isScrollingToTop = true
             return true
@@ -574,6 +617,8 @@ struct TranscriptList: UIViewRepresentable {
 
         func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
             self.isScrollingToTop = false
+            self.anchor = .top
+            self.settle()
             self.scrollEnded()
         }
 
@@ -584,10 +629,12 @@ struct TranscriptList: UIViewRepresentable {
 
         /// The row at the middle of the viewport, or the bottom when the reader is at the end. The
         /// middle row is used because rows entering at the edges may still change height.
-        private func currentAnchor(stickDistance: CGFloat = TranscriptLayout.stickToBottomDistance) -> Anchor {
+        private func currentAnchor(stickDistance: CGFloat = TranscriptLayout.stickToBottomDistance,
+                                   allowTop: Bool = true) -> Anchor {
             guard let view = self.collectionView, !self.rows.isEmpty else { return .bottom }
             let offset = view.contentOffset.y
             if self.maxOffset - offset <= stickDistance { return .bottom }
+            if allowTop, offset - self.minOffset <= 1 { return .top }
             guard let row = self.row(at: offset + view.bounds.height / 2) else { return .bottom }
             return .row(self.rows[row].id, self.tops[row] - offset)
         }
@@ -598,6 +645,8 @@ struct TranscriptList: UIViewRepresentable {
             switch anchor {
             case .bottom:
                 target = self.maxOffset
+            case .top:
+                target = self.minOffset
             case let .row(id, offset):
                 guard let row = self.index[id], row < self.tops.count else {
                     self.anchor = self.currentAnchor()

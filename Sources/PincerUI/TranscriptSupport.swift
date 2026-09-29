@@ -180,11 +180,24 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     isolated deinit {
+        self.context.gateway.images.setVisible([], owner: ObjectIdentifier(self))
         for observer in self.observers { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    /// Tells the image cache which images the rows on screen show, so it keeps them.
+    func pinImages(of rows: some Sequence<TranscriptRow>, width: CGFloat) {
+        var keys = Set<String>()
+        for row in rows {
+            for ref in self.layout(for: row, width: width).images { keys.insert(ref.cacheKey) }
+        }
+        self.context.gateway.images.setVisible(keys, owner: ObjectIdentifier(self))
     }
 
     func update(context: TranscriptContext) {
         let changed = context.differs(from: self.context)
+        if context.gateway !== self.context.gateway {
+            self.context.gateway.images.setVisible([], owner: ObjectIdentifier(self))
+        }
         self.context = context
         self.liveAvatar?.update(chat: context.chat)
         if changed {
