@@ -33,17 +33,8 @@ struct TranscriptList: NSViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, NSTableViewDataSource, NSTableViewDelegate {
-        private enum Anchor: Equatable {
-            case bottom
-            /// Row id, and how far its top sits below the top of the viewport.
-            case row(String, CGFloat)
-        }
-
-        private struct Height {
-            var value: CGFloat
-            var width: CGFloat
-            var measured: Bool
-        }
+        private typealias Anchor = TranscriptAnchor
+        private typealias Height = TranscriptRowHeight
 
         private var context: TranscriptContext
         private var rows: [TranscriptRow] = []
@@ -145,8 +136,7 @@ struct TranscriptList: NSViewRepresentable {
                 self.rows = []
             }
             // Streaming: same ids, only the last row differs. One pass, no diffing.
-            if let last = newRows.last, self.rows.count == newRows.count, self.rows.last?.id == last.id,
-               self.rows.dropLast() == newRows.dropLast() {
+            if TranscriptListController.classify(old: self.rows, new: newRows) == .streamingTail, let last = newRows.last {
                 guard self.rows[self.rows.count - 1] != last else { return }
                 self.rows[self.rows.count - 1] = last
                 self.heights[last.id]?.measured = false
@@ -278,13 +268,13 @@ struct TranscriptList: NSViewRepresentable {
             let layout = self.renderer.layout(for: self.rows[row], width: width)
             let old = self.heights[id]?.value
             self.heights[id] = Height(value: max(1, layout.height), width: width, measured: true)
-            if old.map({ abs($0 - layout.height) > 0.5 }) ?? true {
+            if TranscriptListController.heightMoved(from: old, to: layout.height) {
                 self.withoutAnimation { table.noteHeightOfRows(withIndexesChanged: [row]) }
             }
             let insets = scroll.contentInsets
             let visible = max(scroll.contentView.bounds.height - insets.top - insets.bottom, 1)
-            let y = min(layout.matchY ?? 0, layout.height)
-            self.anchor = .row(id, insets.top + visible * 0.4 - y)
+            self.anchor = TranscriptListController.revealAnchor(id: id, insetTop: insets.top, visibleHeight: visible,
+                                                                matchY: layout.matchY, rowHeight: layout.height)
             self.settle(changed: IndexSet())
         }
 
@@ -312,11 +302,11 @@ struct TranscriptList: NSViewRepresentable {
             var changed = IndexSet()
             for row in range.location..<min(range.location + range.length, self.rows.count) {
                 let item = self.rows[row]
-                if let height = self.heights[item.id], height.measured, height.width == width { continue }
+                if let height = self.heights[item.id], height.isCurrent(at: width) { continue }
                 let old = self.heights[item.id]?.value
                 let value = self.measure(item, width: width)
                 self.heights[item.id] = Height(value: value, width: width, measured: true)
-                if old.map({ abs($0 - value) > 0.5 }) ?? true { changed.insert(row) }
+                if TranscriptListController.heightMoved(from: old, to: value) { changed.insert(row) }
             }
             return changed
         }
@@ -337,25 +327,15 @@ struct TranscriptList: NSViewRepresentable {
             guard width > 40 else { return }
             var center = table.row(at: NSPoint(x: 1, y: clip.bounds.midY))
             if center < 0 { center = self.rows.count - 1 }
-            let deadline = Date().addingTimeInterval(0.006)
-            var changed = IndexSet()
-            var remaining = false
-            // Walk outward from the viewport: below, above, below, above…
-            var below = center, above = center - 1
-            while below < self.rows.count || above >= 0 {
-                for row in [below, above] where row >= 0 && row < self.rows.count {
-                    let item = self.rows[row]
-                    if let height = self.heights[item.id], height.measured, height.width == width { continue }
-                    if Date() >= deadline { remaining = true; break }
+            let (changed, remaining) = TranscriptListController.prefetchSlice(
+                rows: self.rows, center: center, budget: 0.006,
+                isMeasured: { self.heights[$0.id]?.isCurrent(at: width) ?? false },
+                measure: { _, item in
                     let old = self.heights[item.id]?.value
                     let value = self.measure(item, width: width)
                     self.heights[item.id] = Height(value: value, width: width, measured: true)
-                    if old.map({ abs($0 - value) > 0.5 }) ?? true { changed.insert(row) }
-                }
-                if remaining { break }
-                below += 1
-                above -= 1
-            }
+                    return TranscriptListController.heightMoved(from: old, to: value)
+                })
             if !changed.isEmpty {
                 self.isAdjusting = true
                 self.withoutAnimation { table.noteHeightOfRows(withIndexesChanged: changed) }
@@ -439,7 +419,8 @@ struct TranscriptList: NSViewRepresentable {
         private func currentAnchor(stickDistance: CGFloat = TranscriptLayout.stickToBottomDistance) -> Anchor {
             guard let table, let clip = self.scrollView?.contentView, !self.rows.isEmpty else { return .bottom }
             let bounds = clip.bounds
-            if self.offsetRange().upperBound - bounds.minY <= stickDistance { return .bottom }
+            if TranscriptListController.isAtBottom(maxOffset: self.offsetRange().upperBound, offset: bounds.minY,
+                                                   stickDistance: stickDistance) { return .bottom }
             var row = table.row(at: NSPoint(x: 1, y: bounds.midY))
             if row < 0 { row = bounds.midY < 0 ? 0 : self.rows.count - 1 }
             return .row(self.rows[row].id, table.rect(ofRow: row).minY - bounds.minY)
@@ -448,16 +429,11 @@ struct TranscriptList: NSViewRepresentable {
         private func restore(_ anchor: Anchor) {
             guard let table, let scroll = self.scrollView else { return }
             let range = self.offsetRange()
-            let target: CGFloat
-            switch anchor {
-            case .bottom:
-                target = range.upperBound
-            case let .row(id, offset):
-                guard let row = self.index[id] else {
-                    self.anchor = self.currentAnchor()
-                    return
-                }
-                target = min(max(table.rect(ofRow: row).minY - offset, range.lowerBound), range.upperBound)
+            guard let target = TranscriptListController.restoreTarget(
+                for: anchor, rowTop: { self.index[$0].map { table.rect(ofRow: $0).minY } }, range: range)
+            else {
+                self.anchor = self.currentAnchor()
+                return
             }
             let clip = scroll.contentView
             guard abs(clip.bounds.minY - target) > 0.5 else { return }

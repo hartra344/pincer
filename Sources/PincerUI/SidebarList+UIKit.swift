@@ -32,10 +32,11 @@ struct SidebarList: UIViewRepresentable {
         private var actions: SidebarActions
         private var model = SidebarModel()
         private var hasLoaded = false
-        private var headers: [String: SidebarModel.Header] = [:]
-        private var entries: [String: SidebarModel.Entry] = [:]
+        private let controller = SidebarController()
+        private var headers: [String: SidebarModel.Header] { self.controller.headers }
+        private var entries: [String: SidebarModel.Entry] { self.controller.entries }
         private var selectedKey: String?
-        private var isProgrammatic = false
+        private var isProgrammatic: Bool { self.controller.isProgrammatic }
         private var timer: Timer?
         private var dataSource: UICollectionViewDiffableDataSource<String, String>?
         private weak var collectionView: UICollectionView?
@@ -138,14 +139,7 @@ struct SidebarList: UIViewRepresentable {
         }
 
         private func rebuildIndex() {
-            self.headers = [:]
-            self.entries = [:]
-            for group in self.model.groups {
-                self.headers[group.header.id] = group.header
-                for entry in group.entries {
-                    self.entries[entry.id] = entry
-                }
-            }
+            self.controller.index(self.model)
         }
 
         private func apply(_ model: SidebarModel, old: SidebarModel,
@@ -221,7 +215,8 @@ struct SidebarList: UIViewRepresentable {
         /// list comes back with nothing selected, as in other iOS apps.
         private func syncSelection() {
             guard let view = self.collectionView, let dataSource else { return }
-            let target = self.isCompact ? nil : self.selectedKey.flatMap { dataSource.indexPath(for: SidebarModel.entryId($0)) }
+            let target = SidebarController.selectionTarget(selectedKey: self.selectedKey, hidesSelection: self.isCompact)
+                .flatMap { dataSource.indexPath(for: $0) }
             let current = view.indexPathsForSelectedItems ?? []
             guard current != (target.map { [$0] } ?? []) else { return }
             self.programmatic {
@@ -231,10 +226,7 @@ struct SidebarList: UIViewRepresentable {
         }
 
         private func programmatic(_ body: () -> Void) {
-            let was = self.isProgrammatic
-            self.isProgrammatic = true
-            body()
-            self.isProgrammatic = was
+            self.controller.programmatic(body)
         }
 
         private func expansionChanged(_ id: String, collapsed: Bool) {
