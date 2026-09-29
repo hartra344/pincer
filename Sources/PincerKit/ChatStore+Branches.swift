@@ -5,9 +5,21 @@ extension ChatStore {
     public var canListBranches: Bool { self.gateway?.sessionManager.supportsBranches == true }
 
     /// Switching needs `sessions.branches.switch` and `operator.admin`, like the Session Manager.
-    public var canSwitchBranches: Bool { self.gateway?.sessionManager.canSwitchBranch == true }
+    public var canSwitchBranches: Bool { self.gateway?.sessionManager.canSwitchBranch == true && !self.isBusyForHistoryChange }
 
-    /// This chat's transcript tips, active first, once there is more than one to choose from.
+    /// Oldest first (`updatedAt` ascending, unknown last, ties by leaf id): stable whichever branch is active.
+    static func orderedBranches(_ list: [SessionBranch]) -> [SessionBranch] {
+        list.sorted { lhs, rhs in
+            switch (lhs.updatedAt, rhs.updatedAt) {
+            case let (l?, r?) where l != r: return l < r
+            case (nil, _?): return false
+            case (_?, nil): return true
+            default: return lhs.leafEntryId < rhs.leafEntryId
+            }
+        }
+    }
+
+    /// This chat's transcript tips in a stable order, once there is more than one to choose from.
     public var hasBranches: Bool { self.branches.count > 1 }
 
     /// 1-based position of the active branch among `branches`, for "Branch 1 of 2".
@@ -16,20 +28,32 @@ extension ChatStore {
     }
 
     /// Reloads `branches` (`sessions.branches.list`, read scope). Failures leave the list empty:
-    /// branches are an extra, never an error banner.
+    /// branches are an extra, never an error banner. Overlapping calls apply only the newest
+    /// response; an older caller returns once that one has landed.
     public func refreshBranches() async {
+        self.branchRefreshGeneration += 1
+        let generation = self.branchRefreshGeneration
+        let task = Task { await self.fetchBranches(generation) }
+        self.branchRefreshTask = task
+        await task.value
+        if generation != self.branchRefreshGeneration { await self.branchRefreshTask?.value }
+    }
+
+    private func fetchBranches(_ generation: Int) async {
         guard !self.headless, let gateway, gateway.state.isConnected, self.canListBranches else {
-            if !self.branches.isEmpty { self.branches = [] }
+            if generation == self.branchRefreshGeneration, !self.branches.isEmpty { self.branches = [] }
             return
         }
-        var params = self.params(keyName: "sessionKey")
+        let params = self.params(keyName: "sessionKey")
         do {
             let result = try await gateway.connection.request(SessionManager.branchesListMethod, .object(params), timeout: 15)
-            let list = result["branches"]?.array?.compactMap(SessionBranch.init) ?? []
+            guard generation == self.branchRefreshGeneration else { return }
+            let list = Self.orderedBranches(result["branches"]?.array?.compactMap(SessionBranch.init) ?? [])
             if list != self.branches { self.branches = list }
         } catch is CancellationError {
             return
         } catch {
+            guard generation == self.branchRefreshGeneration else { return }
             if !self.branches.isEmpty { self.branches = [] }
         }
     }

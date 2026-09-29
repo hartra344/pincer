@@ -98,8 +98,8 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
 private func runBranchNavigationChecks(_ chat: ChatStore, edited: String) async {
     await chat.refreshBranches()
     check(chat.canListBranches && chat.canSwitchBranches, "branches can be listed and switched")
-    check(chat.branches.count == 2 && chat.activeBranchNumber == 1 && chat.hasBranches,
-          "the edit left two branches, the new one active (\(chat.branches.map(\.headline)))")
+    check(chat.branches.count == 2 && chat.activeBranchNumber == 2 && chat.hasBranches,
+          "the edit left two branches, the newest last and active (\(chat.branches.map(\.headline)))")
     guard let old = chat.branches.first(where: { !$0.active }) else { return }
     let switched = await chat.switchBranch(to: old.leafEntryId)
     check(switched, "switch to the earlier branch (\(chat.errorMessage ?? ""))")

@@ -22,12 +22,17 @@ extension ChatStore {
 
     // MARK: Availability
 
-    /// `sessions.fork` is advertised, or the Gateway doesn't list its methods.
+    /// `sessions.fork` is advertised (or the Gateway doesn't list its methods) and the connection can write.
     public var canBranchMessages: Bool {
         guard let gateway else { return false }
+        let scopes = gateway.hello?.scopes ?? []
+        guard gateway.profile.isDemo || scopes.contains("operator.write") || scopes.contains(GatewayConnection.adminScope) else { return false }
         let methods = gateway.hello?.methods ?? []
         return methods.isEmpty || methods.contains(Self.forkMethod)
     }
+
+    /// The Gateway refuses fork, rewind and branch switches while the agent is working.
+    var isBusyForHistoryChange: Bool { self.isRunning || self.live != nil }
 
     /// `sessions.rewind` is advertised and the connection has `operator.admin`.
     public var canRewindMessages: Bool { self.gateway?.sessionManager.canRewind == true }
@@ -40,24 +45,24 @@ extension ChatStore {
     }
 
     public func canBranch(from messageId: String) -> Bool {
-        self.canBranchMessages && self.committedItem(messageId) != nil
+        self.canBranchMessages && !self.isBusyForHistoryChange && self.committedItem(messageId) != nil
     }
 
     public func canEdit(_ messageId: String) -> Bool {
-        guard self.canRewindMessages, let found = self.committedItem(messageId) else { return false }
+        guard self.canRewindMessages, !self.isBusyForHistoryChange, let found = self.committedItem(messageId) else { return false }
         return found.item.role == .user
     }
 
     /// The last assistant reply, when a user message precedes it and no run is streaming.
     public func canRegenerate(_ messageId: String) -> Bool {
-        guard self.canRewindMessages, !self.isRunning, self.live == nil,
+        guard self.canRewindMessages, !self.isBusyForHistoryChange,
               let found = self.committedItem(messageId), found.item.role == .assistant else { return false }
         guard self.items.lastIndex(where: { $0.role == .assistant && !$0.isPending }) == found.index else { return false }
         return self.precedingUser(before: found.index) != nil
     }
 
     private func precedingUser(before index: Int) -> ChatItem? {
-        self.items[..<index].last { $0.role == .user && !$0.isPending && $0.transcriptId != nil }
+        self.items[..<index].last { $0.role == .user && $0.isCommittedEntry }
     }
 
     // MARK: Branch
@@ -73,7 +78,7 @@ extension ChatStore {
             var editorText: String?
             let target: ChatItem? = found.item.role == .user
                 ? found.item
-                : self.items[(found.index + 1)...].first { $0.role == .user && !$0.isPending && $0.transcriptId != nil }
+                : self.items[(found.index + 1)...].first { $0.role == .user && $0.isCommittedEntry }
             if let target, let targetId = target.transcriptId {
                 var params: [String: JSONValue] = ["sessionKey": .string(self.sessionKey), "entryId": .string(targetId)]
                 if let agentId { params["agentId"] = .string(agentId) }
@@ -87,7 +92,7 @@ extension ChatStore {
                 var params: [String: JSONValue] = [
                     "parentSessionKey": .string(self.sessionKey), "fork": .bool(true), "forkFrom": .string("last-completed"),
                 ]
-                params["agentId"] = .string(agentId ?? gateway.defaultAgentId)
+                params["agentId"] = .string(agentId ?? SessionKey.agentId(from: self.sessionKey) ?? gateway.defaultAgentId)
                 let result = try await gateway.connection.request("sessions.create", .object(params), timeout: 30)
                 guard let key = result["key"]?.text ?? result["session"]?["key"]?.text else {
                     throw GatewayError.protocolViolation("sessions.create returned no key")
@@ -124,26 +129,34 @@ extension ChatStore {
         self.draft = target.savedDraft
     }
 
-    /// Rewinds to before the edited message, then sends `text`. On a rewind failure edit mode stays.
+    /// Rewinds to before the edited message, then sends `text` with `attachments` and the images the
+    /// rewound message carried. After the rewind the pre-edit draft comes back; on a rewind failure
+    /// edit mode and the edited text stay. Ignored while an earlier `sendEdit` is still running.
     public func sendEdit(_ text: String, attachments: [OutgoingAttachment]) async -> SendOutcome {
         guard let target = self.editTarget else { return await self.sendMessage(text, attachments: attachments) }
+        guard !self.isSendingEdit else { return .failed(L("Couldn’t edit: the previous edit is still being sent.")) }
+        self.isSendingEdit = true
+        defer { self.isSendingEdit = false }
+        let outcome: RewindOutcome
         do {
-            _ = try await self.rewind(to: target.entryId)
+            outcome = try await self.rewind(to: target.entryId)
         } catch {
             let message = L("Couldn’t edit: \(error.localizedDescription)")
             self.errorMessage = message
             return .failed(message)
         }
         self.editTarget = nil
-        return await self.sendMessage(text, attachments: attachments)
+        self.draft = target.savedDraft
+        return await self.sendMessage(text, attachments: attachments + outcome.attachments)
     }
 
     // MARK: Regenerate
 
     @discardableResult
     public func regenerate(_ messageId: String) async -> Bool {
-        guard self.canRegenerate(messageId), let found = self.committedItem(messageId),
+        guard self.canRegenerate(messageId), !self.isSendingEdit, let found = self.committedItem(messageId),
               let user = self.precedingUser(before: found.index), let entryId = user.transcriptId else { return false }
+        self.editTarget = nil
         do {
             let outcome = try await self.rewind(to: entryId)
             let text = outcome.editorText ?? user.plainText
@@ -181,5 +194,13 @@ extension ChatStore {
         }
         await gateway.transcriptChanged(key: self.sessionKey, change: .changed(editorText: nil))
         return RewindOutcome(editorText: result["editorText"]?.text, attachments: attachments)
+    }
+}
+
+extension ChatItem {
+    /// A persisted transcript entry (not an optimistic send or a pending-input placeholder).
+    var isCommittedEntry: Bool {
+        guard !self.isPending, let id = self.transcriptId else { return false }
+        return !id.hasPrefix(ChatItem.pendingInputPrefix)
     }
 }

@@ -166,7 +166,9 @@ struct MessageEditTests {
         let chat = await self.loaded(gateway, Self.garden)
         await chat.refreshBranches()
         #expect(chat.branches.count == 3 && chat.hasBranches)
-        #expect(chat.branches.first?.active == true && chat.activeBranchNumber == 1)
+        let dates = chat.branches.compactMap(\.updatedAt)
+        #expect(dates == dates.sorted(), "oldest first, whichever branch is active")
+        #expect(chat.activeBranchNumber == chat.branches.firstIndex { $0.active }.map { $0 + 1 })
         #expect(chat.canListBranches && chat.canSwitchBranches)
         await self.finish(gateway)
     }
@@ -176,11 +178,12 @@ struct MessageEditTests {
         let chat = await self.loaded(gateway, Self.garden)
         await chat.refreshBranches()
         guard let other = chat.branches.first(where: { !$0.active }) else { Issue.record("no inactive branch"); return }
-        let before = chat.items.map(\.plainText)
+        let before = (texts: chat.items.map(\.plainText), branchIds: chat.branches.map(\.leafEntryId))
         #expect(await chat.switchBranch(to: other.leafEntryId))
-        await self.settle { chat.items.map(\.plainText) != before && chat.hasLoaded }
-        #expect(chat.items.map(\.plainText) != before)
+        await self.settle { chat.items.map(\.plainText) != before.texts && chat.hasLoaded }
+        #expect(chat.items.map(\.plainText) != before.texts)
         #expect(chat.branches.first { $0.active }?.leafEntryId == other.leafEntryId && chat.branches.count == 3)
+        #expect(chat.branches.map(\.leafEntryId) == before.branchIds, "order doesn't change with the active branch")
         #expect(!(await chat.switchBranch(to: other.leafEntryId)), "the active branch can't be switched to")
         await self.finish(gateway)
     }
@@ -206,11 +209,89 @@ struct MessageEditTests {
         #expect(chat.beginEdit(self.messages(chat, .user).last!.id))
         _ = await chat.sendEdit("something else", attachments: [])
         await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.branches.count == 2 }
-        #expect(chat.branches.count == 2 && chat.activeBranchNumber == 1)
+        #expect(chat.branches.count == 2 && chat.activeBranchNumber == 2, "the newest branch is last and active")
         guard let old = chat.branches.first(where: { !$0.active }) else { return }
         #expect(await chat.switchBranch(to: old.leafEntryId))
         await self.settle { chat.items.map(\.plainText) == original }
         #expect(chat.items.map(\.plainText) == original)
+        await self.finish(gateway)
+    }
+
+    // MARK: Review fixes
+
+    func editableFork(_ gateway: GatewayStore) async -> (chat: ChatStore, user: ChatItem) {
+        let source = await self.loaded(gateway, Self.garden)
+        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        return (chat, self.messages(chat, .user).last!)
+    }
+
+    @Test func afterSendingAnEditTheOldDraftComesBack() async {
+        let gateway = await self.connected()
+        let (chat, user) = await self.editableFork(gateway)
+        chat.draft = ComposerDraft(text: "half-written")
+        #expect(chat.beginEdit(user.id))
+        _ = await chat.sendEdit("edited", attachments: [])
+        #expect(chat.draft.text == "half-written" && chat.editTarget == nil && !chat.isSendingEdit)
+        await self.finish(gateway)
+    }
+
+    @Test func aFailedRewindKeepsTheEditedText() async {
+        let gateway = await self.connected()
+        let (chat, user) = await self.editableFork(gateway)
+        #expect(chat.beginEdit(user.id))
+        let target = chat.editTarget!
+        chat.editTarget = MessageEditTarget(messageId: target.messageId, entryId: "missing-entry", originalText: target.originalText, savedDraft: target.savedDraft)
+        chat.draft = ComposerDraft(text: "my edit")
+        _ = await chat.sendEdit("my edit", attachments: [])
+        #expect(chat.draft.text == "my edit" && chat.editTarget != nil && !chat.isSendingEdit)
+        await self.finish(gateway)
+    }
+
+    @Test func aSecondSendEditWhileOneIsRunningIsIgnored() async {
+        let gateway = await self.connected()
+        let (chat, user) = await self.editableFork(gateway)
+        #expect(chat.beginEdit(user.id))
+        async let first = chat.sendEdit("once", attachments: [])
+        await Task.yield()
+        let second = await chat.sendEdit("twice", attachments: [])
+        let firstOutcome = await first
+        if case .sent = firstOutcome {} else { Issue.record("first edit not sent: \(firstOutcome)") }
+        guard case .failed = second else { Issue.record("second edit should be refused: \(second)"); return }
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant }
+        #expect(chat.items.filter { $0.plainText == "twice" }.isEmpty)
+        #expect(chat.items.filter { $0.role == .user && $0.plainText == "once" }.count == 1)
+        await self.finish(gateway)
+    }
+
+    @Test func editAttachmentsGoOutWithTheMessage() async {
+        let gateway = await self.connected()
+        let (chat, user) = await self.editableFork(gateway)
+        #expect(chat.beginEdit(user.id))
+        let image = OutgoingAttachment(fileName: "a.png", mimeType: "image/png", data: Data([1, 2, 3]))
+        _ = await chat.sendEdit("with a picture", attachments: [image])
+        let sent = chat.items.last { $0.role == .user && $0.plainText == "with a picture" }
+        #expect(sent?.blocks.contains { if case .image = $0 { true } else { false } } == true)
+        await self.finish(gateway)
+    }
+
+    @Test func regenerateLeavesEditMode() async {
+        let gateway = await self.connected()
+        let (chat, user) = await self.editableFork(gateway)
+        #expect(chat.beginEdit(user.id))
+        let reply = self.messages(chat, .assistant).last!
+        #expect(chat.canRegenerate(reply.id))
+        #expect(await chat.regenerate(reply.id))
+        #expect(chat.editTarget == nil)
+        await self.finish(gateway)
+    }
+
+    @Test func nothingIsOfferedWhileARunStreams() async {
+        let gateway = await self.connected()
+        let (chat, user) = await self.editableFork(gateway)
+        chat.isRunning = true
+        let reply = self.messages(chat, .assistant).last!
+        #expect(!chat.canEdit(user.id) && !chat.canRegenerate(reply.id) && !chat.canBranch(from: user.id) && !chat.canSwitchBranches)
+        chat.isRunning = false
         await self.finish(gateway)
     }
 }
