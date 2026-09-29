@@ -158,7 +158,11 @@ struct StreamingProbe {
         \(rows.joined(separator: "\n"))
 
         """)
-        // Baseline (no coalescer) is expected to be slow; the limit only applies once flush is wired.
-        if ProbeShim.flush != nil { #expect(worst25 < 50, "worst publish at 25 KB was \(worst25) ms") }
+        // Baseline (no coalescer) is expected to be slow; the budget only applies once flush is wired.
+        if ProbeShim.flush != nil {
+            let limit = PerfBudget.limit(.milliseconds(8.3))
+            let worst = Duration.seconds(worst25 / 1000)
+            #expect(worst <= limit, "worst publish at 25 KB was \(worst25) ms, budget \(limit)")
+        }
     }
 }
