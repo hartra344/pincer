@@ -60,7 +60,6 @@ func runLive(url: String, token: String) async {
     check(connected, "connected and bootstrapped (pairing seen: \(sawPairing))")
     check(!sawReconnecting, "first connect never reports reconnecting")
     guard connected else { return }
-    _ = gateway.chat(for: "agent:main:dashboard:trip")
     await runLiveShare(profile: profile, gateway: gateway)
     check(gateway.agents.count >= 3, "agents.list (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions.subscribe (\(gateway.sessions.count) rows)")
@@ -94,11 +93,11 @@ func runLive(url: String, token: String) async {
         check(false, "history includes an image")
     }
 
-    let trip = gateway.chat(for: "agent:main:dashboard:trip")
-    // Background prefetch may already have cached trip's whole history (it skips chats open here
-    // from now on): let it finish, then drop that so this checks paging from the Gateway.
+    // Background prefetch may have cached trip's whole history: let it finish and drop that, then
+    // open trip only now, so a reconnect earlier on can't have reloaded (and backfilled) it.
     await gateway.settlePrefetch()
     await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: "agent:main:dashboard:trip")
+    let trip = gateway.chat(for: "agent:main:dashboard:trip")
     await trip.load()
     let firstPage = trip.items.map(\.id)
     check(trip.hasMoreHistory && firstPage.count == 120, "latest page only (\(firstPage.count))")

@@ -134,7 +134,11 @@ func runMenuBarDemo() async {
     }
 
     await gateway.markRead(papers)
-    let markedRead = await waitFor("mark read") { !MenuBarInbox(app: app).unread.contains { $0.target.sessionKey == papers } }
+    // Opening Forge's Main above marks it read asynchronously too, so wait for both to land.
+    let markedRead = await waitFor("mark read") {
+        let now = MenuBarInbox(app: app)
+        return now.unreadCount == 1 && now.unread.map(\.target.sessionKey) == [homeLab]
+    }
     inbox = MenuBarInbox(app: app)
     check(markedRead && inbox.unreadCount == 1 && inbox.unread.map(\.target.sessionKey) == [homeLab], "a chat marked read leaves Unread (\(inbox.unreadCount) unread)")
 
