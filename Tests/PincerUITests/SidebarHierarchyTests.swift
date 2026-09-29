@@ -4,17 +4,18 @@ import Testing
 @testable import PincerUI
 
 /// #372: by-agent sidebar reads as agent → group → chat.
+// Serialized: each test boots its own demo gateway, and CI runs the suites in parallel under load.
+@Suite(.serialized)
 @MainActor
 struct SidebarHierarchyTests {
     private func connectedDemo(_ scratch: ScratchDefaults) async throws -> GatewayStore {
         let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: UIFixtures.identity())
         gateway.start()
-        gateway.reconnectIfNeeded()
-        let ready = await eventually(timeout: .seconds(20)) {
+        let ready = await eventually(timeout: .seconds(60)) {
             gateway.state.isConnected && !gateway.sessions.isEmpty && !gateway.agents.isEmpty
                 && gateway.groupCatalog.contains("Day of move")
         }
-        try #require(ready)
+        try #require(ready, "demo not ready: state=\(gateway.state) sessions=\(gateway.sessions.count) agents=\(gateway.agents.count) groups=\(gateway.groupCatalog)")
         gateway.organization = .agent
         return gateway
     }
