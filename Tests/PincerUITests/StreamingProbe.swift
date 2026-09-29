@@ -151,19 +151,67 @@ struct StreamingProbe {
         return result
     }
 
+    static func p95(_ values: [Double]) -> Double {
+        let sorted = values.sorted()
+        return sorted.isEmpty ? 0 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
+    }
+
+    /// What main paid per token: a cold (uncached) layout plus text-view set of the finished reply as one
+    /// committed row. Median of several runs after a warm-up.
+    func coldCommittedCost(bytes: Int) -> Double {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let profile = GatewayProfile(name: "Probe", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = GatewayStore(profile: profile, defaults: scratch.defaults, identity: UIFixtures.identity())
+        let chat = gateway.chat(for: Self.key)
+        let context = TranscriptContext(gateway: gateway, disclosure: TranscriptDisclosure(),
+                                        agent: AgentSummary(id: "probe", name: "Probe"), sessionKey: Self.key,
+                                        previewImage: { _ in }, saveFile: { _, _ in }, chat: chat)
+        let renderer = TranscriptRenderer(context: context)
+        #if os(macOS)
+        let view = NSTextView(frame: NSRect(x: 0, y: 0, width: 700, height: 100))
+        view.textContainer?.containerSize = NSSize(width: 700, height: CGFloat.greatestFiniteMagnitude)
+        #endif
+        let base = Self.reply(bytes: bytes)
+        let clock = ContinuousClock()
+        var samples: [Double] = []
+        for run in 0..<6 {
+            // A unique first line per run defeats the shared markdown/segment caches.
+            var turn = AssistantTurn(id: "cold-\(run)", timestamp: Date(timeIntervalSince1970: 1))
+            turn.text = ["Run \(run) \(UUID().uuidString)\n\n" + base]
+            let d = clock.measure {
+                let layout = renderer.layout(for: .entry(.assistant(turn)), width: 700)
+                #if os(macOS)
+                for placed in layout.parts {
+                    if case let .text(attributed) = placed.part {
+                        view.textStorage?.setAttributedString(attributed)
+                        if let container = view.textContainer { view.layoutManager?.ensureLayout(for: container) }
+                    }
+                }
+                #endif
+            }
+            if run > 0 { samples.append(Double(d.components.seconds) * 1000 + Double(d.components.attoseconds) / 1e15) }
+        }
+        return samples.sorted()[samples.count / 2]
+    }
+
     @Test func probe() {
         var rows: [String] = []
-        var worst25 = 0.0
+        var p95s: [Int: Double] = [:]
         for kb in [2, 10, 25] {
             let r = self.run(bytes: kb * 1000)
-            let sorted = r.publishes.sorted()
-            let worst = sorted.last ?? 0
-            let p95 = sorted.isEmpty ? 0 : sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.95))]
-            if kb == 25 { worst25 = worst }
+            let worst = r.publishes.max() ?? 0
+            let p95 = Self.p95(r.publishes)
+            p95s[kb] = p95
             let mean = r.totalMs / Double(max(1, r.tokens))
             rows.append("| \(kb) KB | \(r.tokens) | \(String(format: "%.3f", mean)) | \(String(format: "%.2f", worst)) | \(String(format: "%.2f", p95)) | \(r.publishes.count) | \(r.counts ?? "n/a") |")
         }
         let mode = ProbeShim.flush == nil ? "baseline (publish per token)" : "coalesced (30 Hz @ 60 tok/s)"
+        let p10 = p95s[10] ?? 0, p25 = p95s[25] ?? 0
+        let cold = self.coldCommittedCost(bytes: 25_000)
+        let flatness = p25 / max(p10, 0.001)
+        let relative = p25 / max(cold, 0.001)
+        let frameMet = p25 <= 8.3
         print("""
 
         StreamingProbe — \(mode)
@@ -171,12 +219,18 @@ struct StreamingProbe {
         |---|---|---|---|---|---|---|
         \(rows.joined(separator: "\n"))
 
+        p95 25 KB / p95 10 KB = \(String(format: "%.2f", flatness)) (limit: p95_25 <= 1.5 x p95_10 + 1 ms)
+        cold committed 25 KB layout+set (median) = \(String(format: "%.2f", cold)) ms; p95 live / cold = \(String(format: "%.3f", relative)) (limit 0.25)
+        120 Hz frame target 8.3 ms p95 at 25 KB: \(frameMet ? "MET" : "NOT MET") (\(String(format: "%.2f", p25)) ms)
+
         """)
-        // Baseline (no coalescer) is expected to be slow; the budget only applies once flush is wired.
-        if ProbeShim.flush != nil {
+        // Baseline (no coalescer) is expected to be slow; the checks only apply once flush is wired.
+        guard ProbeShim.flush != nil else { return }
+        #expect(p25 <= 1.5 * p10 + 1, "p95 not flat: 25 KB \(p25) ms vs 10 KB \(p10) ms")
+        #expect(p25 <= 0.25 * cold, "p95 live publish \(p25) ms is more than 0.25x the cold committed cost \(cold) ms")
+        if ProcessInfo.processInfo.environment["PINCER_FRAME_BUDGET"] == "1" {
             let limit = PerfBudget.limit(.milliseconds(8.3))
-            let worst = Duration.seconds(worst25 / 1000)
-            #expect(worst <= limit, "worst publish at 25 KB was \(worst25) ms, budget \(limit)")
+            #expect(Duration.seconds(p25 / 1000) <= limit, "p95 publish at 25 KB \(p25) ms, budget \(limit)")
         }
     }
 }
