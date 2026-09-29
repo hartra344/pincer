@@ -1,0 +1,161 @@
+import Foundation
+import Testing
+@testable import PincerKit
+
+/// #41: Branch from Here, Edit & Resend and Regenerate, against the demo Gateway's seeded garden chat
+/// (two user turns; every test forks it first so the seed stays untouched).
+@MainActor
+@Suite("Message edit, regenerate, branch")
+struct MessageEditTests {
+    let scratch = ScratchDefaults()
+    let temp = TempDir()
+    static let garden = "agent:main:dashboard:garden"
+
+    func settle(_ condition: () -> Bool) async {
+        for _ in 0..<1000 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
+    }
+
+    func connected() async -> GatewayStore {
+        let gateway = GatewayStore(profile: GatewayProfile.demo(), defaults: self.scratch.defaults, identity: Fixtures.identity())
+        gateway.cacheRoot = self.temp.url
+        gateway.start()
+        await self.settle { gateway.state.isConnected && gateway.sessions[Self.garden] != nil }
+        return gateway
+    }
+
+    func finish(_ gateway: GatewayStore) async {
+        gateway.stop()
+        await TranscriptCache.shutdown(root: self.temp.url)
+        self.temp.remove()
+        self.scratch.remove()
+    }
+
+    func loaded(_ gateway: GatewayStore, _ key: String) async -> ChatStore {
+        let chat = gateway.chat(for: key)
+        await chat.load()
+        return chat
+    }
+
+    func messages(_ chat: ChatStore, _ role: ChatRole) -> [ChatItem] {
+        chat.items.filter { $0.role == role && $0.transcriptId != nil }
+    }
+
+    @Test func branchAtUserMessageForksBeforeItAndFillsTheComposer() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let user = self.messages(source, .user).last!
+        let key = await source.branch(from: user.id)
+        #expect(key != nil && key != Self.garden && gateway.selectedKey == key)
+        let fork = await self.loaded(gateway, key ?? "")
+        #expect(fork.items.count == 2)
+        #expect(fork.draft.text == user.plainText)
+        await self.finish(gateway)
+    }
+
+    @Test func branchAtAssistantMessageForksBeforeTheNextUserMessage() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let key = await source.branch(from: self.messages(source, .assistant).first!.id)
+        let fork = await self.loaded(gateway, key ?? "")
+        #expect(fork.items.count == 2 && fork.draft.text.isEmpty)
+        await self.finish(gateway)
+    }
+
+    @Test func branchAtTheTailForksTheWholeChat() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let key = await source.branch(from: self.messages(source, .assistant).last!.id)
+        #expect(key != nil)
+        #expect(gateway.sessions[key ?? ""]?.raw["forkedFromParent"] == true)
+        let fork = await self.loaded(gateway, key ?? "")
+        #expect(fork.items.count == 4 && fork.draft.text.isEmpty)
+        #expect(source.items.count == 4)
+        await self.finish(gateway)
+    }
+
+    @Test func branchFailureSetsTheErrorAndChangesNothing() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let before = gateway.sessions.count
+        var item = source.items[0]
+        item.transcriptId = "missing-entry"
+        source.items[0] = item
+        let key = await source.branch(from: item.id)
+        #expect(key == nil && source.errorMessage?.hasPrefix("Couldn’t branch") == true)
+        #expect(gateway.sessions.count == before && gateway.selectedKey != nil)
+        await self.finish(gateway)
+    }
+
+    @Test func availability() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let users = self.messages(source, .user), assistants = self.messages(source, .assistant)
+        #expect(source.canBranchMessages && source.canRewindMessages)
+        #expect(source.canEdit(users[0].id) && !source.canEdit(assistants[0].id))
+        #expect(source.canRegenerate(assistants[1].id) && !source.canRegenerate(assistants[0].id) && !source.canRegenerate(users[1].id))
+        await self.finish(gateway)
+    }
+
+    @Test func beginAndCancelEditRestoreTheDraft() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        let user = self.messages(chat, .user).last!
+        chat.draft = ComposerDraft(text: "half-written")
+        chat.replyTarget = ReplyTarget(messageId: "x", senderLabel: "s", preview: "p", isAssistant: false)
+        #expect(chat.beginEdit(user.id))
+        #expect(chat.editTarget?.originalText == user.plainText && chat.draft.text == user.plainText && chat.replyTarget == nil)
+        chat.cancelEdit()
+        #expect(chat.editTarget == nil && chat.draft.text == "half-written" && chat.items.count == 4)
+        await self.finish(gateway)
+    }
+
+    @Test func sendingAnEditRewindsThenSendsAndForgetsTheCache() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let key = await source.branch(from: self.messages(source, .assistant).last!.id) ?? ""
+        let chat = await self.loaded(gateway, key)
+        await chat.saveToCache()
+        let user = self.messages(chat, .user).last!
+        #expect(chat.beginEdit(user.id))
+        let generation = gateway.cacheGeneration(of: key)
+        let outcome = await chat.sendEdit("an edited question", attachments: [])
+        guard case .sent = outcome else { Issue.record("not sent: \(outcome)"); return }
+        #expect(chat.editTarget == nil)
+        #expect(gateway.cacheGeneration(of: key) > generation)
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && self.messages(chat, .user).count == 2 }
+        #expect(self.messages(chat, .user).map(\.plainText).last == "an edited question")
+        #expect(!chat.items.contains { $0.plainText == user.plainText })
+        await self.finish(gateway)
+    }
+
+    @Test func aFailedRewindKeepsEditMode() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        let user = self.messages(chat, .user).last!
+        #expect(chat.beginEdit(user.id))
+        var target = chat.editTarget!
+        target = MessageEditTarget(messageId: target.messageId, entryId: "missing-entry", originalText: target.originalText, savedDraft: target.savedDraft)
+        chat.editTarget = target
+        let outcome = await chat.sendEdit("nope", attachments: [])
+        guard case let .failed(message) = outcome else { Issue.record("expected failure: \(outcome)"); return }
+        #expect(message.hasPrefix("Couldn’t edit") && chat.editTarget != nil && chat.errorMessage == message)
+        #expect(chat.items.count == 4)
+        await self.finish(gateway)
+    }
+
+    @Test func regenerateRewindsAndResendsTheSameMessage() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let chat = await self.loaded(gateway, await source.branch(from: self.messages(source, .assistant).last!.id) ?? "")
+        let user = self.messages(chat, .user).last!
+        let reply = self.messages(chat, .assistant).last!
+        #expect(await chat.regenerate(reply.id))
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && self.messages(chat, .user).count == 2 }
+        let users = self.messages(chat, .user)
+        #expect(users.count == 2 && users.last?.plainText == user.plainText)
+        #expect(chat.items.last?.id != reply.id)
+        await self.finish(gateway)
+    }
+}
