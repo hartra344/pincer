@@ -35,16 +35,32 @@ enum SidebarDance {
         ]
     }
 
-    static func animation(up: CGFloat, offset: CFTimeInterval) -> CAAnimationGroup {
+    /// The unread "has news" loop: one small hop in the first third, then rest until the loop ends.
+    static let unreadDuration: CFTimeInterval = 2.4
+    static let unreadKeyTimes: [CGFloat] = [0, 0.06, 0.16, 0.26, 0.32, 1]
+
+    static func unreadTracks(up: CGFloat) -> [(path: String, values: [CGFloat])] {
+        let tilt = 4 * CGFloat.pi / 180
+        return [
+            ("transform.translation.y", [0, 0, 1 * up, 0, 0, 0]),
+            ("transform.rotation.z", [0, 0, tilt, 0, 0, 0]),
+            ("transform.scale.x", [1, 1.04, 0.98, 1.04, 1, 1]),
+            ("transform.scale.y", [1, 0.96, 1.02, 0.96, 1, 1]),
+        ]
+    }
+
+    static func animation(up: CGFloat, offset: CFTimeInterval, mode: SidebarWorkingIndicator.Mode = .working) -> CAAnimationGroup {
         let group = CAAnimationGroup()
-        group.animations = self.tracks(up: up).map { track in
+        let working = mode == .working
+        let keyTimes = working ? self.keyTimes : self.unreadKeyTimes
+        group.animations = (working ? self.tracks(up: up) : self.unreadTracks(up: up)).map { track in
             let animation = CAKeyframeAnimation(keyPath: track.path)
             animation.values = track.values
-            animation.keyTimes = self.keyTimes.map { NSNumber(value: Double($0)) }
-            animation.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: self.keyTimes.count - 1)
+            animation.keyTimes = keyTimes.map { NSNumber(value: Double($0)) }
+            animation.timingFunctions = Array(repeating: CAMediaTimingFunction(name: .easeInEaseOut), count: keyTimes.count - 1)
             return animation
         }
-        group.duration = self.duration
+        group.duration = working ? self.duration : self.unreadDuration
         group.repeatCount = .infinity
         group.isRemovedOnCompletion = false
         group.timeOffset = offset
@@ -70,6 +86,11 @@ enum SidebarDance {
         var hash: UInt32 = 5381
         for byte in seed.utf8 { hash = hash &* 33 &+ UInt32(byte) }
         return Double(hash % 1000) / 1000 * self.duration
+    }
+
+    /// Offset into `mode`'s loop for a phase drawn from the working loop.
+    static func offset(_ phase: CFTimeInterval, mode: SidebarWorkingIndicator.Mode) -> CFTimeInterval {
+        mode == .working ? phase : phase / self.duration * self.unreadDuration
     }
 
     /// Forces Reduce Motion on or off; only the snapshot renderer sets it.
@@ -288,12 +309,17 @@ private final class SidebarDanceLayers {
         }
     }
 
-    /// Starts the dance unless it's already running, so reconfiguring never restarts it.
-    func setDancing(_ dancing: Bool, phase: CFTimeInterval) {
-        if dancing {
-            guard self.dancer.animation(forKey: SidebarDance.animationKey) == nil else { return }
-            self.dancer.add(SidebarDance.animation(up: self.up, offset: phase), forKey: SidebarDance.animationKey)
+    private var dancingMode: SidebarWorkingIndicator.Mode?
+
+    /// Starts the dance for `mode` unless it's already running, so reconfiguring never restarts it.
+    func setDancing(_ mode: SidebarWorkingIndicator.Mode?, phase: CFTimeInterval) {
+        if let mode {
+            if self.dancingMode == mode, self.dancer.animation(forKey: SidebarDance.animationKey) != nil { return }
+            self.dancingMode = mode
+            self.dancer.add(SidebarDance.animation(up: self.up, offset: SidebarDance.offset(phase, mode: mode), mode: mode),
+                            forKey: SidebarDance.animationKey)
         } else {
+            self.dancingMode = nil
             self.dancer.removeAnimation(forKey: SidebarDance.animationKey)
         }
     }
@@ -325,6 +351,20 @@ final class SidebarWorkingAvatarView: NSView {
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(self.reduceMotionChanged),
             name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(self.activityChanged), name: name, object: nil)
+        }
+    }
+
+    @objc private func activityChanged() { self.updateDancing() }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeOcclusionStateNotification, object: nil)
+        if let newWindow {
+            NotificationCenter.default.addObserver(self, selector: #selector(self.activityChanged),
+                                                   name: NSWindow.didChangeOcclusionStateNotification, object: newWindow)
+        }
     }
 
     @available(*, unavailable)
@@ -348,14 +388,18 @@ final class SidebarWorkingAvatarView: NSView {
     func stop() {
         self.indicator = nil
         self.companion = nil
-        self.layers.setDancing(false, phase: 0)
+        self.layers.setDancing(nil, phase: 0)
         self.toolTip = nil
     }
 
-    private var isVisible: Bool { self.window != nil && !self.isHiddenOrHasHiddenAncestor }
+    /// Only rows on screen in an active app animate.
+    private var isVisible: Bool {
+        guard let window, !self.isHiddenOrHasHiddenAncestor else { return false }
+        return NSApp.isActive && window.occlusionState.contains(.visible)
+    }
 
     private func updateDancing() {
-        self.layers.setDancing(self.indicator?.isWorking == true && self.isVisible && !SidebarDance.reduceMotion(), phase: self.phase)
+        self.layers.setDancing(self.isVisible && !SidebarDance.reduceMotion() ? self.indicator?.mode : nil, phase: self.phase)
     }
 
     private func refresh() {
@@ -387,12 +431,12 @@ final class SidebarWorkingAvatarView: NSView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if self.window == nil { self.layers.setDancing(false, phase: 0) } else { self.refresh() }
+        if self.window == nil { self.layers.setDancing(nil, phase: 0) } else { self.refresh() }
     }
 
     override func viewDidHide() {
         super.viewDidHide()
-        self.layers.setDancing(false, phase: 0)
+        self.layers.setDancing(nil, phase: 0)
     }
 
     override func viewDidUnhide() {
@@ -441,7 +485,12 @@ final class SidebarWorkingAvatarView: UIView {
         }
         NotificationCenter.default.addObserver(self, selector: #selector(self.reduceMotionChanged),
                                                name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
+        for name in [UIApplication.didBecomeActiveNotification, UIApplication.willResignActiveNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(self.activityChanged), name: name, object: nil)
+        }
     }
+
+    @objc private func activityChanged() { self.updateDancing() }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
@@ -468,13 +517,17 @@ final class SidebarWorkingAvatarView: UIView {
     func stop() {
         self.indicator = nil
         self.companion = nil
-        self.layers.setDancing(false, phase: 0)
+        self.layers.setDancing(nil, phase: 0)
     }
 
-    private var isVisible: Bool { self.window != nil && !self.isHidden }
+    /// Only rows on screen in an active scene animate.
+    private var isVisible: Bool {
+        guard let window, !self.isHidden else { return false }
+        return window.windowScene?.activationState == .foregroundActive
+    }
 
     private func updateDancing() {
-        self.layers.setDancing(self.indicator?.isWorking == true && self.isVisible && !SidebarDance.reduceMotion(), phase: self.phase)
+        self.layers.setDancing(self.isVisible && !SidebarDance.reduceMotion() ? self.indicator?.mode : nil, phase: self.phase)
     }
 
     private func refresh() {
@@ -505,7 +558,7 @@ final class SidebarWorkingAvatarView: UIView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
-        if self.window == nil { self.layers.setDancing(false, phase: 0) } else { self.refresh() }
+        if self.window == nil { self.layers.setDancing(nil, phase: 0) } else { self.refresh() }
     }
 
     @objc private func reduceMotionChanged() {
