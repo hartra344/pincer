@@ -8,6 +8,8 @@ public struct PincerScene: Scene {
     @State private var app = AppModel.shared
 
     public init() {
+        // PincerKit's sentences are keys in this catalog.
+        PincerStrings.bundle = .module
         SVGRasterizer.install()
         #if os(macOS)
         QuickCaptureController.shared.install(app: AppModel.shared)
