@@ -8,19 +8,28 @@ import Testing
 @Suite("Transcript removal")
 struct TranscriptRemovalTests {
     let scratch = ScratchDefaults()
+    let temp = TempDir()
     let profile = GatewayProfile(name: "Test", url: "ws://127.0.0.1:1", authMode: .none)
 
     func gateway() -> GatewayStore {
-        GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        let gateway = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        gateway.cacheRoot = self.temp.url
+        return gateway
+    }
+
+    func demoGateway() -> GatewayStore {
+        let gateway = GatewayStore(profile: GatewayProfile.demo(), defaults: self.scratch.defaults, identity: Fixtures.identity())
+        gateway.cacheRoot = self.temp.url
+        return gateway
     }
 
     func cache(_ gateway: GatewayStore, _ key: String, _ text: String) async {
         let item = ChatItem(id: "m-\(key)", role: .user, blocks: [.text(text)], timestamp: Date(timeIntervalSince1970: 1))
-        await TranscriptCache.save(TranscriptCache.Snapshot(items: [item], complete: true), gatewayId: gateway.id, sessionKey: key)
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [item], complete: true), gatewayId: gateway.id, sessionKey: key, root: self.temp.url)
     }
 
     func cached(_ gateway: GatewayStore, _ key: String) -> Bool {
-        TranscriptCache.file(gatewayId: gateway.id, sessionKey: key).map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+        TranscriptCache.file(gatewayId: gateway.id, sessionKey: key, root: self.temp.url).map { FileManager.default.fileExists(atPath: $0.path) } ?? false
     }
 
     func found(_ gateway: GatewayStore, _ word: String) async -> Bool {
@@ -28,12 +37,18 @@ struct TranscriptRemovalTests {
         return !hits.isEmpty
     }
 
+    func removed(_ gateway: GatewayStore, _ key: String, _ word: String) async -> Bool {
+        let stillFound = await self.found(gateway, word)
+        return !self.cached(gateway, key) && !stillFound
+    }
+
     func settle(_ condition: () async -> Bool) async {
         for _ in 0..<500 where !(await condition()) { try? await Task.sleep(for: .milliseconds(10)) }
     }
 
     func finish(_ gateway: GatewayStore) async {
-        TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true)
+        await TranscriptCache.shutdown(root: self.temp.url)
+        self.temp.remove()
         self.scratch.remove()
     }
 
@@ -76,7 +91,7 @@ struct TranscriptRemovalTests {
         await self.cache(gateway, key, "zorblax pancake")
         await self.settle { await self.found(gateway, "zorblax") }
         gateway.applySessionChange(["reason": "delete", "key": .string(key)])
-        await self.settle { !self.cached(gateway, key) }
+        await self.settle { await self.removed(gateway, key, "zorblax") }
         #expect(!self.cached(gateway, key))
         #expect(await !self.found(gateway, "zorblax"))
         await self.finish(gateway)
@@ -88,7 +103,7 @@ struct TranscriptRemovalTests {
         await self.cache(gateway, key, "zorblax pancake")
         await self.settle { await self.found(gateway, "zorblax") }
         gateway.applySessionChange(["reason": "rewind", "sessionKey": .string(key)])
-        await self.settle { !self.cached(gateway, key) }
+        await self.settle { await self.removed(gateway, key, "zorblax") }
         #expect(!self.cached(gateway, key))
         #expect(await !self.found(gateway, "zorblax"))
         await self.finish(gateway)
@@ -108,12 +123,12 @@ struct TranscriptRemovalTests {
 
     @Test(arguments: [SessionTranscriptChange.deleted, .changed(editorText: nil)])
     func fillInFlightCantReAddRemovedContent(change: SessionTranscriptChange) async {
-        let gateway = GatewayStore(profile: GatewayProfile.demo(), defaults: self.scratch.defaults, identity: Fixtures.identity())
+        let gateway = self.demoGateway()
         gateway.start()
         await self.settle { gateway.state.isConnected && !gateway.sessions.isEmpty }
         let key = "agent:main:dashboard:trip"
         #expect(gateway.state.isConnected)
-        await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: key)
+        await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: key, root: self.temp.url)
         let fill = gateway.startHeadlessFill(sessionKey: key, agentId: "main")
         await gateway.transcriptChanged(key: key, change: change)
         await fill.value
@@ -124,7 +139,7 @@ struct TranscriptRemovalTests {
     }
 
     @Test func vanishedSessionIsForgottenOnlyWhenTheGatewayNoLongerListsIt() async {
-        let gateway = GatewayStore(profile: GatewayProfile.demo(), defaults: self.scratch.defaults, identity: Fixtures.identity())
+        let gateway = self.demoGateway()
         gateway.start()
         await self.settle { gateway.state.isConnected && !gateway.sessions.isEmpty }
         let gone = "agent:main:dashboard:deleted-offline"
