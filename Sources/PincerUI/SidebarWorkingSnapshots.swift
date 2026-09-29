@@ -30,6 +30,9 @@ public enum SidebarWorkingSnapshots {
         var helpers = 0
         var reduceMotion = false
         var selected = false
+        var unread = false
+        /// An idle unread chat: the still avatar with the unread mark, not working.
+        var idle = false
     }
 
     static let variants: [Variant] = [
@@ -40,6 +43,9 @@ public enum SidebarWorkingSnapshots {
         Variant(title: "Helpers 9+", agent: forge, helpers: 12),
         Variant(title: "Reduce Motion", agent: forge, reduceMotion: true),
         Variant(title: "Selected", agent: forge, helpers: 2, reduceMotion: true, selected: true),
+        Variant(title: "Idle unread", agent: forge, idle: true),
+        Variant(title: "Working unread", agent: forge, unread: true),
+        Variant(title: "Idle unread selected", agent: forge, selected: true, idle: true),
     ]
 
     static let cell = CGSize(width: 150, height: 30), header: CGFloat = 22, gutter: CGFloat = 44
@@ -88,9 +94,13 @@ public enum SidebarWorkingSnapshots {
         }
         self.text("Fix the parser", at: CGPoint(x: row.minX + 8, y: row.midY - 8), size: 13, weight: .regular, color: titleColor)
 
-        guard let indicator = SidebarWorkingIndicator.resolve(
-            hasActiveRun: variant.helpers == 0, runningSubagents: variant.helpers, showSubagentRuns: false,
-            agent: variant.agent, companionsEnabled: variant.companions) else { return }
+        let resolved = variant.idle
+            ? SidebarWorkingIndicator.resolveUnread(isUnread: true, isSubagent: false, agent: variant.agent,
+                                                    companionsEnabled: variant.companions)
+            : SidebarWorkingIndicator.resolve(
+                hasActiveRun: variant.helpers == 0, runningSubagents: variant.helpers, showSubagentRuns: false,
+                agent: variant.agent, companionsEnabled: variant.companions, isUnread: variant.unread)
+        guard let indicator = resolved else { return }
         SidebarDance.reduceMotionOverride = variant.reduceMotion
         let view = SidebarWorkingAvatarView()
         view.appearance = appearance

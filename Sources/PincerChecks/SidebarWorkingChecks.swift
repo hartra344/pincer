@@ -33,6 +33,21 @@ func checkSidebarWorking() {
     check(unnamed?.agentName == "research" && unnamed?.label == "research is working", "sidebar working: blank name uses the agent id")
     check(resolve(false, 10)?.badge == "9+" && resolve(false, 9)?.badge == "9", "sidebar working: badge caps at 9+")
     check(resolve(false, -2) == nil, "sidebar working: a negative helper count isn't working")
+
+    func unread(_ isUnread: Bool, subagent: Bool = false, companions: Bool = true) -> SidebarWorkingIndicator? {
+        SidebarWorkingIndicator.resolveUnread(isUnread: isUnread, isSubagent: subagent, agent: moki, companionsEnabled: companions)
+    }
+    let mark = unread(true)
+    check(mark?.mode == .unread && mark?.source == .companion && mark?.showsUnreadMark == true && mark?.badge == nil
+          && mark?.isWorking == false, "sidebar unread: idle unread chat gets the pet with an unread mark")
+    check(unread(true, companions: false) == nil && unread(true, subagent: true) == nil && unread(false) == nil,
+          "sidebar unread: avatars off, subagent and read rows keep the dot / nothing")
+    let workingUnread = SidebarWorkingIndicator.resolve(hasActiveRun: true, runningSubagents: 0, showSubagentRuns: false,
+                                                        agent: moki, companionsEnabled: true, isUnread: true)
+    check(workingUnread?.isWorking == true && workingUnread?.showsUnreadMark == true, "sidebar unread: working + unread shows the mark")
+    let helpersUnread = SidebarWorkingIndicator.resolve(hasActiveRun: false, runningSubagents: 2, showSubagentRuns: false,
+                                                        agent: moki, companionsEnabled: true, isUnread: true)
+    check(helpersUnread?.badge == "2" && helpersUnread?.showsUnreadMark == false, "sidebar unread: helper count badge wins")
 }
 
 /// The demo opens with Forge at work in "Fix retry backoff" and a Scout helper run under "Paper digest".
@@ -77,6 +92,19 @@ func runDemoSidebarWorking() async {
 
     let idle = ["agent:main:main", "agent:research:main", "agent:coder:main", "agent:main:dashboard:trip"]
     check(idle.allSatisfy { indicator($0) == nil }, "demo: the other seeded chats are idle")
+
+    let paperRow = gateway.sessions[papers]
+    let paperUnread = SidebarWorkingIndicator.resolveUnread(isUnread: paperRow?.isUnread ?? false, isSubagent: paperRow?.isSubagent ?? true,
+                                                            agent: scout, companionsEnabled: true)
+    check(paperRow?.isUnread == true && paperRow?.hasActiveRun == false && paperUnread?.mode == .unread
+          && paperUnread?.source == .companion && paperUnread?.showsUnreadMark == true && paperUnread?.agentId == "research",
+          "demo: idle unread Paper digest resolves to Scout's avatar with the unread mark")
+    let idleUnread = gateway.sessions.values.filter { $0.isUnread && !$0.isSubagent && !$0.hasActiveRun && indicator($0.key) == nil }
+    check(!idleUnread.isEmpty && idleUnread.allSatisfy {
+        let avatar = SidebarWorkingIndicator.resolveUnread(isUnread: true, isSubagent: false, agent: gateway.agent($0.agentId),
+                                                           companionsEnabled: true)
+        return avatar?.mode == .unread && avatar?.showsUnreadMark == true && avatar?.isWorking == false
+    }, "demo: \(idleUnread.count) idle unread chat(s) show the avatar with the unread mark")
 
     // Stopping a seeded run ends it like any other.
     let chat = gateway.chat(for: retryFix)

@@ -636,14 +636,14 @@ private final class SidebarChatCell: NSTableCellView {
         }
 
         let working = entry.working != nil
-        self.workingAvatar.isHidden = !working
-        if let indicator = entry.working {
-            self.workingAvatar.configure(indicator, companion: entry.workingAvatar, phaseSeed: row.key)
+        self.workingAvatar.isHidden = entry.avatar == nil
+        if let indicator = entry.avatar {
+            self.workingAvatar.configure(indicator, companion: entry.avatarStyle, phaseSeed: row.key)
         } else {
             self.workingAvatar.stop()
         }
-        self.unreadDot.isHidden = working || !(row.isUnread && !row.isSubagent)
-        let activity = working || !self.unreadDot.isHidden ? nil : row.activityDate
+        self.unreadDot.isHidden = entry.avatar != nil || !(row.isUnread && !row.isSubagent)
+        let activity = entry.avatar != nil || !self.unreadDot.isHidden ? nil : row.activityDate
         self.date.isHidden = activity == nil
         self.date.stringValue = activity.map(ChannelRowStyle.relativeDate) ?? ""
 

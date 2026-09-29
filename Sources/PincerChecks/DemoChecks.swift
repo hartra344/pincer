@@ -368,9 +368,14 @@ func runDemo() async {
     await checkDemoPairingShapes()
     // Health page and a simulated restart.
     let health = gateway.health
+    check(health.health != nil && health.issues.contains { $0.id.hasPrefix("channel:telegram") } && health.indicator == nil,
+          "demo sidebar quiet right after connecting, before any load (\(String(describing: health.indicator)))")
     await health.load()
     check(health.hasLoaded && health.level == .degraded && health.issues.contains { $0.id.hasPrefix("channel:telegram") },
           "demo health degraded by Telegram (\(health.issues.map(\.title)))")
+    check(health.indicator == nil && !health.quietedIssueIds.isEmpty, "demo sidebar stays quiet about the Telegram issue at first")
+    health.markIssuesViewed()
+    check(health.level == .degraded && health.indicator == .degraded(issues: 1), "demo indicator returns once Health is viewed")
     check(health.presence.count == 3 && health.sortedPresence.first.map(health.isThisDevice) == true, "demo clients, this device first")
     check(health.heartbeat?.status == .okToken && (health.uptime() ?? 0) > 3 * 86_400, "demo heartbeat and uptime")
     check(health.canRestart, "demo can restart")

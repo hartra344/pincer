@@ -39,6 +39,7 @@ struct GatewayHealthPage: View {
         #endif
         .task(id: connected) {
             guard connected else { return }
+            model.markIssuesViewed()
             await model.load()
             while !Task.isCancelled {
                 try? await Task.sleep(for: GatewayHealthModel.refreshInterval)
