@@ -613,13 +613,15 @@ struct TranscriptList: UIViewRepresentable {
         /// Pages older history in when the loading row comes into view (once per appearance; a
         /// prepend resets it, so a short transcript keeps loading).
         private func loadOlderIfShown() {
-            var visible = false
-            if case .loadingOlder? = self.rows.first, let view = self.collectionView {
-                visible = view.indexPathsForVisibleItems.contains { $0.item == 0 }
-            }
+            let visible = self.isOlderRowVisible
             defer { self.olderRowWasVisible = visible }
             guard visible, !self.olderRowWasVisible else { return }
-            self.renderer.loadOlderIfShown()
+            self.renderer.loadOlderIfShown { [weak self] in self?.isOlderRowVisible ?? false }
+        }
+
+        private var isOlderRowVisible: Bool {
+            guard case .loadingOlder? = self.rows.first, let view = self.collectionView else { return false }
+            return view.indexPathsForVisibleItems.contains { $0.item == 0 }
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {

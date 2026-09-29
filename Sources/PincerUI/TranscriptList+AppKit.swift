@@ -578,14 +578,16 @@ struct TranscriptList: NSViewRepresentable {
         /// Pages older history in when the loading row comes into view (once per appearance; a
         /// prepend resets it, so a short transcript keeps loading).
         private func loadOlderIfShown() {
-            var visible = false
-            if case .loadingOlder? = self.rows.first, let table {
-                let range = table.rows(in: table.visibleRect)
-                visible = range.length > 0 && range.location == 0
-            }
+            let visible = self.isOlderRowVisible
             defer { self.olderRowWasVisible = visible }
             guard visible, !self.olderRowWasVisible else { return }
-            self.renderer.loadOlderIfShown()
+            self.renderer.loadOlderIfShown { [weak self] in self?.isOlderRowVisible ?? false }
+        }
+
+        private var isOlderRowVisible: Bool {
+            guard case .loadingOlder? = self.rows.first, let table else { return false }
+            let range = table.rows(in: table.visibleRect)
+            return range.length > 0 && range.location == 0
         }
 
         private func pinVisibleImages() {

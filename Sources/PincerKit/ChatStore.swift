@@ -238,7 +238,7 @@ public final class ChatStore: Identifiable {
 
     func updateIsRunning() {
         let running = self.live != nil || self.sessionRow?.hasActiveRun == true
-        guard running != self.isRunning else { return }
+        guard !self.headless, running != self.isRunning else { return }
         self.isRunning = running
         self.gateway?.chatRunStateChanged(self.sessionKey, running: running)
     }

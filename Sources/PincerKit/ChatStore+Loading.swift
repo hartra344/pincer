@@ -89,7 +89,7 @@ extension ChatStore {
         let state = self.currentCacheState
         guard state != self.savedState else { return }
         await TranscriptCache.save(self.snapshot(), gatewayId: self.gatewayId, sessionKey: self.sessionKey,
-                                   keepingOlder: self.olderInCache)
+                                   keepingOlder: self.olderInCache || self.hasMoreHistory)
         self.savedState = state
     }
 
@@ -289,30 +289,41 @@ extension ChatStore {
 
     /// Brings the whole history to disk (and the search index) right after opening, in a headless
     /// store shared per chat, so this one keeps only its window in memory. Resumes on the next load
-    /// if it was cut short.
+    /// if it was cut short. A cache that is current or already holds its retained maximum is left alone.
     func startBackfill() {
-        guard self.hasMoreHistory, !self.headless, !self.cachingStopped else { return }
-        self.gateway?.startHeadlessFill(sessionKey: self.sessionKey, agentId: self.agentId)
+        guard self.hasMoreHistory, !self.headless, !self.cachingStopped, let gateway = self.gateway else { return }
+        Task { [weak self, sessionKey, agentId, gatewayId] in
+            let meta = await TranscriptCache.meta(gatewayId: gatewayId, sessionKey: sessionKey)
+            let activityMs = gateway.sessions[sessionKey]?.activityMs ?? .infinity
+            guard meta?.retained != true, !GatewayStore.prefetchIsFresh(meta, activityMs: activityMs),
+                  let self, self.hasMoreHistory, !self.cachingStopped else { return }
+            gateway.startHeadlessFill(sessionKey: sessionKey, agentId: agentId)
+        }
     }
 
     /// The background fill finished: the cache may now hold items older than the loaded window, and
     /// says whether it is complete. The window is saved over the filler's write, keeping the older part.
     func adoptFilledCache() async {
-        guard !self.headless, !self.cachingStopped, !self.isDehydrated, self.hasLoaded else { return }
+        guard !self.headless, !self.cachingStopped, !self.isDehydrated, self.hasLoaded, let gateway else { return }
+        let generation = gateway.cacheGeneration(of: self.sessionKey)
+        // A queued save must not land over the filler's write before this store reads it.
+        self.saveTask?.cancel()
+        func current() -> Bool {
+            !self.cachingStopped && !self.isDehydrated && gateway.cacheGeneration(of: self.sessionKey) == generation
+        }
         if !self.olderInCache, let first = self.items.first(where: { !$0.isPending }) {
             let older = await TranscriptCache.loadOlder(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
                                                         before: first.id, limit: 1)
-            guard !self.cachingStopped, !self.isDehydrated, !self.olderInCache else { return }
+            guard current(), !self.olderInCache else { return }
             if Self.cacheReadable(older.outcome), !older.items.isEmpty {
                 self.olderInCache = true
                 self.hasPagedOlder = true
                 self.olderOffset = nil
             }
         }
-        if let meta = await TranscriptCache.meta(gatewayId: self.gatewayId, sessionKey: self.sessionKey) {
-            self.hasMoreHistory = !meta.complete
-        }
-        guard !self.cachingStopped, !self.isDehydrated, !self.cacheUnreadable else { return }
+        let meta = await TranscriptCache.meta(gatewayId: self.gatewayId, sessionKey: self.sessionKey)
+        guard current(), !self.cacheUnreadable else { return }
+        if let meta { self.hasMoreHistory = !meta.complete }
         self.saveTask?.cancel()
         self.savedState = nil
         await self.saveSnapshot()
