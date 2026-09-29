@@ -39,6 +39,9 @@ final class GatewayMediaClient {
     private let profile: @MainActor () -> GatewayProfile?
     private let secretReader: (GatewayProfile) -> String?
     let maxBytes: Int
+    /// Test seam: replaces the configuration of both the Gateway session and the public session.
+    var configurationOverride: URLSessionConfiguration?
+    private var overriddenPublicSession: URLSession?
     private var credentials: Credentials?
     nonisolated(unsafe) private var session: URLSession?
 
@@ -58,6 +61,7 @@ final class GatewayMediaClient {
 
     deinit {
         self.session?.finishTasksAndInvalidate()
+        self.overriddenPublicSession?.finishTasksAndInvalidate()
     }
 
     /// Drops the cached credentials and session; the next request rebuilds them. Requests already
@@ -93,12 +97,20 @@ final class GatewayMediaClient {
         var request = URLRequest(url: url)
         request.setValue("Pincer/0.1 (OpenClaw client; +https://github.com/openclaw/openclaw)", forHTTPHeaderField: "User-Agent")
         request.setValue(accept, forHTTPHeaderField: "Accept")
-        let result = try await BoundedDownload.run(session: Self.publicSession, request: request, limit: maxBytes ?? self.maxBytes)
+        let result = try await BoundedDownload.run(session: self.publicSession, request: request, limit: maxBytes ?? self.maxBytes)
         if result.tooLarge { throw MediaError.tooLarge }
         guard let http = result.response, http.statusCode == 200,
               let finalHost = http.url?.host, http.url?.scheme == "https", ArtifactImageLoader.isPublicHost(finalHost)
         else { return nil }
         return result.data
+    }
+
+    private var publicSession: URLSession {
+        guard let configuration = self.configurationOverride else { return Self.publicSession }
+        if let session = self.overriddenPublicSession { return session }
+        let session = URLSession(configuration: configuration)
+        self.overriddenPublicSession = session
+        return session
     }
 
     /// Current session and auth header, rebuilt when the profile's identity changed.
@@ -117,7 +129,7 @@ final class GatewayMediaClient {
             self.sessionsCreated += 1
             // Same TLS pin as the socket; ephemeral so nothing is cached to disk.
             self.session = URLSession(
-                configuration: .ephemeral,
+                configuration: self.configurationOverride ?? .ephemeral,
                 delegate: PinningDelegate(fingerprint: profile.tlsFingerprint),
                 delegateQueue: nil)
         }
