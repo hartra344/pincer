@@ -26,6 +26,14 @@ func runRichRenderingChecks() {
     check(TranscriptSearch.renderedTexts(markdown: "Area $\\pi r^2$ here") == ["Area \u{FFFC} here"],
           "Find skips drawn inline math source")
 
+    // Quick Look previews: non-text attachments, written as one safe file name under a private folder.
+    check(FilePreviewFiles.isPreviewable(FileRef(name: "a.pdf", artifactId: "x", mimeType: "application/pdf"))
+          && !FilePreviewFiles.isPreviewable(FileRef(name: "a.sh", artifactId: "x", mimeType: "text/x-shellscript")),
+          "PDFs open in Quick Look; text files expand inline instead")
+    check(FilePreviewFiles.fileName("../../etc/passwd", mimeType: nil) == "passwd"
+          && FilePreviewFiles.fileName("summary", mimeType: "application/pdf") == "summary.pdf",
+          "Quick Look file names can't leave their folder and get an extension from the MIME type")
+
     // Streaming cuts never land inside display math, so the chunks parse to the same blocks.
     let long = String(repeating: "Some words here. ", count: 80)
     let streamed = "\(long)\n\n$$\n\\sum_i x_i\n\n\\int f\n$$\n\n\(long)\n\nEnd"
@@ -100,4 +108,18 @@ func runDemoRichRendering() async {
         inline += InlineMath.spans(in: paragraph).filter { InlineMath.isDrawable($0.latex) }.count
     }
     check(inline == 4, "demo chat draws 4 inline formulas (got \(inline))")
+    var files: [FileRef] = []
+    for case let .assistant(turn) in chat.entries { files += turn.files }
+    let pdf = files.first { $0.mimeType == "application/pdf" }
+    check(pdf.map(FilePreviewFiles.isPreviewable) == true, "demo chat attaches a PDF that opens in Quick Look")
+    if let pdf {
+        let data = await gateway.files.data(for: pdf, sessionKey: richRenderingKey)
+        check(data?.prefix(5) == Data("%PDF-".utf8), "demo PDF downloads as a PDF (\(data?.count ?? 0) bytes)")
+        if let data {
+            let root = FileManager.default.temporaryDirectory.appendingPathComponent("PincerChecksQuickLook")
+            let url = try? FilePreviewFiles.write(data, name: pdf.name, mimeType: pdf.mimeType, in: root)
+            check(url?.lastPathComponent == "rate-limiter-design.pdf", "demo PDF is written for Quick Look under its own name")
+            FilePreviewFiles.clear(in: root)
+        }
+    }
 }

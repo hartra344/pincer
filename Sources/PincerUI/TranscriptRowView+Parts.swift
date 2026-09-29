@@ -1530,6 +1530,12 @@ final class TranscriptFileView: TranscriptBaseView {
                 actions?.setExpanded(file.key, !file.isExpanded, row: rowId)
             }
             self.header.accessibilityText = file.isExpanded ? L("Attachment \(file.ref.name), expanded") : L("Attachment \(file.ref.name), collapsed")
+        } else if FilePreviewFiles.isPreviewable(file.ref) {
+            self.header.onTap = { [weak self, weak actions] in
+                guard let actions else { return }
+                self?.quickLook(file.ref, actions: actions)
+            }
+            self.header.accessibilityText = L("Preview \(file.ref.name)")
         } else if file.ref.isDownloadable {
             self.header.onTap = { [weak self, weak actions] in
                 guard let actions else { return }
@@ -1556,6 +1562,23 @@ final class TranscriptFileView: TranscriptBaseView {
             self.section.isHidden = true
         }
         self.redraw()
+    }
+
+    /// Downloads the file for Quick Look; the Save button's symbol shows the download, as for saving.
+    private func quickLook(_ file: FileRef, actions: TranscriptRowActions) {
+        self.saveToken += 1
+        let token = self.saveToken
+        self.saveButton.set(title: L("Save"), symbol: "hourglass")
+        Task { @MainActor [weak self] in
+            let shown = await actions.quickLook(file)
+            guard let self, self.saveToken == token else { return }
+            self.saveButton.set(title: L("Save"), symbol: shown ? "arrow.down.circle" : "exclamationmark.triangle")
+            guard !shown else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                guard let self, self.saveToken == token else { return }
+                self.saveButton.set(title: L("Save"), symbol: "arrow.down.circle")
+            }
+        }
     }
 
     /// The button keeps its "Save" title, so the chip keeps its width; the symbol shows progress.
