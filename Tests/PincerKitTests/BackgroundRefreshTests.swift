@@ -314,6 +314,8 @@ struct BackgroundRefreshTests {
         var approvals: [JSONValue] = []
         private(set) var methods: [String] = []
         private(set) var closed = false
+        private(set) var closeCount = 0
+        private(set) var observerCalls = 0
 
         func request(_ method: String, _ params: JSONValue, timeout: TimeInterval) async throws -> JSONValue {
             methods.append(method)
@@ -328,9 +330,9 @@ struct BackgroundRefreshTests {
             }
         }
 
-        func observeEvents(_ handler: @escaping @MainActor (GatewayEvent) -> Void) -> Int { 0 }
+        func observeEvents(_ handler: @escaping @MainActor (GatewayEvent) -> Void) -> Int { observerCalls += 1; return 0 }
         func stopObserving(_ token: Int) {}
-        func close() async { closed = true }
+        func close() async { closed = true; closeCount += 1 }
     }
 
     @MainActor
@@ -572,6 +574,28 @@ struct BackgroundRefreshTests {
         #expect(report.skipped)
         #expect(rig.defaults.object(forKey: "pincer.refresh.lastRun") as? Date == ran)
         #expect(rig.defaults.string(forKey: "pincer.refresh.lastResult") == "Up to date")
+    }
+
+    @Test @MainActor func runOnlyIssuesTheFourReadOnlyRequestsAndClosesEverything() async {
+        let defaults = Self.defaults()
+        ClosedAppDelivery.set(.backgroundRefresh, defaults)
+        let profiles = [GatewayProfile(name: "A", url: "wss://a.example", authMode: .token),
+                        GatewayProfile(name: "B", url: "wss://b.example", authMode: .token)]
+        let connections = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, FakeConnection()) })
+        for connection in connections.values { connection.sessions = [Self.row(Self.key(1), activity: 5000)] }
+        let refresher = BackgroundRefresh(
+            profiles: { profiles }, connector: FakeConnector(connections: connections),
+            cursors: BackgroundRefreshCursorStore(defaults: defaults), defaults: defaults, post: { _ in })
+        _ = await refresher.run()
+        connections.values.forEach { $0.sessions = [Self.row(Self.key(1), activity: 6000)] }
+        _ = await refresher.run()
+
+        let allowed: Set<String> = ["agents.list", "sessions.list", "exec.approval.list", "question.list"]
+        for connection in connections.values {
+            #expect(!connection.methods.isEmpty && Set(connection.methods) == allowed)
+            #expect(connection.observerCalls == 0)
+            #expect(connection.closed && connection.closeCount == 2)
+        }
     }
 
     @Test @MainActor func constants() {
