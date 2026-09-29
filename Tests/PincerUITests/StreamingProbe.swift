@@ -17,9 +17,9 @@ import AppKit
 /// and once more at the end.
 @MainActor
 enum ProbeShim {
-    static let flush: ((ChatStore) -> Void)? = nil
+    static let flush: ((ChatStore) -> Void)? = { $0.flushLive() }
     /// Optional: shared cache entry counts, e.g. `{ "\(MarkdownCache.debugCounts)" }`. nil when absent.
-    static let cacheCounts: (() -> String)? = nil
+    static let cacheCounts: (() -> String)? = { "\(MarkdownCache.counts.blocks)/\(MarkdownCache.counts.inlines)/\(TranscriptText.segmentCacheCount)" }
 }
 
 @MainActor
