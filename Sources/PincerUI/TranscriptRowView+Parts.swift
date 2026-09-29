@@ -544,6 +544,7 @@ final class TranscriptFooterView: TranscriptBaseView {
     private let copyButton = TranscriptLabelButton()
     private let replyButton = TranscriptLabelButton()
     private let reactButton = TranscriptLabelButton()
+    private let bookmarkButton = TranscriptLabelButton()
     private weak var actions: TranscriptRowActions?
     private var copiedToken = 0
 
@@ -552,6 +553,15 @@ final class TranscriptFooterView: TranscriptBaseView {
         for button in [self.copyButton, self.replyButton, self.reactButton] {
             button.isSubdued = true
             self.addSubview(button)
+        }
+        self.bookmarkButton.set(title: "", symbol: "star.fill")
+        self.bookmarkButton.accessibilityText = L("Remove Bookmark")
+        self.bookmarkButton.hitOutset = CGSize(width: 8, height: 8)
+        self.bookmarkButton.isHidden = true
+        self.addSubview(self.bookmarkButton)
+        self.bookmarkButton.onTap = { [weak self] in
+            guard let self, let id = self.footer?.messageId else { return }
+            self.actions?.toggleBookmark(id)
         }
         self.showCopy()
         self.copyButton.onTap = { [weak self] in self?.copy() }
@@ -576,6 +586,14 @@ final class TranscriptFooterView: TranscriptBaseView {
         self.copyButton.isHidden = footer.copyText.isEmpty
         self.replyButton.isHidden = footer.messageId == nil
         self.reactButton.isHidden = footer.messageId == nil || !actions.reactionsEnabled
+        self.bookmarkButton.isHidden = footer.messageId == nil || !footer.isBookmarked
+        if old?.isBookmarked != footer.isBookmarked {
+            #if os(macOS)
+            self.needsLayout = true
+            #else
+            self.setNeedsLayout()
+            #endif
+        }
         if old?.key != footer.key {
             self.copiedToken += 1
             self.showCopy()
@@ -609,7 +627,7 @@ final class TranscriptFooterView: TranscriptBaseView {
     override func layoutContent() {
         var x: CGFloat = 0
         var moved = false
-        for button in [self.copyButton, self.replyButton, self.reactButton] where !button.isHidden {
+        for button in [self.bookmarkButton, self.copyButton, self.replyButton, self.reactButton] where !button.isHidden {
             let size = button.buttonSize
             let frame = CGRect(x: x, y: (self.bounds.height - size.height) / 2, width: size.width, height: size.height)
             if button.frame != frame {
