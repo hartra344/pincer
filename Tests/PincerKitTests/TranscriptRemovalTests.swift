@@ -122,4 +122,23 @@ struct TranscriptRemovalTests {
         gateway.stop()
         await self.finish(gateway)
     }
+
+    @Test func vanishedSessionIsForgottenOnlyWhenTheGatewayNoLongerListsIt() async {
+        let gateway = GatewayStore(profile: GatewayProfile.demo(), defaults: self.scratch.defaults, identity: Fixtures.identity())
+        gateway.start()
+        await self.settle { gateway.state.isConnected && !gateway.sessions.isEmpty }
+        let gone = "agent:main:dashboard:deleted-offline"
+        let archived = "agent:main:dashboard:tax-2025"
+        await self.cache(gateway, gone, "zorblax pancake")
+        await self.cache(gateway, archived, "quillon waffle")
+        await self.settle { await self.found(gateway, "zorblax") }
+        gateway.setSession(nil, for: archived)
+
+        await gateway.forgetVanishedSessions([gone, archived])
+        #expect(!self.cached(gateway, gone))
+        #expect(await !self.found(gateway, "zorblax"))
+        #expect(self.cached(gateway, archived), "still listed (archived): its cache stays")
+        gateway.stop()
+        await self.finish(gateway)
+    }
 }

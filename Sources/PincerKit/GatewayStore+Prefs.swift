@@ -265,6 +265,22 @@ extension GatewayStore {
         }
     }
 
+    /// Chats that dropped out of `sessions.list` (deleted while we were away, or just archived, or past
+    /// the list limit). Only those the Gateway confirms gone are forgotten: an unfiltered list that
+    /// wasn't cut at its limit no longer has them.
+    func forgetVanishedSessions(_ keys: Set<String>) async {
+        guard !keys.isEmpty, self.state.isConnected else { return }
+        let params: [String: JSONValue] = ["limit": 300, "archived": "all"]
+        guard let list = try? await self.connection.request("sessions.list", .object(params), timeout: 30),
+              let rows = list["sessions"]?.array,
+              rows.count < 300
+        else { return }
+        let listed = Set(rows.compactMap(SessionRow.init).map(\.key))
+        for key in keys.subtracting(listed) where self.sessions[key] == nil {
+            await self.transcriptChanged(key: key, change: .deleted)
+        }
+    }
+
     /// Drops a chat's cached transcript and its messages from search; a refetch re-adds both.
     private func forgetTranscript(_ key: String) async {
         await TranscriptCache.remove(gatewayId: self.id, sessionKey: key)
