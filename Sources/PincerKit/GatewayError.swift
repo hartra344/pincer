@@ -43,11 +43,28 @@ extension GatewayError {
         self.isUnknownMethod(error) || self.isForbidden(error)
     }
 
-    /// `scope` for a missing scope, `unavailable` for an unknown method (when given); otherwise the
+    /// The default missing-scope sentence, naming the scope when the Gateway did.
+    static func missingScopeMessage(for error: Error) -> String {
+        guard let scope = self.missingScope(error) ?? self.scopeHint(in: error) else {
+            return "Your device is missing a scope this needs. Approve it again from the Gateway with that scope."
+        }
+        return "Your device doesn't have the `\(scope)` scope. Approve it again from the Gateway with that scope."
+    }
+
+    /// An `operator.*` scope named in the message ("missing scope: operator.read").
+    private static func scopeHint(in error: Error) -> String? {
+        guard case let .rpc(_, message, _) = error as? GatewayError,
+              let range = message.range(of: #"operator\.[a-z0-9_.-]*[a-z0-9]"#, options: [.regularExpression, .caseInsensitive])
+        else { return nil }
+        return String(message[range])
+    }
+
+    /// `scope` (a page's own sentence, else the default) for a missing scope; for an unknown method,
+    /// "This Gateway doesn't support <unavailable> yet." when a feature phrase is given; otherwise the
     /// Gateway's own message, or the error's description when it wasn't an RPC failure.
-    static func message(for error: Error, scope: String, unavailable: String? = nil) -> String {
-        if self.isMissingScope(error) { return scope }
-        if let unavailable, self.isUnknownMethod(error) { return unavailable }
+    static func message(for error: Error, scope: String? = nil, unavailable: String? = nil) -> String {
+        if self.isMissingScope(error) { return scope ?? self.missingScopeMessage(for: error) }
+        if let unavailable, self.isUnknownMethod(error) { return "This Gateway doesn't support \(unavailable) yet." }
         guard case let .rpc(_, message, _) = error as? GatewayError else { return error.localizedDescription }
         return message
     }

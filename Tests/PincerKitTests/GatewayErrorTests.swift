@@ -45,9 +45,16 @@ struct GatewayErrorTests {
 
     @Test func messagePicksTheCallersWording() {
         #expect(GatewayError.message(for: self.rpc("FORBIDDEN", "missing scope: operator.admin"), scope: "S", unavailable: "U") == "S")
-        #expect(GatewayError.message(for: self.rpc("UNKNOWN_METHOD", "nope"), scope: "S", unavailable: "U") == "U")
+        #expect(GatewayError.message(for: self.rpc("UNKNOWN_METHOD", "nope"), scope: "S", unavailable: "renaming devices") == "This Gateway doesn't support renaming devices yet.")
         #expect(GatewayError.message(for: self.rpc("UNKNOWN_METHOD", "nope"), scope: "S") == "nope")
         #expect(GatewayError.message(for: self.rpc("UNAVAILABLE", "try later"), scope: "S", unavailable: "U") == "try later")
         #expect(GatewayError.message(for: GatewayError.notConnected, scope: "S") == GatewayError.notConnected.localizedDescription)
+    }
+
+    @Test func defaultWording() {
+        let named = self.rpc("FORBIDDEN", "x", ["code": "MISSING_SCOPE", "missingScope": "operator.read"])        #expect(GatewayError.message(for: named) == "Your device doesn't have the `operator.read` scope. Approve it again from the Gateway with that scope.")
+        let inMessage = self.rpc("FORBIDDEN", "missing scope: operator.admin")
+        #expect(GatewayError.message(for: inMessage).contains("`operator.admin`"))
+        #expect(GatewayError.message(for: self.rpc("MISSING_SCOPE")).hasPrefix("Your device is missing a scope"))
     }
 }
