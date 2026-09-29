@@ -21,6 +21,8 @@ struct TranscriptList: UIViewRepresentable {
     var jump: TranscriptJump?
     /// Told how far the reader is from the latest message; runs the scroll-to-bottom button's scroll.
     var scrollToBottom: ScrollToBottomModel?
+    /// Told (on a later main-queue turn) whenever the list starts or stops following the bottom.
+    var bottomAnchorChanged: ((Bool) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(context: self.context) }
 
@@ -30,6 +32,7 @@ struct TranscriptList: UIViewRepresentable {
 
     func updateUIView(_ view: UICollectionView, context: Context) {
         context.coordinator.attach(self.scrollToBottom)
+        context.coordinator.bottomAnchorChanged = self.bottomAnchorChanged
         context.coordinator.update(rows: self.rows, context: self.context, insets: (self.topInset, self.bottomInset))
         context.coordinator.apply(self.highlight)
         context.coordinator.apply(self.jump)
@@ -60,7 +63,16 @@ struct TranscriptList: UIViewRepresentable {
         fileprivate private(set) var contentHeight: CGFloat = 0
         /// Ids whose height value changed since the offsets were last built.
         private var dirtyHeights = Set<String>()
-        private var anchor = Anchor.bottom
+        private var anchor = Anchor.bottom {
+            didSet {
+                guard (oldValue == .bottom) != (self.anchor == .bottom), let report = self.bottomAnchorChanged else { return }
+                let atBottom = self.anchor == .bottom
+                DispatchQueue.main.async { report(atBottom) }
+            }
+        }
+        var bottomAnchorChanged: ((Bool) -> Void)?
+        /// Whether the list is following the bottom (#335: the open chat may be trimmed then).
+        var isAnchoredAtBottom: Bool { self.anchor == .bottom }
         private var isAdjusting = false
         private var isScrollingToTop = false
         private var lastOffset: CGFloat = 0
@@ -194,6 +206,8 @@ struct TranscriptList: UIViewRepresentable {
                 // Sending jumps to the end, even from far up, and follows the reply from there.
                 let oldIds = Set(oldRows.map(\.id))
                 if unique.contains(where: { !oldIds.contains($0.id) && $0.isPendingSend }) { self.anchor = .bottom }
+                // Trimmed back to the window (#335): forget the heights of the rows that left.
+                if oldRows.count > unique.count + 256 { self.heights = self.heights.filter { self.index[$0.key] != nil } }
                 // Rows only come and go when a message is sent or arrives, or history loads, so a
                 // reload (which re-dequeues the few cells on screen) is cheap enough.
                 self.rebuildOffsets()

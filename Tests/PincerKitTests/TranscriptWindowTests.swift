@@ -412,6 +412,33 @@ struct TranscriptWindowTests {
         #expect(await self.cached(gateway) == self.ids(0..<self.total))
     }
 
+    /// #335: once Find closes, the open chat is trimmed back to its window (the UI asks only when the
+    /// list follows the bottom); the idle-only trim still leaves a selected chat alone.
+    @Test func theOpenChatTrimsBackToTheWindowAfterFind() async {
+        let (chat, gateway) = self.makeStore()
+        defer {
+            chat.stopCaching()
+            TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: self.temp.url)
+            self.temp.remove()
+        }
+        await self.seed(gateway)
+        await chat.restoreFromCache()
+        chat.hasLoaded = true
+        gateway.selectedKey = self.key
+        await chat.loadAllCached()
+        #expect(chat.items.count == self.total)
+
+        await chat.trimWhenIdle()
+        #expect(chat.items.count == self.total, "the idle trim skips the selected chat")
+        await chat.trimOpenChatToWindow(stillWanted: { false })
+        #expect(chat.items.count == self.total, "Find reopened (or the list left the bottom) during the save")
+
+        await chat.trimOpenChatToWindow(stillWanted: { true })
+        #expect(chat.items.count <= self.limit && chat.olderInCache)
+        self.expectNewestSuffix(chat)
+        #expect(await self.cached(gateway) == self.ids(0..<self.total))
+    }
+
     // MARK: Background fill vs. the visible store
 
     @Test func aNewerMessageSavedByTheVisibleStoreSurvivesTheFullFill() async {
