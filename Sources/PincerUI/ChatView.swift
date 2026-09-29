@@ -56,6 +56,45 @@ struct ChatView: View {
         #if DEBUG
         let _ = BodyCounter.hit("ChatView")
         #endif
+        self.presentedContent
+        .focusedSceneValue(\.replyToLast, self.paneIsActive ? ReplyToLast(chat: self.chat, agentName: self.agent.name) : nil)
+        .task(id: self.chat.notice) {
+            guard self.chat.notice != nil else { return }
+            try? await Task.sleep(for: .seconds(4))
+            self.chat.notice = nil
+        }
+        .onChange(of: self.app.findRequest, initial: true) { self.takeFindRequest() }
+        .onChange(of: self.app.messageJump, initial: true) { self.takeMessageJump() }
+        .onChange(of: self.chat.hasLoaded) { self.takeMessageJump() }
+        .onChange(of: self.chat.lastOutcomeAt) { _, finished in
+            if finished != nil { self.announceOutcome() }
+            #if DEBUG
+            if finished != nil { BodyCounter.report() }
+            #endif
+        }
+        .modifier(ChatHandoff(sessionKey: self.chat.sessionKey))
+        #if os(iOS)
+        // Menu commands are macOS-only; on iOS a hardware keyboard reaches these instead.
+        .background {
+            Group {
+                Button(L("Find in Chat")) { self.find.present() }.shortcut(.findInChat)
+                if !self.find.isPresented {
+                    Button(L("Find Next")) { self.find.next() }.shortcut(.findNext)
+                    Button(L("Find Previous")) { self.find.previous() }.shortcut(.findPrevious)
+                }
+                Button(L("Reply to Last Message")) { ReplyToLast(chat: self.chat, agentName: self.agent.name).perform() }
+                    .shortcut(.replyToLastMessage)
+                    .disabled(self.chat.latestReplyableId == nil)
+            }
+            .opacity(0)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        #endif
+    }
+
+    // Split out of `body` so the iOS compiler can type-check the modifier chain in time.
+    private var transcript: some View {
         TranscriptPane(
             chat: self.chat, find: self.find, jump: self.jump, disclosure: self.disclosure,
             previewing: self.$previewing, previewingHTML: self.$previewingHTML, quickLookURL: self.$quickLookURL,
@@ -103,6 +142,10 @@ struct ChatView: View {
             .animation(.snappy, value: self.chat.notice)
             .animation(.snappy, value: self.chat.replyTarget)
             .animation(.snappy, value: self.chat.progressCard)
+    }
+
+    private var presentedContent: some View {
+        self.transcript
         .sheet(item: self.$previewing) { ref in
             ImagePreview(ref: ref, sessionKey: self.chat.sessionKey)
         }
@@ -157,40 +200,6 @@ struct ChatView: View {
                 self.jump = TranscriptJump(id: UUID(), messageId: bookmark.messageId)
             }
         }
-        .focusedSceneValue(\.replyToLast, self.paneIsActive ? ReplyToLast(chat: self.chat, agentName: self.agent.name) : nil)
-        .task(id: self.chat.notice) {
-            guard self.chat.notice != nil else { return }
-            try? await Task.sleep(for: .seconds(4))
-            self.chat.notice = nil
-        }
-        .onChange(of: self.app.findRequest, initial: true) { self.takeFindRequest() }
-        .onChange(of: self.app.messageJump, initial: true) { self.takeMessageJump() }
-        .onChange(of: self.chat.hasLoaded) { self.takeMessageJump() }
-        .onChange(of: self.chat.lastOutcomeAt) { _, finished in
-            if finished != nil { self.announceOutcome() }
-            #if DEBUG
-            if finished != nil { BodyCounter.report() }
-            #endif
-        }
-        .modifier(ChatHandoff(sessionKey: self.chat.sessionKey))
-        #if os(iOS)
-        // Menu commands are macOS-only; on iOS a hardware keyboard reaches these instead.
-        .background {
-            Group {
-                Button(L("Find in Chat")) { self.find.present() }.shortcut(.findInChat)
-                if !self.find.isPresented {
-                    Button(L("Find Next")) { self.find.next() }.shortcut(.findNext)
-                    Button(L("Find Previous")) { self.find.previous() }.shortcut(.findPrevious)
-                }
-                Button(L("Reply to Last Message")) { ReplyToLast(chat: self.chat, agentName: self.agent.name).perform() }
-                    .shortcut(.replyToLastMessage)
-                    .disabled(self.chat.latestReplyableId == nil)
-            }
-            .opacity(0)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-        }
-        #endif
     }
 
     private var reasoningOff: Bool { self.row?.reasoningLevel == "off" }
