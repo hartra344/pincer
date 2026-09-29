@@ -394,6 +394,12 @@ const facts = [
 
 			const strip = document.querySelector<HTMLElement>('.line-index');
 			const links = [...document.querySelectorAll<HTMLAnchorElement>('.line-index a')];
+			if (strip) {
+				const edge = () =>
+					strip.toggleAttribute('data-end', strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 4);
+				strip.addEventListener('scroll', edge, { passive: true });
+				edge();
+			}
 			if (strip && 'IntersectionObserver' in window) {
 				const io = new IntersectionObserver(
 					(entries) => {
