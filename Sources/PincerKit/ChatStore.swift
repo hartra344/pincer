@@ -208,14 +208,15 @@ public final class ChatStore: Identifiable {
     public func markStale() { self.stale = true }
 
     public func releaseSubscription() async {
-        if self.isSubscribed, let gateway, gateway.state.isConnected {
+        let wasSubscribed = self.isSubscribed
+        self.subscribedEpoch = nil
+        self.stale = true
+        if wasSubscribed, let gateway, gateway.state.isConnected {
             _ = try? await gateway.connection.request(
                 "sessions.messages.unsubscribe",
                 .object(self.params(keyName: "key")),
                 timeout: 10)
         }
-        self.subscribedEpoch = nil
-        self.stale = true
     }
 
     public func load(force: Bool = false) async {
@@ -231,11 +232,18 @@ public final class ChatStore: Identifiable {
         do {
             let epoch = gateway.connectionEpoch
             if self.subscribedEpoch != epoch {
-                _ = try? await gateway.connection.request(
-                    "sessions.messages.subscribe",
-                    .object(self.params(keyName: "key")),
-                    timeout: 10)
                 self.subscribedEpoch = epoch
+                do {
+                    _ = try await gateway.connection.request(
+                        "sessions.messages.subscribe",
+                        .object(self.params(keyName: "key")),
+                        timeout: 10)
+                } catch is CancellationError {
+                    if self.subscribedEpoch == epoch { self.subscribedEpoch = nil }
+                    return
+                } catch {
+                    if self.subscribedEpoch == epoch { self.subscribedEpoch = nil }
+                }
             }
             var params = self.params(keyName: "sessionKey")
             params["limit"] = .number(Double(self.historyLimit))
@@ -1111,12 +1119,19 @@ public final class ChatStore: Identifiable {
     private func finishRun(_ runId: String) {
         guard self.live == nil || self.live?.runId == runId else { return }
         if self.finishedRunIds.contains(runId) { return }
+        guard self.isSubscribed else {
+            // A background chat: reload when it is opened instead of resubscribing.
+            self.markStale()
+            if self.live?.runId == runId { self.live = nil }
+            return
+        }
         self.finishedRunIds.append(runId)
         if self.finishedRunIds.count > 32 { self.finishedRunIds.removeFirst(self.finishedRunIds.count - 32) }
         self.reloadTask?.cancel()
         self.reloadTask = Task { [weak self] in
             let before = self?.loadCount
             await self?.load(force: true)
+            guard !Task.isCancelled else { return }
             // A failed or cancelled reload must not swallow the run's only history read.
             if let self, self.loadCount == before {
                 self.finishedRunIds.removeAll { $0 == runId }

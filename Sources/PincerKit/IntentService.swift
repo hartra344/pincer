@@ -932,12 +932,17 @@ func withBound<T: Sendable>(seconds: TimeInterval, _ body: @escaping @MainActor 
     let once = BoundOnce<T>()
     return await withCheckedContinuation { continuation in
         once.continuation = continuation
-        let work = Task { @MainActor in once.finish(await body()) }
-        Task { @MainActor in
+        let timer = Task { @MainActor in
             try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
             // Cancelling lets the body's connection unwind and close instead of running on.
-            work.cancel()
+            once.work?.cancel()
             once.finish(nil)
+        }
+        once.work = Task { @MainActor in
+            let value = await body()
+            timer.cancel()
+            once.finish(value)
         }
     }
 }
@@ -945,6 +950,7 @@ func withBound<T: Sendable>(seconds: TimeInterval, _ body: @escaping @MainActor 
 @MainActor
 private final class BoundOnce<T: Sendable> {
     var continuation: CheckedContinuation<T?, Never>?
+    var work: Task<Void, Never>?
 
     func finish(_ value: T?) {
         self.continuation?.resume(returning: value)
