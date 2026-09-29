@@ -169,13 +169,13 @@ struct ChatView: View {
         // Menu commands are macOS-only; on iOS a hardware keyboard reaches these instead.
         .background {
             Group {
-                Button(L("Find in Chat")) { self.find.present() }.keyboardShortcut("f", modifiers: .command)
+                Button(L("Find in Chat")) { self.find.present() }.shortcut(.findInChat)
                 if !self.find.isPresented {
-                    Button(L("Find Next")) { self.find.next() }.keyboardShortcut("g", modifiers: .command)
-                    Button(L("Find Previous")) { self.find.previous() }.keyboardShortcut("g", modifiers: [.command, .shift])
+                    Button(L("Find Next")) { self.find.next() }.shortcut(.findNext)
+                    Button(L("Find Previous")) { self.find.previous() }.shortcut(.findPrevious)
                 }
                 Button(L("Reply to Last Message")) { ReplyToLast(chat: self.chat, agentName: self.agent.name).perform() }
-                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                    .shortcut(.replyToLastMessage)
                     .disabled(self.chat.latestReplyableId == nil)
             }
             .opacity(0)

@@ -90,7 +90,7 @@ struct ChannelList: View {
                     Button(L("Set Up Gateway…")) { self.gateway.setup.present() }
                         .disabled(!self.gateway.state.isConnected)
                     Button(L("Gateway Settings…")) { self.openGatewaySettings(self.gateway) }
-                        .keyboardShortcut(",", modifiers: [.command, .shift])
+                        .shortcut(.gatewaySettings)
                     Button(L("Edit Connection…")) { self.openGatewaySettings(self.gateway, at: .connection) }
                     Button(L("Reconnect")) { self.gateway.stop(); self.gateway.start() }
                     Divider()
@@ -105,7 +105,7 @@ struct ChannelList: View {
                 } label: {
                     Label(L("New Chat"), systemImage: "square.and.pencil")
                 }
-                .keyboardShortcut("n", modifiers: .command)
+                .shortcut(.newChat)
                 .disabled(!self.gateway.state.isConnected)
             }
         }

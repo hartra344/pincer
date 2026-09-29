@@ -376,7 +376,8 @@ struct CommandPaletteView: View {
         var ranked = Array(PaletteMatcher.rank(items, query: self.query).prefix(80))
         guard self.page == .root else { return ranked }
         ranked += PaletteMatcher.rank(CommandPalette.bookmarkItems(gateways: self.app.gateways), query: self.query).prefix(10)
-        return CommandPalette.addingSearchMessages(to: ranked, query: self.query, gatewaySelected: self.gateway != nil)
+        return CommandPalette.addingSearchMessages(to: ranked, query: self.query, gatewaySelected: self.gateway != nil,
+                                                   shortcut: ShortcutCommand.searchMessages.displayShortcut)
     }
 
     private var commandItems: [PaletteItem] {
@@ -397,11 +398,11 @@ struct CommandPaletteView: View {
         items += [
             item(.toggleThinking, showsThinking ? L("Hide Thinking Steps") : L("Show Thinking Steps"), "brain.head.profile",
                  keywords: ["toggle", "reasoning", "tools"], subtitle: L("Now: \(self.thinkingDisplay.label)")),
-            item(.back, L("Go Back"), "chevron.backward", keywords: ["previous", "history"], shortcut: "⌘[",
+            item(.back, L("Go Back"), "chevron.backward", keywords: ["previous", "history"], shortcut: ShortcutCommand.goBack.displayShortcut,
                  enabled: self.app.canGoBack),
-            item(.forward, L("Go Forward"), "chevron.forward", keywords: ["next", "history"], shortcut: "⌘]",
+            item(.forward, L("Go Forward"), "chevron.forward", keywords: ["next", "history"], shortcut: ShortcutCommand.goForward.displayShortcut,
                  enabled: self.app.canGoForward),
-            item(.nextUnread, L("Next Unread Chat"), "circle.badge", keywords: ["unread"], shortcut: "⌥⇧↓",
+            item(.nextUnread, L("Next Unread Chat"), "circle.badge", keywords: ["unread"], shortcut: ShortcutCommand.nextUnreadChat.displayShortcut,
                  enabled: self.app.totalUnread > 0),
             item(.appSettings, L("Open Settings…"), "gearshape", keywords: ["preferences"], shortcut: "⌘,"),
             item(.addGateway, L("Add Gateway…"), "plus.circle", keywords: ["connect", "new", "server", "setup", "wizard"]),
@@ -409,7 +410,7 @@ struct CommandPaletteView: View {
         if let setup = CommandPalette.setupGatewayItem(gateway: self.gateway) { items.append(setup) }
         if self.gateway != nil {
             items += [
-                item(.gatewaySettings, L("Gateway Settings…"), "server.rack", keywords: ["config"], shortcut: "⇧⌘,"),
+                item(.gatewaySettings, L("Gateway Settings…"), "server.rack", keywords: ["config"], shortcut: ShortcutCommand.gatewaySettings.displayShortcut),
                 item(.automations, L("Automations…"), "clock", keywords: ["cron", "jobs", "schedule"]),
                 item(.approvalHistory, L("Approval History…"), "checkmark.shield",
                      keywords: ["approvals", "audit", "log", "exec", "plugin", "decisions"]),
@@ -705,10 +706,10 @@ struct GoCommands: Commands {
         #endif
         CommandMenu(L("Go")) {
             Button(L("Command Palette…")) { self.palette?.wrappedValue.toggle() }
-                .keyboardShortcut("k", modifiers: .command)
+                .shortcut(.commandPalette)
                 .disabled(self.palette == nil)
             Button(L("Search Messages…")) { self.searchMessages?() }
-                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .shortcut(.searchMessages)
                 .disabled(self.palette == nil || self.searchMessages == nil || self.app.selectedGateway == nil)
             #if os(macOS)
             Button(QuickCaptureController.shared.menuTitle) {
@@ -717,10 +718,10 @@ struct GoCommands: Commands {
             #endif
             Divider()
             Button(L("Back")) { self.app.goBack() }
-                .keyboardShortcut("[", modifiers: .command)
+                .shortcut(.goBack)
                 .disabled(!self.app.canGoBack)
             Button(L("Forward")) { self.app.goForward() }
-                .keyboardShortcut("]", modifiers: .command)
+                .shortcut(.goForward)
                 .disabled(!self.app.canGoForward)
             let pinned = self.app.selectedGateway?.pinnedChats.prefix(9) ?? []
             if !pinned.isEmpty {
@@ -728,7 +729,7 @@ struct GoCommands: Commands {
                 Section(L("Pinned Chats")) {
                     ForEach(Array(pinned.enumerated()), id: \.element.key) { index, row in
                         Button(row.title) { self.app.openPinned(index + 1) }
-                            .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                            .keyboardShortcut(ShortcutStore.shared.isRecording ? nil : KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command))
                     }
                 }
             }

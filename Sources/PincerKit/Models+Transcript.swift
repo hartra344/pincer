@@ -343,12 +343,20 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         self.isPending = isPending
     }
 
+    /// The Gateway stores a sent user turn under `<clientKey>:user` (upstream `buildRunUserTurnIdempotencyKey`),
+    /// so strip that suffix to match the key Pincer sent with `chat.send` (#429).
+    static func clientIdempotencyKey(_ stored: String?) -> String? {
+        guard let stored, stored.hasSuffix(":user") else { return stored }
+        let bare = String(stored.dropLast(":user".count))
+        return bare.isEmpty ? stored : bare
+    }
+
     public init?(_ json: JSONValue, fallbackIndex: Int) {
         let meta = json["__openclaw"]
         self.transcriptId = meta?["id"]?.text
         self.markerKind = meta?["kind"]?.text
         self.runId = meta?["runId"]?.text
-        self.idempotencyKey = meta?["idempotencyKey"]?.text ?? json["idempotencyKey"]?.text
+        self.idempotencyKey = Self.clientIdempotencyKey(meta?["idempotencyKey"]?.text ?? json["idempotencyKey"]?.text)
         let baseId = self.transcriptId ?? "idx-\(fallbackIndex)"
         // Stable across reloads and older pages, so rows keep their identity and scroll position.
         self.id = baseId
