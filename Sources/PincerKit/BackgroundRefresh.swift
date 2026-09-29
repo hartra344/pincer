@@ -199,6 +199,8 @@ public final class BackgroundRefresh {
         /// Gateways that couldn't be reached or answered badly.
         public var failed: [UUID] = []
         public var skipped = false
+        /// The unread count the app badge was set to; nil when a gateway didn't answer, so it's left as is.
+        public var badge: Int?
     }
 
     private enum Outcome: Sendable {
@@ -211,6 +213,7 @@ public final class BackgroundRefresh {
     private let cursors: BackgroundRefreshCursorStore
     private let defaults: UserDefaults
     private let post: @MainActor ([UNNotificationRequest]) async -> Void
+    private let setBadge: @MainActor (Int) -> Void
     private let timer: @Sendable (TimeInterval) async -> Void
 
     public init(
@@ -219,6 +222,7 @@ public final class BackgroundRefresh {
         cursors: BackgroundRefreshCursorStore = BackgroundRefreshCursorStore(),
         defaults: UserDefaults = .standard,
         post: @escaping @MainActor ([UNNotificationRequest]) async -> Void = { await Notifier.shared.postBackground($0) },
+        setBadge: @escaping @MainActor (Int) -> Void = { Notifier.shared.setBadge($0) },
         /// Waits out the run's budget; tests pass a gate to end it on cue.
         timer: @escaping @Sendable (TimeInterval) async -> Void = { try? await Task.sleep(for: .seconds($0)) })
     {
@@ -227,6 +231,7 @@ public final class BackgroundRefresh {
         self.cursors = cursors
         self.defaults = defaults
         self.post = post
+        self.setBadge = setBadge
         self.timer = timer
     }
 
@@ -256,6 +261,8 @@ public final class BackgroundRefresh {
             }
         }
         var outcomes: [UUID: Outcome?] = [:]
+        var unread = 0
+        var sounded = false
         await withTaskCancellationHandler {
             for (profile, fetch) in zip(profiles, fetches) { outcomes[profile.id] = await fetch.value }
         } onCancel: {
@@ -274,9 +281,17 @@ public final class BackgroundRefresh {
                 snapshot: snapshot, cursor: self.cursors.cursor(for: profile.id),
                 filter: .load(gatewayId: profile.id, defaults: self.defaults),
                 gatewayId: profile.id, gatewayName: profile.name)
-            if !plan.requests.isEmpty { await self.post(plan.requests) }
+            if !plan.requests.isEmpty {
+                await self.post(Self.quieted(plan.requests, firstMaySound: !sounded))
+                sounded = true
+            }
             self.cursors.save(plan.cursor, for: profile.id)
             report.posted += plan.requests.count
+            unread += Self.unreadCount(snapshot.sessions, filter: .load(gatewayId: profile.id, defaults: self.defaults))
+        }
+        if !Task.isCancelled, !profiles.isEmpty, report.aborted.isEmpty, report.failed.isEmpty {
+            self.setBadge(unread)
+            report.badge = unread
         }
         let unreached = Set(report.aborted + report.failed)
         let names = profiles.filter { unreached.contains($0.id) }.map(\.name)
@@ -285,6 +300,22 @@ public final class BackgroundRefresh {
         self.defaults.set(Date(), forKey: "pincer.refresh.lastRun")
         self.defaults.set(parts.isEmpty ? "Up to date" : parts.joined(separator: " · "), forKey: "pincer.refresh.lastResult")
         return report
+    }
+
+    /// One sound per run: every request after the first is delivered silently.
+    nonisolated static func quieted(_ requests: [UNNotificationRequest], firstMaySound: Bool) -> [UNNotificationRequest] {
+        requests.enumerated().map { index, request in
+            guard index > 0 || !firstMaySound, request.content.sound != nil,
+                  let content = request.content.mutableCopy() as? UNMutableNotificationContent
+            else { return request }
+            content.sound = nil
+            return UNNotificationRequest(identifier: request.identifier, content: content, trigger: request.trigger)
+        }
+    }
+
+    /// The chats the app counts in its unread badge, as the sidebar would show them.
+    public nonisolated static func unreadCount(_ rows: [SessionRow], filter: BackgroundRefreshFilter) -> Int {
+        rows.count { $0.isUnread && filter.notifies($0) }
     }
 
     /// On entering background: what each connected gateway's live state shows is already seen.

@@ -309,12 +309,14 @@ public final class TipsModel {
         self.hasSeen = defaults.bool(forKey: SetupTips.seenKey)
     }
 
-    /// Call when the main window appears, a gateway connects, or its setup sheet closes.
-    public func evaluate(connected: Bool, setupShowingOrPending: Bool, isDemo: Bool) {
+    /// Call when the main window appears, a gateway connects, its setup sheet closes, or the system's
+    /// notification prompt is answered. The card and its countdown wait for that prompt (#332).
+    public func evaluate(connected: Bool, setupShowingOrPending: Bool, isDemo: Bool, permissionPromptShowing: Bool = false) {
         guard !self.isPresented else {
             if setupShowingOrPending { self.isPresented = false }
             return
         }
+        let setupShowingOrPending = setupShowingOrPending || permissionPromptShowing
         if self.isPending {
             if setupShowingOrPending || !connected { self.cancelPending() }
             return

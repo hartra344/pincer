@@ -19,6 +19,8 @@ struct TranscriptList: NSViewRepresentable {
     var highlight = TranscriptHighlight()
     /// A message to scroll to and flash, e.g. from a `pincer://` link.
     var jump: TranscriptJump?
+    /// Told how far the reader is from the latest message; runs the scroll-to-bottom button's scroll.
+    var scrollToBottom: ScrollToBottomModel?
     /// Told (on a later main-queue turn) whenever the list starts or stops following the bottom.
     var bottomAnchorChanged: ((Bool) -> Void)?
 
@@ -29,6 +31,7 @@ struct TranscriptList: NSViewRepresentable {
     }
 
     func updateNSView(_ view: NSScrollView, context: Context) {
+        context.coordinator.attach(self.scrollToBottom)
         context.coordinator.bottomAnchorChanged = self.bottomAnchorChanged
         context.coordinator.update(rows: self.rows, context: self.context, insets: (self.topInset, self.bottomInset))
         context.coordinator.apply(self.highlight)
@@ -169,6 +172,7 @@ struct TranscriptList: NSViewRepresentable {
             defer {
                 self.revealPending()
                 self.loadOlderIfShown()
+                self.reportPosition()
             }
             if newRows.count != self.rows.count { self.olderRowWasVisible = false }
             guard let table, let scroll = self.scrollView else { return }
@@ -605,6 +609,7 @@ struct TranscriptList: NSViewRepresentable {
 
         @objc private func liveScrollStarted() {
             self.isLiveScrolling = true
+            self.isScrollingToBottom = false
         }
 
         @objc private func liveScrollEnded() {
@@ -641,6 +646,7 @@ struct TranscriptList: NSViewRepresentable {
 
         @objc private func clipChanged() {
             guard let clip = self.scrollView?.contentView else { return }
+            defer { self.reportPosition() }
             if clip.frame.size != self.clipSize {
                 // Window resize, a panel sliding or the composer growing: keep the same message in
                 // view. A width change freezes layout at the old width until it settles.
@@ -654,7 +660,7 @@ struct TranscriptList: NSViewRepresentable {
             }
             let offset = clip.bounds.minY
             defer { self.lastOffset = offset }
-            guard !self.isAdjusting else { return }
+            guard !self.isAdjusting, !self.isScrollingToBottom else { return }
             // Mid-slide clip state must not become the anchor; only a real scroll moves it.
             if self.freeze.isFrozen, abs(offset - self.lastOffset) <= 0.5 { return }
             // Scrolling up leaves the bottom right away; only scrolling down re-sticks early.
@@ -739,6 +745,73 @@ struct TranscriptList: NSViewRepresentable {
             guard abs(clip.bounds.minY - target) > 0.5 else { return }
             clip.scroll(to: NSPoint(x: clip.bounds.minX, y: target))
             scroll.reflectScrolledClipView(clip)
+        }
+
+        // MARK: Scroll to bottom
+
+        private weak var scrollToBottomModel: ScrollToBottomModel?
+        /// The scroll-to-bottom animation is running; its frames don't move the anchor.
+        private var isScrollingToBottom = false
+        private var scrollToBottomToken = 0
+
+        func attach(_ model: ScrollToBottomModel?) {
+            guard model !== self.scrollToBottomModel else { return }
+            self.scrollToBottomModel = model
+            model?.perform = { [weak self] in self?.scrollToBottom() }
+        }
+
+        private func reportPosition() {
+            guard let model = self.scrollToBottomModel, let scroll = self.scrollView else { return }
+            let clip = scroll.contentView
+            let distance = self.rows.isEmpty ? 0 : self.offsetRange().upperBound - clip.bounds.minY
+            model.report(distance: distance,
+                         viewport: clip.bounds.height - scroll.contentInsets.top - scroll.contentInsets.bottom,
+                         lastRowId: self.rows.last?.id)
+        }
+
+        /// Scrolls to the latest message and follows it again. From far up it jumps to a screen
+        /// above the end first, so the animation doesn't lay out the whole history on the way.
+        func scrollToBottom() {
+            guard let scroll = self.scrollView, !self.rows.isEmpty else { return }
+            let clip = scroll.contentView
+            self.anchor = .bottom
+            let height = clip.bounds.height
+            let animated = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            if !animated || self.offsetRange().upperBound - clip.bounds.minY > height * 2 {
+                self.isAdjusting = true
+                let target = self.offsetRange().upperBound - (animated ? height : 0)
+                clip.scroll(to: NSPoint(x: clip.bounds.minX, y: target))
+                scroll.reflectScrolledClipView(clip)
+                self.isAdjusting = false
+                if !animated {
+                    self.settle(changed: IndexSet())
+                    return
+                }
+            }
+            self.scrollToBottomToken += 1
+            let token = self.scrollToBottomToken
+            self.isScrollingToBottom = true
+            let target = NSPoint(x: clip.bounds.minX, y: self.offsetRange().upperBound)
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.25
+                context.allowsImplicitAnimation = true
+                clip.animator().setBoundsOrigin(target)
+            } completionHandler: { [weak self] in
+                MainActor.assumeIsolated { self?.scrollToBottomEnded(token) }
+            }
+            // In case the animation never reports back (the window closed mid-scroll).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                MainActor.assumeIsolated { self?.scrollToBottomEnded(token) }
+            }
+        }
+
+        private func scrollToBottomEnded(_ token: Int) {
+            guard token == self.scrollToBottomToken, self.isScrollingToBottom, let scroll = self.scrollView else { return }
+            self.isScrollingToBottom = false
+            scroll.reflectScrolledClipView(scroll.contentView)
+            // Rows measured on the way may have moved the end; land on it exactly.
+            if self.anchor == .bottom { self.settle(changed: IndexSet()) }
+            self.schedulePrefetch()
         }
 
         private func withoutAnimation(_ body: () -> Void) {
