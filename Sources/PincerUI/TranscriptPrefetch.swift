@@ -86,10 +86,3 @@ struct TranscriptMeasureQueue {
         return low <= high ? low...high : nil
     }
 }
-
-/// Counters for the probe: time spent measuring rows off the reader's critical path.
-struct TranscriptPrefetchStats {
-    var steps = 0
-    var rowsMeasured = 0
-    var seconds = 0.0
-}
