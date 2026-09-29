@@ -332,6 +332,12 @@ public struct InspectedToolGroup: Identifiable, Hashable, Sendable {
     public let id: String
     public let label: String
     public let tools: [InspectedTool]
+
+    public init(id: String, label: String, tools: [InspectedTool]) {
+        self.id = id
+        self.label = label
+        self.tools = tools
+    }
 }
 
 public enum ToolFilter: String, CaseIterable, Hashable, Sendable {

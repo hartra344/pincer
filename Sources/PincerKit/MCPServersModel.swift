@@ -181,7 +181,7 @@ public final class MCPServersModel {
 
     /// Server states inferred from an agent's effective tools: servers with tools are connected,
     /// diagnostics are errors, and servers still connecting are named by the `mcp-not-yet-*` notices.
-    static func statuses(from tools: EffectiveTools) -> [String: MCPServerStatus] {
+    nonisolated static func statuses(from tools: EffectiveTools) -> [String: MCPServerStatus] {
         var names: [String: [String]] = [:]
         for tool in tools.groups.flatMap(\.tools) where tool.source == .mcp {
             guard let server = tool.mcpServer else { continue }
