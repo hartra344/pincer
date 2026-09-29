@@ -19,8 +19,8 @@ struct ExportSheet: View {
     let title: String
     let agentName: String
     let agents: [AgentSummary]
-    /// Called with the file name and data once built; the chat saves it.
-    let finish: (String, Data) -> Void
+    /// Called with the built file; the chat saves or shares it once this sheet has gone (#430).
+    let finish: (ExportedFile) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @AppStorage("pincer.export.format") private var formatRaw = TranscriptExport.Format.markdown.rawValue
@@ -49,12 +49,14 @@ struct ExportSheet: View {
                         ProgressView().controlSize(.small)
                         Text(L("Loading full history…")).foregroundStyle(.secondary)
                     }
-                } else if self.failed {
-                    Label(L("Couldn't load the full history. Try again."), systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.red)
                 }
             }
             .formStyle(.grouped)
+            .alert(L("Couldn't Export Chat"), isPresented: self.$failed) {
+                Button(L("OK")) {}
+            } message: {
+                Text(L("Couldn't load the full history. Try again."))
+            }
             .navigationTitle(L("Export Chat"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -76,26 +78,37 @@ struct ExportSheet: View {
         self.failed = false
         let format = self.format.wrappedValue
         let options = TranscriptExport.Options(includeThinking: self.includeThinking, includeToolCalls: self.includeToolCalls)
+        let header = TranscriptExport.Header(title: self.title, agentName: self.agentName, agents: self.agents)
         Task {
-            guard let items = await self.chat.exportItems() else {
-                self.isExporting = false
+            let file = await ChatExportBuilder.build(chat: self.chat, format: format, options: options, header: header)
+            self.isExporting = false
+            guard let file else {
                 self.failed = true
                 return
             }
-            let header = TranscriptExport.Header(title: self.title, agentName: self.agentName, agents: self.agents)
-            let name = TranscriptExport.fileName(title: self.title, format: format)
-            let data: Data
-            switch format {
-            case .markdown: data = Data(TranscriptExport.markdown(items, header: header, options: options).utf8)
-            case .plainText: data = Data(TranscriptExport.plainText(items, header: header, options: options).utf8)
-            case .pdf:
-                data = TranscriptPDF.render(
-                    markdown: TranscriptExport.markdown(items, header: header, options: options), title: self.title)
-            }
-            self.isExporting = false
-            self.finish(name, data)
+            self.finish(file)
             self.dismiss()
         }
+    }
+}
+
+/// Builds a chat's export file (#42): the whole history, not just the loaded window, in the chosen format.
+enum ChatExportBuilder {
+    /// Nil if the full history couldn't be loaded or the file came out empty.
+    @MainActor
+    static func build(chat: ChatStore, format: TranscriptExport.Format, options: TranscriptExport.Options,
+                      header: TranscriptExport.Header) async -> ExportedFile? {
+        guard let items = await chat.exportItems() else { return nil }
+        let data: Data
+        switch format {
+        case .markdown: data = Data(TranscriptExport.markdown(items, header: header, options: options).utf8)
+        case .plainText: data = Data(TranscriptExport.plainText(items, header: header, options: options).utf8)
+        case .pdf:
+            data = TranscriptPDF.render(markdown: TranscriptExport.markdown(items, header: header, options: options),
+                                        title: header.title)
+        }
+        guard !data.isEmpty else { return nil }
+        return ExportedFile(name: TranscriptExport.fileName(title: header.title, format: format), data: data)
     }
 }
 
