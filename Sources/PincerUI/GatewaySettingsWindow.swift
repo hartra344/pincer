@@ -109,6 +109,7 @@ private struct GatewaySettingsRoot: View {
                         case let .execAgent(id): ExecAgentPage(agentId: id)
                         case let .agent(id): AgentPage(agentId: id)
                         case let .agentFile(agentId, name): AgentFileEditorPage(agentId: agentId, name: name)
+                        case let .mcpServer(name): MCPServerPage(name: name)
                         case let .skill(key): SkillDetailPage(skillKey: key)
                         case .clawHub: ClawHubSearchPage()
                         case let .agentTools(id): AgentToolsPage(agentId: id)
@@ -148,7 +149,7 @@ private struct GatewaySettingsRoot: View {
                     self.closeAfterConfig()
                 }
             }
-            .disabled(settings.saveBlocker != nil || !settings.canEdit)
+            .disabled(settings.saveBlocker != nil || !settings.canSave)
             Button("Discard Changes", role: .destructive) {
                 settings.discardChanges()
                 Task { @MainActor in
@@ -255,6 +256,7 @@ private struct GatewaySettingsRoot: View {
         case let .page(id):
             if let page = SettingsCatalog.page(id) { CuratedPage(page: page) }
         case .plugins: PluginsPage()
+        case .mcpServers: MCPServersPage()
         case .allSettings: AllSettingsPage()
         case .raw: RawConfigPage()
         case nil:
@@ -399,6 +401,11 @@ private struct SettingsSidebar: View {
                                      badge: settings.changeCount(under: ["plugins"]),
                                      attention: settings.pluginsNeedingAttention > 0)
                         }
+                        if self.gateway.supportsMCPServers {
+                            self.row("MCP Servers", symbol: "point.3.connected.trianglepath.dotted", .mcpServers,
+                                     badge: settings.changeCount(under: ["mcp"]),
+                                     attention: self.gateway.mcp.needsAttention)
+                        }
                     }
                     Section("Advanced") {
                         self.row("All Settings", symbol: "list.bullet.rectangle", .allSettings,
@@ -461,6 +468,7 @@ private struct SearchResults: View {
         let pages = SettingsCatalog.destinations(matching: self.query)
             .filter { $0.destination != .skills || self.gateway.supportsSkills }
             .filter { $0.destination != .sessions || self.gateway.supportsSessionManager }
+            .filter { $0.destination != .mcpServers || self.gateway.supportsMCPServers }
         if results.isEmpty, pages.isEmpty {
             Text("No settings match “\(self.query)”.", bundle: .module).foregroundStyle(.secondary)
         }
@@ -523,7 +531,8 @@ private struct SettingsChrome: ViewModifier {
             .toolbar {
                 #if os(macOS)
                 ToolbarItemGroup(placement: .primaryAction) {
-                    if settings.hasLoaded, !settings.canEdit {
+                    if settings.hasLoaded, !settings.canEdit,
+                       !(self.navigator.destination == .mcpServers && settings.canEdit(root: "mcp")) {
                         Button { self.navigator.destination = .connection } label: {
                             Label("Read Only", systemImage: "lock")
                                 .labelStyle(.titleAndIcon)
@@ -536,7 +545,7 @@ private struct SettingsChrome: ViewModifier {
                     }
                     Button("Save") { Task { await settings.save() } }
                         .keyboardShortcut("s", modifiers: .command)
-                        .disabled(!settings.hasChanges || settings.isSaving || !settings.canEdit)
+                        .disabled(!settings.hasChanges || settings.isSaving || !settings.canSave)
                         .help(settings.saveBlocker ?? "Save changes to the Gateway")
                 }
                 #else
@@ -545,7 +554,7 @@ private struct SettingsChrome: ViewModifier {
                         ProgressView()
                     } else {
                         Button("Save") { Task { await settings.save() } }
-                            .disabled(!settings.hasChanges || !settings.canEdit)
+                            .disabled(!settings.hasChanges || !settings.canSave)
                     }
                 }
                 if settings.hasChanges {
@@ -598,7 +607,7 @@ struct ReviewChangesSheet: View {
                         Button("Save") {
                             Task { if await settings.save() { self.dismiss() } }
                         }
-                        .disabled(!settings.hasChanges || settings.saveBlocker != nil || !settings.canEdit)
+                        .disabled(!settings.hasChanges || settings.saveBlocker != nil || !settings.canSave)
                     }
                 }
                 ToolbarItem(placement: .destructiveAction) {
@@ -757,7 +766,9 @@ struct ReviewChangesSheet: View {
     }
 
     private func isSecret(_ path: [String]) -> Bool {
-        self.settings.field(at: path)?.kind == .secret
+        // MCP env and header values are secrets whatever they're called.
+        if path.count >= 5, path.starts(with: MCPServers.path), ["env", "headers"].contains(path[3]) { return true }
+        return self.settings.field(at: path)?.kind == .secret
     }
 
     static func summary(_ value: JSONValue?, secret: Bool, missing: String) -> String {

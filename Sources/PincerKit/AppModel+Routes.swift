@@ -72,6 +72,11 @@ extension AppModel {
     @discardableResult
     public func open(url: URL) -> PincerRoute.Resolution? {
         guard let route = PincerRoute.parse(url) else {
+            // The browser coming back from an MCP OAuth sign-in: just refresh the servers.
+            if MCPServers.isReturnURL(url) {
+                self.selectedGateway?.mcp.handleOAuthReturn()
+                return nil
+            }
             if url.scheme?.lowercased() == PincerRoute.scheme {
                 self.routeNotice = RouteNotice(PincerRoute.Notice.invalidLink)
             }

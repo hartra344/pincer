@@ -1,0 +1,99 @@
+---
+title: MCP Servers
+description: See, add, edit, enable, reconnect and sign in to the MCP servers your Gateway connects to, from Gateway Settings.
+---
+
+{/* Screenshots: add DocScreenshot (macOS + iOS) once captured, like the Command Policy page. */}
+
+MCP (Model Context Protocol) servers give your agents extra tools, such as a filesystem, GitHub or a database. The Gateway starts or connects to each server you list in its config, and the server's tools then show up for your agents. **MCP Servers** in Gateway Settings lets you manage that list from your Mac or iPhone instead of editing the config file.
+
+## Opening MCP Servers
+
+- In [Gateway Settings](../gateway-settings/), choose **MCP Servers** in the sidebar, below **Plugins**. It works on macOS and iOS.
+- Press <kbd>⌘</kbd> <kbd>K</kbd> and choose **MCP Servers…**.
+
+Searching the sidebar for `mcp`, `oauth`, `stdio` or `sse` also finds it. The sidebar row shows how many changes are unsaved, and a dot when a server has an error or needs sign-in.
+
+:::caution[Needs Full Management]
+Changing the server list writes the Gateway's config, and Reconnect and sign-in change the Gateway's state. Both need `operator.admin`. Set **Access** to **Full Management** on the **Connection** page, then approve this device on the Gateway host. See [Access levels](../../getting-started/connect-a-gateway/#access-levels). Without it you can still look at the list.
+:::
+
+## The server list
+
+Each row shows the server's name, how it starts (its command, or its URL) and a status:
+
+| Status | Meaning |
+| --- | --- |
+| **Connected** | The server is running. It adds **· N tools** when the Gateway reports how many. |
+| **Connecting…** / **Idle** | The Gateway is connecting, or hasn't needed the server yet. |
+| **Error** | The connection failed. The error is on a second line. |
+| **Retrying at** *time* | The Gateway is waiting to try again after an error. |
+| **Needs Sign-In** | The server uses OAuth and you haven't signed in. |
+| **Sign-In Expired** | You signed in before, but the session ran out. Sign in again. |
+| **Waiting for Sign-In…** | A sign-in has started and isn't finished. |
+| **Disabled** | The server is turned off. |
+| **Invalid Config** | It has neither a command nor a URL. |
+| **Not Saved** | You added it and haven't saved yet. |
+| **Status Unknown** | This Gateway doesn't report MCP status. Tools show up once an agent connects to the server. |
+
+An OAuth server that's signed in says **Signed in as** *account*, or **Signed in**. Choose a row to open the server.
+
+## Adding and editing
+
+Choose **+** to add a server, or open a server and choose **Edit**. Pick how it connects:
+
+- **stdio** starts a program on the Gateway host. Set the **Command**, **Arguments** and, if needed, a working directory and **Environment** variables.
+- **Streamable HTTP** connects to a remote URL. Add **Headers** if the server needs them, such as `Authorization`.
+- **SSE** is the older remote transport. Use it only if the server doesn't offer Streamable HTTP.
+
+Names can use letters, numbers, `.`, `_` and `-`, and must start with a letter or number.
+
+### Secrets
+
+The Gateway hides the values of environment variables and headers when it sends its config, so Pincer shows them as **•••• (saved)**. Leave a value alone and the saved secret stays. Type a new value to replace it.
+
+**Renaming a server needs its secrets typed in again.** The Gateway can only keep a hidden value at the same name, so Pincer asks you to re-enter each one before you can save.
+
+The Gateway doesn't hide **Arguments**. Pincer masks values that look like secrets, such as ones after `--token` or `--api-key`, but they're still stored in plain text in the config. Put secrets in **Environment** (or **Headers**), not in arguments.
+
+Anything in the server's config that Pincer doesn't have a field for is kept when you save.
+
+## Enable, disable and remove
+
+Use the **Enabled** switch to turn a server off without losing its settings. Choose **Remove** to delete it. Like edits, both wait for **Review & Save**.
+
+## Review & Save
+
+Changes stay in a draft until you choose **Review & Save**, the same as the other Gateway Settings pages. You see what will change first, then save. The Gateway applies MCP changes live, so **no Gateway restart is needed**, and the list refreshes when it does. **Revert** throws the draft away.
+
+## Reconnect
+
+If a server is in **Error**, or you fixed something on the Gateway host, choose **Reconnect** on the server to make the Gateway drop and reconnect it. The status goes to **Connecting…** and then **Connected** or **Error**.
+
+## OAuth sign-in
+
+Some remote servers use OAuth. For those, the server page has **Sign In…**:
+
+1. Choose **Sign In…**. Pincer opens the provider's page in a secure browser window (or **Open in Browser** if that can't open).
+2. Approve access. The Gateway receives the reply itself and Pincer returns to the app.
+3. The status changes to **Connected**, and **Signed in as** *account* appears.
+
+**Cancel** stops a sign-in that's under way. **Sign Out** clears the Gateway's saved sign-in for that server. When the status is **Sign-In Expired**, choose **Sign In…** again.
+
+## Viewing a server's tools
+
+Choose **Tools** on a server to open the [Tools inspector](../skills-and-tools/#effective-tools) for your default agent, filtered to that server. Its tools show as coming from an MCP server, with **Allowed** or **Denied** and the reason. If a server couldn't connect, the inspector notes it, for example "MCP server postgres couldn't connect: spawn uvx ENOENT".
+
+## What your Gateway needs
+
+- **Editing** works on any Gateway that offers `config.get` and `config.patch`: add, edit, remove, enable and disable.
+- **Live status, Reconnect and in-app sign-in** need Gateway support that is proposed upstream in OpenClaw: [mcp.status](https://github.com/hartra344/pincer/issues/327), [mcp.reconnect](https://github.com/hartra344/pincer/issues/328) and [mcp.oauth](https://github.com/hartra344/pincer/issues/329). Pincer only shows these controls when your Gateway advertises them.
+
+Until then:
+
+- Status comes from the Tools inspector when it's available, so it may read **Status Unknown** for servers that haven't connected yet.
+- For OAuth servers, Pincer shows the commands to run on the Gateway host, with a **Copy** button: `openclaw mcp login <name>` to sign in and `openclaw mcp logout <name>` to sign out.
+
+## Try it in the demo
+
+Everything here works in [Try the Demo](../../getting-started/try-the-demo/), with sample servers in each state: **linear** needs sign-in, **notion**'s sign-in has expired, **postgres** has an error, **sentry** is disabled, and **filesystem**, **home-assistant** and **github** are connected. Nothing touches a real Gateway.

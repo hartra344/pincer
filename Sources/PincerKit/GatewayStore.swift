@@ -157,7 +157,8 @@ public final class GatewayStore: Identifiable {
     public let files: FileContentLoader
     /// Gateway config and plugins; loaded when the settings screen opens.
     @ObservationIgnored public private(set) lazy var settings: GatewaySettingsModel = {
-        let settings = GatewaySettingsModel(connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] })
+        let settings = GatewaySettingsModel(connection: self.connection, scopes: { [weak self] in self?.hello?.scopes ?? [] },
+                                            rootWritableWithoutAdmin: self.profile.isDemo ? "mcp" : nil)
         settings.onRestartRequired = { [weak self] reason in self?.health.markRestartRequired(reason) }
         return settings
     }()
@@ -187,6 +188,11 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var skills = SkillsModel(
         connection: self.connection, hello: { [weak self] in self?.hello },
         allowsWritesWithoutAdmin: self.profile.isDemo)
+    /// MCP Servers: the server list (through the shared settings draft), live state and OAuth
+    /// sign-in. The demo may write without `operator.admin`.
+    @ObservationIgnored public private(set) lazy var mcp = MCPServersModel(
+        settings: self.settings, connection: self.connection, hello: { [weak self] in self?.hello },
+        sessionKey: { [weak self] in self?.defaultSessionKey }, allowsWritesWithoutAdmin: self.profile.isDemo)
     /// Gateway Settings → Sessions: every session with previews, details, bulk archive/delete and
     /// branch tools. The demo may write without `operator.admin`.
     @ObservationIgnored public private(set) lazy var sessionManager = SessionManagerModel(
@@ -867,6 +873,8 @@ public final class GatewayStore: Identifiable {
             self.devices.handle(event: event.name, payload: payload)
         case "cron":
             self.automations.handleCronEvent(payload)
+        case MCPServers.oauthChangedEvent, MCPServers.statusChangedEvent:
+            self.mcp.handle(event)
         case "plugins.changed":
             self.settings.handlePluginsChanged()
         case "health", "heartbeat", "presence", "shutdown":
