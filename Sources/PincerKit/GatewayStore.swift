@@ -470,7 +470,9 @@ public final class GatewayStore: Identifiable {
             if trailing {
                 self.refreshTask?.cancel()
                 await self.refreshSessions()
+                let invalidatedAgain = self.listReconcile?.needsTrailingRefresh ?? false
                 self.listReconcile = nil
+                if invalidatedAgain { self.scheduleRefresh() }
                 guard self.isCurrent(epoch) else { return }
             }
         } else {
@@ -674,7 +676,10 @@ public final class GatewayStore: Identifiable {
     }
 
     private func scheduleRefresh() {
-        self.listReconcile?.needsTrailingRefresh = true
+        if self.listReconcile != nil {
+            self.listReconcile?.needsTrailingRefresh = true
+            return
+        }
         self.refreshTask?.cancel()
         self.refreshTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(400))
