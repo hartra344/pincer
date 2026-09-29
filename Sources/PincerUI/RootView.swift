@@ -588,7 +588,7 @@ private struct ThemePresetGrid: View {
     @Binding var selection: ThemePreset
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 10)], spacing: 10) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: Theme.Spacing.lg)], spacing: Theme.Spacing.lg) {
             ForEach(ThemePreset.allCases) { preset in
                 Button { self.selection = preset } label: { self.swatch(preset) }
                     .buttonStyle(.plain)
@@ -602,7 +602,7 @@ private struct ThemePresetGrid: View {
     private func swatch(_ preset: ThemePreset) -> some View {
         let selected = preset == self.selection
         let colors = preset.swatch
-        return VStack(spacing: 6) {
+        return VStack(spacing: Theme.Spacing.sm) {
             HStack(spacing: -6) {
                 ForEach(colors.indices, id: \.self) { index in
                     Circle()
@@ -617,11 +617,11 @@ private struct ThemePresetGrid: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
             .fill(selected ? AnyShapeStyle(colors[0].opacity(0.15)) : AnyShapeStyle(.quinary)))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous)
             .strokeBorder(selected ? colors[0] : .clear, lineWidth: 2))
-        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
     }
 }
 
@@ -643,7 +643,7 @@ private struct ThemeColorRow: View {
                     AppTheme.setOverride(color, for: self.role)
                 }
             ), supportsOpacity: false) {
-                HStack(spacing: 6) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text(self.role.label)
                     if overridden {
                         Text("Custom").font(.caption).foregroundStyle(.secondary)

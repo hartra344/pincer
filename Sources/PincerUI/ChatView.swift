@@ -177,7 +177,7 @@ struct ChatView: View {
 
     @ViewBuilder private var errorBar: some View {
         if let error = self.chat.errorMessage {
-            HStack(spacing: 10) {
+            HStack(spacing: Theme.Spacing.lg) {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.callout)
                     .foregroundStyle(.orange)
@@ -199,7 +199,7 @@ struct ChatView: View {
     /// Passing notes that aren't failures, such as a quoted message that's no longer in history.
     @ViewBuilder private var noticeBar: some View {
         if let notice = self.chat.notice {
-            HStack(spacing: 10) {
+            HStack(spacing: Theme.Spacing.lg) {
                 Label(notice, systemImage: "info.circle.fill")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -248,7 +248,7 @@ private struct ReasoningHint: View {
         if !self.dismissed, self.chat.hasLoaded, !self.chat.sawThinking, self.level != "on", self.level != "stream",
            self.chat.items.contains { $0.role == .assistant }
         {
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: "brain").foregroundStyle(.purple)
                 Text("Thinking isn’t being saved for this chat.", bundle: .module)
                     .font(.callout)
@@ -314,7 +314,7 @@ private struct TranscriptPane: View {
         if self.chat.entries.isEmpty, self.chat.isLoading || !self.chat.hasLoaded {
             // Until history has loaded once (cache still reading, or the Gateway reconnecting after
             // the app was suspended), an empty chat isn't known to be empty.
-            VStack(spacing: 8) {
+            VStack(spacing: Theme.Spacing.md) {
                 ChatLoadingSkeleton()
                 if !self.gateway.state.isConnected {
                     Text("Connecting…", bundle: .module).font(.callout).foregroundStyle(.secondary)
@@ -516,14 +516,14 @@ struct ApprovalsBanner: View {
     var body: some View {
         let approvals = self.gateway.approvals.filter { self.sessionKey == nil || $0.sessionKey == nil || $0.sessionKey == self.sessionKey }
         if !approvals.isEmpty {
-            VStack(spacing: 8) {
+            VStack(spacing: Theme.Spacing.md) {
                 ForEach(approvals) { approval in
-                    HStack(alignment: .top, spacing: 12) {
+                    HStack(alignment: .top, spacing: Theme.Spacing.xl) {
                         Image(systemName: "hand.raised.fill")
                             .font(.title3)
                             .foregroundStyle(.orange)
                             .symbolEffect(.wiggle, options: .nonRepeating)
-                        VStack(alignment: .leading, spacing: 4) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                             Text("\(self.gateway.agent(approval.agentId ?? "main").name) wants to run a command")
                                 .font(.callout.weight(.semibold))
                             Text(approval.command)
@@ -533,7 +533,7 @@ struct ApprovalsBanner: View {
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 5)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous))
                             if let cwd = approval.cwd {
                                 Text(cwd).font(.caption.monospaced()).foregroundStyle(.secondary)
                             }
@@ -560,7 +560,7 @@ struct ApprovalsBanner: View {
                         }
                     }
                     .padding(12)
-                    .glassSurface(in: RoundedRectangle(cornerRadius: 18, style: .continuous), tint: .orange.opacity(0.35))
+                    .glassSurface(in: RoundedRectangle(cornerRadius: Theme.Radius.xxLarge, style: .continuous), tint: .orange.opacity(0.35))
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
@@ -637,12 +637,12 @@ struct ChatLoadingSkeleton: View {
     ]
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: Theme.Spacing.xl) {
             ForEach(Self.rows.indices, id: \.self) { index in
                 let row = Self.rows[index]
                 HStack {
                     if !row.leading { Spacer(minLength: 0) }
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.Radius.xLarge, style: .continuous)
                         .fill(.quaternary)
                         .frame(width: row.width, height: row.height)
                     if row.leading { Spacer(minLength: 0) }
