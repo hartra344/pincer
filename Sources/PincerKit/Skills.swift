@@ -15,8 +15,8 @@ public enum Skills {
     public static let forceRequiredCode = "force_required"
 
     public static let needsAdminMessage = "You can view skills. Turn on Full Management under Connection, then approve this device on the Gateway host."
-    public static let unsupportedMessage = "This gateway can't manage skills. Update OpenClaw to install and configure skills here."
-    public static let installWarning = "This downloads the skill into the default agent's workspace on the gateway host. Skills can run commands and read files with the agent's permissions. Only install skills you trust."
+    public static let unsupportedMessage = "This Gateway can't manage skills. Update OpenClaw to install and configure skills here."
+    public static let installWarning = "This downloads the skill into the default agent's workspace on the Gateway host. Skills can run commands and read files with the agent's permissions. Only install skills you trust."
 
     /// Ready, Needs Setup, Blocked, Disabled, each sorted by name; empty sections are left out.
     /// `filter` matches the name, description or key, ignoring case.
@@ -56,16 +56,16 @@ public enum Skills {
     }
 
     /// The installer confirmation's title.
-    public static func installerTitle(_ option: SkillInstallOption) -> String { "Run installer “\(option.label)” on the gateway host?" }
+    public static func installerTitle(_ option: SkillInstallOption) -> String { "Run installer “\(option.label)” on the Gateway host?" }
     public static func clawHubInstallTitle(_ name: String) -> String { "Install “\(name)” from ClawHub?" }
     public static func updateTitle(_ name: String) -> String { "Update “\(name)”?" }
     public static func forceReplaceMessage(_ name: String) -> String { "\(name) was changed locally since it was installed. Replace it anyway?" }
     public static func reinstallTitle(_ name: String) -> String { "Reinstall “\(name)”?" }
     public static func reinstallMessage(_ name: String) -> String {
-        "This replaces the installed copy of “\(name)”, including any changes made on the gateway."
+        "This replaces the installed copy of “\(name)”, including any changes made on the Gateway."
     }
     /// `skills.update` config mode writes the Gateway-wide `skills.entries.<key>`, not per agent.
-    public static let settingsScopeFooter = "Enabled, API key and environment values apply to every agent on this gateway."
+    public static let settingsScopeFooter = "Enabled, API key and environment values apply to every agent on this Gateway."
 
     /// ClawHub trust warnings in a successful `skills.install` (`warning`) or `skills.update`
     /// (`config.results[].warning`) response.

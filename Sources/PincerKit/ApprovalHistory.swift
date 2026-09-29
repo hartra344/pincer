@@ -451,7 +451,7 @@ public final class ApprovalHistoryModel {
             self.supported = true
             self.loadState = .idle
             self.loadMoreState = .idle
-        } catch let error where GatewayConfigClient.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             guard generation == self.generation else { return }
             self.markUnsupported()
         } catch {
@@ -515,7 +515,7 @@ public final class ApprovalHistoryModel {
                 self.details[id] = record
             }
             self.detailState[id] = .idle
-        } catch let error where GatewayConfigClient.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             self.detailState[id] = .idle
         } catch {
             self.detailState[id] = .failed(Self.message(for: error))
@@ -580,15 +580,11 @@ public final class ApprovalHistoryModel {
         "Approval History needs the operator.approvals scope. Approve it for this device on the Gateway host, then try again."
 
     static func message(for error: Error) -> String {
-        guard case let GatewayError.rpc(code, message, details) = error else { return error.localizedDescription }
-        if code == "MISSING_SCOPE" || details?["code"]?.text == "MISSING_SCOPE"
-            || message.lowercased().contains("operator.approvals")
+        if !GatewayError.isMissingScope(error), case let GatewayError.rpc(_, _, details) = error,
+           details?["reason"]?.text == "APPROVAL_NOT_FOUND"
         {
-            return Self.missingScopeMessage
-        }
-        if details?["reason"]?.text == "APPROVAL_NOT_FOUND" {
             return "This approval is no longer on the Gateway."
         }
-        return message
+        return GatewayError.message(for: error, scope: Self.missingScopeMessage)
     }
 }

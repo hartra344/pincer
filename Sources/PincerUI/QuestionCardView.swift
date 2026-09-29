@@ -40,8 +40,8 @@ struct QuestionCardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassSurface(in: RoundedRectangle(cornerRadius: Self.corner, style: .continuous))
-        .padding(.horizontal, 14)
-        .padding(.top, 6)
+        .padding(.horizontal, Theme.Spacing.row)
+        .padding(.top, Theme.Spacing.sm)
         .focusable()
         .focusEffectDisabled()
         .focused(self.$focus, equals: .card)
@@ -59,7 +59,7 @@ struct QuestionCardView: View {
         Button {
             withAnimation(self.reduceMotion ? nil : .snappy) { self.isExpanded.toggle() }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: "questionmark.bubble.fill")
                     .font(.callout)
                     .foregroundStyle(self.theme.accent)
@@ -84,8 +84,8 @@ struct QuestionCardView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 16)
-        .padding(.top, 14)
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.top, Theme.Spacing.row)
         .padding(.bottom, self.isExpanded ? 4 : 14)
         .accessibilityHint(self.isExpanded ? "Collapse question" : "Expand question")
     }
@@ -98,12 +98,12 @@ struct QuestionCardView: View {
     // MARK: Body
 
     private var questionBody: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.lg) {
             Text(self.question.question)
                 .font(.title3.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
-                .padding(.bottom, 4)
+                .padding(.bottom, Theme.Spacing.xs)
             if let url = self.question.url {
                 Link(destination: url) {
                     Label(url.host() ?? url.absoluteString, systemImage: "arrow.up.right.square")
@@ -129,8 +129,8 @@ struct QuestionCardView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.vertical, Theme.Spacing.md)
     }
 
     private func optionRow(_ option: AgentQuestion.Option, number: Int) -> some View {
@@ -140,7 +140,7 @@ struct QuestionCardView: View {
             self.errorText = nil
             self.focus = .card
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Theme.Spacing.xl) {
                 self.marker(selected: selected)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(option.label)
@@ -157,11 +157,11 @@ struct QuestionCardView: View {
                 Spacer(minLength: 8)
                 self.numberHint(number)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, Theme.Spacing.row)
             .padding(.vertical, 11)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(self.rowBackground(selected: selected))
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(self.isSending)
@@ -174,7 +174,7 @@ struct QuestionCardView: View {
             get: { self.draft.text(for: self.question) },
             set: { self.draft.setText($0, for: self.question); self.errorText = nil })
         let hasText = !text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        return HStack(spacing: 12) {
+        return HStack(spacing: Theme.Spacing.xl) {
             Image(systemName: hasText ? "checkmark.square.fill" : "square")
                 .font(.body)
                 .foregroundStyle(hasText ? self.theme.accent : .secondary)
@@ -195,7 +195,7 @@ struct QuestionCardView: View {
             Spacer(minLength: 8)
             self.numberHint(number)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, Theme.Spacing.row)
         .padding(.vertical, 11)
         .background(self.rowBackground(selected: hasText))
         .contentShape(Rectangle())
@@ -219,7 +219,7 @@ struct QuestionCardView: View {
     }
 
     private func rowBackground(selected: Bool) -> some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
             .fill(selected ? self.theme.accent.opacity(0.14) : Color.primary.opacity(0.05))
             .strokeBorder(selected ? self.theme.accent.opacity(0.6) : Color.primary.opacity(0.08), lineWidth: 1)
     }
@@ -227,7 +227,7 @@ struct QuestionCardView: View {
     // MARK: Footer
 
     private var footer: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Theme.Spacing.lg) {
             if let expiresAt = self.prompt.expiresAt {
                 Text(expiresAt, style: .relative)
                     .font(.caption.monospacedDigit())
@@ -258,9 +258,9 @@ struct QuestionCardView: View {
             .tint(self.theme.accent)
             .disabled(self.isSending || (self.isLastPage ? self.answers == nil : self.draft.values(for: self.question) == nil))
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .padding(.bottom, 14)
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.top, Theme.Spacing.xs)
+        .padding(.bottom, Theme.Spacing.row)
     }
 
     // MARK: Actions
@@ -353,7 +353,7 @@ struct QuestionAccessHint: View {
     private var command: String { "openclaw devices approve \(self.requestId ?? "<requestId>")" }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Label(L("The agent is waiting for your answer"), systemImage: "questionmark.bubble.fill")
                 .font(.callout.weight(.semibold))
                 .foregroundStyle(self.theme.accent)
@@ -361,26 +361,26 @@ struct QuestionAccessHint: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Spacing.md) {
                 Text(self.command)
                     .font(.callout.monospaced())
                     .textSelection(.enabled)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .padding(.horizontal, Theme.Spacing.md)
+                    .padding(.vertical, Theme.Spacing.xs)
+                    .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
                 Spacer(minLength: 8)
                 Button(L("Try Again")) { self.gateway.retryQuestionAccess() }
                     .glassButton()
                     .controlSize(.small)
             }
         }
-        .padding(14)
+        .padding(Theme.Spacing.row)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .padding(.horizontal, 14)
-        .padding(.top, 6)
+        .glassSurface(in: RoundedRectangle(cornerRadius: Theme.Radius.xxLarge, style: .continuous))
+        .padding(.horizontal, Theme.Spacing.row)
+        .padding(.top, Theme.Spacing.sm)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }

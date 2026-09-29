@@ -33,8 +33,8 @@ public enum SessionManager {
 
     public static let needsAdminMessage = "Turn on Full Management under Connection, then approve this device on the Gateway host."
     public static let unsupportedMessage = "Session Management Isn't Available. Update OpenClaw to manage sessions here."
-    public static let branchesUnsupportedMessage = "Branches need a newer gateway."
-    public static let deleteMessage = "This permanently deletes the transcript on the gateway and can't be undone."
+    public static let branchesUnsupportedMessage = "Branches need a newer Gateway."
+    public static let deleteMessage = "This permanently deletes the transcript on the Gateway and can't be undone."
     public static let mixedDeleteMessage = "Only archived sessions can be deleted without Full Management."
 
     public static func deleteTitle(count: Int) -> String {
@@ -275,8 +275,8 @@ public struct SessionPreview: Equatable, Sendable {
         switch self.status {
         case .ok, .empty: return "No messages yet"
         case .missing: return "This session is gone"
-        case .cold: return "The transcript isn't loaded on the gateway yet"
-        case .error: return "The gateway couldn't read this transcript"
+        case .cold: return "The transcript isn't loaded on the Gateway yet"
+        case .error: return "The Gateway couldn't read this transcript"
         case .unknown: return "No preview"
         }
     }
@@ -691,7 +691,7 @@ public final class SessionManagerModel {
             }
         }
         for row in batch where !seen.contains(row.key) {
-            outcome.failed.append(.init(key: row.key, message: "The gateway didn't report this session."))
+            outcome.failed.append(.init(key: row.key, message: "The Gateway didn't report this session."))
         }
     }
 
@@ -713,7 +713,7 @@ public final class SessionManagerModel {
             do {
                 let result = try await self.call(SessionManager.deleteMethod, SessionManager.deleteParams(row))
                 if result["deleted"]?.bool == false {
-                    outcome.failed.append(.init(key: row.key, message: "The gateway didn't delete this session."))
+                    outcome.failed.append(.init(key: row.key, message: "The Gateway didn't delete this session."))
                     continue
                 }
                 outcome.succeeded.append(row.key)
@@ -756,7 +756,7 @@ public final class SessionManagerModel {
         do {
             let response = try await self.call(SessionManager.recoverMethod, .object(params))
             guard let result = SessionRecoverResult(response) else {
-                self.actionError = "The gateway didn't return the recovered session."
+                self.actionError = "The Gateway didn't return the recovered session."
                 return nil
             }
             self.lastMessage = "Recovered the session"

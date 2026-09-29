@@ -93,9 +93,9 @@ struct NotificationSettingsSection: View {
     private var footer: String {
         switch self.delivery {
         case .pushRelay:
-            "To get notified while Pincer is closed, enter a Pincer push relay. Your gateway encrypts each notification to this device, so the relay can't read it. The gateway needs Web Push (push.web.subscribe)."
+            "To get notified while Pincer is closed, enter a Pincer push relay. Your Gateway encrypts each notification to this device, so the relay can't read it. The Gateway needs Web Push (push.web.subscribe)."
         case .backgroundRefresh:
-            "Pincer checks your gateways in the background, with no server needed. iOS decides when, usually 15 minutes to a few hours apart, depending on how often you use Pincer and your battery. It pauses in Low Power Mode, and stops after you swipe Pincer away in the app switcher until you open it again."
+            "Pincer checks your Gateways in the background, with no server needed. iOS decides when, usually 15 minutes to a few hours apart, depending on how often you use Pincer and your battery. It pauses in Low Power Mode, and stops after you swipe Pincer away in the app switcher until you open it again."
         case .off:
             "You're notified only while Pincer is open."
         }

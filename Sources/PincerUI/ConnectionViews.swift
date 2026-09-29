@@ -276,7 +276,7 @@ struct ApprovalInstructions: View {
 
     var body: some View {
         let command = self.requestId.map { "openclaw devices approve \($0)" } ?? "openclaw devices list\nopenclaw devices approve <requestId>"
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Text("Approve this device on the Gateway host:").font(.callout).foregroundStyle(.secondary)
             Text(command)
                 .font(.callout.monospaced())
@@ -331,9 +331,9 @@ struct PairingView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
-                .padding(14)
+                .padding(Theme.Spacing.row)
                 .frame(maxWidth: 440)
-                .glassSurface(in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .glassSurface(in: RoundedRectangle(cornerRadius: Theme.Radius.xLarge, style: .continuous))
                 .contextMenu {
                     Button("Copy Command", systemImage: "doc.on.doc") { self.copy(command) }
                 }
@@ -347,18 +347,18 @@ struct PairingView: View {
             .controlSize(.large)
             .tint(self.copied ? .green : self.theme.accent)
             .contentTransition(.symbolEffect(.replace))
-            VStack(spacing: 4) {
+            VStack(spacing: Theme.Spacing.xs) {
                 Text("Device ID").font(.caption).foregroundStyle(.secondary)
                 Text(self.deviceId.prefix(16) + "…")
                     .font(.caption.monospaced())
                     .textSelection(.enabled)
             }
-            HStack(spacing: 6) {
+            HStack(spacing: Theme.Spacing.sm) {
                 ProgressView().controlSize(.small)
                 Text("Checking every few seconds…").font(.callout).foregroundStyle(.secondary)
             }
         }
-        .padding(32)
+        .padding(Theme.Spacing.hero)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 

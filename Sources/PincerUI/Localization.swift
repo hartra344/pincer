@@ -9,10 +9,3 @@ import SwiftUI
 func L(_ key: String.LocalizationValue) -> String {
     String(localized: key, bundle: .module)
 }
-
-extension Text {
-    /// `Text` for a key in PincerUI's catalog: `Text(l: "Send")`.
-    init(l key: LocalizedStringKey) {
-        self.init(key, bundle: .module)
-    }
-}

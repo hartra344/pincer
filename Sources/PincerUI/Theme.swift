@@ -10,7 +10,36 @@ public typealias PlatformImage = UIImage
 #endif
 
 enum Theme {
-    static let bubbleCorner: CGFloat = 14
+    static let bubbleCorner: CGFloat = Radius.bubble
+
+    /// Corner radii. Names map the values the views already used; nothing is rounded.
+    enum Radius {
+        static let hairline: CGFloat = 2
+        static let tiny: CGFloat = 3
+        static let small: CGFloat = 6
+        static let medium: CGFloat = 8
+        static let large: CGFloat = 10
+        static let card: CGFloat = 12
+        static let bubble: CGFloat = 14
+        static let xLarge: CGFloat = 16
+        static let xxLarge: CGFloat = 18
+    }
+
+    /// Padding and stack spacing. One-off values (3, 5, 7, 11) stay literal at their call sites.
+    enum Spacing {
+        static let hairline: CGFloat = 1
+        static let xxs: CGFloat = 2
+        static let xs: CGFloat = 4
+        static let sm: CGFloat = 6
+        static let md: CGFloat = 8
+        static let lg: CGFloat = 10
+        static let xl: CGFloat = 12
+        static let row: CGFloat = 14
+        static let xxl: CGFloat = 16
+        static let section: CGFloat = 20
+        static let page: CGFloat = 24
+        static let hero: CGFloat = 32
+    }
 
     static func color(named name: String?) -> Color? {
         guard let name = name?.lowercased() else { return nil }

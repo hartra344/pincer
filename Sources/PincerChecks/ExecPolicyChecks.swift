@@ -414,7 +414,7 @@ private func checkExecPolicyModel() async {
     let noSet = ExecPolicyModel(methods: { [ExecPolicy.getMethod] }) { method, params in try getOnly.handle(method, params) }
     await noSet.load()
     check(noSet.supported && noSet.snapshot != nil && !noSet.canWrite, "get without set → read-only")
-    check(noSet.readOnlyReason == "This gateway can't change its command policy. Update OpenClaw to manage it here.",
+    check(noSet.readOnlyReason == "This Gateway can't change its command policy. Update OpenClaw to manage it here.",
           "get without set → update-OpenClaw reason")
     let setGone = ScriptedPolicyGateway(json(policySnapshotJSON))
     let staleHello = ExecPolicyModel { method, params in try setGone.handle(method, params) }
@@ -423,7 +423,7 @@ private func checkExecPolicyModel() async {
     setGone.nextSetError = rpc("UNKNOWN_METHOD", "unknown method: exec.approvals.set")
     let unknownSet = await staleHello.save()
     check(unknownSet == .failed(.unsupported) && !staleHello.canWrite && staleHello.hasChanges
-          && staleHello.banner == .notice("This gateway can't change its command policy. Update OpenClaw to manage it here."),
+          && staleHello.banner == .notice("This Gateway can't change its command policy. Update OpenClaw to manage it here."),
           "set answered UNKNOWN_METHOD → read-only notice, draft kept")
     let noRetry = await staleHello.save()
     check(noRetry == .failed(.needsAdmin) && setGone.setCalls.count == 1, "no more set after UNKNOWN_METHOD")

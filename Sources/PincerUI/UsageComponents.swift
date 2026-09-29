@@ -198,7 +198,7 @@ struct UsageErrorLabel: View {
     let retry: @MainActor () async -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             if self.forbidden {
                 Label(self.message, systemImage: "lock")
                     .foregroundStyle(.secondary)
@@ -238,8 +238,8 @@ struct UsageTile: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(Theme.Spacing.lg)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
         .help(self.help ?? "")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(self.title)
@@ -253,7 +253,7 @@ struct UsageTileGrid: View {
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 10) {
+            HStack(alignment: .top, spacing: Theme.Spacing.lg) {
                 ForEach(self.tiles.indices, id: \.self) { self.tiles[$0].frame(minWidth: 130) }
             }
             Grid(horizontalSpacing: 10, verticalSpacing: 10) {
@@ -263,7 +263,7 @@ struct UsageTileGrid: View {
                     }
                 }
             }
-            VStack(spacing: 10) {
+            VStack(spacing: Theme.Spacing.lg) {
                 ForEach(self.tiles.indices, id: \.self) { self.tiles[$0] }
             }
         }
@@ -361,7 +361,7 @@ struct UsageRangeBar: View {
     let apply: @MainActor (UsageRangeSelection) -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: Theme.Spacing.sm) {
             Picker(L("Range"), selection: Binding(
                 get: { self.selection.preset },
                 set: { preset in
@@ -390,7 +390,7 @@ struct UsageRangeBar: View {
         }
         .disabled(!self.enabled)
         .padding(.horizontal)
-        .padding(.vertical, 8)
+        .padding(.vertical, Theme.Spacing.md)
         .frame(maxWidth: .infinity)
         .background(.bar)
     }

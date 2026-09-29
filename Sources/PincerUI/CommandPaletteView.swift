@@ -66,7 +66,7 @@ struct CommandPaletteView: View {
     var body: some View {
         let results = self.results
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Spacing.md) {
                 Image(systemName: self.fieldSymbol)
                     .foregroundStyle(.secondary)
                 TextField(self.placeholder, text: self.$query)
@@ -88,8 +88,8 @@ struct CommandPaletteView: View {
                     #endif
                     .accessibilityLabel("Command palette")
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.horizontal, Theme.Spacing.row)
+            .padding(.vertical, Theme.Spacing.xl)
             Divider()
             if self.page == .messages {
                 self.messagesPage(results)
@@ -97,14 +97,14 @@ struct CommandPaletteView: View {
                 Text(self.page == .models && self.gateway?.loadingModelCatalogs.isEmpty == false ? "Loading models…" : "No matches")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
+                    .padding(.vertical, Theme.Spacing.page)
             } else {
                 self.list(results)
             }
         }
         .frame(maxWidth: 560)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.separator))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous).strokeBorder(.separator))
         .shadow(color: .black.opacity(0.25), radius: 24, y: 10)
         #if os(macOS)
         .background(HostWindowReader(host: self.host))
@@ -226,19 +226,19 @@ struct CommandPaletteView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.horizontal, Theme.Spacing.xxl)
+                .padding(.top, Theme.Spacing.md)
         }
         if let notice {
-            VStack(spacing: 4) {
+            VStack(spacing: Theme.Spacing.xs) {
                 Text(notice.text)
                 if let hint = notice.hint { Text(hint).font(.caption) }
             }
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 24)
-            .padding(.horizontal, 16)
+            .padding(.vertical, Theme.Spacing.page)
+            .padding(.horizontal, Theme.Spacing.xxl)
         } else {
             self.list(results)
         }
@@ -249,7 +249,7 @@ struct CommandPaletteView: View {
         let current = self.currentSelection(in: results)
         return ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
+                LazyVStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                     ForEach(Array(results.enumerated()), id: \.element.id) { index, item in
                         if showsSections, index == 0 || results[index - 1].section != item.section {
                             self.header(item.section.title, first: index == 0)
@@ -263,7 +263,7 @@ struct CommandPaletteView: View {
                         }
                     }
                 }
-                .padding(6)
+                .padding(Theme.Spacing.sm)
             }
             .frame(maxHeight: 380)
             .onChange(of: self.selection) { _, id in
@@ -277,9 +277,9 @@ struct CommandPaletteView: View {
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .lineLimit(1)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, Theme.Spacing.lg)
             .padding(.top, first ? 2 : 10)
-            .padding(.bottom, 2)
+            .padding(.bottom, Theme.Spacing.xxs)
             .accessibilityAddTraits(.isHeader)
     }
 
@@ -300,12 +300,12 @@ struct CommandPaletteView: View {
         Button {
             self.run(item)
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: Theme.Spacing.lg) {
                 Image(systemName: item.symbol)
                     .frame(width: 20)
                     .foregroundStyle(selected ? .primary : .secondary)
                 if let snippet = item.snippet {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                         HStack {
                             Text(item.title).font(.callout.weight(.medium)).lineLimit(1)
                             Spacer(minLength: 8)
@@ -320,7 +320,7 @@ struct CommandPaletteView: View {
                             .multilineTextAlignment(.leading)
                     }
                 } else {
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: Theme.Spacing.hairline) {
                         Text(item.title).lineLimit(1)
                         if let subtitle = item.subtitle {
                             Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -332,10 +332,10 @@ struct CommandPaletteView: View {
                     }
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, Theme.Spacing.lg)
+            .padding(.vertical, Theme.Spacing.sm)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.medium, style: .continuous)
                 .fill(selected ? AnyShapeStyle(Color.accentColor.opacity(0.2)) : AnyShapeStyle(.clear)))
             .contentShape(Rectangle())
         }
@@ -664,7 +664,7 @@ struct CommandPaletteOverlay: View {
                                    page: request.page, query: request.query, openAppSettings: self.openAppSettings)
                     .id(request.id)
                     .padding(.top, 72)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, Theme.Spacing.xxl)
             }
             .transition(.opacity)
         }

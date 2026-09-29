@@ -118,9 +118,9 @@ struct ContextMeterPopover: View {
     @ViewBuilder private var content: some View {
         let row = self.gateway.sessions[self.chat.sessionKey]
         let usage = self.gateway.contextUsage(for: self.chat.sessionKey)
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
             if let usage {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     HStack {
                         Text(usage.isPromptBudget ? L("Prompt Budget") : L("Context Window")).font(.headline)
                         Spacer(minLength: 12)
@@ -157,7 +157,7 @@ struct ContextMeterPopover: View {
             Divider()
             self.compactSection
         }
-        .padding(14)
+        .padding(Theme.Spacing.row)
         .frame(width: 320)
         // `/compact` finishes after the run ends, so clear the instructions once the result lands.
         .onChange(of: self.chat.compaction) { _, state in
@@ -168,13 +168,13 @@ struct ContextMeterPopover: View {
     @ViewBuilder private var compactSection: some View {
         let state = self.chat.compaction
         let running = state?.isRunning == true
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             TextField(L("Instructions (optional)"), text: self.$instructions, axis: .vertical)
                 .lineLimit(1...4)
                 .textFieldStyle(.roundedBorder)
                 .disabled(running)
                 .onSubmit(self.compact)
-            HStack(spacing: 8) {
+            HStack(spacing: Theme.Spacing.md) {
                 Button(action: self.compact) {
                     Label(L("Compact Now"), systemImage: "arrow.down.right.and.arrow.up.left")
                 }

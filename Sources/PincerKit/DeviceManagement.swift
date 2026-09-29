@@ -469,13 +469,13 @@ public final class DeviceManagementModel {
             self.apply(result)
             self.scopeDenied = false
             self.loadState = .idle
-        } catch let error where GatewayConfigClient.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             guard generation == self.generation else { return }
             self.rejectedMethods.insert(Self.listMethod)
             self.pending = []
             self.paired = []
             self.loadState = .idle
-        } catch let error where PairingInboxModel.isMissingScope(error) {
+        } catch let error where GatewayError.isMissingScope(error) {
             guard generation == self.generation else { return }
             self.scopeDenied = true
             self.loadState = .failed(Self.needsAccessMessage)
@@ -513,7 +513,7 @@ public final class DeviceManagementModel {
             let ids = Set(self.nodes.map { Self.key($0) })
             self.operations = self.operations.filter { !$0.key.hasPrefix("node:") || ids.contains($0.key) }
             self.nodesLoadState = .idle
-        } catch let error where GatewayConfigClient.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             guard generation == self.nodesGeneration else { return }
             self.rejectedMethods.insert(Self.nodeListMethod)
             self.nodes = []
@@ -708,7 +708,7 @@ public final class DeviceManagementModel {
             }
             await self.load()
             return true
-        } catch let error where GatewayConfigClient.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             self.rejectedMethods.insert(Self.renameMethod)
             self.operations[key] = .failed(Self.renameUnsupportedMessage)
             return false
@@ -732,7 +732,7 @@ public final class DeviceManagementModel {
             }
             await self.loadNodes()
             return true
-        } catch let error where GatewayConfigClient.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             self.rejectedMethods.insert(Self.nodeRenameMethod)
             self.operations[key] = .failed(Self.nodeUnsupportedMessage)
             return false
@@ -754,7 +754,7 @@ public final class DeviceManagementModel {
             await self.loadNodes()
             if self.hasLoaded { await self.load() }
             return true
-        } catch let error where GatewayConfigClient.isUnknownMethod(error) {
+        } catch let error where GatewayError.isUnknownMethod(error) {
             self.rejectedMethods.insert(Self.nodeRemoveMethod)
             self.operations[key] = .failed(Self.nodeUnsupportedMessage)
             return false
@@ -793,7 +793,7 @@ public final class DeviceManagementModel {
     }
 
     private func deviceFailed(_ key: String, error: Error) -> Bool {
-        if PairingInboxModel.isMissingScope(error) || Self.isDenied(error) {
+        if GatewayError.isMissingScope(error) || Self.isDenied(error) {
             self.operations[key] = nil
             if !self.allowsWritesWithoutAdmin { self.manageDenied = true }
             self.notice = Notice(text: Self.readOnlyMessage)
@@ -836,8 +836,6 @@ public final class DeviceManagementModel {
     }
 
     static func message(for error: Error) -> String {
-        guard case let GatewayError.rpc(_, message, _) = error else { return error.localizedDescription }
-        if PairingInboxModel.isMissingScope(error) { return Self.needsAccessMessage }
-        return message
+        GatewayError.message(for: error, scope: Self.needsAccessMessage)
     }
 }

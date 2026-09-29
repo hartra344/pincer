@@ -39,7 +39,7 @@ struct SessionsPage: View {
                     .frame(height: 170)
                     .overlay(alignment: .topTrailing) {
                         Button("Details…") { self.open(key) }
-                            .padding(8)
+                            .padding(Theme.Spacing.md)
                     }
             }
             #endif
@@ -87,7 +87,7 @@ struct SessionsPage: View {
     }
 
     @ViewBuilder private func header(_ model: SessionManagerModel, connected: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
             Picker("Show", selection: Binding(
                 get: { self.filter },
                 set: { next in
@@ -108,14 +108,14 @@ struct SessionsPage: View {
                 #endif
             SessionManagerMessages(model: model)
         }
-        .padding(12)
+        .padding(Theme.Spacing.xl)
         .disabled(!connected)
     }
 
     @ViewBuilder private func content(_ model: SessionManagerModel, rows: [SessionRow], connected: Bool) -> some View {
         if !connected {
             ContentUnavailableView("Not Connected", systemImage: "bolt.horizontal.circle",
-                                   description: Text("Connect to the gateway to manage sessions."))
+                                   description: Text("Connect to the Gateway to manage sessions."))
         } else if !model.supportsList {
             ContentUnavailableView("Session Management Isn't Available", systemImage: "rectangle.stack",
                                    description: Text(SessionManager.unsupportedMessage))
@@ -178,8 +178,8 @@ struct SessionsPage: View {
         let rows = self.selection.compactMap(model.row)
         let plan = model.deletePlan(self.selection)
         let keys = Array(self.selection)
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
+        return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
+            HStack(spacing: Theme.Spacing.lg) {
                 Text("\(self.selection.count) selected")
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -207,7 +207,7 @@ struct SessionsPage: View {
                 FullManagementBadge { self.navigator.destination = .connection }
             }
         }
-        .padding(12)
+        .padding(Theme.Spacing.xl)
     }
 
     /// Archives or unarchives, clearing the selection once every key succeeded.
@@ -234,22 +234,22 @@ struct SessionManagerRowView: View {
 
     var body: some View {
         let state = SessionRunState(row: self.row)
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.md) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                HStack(spacing: Theme.Spacing.sm) {
                     Text(self.row.title).lineLimit(1).truncationMode(.middle)
                     if self.row.isArchived {
                         Text("Archived")
                             .font(.caption2.weight(.medium))
                             .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
+                            .padding(.vertical, Theme.Spacing.hairline)
                             .background(.quaternary, in: Capsule())
                     }
                     if SessionManager.isRecoverable(self.row) {
                         Label("Interrupted", systemImage: "exclamationmark.arrow.circlepath")
                             .labelStyle(.iconOnly)
                             .foregroundStyle(.orange)
-                            .help("Interrupted by a gateway restart")
+                            .help("Interrupted by a Gateway restart")
                     }
                 }
                 Text(self.subtitle)
@@ -264,7 +264,7 @@ struct SessionManagerRowView: View {
                 SessionRunStatusView(row: self.row, state: state)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, Theme.Spacing.xxs)
         .accessibilityElement(children: .combine)
     }
 
@@ -329,7 +329,7 @@ struct SessionPreviewPanel: View {
         ScrollView {
             SessionPreviewContent(model: self.model, key: self.row.key)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(12)
+                .padding(Theme.Spacing.xl)
         }
         .task(id: PreviewLoad(key: self.row.key, isMissing: self.model.previews[self.row.key] == nil)) {
             guard self.model.previews[self.row.key] == nil else { return }
@@ -352,14 +352,14 @@ struct SessionPreviewContent: View {
 
     var body: some View {
         if !self.model.supportsPreview {
-            Text("Previews need a newer gateway.").foregroundStyle(.secondary)
+            Text("Previews need a newer Gateway.").foregroundStyle(.secondary)
         } else if let preview = self.model.previews[self.key] {
             if preview.items.isEmpty {
                 Text(preview.emptyReason ?? "No messages yet").foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
                     ForEach(preview.items) { item in
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.sm) {
                             Text(Self.roleTitle(item.role))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
@@ -564,7 +564,7 @@ struct SessionDetailPage: View {
                 if let reason = row.raw["archiveReason"]?.text { LabeledContent("Archive Reason", value: reason) }
             }
             if SessionManager.isRecoverable(row) {
-                Label("Interrupted by a gateway restart", systemImage: "exclamationmark.arrow.circlepath")
+                Label("Interrupted by a Gateway restart", systemImage: "exclamationmark.arrow.circlepath")
                     .foregroundStyle(.orange)
             }
             LabeledContent("Key") {
@@ -622,7 +622,7 @@ struct SessionDetailPage: View {
                         Image(systemName: branch.active ? "checkmark.circle.fill" : "arrow.triangle.branch")
                             .foregroundStyle(branch.active ? Color.accentColor : .secondary)
                             .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                             Text(branch.title).lineLimit(2)
                             Text(Self.branchSubtitle(branch)).font(.caption).foregroundStyle(.secondary)
                         }
@@ -650,7 +650,7 @@ struct SessionDetailPage: View {
                     if points.isEmpty { Text("No messages to rewind to").foregroundStyle(.secondary) }
                     ForEach(points) { point in
                         HStack {
-                            VStack(alignment: .leading, spacing: 2) {
+                            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                                 Text(point.text).lineLimit(2)
                                 if let date = point.timestamp {
                                     Text(date.formatted(date: .abbreviated, time: .shortened))

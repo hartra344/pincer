@@ -40,7 +40,7 @@ func checkSessionManager() async {
     check(SessionManager.bulkSummary(verb: "Archived", SessionBulkOutcome(succeeded: ["a", "b"], failed: [.init(key: "c", message: "x")]))
           == "Archived 2 sessions; 1 failed", "bulk summary")
     check(SessionBranch(["leafEntryId": "abcdef1234", "headline": "", "active": true])?.title == "Branch abcdef12", "untitled branch")
-    check(SessionPreview(["key": "k", "status": "cold", "items": []])?.emptyReason == "The transcript isn't loaded on the gateway yet",
+    check(SessionPreview(["key": "k", "status": "cold", "items": []])?.emptyReason == "The transcript isn't loaded on the Gateway yet",
           "cold preview reason")
 
     // Gating and scopes against a fake.

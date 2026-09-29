@@ -72,7 +72,7 @@ public enum ApprovalOutcome: Equatable, Sendable {
     /// Text for the follow-up notification, or nil when none is posted (success, or nothing new to say).
     /// Never contains the command.
     public func followUpBody(gatewayName: String?) -> String? {
-        let name = gatewayName ?? "the gateway"
+        let name = gatewayName ?? "the Gateway"
         switch self {
         case .resolved, .alreadyHandled: return nil
         case .expired: return "That approval expired. Nothing was run."
@@ -85,7 +85,7 @@ public enum ApprovalOutcome: Equatable, Sendable {
         case .allowAlwaysUnavailable: return "Always allow isn't available for this command."
         case .unreachable: return "Couldn't reach \(name) — the command is still waiting."
         case .notPermitted: return "This device can't approve commands on \(name). Open Pincer for details."
-        case .unknownGateway: return "This gateway is no longer in Pincer."
+        case .unknownGateway: return "This Gateway is no longer in Pincer."
         case let .failed(message): return Notifier.clip(message)
         }
     }
