@@ -51,6 +51,8 @@ enum DemoUsage {
                 models: [(sol, 0.6), (opus, 0.4)], dailyTokens: 1_200_000, activeDays: 0..<90, log: coderLog),
         Session(key: "agent:kiko:main", agentId: "kiko", label: nil, channel: "webchat",
                 models: [(sonnet, 1)], dailyTokens: 80_000, activeDays: 1..<3, log: kikoLog),
+        Session(key: "agent:mochi:main", agentId: "mochi", label: nil, channel: "webchat",
+                models: [(sonnet, 1)], dailyTokens: 40_000, activeDays: 1..<7, log: mochiLog),
     ]
 
     /// The model a demo chat mainly runs on, so its row and replies match its usage.
@@ -511,6 +513,13 @@ enum DemoUsage {
         ("tool", "sessions_send: agent:main:main"),
         ("toolResult", "Claw: Backblaze B2 about $6 a month, Tailscale free, the domain $12 a year."),
         ("assistant", "Claw sent the list. I've added the home-lab bills to your budget."),
+    ]
+
+    private static let mochiLog: [(role: String, content: String)] = [
+        ("user", "Book two movers for the morning of the 18th."),
+        ("tool", "calendar.add: Movers 8-10am"),
+        ("toolResult", "Added Oct 18, 8:00-10:00 AM: Brooklyn Bound movers."),
+        ("assistant", "Booked with Brooklyn Bound: arrival window is 8-10am on the 18th."),
     ]
 
     private static let researchLog: [(role: String, content: String)] = [
