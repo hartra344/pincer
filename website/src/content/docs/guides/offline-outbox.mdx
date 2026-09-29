@@ -3,7 +3,13 @@ title: Offline sending & retry
 description: Writing messages while you're disconnected, how Pincer sends them when you reconnect, and retrying messages that failed.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotOfflineOutbox from '../../../assets/screenshots/features/offline-outbox.png';
+import shotOfflineOutboxIOS from '../../../assets/screenshots/features/ios/offline-outbox.png';
+
 You can keep writing when your connection drops. Messages you send while offline wait in an **outbox** and go out, in order, as soon as Pincer reconnects to that gateway. If a message can't be sent, it stays in the chat marked **Failed** so you can retry or delete it. Nothing you typed disappears.
+
+<DocScreenshot src={shotOfflineOutbox} alt="Dinner party chat with a failed message and Retry and Delete controls." caption="macOS, built-in demo. The demo seeds a timed-out shopping-list request. Retry and Delete stay beside the unsent message." ios={shotOfflineOutboxIOS} iosAlt="Dinner party chat with a failed message and Retry and Delete controls. iPhone view." iosCaption="iOS, built-in demo. The demo seeds a timed-out shopping-list request. Retry and Delete stay beside the unsent message." focus={{ x: 560, y: 620, width: 1800, height: 500 }} />
 
 ## Sending while offline
 

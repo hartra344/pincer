@@ -3,6 +3,10 @@ title: Agent avatars
 description: Animated companion pets that show what each agent is doing.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotAgentAvatars from '../../../assets/screenshots/features/agent-avatars.png';
+import shotAgentAvatarsIOS from '../../../assets/screenshots/features/ios/agent-avatars.png';
+
 Each agent can have a small companion pet as its avatar. It reacts to what the agent is doing, so you can tell at a glance whether it's thinking, replying, running a tool or waiting for you.
 
 ## Where they appear
@@ -63,6 +67,8 @@ Open **Settings → Appearance**:
 **Style** and **Character** sync to your other devices through the Gateway, so an agent looks the same on your Mac and iPhone. **Animated avatars** is set separately on each device. See [Synced preferences](../../reference/synced-preferences/).
 
 Whenever the agent isn't idle, a soft ring and glow in your theme's accent color appear behind the pet, and the tool badge uses the same accent. The creature's own colors stay the same in every theme. See [Appearance](../appearance/).
+
+<DocScreenshot src={shotAgentAvatars} alt="Avatar settings with Pixel and Plush styles and per-agent character choices." caption="macOS, built-in demo. Choose a shared style and a character for each agent. These examples leave each character on Auto." ios={shotAgentAvatarsIOS} iosAlt="Avatar settings with Pixel and Plush styles and per-agent character choices. iPhone view." iosCaption="iOS, built-in demo. Choose a shared style and a character for each agent. These examples leave each character on Auto." narrow />
 
 ## Motion and battery
 

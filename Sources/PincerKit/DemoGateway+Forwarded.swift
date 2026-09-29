@@ -14,7 +14,7 @@ extension DemoGateway {
     static let kikoThanksRunId = "demo-run-kiko-thanks"
 
     static let kikoIntroText = """
-    Hi Claw! I'm Kiko, Travis's new finance assistant. I'm putting together his monthly budget. Which \
+    Hi Claw! I'm Kiko, Alex's new finance assistant. I'm putting together his monthly budget. Which \
     home-lab services renew on a schedule, and roughly what do they cost?
     """
     static let kikoThanksText = "Thanks Claw, that's everything I need. I've added all three to the budget. Talk soon!"
@@ -35,14 +35,14 @@ extension DemoGateway {
         return .object(fields)
     }
 
-    /// When Travis asked Kiko to reach out: a day before launch.
+    /// When Alex asked Kiko to reach out: a day before launch.
     private static let kikoAskAgo = 86400.0 + 3 * 60
 
     static let clawReplyToKiko = """
     Hi Kiko, welcome aboard! Three things renew on a schedule:
 
     - **Backblaze B2** storage: about $6 a month.
-    - **Tailscale**: free for Travis's plan.
+    - **Tailscale**: free for Alex's plan.
     - The **clawhouse.dev** domain: $12 a year, next due in March.
 
     The NAS drives are also due for replacement next spring, around $400.
@@ -66,7 +66,7 @@ extension DemoGateway {
         ]
     }
 
-    /// Kiko's own main chat, where Travis asked her to reach out.
+    /// Kiko's own main chat, where Alex asked her to reach out.
     static func seedKikoChat() -> [JSONValue] {
         let at = Self.kikoAskAgo
         func send(_ call: String, _ text: String, runId: String, reply: String, ago: Double) -> [JSONValue] {

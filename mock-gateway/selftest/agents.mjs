@@ -70,7 +70,7 @@ export async function run() {
     assert.equal((await reader.call('agents.files.get', { agentId: 'main', name: 'HEARTBEAT.md' })).error.message, 'unsupported file "HEARTBEAT.md"');
 
     // Set: expectedHash CAS, conflict details, expectedMissing, unconditional overwrite.
-    const edited = `${soul.content}\n- Never page Travis after 22:00.\n`;
+    const edited = `${soul.content}\n- Never page Alex after 22:00.\n`;
     const saved = await admin.send('agents.files.set', { agentId: 'main', name: 'SOUL.md', content: edited, expectedHash: soul.hash });
     assert.equal(saved.ok, true);
     assert.equal(saved.file.hash, sha(edited));

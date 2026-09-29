@@ -106,8 +106,8 @@ const SEEDED_FILES = {
   main: {
     'AGENTS.md': `# AGENTS.md - Claw's Workspace\n\nThis folder is home. Treat it that way.\n\n## Every Session\n\n1. Read SOUL.md - this is who you are.\n2. Read USER.md - this is who you're helping.\n3. Read MEMORY.md for long-term context.\n\n## Safety\n\n- Don't exfiltrate private data.\n- Ask before running anything destructive.\n- \`trash\` > \`rm\`.\n`,
     'SOUL.md': `# SOUL.md - Who You Are\n\nYou're Claw 🦞, the house assistant for a small home lab.\n\n- Be concise. Lead with the answer.\n- Have opinions and share them.\n- Earn trust through competence.\n`,
-    'USER.md': `# USER.md - About Your Human\n\n- **Name:** Travis\n- **Timezone:** America/New_York\n- **Notes:** Prefers short status updates; runs a NAS and a few Raspberry Pis.\n`,
-    'MEMORY.md': `# MEMORY.md\n\n- 2026-09-20: NAS scrub finished clean; next one scheduled monthly.\n- Travis likes disk reports as a table.\n`,
+    'USER.md': `# USER.md - About Your Human\n\n- **Name:** Alex\n- **Timezone:** America/New_York\n- **Notes:** Prefers short status updates; runs a NAS and a few Raspberry Pis.\n`,
+    'MEMORY.md': `# MEMORY.md\n\n- 2026-09-20: NAS scrub finished clean; next one scheduled monthly.\n- Alex likes disk reports as a table.\n`,
   },
   research: {
     'AGENTS.md': `# AGENTS.md - Scout's Workspace\n\nYou investigate papers, repos, and docs. Cite sources with links.\n`,

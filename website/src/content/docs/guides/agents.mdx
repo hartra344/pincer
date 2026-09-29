@@ -3,6 +3,14 @@ title: Agents & workspace files
 description: Create, edit, duplicate and delete your gateway's agents, and edit their workspace files such as AGENTS.md and SOUL.md.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotAgents from '../../../assets/screenshots/features/agents.png';
+import shotAgentsIOS from '../../../assets/screenshots/features/ios/agents.png';
+import shotAgentEditor from '../../../assets/screenshots/features/agent-editor.png';
+import shotAgentEditorIOS from '../../../assets/screenshots/features/ios/agent-editor.png';
+import shotWorkspaceFile from '../../../assets/screenshots/features/workspace-file.png';
+import shotWorkspaceFileIOS from '../../../assets/screenshots/features/ios/workspace-file.png';
+
 You can create and edit your gateway's agents in Pincer. You can also edit the files that shape how they behave, such as `AGENTS.md` and `SOUL.md`, without logging in to the gateway host.
 
 ## Opening an agent
@@ -29,6 +37,8 @@ Without it, the pages are read-only (you can still select and copy file text) an
 
 If the gateway can't manage agents, the pages say **Agent Management Isn't Available**. Update OpenClaw to manage agents here.
 
+<DocScreenshot src={shotAgents} ios={shotAgentsIOS} iosCaption="iOS, local mock. The same fictional agent and workspace on iPhone." alt="Agents and Models listing Claw, Scout, Forge and Kiko." caption="macOS, local mock. The local mock provides four fictional agents and editable model defaults." />
+
 ## Creating an agent
 
 Choose **New Agent** and fill in:
@@ -47,6 +57,8 @@ Change the name, emoji, avatar, model or workspace, then choose **Save** (<kbd>â
 Changing the workspace points the agent at a different folder. The files already in the old folder aren't moved.
 
 Bindings can't be edited here yet. Use **Raw Config** in Gateway Settings or edit the gateway's config.
+
+<DocScreenshot src={shotAgentEditor} ios={shotAgentEditorIOS} iosCaption="iOS, local mock. The same fictional agent and workspace on iPhone." alt="Claw agent editor with identity, model, workspace and binding settings." caption="macOS, local mock. Open an agent to inspect its identity and workspace. The path belongs to the local mock fixture." />
 
 ## Duplicating an agent
 
@@ -80,6 +92,8 @@ Files open in a monospaced editor. Switch to **Preview** to see the Markdown for
 - Files can be up to 2 MB. The size shows as you type, such as "12 KB of 2 MB". If the file is over the limit, **Save** turns off and Pincer says by how much. A file that's already larger than that on the gateway opens read-only.
 
 Your unsaved changes stay while you move to other Gateway Settings pages. Going **Back** from the editor or the agent's page, or closing Gateway Settings, asks **Save changes to *file*?**, with **Save**, **Don't Save** and **Cancel**. This works on macOS and iOS.
+
+<DocScreenshot src={shotWorkspaceFile} ios={shotWorkspaceFileIOS} iosCaption="iOS, local mock. The same fictional agent and workspace on iPhone." alt="AGENTS.md open in the workspace file editor with Edit and Preview controls." caption="macOS, local mock. Read or edit the mock agent\u2019s workspace instructions, then use Preview to check the Markdown." />
 
 ### If the file changed on the gateway
 

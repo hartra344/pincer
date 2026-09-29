@@ -36,9 +36,9 @@ export async function run() {
       assert.equal(p.deviceId, crypto.createHash('sha256').update(Buffer.from(p.publicKey, 'base64url')).digest('hex'), 'deviceId is sha256(publicKey)');
     }
     const ipad = list.pending.find((p) => p.requestId === 'pair_ipad');
-    assert.equal(ipad.displayName, "Travis's iPad");
+    assert.equal(ipad.displayName, "Alex's iPad");
     assert.equal(ipad.isRepair, false);
-    assert.equal(ipad.deviceId, deviceIdentityFor('travis-ipad').deviceId);
+    assert.equal(ipad.deviceId, deviceIdentityFor('demo-ipad').deviceId);
     const upgradeReq = list.pending.find((p) => p.requestId === 'pair_studio_admin');
     assert.equal(upgradeReq.isRepair, true);
     assert.ok(upgradeReq.scopes.includes('operator.admin'));

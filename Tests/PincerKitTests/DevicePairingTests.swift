@@ -12,7 +12,7 @@ enum DeviceFixtures {
     static func ms(_ offset: TimeInterval) -> JSONValue { .number(((now.timeIntervalSince1970 + offset) * 1000).rounded()) }
 
     static func pending(_ requestId: String, deviceId: String = "9f".padding(toLength: 64, withPad: "0", startingAt: 0),
-                        name: String? = "Travis’s iPad", ago: TimeInterval = 120, role: String = "operator",
+                        name: String? = "Alex’s iPad", ago: TimeInterval = 120, role: String = "operator",
                         roles: [String] = ["operator"], scopes: [String] = ["operator.read", "operator.write"],
                         isRepair: Bool = false) -> JSONValue
     {
@@ -116,7 +116,7 @@ struct DeviceRecordTests {
         #expect(request.isRepair && !request.silent)
         #expect(request.requestsNodeRole)
         #expect(request.requestedAt == DeviceFixtures.now.addingTimeInterval(-120))
-        #expect(request.title == "Travis’s iPad")
+        #expect(request.title == "Alex’s iPad")
         #expect(request.subtitle == "iPadOS · OpenClaw app")
         #expect(request.clientMode == "ui" && request.remoteIp == "192.168.1.42" && request.publicKey == "pk")
     }
@@ -379,7 +379,7 @@ struct DeviceManagementModelTests {
         model.handle(event: "device.pair.requested", payload: DeviceFixtures.pending("r2", ago: 5))
         #expect(model.pending.map(\.requestId) == ["r2", "r1"] && model.pendingCount == 2)
         model.handle(event: "device.pair.requested", payload: DeviceFixtures.pending("r2", name: "Renamed", ago: 1))
-        #expect(model.pending.map(\.title) == ["Renamed", "Travis’s iPad"], "a refreshed request replaces the old row")
+        #expect(model.pending.map(\.title) == ["Renamed", "Alex’s iPad"], "a refreshed request replaces the old row")
         model.handle(event: "device.pair.requested", payload: ["deviceId": "no request id"])
         #expect(model.pending.count == 2)
         model.handle(event: "device.pair.resolved", payload: ["requestId": "r1", "deviceId": "d", "decision": "rejected", "ts": 1])
@@ -485,7 +485,7 @@ struct DemoDeviceSeedTests {
         #expect(nodes.count == 2)
 
         let ipad = try #require(pending.first { !$0.isRepair })
-        #expect(ipad.title == "Travis’s iPad" && ipad.scopes == GatewayConnection.scopes && !ipad.requestsNodeRole)
+        #expect(ipad.title == "Alex’s iPad" && ipad.scopes == GatewayConnection.scopes && !ipad.requestsNodeRole)
         #expect(abs((ipad.requestedAt ?? .distantPast).timeIntervalSince(now) + 120) < 1)
         let upgrade = try #require(pending.first { $0.isRepair })
         #expect(upgrade.scopes.contains(GatewayConnection.adminScope))

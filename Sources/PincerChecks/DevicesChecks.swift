@@ -184,8 +184,8 @@ func runDemoDevices(_ gateway: GatewayStore) async {
     check(devices.nodesLoadState == .idle && devices.nodes.count == 2 && devices.nodes.first?.connected == true,
           "two nodes, the connected one first (\(devices.nodes.map(\.title)))")
     if let offline = devices.nodes.first(where: { !$0.connected }) {
-        let renamed = await devices.renameNode(offline, to: "Travis’s Pixel")
-        check(renamed && devices.nodes.contains { $0.nodeId == offline.nodeId && $0.title == "Travis’s Pixel" }, "rename a node")
+        let renamed = await devices.renameNode(offline, to: "Alex’s Pixel")
+        check(renamed && devices.nodes.contains { $0.nodeId == offline.nodeId && $0.title == "Alex’s Pixel" }, "rename a node")
         let removed = await devices.removeNode(offline)
         check(removed && !devices.nodes.contains { $0.nodeId == offline.nodeId } && devices.nodes.count == 1, "unpair a node")
         let device = devices.paired.first { $0.deviceId == offline.nodeId }
@@ -237,7 +237,7 @@ func runLiveDevices(profile: GatewayProfile, gateway: GatewayStore, admin: Gatew
     check(devices.paired.first { $0.title == "Mac mini (home)" }?.isNode == true, "node host listed as a node")
 
     if let ipad = seeded.first(where: { $0.requestId == "pair_ipad" }) {
-        check(ipad.title == "Travis's iPad" && ipad.platform == "ipados" && !ipad.isRepair && ipad.requestedAt != nil, "iPad request presentation")
+        check(ipad.title == "Alex's iPad" && ipad.platform == "ipados" && !ipad.isRepair && ipad.requestedAt != nil, "iPad request presentation")
         let approved = await devices.approve(ipad)
         check(approved && devices.operation(for: ipad) == .idle && !devices.pending.contains { $0.requestId == "pair_ipad" }
               && devices.paired.contains { $0.deviceId == ipad.deviceId }, "device.pair.approve")
@@ -273,8 +273,8 @@ func runLiveDevices(profile: GatewayProfile, gateway: GatewayStore, admin: Gatew
           "node.list, connected node first (\(nodeTitles))")
     check(devices.nodes.first?.caps.contains("canvas") == true && devices.nodes.first?.connected == true, "node caps and status")
     if let pixel = devices.nodes.first(where: { $0.title == "Pixel 9" }) {
-        let renamed = await devices.renameNode(pixel, to: "Travis's Pixel")
-        check(renamed && devices.nodes.contains { $0.nodeId == pixel.nodeId && $0.title == "Travis's Pixel" }, "node.rename")
+        let renamed = await devices.renameNode(pixel, to: "Alex's Pixel")
+        check(renamed && devices.nodes.contains { $0.nodeId == pixel.nodeId && $0.title == "Alex's Pixel" }, "node.rename")
         let removed = await devices.removeNode(pixel)
         check(removed && !devices.nodes.contains { $0.nodeId == pixel.nodeId }, "node.pair.remove")
         let row = await waitFor("pixel row") { devices.paired.first { $0.deviceId == pixel.nodeId }?.isNode == false }

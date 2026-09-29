@@ -1,7 +1,7 @@
 ---
 import { Image } from 'astro:assets';
 import Icon from '../components/Icon.astro';
-import screenshot from '../assets/screenshots/transcript.png';
+import screenshot from '../assets/screenshots/features/homepage.png';
 import logo from '../assets/logo.svg';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -140,7 +140,7 @@ const themes = [
 				<figure class="shot">
 					<Image
 						src={screenshot}
-						alt="Pincer on macOS showing a sidebar of agents and channels, and a chat with a tool call, a code block and an inline chart."
+						alt="Pincer on macOS with pixel companion avatars in the agent sidebar and a demo chat showing tool cards, a disk summary, a code block and an inline chart."
 						widths={[800, 1400, 2000]}
 						sizes="(max-width: 1200px) 100vw, 1200px"
 						loading="eager"

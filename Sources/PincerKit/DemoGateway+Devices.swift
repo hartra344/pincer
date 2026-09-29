@@ -24,7 +24,7 @@ extension DemoGateway {
     private static let studioScopes = ["operator.read", "operator.write", "operator.approvals", "operator.pairing"]
 
     private static var selfName: String {
-        GatewayConnection.platform == "ios" ? "Travis’s iPhone" : "Travis’s MacBook Pro"
+        GatewayConnection.platform == "ios" ? "Alex’s iPhone" : "Alex’s MacBook Pro"
     }
 
     /// `device.pair.list` `pending[]`, newest first.
@@ -34,7 +34,7 @@ extension DemoGateway {
                 "requestId": .string(Self.demoPendingRequestId),
                 "deviceId": .string(Self.demoIPadDeviceId),
                 "publicKey": "dKjoLrZPeob6ibnKwkxmWONW9dUsRGb_qAE2rJ5GHq4",
-                "displayName": "Travis’s iPad", "platform": "ios", "deviceFamily": "iPad",
+                "displayName": "Alex’s iPad", "platform": "ios", "deviceFamily": "iPad",
                 "clientId": "openclaw-ios", "clientMode": "ui", "role": "operator", "roles": ["operator"],
                 "scopes": JSONValue(GatewayConnection.scopes), "remoteIp": "192.168.1.42",
                 "silent": false, "isRepair": false,

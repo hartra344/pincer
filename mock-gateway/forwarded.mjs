@@ -11,7 +11,7 @@ export const KIKO_INTRO_RUN_ID = 'seed-run-kiko-intro';
 export const KIKO_THANKS_RUN_ID = 'seed-run-kiko-thanks';
 export const BRIEFING_RUN_ID = 'seed-run-briefing';
 
-export const KIKO_INTRO = "Hi Claw! I'm Kiko, Travis's new finance assistant. I'm putting together his monthly budget. Which home-lab services renew on a schedule, and roughly what do they cost?";
+export const KIKO_INTRO = "Hi Claw! I'm Kiko, Alex's new finance assistant. I'm putting together his monthly budget. Which home-lab services renew on a schedule, and roughly what do they cost?";
 export const CLAW_REPLY = 'Hi Kiko, welcome aboard! Three things renew on a schedule: Backblaze B2 storage (about $6 a month), Tailscale (free) and the clawhouse.dev domain ($12 a year, due in March).';
 export const KIKO_THANKS = "Thanks Claw, that's everything I need. I've added all three to the budget. Talk soon!";
 export const CLAW_NOTE = 'Kiko is tracking the home-lab bills now, so renewals will show up in her monthly summary.';

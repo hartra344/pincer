@@ -139,7 +139,7 @@ extension DemoGateway {
                 "AGENTS.md": """
                 # AGENTS.md - Kiko's Workspace
 
-                You keep Travis's budget: bills, subscriptions and renewals. Ask the other agents for the costs they know about.
+                You keep Alex's budget: bills, subscriptions and renewals. Ask the other agents for the costs they know about.
 
                 """,
                 "SOUL.md": """

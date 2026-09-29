@@ -3,7 +3,12 @@ title: Search messages
 description: Search the text of every cached chat on a gateway, and jump straight to the message.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotSearch from '../../../assets/screenshots/features/search.png';
+
 Message search looks through the text of every chat Pincer has cached for the selected gateway, including older history you haven't scrolled to. Picking a result opens the chat with [Find in Chat](../transcript/#find-in-chat) on that exact message.
+
+<DocScreenshot src={shotSearch} alt="Message search for Kyoto showing highlighted matches grouped under Japan trip." caption="macOS, built-in demo. Search finds matching messages across the fictional Japan trip conversation." focus={{ x: 620, y: 245, width: 1120, height: 860 }} />
 
 ## Opening message search
 
