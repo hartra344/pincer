@@ -348,10 +348,8 @@ public struct ImageRef: Hashable, Codable, Sendable {
     public let width: Int?
     public let height: Int?
 
-    public var cacheKey: String {
-        // Inline images often share a long header (SVG's xmlns), so a prefix alone would collide.
-        self.artifactId ?? self.url ?? self.base64.map { "inline:\($0.count):\(Self.stableHash($0))" } ?? "image"
-    }
+    /// Computed once at init; hashing a megabyte payload on every access dominated layout.
+    public let cacheKey: String
 
     public init(artifactId: String?, base64: String?, url: String?, mimeType: String?, alt: String?, width: Int?, height: Int?) {
         self.artifactId = artifactId
@@ -361,6 +359,50 @@ public struct ImageRef: Hashable, Codable, Sendable {
         self.alt = alt
         self.width = width
         self.height = height
+        // Inline images often share a long header (SVG's xmlns), so a prefix alone would collide.
+        self.cacheKey = artifactId ?? url ?? base64.map { "inline:\($0.utf8.count):\(Self.stableHash($0))" } ?? "image"
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case artifactId, base64, url, mimeType, alt, width, height
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            artifactId: try c.decodeIfPresent(String.self, forKey: .artifactId),
+            base64: try c.decodeIfPresent(String.self, forKey: .base64),
+            url: try c.decodeIfPresent(String.self, forKey: .url),
+            mimeType: try c.decodeIfPresent(String.self, forKey: .mimeType),
+            alt: try c.decodeIfPresent(String.self, forKey: .alt),
+            width: try c.decodeIfPresent(Int.self, forKey: .width),
+            height: try c.decodeIfPresent(Int.self, forKey: .height))
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(self.artifactId, forKey: .artifactId)
+        try c.encodeIfPresent(self.base64, forKey: .base64)
+        try c.encodeIfPresent(self.url, forKey: .url)
+        try c.encodeIfPresent(self.mimeType, forKey: .mimeType)
+        try c.encodeIfPresent(self.alt, forKey: .alt)
+        try c.encodeIfPresent(self.width, forKey: .width)
+        try c.encodeIfPresent(self.height, forKey: .height)
+    }
+
+    public static func == (a: ImageRef, b: ImageRef) -> Bool {
+        a.cacheKey == b.cacheKey && a.artifactId == b.artifactId && a.url == b.url && a.mimeType == b.mimeType
+            && a.alt == b.alt && a.width == b.width && a.height == b.height && a.base64 == b.base64
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(self.cacheKey)
+        hasher.combine(self.artifactId)
+        hasher.combine(self.url)
+        hasher.combine(self.mimeType)
+        hasher.combine(self.alt)
+        hasher.combine(self.width)
+        hasher.combine(self.height)
     }
 
     /// FNV-1a, stable across launches (unlike `hashValue`).
