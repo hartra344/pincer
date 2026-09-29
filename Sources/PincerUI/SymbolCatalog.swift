@@ -15,13 +15,26 @@ enum SymbolCatalog {
         var id: String { self.name }
     }
 
+    private static let availability = NSLock()
+    nonisolated(unsafe) private static var availabilityCache: [String: Bool] = [:]
+
     static func isAvailable(_ name: String) -> Bool {
         guard !name.isEmpty else { return false }
+        self.availability.lock()
+        if let hit = self.availabilityCache[name] {
+            self.availability.unlock()
+            return hit
+        }
+        self.availability.unlock()
         #if os(macOS)
-        return NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil
+        let found = NSImage(systemSymbolName: name, accessibilityDescription: nil) != nil
         #else
-        return UIImage(systemName: name) != nil
+        let found = UIImage(systemName: name) != nil
         #endif
+        self.availability.lock()
+        self.availabilityCache[name] = found
+        self.availability.unlock()
+        return found
     }
 
     /// Other OpenClaw clients store these named glyphs in a session's `icon`.

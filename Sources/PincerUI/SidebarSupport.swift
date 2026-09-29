@@ -419,6 +419,24 @@ enum SidebarDragPayload {
 }
 
 extension SidebarModel {
+    /// Ids of headers and entries present in both models whose values differ.
+    static func changedRowKeys(old: SidebarModel, new: SidebarModel) -> [String] {
+        var oldHeaders: [String: Header] = [:]
+        var oldEntries: [String: Entry] = [:]
+        var changed: [String] = []
+        for group in old.groups {
+            oldHeaders[group.header.id] = group.header
+            for entry in group.entries { oldEntries[entry.id] = entry }
+        }
+        for group in new.groups {
+            if let previous = oldHeaders[group.header.id], previous != group.header { changed.append(group.header.id) }
+            for entry in group.entries {
+                if let previous = oldEntries[entry.id], previous != entry { changed.append(entry.id) }
+            }
+        }
+        return changed
+    }
+
     var groupNamesInOrder: [String] {
         self.groups.compactMap { group in
             if case let .group(name) = group.header.section.kind { return name }

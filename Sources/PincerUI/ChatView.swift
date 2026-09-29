@@ -2,6 +2,23 @@ import PincerKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+#if DEBUG
+/// Body-evaluation counts by view name, for measuring invalidation per streamed token.
+enum BodyCounter {
+    nonisolated(unsafe) static var counts: [String: Int] = [:]
+    static func hit(_ name: String) { self.counts[name, default: 0] += 1 }
+
+    /// Prints and resets the counts when PINCER_BODY_COUNTS=1; called as a run ends.
+    static func report() {
+        defer { self.counts = [:] }
+        guard ProcessInfo.processInfo.environment["PINCER_BODY_COUNTS"] == "1" else { return }
+        let line = ["ChatView", "TranscriptPane", "Composer", "ReasoningHint"]
+            .map { "\($0)=\(self.counts[$0, default: 0])" }.joined(separator: " ")
+        FileHandle.standardError.write(Data("BODY_COUNTS \(line)\n".utf8))
+    }
+}
+#endif
+
 struct ChatView: View {
     let chat: ChatStore
     @Environment(GatewayStore.self) private var gateway
@@ -14,7 +31,7 @@ struct ChatView: View {
     @State private var find = TranscriptFind()
     @State private var jump: TranscriptJump?
 
-    private var row: SessionRow? { self.gateway.sessions[self.chat.sessionKey] }
+    private var row: SessionRow? { self.chat.sessionRow }
     private var agent: AgentSummary { self.gateway.agent(self.row?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main") }
 
     /// Heights of the floating chrome, so the transcript can scroll underneath it.
@@ -23,7 +40,15 @@ struct ChatView: View {
     @State private var safeArea = EdgeInsets()
 
     var body: some View {
-        self.transcript
+        #if DEBUG
+        let _ = BodyCounter.hit("ChatView")
+        #endif
+        TranscriptPane(
+            chat: self.chat, find: self.find, jump: self.jump, disclosure: self.disclosure,
+            previewing: self.$previewing, exporting: self.$exporting,
+            bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
+            topInset: self.topChrome + self.transcriptSafeArea.top,
+            reasoningOff: self.reasoningOff)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Measured outside the transcript's ignored region, so these are the toolbar and
             // home-indicator heights the transcript runs under. (Inside it, macOS reports zero.)
@@ -43,24 +68,20 @@ struct ChatView: View {
                 VStack(spacing: 0) {
                     self.errorBar
                     self.noticeBar
-                    self.reasoningHint
+                    ReasoningHint(chat: self.chat, level: self.row?.reasoningLevel, dismissed: self.$hintDismissed)
                     if let card = self.chat.progressCard {
                         ProgressCardView(chat: self.chat, card: card)
                     }
                     PendingQuestionCard(chat: self.chat)
-                    Composer(chat: self.chat, placeholder: L("Message #\(self.row?.title ?? L("chat"))"),
-                             autoFocus: { [find = self.find, app = self.app, gateway = self.gateway, chat = self.chat] in
-                                 // Opening on a message search result: the Find field keeps focus.
-                                 !find.isPresented && !Self.hasFindRequest(app: app, gateway: gateway, chat: chat)
-                             })
+                    Composer(chat: self.chat, placeholder: L("Message #\(self.row?.title ?? L("chat"))"), find: self.find)
                 }
+                .modifier(QuestionsAnimation())
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.bottomChrome = $0 }
             }
             .animation(.snappy, value: self.chat.errorMessage)
             .animation(.snappy, value: self.chat.notice)
             .animation(.snappy, value: self.chat.replyTarget)
             .animation(.snappy, value: self.chat.progressCard)
-            .animation(.snappy, value: self.gateway.questions.map(\.id))
         .sheet(item: self.$previewing) { ref in
             ImagePreview(ref: ref, sessionKey: self.chat.sessionKey)
         }
@@ -81,14 +102,14 @@ struct ChatView: View {
             try? await Task.sleep(for: .seconds(4))
             self.chat.notice = nil
         }
-        .onAppear { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
-        .onChange(of: self.chat.entries) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
-        .onChange(of: self.reasoningOff) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
         .onChange(of: self.app.findRequest, initial: true) { self.takeFindRequest() }
         .onChange(of: self.app.messageJump, initial: true) { self.takeMessageJump() }
         .onChange(of: self.chat.hasLoaded) { self.takeMessageJump() }
         .onChange(of: self.chat.lastOutcomeAt) { _, finished in
             if finished != nil { self.announceOutcome() }
+            #if DEBUG
+            if finished != nil { BodyCounter.report() }
+            #endif
         }
         .modifier(ChatHandoff(sessionKey: self.chat.sessionKey))
         #if os(iOS)
@@ -131,7 +152,7 @@ struct ChatView: View {
     }
 
     /// A message search result is waiting to open Find in this chat.
-    private static func hasFindRequest(app: AppModel, gateway: GatewayStore, chat: ChatStore) -> Bool {
+    static func hasFindRequest(app: AppModel, gateway: GatewayStore, chat: ChatStore) -> Bool {
         guard let request = app.findRequest else { return false }
         return request.target.gatewayId == gateway.id && gateway.resolveSessionKey(request.target.sessionKey) == chat.sessionKey
     }
@@ -202,7 +223,94 @@ struct ChatView: View {
         }
     }
 
-    @ViewBuilder private var transcript: some View {
+    /// The safe area the transcript has to inset for itself. UIKit's scroll view already adds its
+    /// own safe area (and SwiftUI shrinks it for the keyboard), so only macOS passes it through.
+    private var transcriptSafeArea: EdgeInsets {
+        #if os(macOS)
+        self.safeArea
+        #else
+        EdgeInsets()
+        #endif
+    }
+}
+
+/// The "Thinking isn't being saved" hint. Its own view so its reads don't invalidate `ChatView`.
+private struct ReasoningHint: View {
+    let chat: ChatStore
+    let level: String?
+    @Binding var dismissed: Bool
+    @Environment(GatewayStore.self) private var gateway
+
+    @ViewBuilder var body: some View {
+        #if DEBUG
+        let _ = BodyCounter.hit("ReasoningHint")
+        #endif
+        if !self.dismissed, self.chat.hasLoaded, !self.chat.sawThinking, self.level != "on", self.level != "stream",
+           self.chat.items.contains { $0.role == .assistant }
+        {
+            HStack(spacing: 8) {
+                Image(systemName: "brain").foregroundStyle(.purple)
+                Text("Thinking isn’t being saved for this session.", bundle: .module)
+                    .font(.callout)
+                Button(L("Turn On")) {
+                    Task { await self.gateway.patch(self.chat.sessionKey, ["reasoningLevel": "on"]) }
+                }
+                .glassButton()
+                .controlSize(.small)
+                Text("or send `/reasoning on`", bundle: .module).font(.callout).foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Button {
+                    withAnimation(.snappy) { self.dismissed = true }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L("Dismiss"))
+            }
+            .padding(.leading, 14)
+            .padding(.trailing, 6)
+            .padding(.vertical, 6)
+            .glassSurface(in: Capsule(), tint: .purple)
+            .padding(.horizontal, 14)
+            .padding(.top, 6)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+}
+
+/// The transcript and its empty and loading states. The only view that observes `chat.entries`,
+/// so a streamed token re-evaluates this and not `ChatView`.
+private struct TranscriptPane: View {
+    let chat: ChatStore
+    let find: TranscriptFind
+    let jump: TranscriptJump?
+    let disclosure: TranscriptDisclosure
+    @Binding var previewing: ImageRef?
+    @Binding var exporting: ExportedFile?
+    let bottomInset: CGFloat
+    let topInset: CGFloat
+    let reasoningOff: Bool
+    @Environment(GatewayStore.self) private var gateway
+
+    private var agent: AgentSummary {
+        self.gateway.agent(self.chat.sessionRow?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main")
+    }
+
+    var body: some View {
+        #if DEBUG
+        let _ = BodyCounter.hit("TranscriptPane")
+        #endif
+        self.content
+            .onAppear { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
+            .onChange(of: self.chat.entries) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
+            .onChange(of: self.reasoningOff) { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
+    }
+
+    @ViewBuilder private var content: some View {
         if self.chat.entries.isEmpty, self.chat.isLoading || !self.chat.hasLoaded {
             // Until history has loaded once (cache still reading, or the Gateway reconnecting after
             // the app was suspended), an empty chat isn't known to be empty.
@@ -228,64 +336,25 @@ struct ChatView: View {
                     disclosure: self.disclosure,
                     agent: self.agent,
                     sessionKey: self.chat.sessionKey,
-                    previewImage: { self.previewing = $0 },
-                    saveFile: { file, data in self.exporting = ExportedFile(name: file.name, data: data) },
+                    previewImage: { [$previewing] in $previewing.wrappedValue = $0 },
+                    saveFile: { [$exporting] file, data in $exporting.wrappedValue = ExportedFile(name: file.name, data: data) },
                     chat: self.chat,
-                    reply: { self.chat.beginReply(to: $0, agentName: self.agent.name) }),
-                bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
-                topInset: self.topChrome + self.transcriptSafeArea.top,
+                    reply: { [chat = self.chat, agent = self.agent] in chat.beginReply(to: $0, agentName: agent.name) }),
+                bottomInset: self.bottomInset,
+                topInset: self.topInset,
                 highlight: self.find.highlight,
                 jump: self.jump)
                 .ignoresSafeArea(.container, edges: [.top, .bottom])
         }
     }
+}
 
-    /// The safe area the transcript has to inset for itself. UIKit's scroll view already adds its
-    /// own safe area (and SwiftUI shrinks it for the keyboard), so only macOS passes it through.
-    private var transcriptSafeArea: EdgeInsets {
-        #if os(macOS)
-        self.safeArea
-        #else
-        EdgeInsets()
-        #endif
-    }
+/// Animates the bottom stack as pending questions come and go, without `ChatView` observing them.
+private struct QuestionsAnimation: ViewModifier {
+    @Environment(GatewayStore.self) private var gateway
 
-    @ViewBuilder private var reasoningHint: some View {
-        let level = self.row?.reasoningLevel
-        if !self.hintDismissed, self.chat.hasLoaded, !self.chat.sawThinking, level != "on", level != "stream",
-           self.chat.entries.contains(where: { if case .assistant = $0 { true } else { false } })
-        {
-            HStack(spacing: 8) {
-                Image(systemName: "brain").foregroundStyle(.purple)
-                Text("Thinking isn’t being saved for this session.", bundle: .module)
-                    .font(.callout)
-                Button(L("Turn On")) {
-                    Task { await self.gateway.patch(self.chat.sessionKey, ["reasoningLevel": "on"]) }
-                }
-                .glassButton()
-                .controlSize(.small)
-                Text("or send `/reasoning on`", bundle: .module).font(.callout).foregroundStyle(.secondary)
-                Spacer(minLength: 8)
-                Button {
-                    withAnimation(.snappy) { self.hintDismissed = true }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 22, height: 22)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(L("Dismiss"))
-            }
-            .padding(.leading, 14)
-            .padding(.trailing, 6)
-            .padding(.vertical, 6)
-            .glassSurface(in: Capsule(), tint: .purple)
-            .padding(.horizontal, 14)
-            .padding(.top, 6)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
+    func body(content: Content) -> some View {
+        content.animation(.snappy, value: self.gateway.questions.map(\.id))
     }
 }
 
