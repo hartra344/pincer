@@ -18,7 +18,7 @@ struct VoiceSettingsPage: View {
                 Section {
                     Picker(L("Provider"), selection: Binding(get: { status.provider }, set: { id in self.apply { try await model.setProvider(id) } })) {
                         ForEach(self.providerRows(status)) { row in
-                            Text(row.configured ? row.name : "\(row.name) · \(L("Not configured"))")
+                            Text(row.configured ? row.name : "\(row.name) · \(L("Not Configured"))")
                                 .tag(row.id)
                                 .selectionDisabled(!row.configured && row.id != status.provider)
                         }
@@ -33,9 +33,9 @@ struct VoiceSettingsPage: View {
                     Text("Read Aloud uses this voice when your device is allowed to use it. Change the voice source under Settings → Conversation.", bundle: .module)
                 }
                 Section {
-                    Toggle(L("Speak replies on channels"), isOn: Binding(get: { status.enabled }, set: { on in self.apply { try await model.setAutoSpeakChannels(on) } }))
+                    Toggle(L("Speak Replies on Channels"), isOn: Binding(get: { status.enabled }, set: { on in self.apply { try await model.setAutoSpeakChannels(on) } }))
                 } footer: {
-                    Text("Makes the Gateway attach spoken audio to every reply it sends on channels like Discord or Telegram. It doesn't affect Read Aloud in Pincer.", bundle: .module)
+                    Text("This is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer.", bundle: .module)
                 }
                 .disabled(!model.canWrite)
                 if !model.canWrite {

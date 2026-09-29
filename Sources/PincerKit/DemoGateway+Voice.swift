@@ -85,15 +85,15 @@ extension DemoGateway {
         }
     }
 
-    /// A 0.4 s soft two-note chime as a 16-bit mono 22.05 kHz WAV.
+    /// A 0.6 s gentle two-note chime as a 16-bit mono 22.05 kHz WAV.
     static func demoTone() -> Data {
         let rate = 22050
-        let count = rate * 4 / 10
+        let count = rate * 6 / 10
         var samples = Data(capacity: count * 2)
         for index in 0 ..< count {
             let t = Double(index) / Double(rate)
-            let frequency = t < 0.2 ? 660.0 : 880.0
-            let envelope = min(1, Double(count - index) / Double(rate / 10)) * min(1, t * 200)
+            let frequency = t < 0.3 ? 660.0 : 880.0
+            let envelope = min(1, Double(count - index) / Double(rate / 5)) * min(1, t * 100)
             let value = Int16(sin(2 * .pi * frequency * t) * 0.2 * envelope * Double(Int16.max))
             withUnsafeBytes(of: value.littleEndian) { samples.append(contentsOf: $0) }
         }

@@ -20,18 +20,18 @@ struct ReadAloudSettingsSection: View {
     var body: some View {
         SwiftUI.Section {
             Picker(L("Voice"), selection: self.$source) {
-                Text("Automatic — Gateway when available", bundle: .module).tag(ReadAloudSettings.sourceAutomatic)
-                Text("This device only", bundle: .module).tag(ReadAloudSettings.sourceDevice)
+                Text("Automatic", bundle: .module).tag(ReadAloudSettings.sourceAutomatic)
+                Text("This Device Only", bundle: .module).tag(ReadAloudSettings.sourceDevice)
             }
-            Picker(L("Device voice"), selection: self.$deviceVoice) {
+            Picker(L("Device Voice"), selection: self.$deviceVoice) {
                 Text("System Default", bundle: .module).tag("")
                 ForEach(self.voices, id: \.identifier) { Text($0.name).tag($0.identifier) }
             }
-            LabeledContent(L("Speaking rate")) {
+            LabeledContent(L("Speaking Rate")) {
                 Slider(value: self.$rate, in: Double(ReadAloudSettings.rateRange.lowerBound) ... Double(ReadAloudSettings.rateRange.upperBound))
                     .frame(maxWidth: 200)
             }
-            Toggle(L("Read new replies aloud"), isOn: self.$autoRead)
+            Toggle(L("Read New Replies Aloud"), isOn: self.$autoRead)
             Button(self.controller.isActive ? L("Stop") : L("Test")) {
                 if self.controller.isActive {
                     self.controller.stop()
@@ -42,7 +42,7 @@ struct ReadAloudSettingsSection: View {
         } header: {
             Text("Read Aloud", bundle: .module)
         } footer: {
-            Text("Speaks a reply from its context menu. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on.", bundle: .module)
+            Text("Speaks a reply from its context menu. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on.", bundle: .module)
         }
     }
 }
