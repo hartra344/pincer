@@ -105,6 +105,10 @@ public final class GatewayHealthModel {
     public private(set) var healthFailure: String?
     public private(set) var loadState = OperationState.idle
     public private(set) var hasLoaded = false
+    /// Capture the first load's issues as quiet in the sidebar indicator until the Health page is viewed (the demo).
+    public var quietsInitialIssues = false
+    /// Issue ids the sidebar indicator skips; the Health page, menu bar and Settings still count them.
+    public private(set) var quietedIssueIds: Set<String> = []
     public private(set) var restartState = RestartState.idle
     /// A config or plugin change that only takes effect after a restart.
     public private(set) var restartRequiredReason: String?
@@ -135,8 +139,9 @@ public final class GatewayHealthModel {
     @ObservationIgnored private var generation = 0
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, localDeviceId: String?,
-         simulatedRestart: Bool = false) {
+         simulatedRestart: Bool = false, quietsInitialIssues: Bool = false) {
         self.simulatedRestart = simulatedRestart
+        self.quietsInitialIssues = quietsInitialIssues
         self.request = { method, params in try await connection.request(method, params, timeout: 30) }
         self.hello = hello
         self.localDeviceId = localDeviceId
@@ -148,9 +153,10 @@ public final class GatewayHealthModel {
     public init(methods: @escaping @MainActor () -> Set<String>? = { nil },
                 scopes: @escaping @MainActor () -> [String] = { [] },
                 localDeviceId: String? = nil, localInstanceId: String? = nil,
-                dismissals: [String: String] = [:],
+                dismissals: [String: String] = [:], quietsInitialIssues: Bool = false,
                 request: @escaping Request)
     {
+        self.quietsInitialIssues = quietsInitialIssues
         self.request = request
         self.dismissals = dismissals
         self.hello = { nil }
@@ -291,7 +297,7 @@ public final class GatewayHealthModel {
         }
         guard self.connection == .connected else { return nil }
         if self.needsRestart { return .restartNeeded }
-        let count = self.activeIssues.count
+        let count = self.activeIssues.filter { !self.quietedIssueIds.contains($0.id) }.count
         return count > 0 ? .degraded(issues: count) : nil
     }
 
@@ -469,7 +475,17 @@ public final class GatewayHealthModel {
         _ = await (health, heartbeat, presence)
         guard generation == self.generation else { return }
         if self.loadState.isRunning { self.loadState = .idle }
+        if !self.hasLoaded, self.quietsInitialIssues {
+            self.quietedIssueIds = Set(self.activeIssues.map(\.id))
+            self.quietsInitialIssues = false
+        }
         self.hasLoaded = true
+    }
+
+    /// The Health page was opened: the sidebar indicator counts every issue again.
+    public func markIssuesViewed() {
+        self.quietsInitialIssues = false
+        self.quietedIssueIds = []
     }
 
     /// The periodic refresh: `health` and `last-heartbeat`.
