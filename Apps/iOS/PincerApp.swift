@@ -37,6 +37,10 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate {
         return true
     }
 
+    func applicationWillTerminate(_ application: UIApplication) {
+        AppModel.shared.saveOutboxesNow()
+    }
+
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         PushRegistrar.shared.setDeviceToken(deviceToken)
     }

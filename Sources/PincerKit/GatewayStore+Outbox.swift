@@ -38,8 +38,13 @@ extension GatewayStore {
             }
             return
         }
-        let (saved, _) = await OutboxStore.load(gatewayId: self.id)
-        guard var saved, !saved.isEmpty else { return }
+        let (saved, _) = await OutboxStore.load(gatewayId: self.id, root: self.outboxRoot)
+        // Saving starts only now, so what's composed while the file is read doesn't overwrite it.
+        self.outboxRestored = true
+        guard var saved, !saved.isEmpty else {
+            if !self.outbox.persistable.isEmpty { OutboxStore.enqueueSave(self.outbox, gatewayId: self.id, root: self.outboxRoot) }
+            return
+        }
         saved.recoverAfterLaunch()
         // Anything composed while the file was being read goes after what was saved.
         for entry in self.outbox.entries where saved.entry(id: entry.id) == nil { saved.enqueue(entry) }
@@ -57,14 +62,22 @@ extension GatewayStore {
         for id in self.outboxAttachments.keys where self.outbox.entry(id: id) == nil {
             self.outboxAttachments.removeValue(forKey: id)
         }
-        guard self.outboxLoaded, !self.profile.isDemo, old.persistable != self.outbox.persistable else { return }
-        let previous = self.outboxSaveTask
-        let outbox = self.outbox
-        let id = self.id
-        self.outboxSaveTask = Task.detached(priority: .utility) {
-            await previous?.value
-            await OutboxStore.save(outbox, gatewayId: id)
-        }
+        guard self.outboxRestored, !self.profile.isDemo, old.persistable != self.outbox.persistable else { return }
+        OutboxStore.enqueueSave(self.outbox, gatewayId: self.id, root: self.outboxRoot)
+    }
+
+    /// Writes the outbox to disk now, on this thread: the app is about to quit.
+    public func saveOutboxNow() {
+        guard self.outboxRestored, !self.profile.isDemo else { return }
+        OutboxStore.saveNow(self.outbox, gatewayId: self.id, root: self.outboxRoot)
+    }
+
+    /// Saves the outbox one last time (unless it's being discarded) and stops saving it: a store
+    /// replacing this one (after an edit) reads that file, and a send still finishing here
+    /// mustn't overwrite it afterwards.
+    func retireOutbox(save: Bool = true) {
+        if save { self.saveOutboxNow() }
+        self.outboxRestored = false
     }
 
     /// Drops entries whose send already shows in the transcript.

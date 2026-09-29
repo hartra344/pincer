@@ -51,6 +51,8 @@ public enum OutboxStore {
 
     public static func load(gatewayId: UUID, root: URL? = Self.root) async -> (outbox: Outbox?, outcome: LoadOutcome) {
         guard let url = self.file(gatewayId: gatewayId, root: root) else { return (nil, .missing) }
+        // A store that just stopped may still be writing this file; read what it wrote last.
+        await self.pendingWrite(to: url)?.value
         return await Task.detached(priority: .userInitiated) {
             let data: Data
             do {
@@ -78,13 +80,84 @@ public enum OutboxStore {
 
     /// Writes the outbox (only entries that survive a relaunch), or removes the file when empty.
     public static func save(_ outbox: Outbox, gatewayId: UUID, root: URL? = Self.root) async {
-        guard let url = self.file(gatewayId: gatewayId, root: root) else { return }
-        await Writer.shared.write(outbox.persistable, to: url)
+        self.enqueueSave(outbox, gatewayId: gatewayId, root: root)
+        await self.flushWrites(gatewayId: gatewayId, root: root)
     }
 
-    public static func remove(gatewayId: UUID, root: URL? = Self.root) {
+    /// Queues a `save` behind this Gateway's earlier ones and returns at once. `load` waits for
+    /// the queue, so a store started right after another stopped (editing a Gateway, a relaunch in
+    /// checks) reads the last outbox the old one wrote, not an older file.
+    public static func enqueueSave(_ outbox: Outbox, gatewayId: UUID, root: URL? = Self.root) {
         guard let url = self.file(gatewayId: gatewayId, root: root) else { return }
-        try? FileManager.default.removeItem(at: url)
+        let outbox = outbox.persistable
+        self.queue.withLock { queue in
+            let generation = queue.next(for: url)
+            let previous = queue.tasks[url]
+            queue.tasks[url] = Task.detached(priority: .utility) {
+                await previous?.value
+                Self.write(outbox, to: url, generation: generation)
+            }
+        }
+    }
+
+    /// Writes the outbox on this thread, ahead of anything still queued (which then never lands):
+    /// for when the app is about to quit and a queued write might not get to run.
+    public static func saveNow(_ outbox: Outbox, gatewayId: UUID, root: URL? = Self.root) {
+        guard let url = self.file(gatewayId: gatewayId, root: root) else { return }
+        let generation = self.queue.withLock { $0.next(for: url) }
+        self.write(outbox.persistable, to: url, generation: generation)
+    }
+
+    /// Returns once every write queued so far for this Gateway has landed.
+    public static func flushWrites(gatewayId: UUID, root: URL? = Self.root) async {
+        guard let url = self.file(gatewayId: gatewayId, root: root) else { return }
+        await self.pendingWrite(to: url)?.value
+    }
+
+    /// Deletes the file now; writes still queued for it never land.
+    public static func remove(gatewayId: UUID, root: URL? = Self.root) {
+        self.saveNow(Outbox(), gatewayId: gatewayId, root: root)
+    }
+
+    private struct WriteQueue {
+        /// The last queued write per file; each waits for the one before it.
+        var tasks: [URL: Task<Void, Never>] = [:]
+        var generations: [URL: Int] = [:]
+
+        mutating func next(for url: URL) -> Int {
+            let generation = self.generations[url, default: 0] + 1
+            self.generations[url] = generation
+            return generation
+        }
+    }
+
+    private static let queue = OSAllocatedUnfairLock(initialState: WriteQueue())
+    /// Serializes file writes and remembers the newest generation written per file, so an older
+    /// outbox never lands after a newer one.
+    private static let written = NSLock()
+    nonisolated(unsafe) private static var writtenGenerations: [URL: Int] = [:]
+
+    private static func pendingWrite(to url: URL) -> Task<Void, Never>? {
+        self.queue.withLock { $0.tasks[url] }
+    }
+
+    private static func write(_ outbox: Outbox, to url: URL, generation: Int) {
+        self.written.lock()
+        defer { self.written.unlock() }
+        guard generation > self.writtenGenerations[url, default: 0] else { return }
+        self.writtenGenerations[url] = generation
+        let files = FileManager.default
+        guard !outbox.isEmpty else {
+            try? files.removeItem(at: url)
+            return
+        }
+        do {
+            try files.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let data = try OutboxStore.encoder.encode(Envelope(version: OutboxStore.currentVersion, outbox: outbox))
+            try data.write(to: url, options: [.atomic, .completeFileProtection])
+        } catch {
+            OutboxStore.logger.error("Couldn't write outbox \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private static func moveAside(_ url: URL, suffix: String) {
@@ -107,24 +180,4 @@ public enum OutboxStore {
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }()
-
-    /// Serializes writes so an older outbox never lands after a newer one.
-    private actor Writer {
-        static let shared = Writer()
-
-        func write(_ outbox: Outbox, to url: URL) {
-            let files = FileManager.default
-            guard !outbox.isEmpty else {
-                try? files.removeItem(at: url)
-                return
-            }
-            do {
-                try files.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-                let data = try OutboxStore.encoder.encode(Envelope(version: OutboxStore.currentVersion, outbox: outbox))
-                try data.write(to: url, options: [.atomic, .completeFileProtection])
-            } catch {
-                OutboxStore.logger.error("Couldn't write outbox \(url.lastPathComponent, privacy: .private): \(error.localizedDescription, privacy: .public)")
-            }
-        }
-    }
 }

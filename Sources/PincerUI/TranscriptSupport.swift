@@ -89,6 +89,13 @@ struct TranscriptContext {
     }
 }
 
+/// One line of the branch switcher's menu.
+struct TranscriptBranchEntry {
+    let leafEntryId: String
+    let title: String
+    let isActive: Bool
+}
+
 /// What row views can ask of the list they're in.
 @MainActor
 protocol TranscriptRowActions: AnyObject {
@@ -125,6 +132,11 @@ protocol TranscriptRowActions: AnyObject {
     func toggleReaction(_ emoji: String, on messageId: String)
     /// Opens the emoji picker for a message, anchored to `rect` in `view`.
     func pickReaction(for messageId: String, from view: PView, rect: CGRect)
+    /// The chat's branches, oldest first, for the switcher's menu.
+    var branchEntries: [TranscriptBranchEntry] { get }
+    /// Switches to the branch `offset` places from the active one (-1 previous, 1 next).
+    func stepBranch(_ offset: Int)
+    func switchBranch(to leafEntryId: String)
     /// Scrolls to the message a reply quotes (loading older history if needed) and flashes it.
     func showOriginal(_ messageId: String)
     /// Animates the latest reply's avatar.
@@ -510,6 +522,9 @@ final class TranscriptRenderer: TranscriptRowActions {
             _ = chat.items
             _ = chat.agentReactions
             _ = chat.locatingReplyId
+            _ = chat.branchAnchorId
+            _ = chat.canSwitchBranches
+            _ = chat.isRunning
             _ = gateway.reactions
             _ = BookmarkStore.shared(gatewayId: gateway.id).bookmarks
         } onChange: { [weak self, weak chat] in
@@ -691,6 +706,26 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     var reactionsEnabled: Bool { self.settings.reactionsEnabled }
+
+    var branchEntries: [TranscriptBranchEntry] {
+        (self.context.chat?.branches ?? []).map { branch in
+            TranscriptBranchEntry(leafEntryId: branch.leafEntryId,
+                                  title: [branch.title, L("\(String(branch.messageCount)) messages")].joined(separator: " · "),
+                                  isActive: branch.active)
+        }
+    }
+
+    func stepBranch(_ offset: Int) {
+        guard let chat = self.context.chat, let number = chat.activeBranchNumber,
+              chat.branches.indices.contains(number - 1 + offset) else { return }
+        let target = chat.branches[number - 1 + offset].leafEntryId
+        Task { await chat.switchBranch(to: target) }
+    }
+
+    func switchBranch(to leafEntryId: String) {
+        guard let chat = self.context.chat else { return }
+        Task { await chat.switchBranch(to: leafEntryId) }
+    }
 
     func retrySend(_ id: String) {
         self.context.chat?.retry(outboxId: id)

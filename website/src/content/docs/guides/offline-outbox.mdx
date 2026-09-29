@@ -77,7 +77,7 @@ When a chat is deleted on the gateway, its unsent messages are deleted with it. 
 
 ## Where the outbox is stored
 
-The outbox is saved on your device, so queued and failed messages survive quitting Pincer and restarting your Mac, iPhone or iPad. Like drafts, it lives in Application Support, not in the [local cache](../local-cache/), so the system never clears it to free space and **Clear Cache…** doesn't touch it:
+The outbox is saved on your device, so queued and failed messages survive quitting Pincer, editing the gateway's connection, and restarting your Mac, iPhone or iPad. Pincer writes it whenever it changes and makes sure the last write lands before it quits or moves to the background. Like drafts, it lives in Application Support, not in the [local cache](../local-cache/), so the system never clears it to free space and **Clear Cache…** doesn't touch it:
 
 | Platform | File |
 |---|---|
