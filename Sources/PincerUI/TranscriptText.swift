@@ -80,7 +80,10 @@ enum TranscriptText {
 
     private static var liveRow: String?
     private static var liveGeneration = -1
-    private static var frozenChunks: [Key: FrozenChunk] = [:]
+    private static var liveTone: Tone?
+    /// The frozen part of the live row's text (`frozenText` bytes, up to its last cut) and the chunks built from it.
+    private static var frozenText = ""
+    private static var frozenChunks: [FrozenChunk] = []
     private static var frozenHeights: [HeightKey: (text: NSAttributedString, height: CGFloat)] = [:]
 
     /// Entries in the per-live-row memos, for tests.
@@ -95,52 +98,59 @@ enum TranscriptText {
     private static func resetLive(row: String?) {
         self.liveRow = row
         self.liveGeneration = TranscriptStyle.generation
+        self.liveTone = nil
+        self.frozenText = ""
         self.frozenChunks.removeAll()
         self.frozenHeights.removeAll()
     }
 
+    /// Whether `source` still starts with the frozen text (a memcmp, not a Character walk).
+    private static func extendsFrozen(_ source: String) -> Bool {
+        var known = self.frozenText
+        var new = source
+        let count = known.utf8.count
+        guard new.utf8.count >= count else { return false }
+        return known.withUTF8 { old in
+            new.withUTF8 { current in count == 0 || memcmp(old.baseAddress!, current.baseAddress!, count) == 0 }
+        }
+    }
+
     /// A streaming message as frozen chunks plus a fresh tail. Never touches the shared caches.
+    /// Only the text since the last cut is scanned and parsed; frozen chunks are reused as they are.
     static func liveMarkdown(_ source: String, tone: Tone, row: String) -> [LiveSegment] {
         if self.liveRow != row || self.liveGeneration != TranscriptStyle.generation { self.resetLive(row: row) }
-        let cuts = MarkdownBlock.streamingFreezePoints(source)
+        if self.liveTone != tone || !self.extendsFrozen(source) {
+            self.resetLive(row: row)
+            self.liveTone = tone
+        }
+        var start = source.utf8.index(source.startIndex, offsetBy: self.frozenText.utf8.count)
+        for cut in MarkdownBlock.streamingFreezePoints(source, from: start) where cut > start && cut <= source.endIndex {
+            let text = String(source[start..<cut])
+            start = cut
+            let blocks = MarkdownBlock.parse(text)
+            var heading = false
+            if case .heading = blocks.first { heading = true }
+            self.frozenChunks.append(FrozenChunk(segments: self.build(blocks, tone: tone, cached: false), startsWithHeading: heading))
+            self.frozenText += text
+        }
         var result: [LiveSegment] = []
         var previousEndsWithText = false
-        var start = source.startIndex
-        func add(_ chunk: FrozenChunk?, tail: [Segment] = [], startsWithHeading: Bool = false) {
-            let segments = chunk?.segments ?? tail
-            let heading = chunk?.startsWithHeading ?? startsWithHeading
+        func add(_ segments: [Segment], frozen: Bool, startsWithHeading: Bool) {
             for (index, segment) in segments.enumerated() {
                 var extra: CGFloat = 0
-                if index == 0, heading, previousEndsWithText, case .text = segment { extra = 2 }
-                result.append(LiveSegment(segment: segment, isFrozen: chunk != nil, extraSpacing: extra))
+                if index == 0, startsWithHeading, previousEndsWithText, case .text = segment { extra = 2 }
+                result.append(LiveSegment(segment: segment, isFrozen: frozen, extraSpacing: extra))
             }
             if let last = segments.last {
                 if case .text = last { previousEndsWithText = true } else { previousEndsWithText = false }
             }
         }
-        for cut in cuts where cut > start && cut <= source.endIndex {
-            let text = String(source[start..<cut])
-            start = cut
-            let key = Key(source: text, tone: tone)
-            let chunk: FrozenChunk
-            if let known = self.frozenChunks[key] {
-                chunk = known
-            } else {
-                let blocks = MarkdownBlock.parse(text)
-                let built = self.build(blocks, tone: tone, cached: false)
-                var heading = false
-                if case .heading = blocks.first { heading = true }
-                chunk = FrozenChunk(segments: built, startsWithHeading: heading)
-                self.frozenChunks[key] = chunk
-            }
-            add(chunk)
-        }
-        let tail = String(source[start...])
-        if !tail.isEmpty {
-            let blocks = MarkdownBlock.parse(tail)
+        for chunk in self.frozenChunks { add(chunk.segments, frozen: true, startsWithHeading: chunk.startsWithHeading) }
+        if start < source.endIndex {
+            let blocks = MarkdownBlock.parse(String(source[start...]))
             var heading = false
             if case .heading = blocks.first { heading = true }
-            add(nil, tail: self.build(blocks, tone: tone, cached: false), startsWithHeading: heading)
+            add(self.build(blocks, tone: tone, cached: false), frozen: false, startsWithHeading: heading)
         }
         return result
     }

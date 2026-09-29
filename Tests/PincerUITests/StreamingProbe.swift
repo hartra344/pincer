@@ -69,8 +69,8 @@ struct StreamingProbe {
         let renderer = TranscriptRenderer(context: context)
         let width: CGFloat = 700
         #if os(macOS)
-        let view = NSTextView(frame: NSRect(x: 0, y: 0, width: width, height: 100))
-        view.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+        var views: [NSTextView] = []
+        var shown: [NSAttributedString?] = []
         #endif
 
         let text = Self.reply(bytes: bytes)
@@ -92,11 +92,25 @@ struct StreamingProbe {
                 guard let last = rows.last else { return }
                 let layout = renderer.layout(for: last, width: width)
                 #if os(macOS)
+                // Like the row view: one view per text part, identity-equal strings are a no-op.
+                var index = 0
                 for placed in layout.parts {
-                    if case let .text(attributed) = placed.part {
-                        view.textStorage?.setAttributedString(attributed)
-                        if let container = view.textContainer { view.layoutManager?.ensureLayout(for: container) }
+                    guard case let .text(attributed) = placed.part else { continue }
+                    defer { index += 1 }
+                    if index >= views.count {
+                        let v = NSTextView(frame: NSRect(x: 0, y: 0, width: width, height: 100))
+                        v.textContainer?.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+                        views.append(v)
+                        shown.append(nil)
                     }
+                    if shown[index] === attributed { continue }
+                    let v = views[index]
+                    let old = shown[index]
+                    shown[index] = attributed
+                    if let storage = v.textStorage {
+                        storage.update(to: attributed, keepingPrefix: old != nil)
+                    }
+                    if let container = v.textContainer { v.layoutManager?.ensureLayout(for: container) }
                 }
                 #endif
                 _ = layout.height

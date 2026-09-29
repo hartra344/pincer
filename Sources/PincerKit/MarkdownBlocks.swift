@@ -168,12 +168,18 @@ public enum MarkdownBlock: Equatable, Sendable {
     /// Whether a cut exists depends only on the text before it, so it never moves as text grows.
     /// A cut is made once the pending chunk holds at least `minimumChunk` UTF-16 units.
     public static func streamingFreezePoints(_ text: String, minimumChunk: Int = 1024) -> [String.Index] {
+        self.streamingFreezePoints(text, from: text.startIndex, minimumChunk: minimumChunk)
+    }
+
+    /// The cut points at or after `start`, which must be `text.startIndex` or an earlier cut point:
+    /// cuts are stable, so a caller that kept the earlier ones only scans the text since the last.
+    public static func streamingFreezePoints(_ text: String, from start: String.Index, minimumChunk: Int = 1024) -> [String.Index] {
         let utf8 = text.utf8
         var points: [String.Index] = []
         var chunkUnits = 0
-        var lineStart = utf8.startIndex
+        var lineStart = start
         var inFence = false
-        var i = utf8.startIndex
+        var i = start
         while i < utf8.endIndex {
             guard utf8[i] == 0x0A else { i = utf8.index(after: i); continue }
             let next = utf8.index(after: i)
