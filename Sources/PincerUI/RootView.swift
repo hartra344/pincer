@@ -448,9 +448,9 @@ struct SettingsForm: View {
             SwiftUI.Section {
                 TextField(L("Display name"), text: self.$ownerName, prompt: Text(Owner.displayName))
             } header: {
-                Text("Text", bundle: .module)
+                Text("You", bundle: .module)
             } footer: {
-                Text("Text", bundle: .module)
+                Text("Your messages show under this name, whichever channel they came from.", bundle: .module)
             }
         case .tips:
             TipsSettingsSection()
@@ -474,9 +474,9 @@ struct SettingsForm: View {
                 .pickerStyle(.segmented)
                 ThemePresetGrid(selection: self.$preset)
             } header: {
-                Text("Text", bundle: .module)
+                Text("Theme", bundle: .module)
             } footer: {
-                Text("Text", bundle: .module)
+                Text("Themes set the accent, links, avatars and backgrounds. Default follows your system accent color.", bundle: .module)
             }
         case .avatars:
             AvatarSettingsSection()
@@ -487,7 +487,7 @@ struct SettingsForm: View {
                 }
             } header: {
                 HStack {
-                    Text("Text", bundle: .module)
+                    Text("Colors", bundle: .module)
                     Spacer()
                     if !self.theme.overrides.isEmpty {
                         Button(L("Reset All")) { AppTheme.resetOverrides() }
@@ -496,34 +496,34 @@ struct SettingsForm: View {
                     }
                 }
             } footer: {
-                Text("Text", bundle: .module)
+                Text("Pick a color to override the theme for just that part.", bundle: .module)
             }
         case .conversation:
             SwiftUI.Section(L("Conversation")) {
                 Picker(selection: self.$thinkingDisplay) {
                     ForEach(ThinkingDisplay.allCases) { Text($0.label).tag($0) }
                 } label: {
-                    Text("Text", bundle: .module)
+                    Text("Thinking steps", bundle: .module)
                     Text(self.thinkingDisplay.detail + " Includes reasoning and tool calls.")
                 }
                 Toggle(isOn: self.$loadWebImages) {
-                    Text("Text", bundle: .module)
-                    Text("Text", bundle: .module)
+                    Text("Load images the agent links from the web", bundle: .module)
+                    Text("Like OpenClaw's web UI. The image's website can see your IP address.", bundle: .module)
                 }
                 Toggle(isOn: self.$reactionsEnabled) {
-                    Text("Text", bundle: .module)
-                    Text("Text", bundle: .module)
+                    Text("Enable experimental reactions", bundle: .module)
+                    Text("Off by default. Reactions may not interoperate across channels or Gateways.", bundle: .module)
                 }
             }
         case .sidebar:
             SwiftUI.Section(L("Sidebar")) {
                 Toggle(isOn: self.$showMessagePreviews) {
-                    Text("Text", bundle: .module)
-                    Text("Text", bundle: .module)
+                    Text("Show last message under each chat", bundle: .module)
+                    Text("A one-line preview of the latest message in the chat list.", bundle: .module)
                 }
                 Toggle(isOn: self.$showSubagentRuns) {
-                    Text("Text", bundle: .module)
-                    Text("Text", bundle: .module)
+                    Text("List subagent runs under their chat", bundle: .module)
+                    Text("Off keeps one thread per chat. Open a run from its tool call instead.", bundle: .module)
                 }
             }
         case .notifications:
@@ -555,7 +555,7 @@ private struct TranscriptCacheSettingsSection: View {
         SwiftUI.Section {
             LabeledContent(L("Cached transcripts")) {
                 if !self.enabled {
-                    Text("Text", bundle: .module)
+                    Text("Off", bundle: .module)
                 } else if let usage {
                     Text(usage.formatted(.byteCount(style: .file)))
                         .monospacedDigit()
@@ -573,7 +573,7 @@ private struct TranscriptCacheSettingsSection: View {
                         }
                     }
                 } message: {
-                    Text("Text", bundle: .module)
+                    Text("Chats are downloaded again from your Gateways when you open them, and message search is rebuilt. Nothing on your Gateways is deleted.", bundle: .module)
                 }
             LabeledContent(L("Outbox")) {
                 Text(self.app.unsentCount == 1 ? "1 message" : "\(self.app.unsentCount.formatted()) messages")
@@ -584,12 +584,12 @@ private struct TranscriptCacheSettingsSection: View {
                 .confirmationDialog(L("Clear the outbox?"), isPresented: self.$confirmingUnsent, titleVisibility: .visible) {
                     Button(L("Clear Outbox"), role: .destructive) { self.app.discardUnsentMessages() }
                 } message: {
-                    Text("Text", bundle: .module)
+                    Text("Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected.", bundle: .module)
                 }
         } header: {
-            Text("Text", bundle: .module)
+            Text("Storage", bundle: .module)
         } footer: {
-            Text("Text", bundle: .module)
+            Text("Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send.", bundle: .module)
         }
         .task { await self.measure() }
     }
@@ -663,7 +663,7 @@ private struct ThemeColorRow: View {
                 HStack(spacing: Theme.Spacing.sm) {
                     Text(self.role.label)
                     if overridden {
-                        Text("Text", bundle: .module).font(.caption).foregroundStyle(.secondary)
+                        Text("Custom", bundle: .module).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }

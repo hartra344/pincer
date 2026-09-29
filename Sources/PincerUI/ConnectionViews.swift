@@ -62,7 +62,7 @@ struct ConnectionFields: View {
     var body: some View {
         Section {
             TextField(L("Name"), text: self.$draft.name)
-            TextField(L("Gateway URL"), text: self.$draft.url, prompt: Text("Text", bundle: .module))
+            TextField(L("Gateway URL"), text: self.$draft.url, prompt: Text("wss://home.tailnet-name.ts.net", bundle: .module))
                 .autocorrectionDisabled()
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
@@ -71,11 +71,11 @@ struct ConnectionFields: View {
             if let error = self.draft.urlError {
                 Text(error).font(.caption).foregroundStyle(.red)
             } else if self.draft.url.lowercased().hasPrefix("ws://"), self.draft.url.lowercased().contains(".ts.net") {
-                Text("Text", bundle: .module)
+                Text("Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port.", bundle: .module)
                     .font(.caption).foregroundStyle(.orange)
             }
         } footer: {
-            Text("Text", bundle: .module)
+            Text("Use your Tailscale Serve name (wss://…ts.net) or tailnet IP (ws://100.x.y.z:18789). Plain ws:// is only allowed for Tailscale, LAN and loopback addresses.", bundle: .module)
         }
 
         Section(L("Authentication")) {
@@ -98,19 +98,19 @@ struct ConnectionFields: View {
             .pickerStyle(.radioGroup)
             #endif
         } header: {
-            Text("Text", bundle: .module)
+            Text("Access", bundle: .module)
         } footer: {
             Text(self.draft.access.detail)
         }
 
         Section {
-            TextField(L("TLS certificate SHA-256"), text: self.$draft.fingerprint, prompt: Text("Text", bundle: .module))
+            TextField(L("TLS certificate SHA-256"), text: self.$draft.fingerprint, prompt: Text("Optional pin, hex", bundle: .module))
                 .font(.body.monospaced())
                 .autocorrectionDisabled()
         } header: {
-            Text("Text", bundle: .module)
+            Text("Security", bundle: .module)
         } footer: {
-            Text("Text", bundle: .module)
+            Text("Pincer connects as an operator only. It never runs a Gateway, never registers as a node, and stores secrets in the Keychain.", bundle: .module)
         }
     }
 }
@@ -136,7 +136,7 @@ struct ConnectionSheet: View {
                         self.dismiss()
                     }
                 } footer: {
-                    Text("Text", bundle: .module)
+                    Text("No Gateway yet? Explore Pincer with sample agents and chats. Nothing leaves this device.", bundle: .module)
                 }
             }
             .formStyle(.grouped)
@@ -178,7 +178,7 @@ struct ConnectionPage: View {
             self.statusSection
             if profile.isDemo {
                 Section {
-                    Text("Text", bundle: .module)
+                    Text("The demo runs a simulated Gateway on this device, with sample agents, chats and replies. Nothing is sent anywhere.", bundle: .module)
                 }
             } else {
                 ConnectionFields(draft: self.$draft, hasSavedSecret: profile.secret != nil)
@@ -223,12 +223,12 @@ struct ConnectionPage: View {
                 self.dismiss()
             }
         } message: {
-            Text("Text", bundle: .module)
+            Text("The saved token and device pairing token are deleted from this device.", bundle: .module)
         }
         .confirmationDialog(L("Reconnect and discard unsaved settings?"), isPresented: self.$confirmApply) {
             Button(L("Discard \(self.gateway.settings.changeCount) Changes & Reconnect"), role: .destructive, action: self.apply)
         } message: {
-            Text("Text", bundle: .module)
+            Text("Reconnecting to the Gateway starts over from its saved settings.", bundle: .module)
         }
     }
 
@@ -239,7 +239,7 @@ struct ConnectionPage: View {
             if case let .awaitingPairing(requestId, _) = self.gateway.state {
                 ApprovalInstructions(requestId: requestId)
             } else if self.gateway.profile.access == .admin, self.gateway.state.isConnected, !settings.canEdit {
-                Text("Text", bundle: .module)
+                Text("The Gateway hasn't granted Full Management to this device yet.", bundle: .module)
                     .foregroundStyle(.orange)
                 ApprovalInstructions(requestId: nil)
             }
@@ -277,7 +277,7 @@ struct ApprovalInstructions: View {
     var body: some View {
         let command = self.requestId.map { "openclaw devices approve \($0)" } ?? "openclaw devices list\nopenclaw devices approve <requestId>"
         VStack(alignment: .leading, spacing: Theme.Spacing.md) {
-            Text("Text", bundle: .module).font(.callout).foregroundStyle(.secondary)
+            Text("Approve this device on the Gateway host:", bundle: .module).font(.callout).foregroundStyle(.secondary)
             Text(command)
                 .font(.callout.monospaced())
                 .textSelection(.enabled)
@@ -293,7 +293,7 @@ struct ApprovalInstructions: View {
                 .buttonStyle(.borderless)
                 Spacer()
                 ProgressView().controlSize(.small)
-                Text("Text", bundle: .module).font(.caption).foregroundStyle(.secondary)
+                Text("Checking…", bundle: .module).font(.caption).foregroundStyle(.secondary)
             }
         }
     }
@@ -319,9 +319,9 @@ struct PairingView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.orange)
                 .symbolEffect(.pulse)
-            Text("Text", bundle: .module)
+            Text("Approve Pincer on your Gateway host", bundle: .module)
                 .font(.title2.bold())
-            Text("Text", bundle: .module)
+            Text("For your security, new devices must be approved on the machine running OpenClaw. Run this there:", bundle: .module)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 440)
@@ -348,14 +348,14 @@ struct PairingView: View {
             .tint(self.copied ? .green : self.theme.accent)
             .contentTransition(.symbolEffect(.replace))
             VStack(spacing: Theme.Spacing.xs) {
-                Text("Text", bundle: .module).font(.caption).foregroundStyle(.secondary)
+                Text("Device ID", bundle: .module).font(.caption).foregroundStyle(.secondary)
                 Text(self.deviceId.prefix(16) + "…")
                     .font(.caption.monospaced())
                     .textSelection(.enabled)
             }
             HStack(spacing: Theme.Spacing.sm) {
                 ProgressView().controlSize(.small)
-                Text("Text", bundle: .module).font(.callout).foregroundStyle(.secondary)
+                Text("Checking every few seconds…", bundle: .module).font(.callout).foregroundStyle(.secondary)
             }
         }
         .padding(Theme.Spacing.hero)

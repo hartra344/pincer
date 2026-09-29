@@ -122,10 +122,10 @@ private struct SetupIntroView: View {
             Image(systemName: "checklist")
                 .font(.system(size: 44))
                 .foregroundStyle(.tint)
-            Text("Text", bundle: .module)
+            Text("Set Up \(self.gateway.profile.name)", bundle: .module)
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
-            Text("Text", bundle: .module)
+            Text("Pick your default agent and model, look over skills, then send a test message. Skip anything you like.", bundle: .module)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 420)
@@ -188,7 +188,7 @@ private struct SetupStepList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Text", bundle: .module)
+            Text("Set Up \(self.gateway.profile.name)", bundle: .module)
                 .font(.headline)
                 .lineLimit(2)
                 .padding([.horizontal, .top], Theme.Spacing.xxl)
@@ -207,7 +207,7 @@ private struct SetupStepList: View {
                 .tag(step)
             }
             .listStyle(.sidebar)
-            Text("Text", bundle: .module)
+            Text("\(self.setup.settledCount) of \(SetupStep.allCases.count) done or skipped", bundle: .module)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(Theme.Spacing.xxl)
@@ -373,7 +373,7 @@ private struct SetupAgentStep: View {
             }
             Picker(L("Default model"), selection: Binding(get: { self.modelRef ?? gateway.defaultModelRef },
                                                         set: { self.modelRef = $0; self.saved = false })) {
-                if gateway.defaultModelRef == nil { Text("Text", bundle: .module).tag(String?.none) }
+                if gateway.defaultModelRef == nil { Text("None", bundle: .module).tag(String?.none) }
                 ForEach(catalog) { model in
                     Text(model.isAvailable ? model.displayName : "\(model.displayName) (unavailable)").tag(Optional(model.ref))
                 }
@@ -428,7 +428,7 @@ private struct SetupSkillsStep: View {
                 if missing.isEmpty {
                     Label(L("Every skill has what it needs."), systemImage: "checkmark.circle").foregroundStyle(.secondary)
                 } else {
-                    Text("Text", bundle: .module).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("Not set up", bundle: .module).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 }
                 ForEach(missing) { skill in
                     VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
@@ -438,10 +438,10 @@ private struct SetupSkillsStep: View {
                             if let emoji = skill.emoji { Text(emoji) } else { Image(systemName: "puzzlepiece.extension") }
                         }
                         if !skill.missing.isEmpty {
-                            Text("Text", bundle: .module).font(.caption).foregroundStyle(.secondary)
+                            Text("Needs \(skill.missing.joined(separator: ", "))", bundle: .module).font(.caption).foregroundStyle(.secondary)
                         }
                         if !skill.installOptions.isEmpty {
-                            Text("Text", bundle: .module)
+                            Text("Install: \(skill.installOptions.joined(separator: " · "))", bundle: .module)
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -539,7 +539,7 @@ private struct SetupTestReply: View {
         } else {
             HStack(spacing: Theme.Spacing.sm) {
                 ProgressView().controlSize(.small)
-                Text("Text", bundle: .module)
+                Text("Sent. Waiting for your agent…", bundle: .module)
                     .foregroundStyle(.secondary)
             }
         }

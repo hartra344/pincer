@@ -62,7 +62,7 @@ extension GatewayError {
     }
 
     /// The default missing-scope sentence, naming the scope when the Gateway did.
-    static func missingScopeMessage(for error: Error) -> String {
+    public static func missingScopeMessage(for error: Error) -> String {
         guard let scope = self.missingScope(error) ?? self.scopeHint(in: error) else {
             return L("Your device is missing a scope this needs. Approve it again from the Gateway with that scope.")
         }

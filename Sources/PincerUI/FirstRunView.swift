@@ -181,7 +181,7 @@ private struct FirstRunProgress: View {
                 }
             }
             .accessibilityHidden(true)
-            Text("Text", bundle: .module)
+            Text("Step \(self.number) of \(stages.count) · \(self.stage.title)", bundle: .module)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -398,13 +398,13 @@ private struct FirstRunWelcome: View {
                      showsFooter: false) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                 Button { self.model.send(.getStarted) } label: {
-                    Text("Text", bundle: .module).frame(maxWidth: .infinity)
+                    Text("Get Started", bundle: .module).frame(maxWidth: .infinity)
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("firstRun.getStarted")
                 Button { self.model.send(.tryDemo) } label: {
-                    Text("Text", bundle: .module).frame(maxWidth: .infinity)
+                    Text("Try the Demo", bundle: .module).frame(maxWidth: .infinity)
                 }
                 .keyboardShortcut("d", modifiers: .command)
                 .buttonStyle(.bordered)
@@ -481,7 +481,7 @@ private struct FirstRunInstall: View {
 
     private func step(_ number: Int, _ title: String, command: String, caption: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Text", bundle: .module).font(.headline)
+            Text("\(number). \(title)", bundle: .module).font(.headline)
             CommandBox(command: command)
             if let caption { Text(caption).font(.caption).foregroundStyle(.secondary) }
         }
@@ -532,7 +532,7 @@ private struct FirstRunFind: View {
                 self.model.send(.checkAddress)
             } label: {
                 if state.reachability.isChecking {
-                    HStack(spacing: Theme.Spacing.sm) { ProgressView().controlSize(.small); Text("Text", bundle: .module) }
+                    HStack(spacing: Theme.Spacing.sm) { ProgressView().controlSize(.small); Text("Checking…", bundle: .module) }
                 } else {
                     Text(state.canSkip ? L("Try Again") : L("Continue"))
                 }
@@ -553,7 +553,7 @@ private struct FirstRunFind: View {
 
     @ViewBuilder private func addressField(_ state: FirstRunState) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Text", bundle: .module).font(.headline)
+            Text("Gateway address", bundle: .module).font(.headline)
             TextField(L("Gateway address"), text: Binding(get: { self.model.state.address },
                                                        set: { self.model.send(.setAddress($0)) }),
                       prompt: Text(Self.placeholder(state.location)))
@@ -572,7 +572,7 @@ private struct FirstRunFind: View {
             } else if let message = state.reachabilityMessage {
                 InlineMessage(text: message)
             } else if !state.trimmedAddress.isEmpty {
-                Text("Text", bundle: .module)
+                Text("Pincer will connect to \(state.normalizedAddress)", bundle: .module)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
@@ -583,7 +583,7 @@ private struct FirstRunFind: View {
 
     private func nearby(_ gateways: [FirstRunDiscoveredGateway]) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-            Text("Text", bundle: .module).font(.headline).accessibilityAddTraits(.isHeader)
+            Text("Nearby", bundle: .module).font(.headline).accessibilityAddTraits(.isHeader)
             ForEach(gateways) { gateway in
                 Button {
                     self.model.send(.useDiscovered(gateway))
@@ -661,7 +661,7 @@ private struct FirstRunSignInScreen: View {
                 if let error = state.signInStatus.error { InlineMessage(text: error) }
             }
             VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                Text("Text", bundle: .module).foregroundStyle(.secondary)
+                Text("Run this on the Gateway host to see it:", bundle: .module).foregroundStyle(.secondary)
                 CommandBox(command: isToken ? FirstRunCopy.tokenCommand : FirstRunCopy.passwordCommand)
             }
             Button(isToken ? L("Use a password instead") : L("Use a token instead")) {
@@ -669,7 +669,7 @@ private struct FirstRunSignInScreen: View {
             }
             .firstRunLink()
             .disabled(state.signInStatus.isBusy)
-            Text("Text", bundle: .module)
+            Text("Signing in to \(state.normalizedAddress)", bundle: .module)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } secondary: {
@@ -677,9 +677,9 @@ private struct FirstRunSignInScreen: View {
         } primary: {
             PrimaryButton(action: self.signIn) {
                 if state.signInStatus == .connecting {
-                    HStack(spacing: Theme.Spacing.sm) { ProgressView().controlSize(.small); Text("Text", bundle: .module) }
+                    HStack(spacing: Theme.Spacing.sm) { ProgressView().controlSize(.small); Text("Signing in…", bundle: .module) }
                 } else {
-                    Text("Text", bundle: .module)
+                    Text("Sign In", bundle: .module)
                 }
             }
             .disabled(state.signInStatus.isBusy || self.model.secret.isEmpty)
@@ -717,17 +717,17 @@ private struct FirstRunPairing: View {
                      message: L("For your security, new devices need your OK. Run this on the Gateway host:")) {
             CommandBox(command: FirstRunCopy.approveCommand(requestId: self.requestId))
             if self.requestId == nil {
-                Text("Text", bundle: .module).font(.caption).foregroundStyle(.secondary)
+                Text("Find Pincer in the list and approve its request ID.", bundle: .module).font(.caption).foregroundStyle(.secondary)
             }
             if self.model.state.pairingRequestChanged {
                 InlineMessage(text: FirstRunCopy.requestChanged, isError: false)
             }
             HStack(spacing: Theme.Spacing.md) {
                 ProgressView().controlSize(.small)
-                Text("Text", bundle: .module)
+                Text("Waiting for approval…", bundle: .module)
             }
             .accessibilityElement(children: .combine)
-            Text("Text", bundle: .module)
+            Text("Device ID: \(String(self.deviceId.prefix(16)))…", bundle: .module)
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
@@ -737,7 +737,7 @@ private struct FirstRunPairing: View {
                 .fixedSize(horizontal: false, vertical: true)
             DisclosureGroup(L("Didn't work?"), isExpanded: self.$showsHelp) {
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text("Text", bundle: .module)
+                    Text("If you changed settings, the request ID may have changed. Run openclaw devices list to see the latest one.", bundle: .module)
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
                     CommandBox(command: FirstRunCopy.listDevicesCommand)
@@ -770,7 +770,7 @@ private struct FirstRunVerify: View {
                     LabeledContent(L("Access"), value: verified.hasFullManagement ? "Full Management" : "Chat and approvals")
                 }
                 VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                    Text("Text", bundle: .module).font(.headline)
+                    Text("Name", bundle: .module).font(.headline)
                     TextField(L("Name"), text: Binding(get: { self.model.state.name },
                                                     set: { self.model.send(.setName($0)) }),
                               prompt: Text(FirstRunState.suggestedName(for: state.normalizedAddress)))
@@ -788,7 +788,7 @@ private struct FirstRunVerify: View {
                 }
                 if let id = verified.questionsRequestId {
                     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
-                        Text("Text", bundle: .module).font(.callout).foregroundStyle(.secondary)
+                        Text("Answering agent questions is waiting for approval:", bundle: .module).font(.callout).foregroundStyle(.secondary)
                         CommandBox(command: FirstRunCopy.approveCommand(requestId: id))
                     }
                 }
