@@ -24,6 +24,22 @@ func check(_ condition: @autoclosure () -> Bool, _ label: String, line: UInt = #
 
 let skipPerfBudgets = CommandLine.arguments.contains("--skip-perf-budgets")
 
+/// Wall-clock ratios (one timing vs. another from the same run) swing with a shared CI runner's noise
+/// even in the solo perf-smoke lane, so on CI they're only reported unless opted in with
+/// `PINCER_WALL_CLOCK_CHECKS=1`. The counters and absolute ceilings are always enforced.
+let enforceWallClockRatios: Bool = {
+    let env = ProcessInfo.processInfo.environment
+    if skipPerfBudgets { return false }
+    return env["PINCER_WALL_CLOCK_CHECKS"] == "1" || env["CI"] == nil
+}()
+
+/// A wall-clock ratio check: enforced per `enforceWallClockRatios`, otherwise just reported.
+@MainActor
+func checkWallClockRatio(_ condition: @autoclosure () -> Bool, _ label: String, line: UInt = #line) {
+    if enforceWallClockRatios { return check(condition(), label, line: line) }
+    if !skipPerfBudgets, !condition() { print("  · \(label) (over the ratio, not enforced on CI)") }
+}
+
 /// A wall-clock budget. With --skip-perf-budgets, only going over `hardLimit` fails; over the
 /// budget is just reported.
 @MainActor
