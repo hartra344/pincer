@@ -96,8 +96,7 @@ struct ToolFileEditTests {
 
     // MARK: write
 
-    @Test(arguments: [("write", "content"), ("write", "text"), ("write_file", "content"), ("create_file", "file_text"),
-                      ("Write", "file_text")])
+    @Test(arguments: [("create_file", "file_text")])
     func newFileWriteIsAllAdditions(tool: String, key: String) throws {
         let content = "# Title\n\nBody line\n"
         let write = try #require(Self.parse(tool, ["file_path": "docs/new.md", key: content]), "\(tool).\(key)")
@@ -107,6 +106,18 @@ struct ToolFileEditTests {
         #expect(write.additions == 3 && write.deletions == 0 && write.isStatExact)
         #expect(write.copyText == content, "Copy puts the raw file content")
         #expect(write.files[0].unifiedText.hasPrefix("--- /dev/null\n+++ b/docs/new.md\n@@ -0,0 +1,3 @@\n+# Title"))
+    }
+
+    @Test(arguments: [("write", "content"), ("write", "text"), ("write_file", "content"), ("Write", "file_text")])
+    func plainWriteWithoutDetailsIsWritten(tool: String, key: String) throws {
+        let write = try #require(Self.parse(tool, ["file_path": "docs/new.md", key: "# Title\n\nBody line\n"]))
+        #expect(write.kind == .write && write.files[0].operation == .update && write.statusLabel == "Written")
+        #expect(Self.lines(write) == ["+# Title", "+", "+Body line"])
+        #expect(write.additions == 3 && write.deletionsBound == .unknown && !write.isStatExact)
+        let statusOnly = try #require(Self.parse(tool, ["path": "a", key: "x\n"], details: .object(["status": "completed"])))
+        #expect(statusOnly.statusLabel == "Written", "status scalars alone aren't a write receipt")
+        let created = try #require(Self.parse(tool, ["path": "a", key: "x\n"], details: .object(["created": true])))
+        #expect(created.statusLabel == "New file" && created.deletionsBound == .exact)
     }
 
     @Test func writeDetailsSayWhetherTheFileIsNew() throws {
@@ -412,7 +423,8 @@ struct ToolFileEditTests {
     }
 
     @Test func runningWriteSaysWriting() throws {
-        let write = try #require(Self.parse("write", ["path": "src/w.ts", "content": "a\nb\n"]))
+        let write = try #require(Self.parse("write", ["path": "src/w.ts", "content": "a\nb\n"],
+                                            details: .object(["changed": true, "created": true])))
         #expect(write.statusLabel(isRunning: true) == "Writing")
         #expect(write.accessibilitySummary(isRunning: true) == "Writing w.ts, 2 added")
         #expect(write.statusLabel == write.statusLabel(isRunning: false) && write.statusLabel == "New file")
@@ -546,11 +558,16 @@ struct ToolFileEditTests {
 
     /// The demo chat's calls (`DemoGateway+FileEdits.swift`) all read as diffs.
     @Test func demoChatParses() throws {
-        let calls = DemoGateway.seedFileEditsTranscript().flatMap { $0["content"]?.array ?? [] }
+        let transcript = DemoGateway.seedFileEditsTranscript()
+        let calls = transcript.flatMap { $0["content"]?.array ?? [] }
             .filter { $0["type"]?.string == "toolCall" }
+        let detailsById = Dictionary(transcript.compactMap { row in
+            row["toolCallId"]?.string.flatMap { id in row["details"].map { (id, $0) } }
+        }, uniquingKeysWith: { first, _ in first })
         #expect(calls.compactMap { $0["name"]?.string } == ["edit", "write", "apply_patch"])
         let edits = try calls.map { call in
-            try #require(ToolFileEdit.parse(toolName: call["name"]?.string ?? "", arguments: ContentBlock.prettyJSON(call["arguments"] ?? .null)))
+            try #require(ToolFileEdit.parse(toolName: call["name"]?.string ?? "", arguments: ContentBlock.prettyJSON(call["arguments"] ?? .null),
+                                            details: call["id"]?.string.flatMap { detailsById[$0] }))
         }
         #expect(edits[0].kind == .edit && edits[0].primaryPath == DemoGateway.fileEditsRetryPath && edits[0].additions == 2 && edits[0].deletions == 1)
         #expect(edits[1].files[0].operation == .add && edits[1].additions == 17 && edits[1].deletions == 0)

@@ -43,7 +43,7 @@ func runFindInChatChecks() {
               && order.firstIndex(of: .tool("t1"))! < order.firstIndex(of: .message(0))!,
               "within a turn: thinking, tools, then messages, as drawn")
         check(TranscriptSearch.matches("receipt", in: findEntries, options: .init(includeTools: true, toolTextLimit: 11))
-            .filter { $0.section == .tool("t1") }.count == 1, "tool text past the display limit isn't searched")
+            .filter { $0.section == .tool("t1") }.count == 2, "output past the display limit isn't searched (the command is drawn whole)")
         check(TranscriptSearch.ranges(of: "aa", in: "aaaa") == [NSRange(location: 0, length: 2), NSRange(location: 2, length: 2)],
               "occurrences don't overlap")
         check(TranscriptSearch.ranges(of: "b", in: "🦞b") == [NSRange(location: 2, length: 1)], "ranges are UTF-16, for attributed text")

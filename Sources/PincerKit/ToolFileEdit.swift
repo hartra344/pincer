@@ -439,7 +439,8 @@ extension ToolFileEdit {
         guard !isError, let args else { return nil }
         if Self.textEditorToolNames.contains(name) {
             switch Self.string(args, ["command"])?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-            case "create": return Self.write(args, keys: ["file_text", "content"], path: filePath, details: details)
+            case "create":
+                return Self.write(args, keys: ["file_text", "content"], path: filePath, details: details, createsFile: true)
             case "insert": return Self.insertion(Self.string(args, ["insert_text", "new_str"]), path: filePath,
                                                  at: args["insert_line"]?.int.map { $0 + 1 })
             case "view", "undo_edit": return nil
@@ -453,7 +454,8 @@ extension ToolFileEdit {
             return Self.insertion(Self.string(args, ["new_source"]), path: filePath, at: nil, exact: false)
         }
         if Self.writeToolNames.contains(name) {
-            return Self.write(args, keys: ["content", "text", "file_text"], path: filePath, details: details)
+            return Self.write(args, keys: ["content", "text", "file_text"], path: filePath, details: details,
+                              createsFile: name == "create_file")
         }
         return Self.patch(args)
     }
@@ -547,7 +549,8 @@ extension ToolFileEdit {
 
     // MARK: write / insert
 
-    private static func write(_ args: [String: JSONValue], keys: [String], path: String?, details: JSONValue?) -> ToolFileEdit? {
+    private static func write(_ args: [String: JSONValue], keys: [String], path: String?, details: JSONValue?,
+                              createsFile: Bool = false) -> ToolFileEdit? {
         // The Gateway says nothing changed: there's no diff to show.
         guard details?["changed"]?.bool != false, let content = Self.string(args, keys) else { return nil }
         let all = Self.splitLines(content)
@@ -559,8 +562,9 @@ extension ToolFileEdit {
             budget -= text.utf16.count
             shown.append(DiffLine(.addition, text, lineNumber: index + 1))
         }
-        // With details present, only `created: true` proves there was nothing to remove.
-        let isNew = details == nil || details?["created"]?.bool == true
+        // A plain write is new only when the Gateway says `created: true`; without that, an overwrite
+        // can't be ruled out. Tools that only ever create (`create_file`, editor `create`) are new.
+        let isNew = details?["created"]?.bool ?? createsFile
         let file = FileDiff(path: path, operation: isNew ? .add : .update,
                             hunks: [DiffHunk(lines: shown, oldStart: 0, newStart: 1)], additions: all.count, deletions: 0)
         // An overwrite's additions are the new content; what it replaced isn't known.

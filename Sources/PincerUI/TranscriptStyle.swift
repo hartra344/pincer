@@ -139,6 +139,9 @@ enum TranscriptColors {
     static var highlight: PColor { .systemFill }
     #endif
     static var red: PColor { .systemRed }
+    /// Success and failure text on badges and error output: the diff shades, readable on white.
+    @MainActor static var ok: PColor { TranscriptDiffText.addition }
+    @MainActor static var failure: PColor { TranscriptDiffText.deletion }
     /// Find in chat: every match, and the selected one (drawn with dark text so it reads in dark mode).
     static var findMatch: PColor { PColor.systemYellow.withAlphaComponent(0.35) }
     static var findCurrent: PColor { .systemYellow }

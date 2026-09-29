@@ -70,15 +70,24 @@ public enum TranscriptSearch {
         return self.ranges(of: query, in: text).count
     }
 
-    /// Text of a tool call as its card shows it: input, then output, each cut at the limit.
-    /// A file edit's card shows its whole diff (already capped) in place of the input.
+    /// Text of a tool call as its card shows it. A file edit's card shows its whole diff (already
+    /// capped) in place of the input, then the raw result; any other call shows its formatted
+    /// headline, arguments and unwrapped output.
     public static func toolTexts(_ tool: ToolActivity, limit: Int) -> [String] {
-        let diff = tool.fileEdit?.displayText
-        return [diff ?? tool.arguments, tool.result].enumerated().compactMap { index, text in
-            if index == 0, let diff { return diff }
-            guard let text, !text.isEmpty else { return nil }
-            return text.count > limit ? String(text.prefix(limit)) + "\n…" : text
+        if let diff = tool.fileEdit?.displayText {
+            return [diff, tool.result].enumerated().compactMap { index, text in
+                if index == 0 { return diff }
+                guard let text, !text.isEmpty else { return nil }
+                return text.count > limit ? String(text.prefix(limit)) + "\n…" : text
+            }
         }
+        if tool.fileEdit != nil {
+            return [tool.arguments, tool.result].compactMap { text in
+                guard let text, !text.isEmpty else { return nil }
+                return text.count > limit ? String(text.prefix(limit)) + "\n…" : text
+            }
+        }
+        return ToolCallPresentation.make(tool, limit: limit).searchTexts
     }
 
     /// A message's text as the transcript draws it, one string per text view in drawing order:

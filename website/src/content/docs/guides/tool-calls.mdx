@@ -1,0 +1,74 @@
+---
+title: Tool calls
+description: How Pincer shows the agent's commands, web lookups and MCP tool calls as readable cards in the chat transcript.
+---
+
+When an agent runs a command, fetches a page or calls a tool, the transcript shows a tool card. Collapsed, it's a single line. Expanded, it shows what the agent asked for and what came back, laid out for that kind of tool instead of as raw JSON.
+
+{/* Screenshot: an expanded exec card (terminal block, chips, exit badge) once the demo capture exists. */}
+
+## Collapsed and expanded
+
+Tap or click a card's header to expand it, and again to collapse it. The header shows:
+
+- an icon and the tool's name. For an [MCP tool](#mcp-tools) it reads `server › tool`.
+- a one-line summary: the command, path, URL or query, cut short in the middle so both ends stay visible.
+- a spinner while the tool is running, and a red **Failed** badge when the call failed. The card's border turns red too. Every kind of card shows the badge, including the plain one for tools Pincer has no special layout for.
+
+Pincer only works out the details when you expand a card, so long chats stay quick.
+
+## Commands
+
+A command such as `exec` appears in a terminal-style block, monospaced, with a `$` prompt and the command exactly as the agent wrote it, without JSON escapes. **Copy** copies the command without the `$`.
+
+Chips under the block show the settings that came with the call: the **working directory** and **timeout**, and flags such as background, PTY or elevated when they're set. If the gateway reports where the command actually ran, that directory is shown.
+
+## Output
+
+The output section is titled **Output**, or **Error** in red when the call failed. Its badges show:
+
+- the **exit code**, green for `exit 0` and red for anything else.
+- how long the call took, for example `1.2s`.
+- the number of lines.
+
+Pincer shows the text the tool returned, not the gateway's result envelope. Line breaks are real line breaks, terminal colour codes are removed, and text the gateway repeats in its result details appears once. The output isn't wrapped into a card-width column of JSON, so tables and logs line up. If the result has images, a caption such as "2 images" says so, and the images appear in the message.
+
+Long output is cut to its first 12 lines. Choose **Show all N lines** to see the rest, and **Show fewer lines** to cut it short again. A very long result scrolls inside the card. **Copy** next to the badges copies the whole output. Everything in a card is selectable.
+
+While a tool is running and hasn't produced output yet, the card says **Running…**.
+
+## File edits
+
+Edits, writes and patches show as diffs instead. See [File edit diffs](../file-diffs/). A file read shows the path (and offset or limit, if given) and its output like any other tool.
+
+## Web fetch and web search
+
+A fetch shows the URL, and a search shows the query, each in a chip with an icon. Extra chips show settings like the extract mode or the number of results. A fetch's output badge shows the HTTP status, and how long it took, when the gateway reports them.
+
+## MCP tools
+
+Tools that come from an MCP server show the server and the tool separately, `github › search_issues`, so you can see which server handled the call. The server is also a chip in the expanded card, followed by the tool's arguments.
+
+## Arguments
+
+Arguments appear as a list of keys and values instead of a block of JSON. Keys are dimmed, and values are monospaced. Text values keep their line breaks. A nested object or list is shown on one line, in compact form.
+
+Choose **Raw JSON** in the section's title row to see the arguments as the agent sent them, pretty-printed, and **Formatted** to go back. Arguments already shown as the command or as a chip aren't repeated in the list.
+
+Any tool Pincer has no special layout for uses this list, with its output as plain text.
+
+## Finding text in tool calls
+
+With **Include Tool Output** turned on in [Find in Chat](../transcript/#find-in-chat), Find searches what the card shows: the command or headline, the argument list and the output. While a card has matches, its whole output is shown, so a match is never hidden behind **Show all**. With **Raw JSON** on, the card shows the raw arguments, and Find still searches the formatted text.
+
+## Accessibility
+
+- The header is a button. VoiceOver reads the tool, its summary, whether it failed and whether it's expanded, for example "exec, `df -h`, failed, expanded".
+- Chips and badges are labelled: "Working directory", "Exit code 1", "Took 1.2 seconds".
+- Text follows your text size (Dynamic Type on iOS and iPadOS) and works in light and dark mode. The exit code badge is always spelled out, so colour is never the only signal.
+
+See [Accessibility](../accessibility/) for more.
+
+## Try it in the demo
+
+In the [demo](../../getting-started/try-the-demo/), open the **Check the MCP servers** chat. It has a command with multi-line output, a failed command, a file edit, an MCP tool call, a web fetch and a file read, all simulated.

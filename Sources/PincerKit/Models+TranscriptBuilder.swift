@@ -33,10 +33,16 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
         self.derive()
     }
 
-    /// Keeps only the `details` keys a file-edit diff reads, so other tools' details aren't held.
+    /// Scalar `details` keys other cards read: exec's exit status and web_fetch's response.
+    public static let statusDetailKeys: Set<String> = ["exitCode", "exitSignal", "durationMs", "cwd", "status", "timedOut",
+                                                       "failureKind", "tookMs", "finalUrl", "contentType", "title"]
+
+    /// Keeps only the `details` keys the cards read (a file edit's diff; exec and web_fetch status
+    /// scalars), so bulky details such as exec's `aggregated` output aren't held.
     public static func fileEditDetails(_ details: JSONValue?) -> JSONValue? {
         guard let object = details?.object else { return nil }
-        let kept = object.filter { ["diff", "changed", "created"].contains($0.key) }
+        let kept = object.filter { ["diff", "changed", "created"].contains($0.key)
+            || Self.statusDetailKeys.contains($0.key) && $0.value.object == nil && $0.value.array == nil }
         return kept.isEmpty ? nil : .object(kept)
     }
 
