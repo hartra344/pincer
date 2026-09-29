@@ -729,7 +729,7 @@ struct GoCommands: Commands {
                 Section(L("Pinned Chats")) {
                     ForEach(Array(pinned.enumerated()), id: \.element.key) { index, row in
                         Button(row.title) { self.app.openPinned(index + 1) }
-                            .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                            .keyboardShortcut(ShortcutStore.shared.isRecording ? nil : KeyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command))
                     }
                 }
             }

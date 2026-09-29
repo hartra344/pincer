@@ -121,12 +121,42 @@
         }
       }
     },
+    "%@ is already used": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is already used"
+          }
+        }
+      }
+    },
+    "%@ is often used by %@. If that app is running, it may get the keys first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is often used by %@. If that app is running, it may get the keys first."
+          }
+        }
+      }
+    },
     "%@ is still stopping. Try again in a moment.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ is still stopping. Try again in a moment."
+          }
+        }
+      }
+    },
+    "%@ is used by %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is used by %@."
           }
         }
       }
@@ -147,6 +177,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ is working on this"
+          }
+        }
+      }
+    },
+    "%@ is your Quick Capture shortcut, which works from any app and runs first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is your Quick Capture shortcut, which works from any app and runs first."
           }
         }
       }
@@ -241,6 +281,16 @@
         }
       }
     },
+    "%@ shortcut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ shortcut"
+          }
+        }
+      }
+    },
     "%@ theme": {
       "localizations": {
         "en": {
@@ -281,12 +331,32 @@
         }
       }
     },
+    "%@ types a character in text fields. Pincer will run the command instead.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ types a character in text fields. Pincer will run the command instead."
+          }
+        }
+      }
+    },
     "%@ used": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ used"
+          }
+        }
+      }
+    },
+    "%@ uses %@. Use it for “%@” instead? %@ will have no shortcut.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ uses %@. Use it for “%@” instead? %@ will have no shortcut."
           }
         }
       }
@@ -813,6 +883,26 @@
         }
       }
     },
+    "1Password (fill)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1Password (fill)"
+          }
+        }
+      }
+    },
+    "1Password Quick Access": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1Password Quick Access"
+          }
+        }
+      }
+    },
     "A channel is waiting for a Gateway restart.": {
       "localizations": {
         "en": {
@@ -909,6 +999,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Actions for %@"
+          }
+        }
+      }
+    },
+    "Activate, then press the new keys.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activate, then press the new keys."
           }
         }
       }
@@ -1373,12 +1473,32 @@
         }
       }
     },
+    "Another command uses this shortcut too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another command uses this shortcut too."
+          }
+        }
+      }
+    },
     "Answering agent questions is waiting for approval:": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Answering agent questions is waiting for approval:"
+          }
+        }
+      }
+    },
+    "App Exposé": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App Exposé"
           }
         }
       }
@@ -2093,6 +2213,16 @@
         }
       }
     },
+    "Change the Quick Capture shortcut in General.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change the Quick Capture shortcut in General."
+          }
+        }
+      }
+    },
     "Changed on the Gateway": {
       "localizations": {
         "en": {
@@ -2199,6 +2329,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chat Options"
+          }
+        }
+      }
+    },
+    "Chat and Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat and Gateway"
           }
         }
       }
@@ -2443,6 +2583,16 @@
         }
       }
     },
+    "Clear Shortcut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear Shortcut"
+          }
+        }
+      }
+    },
     "Clear cached transcripts?": {
       "localizations": {
         "en": {
@@ -2459,6 +2609,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Clear the outbox?"
+          }
+        }
+      }
+    },
+    "Click a shortcut, then press the new keys. Press Delete to remove it, or Esc to cancel.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click a shortcut, then press the new keys. Press Delete to remove it, or Esc to cancel."
           }
         }
       }
@@ -2489,6 +2649,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Close Split View"
+          }
+        }
+      }
+    },
+    "Close Window": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Window"
           }
         }
       }
@@ -3703,6 +3873,16 @@
         }
       }
     },
+    "Cut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cut"
+          }
+        }
+      }
+    },
     "Cyan": {
       "localizations": {
         "en": {
@@ -4253,6 +4433,16 @@
         }
       }
     },
+    "Dock hiding": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dock hiding"
+          }
+        }
+      }
+    },
     "Don't Save": {
       "localizations": {
         "en": {
@@ -4413,6 +4603,16 @@
         }
       }
     },
+    "Edit Last Message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Last Message"
+          }
+        }
+      }
+    },
     "Edited": {
       "localizations": {
         "en": {
@@ -4503,6 +4703,16 @@
         }
       }
     },
+    "Emoji & Symbols": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emoji & Symbols"
+          }
+        }
+      }
+    },
     "Enable experimental reactions": {
       "localizations": {
         "en": {
@@ -4519,6 +4729,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enabled"
+          }
+        }
+      }
+    },
+    "Enter Full Screen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter Full Screen"
           }
         }
       }
@@ -5043,6 +5263,16 @@
         }
       }
     },
+    "Finder search": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finder search"
+          }
+        }
+      }
+    },
     "Fingerprint %@": {
       "localizations": {
         "en": {
@@ -5113,6 +5343,16 @@
         }
       }
     },
+    "For a hardware keyboard.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For a hardware keyboard."
+          }
+        }
+      }
+    },
     "For your security, new devices must be approved on the machine running OpenClaw. Run this there:": {
       "localizations": {
         "en": {
@@ -5129,6 +5369,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "For your security, new devices need your OK. Run this on the Gateway host:"
+          }
+        }
+      }
+    },
+    "Force Quit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Force Quit"
           }
         }
       }
@@ -5169,6 +5419,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "From %@"
+          }
+        }
+      }
+    },
+    "From Any App": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From Any App"
           }
         }
       }
@@ -5543,6 +5803,16 @@
         }
       }
     },
+    "Help": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help"
+          }
+        }
+      }
+    },
     "Help me choose": {
       "localizations": {
         "en": {
@@ -5579,6 +5849,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hide %@"
+          }
+        }
+      }
+    },
+    "Hide Others": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Others"
+          }
+        }
+      }
+    },
+    "Hide Pincer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Pincer"
           }
         }
       }
@@ -6053,6 +6343,16 @@
         }
       }
     },
+    "Keyboard Shortcuts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyboard Shortcuts"
+          }
+        }
+      }
+    },
     "Kind": {
       "localizations": {
         "en": {
@@ -6383,6 +6683,16 @@
         }
       }
     },
+    "Lock Screen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lock Screen"
+          }
+        }
+      }
+    },
     "Log": {
       "localizations": {
         "en": {
@@ -6429,6 +6739,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Logging out…"
+          }
+        }
+      }
+    },
+    "Look Up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Look Up"
           }
         }
       }
@@ -6703,6 +7023,16 @@
         }
       }
     },
+    "Minimize": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimize"
+          }
+        }
+      }
+    },
     "Minute, hour, day of month, month and day of week. Leave the time zone empty to use the Gateway's.": {
       "localizations": {
         "en": {
@@ -6719,6 +7049,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Missing"
+          }
+        }
+      }
+    },
+    "Mission Control": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mission Control"
+          }
+        }
+      }
+    },
+    "Mission Control (move a Space)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mission Control (move a Space)"
           }
         }
       }
@@ -8033,6 +8383,16 @@
         }
       }
     },
+    "Open Pinned Chat %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Pinned Chat %lld"
+          }
+        }
+      }
+    },
     "Open Settings…": {
       "localizations": {
         "en": {
@@ -8389,6 +8749,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Password"
+          }
+        }
+      }
+    },
+    "Paste": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste"
           }
         }
       }
@@ -8783,6 +9153,16 @@
         }
       }
     },
+    "Print": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Print"
+          }
+        }
+      }
+    },
     "Probe": {
       "localizations": {
         "en": {
@@ -9053,6 +9433,16 @@
         }
       }
     },
+    "Read Last Reply Aloud": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read Last Reply Aloud"
+          }
+        }
+      }
+    },
     "Read Only": {
       "localizations": {
         "en": {
@@ -9183,6 +9573,16 @@
         }
       }
     },
+    "Redo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Redo"
+          }
+        }
+      }
+    },
     "Refresh": {
       "localizations": {
         "en": {
@@ -9229,6 +9629,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Regenerate"
+          }
+        }
+      }
+    },
+    "Regenerate Last Reply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Regenerate Last Reply"
           }
         }
       }
@@ -9753,6 +10163,16 @@
         }
       }
     },
+    "Reset %@ to Default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset %@ to Default"
+          }
+        }
+      }
+    },
     "Reset All": {
       "localizations": {
         "en": {
@@ -9919,6 +10339,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Restore"
+          }
+        }
+      }
+    },
+    "Restore Defaults": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore Defaults"
           }
         }
       }
@@ -10563,6 +10993,16 @@
         }
       }
     },
+    "Screenshot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screenshot"
+          }
+        }
+      }
+    },
     "Scripts and network access are off in this preview.": {
       "localizations": {
         "en": {
@@ -10749,6 +11189,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "See when each one runs next, how its last runs went, and open the chats they ran in."
+          }
+        }
+      }
+    },
+    "Select All": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select All"
           }
         }
       }
@@ -11013,6 +11463,16 @@
         }
       }
     },
+    "Shortcuts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shortcuts"
+          }
+        }
+      }
+    },
     "Show": {
       "localizations": {
         "en": {
@@ -11069,6 +11529,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show Automations"
+          }
+        }
+      }
+    },
+    "Show Fonts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Fonts"
           }
         }
       }
@@ -11633,12 +12103,32 @@
         }
       }
     },
+    "Split Right / Close Split View": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Split Right / Close Split View"
+          }
+        }
+      }
+    },
     "Split view chat": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Split view chat"
+          }
+        }
+      }
+    },
+    "Spotlight": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spotlight"
           }
         }
       }
@@ -11749,6 +12239,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop"
+          }
+        }
+      }
+    },
+    "Stop the Current Run": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop the Current Run"
           }
         }
       }
@@ -13213,6 +13713,16 @@
         }
       }
     },
+    "Type Shortcut": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type Shortcut"
+          }
+        }
+      }
+    },
     "Type at least 2 characters.": {
       "localizations": {
         "en": {
@@ -13483,6 +13993,26 @@
         }
       }
     },
+    "Use %@ for %@?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use %@ for %@?"
+          }
+        }
+      }
+    },
+    "Use Anyway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Anyway"
+          }
+        }
+      }
+    },
     "Use Default": {
       "localizations": {
         "en": {
@@ -13529,6 +14059,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Use a token instead"
+          }
+        }
+      }
+    },
+    "Use at least one of ⌘, ⌃ or ⌥.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use at least one of ⌘, ⌃ or ⌥."
+          }
+        }
+      }
+    },
+    "Use for %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use for %@"
           }
         }
       }
@@ -14473,6 +15023,26 @@
         }
       }
     },
+    "macOS input sources": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS input sources"
+          }
+        }
+      }
+    },
+    "macOS window cycling": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS window cycling"
+          }
+        }
+      }
+    },
     "nearly full": {
       "localizations": {
         "en": {
@@ -14619,6 +15189,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "the account isn't linked. Log in first"
+          }
+        }
+      }
+    },
+    "the app switcher": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the app switcher"
           }
         }
       }

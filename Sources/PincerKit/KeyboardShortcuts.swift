@@ -206,7 +206,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .editLastMessage: L("Edit Last Message")
         case .regenerateLastReply: L("Regenerate Last Reply")
         case .readAloud: L("Read Last Reply Aloud")
-        case .toggleSplitView: L("Split Right / Close Split View")
+        case .toggleSplitView: L("Split Right")
         case .swapSplitChats: L("Swap Chats")
         case .nextUnreadChat: L("Next Unread Chat")
         case .showRuns: L("Show Runs")
@@ -405,7 +405,11 @@ public final class ShortcutStore {
         self.set(combo, for: command)
     }
 
+    /// Back to the default, taking it from any command the user had given it to.
     public func reset(_ command: ShortcutCommand) {
+        if let combo = command.defaultCombo {
+            for other in self.commands(using: combo) where other != command { self.overrides[other] = .some(nil) }
+        }
         self.overrides[command] = nil
         self.save()
     }
@@ -415,9 +419,9 @@ public final class ShortcutStore {
         self.save()
     }
 
-    /// Commands currently bound to `combo`.
+    /// Commands in this build currently bound to `combo`.
     public func commands(using combo: KeyCombo) -> [ShortcutCommand] {
-        ShortcutCommand.allCases.filter { self.combo(for: $0) == combo }
+        ShortcutCommand.allCases.filter { !ShortcutCommand.unavailable.contains($0) && self.combo(for: $0) == combo }
     }
 
     /// Commands that share a shortcut with another command, e.g. after a reset brings a default
@@ -447,7 +451,7 @@ public final class ShortcutStore {
         if let known = ReservedShortcuts.wellKnown.first(where: { $0.combo == combo }) {
             return .warning(L("\(combo.displayString) is often used by \(known.owner). If that app is running, it may get the keys first."))
         }
-        if combo.modifiers.isDisjoint(with: [.command, .control]), !combo.isFunctionKey {
+        if combo.modifiers.isDisjoint(with: [.command, .control]), combo.special == nil {
             return .warning(L("\(combo.displayString) types a character in text fields. Pincer will run the command instead."))
         }
         return .ok

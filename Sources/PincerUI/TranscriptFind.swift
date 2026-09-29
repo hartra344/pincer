@@ -352,15 +352,15 @@ struct TranscriptFindBar: View {
 
     private var previousButton: some View {
         Button { self.find.previous() } label: { self.stepLabel(L("Find previous"), systemImage: "chevron.up") }
-            .keyboardShortcut("g", modifiers: [.command, .shift])
-            .help(L("Previous match (⇧⌘G)"))
+            .shortcut(.findPrevious)
+            .help(ShortcutCommand.findPrevious.displayShortcut.map { L("Previous match (\($0))") } ?? L("Previous match"))
             .accessibilityIdentifier("find-previous")
     }
 
     private var nextButton: some View {
         Button { self.find.next() } label: { self.stepLabel(L("Find next"), systemImage: "chevron.down") }
-            .keyboardShortcut("g", modifiers: .command)
-            .help(L("Next match (⌘G)"))
+            .shortcut(.findNext)
+            .help(ShortcutCommand.findNext.displayShortcut.map { L("Next match (\($0))") } ?? L("Next match"))
             .accessibilityIdentifier("find-next")
     }
 
