@@ -208,7 +208,17 @@ function dispatch(state, conn, msg) {
       };
       state.sessions.set(key, row);
       registerGroup(state, params.category);
-      state.transcripts.set(key, params.message ? [makeMessage('user', [textBlock(String(params.message))])] : []);
+      let seeded = params.message ? [makeMessage('user', [textBlock(String(params.message))])] : [];
+      if (params.fork === true) {
+        // Whole-chat fork through the parent's last completed assistant message.
+        if (!state.sessions.has(params.parentSessionKey)) return sendErr(conn, id, 'INVALID_REQUEST', `session not found: ${params.parentSessionKey}`);
+        const parent = state.transcripts.get(params.parentSessionKey) ?? [];
+        const lastAssistant = parent.map((message) => message.role).lastIndexOf('assistant');
+        seeded = clone(parent.slice(0, lastAssistant + 1));
+        row.forkedFromParent = true;
+        row.lastMessagePreview = seeded.length ? row.lastMessagePreview : undefined;
+      }
+      state.transcripts.set(key, seeded);
       sendRes(conn, id, { key, sessionId: row.sessionId, session: clone(row) });
       broadcastSessionChanged(state, key, 'create', row);
       break;

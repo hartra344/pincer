@@ -56,6 +56,7 @@ export default defineConfig({
 						{ slug: 'guides/search' },
 						{ slug: 'guides/export-and-bookmarks' },
 						{ slug: 'guides/composer' },
+						{ slug: 'guides/edit-regenerate-branch' },
 						{ slug: 'guides/tool-calls' },
 						{ slug: 'guides/file-diffs' },
 						{ slug: 'guides/diagrams-and-math' },

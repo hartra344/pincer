@@ -348,6 +348,7 @@ func runDemo() async {
     await runDemoSubagents(gateway)
     await runDemoDevices(gateway)
     await runDemoSkills(gateway)
+    await runMessageEditChecks(gateway, admin: true, "demo")
     await runDemoSessions(gateway)
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).

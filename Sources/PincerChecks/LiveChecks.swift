@@ -682,6 +682,7 @@ func runLive(url: String, token: String) async {
     await runLiveChannels(profile: profile, admin: admin)
     await runLiveDevices(profile: profile, gateway: gateway, admin: admin)
     await runLiveSkills(profile: profile, admin: admin)
+    await runMessageEditChecks(admin, admin: true, "live")
     await runLiveSessions(profile: profile, admin: admin)
 
     // Gateway Logs after Pairing Requests, whose seeded request expires minutes after the mock starts.

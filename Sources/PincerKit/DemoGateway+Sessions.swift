@@ -8,7 +8,7 @@ import Foundation
 extension DemoGateway {
     static let sessionManagerMethods = [
         "sessions.preview", "sessions.describe", "sessions.delete", "sessions.patchMany", "sessions.recover",
-        "sessions.branches.list", "sessions.branches.switch", "sessions.rewind",
+        "sessions.branches.list", "sessions.branches.switch", "sessions.rewind", "sessions.fork",
     ]
 
     /// Seeded session keys, shared with the checks.
@@ -185,6 +185,8 @@ extension DemoGateway {
             return try self.switchBranch(params)
         case "sessions.rewind":
             return try self.rewind(params)
+        case "sessions.fork":
+            return try self.fork(params)
         default:
             return nil
         }
@@ -408,6 +410,41 @@ extension DemoGateway {
         self.historyChanged(key, reason: "rewind")
         let text = Self.plainText(active[index])
         return text.isEmpty ? [:] : ["editorText": .string(text)]
+    }
+
+    /// Like upstream sessions.fork: a new chat holding the active path before user message `entryId`.
+    private func fork(_ params: JSONValue) throws -> JSONValue {
+        let key = try self.historyTarget(params, switching: false)
+        guard let entryId = params["entryId"]?.text else {
+            throw Self.sessionsInvalid("invalid sessions.fork params: at root: must have required property 'entryId'")
+        }
+        let active = self.transcripts[key] ?? []
+        guard let index = active.firstIndex(where: { Self.entryId($0) == entryId }) else {
+            throw Self.sessionsInvalid("message entry not found: \(entryId)")
+        }
+        guard active[index]["role"]?.string == "user" else { throw Self.sessionsInvalid("entry is not a user message: \(entryId)") }
+        let newKey = self.forkSession(from: key, path: Array(active[..<index]))
+        let text = Self.plainText(active[index])
+        var result: Row = ["sessionKey": .string(newKey)]
+        if !text.isEmpty { result["editorText"] = .string(text) }
+        return .object(result)
+    }
+
+    /// A child chat with `path` as its transcript (whole-chat fork for sessions.create `fork`).
+    func forkSession(from key: String, path: [JSONValue]) -> String {
+        let parent = self.sessions[key] ?? [:]
+        let agentId = parent["agentId"]?.string ?? "main"
+        let newKey = "agent:\(agentId):dashboard:\(Self.shortId())"
+        let title = (parent["label"]?.text ?? "Chat") + " (fork)"
+        var row = Self.row(key: newKey, agentId: agentId, title: title,
+                           preview: path.last.map { String(Self.plainText($0).prefix(120)) } ?? "")
+        row["parentSessionKey"] = .string(key)
+        row["forkedFromParent"] = true
+        row["category"] = parent["category"] ?? .null
+        self.sessions[newKey] = row
+        self.transcripts[newKey] = path
+        self.sessionChanged(newKey, reason: "fork")
+        return newKey
     }
 
     private func historyTarget(_ params: JSONValue, switching: Bool) throws -> String {

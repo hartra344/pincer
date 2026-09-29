@@ -146,6 +146,13 @@ extension DemoGateway {
     }
 
     func create(_ params: JSONValue) -> JSONValue {
+        if params["fork"]?.bool == true, let parent = params["parentSessionKey"]?.string, let transcript = self.transcripts[parent] {
+            // Through the parent's last completed assistant message.
+            let end = transcript.lastIndex { $0["role"]?.string == "assistant" }.map { $0 + 1 } ?? 0
+            let key = self.forkSession(from: parent, path: Array(transcript[..<end]))
+            return ["key": .string(key), "sessionId": self.sessions[key]?["sessionId"] ?? .null,
+                    "session": .object(self.sessions[key] ?? [:])]
+        }
         let agentId = params["agentId"]?.string ?? "main"
         let key = "agent:\(agentId):dashboard:\(Self.shortId())"
         let message = params["message"]?.text
