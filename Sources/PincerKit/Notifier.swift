@@ -392,23 +392,31 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: UNUserNotificationCenterDelegate
 
+    // These use the completion-handler forms, not `async`: UIKit requires the handlers to be called
+    // on the main thread and aborts otherwise (#330), but the `@objc` thunk of a `nonisolated async`
+    // requirement calls them from the cooperative thread pool. Each handler runs on the main actor.
+
     public nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification) async -> UNNotificationPresentationOptions
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void)
     {
         let info = notification.request.content.userInfo
-        guard notification.request.trigger is UNPushNotificationTrigger, let gateway = Self.gatewayId(info) else {
-            return [.banner, .list, .sound]
+        let gateway = notification.request.trigger is UNPushNotificationTrigger ? Self.gatewayId(info) : nil
+        let complete = MainThreadCompletion(completionHandler)
+        Task { @MainActor in
+            // While connected, the live stream already notified (or chose not to, for the open chat).
+            let redundant = gateway.map { self.isConnected($0) } ?? false
+            complete(redundant ? [] : [.banner, .list, .sound])
         }
-        // While connected, the live stream already notified (or chose not to, for the open chat).
-        let redundant = await MainActor.run { self.isConnected(gateway) }
-        return redundant ? [] : [.banner, .list, .sound]
     }
 
-    /// Awaits the approval's resolution, so iOS keeps the app running until the Gateway has it.
+    /// Awaits the approval's resolution before completing, so iOS keeps the app running until the
+    /// Gateway has it.
     public nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse) async
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void)
     {
         let content = response.notification.request.content
         let action = Self.interpret(
@@ -417,6 +425,23 @@ public final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let category = content.categoryIdentifier
         let thread = content.threadIdentifier
         let session = content.userInfo["session"] as? String
-        await self.perform(action, category: category, threadIdentifier: thread, sessionKey: session)
+        let complete = MainThreadCompletion(completionHandler)
+        Task { @MainActor in
+            await self.perform(action, category: category, threadIdentifier: thread, sessionKey: session)
+            complete(())
+        }
+    }
+}
+
+/// A system completion handler, only ever called from the main actor.
+private struct MainThreadCompletion<Value>: @unchecked Sendable {
+    private let handler: (Value) -> Void
+
+    init(_ handler: @escaping (Value) -> Void) {
+        self.handler = handler
+    }
+
+    @MainActor func callAsFunction(_ value: Value) {
+        self.handler(value)
     }
 }

@@ -313,7 +313,7 @@ final class SetupFakeGateway {
     @Test func tipsShowOnceNeverOverSetup() {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let tips = TipsModel(defaults: scratch.defaults)
+        let tips = TipsModel(defaults: scratch.defaults, delay: .zero)
         tips.evaluate(connected: true, setupShowingOrPending: true, isDemo: false)
         #expect(!tips.isPresented, "never over the setup sheet")
         tips.evaluate(connected: false, setupShowingOrPending: false, isDemo: false)
@@ -324,13 +324,57 @@ final class SetupFakeGateway {
         #expect(!tips.isPresented, "setup coming up hides the tips")
         tips.dismiss()
         #expect(tips.hasSeen && scratch.defaults.bool(forKey: SetupTips.seenKey))
-        let relaunched = TipsModel(defaults: scratch.defaults)
+        let relaunched = TipsModel(defaults: scratch.defaults, delay: .zero)
         relaunched.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
         #expect(!relaunched.isPresented, "seen stays seen")
         relaunched.showAgain()
         #expect(!relaunched.hasSeen && !scratch.defaults.bool(forKey: SetupTips.seenKey))
         relaunched.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
         #expect(relaunched.isPresented, "Show Tips Again")
+    }
+
+    @Test func tipsPresentAfterDelay() async throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let tips = TipsModel(defaults: scratch.defaults, delay: .milliseconds(50))
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
+        #expect(tips.isPending && !tips.isPresented)
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
+        #expect(tips.isPending && !tips.isPresented, "repeat evaluate keeps the timer")
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(tips.isPresented && !tips.isPending)
+    }
+
+    @Test func tipsDelayCancelledBySetup() async throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let tips = TipsModel(defaults: scratch.defaults, delay: .milliseconds(50))
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
+        tips.evaluate(connected: true, setupShowingOrPending: true, isDemo: false)
+        #expect(!tips.isPending)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(!tips.isPresented, "setup appearing cancels the pending card")
+        tips.evaluate(connected: false, setupShowingOrPending: false, isDemo: false)
+        #expect(!tips.isPending)
+    }
+
+    @Test func tipsDismissCancelsPending() async throws {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let tips = TipsModel(defaults: scratch.defaults, delay: .milliseconds(50))
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
+        tips.dismiss()
+        #expect(!tips.isPending)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(!tips.isPresented && tips.hasSeen)
+    }
+
+    @Test func tipsZeroDelayPresentsSynchronously() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let tips = TipsModel(defaults: scratch.defaults, delay: .zero)
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
+        #expect(tips.isPresented && !tips.isPending)
     }
 
     // MARK: Config edits and ⌘K
