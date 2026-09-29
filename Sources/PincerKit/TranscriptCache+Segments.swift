@@ -256,7 +256,20 @@ extension TranscriptCache.Writer {
         self.recency.removeAll { $0 == url }
         self.recency.append(url)
         self.layouts[url] = layout
-        while self.recency.count > Self.maxLayouts { self.layouts[self.recency.removeFirst()] = nil }
+        // Counted per cache root (the app has one), so separate roots (tests) never evict each other's.
+        let root = Self.cacheRoot(of: url)
+        var sameRoot = self.recency.indices.filter { Self.cacheRoot(of: self.recency[$0]) == root }
+        while sameRoot.count > Self.maxLayouts {
+            let oldest = sameRoot.removeFirst()
+            self.layouts[self.recency[oldest]] = nil
+            self.recency.remove(at: oldest)
+            sameRoot = sameRoot.map { $0 - 1 }
+        }
+    }
+
+    /// `root/<gateway>/<chat>.json` → `root`.
+    private static func cacheRoot(of url: URL) -> URL {
+        url.deletingLastPathComponent().deletingLastPathComponent()
     }
 
     /// Records what a load found so the first save after launch writes only what changed.
