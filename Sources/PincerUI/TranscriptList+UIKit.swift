@@ -19,6 +19,8 @@ struct TranscriptList: UIViewRepresentable {
     var highlight = TranscriptHighlight()
     /// A message to scroll to and flash, e.g. from a `pincer://` link.
     var jump: TranscriptJump?
+    /// Told how far the reader is from the latest message; runs the scroll-to-bottom button's scroll.
+    var scrollToBottom: ScrollToBottomModel?
     /// Told (on a later main-queue turn) whenever the list starts or stops following the bottom.
     var bottomAnchorChanged: ((Bool) -> Void)?
 
@@ -29,6 +31,7 @@ struct TranscriptList: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UICollectionView, context: Context) {
+        context.coordinator.attach(self.scrollToBottom)
         context.coordinator.bottomAnchorChanged = self.bottomAnchorChanged
         context.coordinator.update(rows: self.rows, context: self.context, insets: (self.topInset, self.bottomInset))
         context.coordinator.apply(self.highlight)
@@ -142,6 +145,7 @@ struct TranscriptList: UIViewRepresentable {
             defer {
                 self.revealPending()
                 self.loadOlderIfShown()
+                self.reportPosition()
             }
             if newRows.count != self.rows.count { self.olderRowWasVisible = false }
             guard let view = self.collectionView else { return }
@@ -610,6 +614,7 @@ struct TranscriptList: UIViewRepresentable {
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
             let offset = scrollView.contentOffset.y
             defer { self.lastOffset = offset }
+            self.reportPosition()
             // Only the reader moves the anchor: layout changes and inset changes keep it.
             guard !self.isAdjusting,
                   scrollView.isTracking || scrollView.isDragging || scrollView.isDecelerating || self.isScrollingToTop
@@ -667,6 +672,47 @@ struct TranscriptList: UIViewRepresentable {
 
         private func scrollEnded() {
             self.anchor = self.currentAnchor()
+            self.schedulePrefetch()
+        }
+
+        // MARK: Scroll to bottom
+
+        private weak var scrollToBottomModel: ScrollToBottomModel?
+
+        func attach(_ model: ScrollToBottomModel?) {
+            guard model !== self.scrollToBottomModel else { return }
+            self.scrollToBottomModel = model
+            model?.perform = { [weak self] in self?.scrollToBottom() }
+        }
+
+        private func reportPosition() {
+            guard let model = self.scrollToBottomModel, let view = self.collectionView else { return }
+            let insets = view.adjustedContentInset
+            model.report(distance: self.rows.isEmpty ? 0 : self.maxOffset - view.contentOffset.y,
+                         viewport: view.bounds.height - insets.top - insets.bottom, lastRowId: self.rows.last?.id)
+        }
+
+        /// Scrolls to the latest message and follows it again. From far up it jumps to a screen
+        /// above the end first, so the animation doesn't lay out the whole history on the way.
+        func scrollToBottom() {
+            guard let view = self.collectionView, !self.rows.isEmpty else { return }
+            self.isScrollingToTop = false
+            self.anchor = .bottom
+            let target = self.maxOffset
+            let height = view.bounds.height
+            let animated = !UIAccessibility.isReduceMotionEnabled
+            if !animated || target - view.contentOffset.y > height * 2 {
+                self.isAdjusting = true
+                view.contentOffset.y = animated ? target - height : target
+                self.isAdjusting = false
+                if !animated { self.settle() }
+            }
+            if animated { view.setContentOffset(CGPoint(x: view.contentOffset.x, y: self.maxOffset), animated: true) }
+        }
+
+        func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+            // Rows measured on the way may have moved the end; land on it exactly.
+            if self.anchor == .bottom { self.settle() }
             self.schedulePrefetch()
         }
 

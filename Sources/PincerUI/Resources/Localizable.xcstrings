@@ -7073,12 +7073,32 @@
         }
       }
     },
+    "New messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New messages"
+          }
+        }
+      }
+    },
     "Next": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Next"
+          }
+        }
+      }
+    },
+    "Next Tip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Tip"
           }
         }
       }
@@ -10583,6 +10603,16 @@
         }
       }
     },
+    "Scroll to latest message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scroll to latest message"
+          }
+        }
+      }
+    },
     "Search": {
       "localizations": {
         "en": {
@@ -12939,6 +12969,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Times"
+          }
+        }
+      }
+    },
+    "Tip %lld of %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tip %lld of %lld"
           }
         }
       }

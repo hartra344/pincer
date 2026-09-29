@@ -89,7 +89,7 @@ struct ChatPaneHeader: View {
                     .controlSize(.small)
             }
             if let actions {
-                RunsToolbarButton(isPresented: actions.showRuns, sessionKey: self.key, isFocused: self.isFocused) { self.focus() }
+                RunsToolbarButton(isPresented: actions.showRuns, isCompact: false, sessionKey: self.key, isFocused: self.isFocused) { self.focus() }
                     .labelStyle(.iconOnly)
                 ChatSessionMenu(showRuns: actions.showRuns, toolsInspector: actions.toolsInspector, row: row, handles: self.handles) {
                     self.focus()

@@ -24,7 +24,7 @@ struct RunsPanelChrome: ViewModifier {
         content
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    if self.showsToolbarButton { RunsToolbarButton(isPresented: self.$isPresented) }
+                    if self.showsToolbarButton { RunsToolbarButton(isPresented: self.$isPresented, isCompact: self.isCompact) }
                 }
             }
             .inspector(isPresented: self.presented(false)) {
@@ -54,6 +54,9 @@ struct RunsPanelChrome: ViewModifier {
 /// button takes ⌥⌘R.
 struct RunsToolbarButton: View {
     @Binding var isPresented: Bool
+    /// Compact iPhone: the nav bar is crowded, so the button only shows while helpers run;
+    /// "Show Runs" in the chat's ⋯ menu covers the rest (#180).
+    let isCompact: Bool
     var sessionKey: String?
     var isFocused = true
     var focus: () -> Void = {}
@@ -63,8 +66,10 @@ struct RunsToolbarButton: View {
     var body: some View {
         // Kept while the panel is open, so it (and ⌥⌘R) can always close it again.
         if let key = self.sessionKey ?? self.windowKey ?? self.gateway.selectedKey,
-           (self.isPresented && self.isFocused) || self.gateway.hasRuns(sessionKey: key) {
-            let running = self.gateway.subagentTree(rootKey: key).runningCount
+           (self.isPresented && self.isFocused) || self.gateway.hasRuns(sessionKey: key),
+           case let running = self.gateway.subagentTree(rootKey: key).runningCount,
+           RunsToolbarVisibility.shows(isCompact: self.isCompact, isPresented: self.isPresented, running: running)
+        {
             self.shortcut(Button {
                 if self.isFocused {
                     self.isPresented.toggle()
@@ -89,6 +94,12 @@ struct RunsToolbarButton: View {
         } else {
             button
         }
+    }
+}
+
+enum RunsToolbarVisibility {
+    static func shows(isCompact: Bool, isPresented: Bool, running: Int) -> Bool {
+        !isCompact || isPresented || running > 0
     }
 }
 
