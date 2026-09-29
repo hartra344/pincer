@@ -71,7 +71,8 @@ func runMemoryProbe() async {
 }
 
 /// Opt-in (`swift run PincerChecks --memory-probe-20k`): one 20,000-item chat saved to the cache, then
-/// opened (restore + select), then left (deselected, which trims a windowed chat). Numbers only.
+/// opened (restore + select), then left (deselected, which trims a windowed chat), then searched with Find and
+/// closed again while still open (#335). Numbers only.
 @MainActor
 func runMemoryProbe20k() async {
     let count = 20_000
@@ -112,6 +113,13 @@ func runMemoryProbe20k() async {
     let searched = memoryUsage()
     let searchedHeap = heapInUse()
     let searchedCount = chat.items.count
+    // Find closes with the list at the bottom: the open chat trims back to its window (#335).
+    await chat.trimOpenChatToWindow(stillWanted: { true })
+    try? await Task.sleep(for: .milliseconds(500))
+    malloc_zone_pressure_relief(nil, 0)
+    let closed = memoryUsage()
+    let closedHeap = heapInUse()
+    let closedCount = chat.items.count
     gateway.selectedKey = "agent:main:dashboard:other"
     await chat.trimToWindow()
     try? await Task.sleep(for: .milliseconds(500))
@@ -124,6 +132,7 @@ func runMemoryProbe20k() async {
     print("  · opened: \(openedCount) items in memory, footprint \(mb(Int64(opened.footprint))), live heap \(openedHeap) (after pressure relief \(mb(Int64(openedRelieved.footprint))))")
     print("  · left:   \(leftCount) items in memory, footprint \(mb(Int64(left.footprint))), live heap \(leftHeap) (after pressure relief \(mb(Int64(leftRelieved.footprint))))")
     print("  · find (loadAllCached): \(searchedCount) items in memory, footprint \(mb(Int64(searched.footprint))), live heap \(searchedHeap)")
+    print("  · find closed, still open (trim at bottom): \(closedCount) items in memory, footprint \(mb(Int64(closed.footprint))), live heap \(closedHeap) (after pressure relief)")
     print("  · left again (trim): \(trimmedCount) items in memory, footprint \(mb(Int64(trimmedAgain.footprint))), live heap \(trimmedAgainHeap) (after pressure relief)")
     chat.stopCaching()
     await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: key)

@@ -19,6 +19,8 @@ struct TranscriptList: NSViewRepresentable {
     var highlight = TranscriptHighlight()
     /// A message to scroll to and flash, e.g. from a `pincer://` link.
     var jump: TranscriptJump?
+    /// Told (on a later main-queue turn) whenever the list starts or stops following the bottom.
+    var bottomAnchorChanged: ((Bool) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator(context: self.context) }
 
@@ -27,6 +29,7 @@ struct TranscriptList: NSViewRepresentable {
     }
 
     func updateNSView(_ view: NSScrollView, context: Context) {
+        context.coordinator.bottomAnchorChanged = self.bottomAnchorChanged
         context.coordinator.update(rows: self.rows, context: self.context, insets: (self.topInset, self.bottomInset))
         context.coordinator.apply(self.highlight)
         context.coordinator.apply(self.jump)
@@ -52,7 +55,16 @@ struct TranscriptList: NSViewRepresentable {
         private var rows: [TranscriptRow] = []
         private var index: [String: Int] = [:]
         private var heights: [String: Height] = [:]
-        private var anchor = Anchor.bottom
+        private var anchor = Anchor.bottom {
+            didSet {
+                guard (oldValue == .bottom) != (self.anchor == .bottom), let report = self.bottomAnchorChanged else { return }
+                let atBottom = self.anchor == .bottom
+                DispatchQueue.main.async { report(atBottom) }
+            }
+        }
+        var bottomAnchorChanged: ((Bool) -> Void)?
+        /// Whether the list is following the bottom (#335: the open chat may be trimmed then).
+        var isAnchoredAtBottom: Bool { self.anchor == .bottom }
         private var isAdjusting = false
         private var lastOffset: CGFloat = 0
         private var isLiveScrolling = false
@@ -207,6 +219,10 @@ struct TranscriptList: NSViewRepresentable {
                 if newIds.count > oldIds.count, newIds.suffix(oldIds.count).elementsEqual(oldIds) {
                     // Older history arrived above: no need to diff thousands of rows.
                     insertions = IndexSet(integersIn: 0..<(newIds.count - oldIds.count))
+                } else if oldIds.count > newIds.count, oldIds.suffix(newIds.count).elementsEqual(newIds) {
+                    // Trimmed back to the window (#335): diffing away thousands of rows would stall.
+                    removals = IndexSet(integersIn: 0..<(oldIds.count - newIds.count))
+                    for id in oldIds.prefix(oldIds.count - newIds.count) { self.heights.removeValue(forKey: id) }
                 } else {
                     for change in newIds.difference(from: oldIds) {
                         switch change {
