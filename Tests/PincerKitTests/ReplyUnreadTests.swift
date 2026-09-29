@@ -137,6 +137,21 @@ struct ReplyUnreadTests {
         await self.finish(gateway)
     }
 
+    @Test func glancingAtTheReplyBeforeItIsMarkedReadsIt() async {
+        let saved = GatewayStore.replyUnreadGrace
+        GatewayStore.replyUnreadGrace = .seconds(3)
+        defer { GatewayStore.replyUnreadGrace = saved }
+        let gateway = await self.demo()
+        self.show(gateway, self.open)
+        #expect(await self.reply(gateway, in: self.other))
+        // Within the grace: open the chat, read the reply, go back.
+        self.show(gateway, self.other)
+        self.show(gateway, self.open)
+        try? await Task.sleep(for: .seconds(4))
+        #expect(gateway.sessions[self.other]?.isUnread == false, "the user saw the reply")
+        await self.finish(gateway)
+    }
+
     @Test func onlyReadsBeforeTheReplyAreOverridden() {
         let replyAt = Date().timeIntervalSince1970 * 1000
         func row(_ fields: [String: JSONValue]) -> SessionRow {

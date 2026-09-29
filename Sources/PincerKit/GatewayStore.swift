@@ -56,6 +56,8 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var recheckRead: Set<String> = []
     /// Runs whose reply was already checked for unread, so a repeated `final` sends at most one patch (#426).
     @ObservationIgnored var markedReplyRuns: Set<String> = []
+    /// Chats with a finished reply waiting out `replyUnreadGrace`; showing the chat meanwhile drops it.
+    @ObservationIgnored var pendingReplyUnread: Set<String> = []
     @ObservationIgnored private var sessionStorage: [String: SessionRow] = [:]
     @ObservationIgnored var sortedRowsCache: [SessionRow]?
     /// `subagentTree(rootKey:)` per root and connection state, until the rows change.

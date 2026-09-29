@@ -17,6 +17,8 @@ extension GatewayStore {
     public func setVisibleChat(_ key: String?, viewer: String) {
         guard self.visibleChatsByViewer[viewer] != key else { return }
         self.visibleChatsByViewer[viewer] = key
+        // Seen now, so a reply still waiting to be marked unread (#426) was read.
+        if let key { self.pendingReplyUnread.remove(key) }
         self.markVisibleChatsRead()
     }
 
@@ -51,10 +53,13 @@ extension GatewayStore {
             if self.markedReplyRuns.count >= 200 { self.markedReplyRuns.removeAll() }
             self.markedReplyRuns.insert(runId)
         }
+        guard !self.visibleChatKeys.contains(key) else { return }
         let replyAt = message["timestamp"]?.double ?? Date().timeIntervalSince1970 * 1000
+        self.pendingReplyUnread.insert(key)
         Task { [weak self] in
             try? await Task.sleep(for: Self.replyUnreadGrace)
-            guard let self, self.state.isConnected, !self.visibleChatKeys.contains(key),
+            guard let self, self.pendingReplyUnread.remove(key) != nil,
+                  self.state.isConnected, !self.visibleChatKeys.contains(key),
                   let row = self.sessions[key], Self.shouldMarkReplyUnread(row: row, replyAt: replyAt)
             else { return }
             await self.patch(key, ["unread": true])
