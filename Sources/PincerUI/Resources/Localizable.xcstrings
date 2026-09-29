@@ -12113,6 +12113,16 @@
         }
       }
     },
+    "This chat was deleted.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This chat was deleted."
+          }
+        }
+      }
+    },
     "This chat's Gateway was removed.": {
       "localizations": {
         "en": {

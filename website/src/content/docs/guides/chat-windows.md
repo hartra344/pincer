@@ -26,8 +26,8 @@ It uses the same Gateway connection as the main window, so it doesn't open anoth
 - Pincer doesn't show [notifications](../approvals-and-notifications/) for it while Pincer is active, just like the chat open in the main window.
 - Opening the window marks the chat as read.
 
-Clicking a subagent or run link inside a chat window opens it in the main window. See [Subagents & runs](../subagents-and-runs/).
+Clicking a subagent, run or chat link inside a chat window opens it in the main window, which comes to the front. See [Subagents & runs](../subagents-and-runs/).
 
 ## After you relaunch
 
-Chat windows come back when Pincer relaunches, using macOS window restoration. If the chat's Gateway was removed, the window shows **Chat unavailable**; close it.
+Chat windows come back when Pincer relaunches, using macOS window restoration. If the chat was deleted, or its Gateway was removed, the window shows **Chat unavailable**; close it.

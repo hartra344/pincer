@@ -39,13 +39,24 @@ struct ChatWindow: View {
     var body: some View {
         Group {
             if let ref, let gateway = self.app.gateways.first(where: { $0.id == ref.gatewayId }) {
-                ChatWindowContent(ref: ref, gateway: gateway)
+                if Self.isGone(ref.sessionKey, in: gateway) {
+                    ContentUnavailableView(L("Chat unavailable"), systemImage: "bubble.left.and.bubble.right",
+                                           description: Text("This chat was deleted.", bundle: .module))
+                } else {
+                    ChatWindowContent(ref: ref, gateway: gateway)
+                }
             } else {
                 ContentUnavailableView(L("Chat unavailable"), systemImage: "bubble.left.and.bubble.right",
                                        description: Text("This chat's Gateway was removed.", bundle: .module))
             }
         }
         .task { self.app.start() }
+    }
+
+    /// The same rule the main window uses to drop a selection: connected, sessions listed, and no
+    /// row for the chat.
+    static func isGone(_ key: String, in gateway: GatewayStore) -> Bool {
+        gateway.state.isConnected && !gateway.sessions.isEmpty && gateway.sessions[key] == nil
     }
 }
 
@@ -77,8 +88,26 @@ private struct ChatWindowContent: View {
         })
         .onAppear { self.app.chatWindowOpened(self.ref) }
         .onDisappear { self.app.chatWindowClosed(self.ref) }
+        #if os(macOS)
+        .modifier(MainWindowForLinks(gateway: self.gateway))
+        #endif
     }
 }
+
+#if os(macOS)
+/// Links in a chat window (a run, a subagent, another chat) open in the main window, which comes
+/// forward. The selection only changes from here while this window is key.
+private struct MainWindowForLinks: ViewModifier {
+    let gateway: GatewayStore
+    @Environment(\.controlActiveState) private var activeState
+
+    func body(content: Content) -> some View {
+        content.onChange(of: self.gateway.selectedKey) {
+            if self.activeState == .key { QuickCaptureController.shared.showMainWindow() }
+        }
+    }
+}
+#endif
 
 #if os(macOS)
 /// File ▸ Open Chat in New Window (⌥⌘N) for the main window's chat.
