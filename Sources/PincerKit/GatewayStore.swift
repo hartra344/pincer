@@ -278,7 +278,7 @@ public final class GatewayStore: Identifiable {
         self.health = GatewayHealthModel(
             connection: connection, hello: { nil },
             localDeviceId: profile.isDemo ? DemoGateway.deviceId : identity.deviceId,
-            simulatedRestart: profile.isDemo)
+            simulatedRestart: profile.isDemo, quietsInitialIssues: profile.isDemo)
         self.devices = DeviceManagementModel(
             connection: connection, selfDeviceId: profile.isDemo ? DemoGateway.deviceId : identity.deviceId,
             allowsWritesWithoutAdmin: profile.isDemo)
