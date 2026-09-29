@@ -1,6 +1,6 @@
 ---
 title: Notifications while Pincer is closed (iOS)
-description: Get notified on iPhone and iPad while Pincer is closed, with background refresh (no server) or a self-hosted push relay.
+description: Get notified on iPhone and iPad while Pincer is closed, by background refresh or a self-hosted push relay.
 ---
 
 import { Steps, Aside } from '@astrojs/starlight/components';
@@ -9,7 +9,7 @@ On iOS, Pincer can only post notifications while it's running and connected. To 
 
 | Mode | Server needed | How fast |
 | --- | --- | --- |
-| **Background refresh** | No | Delayed. iOS decides when Pincer checks. |
+| **Background refresh** | No. This is the default until you enter a relay URL. | Delayed. iOS decides when Pincer checks. |
 | **Push relay** | Yes: a self-hosted relay and an APNs key | Instant. |
 | **Off** | No | You're notified only while Pincer is open. |
 
@@ -30,26 +30,30 @@ The first check only records where you are, so it doesn't notify about things th
 
 ### It's not instant
 
-iOS decides when Pincer gets to run. Pincer asks for a check about every 15 minutes, but iOS often waits longer, from a quarter of an hour to a few hours. It runs more often if you use Pincer a lot, and less on low battery or in Low Power Mode.
+iOS decides when, usually 15 minutes to a few hours apart, depending on how often you use Pincer and your battery. It pauses in Low Power Mode, and stops after you swipe Pincer away in the app switcher until you open it again.
 
-- It doesn't run after you swipe Pincer away in the app switcher. Close it by going Home instead.
 - **Background App Refresh** has to be on for Pincer, under **Settings → General → Background App Refresh** in iOS. If it's off, Settings → Notifications in Pincer shows a warning with a button that opens iOS Settings.
+- Each gateway has to be reachable from your phone when iOS checks, for example with Tailscale connected. A gateway Pincer can't reach is skipped until the next check.
 
 If you need notifications right away, use a [push relay](#push-relay).
 
 ### What you're notified about
 
-- **Replies** to your chats that finished and are unread.
-- **Approvals** that are still waiting. These always notify, even for hidden chats.
+- **Replies** to your chats that finished and are unread. You get up to 10 per gateway per check, the newest first.
+- **Approvals** that are still waiting.
 - **Questions** an agent is waiting on you to answer.
 
-Pincer skips subagents, archived chats, and hidden automation and slash-command chats, the same as when it's open. You can show those in each gateway's settings. If more than 10 things are new for a gateway, you get the 10 newest.
+Approvals and questions always notify, even for hidden automation and slash-command chats. Replies skip subagents, archived chats, and hidden automation and slash-command chats, the same as when Pincer is open. You can show those in each gateway's settings.
+
+The first check after you set it up only records a starting point, so you don't get a flood of old chats.
+
+Unlike push, these notifications include the message preview, the same as the ones Pincer posts while it's open.
 
 Turning off **Notify about replies and approvals** stops background refresh too.
 
 ### Checking it works
 
-Under **While Pincer is closed**, the **Last checked** row shows when Pincer last checked and how it went, such as "3 new", "Up to date" or "Couldn't reach Home". If it says **Not yet**, iOS hasn't run a check.
+Under **While Pincer is closed**, the **Last checked** row shows when Pincer last checked and how it went, such as "Up to date", "3 new" or "Couldn't reach Home". Use it to troubleshoot: "Couldn't reach Home" means the gateway wasn't reachable, and **Not yet** means iOS hasn't run a check.
 
 Notifications look and group the same as the others in Pincer, one thread per chat. Tap one to open the chat. You can answer an approval from its notification. See [Answering from a notification](../approvals-and-notifications/#answering-from-a-notification).
 
