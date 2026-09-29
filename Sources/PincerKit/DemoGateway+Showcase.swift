@@ -436,7 +436,7 @@ extension DemoGateway {
             ])
         add("agent:research:dashboard:papers", agent: "research", title: "Paper digest",
             preview: "Three papers summarized.", age: 120_000,
-            ["label": "Paper digest", "category": "Work", "unread": true, "pinned": true,
+            ["label": "Paper digest", "category": "Reading", "unread": true, "pinned": true,
              "totalTokens": 96_000, "inputTokens": 94_000, "outputTokens": 2_000],
             messages: [
                 said("user", "What's new in speculative decoding?", ago: 5 * day),

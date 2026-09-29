@@ -92,7 +92,7 @@ actor DemoGateway {
     var demoNodes: [JSONValue] = []
     var prefs: [String: JSONValue] = [:]
     /// Custom group catalog in display order; groups stay until deleted, even when empty.
-    var groups = ["Home", "Personal", "Work", "Preparations", "Day of move"]
+    var groups = ["Home", "Personal", "Reading", "Work", "Preparations", "Day of move"]
     var progressCards: [String: JSONValue] = [:]
     var idempotency: [String: String] = [:]
     var runs: [String: Run] = [:]

@@ -112,4 +112,10 @@ func runDemoSidebarHierarchy() async {
             return false
         }, "sidebar hierarchy: \(section.id) subsections belong to that agent")
     }
+
+    // The top of the list (Claw, Scout) shows a nested tree above the fold.
+    for id in ["main", "research"] {
+        let groups = gateway.sections().first { $0.kind == .agent(id) }?.subsections.filter { !$0.channels.isEmpty }.count ?? 0
+        check(groups >= 2, "sidebar hierarchy: \(id) has ≥2 nested groups with chats (\(groups))")
+    }
 }
