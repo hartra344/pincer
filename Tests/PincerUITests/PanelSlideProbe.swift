@@ -25,6 +25,8 @@ struct PanelSlideProbe {
         var buildsTail = 0
         var measuredDuringFrames = 0
         var measuredAfterThaw = 0
+        var midSlideThaws = 0
+        var thawed = false
         var frameCPUMax = 0.0
         var frameCPUAvg = 0.0
         var settleCPU = 0.0
@@ -127,6 +129,15 @@ struct PanelSlideProbe {
         return ProbeMeter.wall() - start
     }
 
+    /// Polls (every 5 ms, up to 10 s) until the width freeze ends.
+    static func waitUntilThawed(_ host: Host) async -> Bool {
+        let start = ProbeMeter.wall()
+        while host.coordinator.isWidthFrozen, ProbeMeter.wall() - start < 10 {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return !host.coordinator.isWidthFrozen
+    }
+
     static func toggle(_ host: Host, name: String, to target: CGFloat, mid: Bool) async -> Toggle {
         var result = Toggle(name: name, finalWidth: target)
         let from = host.scroll.frame.width
@@ -138,19 +149,27 @@ struct PanelSlideProbe {
         for i in 1...frames {
             let width = from + (target - from) * CGFloat(i) / CGFloat(frames)
             let cpu = ProbeMeter.threadCPU()
+            let before = builds(host), measuredBefore = host.coordinator.prefetchStats.rowsMeasured
             setWidth(host, width.rounded())
             try? await Task.sleep(for: .milliseconds(8))
             cpus.append(ProbeMeter.threadCPU() - cpu)
+            // A stalled runner can leave > 0.1 s between two frames, so the (correct) thaw runs mid-slide.
+            // Only work done while the width is still frozen counts against the frames.
+            if host.coordinator.isWidthFrozen {
+                result.buildsDuringFrames += builds(host) - before
+                result.measuredDuringFrames += host.coordinator.prefetchStats.rowsMeasured - measuredBefore
+            } else {
+                result.midSlideThaws += 1
+            }
         }
-        result.buildsDuringFrames = builds(host) - builds0
-        result.measuredDuringFrames = host.coordinator.prefetchStats.rowsMeasured - stats0
         result.frameCPUMax = (cpus.max() ?? 0) * 1000
         result.frameCPUAvg = cpus.reduce(0, +) / Double(cpus.count) * 1000
 
         let settleStart = ProbeMeter.threadCPU()
         let buildsFrames = builds(host), measuredFrames = host.coordinator.prefetchStats.rowsMeasured
-        // Thaw happens ~0.1 s after the last change; look at the builds by 0.3 s, then let prefetch drain.
-        try? await Task.sleep(for: .milliseconds(300))
+        // Await the thaw (due ~0.1 s after the last change) rather than sleeping a fixed time: it lays out
+        // synchronously, so the builds seen right after it are the relayout; later ones are prefetch.
+        result.thawed = await Self.waitUntilThawed(host)
         result.buildsAfterThaw = builds(host) - buildsFrames
         result.measuredAfterThaw = host.coordinator.prefetchStats.rowsMeasured - measuredFrames
         await waitQuiet(host, minimum: 0)
@@ -171,10 +190,10 @@ struct PanelSlideProbe {
 
     static func table(_ label: String, _ toggles: [Toggle]) {
         func f(_ v: Double) -> String { String(format: "%.1f", v) }
-        var lines = ["| toggle | builds in frames | builds after thaw (+0.3s) | builds tail | rowsMeasured frames/thaw | frame cpu max/avg ms | settle cpu ms | anchor drift pt | stale rows |",
-                     "|---|---|---|---|---|---|---|---|---|"]
+        var lines = ["| toggle | builds in frames | builds at thaw | builds tail | rowsMeasured frames/thaw | frame cpu max/avg ms | settle cpu ms | anchor drift pt | stale rows | mid-slide thaws |",
+                     "|---|---|---|---|---|---|---|---|---|---|"]
         for t in toggles {
-            lines.append("| \(t.name) | \(t.buildsDuringFrames) | \(t.buildsAfterThaw) | \(t.buildsTail) | \(t.measuredDuringFrames)/\(t.measuredAfterThaw) | \(f(t.frameCPUMax))/\(f(t.frameCPUAvg)) | \(f(t.settleCPU)) | \(f(t.anchorDrift)) | \(t.staleVisibleRows)/\(t.visibleRows) |")
+            lines.append("| \(t.name) | \(t.buildsDuringFrames) | \(t.buildsAfterThaw) | \(t.buildsTail) | \(t.measuredDuringFrames)/\(t.measuredAfterThaw) | \(f(t.frameCPUMax))/\(f(t.frameCPUAvg)) | \(f(t.settleCPU)) | \(f(t.anchorDrift)) | \(t.staleVisibleRows)/\(t.visibleRows) | \(t.midSlideThaws) |")
         }
         print("\nPanelSlideProbe \(label) (20k rows, \(Int(wide))<->\(Int(narrow)), \(frames) frames @ 8 ms)\n" + lines.joined(separator: "\n"))
     }
@@ -182,6 +201,7 @@ struct PanelSlideProbe {
     static func check(_ toggles: [Toggle]) {
         for t in toggles {
             #expect(t.buildsDuringFrames <= 2, "\(t.name): layout builds during frames")
+            #expect(t.thawed, "\(t.name): the width thaws once it settles")
             #expect(t.buildsAfterThaw > 0, "\(t.name): one relayout after the width settles")
             #expect(t.buildsAfterThaw <= 120, "\(t.name): relayout bounded by ~1 screen either side of the viewport")
             #expect(t.anchorDrift <= 1, "\(t.name): anchor moved \(t.anchorDrift) pt")

@@ -52,6 +52,9 @@ struct StreamingProbe {
         var bytes: Int
         var tokens: Int
         var publishes: [Double] = []
+        /// Text views re-set per publish (identity-equal parts are skipped): the deterministic measure of
+        /// per-publish work, since only the growing tail should change.
+        var textSets: [Int] = []
         var totalMs = 0.0
         var counts: String?
     }
@@ -84,7 +87,9 @@ struct StreamingProbe {
         func ms(_ d: Duration) -> Double {
             Double(d.components.seconds) * 1000 + Double(d.components.attoseconds) / 1e15
         }
+        var sets = 0
         func publish() -> Double {
+            sets = 0
             var elapsed = 0.0
             if let flush = ProbeShim.flush { elapsed += ms(clock.measure { flush(chat) }) }
             elapsed += ms(clock.measure {
@@ -104,6 +109,7 @@ struct StreamingProbe {
                         shown.append(nil)
                     }
                     if shown[index] === attributed { continue }
+                    sets += 1
                     let v = views[index]
                     let old = shown[index]
                     shown[index] = attributed
@@ -137,6 +143,7 @@ struct StreamingProbe {
             if ProbeShim.flush == nil || t >= nextBoundary {
                 let p = publish()
                 result.publishes.append(p)
+                result.textSets.append(sets)
                 cost += p
                 while nextBoundary <= t { nextBoundary += 1.0 / 30 }
             }
@@ -145,6 +152,7 @@ struct StreamingProbe {
         if ProbeShim.flush != nil {
             let p = publish()
             result.publishes.append(p)
+            result.textSets.append(sets)
             result.totalMs += p
         }
         result.counts = ProbeShim.cacheCounts?()
@@ -198,13 +206,15 @@ struct StreamingProbe {
     @Test func probe() {
         var rows: [String] = []
         var p95s: [Int: Double] = [:]
+        var results: [Int: Result] = [:]
         for kb in [2, 10, 25] {
             let r = self.run(bytes: kb * 1000)
+            results[kb] = r
             let worst = r.publishes.max() ?? 0
             let p95 = Self.p95(r.publishes)
             p95s[kb] = p95
             let mean = r.totalMs / Double(max(1, r.tokens))
-            rows.append("| \(kb) KB | \(r.tokens) | \(String(format: "%.3f", mean)) | \(String(format: "%.2f", worst)) | \(String(format: "%.2f", p95)) | \(r.publishes.count) | \(r.counts ?? "n/a") |")
+            rows.append("| \(kb) KB | \(r.tokens) | \(String(format: "%.3f", mean)) | \(String(format: "%.2f", worst)) | \(String(format: "%.2f", p95)) | \(r.publishes.count) | \(r.textSets.max() ?? 0) | \(r.counts ?? "n/a") |")
         }
         let mode = ProbeShim.flush == nil ? "baseline (publish per token)" : "coalesced (30 Hz @ 60 tok/s)"
         let p10 = p95s[10] ?? 0, p25 = p95s[25] ?? 0
@@ -212,22 +222,39 @@ struct StreamingProbe {
         let flatness = p25 / max(p10, 0.001)
         let relative = p25 / max(cold, 0.001)
         let frameMet = p25 <= 8.3
+        let enforced = PerfBudget.enforcesWallClockRatios
         print("""
 
         StreamingProbe — \(mode)
-        | size | tokens | per-token ms (mean) | worst publish ms | p95 publish ms | publishes | cache counts |
-        |---|---|---|---|---|---|---|
+        | size | tokens | per-token ms (mean) | worst publish ms | p95 publish ms | publishes | max text sets/publish | cache counts |
+        |---|---|---|---|---|---|---|---|
         \(rows.joined(separator: "\n"))
 
-        p95 25 KB / p95 10 KB = \(String(format: "%.2f", flatness)) (limit: p95_25 <= 1.5 x p95_10 + 1 ms)
-        cold committed 25 KB layout+set (median) = \(String(format: "%.2f", cold)) ms; p95 live / cold = \(String(format: "%.3f", relative)) (limit 0.25)
+        p95 25 KB / p95 10 KB = \(String(format: "%.2f", flatness)) (limit: p95_25 <= 1.5 x p95_10 + 1 ms\(enforced ? "" : ", not enforced here"))
+        cold committed 25 KB layout+set (median) = \(String(format: "%.2f", cold)) ms; p95 live / cold = \(String(format: "%.3f", relative)) (limit 0.25\(enforced ? "" : ", not enforced here"))
         120 Hz frame target 8.3 ms p95 at 25 KB: \(frameMet ? "MET" : "NOT MET") (\(String(format: "%.2f", p25)) ms)
 
         """)
         // Baseline (no coalescer) is expected to be slow; the checks only apply once flush is wired.
         guard ProbeShim.flush != nil else { return }
-        #expect(p25 <= 1.5 * p10 + 1, "p95 not flat: 25 KB \(p25) ms vs 10 KB \(p10) ms")
-        #expect(p25 <= 0.25 * cold, "p95 live publish \(p25) ms is more than 0.25x the cold committed cost \(cold) ms")
+        // Deterministic: publishes follow simulated time (30 Hz at 60 tok/s), so there's one per two tokens
+        // plus the trailing flush, whatever the machine's speed.
+        for (kb, r) in results.sorted(by: { $0.key < $1.key }) {
+            #expect(abs(r.publishes.count - (r.tokens / 2 + 1)) <= 1, "\(kb) KB: \(r.publishes.count) publishes for \(r.tokens) tokens")
+        }
+        #if os(macOS)
+        // Deterministic flatness: each publish re-sets only the text parts that changed (the growing tail),
+        // so the most set in one publish doesn't grow with the reply's size.
+        let sets10 = results[10]?.textSets.max() ?? 0, sets25 = results[25]?.textSets.max() ?? 0
+        // (Up to 3: a publish can close a text part, cross a code block, and start the next text part.)
+        #expect(sets25 <= 3, "a publish at 25 KB re-set \(sets25) text views; only the growing tail should change")
+        #expect(sets25 <= sets10, "text views re-set per publish grew with size: \(sets10) at 10 KB, \(sets25) at 25 KB")
+        #endif
+        // Wall-clock ratios only mean something with the CPU to ourselves: see `PerfBudget.enforcesWallClockRatios`.
+        if enforced {
+            #expect(p25 <= 1.5 * p10 + 1, "p95 not flat: 25 KB \(p25) ms vs 10 KB \(p10) ms")
+            #expect(p25 <= 0.25 * cold, "p95 live publish \(p25) ms is more than 0.25x the cold committed cost \(cold) ms")
+        }
         if ProcessInfo.processInfo.environment["PINCER_FRAME_BUDGET"] == "1" {
             let limit = PerfBudget.limit(.milliseconds(8.3))
             #expect(Duration.seconds(p25 / 1000) <= limit, "p95 publish at 25 KB \(p25) ms, budget \(limit)")

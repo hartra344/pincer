@@ -92,7 +92,8 @@ func directorySize(_ url: URL, _ include: (String) -> Bool) -> Int64 {
 /// - build: 2 × 5k saves vs. JSON-encoding the same items (calibration), plus the 10 s ceiling;
 /// - selective query: median of 5 vs. the median save time of one 5k chat, plus a 1 s ceiling;
 /// - append: bytes written vs. the full save's, and time vs. one full 5k save, plus a 5 s ceiling.
-/// --skip-perf-budgets drops the relative time checks (the counters and ceilings stay).
+/// --skip-perf-budgets drops the relative time checks (the counters and ceilings stay); on CI they're
+/// only reported unless `PINCER_WALL_CLOCK_CHECKS=1` (see `enforceWallClockRatios`).
 @MainActor
 func checkMessageIndexPerfSmoke(root: URL?) async {
     let gatewayId = UUID()
@@ -115,7 +116,7 @@ func checkMessageIndexPerfSmoke(root: URL?) async {
     let ratio = buildRatio / calibrationSeconds
     print("  · perf smoke: 2 × 5k messages saved and indexed in \(ms(build)) (\(String(format: "%.1f", ratio))× the \(ms(calibration)) to JSON-encode them)")
     check(build <= .seconds(10), "perf smoke: build under the absolute ceiling")
-    if !skipPerfBudgets { check(ratio <= 60, "perf smoke: build ≤ 60× JSON-encoding the same items") }
+    checkWallClockRatio(ratio <= 60, "perf smoke: build ≤ 60× JSON-encoding the same items")
     let keys: Set<String> = ["perf0", "perf1"]
     var times: [Duration] = []
     var groups: [MessageSearch.ChatGroup] = []
@@ -127,7 +128,7 @@ func checkMessageIndexPerfSmoke(root: URL?) async {
           "perf smoke: selective query results")
     print("  · perf smoke: selective query, median of 5: \(ms(median)), slowest \(ms(times.max() ?? median)) (one 5k save: \(ms(oneSave)))")
     check(times.max()! <= .seconds(1), "perf smoke: selective query under the absolute ceiling")
-    if !skipPerfBudgets { check(median * 10 <= oneSave, "perf smoke: selective query median ≤ 1/10 of one 5k save") }
+    checkWallClockRatio(median * 10 <= oneSave, "perf smoke: selective query median ≤ 1/10 of one 5k save")
     // Cancelling one search mustn't stop another that wasn't cancelled (e.g. a second window's).
     let index = MessageIndex.shared(gatewayId: gatewayId, root: root)
     var bystanderOK = 0
@@ -154,7 +155,7 @@ func checkMessageIndexPerfSmoke(root: URL?) async {
     check(incremental <= .seconds(5), "perf smoke: append under the absolute ceiling")
     check(appendStats.map { !$0.unchanged && $0.bytesWritten * 5 <= (fullSave?.bytesWritten ?? 0) && $0.filesWritten < (fullSave?.filesWritten ?? 0) } ?? false,
           "perf smoke: append rewrites ≤ 1/5 of the bytes and fewer files than the full save")
-    if !skipPerfBudgets { check(incremental * 2 <= oneSave, "perf smoke: append ≤ half of one full 5k save") }
+    checkWallClockRatio(incremental * 2 <= oneSave, "perf smoke: append ≤ half of one full 5k save")
     TranscriptCache.removeAll(gatewayId: gatewayId, root: root)
 }
 
