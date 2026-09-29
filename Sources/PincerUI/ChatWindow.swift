@@ -124,6 +124,20 @@ struct ChatWindowCommands: Commands {
             .keyboardShortcut("n", modifiers: [.command, .option])
             .disabled(self.app.selectedGateway?.selectedKey == nil)
         }
+        CommandGroup(after: .sidebar) {
+            if let gateway = self.app.selectedGateway, gateway.visibleSplitKey != nil {
+                Button(L("Close Split View")) { gateway.closeSplit() }
+                    .keyboardShortcut("\\", modifiers: .command)
+                Button(L("Swap Chats")) { gateway.swapSplit() }
+            } else {
+                Button(L("Split Right")) {
+                    guard let gateway = self.app.selectedGateway, let key = self.app.splitCandidate(for: gateway) else { return }
+                    gateway.openInSplit(key)
+                }
+                .keyboardShortcut("\\", modifiers: .command)
+                .disabled(self.app.selectedGateway.flatMap { self.app.splitCandidate(for: $0) } == nil)
+            }
+        }
     }
 }
 #endif

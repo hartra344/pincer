@@ -298,6 +298,7 @@ private struct GatewayDetail: View {
                             .id("\(gateway.id)|\(key)")
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .modifier(ChatSplitHost(gateway: gateway))
                     .modifier(ChatChrome())
                 } else if gateway.state.isConnected {
                     ContentUnavailableView(L("Pick a chat"), systemImage: "bubble.left.and.bubble.right",
