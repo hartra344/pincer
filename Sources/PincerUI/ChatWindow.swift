@@ -89,8 +89,37 @@ private struct ChatWindowContent: View {
         })
         .onAppear { self.app.chatWindowOpened(self.ref) }
         .onDisappear { self.app.chatWindowClosed(self.ref) }
+        .modifier(ChatWindowVisibility(gateway: self.gateway, key: self.ref.sessionKey))
         #if os(macOS)
         .modifier(MainWindowForLinks(gateway: self.gateway))
+        #endif
+    }
+}
+
+/// Reports the window's chat as visible (#374, #395) while its scene is active and focused, so
+/// messages that land in it are marked read like in the main window.
+struct ChatWindowVisibility: ViewModifier {
+    let gateway: GatewayStore
+    let key: String
+    @State private var viewer = "window-" + UUID().uuidString
+    @Environment(\.scenePhase) private var scenePhase
+    #if os(macOS)
+    @Environment(\.controlActiveState) private var controlActiveState
+    #endif
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: self.visible, initial: true) { _, visible in
+                self.gateway.setVisibleChat(visible ? self.key : nil, viewer: self.viewer)
+            }
+            .onDisappear { self.gateway.setVisibleChat(nil, viewer: self.viewer) }
+    }
+
+    private var visible: Bool {
+        #if os(macOS)
+        return self.scenePhase == .active && self.controlActiveState == .key
+        #else
+        return self.scenePhase == .active
         #endif
     }
 }

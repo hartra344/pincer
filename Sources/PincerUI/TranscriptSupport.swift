@@ -73,6 +73,8 @@ struct TranscriptContext {
     var isBookmarked: (String) -> Bool = { _ in false }
     /// Opens an ```html fence in the sandboxed preview. Provided by `ChatView`, which owns the sheet.
     var previewHTML: (String) -> Void = { _ in }
+    /// Shows a downloaded attachment in Quick Look. Provided by `ChatView`, which owns the preview.
+    var quickLook: (URL) -> Void = { _ in }
 
     func differs(from other: TranscriptContext) -> Bool {
         self.agent != other.agent || self.sessionKey != other.sessionKey || self.disclosure !== other.disclosure
@@ -102,6 +104,8 @@ protocol TranscriptRowActions: AnyObject {
     func loadFilePreview(_ file: FileRef)
     /// Downloads the file and offers to save it; false when it couldn't be downloaded.
     func saveFile(_ file: FileRef) async -> Bool
+    /// Downloads the file and shows it in Quick Look; false when it couldn't be downloaded.
+    func quickLook(_ file: FileRef) async -> Bool
     /// Starts a reply to the message in the composer.
     func reply(to messageId: String)
     /// Copies a link that opens the chat scrolled to the message.
@@ -568,6 +572,18 @@ final class TranscriptRenderer: TranscriptRowActions {
         let context = self.context
         guard let data = await context.gateway.files.data(for: file, sessionKey: context.sessionKey) else { return false }
         context.saveFile(file, data)
+        return true
+    }
+
+    func quickLook(_ file: FileRef) async -> Bool {
+        let context = self.context
+        guard let data = await context.gateway.files.data(for: file, sessionKey: context.sessionKey) else { return false }
+        let name = file.name, mimeType = file.mimeType
+        let url = await Task.detached(priority: .userInitiated) {
+            try? FilePreviewFiles.write(data, name: name, mimeType: mimeType)
+        }.value
+        guard let url else { return false }
+        context.quickLook(url)
         return true
     }
 

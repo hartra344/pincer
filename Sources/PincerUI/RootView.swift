@@ -119,6 +119,18 @@ struct RootView: View {
     @State private var columns: NavigationSplitViewVisibility = .all
     /// On iPhone the split view is a stack; picking a chat pushes it.
     @State private var compactColumn = NavigationSplitViewColumn.sidebar
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
+    /// Unthemed on iPhone, the sidebar's inset-grouped cards need the grouped backdrop to show.
+    private var sidebarBackground: Color? {
+        if let color = self.theme.background(.sidebarBackground) { return color }
+        #if os(iOS)
+        if self.sizeClass == .compact { return Color(.systemGroupedBackground) }
+        #endif
+        return nil
+    }
 
     var body: some View {
         Group {
@@ -130,7 +142,7 @@ struct RootView: View {
                 NavigationSplitView(columnVisibility: self.$columns, preferredCompactColumn: self.$compactColumn) {
                     ChannelList(openChat: { self.compactColumn = .detail })
                         .environment(gateway)
-                        .background { self.theme.background(.sidebarBackground)?.ignoresSafeArea() }
+                        .background { self.sidebarBackground?.ignoresSafeArea() }
                         .id(gateway.id)
                         #if os(macOS)
                         .navigationSplitViewColumnWidth(min: 240, ideal: 280, max: 400)
@@ -176,6 +188,7 @@ struct RootView: View {
         #endif
         .modifier(AppActivityTracking())
         .modifier(CompactColumnRouting(column: self.$compactColumn))
+        .modifier(MainChatVisibility(compactColumn: self.compactColumn))
         .background { UnreadBadgeSync() }
         #if os(macOS)
         .modifier(MainWindowFronting())

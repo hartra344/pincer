@@ -1,3 +1,5 @@
+import CoreGraphics
+import CoreText
 import Foundation
 
 /// The demo's "Rate limiter design" chat: an agent answering with a Mermaid flowchart, a sequence
@@ -85,7 +87,43 @@ extension DemoGateway {
             ```html
             \(Self.richRenderingHTML)
             ```
-            """)], ago: 8 * minute),
+
+            The full write-up is attached.
+            """), Self.file(Self.richRenderingPDFId, name: "rate-limiter-design.pdf", mimeType: "application/pdf")],
+            ago: 8 * minute),
         ]
+    }
+
+    static let richRenderingPDFId = "demo-rate-limiter-pdf"
+
+    /// A one-page PDF for the Quick Look preview, drawn with CoreGraphics so nothing ships as a resource.
+    static func richRenderingPDF() -> Data {
+        _ = RichRenderSVG.fontsReady
+        let data = NSMutableData()
+        var box = CGRect(x: 0, y: 0, width: 612, height: 792)
+        guard let consumer = CGDataConsumer(data: data as CFMutableData),
+              let context = CGContext(consumer: consumer, mediaBox: &box, nil)
+        else { return Data() }
+        context.beginPDFPage(nil)
+        func line(_ text: String, y: CGFloat, size: CGFloat, bold: Bool = false) {
+            let font = CTFontCreateWithName((bold ? "Helvetica-Bold" : "Helvetica") as CFString, size, nil)
+            let attributes = [kCTFontAttributeName: font] as CFDictionary
+            guard let string = CFAttributedStringCreate(nil, text as CFString, attributes) else { return }
+            context.textPosition = CGPoint(x: 72, y: y)
+            CTLineDraw(CTLineCreateWithAttributedString(string), context)
+        }
+        line("Rate limiter design", y: 700, size: 24, bold: true)
+        line("A token bucket per API key.", y: 660, size: 13)
+        line("Capacity b = 20 tokens, refill r = 5 tokens per second.", y: 640, size: 13)
+        line("An empty bucket answers 429 with Retry-After.", y: 620, size: 13)
+        let bars: [CGFloat] = [20, 16, 9, 3, 0, 5, 10, 15]
+        for (index, value) in bars.enumerated() {
+            context.setFillColor(CGColor(srgbRed: 0.42, green: 0.45, blue: 0.95, alpha: 1))
+            context.fill(CGRect(x: 72 + CGFloat(index) * 40, y: 420, width: 28, height: value * 8))
+        }
+        line("Tokens left over eight seconds of a burst", y: 396, size: 11)
+        context.endPDFPage()
+        context.closePDF()
+        return data as Data
     }
 }

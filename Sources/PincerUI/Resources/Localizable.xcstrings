@@ -101,26 +101,6 @@
         }
       }
     },
-    "%@ group": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ group"
-          }
-        }
-      }
-    },
-    "%@ group in %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ group in %2$@"
-          }
-        }
-      }
-    },
     "%@ is still stopping. Try again in a moment.": {
       "localizations": {
         "en": {
@@ -327,6 +307,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ — too large to preview"
+          }
+        }
+      }
+    },
+    "%@, agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, agent"
+          }
+        }
+      }
+    },
+    "%@, group in %@, %lld chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, group in %2$@, %3$lld chats"
+          }
+        }
+      }
+    },
+    "%@, group in %@, 1 chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, group in %2$@, 1 chat"
+          }
+        }
+      }
+    },
+    "%@, group, %lld chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@, group, %2$lld chats"
+          }
+        }
+      }
+    },
+    "%@, group, 1 chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, group, 1 chat"
           }
         }
       }
@@ -2453,6 +2483,16 @@
         }
       }
     },
+    "Collapsed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapsed"
+          }
+        }
+      }
+    },
     "Collapses the entry": {
       "localizations": {
         "en": {
@@ -4559,6 +4599,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Expand task progress"
+          }
+        }
+      }
+    },
+    "Expanded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expanded"
           }
         }
       }
@@ -8559,6 +8609,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Preview"
+          }
+        }
+      }
+    },
+    "Preview %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview %@"
           }
         }
       }
@@ -14199,6 +14259,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "https://…"
+          }
+        }
+      }
+    },
+    "in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in %@"
           }
         }
       }
