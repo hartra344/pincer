@@ -9,7 +9,7 @@ On iOS, Pincer can only post notifications while it's running and connected. To 
 
 | Mode | Server needed | How fast |
 | --- | --- | --- |
-| **Background refresh** | No. This is the default until you enter a relay URL. | Delayed. iOS decides when Pincer checks. |
+| **Background refresh** | No | Delayed. iOS decides when Pincer checks. |
 | **Push relay** | Yes: a self-hosted relay and an APNs key | Instant. |
 | **Off** | No | You're notified only while Pincer is open. |
 
@@ -26,13 +26,11 @@ No server, no Apple Developer key. Turn it on and Pincer does the rest:
 3. It posts a notification for each new reply, approval and question since the last check.
 4. It disconnects.
 
-The first check only records where you are, so it doesn't notify about things that were already there.
-
 ### It's not instant
 
 iOS decides when, usually 15 minutes to a few hours apart, depending on how often you use Pincer and your battery. It pauses in Low Power Mode, and stops after you swipe Pincer away in the app switcher until you open it again.
 
-- **Background App Refresh** has to be on for Pincer, under **Settings → General → Background App Refresh** in iOS. If it's off, Settings → Notifications in Pincer shows a warning with a button that opens iOS Settings.
+- **Background App Refresh** has to be on for Pincer, under **Settings → General → Background App Refresh** in iOS. If it's off, Settings → Notifications in Pincer shows a warning with a button that opens iOS Settings. If your device restricts it, Settings says "Background App Refresh is restricted on this device".
 - Each gateway has to be reachable from your phone when iOS checks, for example with Tailscale connected. A gateway Pincer can't reach is skipped until the next check.
 
 If you need notifications right away, use a [push relay](#push-relay).
@@ -43,7 +41,7 @@ If you need notifications right away, use a [push relay](#push-relay).
 - **Approvals** that are still waiting.
 - **Questions** an agent is waiting on you to answer.
 
-Approvals and questions always notify, even for hidden automation and slash-command chats. Replies skip subagents, archived chats, and hidden automation and slash-command chats, the same as when Pincer is open. You can show those in each gateway's settings.
+Approvals and questions always notify, even for hidden automation and slash-command chats. Replies skip subagents, archived chats, and hidden automation and slash-command chats. To include automation or slash-command chats, turn on **Show Automations** or **Show Slash Commands** in the chat list's **Organize** menu.
 
 The first check after you set it up only records a starting point, so you don't get a flood of old chats.
 
@@ -53,7 +51,7 @@ Turning off **Notify about replies and approvals** stops background refresh too.
 
 ### Checking it works
 
-Under **While Pincer is closed**, the **Last checked** row shows when Pincer last checked and how it went, such as "Up to date", "3 new" or "Couldn't reach Home". Use it to troubleshoot: "Couldn't reach Home" means the gateway wasn't reachable, and **Not yet** means iOS hasn't run a check.
+Under **While Pincer is closed**, the **Last checked** row shows when Pincer last checked and how it went, such as "Up to date", "3 new" or "Couldn't reach Home". Use it to troubleshoot: "Couldn't reach Home" means the gateway wasn't reachable, "Stopped early" means iOS cut a check short, and **Not yet** means iOS hasn't run a check.
 
 Notifications look and group the same as the others in Pincer, one thread per chat. Tap one to open the chat. You can answer an approval from its notification. See [Answering from a notification](../approvals-and-notifications/#answering-from-a-notification).
 

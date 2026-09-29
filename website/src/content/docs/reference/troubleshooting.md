@@ -208,7 +208,7 @@ That's expected. **Allow once** and **Always allow** need you to unlock the devi
 
 iOS doesn't let Pincer stay connected in the background. Set **Settings → Notifications → While Pincer is closed** to [Background refresh or Push relay](../../guides/push-notifications/).
 
-With **Background refresh**, iOS decides when Pincer checks, often every 15 minutes to a few hours. It doesn't run after you swipe Pincer away in the app switcher, and it needs **Background App Refresh** on for Pincer in iOS Settings. **Last checked** shows the latest check.
+With **Background refresh**, iOS decides when Pincer checks, usually 15 minutes to a few hours apart. It pauses in Low Power Mode, stops after you swipe Pincer away in the app switcher until you open it again, and needs **Background App Refresh** on for Pincer in iOS Settings.
 
 With **Push relay**, check the status next to each gateway:
 
