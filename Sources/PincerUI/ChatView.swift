@@ -89,7 +89,7 @@ struct ChatView: View {
                 // An overlay, so it doesn't change the measured height: its bottom sits just above
                 // the stack's top, centred over the Send button, and rides up with the keyboard.
                 .overlay(alignment: .topTrailing) {
-                    ScrollToBottomButton(model: self.scrollToBottom)
+                    ScrollToBottomButton(model: self.scrollToBottom, chat: self.chat)
                         .alignmentGuide(.top) { $0[.bottom] + Theme.Spacing.md }
                         .padding(.trailing, ScrollToBottomButton.trailingPadding)
                 }

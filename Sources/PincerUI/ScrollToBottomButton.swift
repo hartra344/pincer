@@ -44,9 +44,11 @@ final class ScrollToBottomModel {
 }
 
 /// The round down-arrow shown above the composer while the reader is scrolled up. A dot marks
-/// messages that arrived below since.
+/// messages that arrived below since. Hidden while the slash-command menu, which grows upward
+/// over the same corner, may be open.
 struct ScrollToBottomButton: View {
     let model: ScrollToBottomModel
+    let chat: ChatStore
     @Environment(\.appTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 15
@@ -58,7 +60,7 @@ struct ScrollToBottomButton: View {
 
     var body: some View {
         ZStack {
-            if self.model.isVisible {
+            if self.model.isVisible, !self.chat.draft.text.hasPrefix("/") {
                 Button {
                     self.model.scrollToBottom()
                 } label: {
