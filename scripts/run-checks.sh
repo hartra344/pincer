@@ -121,6 +121,8 @@ report 0
 # The perf smoke budgets are wall-clock, so they only mean something with the CPU to themselves.
 # Likewise the unit tests' perf budgets: the parallel lane above only holds them to a generous
 # ceiling (`PerfBudget` in Tests/PincerKitTests/Support.swift); this solo run enforces them.
+# On CI (CI=true) the wall-clock *ratios* are only reported, even here, since shared runners are too
+# noisy for them; the counter checks and absolute ceilings still apply. PINCER_WALL_CLOCK_CHECKS=1 opts in.
 lane perf-smoke "$CHECKS" --perf-smoke
 report $((${#pids[@]} - 1))
 lane perf-tests env PINCER_STRICT_PERF=1 swift test --skip-build ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"} \
