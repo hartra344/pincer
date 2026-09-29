@@ -61,7 +61,11 @@ struct SidebarList: NSViewRepresentable {
         }
 
         func makeScrollView() -> NSScrollView {
-            let outline = NSOutlineView()
+            let outline = SidebarOutlineView()
+            outline.hidesOutlineCell = { [weak self, weak outline] row in
+                guard let node = outline?.item(atRow: row) as? Node else { return false }
+                return self?.headers[node.id]?.isSubsection == true
+            }
             outline.style = .sourceList
             outline.selectionHighlightStyle = .sourceList
             outline.headerView = nil
@@ -300,7 +304,9 @@ struct SidebarList: NSViewRepresentable {
         /// hover and pushes the + button aside when it does.
         func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool {
             guard let node = item as? Node else { return true }
-            return self.allowsHeaderOutlineCell || self.headers[node.id] == nil
+            // Nested group headers keep their outline cell so they expand and collapse (and answer
+            // the arrow keys), but SidebarOutlineView never lets its triangle show.
+            return self.allowsHeaderOutlineCell || self.headers[node.id] == nil || self.headers[node.id]?.isSubsection == true
         }
 
         private func toggle(_ id: String) {
@@ -489,6 +495,15 @@ struct SidebarList: NSViewRepresentable {
     }
 }
 
+/// An outline that can keep an expandable row's disclosure triangle out of sight.
+private final class SidebarOutlineView: NSOutlineView {
+    var hidesOutlineCell: ((Int) -> Bool)?
+
+    override func frameOfOutlineCell(atRow row: Int) -> NSRect {
+        self.hidesOutlineCell?(row) == true ? .zero : super.frameOfOutlineCell(atRow: row)
+    }
+}
+
 private extension Array {
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
@@ -664,6 +679,8 @@ private final class SidebarHeaderCell: NSTableCellView {
     private var onAdd: (() -> Void)?
     private var onToggle: (() -> Void)?
     private var leading: NSLayoutConstraint?
+    private var trailing: NSLayoutConstraint?
+    private var isNested = false
     /// Width of each trailing button slot. Every header keeps both slots, so + and the chevron
     /// line up across sections and never move.
     static let buttonSlot: CGFloat = 22
@@ -720,10 +737,12 @@ private final class SidebarHeaderCell: NSTableCellView {
         row.translatesAutoresizingMaskIntoConstraints = false
         self.addSubview(row)
         let leading = row.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 2)
+        let trailing = row.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -2)
         self.leading = leading
+        self.trailing = trailing
         NSLayoutConstraint.activate([
             leading,
-            row.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -2),
+            trailing,
             row.centerYAnchor.constraint(equalTo: self.centerYAnchor),
         ])
         self.textField = self.title
@@ -735,7 +754,9 @@ private final class SidebarHeaderCell: NSTableCellView {
     @MainActor
     func configure(_ header: SidebarModel.Header, actions: SidebarActions, toggle: @escaping () -> Void) {
         let section = header.section
+        self.isNested = header.isSubsection
         self.leading?.constant = header.isSubsection ? 2 + SidebarChatCell.indentPerDepth : 2
+        self.needsLayout = true
         self.onToggle = toggle
         self.avatar = header.avatar.map { ($0, header.avatarState) }
         self.drawAvatar()
@@ -766,6 +787,29 @@ private final class SidebarHeaderCell: NSTableCellView {
                                      accessibilityDescription: label)
         self.chevron.toolTip = header.isCollapsed ? "Show" : "Hide"
         self.chevron.setAccessibilityLabel(label)
+    }
+
+    /// Nested rows are inset from the outline's trailing edge; the + and chevron reach out to it
+    /// so they sit in the same slots as the agent header's.
+    override func layout() {
+        super.layout()
+        guard isNested, let outline = self.enclosingOutline else {
+            self.setTrailing(-2)
+            return
+        }
+        let inset = outline.bounds.maxX - outline.convert(self.bounds, from: self).maxX
+        self.setTrailing(-2 + max(0, inset))
+    }
+
+    private var enclosingOutline: NSOutlineView? {
+        var view = self.superview
+        while let current = view, !(current is NSOutlineView) { view = current.superview }
+        return view as? NSOutlineView
+    }
+
+    private func setTrailing(_ value: CGFloat) {
+        guard let trailing, trailing.constant != value else { return }
+        trailing.constant = value
     }
 
     @objc private func addChat() {
