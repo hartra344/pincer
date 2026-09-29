@@ -41,6 +41,35 @@ private func checkToolCardsChat(_ gateway: GatewayStore, label: String) async {
           "\(label): web_fetch has its url args and markdown text")
     check(calls[2].arguments?.contains("\"offset\"") == true && calls[2].result?.contains("\"servers\"") == true,
           "\(label): read has path, offset, limit and the file text")
+    checkToolCardPresentations(calls, label: label)
+}
+
+@MainActor
+private func checkToolCardPresentations(_ calls: [ToolActivity], label: String) {
+    let exec = ToolCallPresentation.make(calls[0])
+    let text = exec.output?.text ?? ""
+    check(exec.kind == .exec && exec.headline == "openclaw mcp status --verbose 2>&1 | grep -A4 \"^- Era\"",
+          "\(label): exec headline is the command, unescaped (\(exec.headline ?? "nil"))")
+    check(text.contains("\n") && !text.contains("\\n") && !text.contains("\"content\"") && !text.contains("\"details\"")
+          && text.components(separatedBy: "MCP servers (4 configured)").count == 2,
+          "\(label): exec output has real newlines, no envelope or escapes, and isn't repeated")
+    check(exec.output?.exitCode == 0 && exec.output?.durationMs == 1240 && exec.output?.isError == false,
+          "\(label): exec exit 0 in 1240 ms (\(exec.output?.exitCode ?? -1), \(exec.output?.durationMs ?? -1))")
+    let failed = ToolCallPresentation.make(calls[1])
+    check(failed.output?.exitCode == 1 && failed.output?.isError == true, "\(label): failed exec has exit code 1 and the error flag")
+    let mcp = ToolCallPresentation.make(calls[4])
+    check(mcp.kind == .mcp && mcp.mcpServer == "github" && mcp.displayName == "search_issues",
+          "\(label): MCP call is github › search_issues (\(mcp.mcpServer ?? "nil") \(mcp.displayName))")
+    let fetch = ToolCallPresentation.make(calls[5])
+    check(fetch.kind == .webFetch && fetch.output?.status == "200", "\(label): web_fetch status is 200 (\(fetch.output?.status ?? "nil"))")
+
+    // A live run stores the whole result envelope; the card still shows just the text.
+    var live = calls[0]
+    live.result = """
+    {"content":[{"type":"text","text":"line one\\nline two"}],"details":{"status":"completed","exitCode":0,"durationMs":900,"aggregated":"line one\\nline two"}}
+    """
+    let unwrapped = ToolCallPresentation.make(live).output
+    check(unwrapped?.text == "line one\nline two" && unwrapped?.exitCode == 0, "\(label): envelope result is unwrapped (\(unwrapped?.text ?? "nil"))")
 }
 
 @MainActor
