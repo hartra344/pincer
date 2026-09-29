@@ -93,6 +93,7 @@ enum Suites {
                 await checkMessageIndex()
                 await checkTranscriptCacheVersioning()
             },
+            Section("Transcript window") { await withScratchCache { root in await withCacheEnvironment(root.path(percentEncoded: false)) { await runTranscriptWindowChecks() } } },
             Section("Message search in the palette") { checkPaletteMessages() },
             Section("Context usage") { runContextUsageChecks() },
             Section("Quick Capture") { await runQuickCaptureChecks() },
