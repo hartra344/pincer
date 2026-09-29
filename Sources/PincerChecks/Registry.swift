@@ -148,6 +148,7 @@ enum Suites {
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
         Section("Sidebar hierarchy (demo)") { await runDemoSidebarHierarchy() },
+        Section("Sidebar reveal (demo)") { await runDemoSidebarReveal() },
         Section("MCP servers (demo)") { await runDemoMCP() },
         Section("Chat windows (demo)") { await runDemoChatWindows() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
