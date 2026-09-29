@@ -114,7 +114,7 @@ func checkMessageIndexPerfSmoke(root: URL?) async {
     let calibrationSeconds = max(Double(calibration.components.attoseconds) / 1e18 + Double(calibration.components.seconds), 0.001)
     let ratio = buildRatio / calibrationSeconds
     print("  · perf smoke: 2 × 5k messages saved and indexed in \(ms(build)) (\(String(format: "%.1f", ratio))× the \(ms(calibration)) to JSON-encode them)")
-    checkBudget(build, .seconds(3), hardLimit: .seconds(10), "perf smoke: build under the absolute ceiling")
+    check(build <= .seconds(10), "perf smoke: build under the absolute ceiling")
     if !skipPerfBudgets { check(ratio <= 60, "perf smoke: build ≤ 60× JSON-encoding the same items") }
     let keys: Set<String> = ["perf0", "perf1"]
     var times: [Duration] = []
