@@ -478,7 +478,7 @@ struct TranscriptLayoutBuilder {
                                            time: item.timestamp?.chatTimestamp, isPending: item.isAwaitingDelivery)
         let text = item.plainText
         let messageId = item.isReplyable ? item.transcriptId : nil
-        let contentWidth = max(layout.width - TranscriptMetrics.contentX - TranscriptMetrics.sidePadding, 40)
+        let contentWidth = TranscriptMetrics.contentWidth(rowWidth: layout.width)
         let quote = layout.decoration.quote.map {
             self.replyQuote($0, isLocating: layout.decoration.isLocating, width: min(contentWidth, TranscriptMetrics.maxCardWidth))
         }
@@ -657,7 +657,7 @@ struct TranscriptLayoutBuilder {
     {
         let metrics = TranscriptMetrics.self
         let x = metrics.contentX
-        let contentWidth = max(layout.width - x - metrics.sidePadding, 40)
+        let contentWidth = metrics.contentWidth(rowWidth: layout.width)
         let top = metrics.verticalPadding
         let headerHeight = TranscriptStyle.lineHeight(self.style.headline)
         layout.parts.append(.init(part: .avatar(avatar), frame: CGRect(x: metrics.sidePadding, y: top, width: metrics.avatar, height: metrics.avatar)))
@@ -706,21 +706,21 @@ struct TranscriptLayoutBuilder {
         // A streaming message is split into frozen chunks and a tail; a committed one is one cached list.
         let pieces: [TranscriptText.LiveSegment] = live
             ? TranscriptText.liveMarkdown(source, tone: tone, row: layout.id, owner: self.context.chat.map(ObjectIdentifier.init))
-            : TranscriptText.markdown(source, tone: tone).map { .init(segment: $0, isFrozen: false, extraSpacing: 0) }
+            : TranscriptText.markdown(source, tone: tone, dark: self.settings.dark).map { .init(segment: $0, isFrozen: false, extraSpacing: 0) }
         for piece in pieces {
             let spacing = TranscriptMetrics.blockSpacing + piece.extraSpacing
             switch piece.segment {
             case let .text(source):
                 let (text, match) = self.marks.mark(source, section)
                 let size = live ? TranscriptText.liveSize(text, width: width, frozen: piece.isFrozen && text === source, exact: true)
-                    : TranscriptText.size(text, width: width)
+                    : TranscriptText.size(text, width: width, memoized: text === source)
                 stack.add(.text(text), height: size.height, spacing: spacing)
                 self.marks.place(match, in: text, width: width, stack: stack, into: &layout)
             case let .quote(source):
                 let (text, match) = self.marks.mark(source, section)
                 let quoteWidth = max(width - 11, 20)
                 let size = live ? TranscriptText.liveSize(text, width: quoteWidth, frozen: piece.isFrozen && text === source, exact: false)
-                    : TranscriptText.size(text, width: quoteWidth)
+                    : TranscriptText.size(text, width: quoteWidth, memoized: text === source)
                 stack.add(.quote(text), height: size.height, spacing: spacing)
                 self.marks.place(match, in: text, width: max(width - 11, 20), stack: stack, into: &layout)
             case .rule:
@@ -756,7 +756,7 @@ struct TranscriptLayoutBuilder {
                 let isSVG = SVGSource.inlineSource(language: language, code: code) != nil || RichBlock.kind(language: language) != nil
                 let (text, match) = isSVG ? (source, nil) : self.marks.mark(source, section)
                 let size = live ? TranscriptText.liveSize(text, width: .greatestFiniteMagnitude, frozen: piece.isFrozen && text === source, exact: false)
-                    : TranscriptText.size(text, width: .greatestFiniteMagnitude)
+                    : TranscriptText.size(text, width: .greatestFiniteMagnitude, memoized: text === source)
                 let part = TranscriptPart.Code(language: language, code: code, text: text, textSize: size, headerHeight: headerHeight)
                 stack.add(.code(part), height: headerHeight + 1 + 10 + size.height + 10)
                 self.marks.place(match, in: text, width: .greatestFiniteMagnitude, stack: stack, offset: headerHeight + 11, into: &layout)

@@ -103,10 +103,10 @@ enum InlineMathText {
     }
 
     /// First private-use scalar used as a placeholder; one per span, so at most `limit` spans a paragraph.
-    private static let base: UInt32 = 0xF0000
-    private static let limit = 512
+    private nonisolated static let base: UInt32 = 0xF0000
+    private nonisolated static let limit = 512
 
-    static func mask(_ text: String) -> Masked {
+    nonisolated static func mask(_ text: String) -> Masked {
         let found = InlineMath.spans(in: text)
         guard !found.isEmpty, !text.unicodeScalars.contains(where: { $0.value >= base && $0.value < base + UInt32(limit) })
         else { return Masked(text: text, spans: [:]) }

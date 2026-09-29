@@ -29,9 +29,26 @@ enum TranscriptText {
 
     enum Tone: Hashable { case primary, secondary, error }
 
-    private struct Key: Hashable {
+    /// The appearance is part of the key because inline math bakes a resolved color into its attachments.
+    struct Key: Hashable {
         let source: String
         let tone: Tone
+        let dark: Bool
+    }
+
+    /// How inline text reaches Markdown parsing and inline math. Main uses the shared caches and draws
+    /// math; the premeasure worker parses uncached and rejects any row with math (which stays on main).
+    struct BuildHooks {
+        var parse: (String) -> AttributedString
+        var math: ((String, [Unicode.Scalar: (latex: String, source: String)], [NSAttributedString.Key: Any],
+                    PFont, PColor, NSMutableAttributedString) -> Void)?
+
+        @MainActor static func main(cached: Bool) -> BuildHooks {
+            BuildHooks(parse: { cached ? MarkdownCache.inline($0) : MarkdownBlock.inline($0) },
+                       math: { string, spans, attributes, font, color, result in
+                           InlineMathText.append(string, spans: spans, attributes: attributes, font: font, color: color, to: result)
+                       })
+        }
     }
 
     static let segmentCapacity = 3000
@@ -39,19 +56,43 @@ enum TranscriptText {
     private static var segmentCache = LRUCache<Key, [Segment]>(capacity: TranscriptText.segmentCapacity)
     private static var cacheGeneration = -1
 
+    static let heightMemoCapacity = 6000
+
+    struct MemoKey: Hashable {
+        let object: ObjectIdentifier
+        let width: CGFloat
+        let exact: Bool
+    }
+
+    /// Sizes of cached segments' strings, so relaying out a row whose text is unchanged (or whose sizes
+    /// the premeasure worker computed) costs no TextKit pass. Entries hold their string so an identifier
+    /// can't be reused while the size is remembered.
+    private static var heightMemo = LRUCache<MemoKey, (text: NSAttributedString, size: CGSize)>(capacity: TranscriptText.heightMemoCapacity)
+    private static let measurer = TranscriptTextMeasurer()
+
+    /// TextKit passes run on the main thread and sizes served from the memo, for tests and probes.
+    private(set) static var measureStats: (mainLayouts: Int, memoHits: Int) = (0, 0)
+
+    static func resetMeasureStats() { self.measureStats = (0, 0) }
+
+    /// Drops everything built with an older style (Dynamic Type changed).
+    private static func syncGeneration() {
+        guard self.cacheGeneration != TranscriptStyle.generation else { return }
+        self.segmentCache.removeAll()
+        self.heightMemo.removeAll()
+        self.cacheGeneration = TranscriptStyle.generation
+    }
+
     /// Number of cached committed-message segment lists, for tests.
     static var segmentCacheCount: Int { self.segmentCache.count }
 
     // MARK: Building
 
-    static func markdown(_ source: String, tone: Tone) -> [Segment] {
-        if self.cacheGeneration != TranscriptStyle.generation {
-            self.segmentCache.removeAll()
-            self.cacheGeneration = TranscriptStyle.generation
-        }
-        let key = Key(source: source, tone: tone)
+    static func markdown(_ source: String, tone: Tone, dark: Bool = RichBlock.isDark) -> [Segment] {
+        self.syncGeneration()
+        let key = Key(source: source, tone: tone, dark: dark)
         if let cached = self.segmentCache.value(for: key) { return cached }
-        let segments = self.build(MarkdownCache.blocks(source), tone: tone)
+        let segments = self.build(MarkdownCache.blocks(source), tone: tone, env: .current(dark: dark), hooks: .main(cached: true))!
         self.segmentCache.set(segments, for: key)
         return segments
     }
@@ -72,12 +113,6 @@ enum TranscriptText {
         let startsWithHeading: Bool
     }
 
-    private struct HeightKey: Hashable {
-        let object: ObjectIdentifier
-        let width: CGFloat
-        let exact: Bool
-    }
-
     /// What is kept for one streaming row: its frozen text (up to its last cut), the chunks built from it,
     /// and their measured heights.
     private struct LiveState {
@@ -86,7 +121,7 @@ enum TranscriptText {
         var generation: Int
         var frozenText = ""
         var chunks: [FrozenChunk] = []
-        var heights: [HeightKey: (text: NSAttributedString, height: CGFloat)] = [:]
+        var heights: [MemoKey: (text: NSAttributedString, height: CGFloat)] = [:]
         var lastUse = 0
     }
 
@@ -134,6 +169,7 @@ enum TranscriptText {
             state = LiveState(owner: owner, tone: tone, generation: TranscriptStyle.generation)
         }
         state.lastUse = self.liveClock
+        let env = TextBuildEnvironment.current(dark: RichBlock.isDark)
         var start = source.utf8.index(source.startIndex, offsetBy: state.frozenText.utf8.count)
         for cut in MarkdownBlock.streamingFreezePoints(source, from: start) where cut > start && cut <= source.endIndex {
             let text = String(source[start..<cut])
@@ -141,7 +177,7 @@ enum TranscriptText {
             let blocks = MarkdownBlock.parse(text)
             var heading = false
             if case .heading = blocks.first { heading = true }
-            state.chunks.append(FrozenChunk(segments: self.build(blocks, tone: tone, cached: false), startsWithHeading: heading))
+            state.chunks.append(FrozenChunk(segments: self.build(blocks, tone: tone, env: env, hooks: .main(cached: false))!, startsWithHeading: heading))
             state.frozenText += text
         }
         self.liveStates[row] = state
@@ -168,7 +204,7 @@ enum TranscriptText {
             let blocks = MarkdownBlock.parse(String(source[start...]))
             var heading = false
             if case .heading = blocks.first { heading = true }
-            add(self.build(blocks, tone: tone, cached: false), frozen: false, startsWithHeading: heading)
+            add(self.build(blocks, tone: tone, env: env, hooks: .main(cached: false))!, frozen: false, startsWithHeading: heading)
         }
         return result
     }
@@ -177,26 +213,33 @@ enum TranscriptText {
     /// their exact height, so many small views add up to what one committed view measures.
     static func liveSize(_ string: NSAttributedString, width: CGFloat, frozen: Bool, exact: Bool) -> CGSize {
         guard frozen else { return self.size(string, width: width, exact: exact) }
-        let key = HeightKey(object: ObjectIdentifier(string), width: width, exact: exact)
+        let key = MemoKey(object: ObjectIdentifier(string), width: width, exact: exact)
         if let row = self.heightRow, let known = self.liveStates[row]?.heights[key] { return CGSize(width: width, height: known.height) }
         let size = self.size(string, width: width, exact: exact)
         if let row = self.heightRow { self.liveStates[row]?.heights[key] = (string, size.height) }
         return size
     }
 
-    static func color(for tone: Tone) -> PColor {
-        switch tone {
-        case .primary: TranscriptColors.label
-        case .secondary: TranscriptColors.secondary
-        case .error: TranscriptColors.red
-        }
-    }
-
-    private static func build(_ blocks: [MarkdownBlock], tone: Tone, cached: Bool = true) -> [Segment] {
-        let style = TranscriptStyle.shared
-        let color = self.color(for: tone)
+    /// The segments for `blocks`, or nil when `hooks` can't draw inline math and a paragraph has some.
+    /// Runs on any thread: it reads only `env` and its arguments.
+    nonisolated static func build(_ blocks: [MarkdownBlock], tone: Tone, env: TextBuildEnvironment,
+                                  hooks: BuildHooks) -> [Segment]?
+    {
+        let style = env.fonts
+        let color = env.color(for: tone)
+        let secondary = env.colors.secondary
+        var rejected = false
         var segments: [Segment] = []
         var current = NSMutableAttributedString()
+
+        /// Inline text as attributes on `font`; a paragraph with math the hooks can't draw marks the build rejected.
+        func inline(_ text: String, font: PFont, color: PColor) -> NSMutableAttributedString {
+            guard let result = self.inline(text, font: font, color: color, fill: env.colors.fill, hooks: hooks) else {
+                rejected = true
+                return NSMutableAttributedString()
+            }
+            return result
+        }
 
         func flush() {
             if current.length > 0 {
@@ -219,20 +262,20 @@ enum TranscriptText {
         for block in blocks {
             switch block {
             case let .paragraph(text):
-                append(self.inline(text, font: style.body, color: color, cached: cached), spacingBefore: TranscriptMetrics.blockSpacing)
+                append(inline(text, font: style.body, color: color), spacingBefore: TranscriptMetrics.blockSpacing)
             case let .heading(level, text):
                 let font = level == 1 ? style.title2 : level == 2 ? style.title3 : style.headline
-                append(self.inline(text, font: font, color: color, cached: cached), spacingBefore: TranscriptMetrics.blockSpacing + 2)
+                append(inline(text, font: font, color: color), spacingBefore: TranscriptMetrics.blockSpacing + 2)
             case let .list(items, ordered):
                 let markers = items.indices.map { ordered ? "\($0 + 1)." : "•" }
-                let markerAttributes: [NSAttributedString.Key: Any] = [.font: style.listMarker, .foregroundColor: TranscriptColors.secondary]
+                let markerAttributes: [NSAttributedString.Key: Any] = [.font: style.listMarker, .foregroundColor: secondary]
                 let markerWidth = markers.map { ceil(($0 as NSString).size(withAttributes: markerAttributes).width) }.max() ?? 0
                 for (index, item) in items.enumerated() {
                     let indent = CGFloat(item.indent) * 14
                     let textStart = indent + markerWidth + 6
                     let line = NSMutableAttributedString(string: markers[index], attributes: markerAttributes)
                     line.append(NSAttributedString(string: "\t", attributes: [.font: style.body]))
-                    line.append(self.inline(item.text, font: style.body, color: color, cached: cached))
+                    line.append(inline(item.text, font: style.body, color: color))
                     append(line, spacingBefore: index == 0 ? TranscriptMetrics.blockSpacing : 4) { paragraph in
                         paragraph.firstLineHeadIndent = indent
                         paragraph.headIndent = textStart
@@ -242,11 +285,11 @@ enum TranscriptText {
                 }
             case let .quote(text):
                 flush()
-                let quote = self.inline(text, font: style.body, color: TranscriptColors.secondary, cached: cached)
+                let quote = inline(text, font: style.body, color: secondary)
                 segments.append(.quote(quote))
             case let .code(language, code):
                 flush()
-                let text = NSAttributedString(string: code, attributes: [.font: style.code, .foregroundColor: TranscriptColors.label])
+                let text = NSAttributedString(string: code, attributes: [.font: style.code, .foregroundColor: env.colors.primary])
                 segments.append(.code(language: language?.isEmpty == false ? language! : "code", code: code, text: text))
             case .rule:
                 flush()
@@ -257,7 +300,7 @@ enum TranscriptText {
                 func row(_ cells: [String], font: PFont) -> [NSAttributedString] {
                     (0..<columns).map { column in
                         let text = column < cells.count ? cells[column] : ""
-                        let cell = self.inline(text, font: font, color: color, cached: cached)
+                        let cell = inline(text, font: font, color: color)
                         let alignment = column < alignments.count ? alignments[column] : .leading
                         let paragraph = NSMutableParagraphStyle()
                         paragraph.alignment = alignment == .trailing ? .right : alignment == .center ? .center : .natural
@@ -271,15 +314,23 @@ enum TranscriptText {
             }
         }
         flush()
-        return segments
+        return rejected ? nil : segments
     }
 
     /// Inline Markdown (bold, italic, code, links, strikethrough) as attributes on `font`.
-    static func inline(_ text: String, font: PFont, color: PColor, cached: Bool = true) -> NSMutableAttributedString {
+    @MainActor static func inline(_ text: String, font: PFont, color: PColor, cached: Bool = true) -> NSMutableAttributedString {
+        self.inline(text, font: font, color: color, fill: TranscriptColors.fill, hooks: .main(cached: cached))!
+    }
+
+    /// Nil when the text has inline math and `hooks` can't draw it.
+    nonisolated static func inline(_ text: String, font: PFont, color: PColor, fill: PColor,
+                                   hooks: BuildHooks) -> NSMutableAttributedString?
+    {
         // Inline math is swapped for placeholders before Markdown sees it (so `_` and `*` inside it
         // aren't read as emphasis), then drawn as image attachments.
         let math = InlineMathText.mask(text)
-        let parsed = cached ? MarkdownCache.inline(math.text) : MarkdownBlock.inline(math.text)
+        if !math.spans.isEmpty, hooks.math == nil { return nil }
+        let parsed = hooks.parse(math.text)
         let result = NSMutableAttributedString()
         for run in parsed.runs {
             let string = MarkdownBlock.softBreaks(String(parsed[run.range].characters))
@@ -288,7 +339,7 @@ enum TranscriptText {
             if let intent = run.inlinePresentationIntent {
                 if intent.contains(.code) {
                     runFont = PFont.monospacedSystemFont(ofSize: (font.pointSize * 0.92).rounded(), weight: .regular)
-                    attributes[.backgroundColor] = TranscriptColors.fill
+                    attributes[.backgroundColor] = fill
                 }
                 runFont = TranscriptStyle.withTraits(runFont, bold: intent.contains(.stronglyEmphasized),
                                                      italic: intent.contains(.emphasized))
@@ -303,8 +354,7 @@ enum TranscriptText {
             if math.spans.isEmpty {
                 result.append(NSAttributedString(string: string, attributes: attributes))
             } else {
-                InlineMathText.append(string, spans: math.spans, attributes: attributes, font: runFont,
-                                      color: color, to: result)
+                hooks.math?(string, math.spans, attributes, runFont, color, result)
             }
         }
         return result
@@ -316,34 +366,31 @@ enum TranscriptText {
 
     // MARK: Measuring
 
-    private static let storage = NSTextStorage()
-    private static let layoutManager: NSLayoutManager = {
-        let manager = NSLayoutManager()
-        let container = NSTextContainer(size: .zero)
-        container.lineFragmentPadding = 0
-        manager.addTextContainer(container)
-        TranscriptText.storage.addLayoutManager(manager)
-        return manager
-    }()
-
     /// Size of `string` wrapped to `width` (unwrapped when width is infinite), rounded up to points.
-    static func size(_ string: NSAttributedString, width: CGFloat, exact: Bool = false) -> CGSize {
+    /// `memoized` remembers the size by the string's identity, for cached segments that are measured
+    /// again at the same width; leave it off for strings built for one layout.
+    static func size(_ string: NSAttributedString, width: CGFloat, exact: Bool = false, memoized: Bool = false) -> CGSize {
         guard string.length > 0, width > 0 else { return .zero }
-        let manager = self.layoutManager
-        let container = manager.textContainers[0]
-        container.size = CGSize(width: width, height: .greatestFiniteMagnitude)
-        self.storage.setAttributedString(string)
-        manager.ensureLayout(for: container)
-        let used = manager.usedRect(for: container)
-        return exact ? CGSize(width: ceil(used.width), height: used.height) : CGSize(width: ceil(used.width), height: ceil(used.height))
+        var key: MemoKey?
+        if memoized {
+            self.syncGeneration()
+            let memoKey = MemoKey(object: ObjectIdentifier(string), width: width, exact: exact)
+            if let hit = self.heightMemo.value(for: memoKey) {
+                self.measureStats.memoHits += 1
+                return hit.size
+            }
+            key = memoKey
+        }
+        self.measureStats.mainLayouts += 1
+        let size = self.measurer.size(string, width: width, exact: exact)
+        if let key { self.heightMemo.set((string, size), for: key) }
+        return size
     }
 
     /// Width of `string` on one line, ignoring paragraph alignment.
     static func naturalWidth(_ string: NSAttributedString) -> CGFloat {
-        guard string.length > 0 else { return 0 }
-        let unaligned = NSMutableAttributedString(attributedString: string)
-        unaligned.removeAttribute(.paragraphStyle, range: NSRange(location: 0, length: unaligned.length))
-        return self.size(unaligned, width: .greatestFiniteMagnitude).width
+        self.measureStats.mainLayouts += 1
+        return self.measurer.naturalWidth(string)
     }
 }
 
