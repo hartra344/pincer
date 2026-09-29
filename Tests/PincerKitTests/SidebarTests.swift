@@ -425,6 +425,31 @@ struct SidebarTests {
         #expect(store.totalUnread == 2)
     }
 
+    @Test func nestedPinnedChats() throws {
+        defer { self.scratch.remove() }
+        let store = GatewayStore(profile: self.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        store.applySnapshot(Fixtures.json(#"""
+        {"sessions":[
+          {"key":"agent:main:main","updatedAt":100},
+          {"key":"agent:main:dashboard:apt","label":"Apt","category":"Prep","pinned":true,"updatedAt":10},
+          {"key":"agent:main:dashboard:pack","label":"Pack","category":"Prep","updatedAt":300},
+          {"key":"agent:main:dashboard:pinned","label":"Pinned loose","pinned":true,"updatedAt":20},
+          {"key":"agent:main:dashboard:loose","label":"Loose","updatedAt":400}
+        ]}
+        """#))
+        store.groupCatalog = ["Prep"]
+        store.organization = .agent
+        let main = try #require(self.agentSection(store, "main"))
+        // Home, then pinned ungrouped chats, lead; pinned grouped chats stay in their group.
+        #expect(main.leadingChannelCount == 2)
+        #expect(main.channels.map(\.id) == ["agent:main:main", "agent:main:dashboard:pinned", "agent:main:dashboard:loose"])
+        #expect(main.subsections[0].channels.map(\.id).first == "agent:main:dashboard:apt")
+        #expect(main.allChannels.map(\.id) == [
+            "agent:main:main", "agent:main:dashboard:pinned", "agent:main:dashboard:apt",
+            "agent:main:dashboard:pack", "agent:main:dashboard:loose",
+        ])
+    }
+
     @Test func nestedDropValues() {
         defer { self.scratch.remove() }
         let store = self.nestedStore()
