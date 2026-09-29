@@ -52,7 +52,8 @@ struct GatewayErrorTests {
     }
 
     @Test func defaultWording() {
-        let named = self.rpc("FORBIDDEN", "x", ["code": "MISSING_SCOPE", "missingScope": "operator.read"])        #expect(GatewayError.message(for: named) == "Your device doesn't have the `operator.read` scope. Approve it again from the Gateway with that scope.")
+        let named = self.rpc("FORBIDDEN", "x", ["code": "MISSING_SCOPE", "missingScope": "operator.read"])
+        #expect(GatewayError.message(for: named) == "Your device doesn't have the `operator.read` scope. Approve it again from the Gateway with that scope.")
         let inMessage = self.rpc("FORBIDDEN", "missing scope: operator.admin")
         #expect(GatewayError.message(for: inMessage).contains("`operator.admin`"))
         #expect(GatewayError.message(for: self.rpc("MISSING_SCOPE")).hasPrefix("Your device is missing a scope"))
