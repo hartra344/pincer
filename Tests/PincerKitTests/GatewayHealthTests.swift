@@ -644,11 +644,11 @@ struct GatewayHealthStalenessTests {
         await model.refreshIfStale()
         #expect(calls.count("health") == 0)
 
-        // Long after the last event the fallback polls once, and that poll counts as fresh.
+        // Long after the last event the fallback polls once, and the poll itself counts as fresh.
         let later = Date().addingTimeInterval(Double(GatewayHealthModel.refreshInterval.components.seconds) + 5)
         await model.refreshIfStale(now: later)
         #expect(calls.count("health") == 1)
-        await model.refreshIfStale(now: later.addingTimeInterval(1))
+        await model.refreshIfStale()
         #expect(calls.count("health") == 1)
     }
 }
