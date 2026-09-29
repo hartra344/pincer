@@ -93,4 +93,33 @@ struct TranscriptRemovalTests {
         #expect(await !self.found(gateway, "zorblax"))
         await self.finish(gateway)
     }
+
+    @Test func changeInvalidatesInFlightFills() async {
+        let gateway = self.gateway()
+        let key = "agent:main:dashboard:a"
+        let before = gateway.cacheGeneration(of: key)
+        await gateway.transcriptChanged(key: key, change: .changed(editorText: nil))
+        #expect(gateway.cacheGeneration(of: key) == before + 1)
+        await gateway.transcriptChanged(key: key, change: .deleted)
+        #expect(gateway.cacheGeneration(of: key) == before + 2)
+        #expect(gateway.cacheGeneration(of: "agent:main:dashboard:b") == 0)
+        await self.finish(gateway)
+    }
+
+    @Test(arguments: [SessionTranscriptChange.deleted, .changed(editorText: nil)])
+    func fillInFlightCantReAddRemovedContent(change: SessionTranscriptChange) async {
+        let gateway = GatewayStore(profile: GatewayProfile.demo(), defaults: self.scratch.defaults, identity: Fixtures.identity())
+        gateway.start()
+        await self.settle { gateway.state.isConnected && !gateway.sessions.isEmpty }
+        let key = "agent:main:dashboard:trip"
+        #expect(gateway.state.isConnected)
+        await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: key)
+        let fill = gateway.startHeadlessFill(sessionKey: key, agentId: "main")
+        await gateway.transcriptChanged(key: key, change: change)
+        await fill.value
+        #expect(!self.cached(gateway, key))
+        #expect(await !self.found(gateway, "ramen"))
+        gateway.stop()
+        await self.finish(gateway)
+    }
 }

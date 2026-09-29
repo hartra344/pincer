@@ -249,6 +249,7 @@ extension GatewayStore {
         }
         guard self.invalidatingTranscripts.insert(key).inserted else { return }
         defer { self.invalidatingTranscripts.remove(key) }
+        await self.cancelHeadlessFill(key)
         if change == .deleted {
             self.chats.removeValue(forKey: key)?.stopCaching()
             self.residency.forget(key)
