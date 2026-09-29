@@ -4,7 +4,8 @@
 #
 # Builds the PincerUI package target for macOS and the iOS Simulator with the compiler's string
 # extraction on (SWIFT_EMIT_LOC_STRINGS), then merges the extracted strings of every PincerUI file
-# that looks strings up in its own bundle (`bundle: .module` or `L("…")`) into the catalog with
+# that looks strings up in its own bundle (`bundle: .module` or `L("…")`), plus every PincerKit file
+# that uses PincerKit's `L("…")` (its sentences live in PincerUI's catalog; see `PincerStrings`), into the catalog with
 # `xcstringstool sync`. Each key gets an English value equal to the key, and keys with no letters
 # (pure format strings such as "%@ %@") are dropped since there's nothing to translate.
 # Syncs into the existing catalog, so translations and comments are kept; keys no longer in the code
@@ -23,11 +24,13 @@ if [[ "${1:-}" != "--skip-build" ]]; then
 fi
 
 args=()
-while IFS= read -r source; do
-  name="$(basename "$source" .swift)"
-  while IFS= read -r data; do args+=(--stringsdata "$data"); done \
-    < <(find "$DERIVED/Build/Intermediates.noindex" -path "*PincerUI*" -path "*/arm64/*" -name "$name.stringsdata")
-done < <(grep -lE 'bundle: \.module|[^A-Za-z]L\("' Sources/PincerUI/*.swift)
+for target in PincerUI PincerKit; do
+  while IFS= read -r source; do
+    name="$(basename "$source" .swift)"
+    while IFS= read -r data; do args+=(--stringsdata "$data"); done \
+      < <(find "$DERIVED/Build/Intermediates.noindex" -path "*/$target-*.build/*" -path "*/arm64/*" -name "$name.stringsdata")
+  done < <(grep -lE 'bundle: \.module|[^A-Za-z]L\("' "Sources/$target"/*.swift)
+done
 if [[ ${#args[@]} -eq 0 ]]; then
   echo "No .stringsdata found under $DERIVED; run without --skip-build." >&2
   exit 1

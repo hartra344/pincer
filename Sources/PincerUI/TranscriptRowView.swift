@@ -91,12 +91,12 @@ final class TranscriptRowView: TranscriptBaseView {
         guard let status = status ?? self.layout?.sendStatus, let actions else { return [] }
         var result: [SendAction] = []
         if status.canRetry {
-            result.append(SendAction(title: "Retry", symbol: "arrow.clockwise", isDestructive: false) { [weak actions] in
+            result.append(SendAction(title: L("Retry"), symbol: "arrow.clockwise", isDestructive: false) { [weak actions] in
                 actions?.retrySend(status.id)
             })
         }
         if status.canDelete {
-            result.append(SendAction(title: "Delete", symbol: "trash", isDestructive: true) { [weak actions] in
+            result.append(SendAction(title: L("Delete"), symbol: "trash", isDestructive: true) { [weak actions] in
                 actions?.deleteSend(status.id)
             })
         }

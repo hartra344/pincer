@@ -480,10 +480,10 @@ public final class PairingInboxModel {
 
     // MARK: Errors
 
-    public nonisolated static let missingScopeMessage = "Reviewing pairing requests needs Full Management access."
-    public nonisolated static let commandOwnerScopeMessage = "Making them the command owner needs Full Management access."
-    public nonisolated static let staleMessage = "This request was already handled or expired."
-    public nonisolated static let expiredMessage = "This request expired."
+    public nonisolated static var missingScopeMessage: String { L("Reviewing pairing requests needs Full Management access.") }
+    public nonisolated static var commandOwnerScopeMessage: String { L("Making them the command owner needs Full Management access.") }
+    public nonisolated static var staleMessage: String { L("This request was already handled or expired.") }
+    public nonisolated static var expiredMessage: String { L("This request expired.") }
 
     static func isStale(_ error: Error) -> Bool {
         guard case let GatewayError.rpc(code, message, _) = error, code == "INVALID_REQUEST" else { return false }
@@ -499,6 +499,7 @@ public final class PairingInboxModel {
         GatewayError.message(
             for: error,
             scope: GatewayError.missingScope(error) == GatewayConnection.adminScope
-                ? Self.commandOwnerScopeMessage : Self.missingScopeMessage)
+                ? Self.commandOwnerScopeMessage : Self.missingScopeMessage,
+            unavailable: L("pairing requests"))
     }
 }

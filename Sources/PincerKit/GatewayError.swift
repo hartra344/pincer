@@ -43,12 +43,30 @@ extension GatewayError {
         self.isUnknownMethod(error) || self.isForbidden(error)
     }
 
+    /// How a failed call reads to the user, before it's put into words.
+    public enum Failure: Equatable, Sendable {
+        /// The device lacks an operator scope; `scope` when the Gateway named it.
+        case missingScope(scope: String?)
+        /// The Gateway doesn't have the method.
+        case unsupported
+        /// Anything else: the Gateway's own message, or the error's description.
+        case message(String)
+    }
+
+    /// Classifies a failed call: missing scope, unsupported method, or the Gateway's message.
+    public static func classify(_ error: Error) -> Failure {
+        if self.isMissingScope(error) { return .missingScope(scope: self.missingScope(error) ?? self.scopeHint(in: error)) }
+        if self.isUnknownMethod(error) { return .unsupported }
+        guard case let .rpc(_, message, _) = error as? GatewayError else { return .message(error.localizedDescription) }
+        return .message(message)
+    }
+
     /// The default missing-scope sentence, naming the scope when the Gateway did.
-    static func missingScopeMessage(for error: Error) -> String {
+    public static func missingScopeMessage(for error: Error) -> String {
         guard let scope = self.missingScope(error) ?? self.scopeHint(in: error) else {
-            return "Your device is missing a scope this needs. Approve it again from the Gateway with that scope."
+            return L("Your device is missing a scope this needs. Approve it again from the Gateway with that scope.")
         }
-        return "Your device doesn't have the `\(scope)` scope. Approve it again from the Gateway with that scope."
+        return L("Your device doesn't have the `\(scope)` scope. Approve it again from the Gateway with that scope.")
     }
 
     /// An `operator.*` scope named in the message ("missing scope: operator.read").
@@ -59,12 +77,16 @@ extension GatewayError {
         return String(message[range])
     }
 
+    /// Pages pass `unavailable` from `L(…)` so the feature phrase is localized too.
+    ///
     /// `scope` (a page's own sentence, else the default) for a missing scope; for an unknown method,
     /// "This Gateway doesn't support <unavailable> yet." when a feature phrase is given; otherwise the
     /// Gateway's own message, or the error's description when it wasn't an RPC failure.
     static func message(for error: Error, scope: String? = nil, unavailable: String? = nil) -> String {
         if self.isMissingScope(error) { return scope ?? self.missingScopeMessage(for: error) }
-        if let unavailable, self.isUnknownMethod(error) { return "This Gateway doesn't support \(unavailable) yet." }
+        if let unavailable, self.isUnknownMethod(error) {
+            return L("This Gateway doesn't support \(unavailable) yet.", comment: "The value is a feature phrase such as “device management”")
+        }
         guard case let .rpc(_, message, _) = error as? GatewayError else { return error.localizedDescription }
         return message
     }

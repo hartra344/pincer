@@ -13,7 +13,7 @@ public enum MCPTransport: String, CaseIterable, Sendable, Hashable {
     public var title: String {
         switch self {
         case .stdio: "stdio"
-        case .streamableHTTP: "Streamable HTTP"
+        case .streamableHTTP: L("Streamable HTTP")
         case .sse: "SSE"
         }
     }
@@ -272,14 +272,14 @@ public struct MCPServerDraft: Hashable, Sendable {
         self.savedURL = server.url
         self.savedUsesOAuth = server.usesOAuth
         var local: [String] = []
-        if server.command != nil { local.append("Command") }
-        if !server.args.isEmpty { local.append("Arguments") }
-        if server.cwd != nil { local.append("Working directory") }
-        if !server.env.isEmpty { local.append("Environment variables") }
+        if server.command != nil { local.append(L("Command")) }
+        if !server.args.isEmpty { local.append(L("Arguments")) }
+        if server.cwd != nil { local.append(L("Working directory")) }
+        if !server.env.isEmpty { local.append(L("Environment variables")) }
         var remote: [String] = []
-        if server.url != nil { remote.append("URL") }
-        if !server.headers.isEmpty { remote.append("Headers") }
-        if server.usesOAuth { remote.append("OAuth sign-in") }
+        if server.url != nil { remote.append(L("URL")) }
+        if !server.headers.isEmpty { remote.append(L("Headers")) }
+        if server.usesOAuth { remote.append(L("OAuth sign-in")) }
         self.savedFields = [.stdio: local, .streamableHTTP: remote, .sse: remote]
     }
 
@@ -300,35 +300,35 @@ public struct MCPServerDraft: Hashable, Sendable {
 
     private var trimmedName: String { self.name.trimmingCharacters(in: .whitespaces) }
 
-    private static let resecret = "Re-enter this value; saved secrets can't move to a new name."
+    private static var resecret: String { L("Re-enter this value; saved secrets can't move to a new name.") }
 
     /// Problems by field: `name`, `command`, `url`, `env.<key>`, `headers.<key>`.
     public func problems(existingNames: Set<String>) -> [String: String] {
         var problems: [String: String] = [:]
         let name = self.trimmedName
         if name.isEmpty {
-            problems["name"] = "Enter a name."
+            problems["name"] = L("Enter a name.")
         } else if !MCPServers.isValidName(name) {
-            problems["name"] = "Use letters, numbers, dots, dashes and underscores, starting with a letter or number."
+            problems["name"] = L("Use letters, numbers, dots, dashes and underscores, starting with a letter or number.")
         } else if name != self.originalName, existingNames.contains(name) {
-            problems["name"] = "A server named “\(name)” already exists."
+            problems["name"] = L("A server named “\(name)” already exists.")
         }
         if self.transport.isRemote {
             let url = self.url.trimmingCharacters(in: .whitespacesAndNewlines)
             if self.urlIsRedacted {
                 if self.isRename { problems["url"] = Self.resecret }
             } else if url.isEmpty {
-                problems["url"] = "Enter the server's URL."
+                problems["url"] = L("Enter the server's URL.")
             } else if let components = URLComponents(string: url), let scheme = components.scheme?.lowercased(),
                       ["http", "https"].contains(scheme), components.host?.isEmpty == false
             {
                 // valid
             } else {
-                problems["url"] = "Enter a full http:// or https:// URL."
+                problems["url"] = L("Enter a full http:// or https:// URL.")
             }
             self.checkRows(self.headers, saved: self.savedHeaderKeys, prefix: "headers", into: &problems)
         } else {
-            if self.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { problems["command"] = "Enter the command to run." }
+            if self.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { problems["command"] = L("Enter the command to run.") }
             self.checkRows(self.env, saved: self.savedEnvKeys, prefix: "env", into: &problems)
         }
         return problems
@@ -339,11 +339,11 @@ public struct MCPServerDraft: Hashable, Sendable {
         for row in rows {
             let key = row.key.trimmingCharacters(in: .whitespaces)
             if key.isEmpty {
-                if !row.value.isEmpty || row.isRedacted { problems["\(prefix).\(key)"] = "Enter a name for this value." }
+                if !row.value.isEmpty || row.isRedacted { problems["\(prefix).\(key)"] = L("Enter a name for this value.") }
                 continue
             }
             if !seen.insert(key).inserted {
-                problems["\(prefix).\(key)"] = "“\(key)” is listed twice."
+                problems["\(prefix).\(key)"] = L("“\(key)” is listed twice.")
             } else if row.isRedacted, self.isRename || !saved.contains(key) {
                 problems["\(prefix).\(key)"] = Self.resecret
             }

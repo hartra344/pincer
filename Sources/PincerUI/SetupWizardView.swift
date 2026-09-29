@@ -102,10 +102,10 @@ struct SetupWizardView: View {
                 Divider()
                 SetupStepDetail(setup: self.setup, openSettings: self.openSettings)
             }
-            .navigationTitle("Set Up \(self.gateway.profile.name)")
+            .navigationTitle(L("Set Up \(self.gateway.profile.name)"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Close") { self.setup.close() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Close")) { self.setup.close() } }
             }
         }
     }
@@ -122,10 +122,10 @@ private struct SetupIntroView: View {
             Image(systemName: "checklist")
                 .font(.system(size: 44))
                 .foregroundStyle(.tint)
-            Text("Set Up \(self.gateway.profile.name)")
+            Text("Set Up \(self.gateway.profile.name)", bundle: .module)
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
-            Text("Pick your default agent and model, look over skills, then send a test message. Skip anything you like.")
+            Text("Pick your default agent and model, look over skills, then send a test message. Skip anything you like.", bundle: .module)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 420)
@@ -136,9 +136,9 @@ private struct SetupIntroView: View {
             }
             .padding(.vertical, Theme.Spacing.xs)
             HStack(spacing: Theme.Spacing.xl) {
-                Button("Not Now") { self.setup.notNow() }
+                Button(L("Not Now")) { self.setup.notNow() }
                     .keyboardShortcut(.cancelAction)
-                Button("Start Setup") { self.setup.startSetup() }
+                Button(L("Start Setup")) { self.setup.startSetup() }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
             }
@@ -168,7 +168,7 @@ private struct SetupStatusIcon: View {
     }
 
     static func label(_ status: SetupStepStatus, _ step: SetupStep) -> String {
-        self.isOptional(status, step) ? "Optional" : status.label
+        self.isOptional(status, step) ? L("Optional") : status.label
     }
 
     static func color(_ status: SetupStepStatus, _ step: SetupStep) -> Color {
@@ -188,7 +188,7 @@ private struct SetupStepList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Set Up \(self.gateway.profile.name)")
+            Text("Set Up \(self.gateway.profile.name)", bundle: .module)
                 .font(.headline)
                 .lineLimit(2)
                 .padding([.horizontal, .top], Theme.Spacing.xxl)
@@ -207,7 +207,7 @@ private struct SetupStepList: View {
                 .tag(step)
             }
             .listStyle(.sidebar)
-            Text("\(self.setup.settledCount) of \(SetupStep.allCases.count) done or skipped")
+            Text("\(self.setup.settledCount) of \(SetupStep.allCases.count) done or skipped", bundle: .module)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(Theme.Spacing.xxl)
@@ -301,31 +301,31 @@ private struct SetupStepDetail: View {
 
     private func footer(step: SetupStep, status: SetupStepStatus) -> some View {
         HStack {
-            Button("Back") { self.setup.goBack() }
+            Button(L("Back")) { self.setup.goBack() }
                 .disabled(self.setup.previousStep == nil)
             if self.setup.loadState.isRunning {
                 ProgressView().controlSize(.small).padding(.leading, Theme.Spacing.xs)
             } else if !self.embedded {
-                Button { Task { await self.setup.load() } } label: { Label("Check Again", systemImage: "arrow.clockwise") }
+                Button { Task { await self.setup.load() } } label: { Label(L("Check Again"), systemImage: "arrow.clockwise") }
                     .labelStyle(.iconOnly)
                     .buttonStyle(.borderless)
-                    .help("Check Again")
+                    .help(L("Check Again"))
                     .disabled(!self.gateway.state.isConnected)
             }
             Spacer()
             #if os(macOS)
             if !self.embedded {
-                Button("Close") { self.setup.close() }
+                Button(L("Close")) { self.setup.close() }
                     .keyboardShortcut(.cancelAction)
             }
             #endif
             if status.isSkipped {
-                Button("Unskip") { self.setup.unskip(step) }
+                Button(L("Unskip")) { self.setup.unskip(step) }
             } else if !status.isDone {
-                Button("Skip") { self.setup.skipCurrent() }
+                Button(L("Skip")) { self.setup.skipCurrent() }
             }
             // On Test Message, Return sends from the text field; it mustn't also Finish.
-            Button(self.setup.nextStep == nil ? "Finish" : "Continue") { self.advance() }
+            Button(self.setup.nextStep == nil ? L("Finish") : L("Continue")) { self.advance() }
                 .keyboardShortcut(step == .testMessage ? nil : KeyboardShortcut.defaultAction)
                 .buttonStyle(.borderedProminent)
         }
@@ -364,16 +364,16 @@ private struct SetupAgentStep: View {
         let agentId = self.agentId ?? gateway.defaultAgentId
         let catalog = gateway.modelCatalogs[agentId] ?? []
         let blocker = gateway.setupDefaultsBlocker
-        Section("Defaults") {
-            Picker("Default agent", selection: Binding(get: { agentId }, set: { self.agentId = $0; self.saved = false })) {
+        Section(L("Defaults")) {
+            Picker(L("Default agent"), selection: Binding(get: { agentId }, set: { self.agentId = $0; self.saved = false })) {
                 ForEach(gateway.agents) { agent in
                     Text([agent.emoji, agent.name].compactMap(\.self).joined(separator: " ")).tag(agent.id)
                 }
                 if !gateway.agents.contains(where: { $0.id == agentId }) { Text(agentId).tag(agentId) }
             }
-            Picker("Default model", selection: Binding(get: { self.modelRef ?? gateway.defaultModelRef },
+            Picker(L("Default model"), selection: Binding(get: { self.modelRef ?? gateway.defaultModelRef },
                                                         set: { self.modelRef = $0; self.saved = false })) {
-                if gateway.defaultModelRef == nil { Text("None").tag(String?.none) }
+                if gateway.defaultModelRef == nil { Text("None", bundle: .module).tag(String?.none) }
                 ForEach(catalog) { model in
                     Text(model.isAvailable ? model.displayName : "\(model.displayName) (unavailable)").tag(Optional(model.ref))
                 }
@@ -387,11 +387,11 @@ private struct SetupAgentStep: View {
             }
             if let error { Text(error).font(.caption).foregroundStyle(.red) }
             HStack {
-                Button(self.saved ? "Saved" : "Save Defaults") { self.save() }
+                Button(self.saved ? L("Saved") : L("Save Defaults")) { self.save() }
                     .disabled(blocker != nil || self.saving || self.saved || !self.hasChanges)
                 if self.saving { ProgressView().controlSize(.small) }
             }
-            SetupLink(title: "Open Agents & Models", symbol: "person.2") { self.openSettings(.page("agents")) }
+            SetupLink(title: L("Open Agents & Models"), symbol: "person.2") { self.openSettings(.page("agents")) }
         }
         .task(id: agentId) { await gateway.loadModels(agentId: agentId) }
     }
@@ -422,13 +422,13 @@ private struct SetupSkillsStep: View {
     @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
-        Section("Skills") {
+        Section(L("Skills")) {
             if let report = self.setup.skills {
                 let missing = report.missing
                 if missing.isEmpty {
-                    Label("Every skill has what it needs.", systemImage: "checkmark.circle").foregroundStyle(.secondary)
+                    Label(L("Every skill has what it needs."), systemImage: "checkmark.circle").foregroundStyle(.secondary)
                 } else {
-                    Text("Not set up").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("Not set up", bundle: .module).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                 }
                 ForEach(missing) { skill in
                     VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
@@ -438,24 +438,24 @@ private struct SetupSkillsStep: View {
                             if let emoji = skill.emoji { Text(emoji) } else { Image(systemName: "puzzlepiece.extension") }
                         }
                         if !skill.missing.isEmpty {
-                            Text("Needs \(skill.missing.joined(separator: ", "))").font(.caption).foregroundStyle(.secondary)
+                            Text("Needs \(skill.missing.joined(separator: ", "))", bundle: .module).font(.caption).foregroundStyle(.secondary)
                         }
                         if !skill.installOptions.isEmpty {
-                            Text("Install: \(skill.installOptions.joined(separator: " · "))")
+                            Text("Install: \(skill.installOptions.joined(separator: " · "))", bundle: .module)
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
                 }
-                LabeledContent("Ready", value: "\(report.ready.count)")
+                LabeledContent(L("Ready"), value: "\(report.ready.count)")
             } else if let failure = self.setup.skillsFailure {
                 Text(failure).foregroundStyle(.secondary)
             } else {
                 ProgressView()
             }
             if self.gateway.supportsSkills {
-                SetupLink(title: "Open Skills", symbol: "wand.and.stars") { self.openSettings(.skills) }
+                SetupLink(title: L("Open Skills"), symbol: "wand.and.stars") { self.openSettings(.skills) }
             } else {
-                SetupLink(title: "Open Tools & Skills", symbol: "wrench.and.screwdriver") { self.openSettings(.page("tools")) }
+                SetupLink(title: L("Open Tools & Skills"), symbol: "wrench.and.screwdriver") { self.openSettings(.page("tools")) }
             }
         }
     }
@@ -475,10 +475,10 @@ private struct SetupTestMessageStep: View {
     var body: some View {
         let failed = self.error != nil || self.chat.map(SetupTestReply.failed) == true
         Section {
-            TextField("Message", text: self.$text)
+            TextField(L("Message"), text: self.$text)
                 .onSubmit(self.send)
             HStack {
-                Button(failed ? "Try Again" : self.chat == nil ? "Send" : "Send Again", action: self.send)
+                Button(failed ? L("Try Again") : self.chat == nil ? L("Send") : L("Send Again"), action: self.send)
                     .disabled(self.sending || !self.gateway.state.isConnected
                         || self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if self.sending { ProgressView().controlSize(.small) }
@@ -489,8 +489,8 @@ private struct SetupTestMessageStep: View {
             }
             // Finish opens this chat (no separate Open Chat, #175).
             Text(self.chat.map(SetupTestReply.replied) == true
-                ? "Finish opens this chat."
-                : "Pincer starts a chat called \(GatewayStore.setupTestLabel) with \(self.gateway.agent(self.gateway.defaultAgentId).name).")
+                ? L("Finish opens this chat.")
+                : L("Pincer starts a chat called \(GatewayStore.setupTestLabel) with \(self.gateway.agent(self.gateway.defaultAgentId).name)."))
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -512,7 +512,7 @@ private struct SetupTestMessageStep: View {
             switch result.outcome {
             case .sent: break
             case let .failed(message), let .failedInline(message): self.error = message
-            case .queued: self.error = "Couldn’t send: not connected to the Gateway."
+            case .queued: self.error = L("Couldn’t send: not connected to the Gateway.")
             }
         }
     }
@@ -525,21 +525,21 @@ private struct SetupTestReply: View {
     var body: some View {
         let reply = Self.reply(in: self.chat)
         if let reply, reply.isError {
-            Label("Your agent didn't answer. You can try again, or skip and chat later.", systemImage: "exclamationmark.bubble")
+            Label(L("Your agent didn't answer. You can try again, or skip and chat later."), systemImage: "exclamationmark.bubble")
                 .foregroundStyle(.red)
         } else if let reply, !reply.body.isEmpty, !reply.isStreaming {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Label("Your agent replied.", systemImage: "checkmark.bubble.fill").foregroundStyle(.green)
+                Label(L("Your agent replied."), systemImage: "checkmark.bubble.fill").foregroundStyle(.green)
                 Text(Self.inline(reply.body)).lineLimit(4).foregroundStyle(.secondary).textSelection(.enabled)
             }
             .accessibilityElement(children: .combine)
         } else if self.chat.errorMessage != nil {
-            Label("Your agent didn't answer. You can try again, or skip and chat later.", systemImage: "exclamationmark.bubble")
+            Label(L("Your agent didn't answer. You can try again, or skip and chat later."), systemImage: "exclamationmark.bubble")
                 .foregroundStyle(.red)
         } else {
             HStack(spacing: Theme.Spacing.sm) {
                 ProgressView().controlSize(.small)
-                Text("Sent. Waiting for your agent…")
+                Text("Sent. Waiting for your agent…", bundle: .module)
                     .foregroundStyle(.secondary)
             }
         }
@@ -600,9 +600,9 @@ struct SetupGatewaySection: View {
                 self.open(setup)
             } label: {
                 LabeledContent {
-                    Text(setup.progress.completed ? "Done" : "\(setup.settledCount) of \(SetupStep.allCases.count)")
+                    Text(setup.progress.completed ? L("Done") : L("\(setup.settledCount) of \(SetupStep.allCases.count)"))
                 } label: {
-                    Label("Set Up Gateway…", systemImage: "checklist")
+                    Label(L("Set Up Gateway…"), systemImage: "checklist")
                 }
             }
             .buttonStyle(.borderless)

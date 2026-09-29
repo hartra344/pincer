@@ -627,9 +627,10 @@ public final class AutomationsModel {
     static func message(for error: Error) -> String {
         let message = GatewayError.message(
             for: error,
-            scope: "Changing automations needs Full Management access. Turn it on under Gateway Settings → Connection, then approve this device on the Gateway host.")
+            scope: L("Changing automations needs Full Management access. Turn it on under Gateway Settings → Connection, then approve this device on the Gateway host."),
+            unavailable: L("automations"))
         if !GatewayError.isMissingScope(error), message.lowercased().contains("revision") {
-            return "This automation changed on the Gateway. The latest version is loaded; review it and try again."
+            return L("This automation changed on the Gateway. The latest version is loaded; review it and try again.")
         }
         return message
     }

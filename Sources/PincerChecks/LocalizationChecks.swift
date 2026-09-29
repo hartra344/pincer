@@ -62,6 +62,21 @@ func runLocalizationChecks() {
     }
     check(missing.isEmpty, "every key has a non-empty en value (missing: \(missing.sorted().prefix(10)))")
     check(mismatched.isEmpty, "format specifiers match between key and en value (\(mismatched.sorted().prefix(10)))")
+
+    // #228: PincerKit's sentences are keys in this catalog (no bundle registered here, so they read as English keys).
+    let kitPhrases = [
+        MessageSender.unknownAgentName, MessageSender.automationName, MessageSender.helperName,
+        MessageSender(kind: .automation).marker(agents: [], receivingAgentId: nil),
+        MessageSender(kind: .helper).marker(agents: [], receivingAgentId: nil),
+        MessageSender(kind: .agent).marker(agents: [], receivingAgentId: nil),
+        MessageSender(kind: .agent, agentId: "main").marker(agents: [], receivingAgentId: "main"),
+        AccessibilityText.contextMeterLabel,
+        AccessibilityText.findStatus(current: nil, total: 0),
+        AccessibilityText.speaker(role: .user, author: nil),
+    ]
+    check(kitPhrases.allSatisfy { strings[$0] != nil }, "sender names and accessibility phrases are catalog keys (missing: \(kitPhrases.filter { strings[$0] == nil }))")
+    let templates = ["from %@’s chat", "Result %lld of %lld", "Expand %@", "Collapse %@", "%lld unread", "%lld results", "%lld tool calls"]
+    check(templates.allSatisfy { strings[$0] != nil }, "interpolated PincerKit phrases are catalog keys (missing: \(templates.filter { strings[$0] == nil }))")
 }
 
 /// Every seeded demo session and transcript row gets a spoken label from `AccessibilityText`.

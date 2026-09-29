@@ -46,7 +46,7 @@ private struct RouteNoticeBar: View {
                     }
                     .buttonStyle(.borderless)
                     .controlSize(.small)
-                    .accessibilityLabel("Dismiss")
+                    .accessibilityLabel(L("Dismiss"))
                 }
                 .padding(.leading, Theme.Spacing.row)
                 .padding(.trailing, Theme.Spacing.lg)
@@ -76,7 +76,7 @@ struct ChatHandoff: ViewModifier {
     func body(content: Content) -> some View {
         content.userActivity(PincerRoute.activityType, isActive: self.gateway.state.isConnected) { activity in
             let route = self.app.route(for: Notifier.Target(gatewayId: self.gateway.id, sessionKey: self.sessionKey))
-            activity.title = self.gateway.sessions[self.sessionKey]?.title ?? "Chat"
+            activity.title = self.gateway.sessions[self.sessionKey]?.title ?? L("Chat")
             let userInfo = route.handoffUserInfo
             activity.userInfo = userInfo
             activity.requiredUserInfoKeys = Set(userInfo.keys)
@@ -98,7 +98,7 @@ struct CopyChatLinkButton: View {
     @Environment(GatewayStore.self) private var gateway
 
     var body: some View {
-        Button("Copy Link to Chat", systemImage: "link") {
+        Button(L("Copy Link to Chat"), systemImage: "link") {
             Self.copyLink(app: self.app, gateway: self.gateway, sessionKey: self.sessionKey)
         }
     }

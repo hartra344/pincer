@@ -14,8 +14,8 @@ public enum Skills {
     public static let updateMethod = "skills.update"
     public static let forceRequiredCode = "force_required"
 
-    public static let needsAdminMessage = "You can view skills. Turn on Full Management under Connection, then approve this device on the Gateway host."
-    public static let unsupportedMessage = "This Gateway can't manage skills. Update OpenClaw to install and configure skills here."
+    public static var needsAdminMessage: String { L("You can view skills. Turn on Full Management under Connection, then approve this device on the Gateway host.") }
+    public static var unsupportedMessage: String { L("This Gateway can't manage skills. Update OpenClaw to install and configure skills here.") }
     public static let installWarning = "This downloads the skill into the default agent's workspace on the Gateway host. Skills can run commands and read files with the agent's permissions. Only install skills you trust."
 
     /// Ready, Needs Setup, Blocked, Disabled, each sorted by name; empty sections are left out.

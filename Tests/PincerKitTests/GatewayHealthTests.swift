@@ -289,7 +289,7 @@ struct GatewayHealthModelTests {
         let byDetails = GatewayError.rpc(code: "FORBIDDEN", message: "x", details: ["code": "MISSING_SCOPE"])
         let byMessage = GatewayError.rpc(code: "FORBIDDEN", message: "missing scope: operator.admin", details: nil)
         for error in [byCode, byDetails, byMessage] {
-            #expect(GatewayHealthModel.message(for: error) == ConfigWriteError.adminRequired.message)
+            #expect(GatewayHealthModel.message(for: error) == GatewayError.missingScopeMessage(for: error))
             #expect(!GatewayHealthModel.isUnavailableMethod(error))
         }
     }

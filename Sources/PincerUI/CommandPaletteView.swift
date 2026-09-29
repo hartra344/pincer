@@ -86,7 +86,7 @@ struct CommandPaletteView: View {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     #endif
-                    .accessibilityLabel("Command palette")
+                    .accessibilityLabel(L("Command palette"))
             }
             .padding(.horizontal, Theme.Spacing.row)
             .padding(.vertical, Theme.Spacing.xl)
@@ -94,7 +94,7 @@ struct CommandPaletteView: View {
             if self.page == .messages {
                 self.messagesPage(results)
             } else if results.isEmpty {
-                Text(self.page == .models && self.gateway?.loadingModelCatalogs.isEmpty == false ? "Loading models…" : "No matches")
+                Text(self.page == .models && self.gateway?.loadingModelCatalogs.isEmpty == false ? L("Loading models…") : L("No matches"))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Theme.Spacing.page)
@@ -144,9 +144,9 @@ struct CommandPaletteView: View {
 
     private var placeholder: String {
         switch self.page {
-        case .root: "Jump to a chat or run a command…"
-        case .models: "Choose a model…"
-        case .messages: "Search messages in \(self.gateway?.profile.name ?? "this Gateway")…"
+        case .root: L("Jump to a chat or run a command…")
+        case .models: L("Choose a model…")
+        case .messages: L("Search messages in \(self.gateway?.profile.name ?? L("this Gateway"))…")
         }
     }
 
@@ -199,21 +199,21 @@ struct CommandPaletteView: View {
 
     /// The messages page's notice for the current state, when it has one instead of results.
     private func messageNotice(hasResults: Bool) -> (text: String, hint: String?)? {
-        guard let gateway else { return ("Select a Gateway to search its messages.", nil) }
+        guard let gateway else { return (L("Select a Gateway to search its messages."), nil) }
         let query = TranscriptSearch.normalized(self.query)
         let name = gateway.profile.name
         if gateway.messageIndexProgress == .unavailable {
-            return ("Message search needs the transcript cache, which is turned off.", nil)
+            return (L("Message search needs the transcript cache, which is turned off."), nil)
         }
         if query.isEmpty {
-            return ("Search messages in every chat on \(name).", "Matches words from their start; case and accents are ignored.")
+            return (L("Search messages in every chat on \(name)."), L("Matches words from their start; case and accents are ignored."))
         }
-        if query.count < MessageSearch.minimumQueryLength { return ("Type at least 2 characters.", nil) }
-        if !gateway.state.isConnected, gateway.sessions.isEmpty { return ("Connect to \(name) to search messages.", nil) }
-        if self.messages?.results.failed == true { return ("Message search is unavailable right now.", nil) }
+        if query.count < MessageSearch.minimumQueryLength { return (L("Type at least 2 characters."), nil) }
+        if !gateway.state.isConnected, gateway.sessions.isEmpty { return (L("Connect to \(name) to search messages."), nil) }
+        if self.messages?.results.failed == true { return (L("Message search is unavailable right now."), nil) }
         if hasResults { return nil }
-        if self.searchingMessages { return ("Searching…", nil) }
-        return ("No messages match “\(query)”.", nil)
+        if self.searchingMessages { return (L("Searching…"), nil) }
+        return (L("No messages match “\(query)”."), nil)
     }
 
     @ViewBuilder
@@ -222,7 +222,7 @@ struct CommandPaletteView: View {
         if case let .building(done, total) = self.gateway?.messageIndexProgress,
            TranscriptSearch.normalized(self.query).count >= MessageSearch.minimumQueryLength
         {
-            Label("Indexing chats… \(done) of \(total) — results may be incomplete", systemImage: "hourglass")
+            Label(L("Indexing chats… \(done) of \(total) — results may be incomplete"), systemImage: "hourglass")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -387,42 +387,42 @@ struct CommandPaletteView: View {
         }
         var items: [PaletteItem] = []
         if let row {
-            items.append(item(.changeModel, "Change Model…", "cpu", keywords: ["switch", "llm"],
+            items.append(item(.changeModel, L("Change Model…"), "cpu", keywords: ["switch", "llm"],
                               subtitle: row.modelRef.map(ModelRef.shortName) ?? self.gateway?.defaultModelRef.map(ModelRef.shortName),
                               enabled: !row.isModelSelectionLocked))
-            items.append(item(.togglePin, row.isPinned ? "Unpin Chat" : "Pin Chat", row.isPinned ? "pin.slash" : "pin"))
+            items.append(item(.togglePin, row.isPinned ? L("Unpin Chat") : L("Pin Chat"), row.isPinned ? "pin.slash" : "pin"))
         }
         let showsThinking = self.thinkingDisplay != .none
         items += [
-            item(.toggleThinking, showsThinking ? "Hide Thinking Steps" : "Show Thinking Steps", "brain.head.profile",
-                 keywords: ["toggle", "reasoning", "tools"], subtitle: "Now: \(self.thinkingDisplay.label)"),
-            item(.back, "Go Back", "chevron.backward", keywords: ["previous", "history"], shortcut: "⌘[",
+            item(.toggleThinking, showsThinking ? L("Hide Thinking Steps") : L("Show Thinking Steps"), "brain.head.profile",
+                 keywords: ["toggle", "reasoning", "tools"], subtitle: L("Now: \(self.thinkingDisplay.label)")),
+            item(.back, L("Go Back"), "chevron.backward", keywords: ["previous", "history"], shortcut: "⌘[",
                  enabled: self.app.canGoBack),
-            item(.forward, "Go Forward", "chevron.forward", keywords: ["next", "history"], shortcut: "⌘]",
+            item(.forward, L("Go Forward"), "chevron.forward", keywords: ["next", "history"], shortcut: "⌘]",
                  enabled: self.app.canGoForward),
-            item(.nextUnread, "Next Unread Chat", "circle.badge", keywords: ["unread"], shortcut: "⌥⇧↓",
+            item(.nextUnread, L("Next Unread Chat"), "circle.badge", keywords: ["unread"], shortcut: "⌥⇧↓",
                  enabled: self.app.totalUnread > 0),
-            item(.appSettings, "Open Settings…", "gearshape", keywords: ["preferences"], shortcut: "⌘,"),
-            item(.addGateway, "Add Gateway…", "plus.circle", keywords: ["connect", "new", "server", "setup", "wizard"]),
+            item(.appSettings, L("Open Settings…"), "gearshape", keywords: ["preferences"], shortcut: "⌘,"),
+            item(.addGateway, L("Add Gateway…"), "plus.circle", keywords: ["connect", "new", "server", "setup", "wizard"]),
         ]
         if let setup = CommandPalette.setupGatewayItem(gateway: self.gateway) { items.append(setup) }
         if self.gateway != nil {
             items += [
-                item(.gatewaySettings, "Gateway Settings…", "server.rack", keywords: ["config"], shortcut: "⇧⌘,"),
-                item(.automations, "Automations…", "clock", keywords: ["cron", "jobs", "schedule"]),
-                item(.approvalHistory, "Approval History…", "checkmark.shield",
+                item(.gatewaySettings, L("Gateway Settings…"), "server.rack", keywords: ["config"], shortcut: "⇧⌘,"),
+                item(.automations, L("Automations…"), "clock", keywords: ["cron", "jobs", "schedule"]),
+                item(.approvalHistory, L("Approval History…"), "checkmark.shield",
                      keywords: ["approvals", "audit", "log", "exec", "plugin", "decisions"]),
-                item(.gatewayLogs, "Gateway Logs…", "doc.text.magnifyingglass",
+                item(.gatewayLogs, L("Gateway Logs…"), "doc.text.magnifyingglass",
                      keywords: ["logs", "tail", "debug", "diagnose", "errors", "console"]),
-                item(.execPolicy, "Command Policy…", "lock.shield",
+                item(.execPolicy, L("Command Policy…"), "lock.shield",
                      keywords: ["exec", "allowlist", "always allow", "approval policy", "ask", "security", "commands"]),
-                item(.devices, "Devices…", "laptopcomputer.and.iphone",
+                item(.devices, L("Devices…"), "laptopcomputer.and.iphone",
                      keywords: ["devices", "pairing", "approve", "revoke", "paired", "nodes", "fingerprint"]),
-                item(.usage, "Usage & Cost…", "chart.bar.xaxis",
+                item(.usage, L("Usage & Cost…"), "chart.bar.xaxis",
                      keywords: ["usage", "cost", "tokens", "spend", "billing", "quota", "rate limit", "budget"]),
             ]
             if self.gateway?.supportsSkills == true {
-                items.append(item(.skills, "Skills…", "wand.and.stars",
+                items.append(item(.skills, L("Skills…"), "wand.and.stars",
                                   keywords: ["skills", "clawhub", "install", "plugins", "requirements"]))
             }
             if self.gateway?.supportsMCPServers == true {
@@ -430,13 +430,13 @@ struct CommandPaletteView: View {
                                   keywords: ["mcp", "model context protocol", "servers", "oauth", "sign in", "tools", "stdio"]))
             }
             if self.gateway?.supportsSessionManager == true {
-                items.append(item(.sessions, "Manage Sessions…", "rectangle.stack",
+                items.append(item(.sessions, L("Manage Sessions…"), "rectangle.stack",
                                   keywords: ["sessions", "archive", "archived", "delete", "branches", "rewind", "recover"]))
             }
             if row != nil {
-                items.append(item(.sessionUsage, "Session Usage…", "chart.bar", keywords: ["usage", "cost", "tokens", "session"]))
+                items.append(item(.sessionUsage, L("Session Usage…"), "chart.bar", keywords: ["usage", "cost", "tokens", "session"]))
                 if self.gateway?.supportsSessionManager == true {
-                    items.append(item(.manageSession, "Manage Session…", "rectangle.stack.badge.person.crop",
+                    items.append(item(.manageSession, L("Manage Session…"), "rectangle.stack.badge.person.crop",
                                       keywords: ["session", "details", "branches", "rewind", "archive", "delete"]))
                 }
             }
@@ -699,11 +699,11 @@ struct GoCommands: Commands {
         #if os(macOS)
         let _ = (QuickCaptureController.shared.openWindow = self.openWindow)
         #endif
-        CommandMenu("Go") {
-            Button("Command Palette…") { self.palette?.wrappedValue.toggle() }
+        CommandMenu(L("Go")) {
+            Button(L("Command Palette…")) { self.palette?.wrappedValue.toggle() }
                 .keyboardShortcut("k", modifiers: .command)
                 .disabled(self.palette == nil)
-            Button("Search Messages…") { self.searchMessages?() }
+            Button(L("Search Messages…")) { self.searchMessages?() }
                 .keyboardShortcut("f", modifiers: [.command, .shift])
                 .disabled(self.palette == nil || self.searchMessages == nil || self.app.selectedGateway == nil)
             #if os(macOS)
@@ -712,16 +712,16 @@ struct GoCommands: Commands {
             }
             #endif
             Divider()
-            Button("Back") { self.app.goBack() }
+            Button(L("Back")) { self.app.goBack() }
                 .keyboardShortcut("[", modifiers: .command)
                 .disabled(!self.app.canGoBack)
-            Button("Forward") { self.app.goForward() }
+            Button(L("Forward")) { self.app.goForward() }
                 .keyboardShortcut("]", modifiers: .command)
                 .disabled(!self.app.canGoForward)
             let pinned = self.app.selectedGateway?.pinnedChats.prefix(9) ?? []
             if !pinned.isEmpty {
                 Divider()
-                Section("Pinned Chats") {
+                Section(L("Pinned Chats")) {
                     ForEach(Array(pinned.enumerated()), id: \.element.key) { index, row in
                         Button(row.title) { self.app.openPinned(index + 1) }
                             .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)

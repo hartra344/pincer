@@ -53,7 +53,7 @@ public struct SidebarWorkingIndicator: Hashable, Sendable {
         let displayName = name.isEmpty ? agent.id : name
         return SidebarWorkingIndicator(
             mode: .unread, isUnread: true, agentId: agent.id, agentName: displayName, source: .companion,
-            helperRuns: 0, label: String(localized: "Unread", comment: "Sidebar: idle unread chat avatar tooltip"))
+            helperRuns: 0, label: L("Unread", comment: "Sidebar: idle unread chat avatar tooltip"))
     }
 
     public static func source(for agent: AgentSummary, displayName: String, companionsEnabled: Bool) -> Source {
@@ -65,9 +65,9 @@ public struct SidebarWorkingIndicator: Hashable, Sendable {
 
     public static func label(agentName: String, helperRuns: Int) -> String {
         switch helperRuns {
-        case 0: String(localized: "\(agentName) is working", comment: "Sidebar: a chat's agent is running")
-        case 1: String(localized: "\(agentName): 1 helper run working", comment: "Sidebar: one subagent run is working")
-        default: String(localized: "\(agentName): \(helperRuns) helper runs working",
+        case 0: L("\(agentName) is working", comment: "Sidebar: a chat's agent is running")
+        case 1: L("\(agentName): 1 helper run working", comment: "Sidebar: one subagent run is working")
+        default: L("\(agentName): \(helperRuns) helper runs working",
                         comment: "Sidebar: several subagent runs are working")
         }
     }

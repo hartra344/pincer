@@ -31,12 +31,32 @@
         }
       }
     },
+    "%@ can't be started from Pincer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ can't be started from Pincer."
+          }
+        }
+      }
+    },
     "%@ changed on the Gateway since you opened it.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ changed on the Gateway since you opened it."
+          }
+        }
+      }
+    },
+    "%@ channel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ channel"
           }
         }
       }
@@ -51,12 +71,82 @@
         }
       }
     },
+    "%@ didn't start: %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ didn't start: %2$@."
+          }
+        }
+      }
+    },
     "%@ doesn't exist yet. Saving creates it.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ doesn't exist yet. Saving creates it."
+          }
+        }
+      }
+    },
+    "%@ doesn't support logging out.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ doesn't support logging out."
+          }
+        }
+      }
+    },
+    "%@ group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ group"
+          }
+        }
+      }
+    },
+    "%@ group in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ group in %2$@"
+          }
+        }
+      }
+    },
+    "%@ is still stopping. Try again in a moment.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is still stopping. Try again in a moment."
+          }
+        }
+      }
+    },
+    "%@ is working": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is working"
+          }
+        }
+      }
+    },
+    "%@ is working on this": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is working on this"
           }
         }
       }
@@ -101,12 +191,42 @@
         }
       }
     },
+    "%@ of %@ tokens": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ of %2$@ tokens"
+          }
+        }
+      }
+    },
     "%@ on %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ on %@"
+          }
+        }
+      }
+    },
+    "%@ replied": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ replied"
+          }
+        }
+      }
+    },
+    "%@ replied: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ replied: %2$@"
           }
         }
       }
@@ -211,6 +331,36 @@
         }
       }
     },
+    "%@: %lld helper runs working": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$lld helper runs working"
+          }
+        }
+      }
+    },
+    "%@: 1 helper run working": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: 1 helper run working"
+          }
+        }
+      }
+    },
+    "%@: reply failed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: reply failed"
+          }
+        }
+      }
+    },
     "%lld Change%@": {
       "localizations": {
         "en": {
@@ -231,12 +381,32 @@
         }
       }
     },
+    "%lld added": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld added"
+          }
+        }
+      }
+    },
     "%lld allowed": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%lld allowed"
+          }
+        }
+      }
+    },
+    "%lld attachments": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld attachments"
           }
         }
       }
@@ -353,6 +523,26 @@
         }
       }
     },
+    "%lld of %lld done or skipped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld of %2$lld done or skipped"
+          }
+        }
+      }
+    },
+    "%lld percent used": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld percent used"
+          }
+        }
+      }
+    },
     "%lld plugins need attention": {
       "localizations": {
         "en": {
@@ -379,6 +569,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld reconnect attempts"
+          }
+        }
+      }
+    },
+    "%lld removed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld removed"
+          }
+        }
+      }
+    },
+    "%lld results": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld results"
           }
         }
       }
@@ -413,12 +623,52 @@
         }
       }
     },
+    "%lld tool calls": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld tool calls"
+          }
+        }
+      }
+    },
+    "%lld unread": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld unread"
+          }
+        }
+      }
+    },
+    "(empty file)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(empty file)"
+          }
+        }
+      }
+    },
     "+%lld more": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "+%lld more"
+          }
+        }
+      }
+    },
+    "1 attachment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 attachment"
           }
         }
       }
@@ -483,6 +733,26 @@
         }
       }
     },
+    "1 result": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 result"
+          }
+        }
+      }
+    },
+    "1 tool call": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 tool call"
+          }
+        }
+      }
+    },
     "A channel is waiting for a Gateway restart.": {
       "localizations": {
         "en": {
@@ -503,12 +773,32 @@
         }
       }
     },
+    "A server named “%@” already exists.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A server named “%@” already exists."
+          }
+        }
+      }
+    },
     "API Key (%@)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "API Key (%@)"
+          }
+        }
+      }
+    },
+    "About %lld percent used": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About %lld percent used"
           }
         }
       }
@@ -619,6 +909,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add Entry…"
+          }
+        }
+      }
+    },
+    "Add Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Gateway"
           }
         }
       }
@@ -759,6 +1059,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Advanced (%lld)"
+          }
+        }
+      }
+    },
+    "Advanced…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advanced…"
           }
         }
       }
@@ -993,6 +1303,26 @@
         }
       }
     },
+    "Another agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Another agent"
+          }
+        }
+      }
+    },
+    "Answering agent questions is waiting for approval:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Answering agent questions is waiting for approval:"
+          }
+        }
+      }
+    },
     "Appearance": {
       "localizations": {
         "en": {
@@ -1009,6 +1339,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Applies to every agent"
+          }
+        }
+      }
+    },
+    "Apply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apply"
           }
         }
       }
@@ -1043,6 +1383,26 @@
         }
       }
     },
+    "Approval History needs the operator.approvals scope. Approve it for this device on the Gateway host, then try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approval History needs the operator.approvals scope. Approve it for this device on the Gateway host, then try again."
+          }
+        }
+      }
+    },
+    "Approval History…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approval History…"
+          }
+        }
+      }
+    },
     "Approval Not Found": {
       "localizations": {
         "en": {
@@ -1073,12 +1433,42 @@
         }
       }
     },
+    "Approve Pincer on your Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve Pincer on your Gateway"
+          }
+        }
+      }
+    },
+    "Approve Pincer on your Gateway host": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve Pincer on your Gateway host"
+          }
+        }
+      }
+    },
     "Approve new nodes on the Devices page.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Approve new nodes on the Devices page."
+          }
+        }
+      }
+    },
+    "Approve this device on the Gateway host:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve this device on the Gateway host:"
           }
         }
       }
@@ -1099,6 +1489,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Approving new senders? See Pairing Requests."
+          }
+        }
+      }
+    },
+    "Approving, rejecting and revoking devices needs Full Management. Turn it on under Connection.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approving, rejecting and revoking devices needs Full Management. Turn it on under Connection."
+          }
+        }
+      }
+    },
+    "Archive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive"
+          }
+        }
+      }
+    },
+    "Archived": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archived"
           }
         }
       }
@@ -1143,6 +1563,16 @@
         }
       }
     },
+    "Assistant": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assistant"
+          }
+        }
+      }
+    },
     "Attach files": {
       "localizations": {
         "en": {
@@ -1163,12 +1593,52 @@
         }
       }
     },
+    "Attachment %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attachment %@"
+          }
+        }
+      }
+    },
+    "Attachment %@, collapsed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attachment %@, collapsed"
+          }
+        }
+      }
+    },
+    "Attachment %@, expanded": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attachment %@, expanded"
+          }
+        }
+      }
+    },
     "Attachments need a connection": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Attachments need a connection"
+          }
+        }
+      }
+    },
+    "Authentication": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authentication"
           }
         }
       }
@@ -1189,6 +1659,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Auto picks a character from the agent's identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still."
+          }
+        }
+      }
+    },
+    "Automation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automation"
           }
         }
       }
@@ -1219,6 +1699,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Automations run an agent on a schedule, like a morning briefing or a nightly check."
+          }
+        }
+      }
+    },
+    "Automations…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automations…"
           }
         }
       }
@@ -1273,6 +1763,26 @@
         }
       }
     },
+    "Blue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blue"
+          }
+        }
+      }
+    },
+    "Branches need a newer Gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branches need a newer Gateway."
+          }
+        }
+      }
+    },
     "Breakdown": {
       "localizations": {
         "en": {
@@ -1303,6 +1813,36 @@
         }
       }
     },
+    "By agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By agent"
+          }
+        }
+      }
+    },
+    "By group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By group"
+          }
+        }
+      }
+    },
+    "By server": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By server"
+          }
+        }
+      }
+    },
     "Cached transcripts": {
       "localizations": {
         "en": {
@@ -1319,6 +1859,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Calculating…"
+          }
+        }
+      }
+    },
+    "Can't reach Gateway · retrying in %llds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can't reach Gateway · retrying in %llds"
           }
         }
       }
@@ -1343,6 +1893,46 @@
         }
       }
     },
+    "Can’t connect to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Can’t connect to %@"
+          }
+        }
+      }
+    },
+    "Change Icon": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change Icon"
+          }
+        }
+      }
+    },
+    "Change Icon…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change Icon…"
+          }
+        }
+      }
+    },
+    "Change Model…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Change Model…"
+          }
+        }
+      }
+    },
     "Changed on the Gateway": {
       "localizations": {
         "en": {
@@ -1353,12 +1943,12 @@
         }
       }
     },
-    "Changes stay with your other unsaved settings until you use Review & Save. Other settings are kept. Edit them in Raw Config.": {
+    "Changes": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Changes stay with your other unsaved settings until you use Review & Save. Other settings are kept. Edit them in Raw Config."
+            "value": "Changes"
           }
         }
       }
@@ -1369,6 +1959,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Changes stay with your other unsaved settings until you use Review & Save. Other settings for this server are kept. Edit them in Raw Config."
+          }
+        }
+      }
+    },
+    "Changing Gateway settings needs Full Management access. Turn it on under Connection, then approve this device on the Gateway host.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changing Gateway settings needs Full Management access. Turn it on under Connection, then approve this device on the Gateway host."
+          }
+        }
+      }
+    },
+    "Changing automations needs Full Management access. Turn it on under Gateway Settings → Connection, then approve this device on the Gateway host.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Changing automations needs Full Management access. Turn it on under Gateway Settings → Connection, then approve this device on the Gateway host."
           }
         }
       }
@@ -1413,6 +2023,16 @@
         }
       }
     },
+    "Chat Color": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat Color"
+          }
+        }
+      }
+    },
     "Chat Options": {
       "localizations": {
         "en": {
@@ -1429,6 +2049,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send."
+          }
+        }
+      }
+    },
+    "Chat with your OpenClaw agents from your Mac, iPhone, and iPad.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat with your OpenClaw agents from your Mac, iPhone, and iPad."
           }
         }
       }
@@ -1463,12 +2093,42 @@
         }
       }
     },
+    "Check it's working": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check it's working"
+          }
+        }
+      }
+    },
     "Checked %@ ago": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Checked %@ ago"
+          }
+        }
+      }
+    },
+    "Checking every few seconds…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking every few seconds…"
+          }
+        }
+      }
+    },
+    "Checking…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking…"
           }
         }
       }
@@ -1509,6 +2169,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose a chat from the sidebar or start a new one."
+          }
+        }
+      }
+    },
+    "Choose a model…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a model…"
           }
         }
       }
@@ -1653,6 +2323,16 @@
         }
       }
     },
+    "Collapse %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapse %@"
+          }
+        }
+      }
+    },
     "Collapse question": {
       "localizations": {
         "en": {
@@ -1683,6 +2363,16 @@
         }
       }
     },
+    "Color": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Color"
+          }
+        }
+      }
+    },
     "Colors": {
       "localizations": {
         "en": {
@@ -1699,6 +2389,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Command"
+          }
+        }
+      }
+    },
+    "Command Palette…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command Palette…"
           }
         }
       }
@@ -1723,6 +2423,26 @@
         }
       }
     },
+    "Command Policy…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command Policy…"
+          }
+        }
+      }
+    },
+    "Command palette": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command palette"
+          }
+        }
+      }
+    },
     "Command policy saved": {
       "localizations": {
         "en": {
@@ -1739,16 +2459,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Command suggestions"
-          }
-        }
-      }
-    },
-    "Command, %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Command, %@"
           }
         }
       }
@@ -1849,6 +2559,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Confirm Plugin Change"
+          }
+        }
+      }
+    },
+    "Connect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect"
+          }
+        }
+      }
+    },
+    "Connect to %@ to search messages.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to %@ to search messages."
+          }
+        }
+      }
+    },
+    "Connect to a Gateway to manage devices.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to a Gateway to manage devices."
           }
         }
       }
@@ -2033,6 +2773,16 @@
         }
       }
     },
+    "Connected to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected to %@"
+          }
+        }
+      }
+    },
     "Connected · %lld tools": {
       "localizations": {
         "en": {
@@ -2073,6 +2823,26 @@
         }
       }
     },
+    "Connection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection"
+          }
+        }
+      }
+    },
+    "Connection closed: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection closed: %@"
+          }
+        }
+      }
+    },
     "Context Window": {
       "localizations": {
         "en": {
@@ -2099,6 +2869,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Context: %1$@ tokens (%2$@)"
+          }
+        }
+      }
+    },
+    "Continue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue"
+          }
+        }
+      }
+    },
+    "Continue Anyway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue Anyway"
+          }
+        }
+      }
+    },
+    "Continue Setup": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue Setup"
           }
         }
       }
@@ -2139,6 +2939,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy"
+          }
+        }
+      }
+    },
+    "Copy Code": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Code"
           }
         }
       }
@@ -2193,6 +3003,16 @@
         }
       }
     },
+    "Copy Link to Chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Link to Chat"
+          }
+        }
+      }
+    },
     "Copy Log File Path": {
       "localizations": {
         "en": {
@@ -2233,6 +3053,16 @@
         }
       }
     },
+    "Copy Reply": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Reply"
+          }
+        }
+      }
+    },
     "Copy Request ID": {
       "localizations": {
         "en": {
@@ -2269,6 +3099,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Setting Path"
+          }
+        }
+      }
+    },
+    "Copy Table": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Table"
+          }
+        }
+      }
+    },
+    "Copy Text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Text"
+          }
+        }
+      }
+    },
+    "Copy Thinking": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Thinking"
           }
         }
       }
@@ -2503,6 +3363,46 @@
         }
       }
     },
+    "Couldn’t download “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t download “%@”"
+          }
+        }
+      }
+    },
+    "Couldn’t find that message.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t find that message."
+          }
+        }
+      }
+    },
+    "Couldn’t load this file.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t load this file."
+          }
+        }
+      }
+    },
+    "Couldn’t send: not connected to the Gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t send: not connected to the Gateway."
+          }
+        }
+      }
+    },
     "Create": {
       "localizations": {
         "en": {
@@ -2513,12 +3413,42 @@
         }
       }
     },
+    "Created %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Created %@"
+          }
+        }
+      }
+    },
     "Custom": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Custom"
+          }
+        }
+      }
+    },
+    "Custom…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom…"
+          }
+        }
+      }
+    },
+    "Cyan": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cyan"
           }
         }
       }
@@ -2613,12 +3543,52 @@
         }
       }
     },
+    "Default agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default agent"
+          }
+        }
+      }
+    },
+    "Default model": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default model"
+          }
+        }
+      }
+    },
+    "Defaults": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Defaults"
+          }
+        }
+      }
+    },
     "Defaults for all agents": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Defaults for all agents"
+          }
+        }
+      }
+    },
+    "Delete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
           }
         }
       }
@@ -2653,6 +3623,26 @@
         }
       }
     },
+    "Delete Group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Group"
+          }
+        }
+      }
+    },
+    "Delete Group…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Group…"
+          }
+        }
+      }
+    },
     "Delete and Move Files to Trash": {
       "localizations": {
         "en": {
@@ -2663,12 +3653,32 @@
         }
       }
     },
+    "Delete unsent message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete unsent message"
+          }
+        }
+      }
+    },
     "Delete “%@”?": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Delete “%@”?"
+          }
+        }
+      }
+    },
+    "Deleted %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deleted %@"
           }
         }
       }
@@ -2743,6 +3753,16 @@
         }
       }
     },
+    "Device ID: %@…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device ID: %@…"
+          }
+        }
+      }
+    },
     "Device name": {
       "localizations": {
         "en": {
@@ -2773,6 +3793,26 @@
         }
       }
     },
+    "Devices…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Devices…"
+          }
+        }
+      }
+    },
+    "Didn't work?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Didn't work?"
+          }
+        }
+      }
+    },
     "Disabled": {
       "localizations": {
         "en": {
@@ -2789,6 +3829,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Discard"
+          }
+        }
+      }
+    },
+    "Discard %lld Changes & Reconnect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Discard %lld Changes & Reconnect"
           }
         }
       }
@@ -2923,6 +3973,16 @@
         }
       }
     },
+    "Do you have an OpenClaw Gateway?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Do you have an OpenClaw Gateway?"
+          }
+        }
+      }
+    },
     "Don't Save": {
       "localizations": {
         "en": {
@@ -3023,6 +4083,16 @@
         }
       }
     },
+    "Earlier messages were summarized for the agent. They're still shown here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earlier messages were summarized for the agent. They're still shown here."
+          }
+        }
+      }
+    },
     "Edit": {
       "localizations": {
         "en": {
@@ -3053,12 +4123,32 @@
         }
       }
     },
+    "Edit Connection…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Connection…"
+          }
+        }
+      }
+    },
     "Edited": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Edited"
+          }
+        }
+      }
+    },
+    "Edited %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edited %@"
           }
         }
       }
@@ -3079,6 +4169,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Editing agents needs Full Management"
+          }
+        }
+      }
+    },
+    "Editing agents needs Full Management. Turn it on under Connection, then approve this device on the Gateway host.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editing agents needs Full Management. Turn it on under Connection, then approve this device on the Gateway host."
           }
         }
       }
@@ -3133,6 +4233,56 @@
         }
       }
     },
+    "Enter a full http:// or https:// URL.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a full http:// or https:// URL."
+          }
+        }
+      }
+    },
+    "Enter a name for this value.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a name for this value."
+          }
+        }
+      }
+    },
+    "Enter a name.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a name."
+          }
+        }
+      }
+    },
+    "Enter the command to run.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter the command to run."
+          }
+        }
+      }
+    },
+    "Enter the server's URL.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter the server's URL."
+          }
+        }
+      }
+    },
     "Entire session, not limited to the range above.": {
       "localizations": {
         "en": {
@@ -3149,6 +4299,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Environment"
+          }
+        }
+      }
+    },
+    "Environment variables": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Environment variables"
           }
         }
       }
@@ -3213,6 +4373,26 @@
         }
       }
     },
+    "Every skill has what it needs.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Every skill has what it needs."
+          }
+        }
+      }
+    },
+    "Existing group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Existing group"
+          }
+        }
+      }
+    },
     "Exit code %lld": {
       "localizations": {
         "en": {
@@ -3229,6 +4409,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Expand"
+          }
+        }
+      }
+    },
+    "Expand %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expand %@"
           }
         }
       }
@@ -3343,6 +4533,36 @@
         }
       }
     },
+    "Failed to send.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to send."
+          }
+        }
+      }
+    },
+    "Failed to send: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to send: %@"
+          }
+        }
+      }
+    },
+    "Failed — %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed — %@"
+          }
+        }
+      }
+    },
     "File": {
       "localizations": {
         "en": {
@@ -3403,12 +4623,32 @@
         }
       }
     },
+    "Find Pincer in the list and approve its request ID.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find Pincer in the list and approve its request ID."
+          }
+        }
+      }
+    },
     "Find Previous": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Find Previous"
+          }
+        }
+      }
+    },
+    "Find a chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find a chat"
           }
         }
       }
@@ -3463,6 +4703,16 @@
         }
       }
     },
+    "Find your Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find your Gateway"
+          }
+        }
+      }
+    },
     "Fingerprint %@": {
       "localizations": {
         "en": {
@@ -3479,6 +4729,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fingerprint (SHA-256 of the device's public key): %@"
+          }
+        }
+      }
+    },
+    "Finish": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish"
+          }
+        }
+      }
+    },
+    "Finish opens this chat.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish opens this chat."
           }
         }
       }
@@ -3503,6 +4773,46 @@
         }
       }
     },
+    "Follow the prompts. Choose Quick start.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follow the prompts. Choose Quick start."
+          }
+        }
+      }
+    },
+    "For your security, new devices must be approved on the machine running OpenClaw. Run this there:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For your security, new devices must be approved on the machine running OpenClaw. Run this there:"
+          }
+        }
+      }
+    },
+    "For your security, new devices need your OK. Run this on the Gateway host:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For your security, new devices need your OK. Run this on the Gateway host:"
+          }
+        }
+      }
+    },
+    "Forward": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forward"
+          }
+        }
+      }
+    },
     "From": {
       "localizations": {
         "en": {
@@ -3513,12 +4823,42 @@
         }
       }
     },
+    "From %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From %@"
+          }
+        }
+      }
+    },
     "Full Management Needed": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Full Management Needed"
+          }
+        }
+      }
+    },
+    "Full Management lets Pincer change Gateway settings and agents. You can turn it on later in Connection.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full Management lets Pincer change Gateway settings and agents. You can turn it on later in Connection."
+          }
+        }
+      }
+    },
+    "Full install guide": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full install guide"
           }
         }
       }
@@ -3553,6 +4893,26 @@
         }
       }
     },
+    "Gateway Logs needs the operator.read scope. Approve it for this device on the Gateway host, then try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway Logs needs the operator.read scope. Approve it for this device on the Gateway host, then try again."
+          }
+        }
+      }
+    },
+    "Gateway Logs…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway Logs…"
+          }
+        }
+      }
+    },
     "Gateway Reasoning": {
       "localizations": {
         "en": {
@@ -3583,6 +4943,36 @@
         }
       }
     },
+    "Gateway Settings…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway Settings…"
+          }
+        }
+      }
+    },
+    "Gateway URL": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway URL"
+          }
+        }
+      }
+    },
+    "Gateway address": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway address"
+          }
+        }
+      }
+    },
     "Gateway default": {
       "localizations": {
         "en": {
@@ -3599,6 +4989,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gateway logs are redacted by the Gateway, but they can still contain hostnames, file paths and message content. Review them before sharing."
+          }
+        }
+      }
+    },
+    "Gateway password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway password"
+          }
+        }
+      }
+    },
+    "Gateway token": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway token"
           }
         }
       }
@@ -3623,6 +5033,16 @@
         }
       }
     },
+    "Get Started": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get Started"
+          }
+        }
+      }
+    },
     "Get a key": {
       "localizations": {
         "en": {
@@ -3643,12 +5063,72 @@
         }
       }
     },
+    "Go": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go"
+          }
+        }
+      }
+    },
+    "Go Back": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go Back"
+          }
+        }
+      }
+    },
+    "Go Forward": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go Forward"
+          }
+        }
+      }
+    },
+    "Go to Chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Go to Chats"
+          }
+        }
+      }
+    },
     "Got It": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Got It"
+          }
+        }
+      }
+    },
+    "Green": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Green"
+          }
+        }
+      }
+    },
+    "Group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Group"
           }
         }
       }
@@ -3713,6 +5193,26 @@
         }
       }
     },
+    "Help me choose": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help me choose"
+          }
+        }
+      }
+    },
+    "Helper": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helper"
+          }
+        }
+      }
+    },
     "Hide": {
       "localizations": {
         "en": {
@@ -3723,12 +5223,42 @@
         }
       }
     },
+    "Hide %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide %@"
+          }
+        }
+      }
+    },
     "Hide Runs": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Hide Runs"
+          }
+        }
+      }
+    },
+    "Hide Thinking Steps": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Thinking Steps"
+          }
+        }
+      }
+    },
+    "Hide subagent runs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide subagent runs"
           }
         }
       }
@@ -3783,6 +5313,26 @@
         }
       }
     },
+    "If you changed settings, the request ID may have changed. Run openclaw devices list to see the latest one.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "If you changed settings, the request ID may have changed. Run openclaw devices list to see the latest one."
+          }
+        }
+      }
+    },
+    "Image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image"
+          }
+        }
+      }
+    },
     "Image too large to preview": {
       "localizations": {
         "en": {
@@ -3793,12 +5343,32 @@
         }
       }
     },
+    "Image unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Image unavailable"
+          }
+        }
+      }
+    },
     "In %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "In %@"
+          }
+        }
+      }
+    },
+    "In reply to %@: %@. ": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In reply to %1$@: %2$@. "
           }
         }
       }
@@ -3823,6 +5393,16 @@
         }
       }
     },
+    "Indexing chats… %lld of %lld — results may be incomplete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indexing chats… %1$lld of %2$lld — results may be incomplete"
+          }
+        }
+      }
+    },
     "Input": {
       "localizations": {
         "en": {
@@ -3843,12 +5423,32 @@
         }
       }
     },
+    "Install OpenClaw": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install OpenClaw"
+          }
+        }
+      }
+    },
     "Install a plugin on the Gateway": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Install a plugin on the Gateway"
+          }
+        }
+      }
+    },
+    "Install: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install: %@"
           }
         }
       }
@@ -3973,6 +5573,26 @@
         }
       }
     },
+    "Its %lld chats won’t be deleted; they just won’t be in a group.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Its %lld chats won’t be deleted; they just won’t be in a group."
+          }
+        }
+      }
+    },
+    "Its chat won’t be deleted; it just won’t be in a group.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Its chat won’t be deleted; it just won’t be in a group."
+          }
+        }
+      }
+    },
     "JSON": {
       "localizations": {
         "en": {
@@ -4003,6 +5623,26 @@
         }
       }
     },
+    "Jump to a chat or run a command…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jump to a chat or run a command…"
+          }
+        }
+      }
+    },
+    "Jumps to the message this replies to": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jumps to the message this replies to"
+          }
+        }
+      }
+    },
     "Keep Editing": {
       "localizations": {
         "en": {
@@ -4029,6 +5669,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keep Waiting"
+          }
+        }
+      }
+    },
+    "Keep it running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep it running"
           }
         }
       }
@@ -4113,6 +5763,16 @@
         }
       }
     },
+    "Last run failed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last run failed"
+          }
+        }
+      }
+    },
     "Last seen %@": {
       "localizations": {
         "en": {
@@ -4183,16 +5843,6 @@
         }
       }
     },
-    "Letters, numbers, . _ - (start with a letter or number)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Letters, numbers, . _ - (start with a letter or number)"
-          }
-        }
-      }
-    },
     "Levels": {
       "localizations": {
         "en": {
@@ -4219,6 +5869,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Link %@"
+          }
+        }
+      }
+    },
+    "Link copied": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link copied"
           }
         }
       }
@@ -4283,6 +5943,16 @@
         }
       }
     },
+    "Loading earlier messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading earlier messages"
+          }
+        }
+      }
+    },
     "Loading messages": {
       "localizations": {
         "en": {
@@ -4319,6 +5989,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Loading…"
+          }
+        }
+      }
+    },
+    "Location": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location"
           }
         }
       }
@@ -4393,12 +6073,52 @@
         }
       }
     },
+    "MCP sign-in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MCP sign-in"
+          }
+        }
+      }
+    },
     "Make them the command owner": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Make them the command owner"
+          }
+        }
+      }
+    },
+    "Making them the command owner needs Full Management access.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Making them the command owner needs Full Management access."
+          }
+        }
+      }
+    },
+    "Manage Automations…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage Automations…"
+          }
+        }
+      }
+    },
+    "Manage Sessions…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage Sessions…"
           }
         }
       }
@@ -4423,12 +6143,52 @@
         }
       }
     },
+    "Mark as Read": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as Read"
+          }
+        }
+      }
+    },
+    "Mark as Unread": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as Unread"
+          }
+        }
+      }
+    },
+    "Matches words from their start; case and accents are ignored.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Matches words from their start; case and accents are ignored."
+          }
+        }
+      }
+    },
     "Menu Bar": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Menu Bar"
+          }
+        }
+      }
+    },
+    "Message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message"
           }
         }
       }
@@ -4443,12 +6203,42 @@
         }
       }
     },
+    "Message search is unavailable right now.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message search is unavailable right now."
+          }
+        }
+      }
+    },
+    "Message search needs the transcript cache, which is turned off.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message search needs the transcript cache, which is turned off."
+          }
+        }
+      }
+    },
     "Messages": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Messages"
+          }
+        }
+      }
+    },
+    "Messages after this point move to a new branch. The message you rewind to goes back into the composer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messages after this point move to a new branch. The message you rewind to goes back into the composer."
           }
         }
       }
@@ -4469,6 +6259,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Met"
+          }
+        }
+      }
+    },
+    "Method": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Method"
           }
         }
       }
@@ -4543,6 +6343,56 @@
         }
       }
     },
+    "Move Down": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Down"
+          }
+        }
+      }
+    },
+    "Move Up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move Up"
+          }
+        }
+      }
+    },
+    "Move to Group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Move to Group"
+          }
+        }
+      }
+    },
+    "Moved %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moved %@"
+          }
+        }
+      }
+    },
+    "My Gateway Is Running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Gateway Is Running"
+          }
+        }
+      }
+    },
     "Name": {
       "localizations": {
         "en": {
@@ -4559,6 +6409,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Name: letters, numbers, . _ - (start with a letter or number)."
+          }
+        }
+      }
+    },
+    "Names can be at most 64 characters.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Names can be at most 64 characters."
+          }
+        }
+      }
+    },
+    "Nearby": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nearby"
+          }
+        }
+      }
+    },
+    "Needs %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs %@"
           }
         }
       }
@@ -4663,6 +6543,86 @@
         }
       }
     },
+    "New Chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Chat"
+          }
+        }
+      }
+    },
+    "New Chat in Group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Chat in Group"
+          }
+        }
+      }
+    },
+    "New Chat in Group…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Chat in Group…"
+          }
+        }
+      }
+    },
+    "New Group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Group"
+          }
+        }
+      }
+    },
+    "New Group…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Group…"
+          }
+        }
+      }
+    },
+    "New chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New chat"
+          }
+        }
+      }
+    },
+    "New chat in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New chat in %@"
+          }
+        }
+      }
+    },
+    "New chat in %@ with %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New chat in %1$@ with %2$@"
+          }
+        }
+      }
+    },
     "New lines appear here as the Gateway writes them.": {
       "localizations": {
         "en": {
@@ -4759,6 +6719,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No Channels Use DM Pairing"
+          }
+        }
+      }
+    },
+    "No Gateway yet? Explore Pincer with sample agents and chats. Nothing leaves this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No Gateway yet? Explore Pincer with sample agents and chats. Nothing leaves this device."
           }
         }
       }
@@ -4943,6 +6913,16 @@
         }
       }
     },
+    "No messages match “%@”.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No messages match “%@”."
+          }
+        }
+      }
+    },
     "No models available": {
       "localizations": {
         "en": {
@@ -5053,6 +7033,16 @@
         }
       }
     },
+    "No text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No text"
+          }
+        }
+      }
+    },
     "No tools match.": {
       "localizations": {
         "en": {
@@ -5089,6 +7079,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No usage in this range."
+          }
+        }
+      }
+    },
+    "No, help me set one up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No, help me set one up"
           }
         }
       }
@@ -5169,6 +7169,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not Created"
+          }
+        }
+      }
+    },
+    "Not Now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Now"
           }
         }
       }
@@ -5263,6 +7273,36 @@
         }
       }
     },
+    "Not sent yet, queued.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet, queued."
+          }
+        }
+      }
+    },
+    "Not set": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not set"
+          }
+        }
+      }
+    },
+    "Not set up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not set up"
+          }
+        }
+      }
+    },
     "Not signed in.": {
       "localizations": {
         "en": {
@@ -5303,12 +7343,22 @@
         }
       }
     },
-    "Notify about replies and approvals": {
+    "Now: %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Notify about replies and approvals"
+            "value": "Now: %@"
+          }
+        }
+      }
+    },
+    "OAuth sign-in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OAuth sign-in"
           }
         }
       }
@@ -5363,6 +7413,16 @@
         }
       }
     },
+    "On Windows": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On Windows"
+          }
+        }
+      }
+    },
     "Online for %@": {
       "localizations": {
         "en": {
@@ -5379,6 +7439,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Only approve devices you recognize. Compare the fingerprint with the one the device shows while it waits."
+          }
+        }
+      }
+    },
+    "Only archived sessions can be deleted without Full Management.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only archived sessions can be deleted without Full Management."
           }
         }
       }
@@ -5409,6 +7479,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open %@’s Chat"
+          }
+        }
+      }
+    },
+    "Open Agents & Models": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Agents & Models"
           }
         }
       }
@@ -5503,6 +7583,36 @@
         }
       }
     },
+    "Open Settings…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings…"
+          }
+        }
+      }
+    },
+    "Open Skills": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Skills"
+          }
+        }
+      }
+    },
+    "Open Tools & Skills": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Tools & Skills"
+          }
+        }
+      }
+    },
     "Open a small composer from any app to send to a chat.": {
       "localizations": {
         "en": {
@@ -5519,6 +7629,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open at Login"
+          }
+        }
+      }
+    },
+    "Open image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open image"
           }
         }
       }
@@ -5553,12 +7673,42 @@
         }
       }
     },
+    "Open “%@” to see what this helper did": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open “%@” to see what this helper did"
+          }
+        }
+      }
+    },
+    "OpenClaw is running on this Mac.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenClaw is running on this Mac."
+          }
+        }
+      }
+    },
     "Optional": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Optional"
+          }
+        }
+      }
+    },
+    "Optional pin, hex": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional pin, hex"
           }
         }
       }
@@ -5573,6 +7723,26 @@
         }
       }
     },
+    "Orange": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orange"
+          }
+        }
+      }
+    },
+    "Organize": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Organize"
+          }
+        }
+      }
+    },
     "Origin": {
       "localizations": {
         "en": {
@@ -5583,22 +7753,22 @@
         }
       }
     },
+    "Original message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original message"
+          }
+        }
+      }
+    },
     "Other": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Other"
-          }
-        }
-      }
-    },
-    "Other settings are kept. Edit them in Raw Config.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Other settings are kept. Edit them in Raw Config."
           }
         }
       }
@@ -5723,6 +7893,16 @@
         }
       }
     },
+    "Password": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password"
+          }
+        }
+      }
+    },
     "Paste Code or URL": {
       "localizations": {
         "en": {
@@ -5759,6 +7939,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Paste the code the provider showed, or the full link you were sent to after approving."
+          }
+        }
+      }
+    },
+    "Paste your Gateway token. You'll only need to do this once.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste your Gateway token. You'll only need to do this once."
           }
         }
       }
@@ -5833,12 +8023,32 @@
         }
       }
     },
+    "Pick your default agent and model, look over skills, then send a test message. Skip anything you like.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick your default agent and model, look over skills, then send a test message. Skip anything you like."
+          }
+        }
+      }
+    },
     "Pin": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Pin"
+          }
+        }
+      }
+    },
+    "Pin Chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pin Chat"
           }
         }
       }
@@ -5853,12 +8063,92 @@
         }
       }
     },
+    "Pincer connects as an operator only. It never runs a Gateway, never registers as a node, and stores secrets in the Keychain.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer connects as an operator only. It never runs a Gateway, never registers as a node, and stores secrets in the Keychain."
+          }
+        }
+      }
+    },
+    "Pincer connects to a Gateway you run on your own computer or server.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer connects to a Gateway you run on your own computer or server."
+          }
+        }
+      }
+    },
+    "Pincer couldn’t open that link.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer couldn’t open that link."
+          }
+        }
+      }
+    },
+    "Pincer starts a chat called %@ with %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer starts a chat called %1$@ with %2$@."
+          }
+        }
+      }
+    },
     "Pincer stops this account until you start it again or the Gateway restarts. Messages to it won't be answered.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Pincer stops this account until you start it again or the Gateway restarts. Messages to it won't be answered."
+          }
+        }
+      }
+    },
+    "Pincer will connect to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer will connect to %@"
+          }
+        }
+      }
+    },
+    "Pink": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pink"
+          }
+        }
+      }
+    },
+    "Pinned": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pinned"
+          }
+        }
+      }
+    },
+    "Pinned Chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pinned Chats"
           }
         }
       }
@@ -6063,12 +8353,12 @@
         }
       }
     },
-    "Push relay": {
+    "Purple": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Push relay"
+            "value": "Purple"
           }
         }
       }
@@ -6109,6 +8399,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Queue a follow-up"
+          }
+        }
+      }
+    },
+    "Queued": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Queued"
           }
         }
       }
@@ -6193,12 +8493,12 @@
         }
       }
     },
-    "Raw JSON": {
+    "Re-enter this value; saved secrets can't move to a new name.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Raw JSON"
+            "value": "Re-enter this value; saved secrets can't move to a new name."
           }
         }
       }
@@ -6223,6 +8523,16 @@
         }
       }
     },
+    "Read": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read"
+          }
+        }
+      }
+    },
     "Read Only": {
       "localizations": {
         "en": {
@@ -6233,12 +8543,32 @@
         }
       }
     },
+    "Ready": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready"
+          }
+        }
+      }
+    },
     "Reason": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Reason"
+          }
+        }
+      }
+    },
+    "Recent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recent"
           }
         }
       }
@@ -6283,12 +8613,52 @@
         }
       }
     },
+    "Reconnect and discard unsaved settings?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnect and discard unsaved settings?"
+          }
+        }
+      }
+    },
+    "Reconnecting in %llds (attempt %lld)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnecting in %1$llds (attempt %2$lld)"
+          }
+        }
+      }
+    },
+    "Reconnecting to the Gateway starts over from its saved settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconnecting to the Gateway starts over from its saved settings."
+          }
+        }
+      }
+    },
     "Reconnecting…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Reconnecting…"
+          }
+        }
+      }
+    },
+    "Red": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Red"
           }
         }
       }
@@ -6319,6 +8689,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Refreshing…"
+          }
+        }
+      }
+    },
+    "Refusing unencrypted ws:// to public host %@. Use wss:// (Tailscale Serve) or a tailnet IP.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refusing unencrypted ws:// to public host %@. Use wss:// (Tailscale Serve) or a tailnet IP."
           }
         }
       }
@@ -6443,6 +8823,26 @@
         }
       }
     },
+    "Remove Gateway…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Gateway…"
+          }
+        }
+      }
+    },
+    "Remove My Reaction": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove My Reaction"
+          }
+        }
+      }
+    },
     "Remove Plugin…": {
       "localizations": {
         "en": {
@@ -6483,12 +8883,32 @@
         }
       }
     },
+    "Remove from Group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove from Group"
+          }
+        }
+      }
+    },
     "Remove item %lld": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Remove item %lld"
+          }
+        }
+      }
+    },
+    "Removed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removed"
           }
         }
       }
@@ -6533,6 +8953,16 @@
         }
       }
     },
+    "Rename Chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Chat"
+          }
+        }
+      }
+    },
     "Rename Device": {
       "localizations": {
         "en": {
@@ -6543,12 +8973,52 @@
         }
       }
     },
+    "Rename Group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Group"
+          }
+        }
+      }
+    },
+    "Rename Group…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Group…"
+          }
+        }
+      }
+    },
     "Rename Node": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Rename Node"
+          }
+        }
+      }
+    },
+    "Rename Server": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Server"
+          }
+        }
+      }
+    },
+    "Rename Server…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename Server…"
           }
         }
       }
@@ -6703,6 +9173,16 @@
         }
       }
     },
+    "Required for first pairing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Required for first pairing"
+          }
+        }
+      }
+    },
     "Requirements": {
       "localizations": {
         "en": {
@@ -6743,12 +9223,32 @@
         }
       }
     },
+    "Reset Icon": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset Icon"
+          }
+        }
+      }
+    },
     "Reset to Default": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Reset to Default"
+          }
+        }
+      }
+    },
+    "Responding": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Responding"
           }
         }
       }
@@ -6843,6 +9343,16 @@
         }
       }
     },
+    "Restarting isn't available on this Gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restarting isn't available on this Gateway."
+          }
+        }
+      }
+    },
     "Restarting needs Full Management access": {
       "localizations": {
         "en": {
@@ -6853,12 +9363,32 @@
         }
       }
     },
+    "Restarting needs Full Management access.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restarting needs Full Management access."
+          }
+        }
+      }
+    },
     "Restore": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Restore"
+          }
+        }
+      }
+    },
+    "Result %lld of %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Result %1$lld of %2$lld"
           }
         }
       }
@@ -6899,6 +9429,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Retry"
+          }
+        }
+      }
+    },
+    "Retry now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry now"
+          }
+        }
+      }
+    },
+    "Retry sending": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry sending"
           }
         }
       }
@@ -6989,6 +9539,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Review unsaved changes"
+          }
+        }
+      }
+    },
+    "Reviewing pairing requests needs Full Management access.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reviewing pairing requests needs Full Management access."
           }
         }
       }
@@ -7103,6 +9663,26 @@
         }
       }
     },
+    "Run these on the computer that will host your Gateway. It takes about 5 minutes.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run these on the computer that will host your Gateway. It takes about 5 minutes."
+          }
+        }
+      }
+    },
+    "Run this on the Gateway host to see it:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run this on the Gateway host to see it:"
+          }
+        }
+      }
+    },
     "Running replies and tasks finish first. Connected clients disconnect briefly.": {
       "localizations": {
         "en": {
@@ -7129,6 +9709,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Running, pausing and editing automations needs Full Management access (Gateway Settings → Connection)."
+          }
+        }
+      }
+    },
+    "Running…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running…"
           }
         }
       }
@@ -7183,12 +9773,52 @@
         }
       }
     },
+    "SVG image": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SVG image"
+          }
+        }
+      }
+    },
+    "SVG source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SVG source"
+          }
+        }
+      }
+    },
+    "Same Wi-Fi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same Wi-Fi"
+          }
+        }
+      }
+    },
     "Save": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Save"
+          }
+        }
+      }
+    },
+    "Save %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save %@"
           }
         }
       }
@@ -7213,6 +9843,16 @@
         }
       }
     },
+    "Save Defaults": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Defaults"
+          }
+        }
+      }
+    },
     "Save changes to %@?": {
       "localizations": {
         "en": {
@@ -7229,6 +9869,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Save changes to Command Policy?"
+          }
+        }
+      }
+    },
+    "Save changes to the Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save changes to the Gateway"
           }
         }
       }
@@ -7253,12 +9903,32 @@
         }
       }
     },
+    "Save the connection on this device and reconnect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save the connection on this device and reconnect"
+          }
+        }
+      }
+    },
     "Save your changes first.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Save your changes first."
+          }
+        }
+      }
+    },
+    "Save “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save “%@”"
           }
         }
       }
@@ -7273,12 +9943,42 @@
         }
       }
     },
+    "Saved in Keychain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved in Keychain"
+          }
+        }
+      }
+    },
+    "Saved secret": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved secret"
+          }
+        }
+      }
+    },
     "Saved to the Gateway's secret store as %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Saved to the Gateway's secret store as %@"
+          }
+        }
+      }
+    },
+    "Saves this Gateway and opens its Health page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saves this Gateway and opens its Health page."
           }
         }
       }
@@ -7363,6 +10063,16 @@
         }
       }
     },
+    "Search Messages…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search Messages…"
+          }
+        }
+      }
+    },
     "Search Options": {
       "localizations": {
         "en": {
@@ -7403,12 +10113,62 @@
         }
       }
     },
+    "Search messages for “%@”": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search messages for “%@”"
+          }
+        }
+      }
+    },
+    "Search messages in %@…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search messages in %@…"
+          }
+        }
+      }
+    },
+    "Search messages in every chat on %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search messages in every chat on %@."
+          }
+        }
+      }
+    },
     "Search options": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Search options"
+          }
+        }
+      }
+    },
+    "Search symbols": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search symbols"
+          }
+        }
+      }
+    },
+    "Searching…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Searching…"
           }
         }
       }
@@ -7423,12 +10183,32 @@
         }
       }
     },
+    "Security": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Security"
+          }
+        }
+      }
+    },
     "See when each one runs next, how its last runs went, and open the chats they ran in.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "See when each one runs next, how its last runs went, and open the chats they ran in."
+          }
+        }
+      }
+    },
+    "Select a Gateway to search its messages.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a Gateway to search its messages."
           }
         }
       }
@@ -7453,12 +10233,62 @@
         }
       }
     },
+    "Send Again": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send Again"
+          }
+        }
+      }
+    },
     "Send to %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Send to %@"
+          }
+        }
+      }
+    },
+    "Sending": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending"
+          }
+        }
+      }
+    },
+    "Sending.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending."
+          }
+        }
+      }
+    },
+    "Sending…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sending…"
+          }
+        }
+      }
+    },
+    "Sent. Waiting for your agent…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent. Waiting for your agent…"
           }
         }
       }
@@ -7513,6 +10343,16 @@
         }
       }
     },
+    "Session Management Isn't Available. Update OpenClaw to manage sessions here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Session Management Isn't Available. Update OpenClaw to manage sessions here."
+          }
+        }
+      }
+    },
     "Session Usage…": {
       "localizations": {
         "en": {
@@ -7533,6 +10373,16 @@
         }
       }
     },
+    "Set Up %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Up %@"
+          }
+        }
+      }
+    },
     "Set Up Gateway…": {
       "localizations": {
         "en": {
@@ -7549,6 +10399,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Set a channel's dmPolicy to \"pairing\" on the Gateway, and new senders will ask for access here."
+          }
+        }
+      }
+    },
+    "Set up OpenClaw": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set up OpenClaw"
           }
         }
       }
@@ -7613,12 +10473,52 @@
         }
       }
     },
+    "Show %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show %@"
+          }
+        }
+      }
+    },
     "Show %@ lines": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Show %@ lines"
+          }
+        }
+      }
+    },
+    "Show %lld subagent runs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show %lld subagent runs"
+          }
+        }
+      }
+    },
+    "Show Archived": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Archived"
+          }
+        }
+      }
+    },
+    "Show Automations": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Automations"
           }
         }
       }
@@ -7669,6 +10569,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show Setting"
+          }
+        }
+      }
+    },
+    "Show Slash Commands": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Slash Commands"
+          }
+        }
+      }
+    },
+    "Show Thinking Steps": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Thinking Steps"
           }
         }
       }
@@ -7763,6 +10683,16 @@
         }
       }
     },
+    "Show original message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show original message"
+          }
+        }
+      }
+    },
     "Show raw JSON": {
       "localizations": {
         "en": {
@@ -7799,6 +10729,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Showing the latest %lld entries."
+          }
+        }
+      }
+    },
+    "Showing the start of the file. Save it to see the rest.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Showing the start of the file. Save it to see the rest."
           }
         }
       }
@@ -7893,6 +10833,16 @@
         }
       }
     },
+    "Sign in to your Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign in to your Gateway"
+          }
+        }
+      }
+    },
     "Sign out of %@?": {
       "localizations": {
         "en": {
@@ -7973,6 +10923,26 @@
         }
       }
     },
+    "Signing in to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signing in to %@"
+          }
+        }
+      }
+    },
+    "Signing in…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signing in…"
+          }
+        }
+      }
+    },
     "Signs in with auth profile %@.": {
       "localizations": {
         "en": {
@@ -8013,12 +10983,32 @@
         }
       }
     },
+    "Skills…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skills…"
+          }
+        }
+      }
+    },
     "Skip": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Skip"
+          }
+        }
+      }
+    },
+    "Skip to Chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skip to Chats"
           }
         }
       }
@@ -8093,6 +11083,26 @@
         }
       }
     },
+    "Start Setup": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Setup"
+          }
+        }
+      }
+    },
+    "Start a chat with your agent any time.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start a chat with your agent any time."
+          }
+        }
+      }
+    },
     "Starting…": {
       "localizations": {
         "en": {
@@ -8149,6 +11159,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Status: %@"
+          }
+        }
+      }
+    },
+    "Step %lld of %lld · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step %1$lld of %2$lld · %3$@"
           }
         }
       }
@@ -8233,6 +11253,16 @@
         }
       }
     },
+    "Streamable HTTP": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Streamable HTTP"
+          }
+        }
+      }
+    },
     "Style": {
       "localizations": {
         "en": {
@@ -8259,6 +11289,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Succeeded"
+          }
+        }
+      }
+    },
+    "System": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "System"
+          }
+        }
+      }
+    },
+    "TLS certificate SHA-256": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TLS certificate SHA-256"
+          }
+        }
+      }
+    },
+    "Tailscale": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tailscale"
+          }
+        }
+      }
+    },
+    "Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port."
           }
         }
       }
@@ -8303,6 +11373,26 @@
         }
       }
     },
+    "That chat isn’t available on this Gateway anymore.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That chat isn’t available on this Gateway anymore."
+          }
+        }
+      }
+    },
+    "That link points to a Gateway that isn’t set up on this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That link points to a Gateway that isn’t set up on this device."
+          }
+        }
+      }
+    },
     "The Gateway couldn't finish removing the agent's data. Deleting again retries it.": {
       "localizations": {
         "en": {
@@ -8313,12 +11403,42 @@
         }
       }
     },
+    "The Gateway couldn't load usage.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway couldn't load usage."
+          }
+        }
+      }
+    },
     "The Gateway didn't accept that. Check it and try again.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The Gateway didn't accept that. Check it and try again."
+          }
+        }
+      }
+    },
+    "The Gateway didn't accept the sign-in.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway didn't accept the sign-in."
+          }
+        }
+      }
+    },
+    "The Gateway didn't send a sign-in link.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway didn't send a sign-in link."
           }
         }
       }
@@ -8363,12 +11483,72 @@
         }
       }
     },
+    "The Gateway limits how often it restarts. Try again in a minute.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway limits how often it restarts. Try again in a minute."
+          }
+        }
+      }
+    },
+    "The Gateway refused the restart: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway refused the restart: %@"
+          }
+        }
+      }
+    },
+    "The Gateway rejected %lld values.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway rejected %lld values."
+          }
+        }
+      }
+    },
+    "The Gateway rejected the change: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway rejected the change: %@"
+          }
+        }
+      }
+    },
+    "The Gateway sent usage data Pincer couldn't read.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway sent usage data Pincer couldn't read."
+          }
+        }
+      }
+    },
     "The Gateway waits for running replies and tasks to finish, then restarts. Pincer reconnects on its own.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The Gateway waits for running replies and tasks to finish, then restarts. Pincer reconnects on its own."
+          }
+        }
+      }
+    },
+    "The Gateway's config is invalid. Fix it before logging out.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway's config is invalid. Fix it before logging out."
           }
         }
       }
@@ -8403,6 +11583,46 @@
         }
       }
     },
+    "The chat continues from that branch. The current branch is kept and you can switch back.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The chat continues from that branch. The current branch is kept and you can switch back."
+          }
+        }
+      }
+    },
+    "The command policy changed on the Gateway, so your changes weren't saved. The latest version is shown. Make your changes again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The command policy changed on the Gateway, so your changes weren't saved. The latest version is shown. Make your changes again."
+          }
+        }
+      }
+    },
+    "The config changed on the Gateway since it was loaded.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The config changed on the Gateway since it was loaded."
+          }
+        }
+      }
+    },
+    "The demo runs a simulated Gateway on this device, with sample agents, chats and replies. Nothing is sent anywhere.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The demo runs a simulated Gateway on this device, with sample agents, chats and replies. Nothing is sent anywhere."
+          }
+        }
+      }
+    },
     "The folder on the Gateway host with this agent's files.": {
       "localizations": {
         "en": {
@@ -8429,6 +11649,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The plugin is uninstalled from the Gateway and its settings are removed. This happens right away."
+          }
+        }
+      }
+    },
+    "The saved token and device pairing token are deleted from this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The saved token and device pairing token are deleted from this device."
           }
         }
       }
@@ -8543,12 +11773,92 @@
         }
       }
     },
+    "Thinking…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking…"
+          }
+        }
+      }
+    },
+    "This Gateway can't %@ channels.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't %@ channels."
+          }
+        }
+      }
+    },
+    "This Gateway can't change nodes. Update OpenClaw to manage them here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't change nodes. Update OpenClaw to manage them here."
+          }
+        }
+      }
+    },
     "This Gateway can't list nodes.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This Gateway can't list nodes."
+          }
+        }
+      }
+    },
+    "This Gateway can't manage agents. Update OpenClaw to create and edit agents here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't manage agents. Update OpenClaw to create and edit agents here."
+          }
+        }
+      }
+    },
+    "This Gateway can't manage devices.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't manage devices."
+          }
+        }
+      }
+    },
+    "This Gateway can't manage skills. Update OpenClaw to install and configure skills here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't manage skills. Update OpenClaw to install and configure skills here."
+          }
+        }
+      }
+    },
+    "This Gateway can't rename devices. Update OpenClaw to rename them here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't rename devices. Update OpenClaw to rename them here."
+          }
+        }
+      }
+    },
+    "This Gateway can't report tool policy. Update OpenClaw to see it here.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway can't report tool policy. Update OpenClaw to see it here."
           }
         }
       }
@@ -8663,6 +11973,16 @@
         }
       }
     },
+    "This Gateway doesn't support %@ yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway doesn't support %@ yet."
+          }
+        }
+      }
+    },
     "This Gateway doesn't support channel pairing requests. Update OpenClaw to review them here.": {
       "localizations": {
         "en": {
@@ -8679,6 +11999,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Gateway doesn't support managing plugins remotely. Update OpenClaw to manage plugins here."
+          }
+        }
+      }
+    },
+    "This Gateway doesn't support that yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Gateway doesn't support that yet."
           }
         }
       }
@@ -8713,6 +12043,36 @@
         }
       }
     },
+    "This Mac": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This Mac"
+          }
+        }
+      }
+    },
+    "This approval is no longer on the Gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This approval is no longer on the Gateway."
+          }
+        }
+      }
+    },
+    "This automation changed on the Gateway. The latest version is loaded; review it and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This automation changed on the Gateway. The latest version is loaded; review it and try again."
+          }
+        }
+      }
+    },
     "This automation runs a %@ task, which can only be changed in the Control UI or the config.": {
       "localizations": {
         "en": {
@@ -8729,6 +12089,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This device"
+          }
+        }
+      }
+    },
+    "This device can view but not change this. Open Connection to request Full Management.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device can view but not change this. Open Connection to request Full Management."
           }
         }
       }
@@ -8753,6 +12123,26 @@
         }
       }
     },
+    "This device was already revoked.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device was already revoked."
+          }
+        }
+      }
+    },
+    "This device will be disconnected and must pair again to reconnect.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device will be disconnected and must pair again to reconnect."
+          }
+        }
+      }
+    },
     "This downloads the latest version from ClawHub onto the Gateway host.": {
       "localizations": {
         "en": {
@@ -8773,12 +12163,52 @@
         }
       }
     },
+    "This file isn’t text. Save it to open it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file isn’t text. Save it to open it."
+          }
+        }
+      }
+    },
+    "This group is shared by all agents.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This group is shared by all agents."
+          }
+        }
+      }
+    },
     "This is a simulated sign-in for the demo. No account is used.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This is a simulated sign-in for the demo. No account is used."
+          }
+        }
+      }
+    },
+    "This node was already removed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This node was already removed."
+          }
+        }
+      }
+    },
+    "This permanently deletes the transcript on the Gateway and can't be undone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This permanently deletes the transcript on the Gateway and can't be undone."
           }
         }
       }
@@ -8809,6 +12239,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This request expired."
+          }
+        }
+      }
+    },
+    "This request was already handled or expired.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This request was already handled or expired."
           }
         }
       }
@@ -8849,6 +12289,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Time zone"
+          }
+        }
+      }
+    },
+    "Timed out waiting for %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timed out waiting for %@."
           }
         }
       }
@@ -8903,22 +12353,22 @@
         }
       }
     },
-    "To get notified while Pincer is closed, enter a Pincer push relay. Your Gateway encrypts each notification to this device, so the relay can't read it. The Gateway needs Web Push (push.web.subscribe).": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "To get notified while Pincer is closed, enter a Pincer push relay. Your Gateway encrypts each notification to this device, so the relay can't read it. The Gateway needs Web Push (push.web.subscribe)."
-          }
-        }
-      }
-    },
     "To:": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "To:"
+          }
+        }
+      }
+    },
+    "Token": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token"
           }
         }
       }
@@ -8973,12 +12423,32 @@
         }
       }
     },
+    "Tool %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool %@"
+          }
+        }
+      }
+    },
     "Tool calls": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Tool calls"
+          }
+        }
+      }
+    },
+    "Tool result": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool result"
           }
         }
       }
@@ -9063,6 +12533,16 @@
         }
       }
     },
+    "Try the Demo": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try the Demo"
+          }
+        }
+      }
+    },
     "Turn Off": {
       "localizations": {
         "en": {
@@ -9079,6 +12559,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn On"
+          }
+        }
+      }
+    },
+    "Turn on Full Management under Connection, then approve this device on the Gateway host.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on Full Management under Connection, then approve this device on the Gateway host."
           }
         }
       }
@@ -9109,6 +12599,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Type"
+          }
+        }
+      }
+    },
+    "Type at least 2 characters.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type at least 2 characters."
           }
         }
       }
@@ -9153,6 +12653,16 @@
         }
       }
     },
+    "Unarchive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unarchive"
+          }
+        }
+      }
+    },
     "Unavailable on this Gateway": {
       "localizations": {
         "en": {
@@ -9169,6 +12679,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Undo"
+          }
+        }
+      }
+    },
+    "Unexpected Gateway response: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unexpected Gateway response: %@"
           }
         }
       }
@@ -9213,6 +12733,26 @@
         }
       }
     },
+    "Unpin Chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unpin Chat"
+          }
+        }
+      }
+    },
+    "Unread": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unread"
+          }
+        }
+      }
+    },
     "Unsaved Changes": {
       "localizations": {
         "en": {
@@ -9229,6 +12769,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unsaved changes"
+          }
+        }
+      }
+    },
+    "Unskip": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unskip"
+          }
+        }
+      }
+    },
+    "Untitled session": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Untitled session"
           }
         }
       }
@@ -9283,6 +12843,16 @@
         }
       }
     },
+    "Usage & Cost…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usage & Cost…"
+          }
+        }
+      }
+    },
     "Usage Isn't Available": {
       "localizations": {
         "en": {
@@ -9299,6 +12869,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Usage Over Time"
+          }
+        }
+      }
+    },
+    "Use Default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Default"
           }
         }
       }
@@ -9323,12 +12903,52 @@
         }
       }
     },
+    "Use a password instead": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use a password instead"
+          }
+        }
+      }
+    },
+    "Use a token instead": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use a token instead"
+          }
+        }
+      }
+    },
+    "Use letters, numbers, dots, dashes and underscores, starting with a letter or number.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use letters, numbers, dots, dashes and underscores, starting with a letter or number."
+          }
+        }
+      }
+    },
     "Use the theme's color": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Use the theme's color"
+          }
+        }
+      }
+    },
+    "Use your Tailscale Serve name (wss://…ts.net) or tailnet IP (ws://100.x.y.z:18789). Plain ws:// is only allowed for Tailscale, LAN and loopback addresses.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use your Tailscale Serve name (wss://…ts.net) or tailnet IP (ws://100.x.y.z:18789). Plain ws:// is only allowed for Tailscale, LAN and loopback addresses."
           }
         }
       }
@@ -9383,6 +13003,16 @@
         }
       }
     },
+    "Viewing and changing the command policy needs Full Management access. Turn it on under Connection, then approve this device on the Gateway host.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viewing and changing the command policy needs Full Management access. Turn it on under Connection, then approve this device on the Gateway host."
+          }
+        }
+      }
+    },
     "Wait for the current run to finish.": {
       "localizations": {
         "en": {
@@ -9409,6 +13039,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting for approval"
+          }
+        }
+      }
+    },
+    "Waiting for approval on the Gateway host": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for approval on the Gateway host"
+          }
+        }
+      }
+    },
+    "Waiting for approval…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for approval…"
+          }
+        }
+      }
+    },
+    "Welcome to Pincer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to Pincer"
           }
         }
       }
@@ -9453,6 +13113,16 @@
         }
       }
     },
+    "Where is OpenClaw running?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where is OpenClaw running?"
+          }
+        }
+      }
+    },
     "Which channels and chats route to this agent. Bindings are managed in the config.": {
       "localizations": {
         "en": {
@@ -9479,6 +13149,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Will Be Removed"
+          }
+        }
+      }
+    },
+    "Working": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Working"
           }
         }
       }
@@ -9543,12 +13223,62 @@
         }
       }
     },
+    "Writing %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Writing %@"
+          }
+        }
+      }
+    },
+    "Wrote %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wrote %@"
+          }
+        }
+      }
+    },
+    "Yellow": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yellow"
+          }
+        }
+      }
+    },
+    "Yes, it's running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yes, it's running"
+          }
+        }
+      }
+    },
     "You": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "You"
+          }
+        }
+      }
+    },
+    "You can only see this device. Turn on Full Management under Connection, then approve this device on the Gateway host.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can only see this device. Turn on Full Management under Connection, then approve this device on the Gateway host."
           }
         }
       }
@@ -9569,6 +13299,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "You can view agents and their files. Turn on Full Management under Connection, then approve this device on the Gateway host."
+          }
+        }
+      }
+    },
+    "You can view skills. Turn on Full Management under Connection, then approve this device on the Gateway host.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can view skills. Turn on Full Management under Connection, then approve this device on the Gateway host."
           }
         }
       }
@@ -9603,6 +13343,66 @@
         }
       }
     },
+    "You're all set": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're all set"
+          }
+        }
+      }
+    },
+    "You're connected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're connected"
+          }
+        }
+      }
+    },
+    "Your Gateway is on another device in your tailnet. Turn on Tailscale Serve on the Gateway host, then use its address.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Gateway is on another device in your tailnet. Turn on Tailscale Serve on the Gateway host, then use its address."
+          }
+        }
+      }
+    },
+    "Your Gateway is on this network and set to accept connections from it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Gateway is on this network and set to accept connections from it."
+          }
+        }
+      }
+    },
+    "Your agent didn't answer. You can try again, or skip and chat later.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your agent didn't answer. You can try again, or skip and chat later."
+          }
+        }
+      }
+    },
+    "Your agent replied.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your agent replied."
+          }
+        }
+      }
+    },
     "Your changes to agents or workspace files haven't been saved.": {
       "localizations": {
         "en": {
@@ -9629,6 +13429,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your changes will be lost if you don't save them."
+          }
+        }
+      }
+    },
+    "Your device doesn't have the `%@` scope. Approve it again from the Gateway with that scope.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your device doesn't have the `%@` scope. Approve it again from the Gateway with that scope."
+          }
+        }
+      }
+    },
+    "Your device is missing a scope this needs. Approve it again from the Gateway with that scope.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your device is missing a scope this needs. Approve it again from the Gateway with that scope."
           }
         }
       }
@@ -9683,12 +13503,42 @@
         }
       }
     },
+    "a message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "a message"
+          }
+        }
+      }
+    },
     "active %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "active %@"
+          }
+        }
+      }
+    },
+    "almost full": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "almost full"
+          }
+        }
+      }
+    },
+    "approval history": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "approval history"
           }
         }
       }
@@ -9723,12 +13573,62 @@
         }
       }
     },
+    "at least %lld added": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "at least %lld added"
+          }
+        }
+      }
+    },
+    "at least %lld removed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "at least %lld removed"
+          }
+        }
+      }
+    },
+    "automations": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "automations"
+          }
+        }
+      }
+    },
+    "channel status": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "channel status"
+          }
+        }
+      }
+    },
     "chat": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "chat"
+          }
+        }
+      }
+    },
+    "checkmark": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "checkmark"
           }
         }
       }
@@ -9749,6 +13649,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "command not found"
+          }
+        }
+      }
+    },
+    "device management": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "device management"
+          }
+        }
+      }
+    },
+    "doc.on.doc": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "doc.on.doc"
+          }
+        }
+      }
+    },
+    "e.g. Kitchen remodel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "e.g. Kitchen remodel"
           }
         }
       }
@@ -9803,22 +13733,72 @@
         }
       }
     },
-    "https://example.com/mcp": {
+    "finished": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "https://example.com/mcp"
+            "value": "finished"
           }
         }
       }
     },
-    "https://relay.example.com": {
+    "from %@’s chat": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "https://relay.example.com"
+            "value": "from %@’s chat"
+          }
+        }
+      }
+    },
+    "from a helper": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "from a helper"
+          }
+        }
+      }
+    },
+    "from an automation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "from an automation"
+          }
+        }
+      }
+    },
+    "from another agent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "from another agent"
+          }
+        }
+      }
+    },
+    "from another chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "from another chat"
+          }
+        }
+      }
+    },
+    "health reports": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "health reports"
           }
         }
       }
@@ -9829,6 +13809,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "https://…"
+          }
+        }
+      }
+    },
+    "its credentials aren't available": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "its credentials aren't available"
           }
         }
       }
@@ -9863,6 +13853,16 @@
         }
       }
     },
+    "nearly full": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nearly full"
+          }
+        }
+      }
+    },
     "no output timeout": {
       "localizations": {
         "en": {
@@ -9893,12 +13893,32 @@
         }
       }
     },
+    "pairing requests": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "pairing requests"
+          }
+        }
+      }
+    },
     "reconnect": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "reconnect"
+          }
+        }
+      }
+    },
+    "reconnecting MCP servers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "reconnecting MCP servers"
           }
         }
       }
@@ -9943,12 +13963,122 @@
         }
       }
     },
+    "the Gateway skipped it": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the Gateway skipped it"
+          }
+        }
+      }
+    },
+    "the account is disabled": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the account is disabled"
+          }
+        }
+      }
+    },
+    "the account isn't configured": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the account isn't configured"
+          }
+        }
+      }
+    },
+    "the account isn't linked. Log in first": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the account isn't linked. Log in first"
+          }
+        }
+      }
+    },
+    "the channel doesn't support starting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the channel doesn't support starting"
+          }
+        }
+      }
+    },
+    "this Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "this Gateway"
+          }
+        }
+      }
+    },
     "timed out": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "timed out"
+          }
+        }
+      }
+    },
+    "to": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "to"
+          }
+        }
+      }
+    },
+    "usage reports": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "usage reports"
+          }
+        }
+      }
+    },
+    "via %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "via %@"
+          }
+        }
+      }
+    },
+    "wss://home.tailnet-name.ts.net": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wss://home.tailnet-name.ts.net"
+          }
+        }
+      }
+    },
+    "“%@” is listed twice.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” is listed twice."
           }
         }
       }
@@ -9969,6 +14099,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "“%@” isn't an agent on this Gateway anymore."
+          }
+        }
+      }
+    },
+    "“%@” isn’t a valid Gateway address. Use wss://host.tailnet.ts.net or ws://100.x.y.z:18789.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” isn’t a valid Gateway address. Use wss://host.tailnet.ts.net or ws://100.x.y.z:18789."
           }
         }
       }

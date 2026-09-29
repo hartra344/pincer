@@ -53,7 +53,7 @@ struct GatewaySettingsWindow: View {
                                    description: Text("This Gateway is no longer in Pincer.", bundle: .module))
                 .toolbar {
                     if let close = self.close {
-                        ToolbarItem(placement: .confirmationAction) { Button("Done", action: close) }
+                        ToolbarItem(placement: .confirmationAction) { Button(L("Done"), action: close) }
                     }
                 }
         }
@@ -91,7 +91,7 @@ private struct GatewaySettingsRoot: View {
                 .toolbar {
                     if self.close != nil {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Done") {
+                            Button(L("Done")) {
                                 if settings.hasChanges { self.confirmClose = true } else { self.closeAfterConfig() }
                             }
                         }
@@ -128,20 +128,20 @@ private struct GatewaySettingsRoot: View {
                 .environment(self.gateway)
                 .environment(self.navigator)
         }
-        .alert("Couldn't Save Settings", isPresented: Binding(
+        .alert(L("Couldn't Save Settings"), isPresented: Binding(
             get: { settings.saveState.error != nil && !self.navigator.isReviewing },
             set: { if !$0 { settings.clearSaveError() } }
         )) {
-            Button("Review Changes") {
+            Button(L("Review Changes")) {
                 self.navigator.isReviewing = true
             }
-            Button("OK", role: .cancel) { settings.clearSaveError() }
+            Button(L("OK"), role: .cancel) { settings.clearSaveError() }
         } message: {
             Text(settings.saveState.error ?? "")
         }
-        .confirmationDialog("Save changes to \(self.gateway.profile.name)?", isPresented: self.$confirmClose,
+        .confirmationDialog(L("Save changes to \(self.gateway.profile.name)?"), isPresented: self.$confirmClose,
                             titleVisibility: .visible) {
-            Button("Save") {
+            Button(L("Save")) {
                 Task {
                     guard await settings.save() else { return }
                     // Let this dialog dismiss before the Command Policy one can present.
@@ -150,37 +150,37 @@ private struct GatewaySettingsRoot: View {
                 }
             }
             .disabled(settings.saveBlocker != nil || !settings.canSave)
-            Button("Discard Changes", role: .destructive) {
+            Button(L("Discard Changes"), role: .destructive) {
                 settings.discardChanges()
                 Task { @MainActor in
                     await Task.yield()
                     self.closeAfterConfig()
                 }
             }
-            Button("Keep Editing", role: .cancel) {}
+            Button(L("Keep Editing"), role: .cancel) {}
         } message: {
             Text("You have \(settings.changeCount) unsaved change\(settings.changeCount == 1 ? "" : "s").", bundle: .module)
         }
-        .confirmationDialog("Save changes to Command Policy?", isPresented: self.$confirmPolicyClose,
+        .confirmationDialog(L("Save changes to Command Policy?"), isPresented: self.$confirmPolicyClose,
                             titleVisibility: .visible) {
-            Button("Save") { Task { await self.savePolicyThenClose() } }
+            Button(L("Save")) { Task { await self.savePolicyThenClose() } }
                 .disabled(!self.policy.canWrite || !self.gateway.state.isConnected)
-            Button("Discard", role: .destructive) {
+            Button(L("Discard"), role: .destructive) {
                 self.policy.revert()
                 Task { @MainActor in
                     await Task.yield()
                     self.closeAfterPolicy()
                 }
             }
-            Button("Keep Editing", role: .cancel) {}
+            Button(L("Keep Editing"), role: .cancel) {}
         } message: {
             Text("Your changes to the command policy haven't been saved.", bundle: .module)
         }
-        .confirmationDialog("Loosen command policy?", isPresented: Binding(
+        .confirmationDialog(L("Loosen command policy?"), isPresented: Binding(
             get: { self.policy.pendingLoosening != nil },
             set: { if !$0 { self.policy.pendingLoosening = nil } }
         ), titleVisibility: .visible) {
-            Button("Save Anyway", role: .destructive) {
+            Button(L("Save Anyway"), role: .destructive) {
                 let names = ExecPolicyUI.agentNames(self.gateway)
                 Task {
                     let result = await self.policy.save(allowLoosening: true, agentNames: names)
@@ -188,24 +188,24 @@ private struct GatewaySettingsRoot: View {
                     self.closeAfterPolicySave = false
                 }
             }
-            Button("Cancel", role: .cancel) {
+            Button(L("Cancel"), role: .cancel) {
                 self.policy.pendingLoosening = nil
                 self.closeAfterPolicySave = false
             }
         } message: {
             Text((self.policy.pendingLoosening ?? []).joined(separator: "\n"))
         }
-        .confirmationDialog("Save changes to \(self.agentManagement.unsavedTitle(agentNames: ExecPolicyUI.agentNames(self.gateway)))?",
+        .confirmationDialog(L("Save changes to \(self.agentManagement.unsavedTitle(agentNames: ExecPolicyUI.agentNames(self.gateway)))?"),
                             isPresented: self.$confirmAgentsClose, titleVisibility: .visible) {
-            Button("Save") {
+            Button(L("Save")) {
                 Task { if await self.agentManagement.saveAll() { self.closeWindow() } }
             }
             .disabled(!self.gateway.state.isConnected)
-            Button("Don't Save", role: .destructive) {
+            Button(L("Don't Save"), role: .destructive) {
                 self.agentManagement.discardAll()
                 self.closeWindow()
             }
-            Button("Cancel", role: .cancel) {}
+            Button(L("Cancel"), role: .cancel) {}
         } message: {
             Text("Your changes to agents or workspace files haven't been saved.", bundle: .module)
         }
@@ -302,7 +302,7 @@ private struct GatewaySettingsRoot: View {
 
     @ViewBuilder private var toastView: some View {
         if self.policyToast != nil {
-            Label("Command policy saved", systemImage: "checkmark.circle.fill")
+            Label(L("Command policy saved"), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
                 .font(.callout)
                 .padding(.horizontal, Theme.Spacing.xxl)
@@ -365,39 +365,39 @@ private struct SettingsSidebar: View {
         List(selection: $navigator.destination) {
             if self.search.trimmingCharacters(in: .whitespaces).isEmpty {
                 Section {
-                    self.row("Connection", symbol: "network", .connection)
-                    self.row("Overview", symbol: "info.circle", .overview)
-                    self.row("Health", symbol: "heart.text.square", .health,
+                    self.row(L("Connection"), symbol: "network", .connection)
+                    self.row(L("Overview"), symbol: "info.circle", .overview)
+                    self.row(L("Health"), symbol: "heart.text.square", .health,
                              attention: self.gateway.health.level == .degraded || self.gateway.health.needsRestart)
-                    self.row("Channel Status", symbol: "antenna.radiowaves.left.and.right", .channelStatus,
+                    self.row(L("Channel Status"), symbol: "antenna.radiowaves.left.and.right", .channelStatus,
                              attention: self.gateway.health.hasChannelAccountIssues)
-                    self.row("Approval History", symbol: "checkmark.shield", .approvals)
-                    self.row("Gateway Logs", symbol: "doc.text.magnifyingglass", .logs)
-                    self.row("Command Policy", symbol: "lock.shield", .execPolicy,
+                    self.row(L("Approval History"), symbol: "checkmark.shield", .approvals)
+                    self.row(L("Gateway Logs"), symbol: "doc.text.magnifyingglass", .logs)
+                    self.row(L("Command Policy"), symbol: "lock.shield", .execPolicy,
                              unsaved: self.gateway.execPolicy.hasChanges)
                     if self.gateway.supportsSkills {
-                        self.row("Skills", symbol: "wand.and.stars", .skills)
+                        self.row(L("Skills"), symbol: "wand.and.stars", .skills)
                     }
                     if self.gateway.supportsSessionManager {
-                        self.row("Sessions", symbol: "rectangle.stack", .sessions)
+                        self.row(L("Sessions"), symbol: "rectangle.stack", .sessions)
                     }
-                    self.row("Usage", symbol: "chart.bar.xaxis", .usage)
-                    self.row("Pairing Requests", symbol: "person.badge.key", .pairing,
+                    self.row(L("Usage"), symbol: "chart.bar.xaxis", .usage)
+                    self.row(L("Pairing Requests"), symbol: "person.badge.key", .pairing,
                              badge: self.gateway.state.isConnected ? self.gateway.pairingInbox.pendingCount(at: self.now) : 0)
-                    self.row("Devices", symbol: "laptopcomputer.and.iphone", .devices,
+                    self.row(L("Devices"), symbol: "laptopcomputer.and.iphone", .devices,
                              badge: self.gateway.state.isConnected ? self.gateway.devices.pendingCount : 0)
                     if self.gateway.devices.nodesSupported {
-                        self.row("Nodes", symbol: "cpu", .nodes)
+                        self.row(L("Nodes"), symbol: "cpu", .nodes)
                     }
                 }
                 if settings.hasLoaded {
-                    Section("Settings") {
+                    Section(L("Settings")) {
                         ForEach(SettingsCatalog.pages.filter { settings.shows($0) }) { page in
                             self.row(page.title, symbol: page.symbol, .page(page.id),
                                      badge: page.roots.reduce(0) { $0 + settings.changeCount(under: [$1]) })
                         }
                         if settings.pluginsSupported {
-                            self.row("Plugins", symbol: "puzzlepiece.extension", .plugins,
+                            self.row(L("Plugins"), symbol: "puzzlepiece.extension", .plugins,
                                      badge: settings.changeCount(under: ["plugins"]),
                                      attention: settings.pluginsNeedingAttention > 0)
                         }
@@ -407,21 +407,21 @@ private struct SettingsSidebar: View {
                                      attention: self.gateway.mcp.needsAttention)
                         }
                     }
-                    Section("Advanced") {
-                        self.row("All Settings", symbol: "list.bullet.rectangle", .allSettings,
+                    Section(L("Advanced")) {
+                        self.row(L("All Settings"), symbol: "list.bullet.rectangle", .allSettings,
                                  badge: settings.changeCount)
-                        self.row("Raw Config", symbol: "curlybraces", .raw)
+                        self.row(L("Raw Config"), symbol: "curlybraces", .raw)
                     }
                 }
             } else {
                 SearchResults(query: self.search)
             }
         }
-        .navigationTitle("Gateway Settings")
+        .navigationTitle(L("Gateway Settings"))
         #if os(macOS)
-        .searchable(text: self.$search, placement: .sidebar, prompt: "Search")
+        .searchable(text: self.$search, placement: .sidebar, prompt: L("Search"))
         #else
-        .searchable(text: self.$search, prompt: "Search Settings")
+        .searchable(text: self.$search, prompt: L("Search Settings"))
         #endif
         .disabled(!settings.hasLoaded && !self.search.isEmpty && SettingsCatalog.destinations(matching: self.search).isEmpty)
         .task {
@@ -442,12 +442,12 @@ private struct SettingsSidebar: View {
                     Image(systemName: "circle.fill")
                         .font(.system(size: 7))
                         .foregroundStyle(.tint)
-                        .accessibilityLabel("Unsaved changes")
+                        .accessibilityLabel(L("Unsaved changes"))
                 }
                 if attention {
                     Spacer()
                     Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
-                        .accessibilityLabel("Needs attention")
+                        .accessibilityLabel(L("Needs attention"))
                 }
             }
         } icon: {
@@ -534,41 +534,41 @@ private struct SettingsChrome: ViewModifier {
                     if settings.hasLoaded, !settings.canEdit,
                        !(self.navigator.destination == .mcpServers && settings.canEdit(root: "mcp")) {
                         Button { self.navigator.destination = .connection } label: {
-                            Label("Read Only", systemImage: "lock")
+                            Label(L("Read Only"), systemImage: "lock")
                                 .labelStyle(.titleAndIcon)
                         }
-                        .help("This device can view settings but not change them. Open Connection to request Full Management.")
+                        .help(L("This device can view settings but not change them. Open Connection to request Full Management."))
                     }
                     if settings.hasChanges {
-                        Button("\(count) Unsaved") { self.navigator.isReviewing = true }
-                            .help("Review unsaved changes")
+                        Button(L("\(count) Unsaved")) { self.navigator.isReviewing = true }
+                            .help(L("Review unsaved changes"))
                     }
-                    Button("Save") { Task { await settings.save() } }
+                    Button(L("Save")) { Task { await settings.save() } }
                         .keyboardShortcut("s", modifiers: .command)
                         .disabled(!settings.hasChanges || settings.isSaving || !settings.canSave)
-                        .help(settings.saveBlocker ?? "Save changes to the Gateway")
+                        .help(settings.saveBlocker ?? L("Save changes to the Gateway"))
                 }
                 #else
                 ToolbarItem(placement: .confirmationAction) {
                     if settings.isSaving {
                         ProgressView()
                     } else {
-                        Button("Save") { Task { await settings.save() } }
+                        Button(L("Save")) { Task { await settings.save() } }
                             .disabled(!settings.hasChanges || !settings.canSave)
                     }
                 }
                 if settings.hasChanges {
                     ToolbarItemGroup(placement: .bottomBar) {
-                        Button("Discard", role: .destructive) { self.confirmDiscard = true }
+                        Button(L("Discard"), role: .destructive) { self.confirmDiscard = true }
                         Spacer()
-                        Button("\(count) Change\(count == 1 ? "" : "s")") { self.navigator.isReviewing = true }
+                        Button(L("\(count) Change\(count == 1 ? "" : "s")")) { self.navigator.isReviewing = true }
                     }
                 }
                 #endif
             }
-            .confirmationDialog("Discard \(count) unsaved change\(count == 1 ? "" : "s")?",
+            .confirmationDialog(L("Discard \(count) unsaved change\(count == 1 ? "" : "s")?"),
                                 isPresented: self.$confirmDiscard, titleVisibility: .visible) {
-                Button("Discard Changes", role: .destructive) { settings.discardChanges() }
+                Button(L("Discard Changes"), role: .destructive) { settings.discardChanges() }
             }
     }
 }
@@ -594,29 +594,29 @@ struct ReviewChangesSheet: View {
                 self.changeSections
             }
             .formStyle(.grouped)
-            .navigationTitle("Unsaved Changes")
+            .navigationTitle(L("Unsaved Changes"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Close") { self.dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(L("Close")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     if settings.isSaving {
                         ProgressView().controlSize(.small)
                     } else {
-                        Button("Save") {
+                        Button(L("Save")) {
                             Task { if await settings.save() { self.dismiss() } }
                         }
                         .disabled(!settings.hasChanges || settings.saveBlocker != nil || !settings.canSave)
                     }
                 }
                 ToolbarItem(placement: .destructiveAction) {
-                    Button("Discard All", role: .destructive) { self.confirmDiscard = true }
+                    Button(L("Discard All"), role: .destructive) { self.confirmDiscard = true }
                         .disabled(!settings.hasChanges)
                 }
             }
-            .confirmationDialog("Discard all unsaved changes?", isPresented: self.$confirmDiscard, titleVisibility: .visible) {
-                Button("Discard Changes", role: .destructive) {
+            .confirmationDialog(L("Discard all unsaved changes?"), isPresented: self.$confirmDiscard, titleVisibility: .visible) {
+                Button(L("Discard Changes"), role: .destructive) {
                     settings.discardChanges()
                     self.dismiss()
                 }
@@ -660,7 +660,7 @@ struct ReviewChangesSheet: View {
     @ViewBuilder private var problemSection: some View {
         let problems = self.problems
         if !problems.isEmpty {
-            Section("Needs Fixing") {
+            Section(L("Needs Fixing")) {
                 ForEach(problems, id: \.path) { problem in
                     Button { self.show(problem.path) } label: {
                         Label {
@@ -717,30 +717,30 @@ struct ReviewChangesSheet: View {
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 HStack(spacing: Theme.Spacing.sm) {
-                    Text(Self.summary(change.old, secret: secret, missing: "Not set"))
+                    Text(Self.summary(change.old, secret: secret, missing: L("Not set")))
                         .strikethrough(change.old != nil)
                         .foregroundStyle(.secondary)
                     Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.tertiary)
-                    Text(Self.summary(change.new, secret: secret, missing: "Removed"))
+                    Text(Self.summary(change.new, secret: secret, missing: L("Removed")))
                 }
                 .font(.caption.monospaced())
                 .lineLimit(2)
             }
             Spacer()
-            Button("Show") { self.show(change.path) }
+            Button(L("Show")) { self.show(change.path) }
                 .buttonStyle(.borderless)
             Button {
                 self.settings.revert(change.path)
             } label: {
-                Label("Revert", systemImage: "arrow.uturn.backward")
+                Label(L("Revert"), systemImage: "arrow.uturn.backward")
             }
             .labelStyle(.iconOnly)
             .buttonStyle(.borderless)
-            .help("Revert this change")
+            .help(L("Revert this change"))
         }
         .contextMenu {
-            Button("Show Setting") { self.show(change.path) }
-            Button("Revert Change") { self.settings.revert(change.path) }
+            Button(L("Show Setting")) { self.show(change.path) }
+            Button(L("Revert Change")) { self.settings.revert(change.path) }
         }
     }
 
@@ -748,13 +748,13 @@ struct ReviewChangesSheet: View {
         let secret = self.isSecret(conflict.path)
         return VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
             Text(self.label(conflict.path))
-            LabeledContent("Yours", value: Self.summary(conflict.mine, secret: secret, missing: "Removed"))
+            LabeledContent(L("Yours"), value: Self.summary(conflict.mine, secret: secret, missing: L("Removed")))
                 .font(.caption.monospaced())
-            LabeledContent("Gateway", value: Self.summary(conflict.theirs, secret: secret, missing: "Not set"))
+            LabeledContent(L("Gateway"), value: Self.summary(conflict.theirs, secret: secret, missing: L("Not set")))
                 .font(.caption.monospaced())
             HStack {
-                Button("Keep Mine") { self.settings.resolve(conflict, keepMine: true) }
-                Button("Use Gateway's") { self.settings.resolve(conflict, keepMine: false) }
+                Button(L("Keep Mine")) { self.settings.resolve(conflict, keepMine: true) }
+                Button(L("Use Gateway's")) { self.settings.resolve(conflict, keepMine: false) }
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -773,7 +773,7 @@ struct ReviewChangesSheet: View {
 
     static func summary(_ value: JSONValue?, secret: Bool, missing: String) -> String {
         guard let value, !value.isNull else { return missing }
-        if secret { return value.isRedacted ? "Saved secret" : "••••••" }
+        if secret { return value.isRedacted ? L("Saved secret") : "••••••" }
         switch value {
         case let .string(text): return text.isEmpty ? "\"\"" : text
         case let .array(items): return items.isEmpty ? "[]" : "\(items.count) item\(items.count == 1 ? "" : "s")"
