@@ -122,7 +122,10 @@ public final class GatewayStore: Identifiable {
     /// Whether the app is in the foreground, set from `AppModel.appIsActive`. Background prefetch
     /// stops while it's false and starts again on resume.
     public var appIsActive = true {
-        didSet { if self.appIsActive, !oldValue, self.state.isConnected { self.startPrefetch() } }
+        didSet {
+            if self.appIsActive, !oldValue, self.state.isConnected { self.startPrefetch() }
+            if !self.appIsActive, oldValue { self.prefetchTask?.cancel() }
+        }
     }
     /// Most chats one prefetch run fetches, so a big account isn't paged through all at once.
     static let prefetchBudget = 40

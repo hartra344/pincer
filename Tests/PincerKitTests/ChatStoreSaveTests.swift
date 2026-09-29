@@ -80,6 +80,31 @@ struct ChatStoreSaveTests {
         #expect(chat.items.count == 400)
     }
 
+    @Test func retryAfterUnavailableMergesOlderHistory() async throws {
+        let (chat, gateway) = self.makeStore()
+        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true) }
+        let all = V8.items(400)
+        await TranscriptCache.save(V8.snapshot(all), gatewayId: gateway.id, sessionKey: self.key)
+        await TranscriptCache.flush(gatewayId: gateway.id)
+        let url = self.manifest(gateway)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: url.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path) }
+
+        await chat.restoreFromCache()
+        chat.items = Array(all.suffix(20))
+        chat.hasLoaded = true
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: url.path)
+        await chat.restoreFromCache()
+        #expect(chat.cacheOutcome == .loaded)
+        #expect(chat.items.map(\.id) == all.map(\.id))
+
+        chat.items.append(contentsOf: V8.items(1, from: 400))
+        await chat.saveSnapshot()
+        await TranscriptCache.flush(gatewayId: gateway.id)
+        let saved = try #require(await TranscriptCache.load(gatewayId: gateway.id, sessionKey: self.key))
+        #expect(saved.items.count == 401 && saved.items.first?.id == all.first?.id)
+    }
+
     @Test func snapshotMarksRetainedWhenCutAtMaxItems() {
         let items = V8.items(50)
         let cut = ChatStore.snapshot(items: items, hasMoreHistory: true, activityMs: nil, maxItems: 30)
@@ -88,6 +113,8 @@ struct ChatStoreSaveTests {
         #expect(!whole.retained && whole.complete)
         let partial = ChatStore.snapshot(items: items, hasMoreHistory: true, activityMs: nil, maxItems: 100)
         #expect(!partial.retained && !partial.complete)
+        let exact = ChatStore.snapshot(items: items, hasMoreHistory: true, activityMs: nil, maxItems: 50)
+        #expect(exact.retained)
     }
 
     @Test func prefetchSkipsFreshChatsOnly() {

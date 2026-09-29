@@ -32,7 +32,8 @@ public final class AppModel {
     public internal(set) var gatewayListRequests = 0
     /// Chats visited, for Back/Forward and the palette's recent chats.
     public private(set) var history = ChatHistory<Notifier.Target>()
-    public var appIsActive = true {
+    /// False until a scene reports `.active`, so a background launch doesn't prefetch.
+    public var appIsActive = false {
         didSet {
             self.notifier.appIsActive = self.appIsActive
             self.gateways.forEach { $0.appIsActive = self.appIsActive }
@@ -85,7 +86,11 @@ public final class AppModel {
         // One Keychain read at launch, however many Gateways there are.
         let identity = profiles.isEmpty ? nil : DeviceIdentity.loadOrCreate()
         self.identity = identity
-        self.gateways = profiles.map { GatewayStore(profile: $0, defaults: localDefaults, identity: identity!) }
+        self.gateways = profiles.map {
+            let store = GatewayStore(profile: $0, defaults: localDefaults, identity: identity!)
+            store.appIsActive = false
+            return store
+        }
         self.firstRun = FirstRunModel(defaults: localDefaults, environment: firstRunEnvironment, hasGateways: !profiles.isEmpty)
         let saved = (sharedDefaults.string(forKey: Self.selectedGatewayKey)
             ?? localDefaults.string(forKey: Self.selectedGatewayKey)).flatMap(UUID.init(uuidString:))
@@ -234,6 +239,7 @@ public final class AppModel {
         profile.secret = secret
         let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: self.deviceIdentity())
         store.notifier = self.notifier
+        store.appIsActive = self.appIsActive
         self.gateways.append(store)
         self.persist()
         self.selectedGatewayId = store.id
@@ -263,6 +269,7 @@ public final class AppModel {
         }
         let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: self.deviceIdentity())
         store.notifier = self.notifier
+        store.appIsActive = self.appIsActive
         self.gateways[index] = store
         self.persist()
         store.start()
@@ -277,13 +284,13 @@ public final class AppModel {
             store.stop()
             // A prefs pull that was in flight may have written them back.
             store.forgetLocalHealthDismissals()
-            ReactionStore(gatewayId: id.uuidString).removeAll()
+            ReactionStore(gatewayId: id.uuidString, defaults: self.localDefaults).removeAll()
         }
         store.profile.forgetCredentials()
         TranscriptCache.removeAll(gatewayId: id, permanently: true)
         self.history.prune { $0.gatewayId != id }
         DraftStore.removeAll(gatewayId: id)
-        ReactionStore(gatewayId: id.uuidString).removeAll()
+        ReactionStore(gatewayId: id.uuidString, defaults: self.localDefaults).removeAll()
         store.outbox = Outbox()
         OutboxStore.remove(gatewayId: id)
         store.forgetLocalHealthDismissals()

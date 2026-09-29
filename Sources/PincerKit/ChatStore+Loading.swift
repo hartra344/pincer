@@ -102,9 +102,16 @@ extension ChatStore {
             self.cacheUnreadable = true
             return
         }
-        self.cacheUnreadable = false
         // Unsent messages shown before the cache arrived stay, after it.
-        guard let snapshot, !snapshot.items.isEmpty, self.items.allSatisfy(\.isPending) else { return }
+        guard let snapshot, !snapshot.items.isEmpty else {
+            self.cacheUnreadable = false
+            return
+        }
+        guard self.items.allSatisfy(\.isPending) else {
+            self.mergeCached(snapshot, outcome: outcome)
+            return
+        }
+        self.cacheUnreadable = false
         // Item count never exceeds the raw message count, so this offset can only overlap (deduped
         // by id), never skip; the first older page's `nextOffset` makes it exact again.
         self.olderOffset = snapshot.items.count
@@ -112,6 +119,33 @@ extension ChatStore {
         self.hasPagedOlder = true
         self.items = snapshot.items + self.items
         if outcome == .loaded, self.items == snapshot.items { self.savedState = self.currentCacheState }
+    }
+
+    /// The cache arrived after the Gateway's newest page (a retry after `.unavailable`): puts the
+    /// cached items that come before that page in front, so a save keeps the older history.
+    private func mergeCached(_ snapshot: TranscriptCache.Snapshot, outcome: TranscriptCache.LoadOutcome) {
+        defer { self.cacheUnreadable = false }
+        let loaded = Set(self.items.map(\.id))
+        let older = snapshot.items.filter { !loaded.contains($0.id) }
+        guard let firstLoaded = self.items.first(where: { !$0.isPending }),
+              let cut = snapshot.items.firstIndex(where: { $0.id == firstLoaded.id })
+        else {
+            // No overlap to anchor on: keep only the cached items that precede the loaded page in time.
+            guard let start = self.items.first(where: { !$0.isPending })?.timestamp else { return }
+            let before = older.filter { ($0.timestamp ?? .distantFuture) < start }
+            self.prependCached(before, snapshot: snapshot)
+            return
+        }
+        self.prependCached(Array(snapshot.items[..<cut]).filter { !loaded.contains($0.id) }, snapshot: snapshot)
+    }
+
+    private func prependCached(_ older: [ChatItem], snapshot: TranscriptCache.Snapshot) {
+        guard !older.isEmpty else { return }
+        let committed = self.items.filter { !$0.isPending }.count
+        self.olderOffset = committed + older.count
+        self.hasMoreHistory = !snapshot.complete
+        self.hasPagedOlder = true
+        self.items = older + self.items
     }
 
     /// Brings back the draft saved on disk, unless one was started here in the meantime.
@@ -151,7 +185,7 @@ extension ChatStore {
     /// Brings the on-disk cache up to date with the full history, without touching the UI.
     func fillCache() async {
         await self.restoreFromCache()
-        guard let gateway, gateway.state.isConnected else { return }
+        guard !self.cacheUnreadable, let gateway, gateway.state.isConnected else { return }
         var params = self.params(keyName: "sessionKey")
         params["limit"] = .number(Double(self.historyLimit))
         guard let result = try? await gateway.connection.request("chat.history", .object(params), timeout: 30) else { return }
@@ -161,6 +195,7 @@ extension ChatStore {
         self.hasLoaded = true
         // Older items past the retention limit would be dropped anyway.
         while self.hasMoreHistory, !Task.isCancelled, self.committedCount < TranscriptCache.maxItems {
+            guard self.gateway?.appIsActive ?? false else { return }
             guard await self.loadOlder() else { return }
         }
         guard !Task.isCancelled else { return }
@@ -184,7 +219,7 @@ extension ChatStore {
             items: Array(kept),
             complete: !hasMoreHistory && kept.count == committed.count,
             activityMs: activityMs)
-        snapshot.retained = kept.count < committed.count
+        snapshot.retained = kept.count < committed.count || (hasMoreHistory && kept.count >= maxItems)
         return snapshot
     }
 
