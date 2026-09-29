@@ -502,6 +502,19 @@ private final class SidebarOutlineView: NSOutlineView {
     override func frameOfOutlineCell(atRow row: Int) -> NSRect {
         self.hidesOutlineCell?(row) == true ? .zero : super.frameOfOutlineCell(atRow: row)
     }
+
+    /// Nested rows are inset from the trailing edge; a nested header reaches out to its agent
+    /// header's right edge so its + and chevron sit in the same slots and stay clickable.
+    override func frameOfCell(atColumn column: Int, row: Int) -> NSRect {
+        var frame = super.frameOfCell(atColumn: column, row: row)
+        guard column >= 0, row >= 0, self.hidesOutlineCell?(row) == true, let item = self.item(atRow: row) else { return frame }
+        var top: Any = item
+        while let parent = self.parent(forItem: top) { top = parent }
+        let topRow = self.row(forItem: top)
+        guard topRow >= 0, topRow != row else { return frame }
+        frame.size.width = max(frame.width, super.frameOfCell(atColumn: column, row: topRow).maxX - frame.minX)
+        return frame
+    }
 }
 
 private extension Array {
@@ -679,8 +692,6 @@ private final class SidebarHeaderCell: NSTableCellView {
     private var onAdd: (() -> Void)?
     private var onToggle: (() -> Void)?
     private var leading: NSLayoutConstraint?
-    private var trailing: NSLayoutConstraint?
-    private var isNested = false
     /// Width of each trailing button slot. Every header keeps both slots, so + and the chevron
     /// line up across sections and never move.
     static let buttonSlot: CGFloat = 22
@@ -737,12 +748,10 @@ private final class SidebarHeaderCell: NSTableCellView {
         row.translatesAutoresizingMaskIntoConstraints = false
         self.addSubview(row)
         let leading = row.leadingAnchor.constraint(equalTo: self.leadingAnchor, constant: 2)
-        let trailing = row.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -2)
         self.leading = leading
-        self.trailing = trailing
         NSLayoutConstraint.activate([
             leading,
-            trailing,
+            row.trailingAnchor.constraint(equalTo: self.trailingAnchor, constant: -2),
             row.centerYAnchor.constraint(equalTo: self.centerYAnchor),
         ])
         self.textField = self.title
@@ -754,9 +763,7 @@ private final class SidebarHeaderCell: NSTableCellView {
     @MainActor
     func configure(_ header: SidebarModel.Header, actions: SidebarActions, toggle: @escaping () -> Void) {
         let section = header.section
-        self.isNested = header.isSubsection
         self.leading?.constant = header.isSubsection ? 2 + SidebarChatCell.indentPerDepth : 2
-        self.needsLayout = true
         self.onToggle = toggle
         self.avatar = header.avatar.map { ($0, header.avatarState) }
         self.drawAvatar()
@@ -787,29 +794,6 @@ private final class SidebarHeaderCell: NSTableCellView {
                                      accessibilityDescription: label)
         self.chevron.toolTip = header.isCollapsed ? "Show" : "Hide"
         self.chevron.setAccessibilityLabel(label)
-    }
-
-    /// Nested rows are inset from the outline's trailing edge; the + and chevron reach out to it
-    /// so they sit in the same slots as the agent header's.
-    override func layout() {
-        super.layout()
-        guard isNested, let outline = self.enclosingOutline else {
-            self.setTrailing(-2)
-            return
-        }
-        let inset = outline.bounds.maxX - outline.convert(self.bounds, from: self).maxX
-        self.setTrailing(-2 + max(0, inset))
-    }
-
-    private var enclosingOutline: NSOutlineView? {
-        var view = self.superview
-        while let current = view, !(current is NSOutlineView) { view = current.superview }
-        return view as? NSOutlineView
-    }
-
-    private func setTrailing(_ value: CGFloat) {
-        guard let trailing, trailing.constant != value else { return }
-        trailing.constant = value
     }
 
     @objc private func addChat() {
