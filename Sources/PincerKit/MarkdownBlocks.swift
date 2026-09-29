@@ -44,6 +44,9 @@ public enum MarkdownBlock: Equatable, Sendable {
         var quote: [String] = []
         var code: [String]?
         var codeLanguage: String?
+        /// Lines of an open `$$ … $$` / `\[ … \]` display-math block, and the line that closes it.
+        var math: [String]?
+        var mathClose = "$$"
 
         func flushParagraph() {
             if !paragraph.isEmpty {
@@ -77,6 +80,19 @@ public enum MarkdownBlock: Equatable, Sendable {
             let line = rawLine.replacingOccurrences(of: "\t", with: "    ")
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
+            if math != nil {
+                if trimmed == mathClose {
+                    blocks.append(.code("math", math!.joined(separator: "\n")))
+                    math = nil
+                } else if trimmed.hasSuffix(mathClose), !trimmed.hasSuffix("\\" + mathClose) {
+                    math!.append(String(trimmed.dropLast(mathClose.count)))
+                    blocks.append(.code("math", math!.joined(separator: "\n")))
+                    math = nil
+                } else {
+                    math!.append(rawLine)
+                }
+                continue
+            }
             if code != nil {
                 if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
                     blocks.append(.code(codeLanguage, code!.joined(separator: "\n")))
@@ -90,6 +106,16 @@ public enum MarkdownBlock: Equatable, Sendable {
                 flushAll()
                 codeLanguage = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
                 code = []
+                continue
+            }
+            if let (body, close) = Self.displayMathOpening(trimmed) {
+                flushAll()
+                if let body = Self.displayMathSingleLine(trimmed) {
+                    blocks.append(.code("math", body))
+                } else {
+                    math = body.isEmpty ? [] : [body]
+                    mathClose = close
+                }
                 continue
             }
             if trimmed.isEmpty {
@@ -156,8 +182,27 @@ public enum MarkdownBlock: Equatable, Sendable {
             paragraph.append(line)
         }
         if let code { blocks.append(.code(codeLanguage, code.joined(separator: "\n"))) }
+        if let math { blocks.append(.code("math", math.joined(separator: "\n"))) }
         flushAll()
         return blocks
+    }
+
+    /// A line that opens display math: `$$` or `\[`, optionally followed by the first line of the
+    /// expression. Returns that text and the delimiter that closes the block.
+    static func displayMathOpening(_ trimmed: String) -> (body: String, close: String)? {
+        if trimmed.hasPrefix("$$") { return (String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces), "$$") }
+        if trimmed.hasPrefix("\\[") { return (String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces), "\\]") }
+        return nil
+    }
+
+    /// `$$ … $$` or `\[ … \]` on one line: the expression between the delimiters.
+    static func displayMathSingleLine(_ trimmed: String) -> String? {
+        for (open, close) in [("$$", "$$"), ("\\[", "\\]")] where trimmed.hasPrefix(open) {
+            guard trimmed.count > open.count + close.count, trimmed.hasSuffix(close) else { return nil }
+            let body = trimmed.dropFirst(open.count).dropLast(close.count).trimmingCharacters(in: .whitespaces)
+            return body.isEmpty ? nil : body
+        }
+        return nil
     }
 
     /// Cut points that split streaming text into chunks whose blocks never change as more text
@@ -179,14 +224,19 @@ public enum MarkdownBlock: Equatable, Sendable {
         var chunkUnits = 0
         var lineStart = start
         var inFence = false
+        var mathClose: String?
         var i = start
         while i < utf8.endIndex {
             guard utf8[i] == 0x0A else { i = utf8.index(after: i); continue }
             let next = utf8.index(after: i)
             let trimmed = String(decoding: utf8[lineStart..<i], as: UTF8.self).trimmingCharacters(in: .whitespaces)
             chunkUnits += text[lineStart..<next].utf16.count
-            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+            if let close = mathClose {
+                if trimmed == close || (trimmed.hasSuffix(close) && !trimmed.hasSuffix("\\" + close)) { mathClose = nil }
+            } else if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
                 inFence.toggle()
+            } else if !inFence, let opening = Self.displayMathOpening(trimmed), Self.displayMathSingleLine(trimmed) == nil {
+                mathClose = opening.close
             } else if trimmed.isEmpty, !inFence, next < utf8.endIndex, chunkUnits >= minimumChunk {
                 points.append(next)
                 chunkUnits = 0

@@ -143,6 +143,10 @@ final class TranscriptRenderer: TranscriptRowActions {
     private var filePreviews: [String: FileContentLoader.Preview?] = [:]
     private var spawnRows: Set<String> = []
     private var observers: [NSObjectProtocol] = []
+    #if os(macOS)
+    /// Dark Mode flips re-lay out rows, so rendered diagrams and math pick up the matching palette.
+    private var appearanceObservation: NSKeyValueObservation?
+    #endif
     /// The message flashing after a jump from its quote.
     private var flash: String?
     private var flashToken = 0
@@ -175,6 +179,11 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.observers.append(center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { _ = self?.settingsChanged() }
         })
+        #if os(macOS)
+        self.appearanceObservation = NSApp?.observe(\.effectiveAppearance) { [weak self] _, _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { _ = self?.settingsChanged() } }
+        }
+        #endif
         #if os(iOS)
         self.observers.append(center.addObserver(forName: UIContentSizeCategory.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {

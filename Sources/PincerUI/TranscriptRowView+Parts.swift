@@ -1357,6 +1357,13 @@ final class TranscriptImagePartView: TranscriptTapView {
         guard case let .image(image) = part else { return }
         self.image = image
         self.tooLarge = false
+        if self.imageLayer.masksToBounds == image.plain {
+            withoutLayerAnimations {
+                self.imageLayer.masksToBounds = !image.plain
+                self.imageLayer.cornerRadius = image.plain ? 0 : 10
+                self.imageLayer.borderWidth = image.plain ? 0 : 1
+            }
+        }
         if case .failed = image.state {
             self.tooLarge = (actions as? TranscriptRenderer)?.context.gateway.images.failure(image.ref) == .tooLarge
         }

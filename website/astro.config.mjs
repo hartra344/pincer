@@ -56,6 +56,7 @@ export default defineConfig({
 						{ slug: 'guides/composer' },
 						{ slug: 'guides/tool-calls' },
 						{ slug: 'guides/file-diffs' },
+						{ slug: 'guides/diagrams-and-math' },
 						{ slug: 'guides/subagents-and-runs' },
 						{ slug: 'guides/quick-capture' },
 						{ slug: 'guides/menu-bar' },
