@@ -394,6 +394,28 @@ extension GatewayStore {
         self.sectionCollapse[id] = collapsed
     }
 
+    /// The section ids, outermost first, that must be open for chat `key` to show in the sidebar.
+    public func sidebarAncestors(of key: String) -> [String] {
+        guard self.organization != .recent else { return [] }
+        func contains(_ channels: [SidebarChannel]) -> Bool {
+            channels.contains { $0.row.key == key || $0.threads.contains { $0.key == key } }
+        }
+        for section in self.sections() {
+            if let sub = section.subsections.first(where: { contains($0.channels) }) { return [section.id, sub.id] }
+            if contains(section.channels) { return [section.id] }
+        }
+        return []
+    }
+
+    /// Opens the sections holding chat `key`. True if any was collapsed.
+    @discardableResult
+    public func revealInSidebar(_ key: String) -> Bool {
+        let collapsed = self.collapsedSections
+        let hidden = self.sidebarAncestors(of: key).filter(collapsed.contains)
+        for id in hidden { self.setSectionCollapsed(id, false) }
+        return !hidden.isEmpty
+    }
+
     static let automationsSectionId = "automations"
 
     /// Sets (or with `nil`, clears) a group's icon on every device.
@@ -521,6 +543,7 @@ extension GatewayStore {
                 let result = try await self.connection.request("sessions.groups.rename", ["name": .string(name), "to": .string(value)], timeout: 30)
                 self.applyGroupCatalog(result)
                 self.moveGroupIcon(from: name, to: value)
+                self.moveSectionCollapse(fromGroup: name, toGroup: value)
                 return
             } catch {
                 self.groupCatalog = previous
@@ -530,6 +553,7 @@ extension GatewayStore {
             }
         }
         self.moveGroupIcon(from: name, to: value)
+        self.moveSectionCollapse(fromGroup: name, toGroup: value)
         var changes: [String: String?] = [name: String?.none]
         if self.groupPositions[value] == nil { changes[value] = self.groupPositions[name] ?? String(self.groupPositions.count) }
         for (key, change) in changes { self.groupPositions[key] = change }
@@ -548,6 +572,7 @@ extension GatewayStore {
                 let result = try await self.connection.request("sessions.groups.delete", ["name": .string(name)], timeout: 30)
                 self.applyGroupCatalog(result)
                 self.moveGroupIcon(from: name, to: nil)
+                self.dropSectionCollapse(forGroup: name)
                 return
             } catch {
                 self.groupCatalog = previous
@@ -559,9 +584,35 @@ extension GatewayStore {
         self.groupPositions[name] = nil
         Task { await self.push(self.syncedMap(Self.groupsPref), name, nil) }
         self.moveGroupIcon(from: name, to: nil)
+        self.dropSectionCollapse(forGroup: name)
         for key in self.memberKeys(of: name) {
             await self.patch(key, ["category": .null])
         }
+    }
+
+    /// The key `id` has for group `name`, or nil if `id` isn't a section of that group.
+    private static func collapseKey(_ id: String, group name: String, renamedTo newName: String?) -> String? {
+        if id == "group:\(name)" { return newName.map { "group:\($0)" } ?? id }
+        guard id.hasPrefix("agent:"), let range = id.range(of: "/group:"),
+              id[range.upperBound...] == name else { return nil }
+        return newName.map { id[..<range.upperBound] + $0 } ?? id
+    }
+
+    /// Carries a renamed group's collapsed state to its new name, keeping the new name's own if it has one.
+    func moveSectionCollapse(fromGroup old: String, toGroup new: String) {
+        var collapse = self.sectionCollapse
+        for (id, value) in self.sectionCollapse {
+            guard let target = Self.collapseKey(id, group: old, renamedTo: new) else { continue }
+            collapse[id] = nil
+            if collapse[target] == nil { collapse[target] = value }
+        }
+        if collapse != self.sectionCollapse { self.sectionCollapse = collapse }
+    }
+
+    /// Forgets the collapsed state of a deleted group's sections.
+    func dropSectionCollapse(forGroup name: String) {
+        let collapse = self.sectionCollapse.filter { Self.collapseKey($0.key, group: name, renamedTo: nil) == nil }
+        if collapse.count != self.sectionCollapse.count { self.sectionCollapse = collapse }
     }
 
     private func memberKeys(of group: String) -> [String] {
