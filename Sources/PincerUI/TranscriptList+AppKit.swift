@@ -144,6 +144,15 @@ struct TranscriptList: NSViewRepresentable {
                 self.heights.removeAll()
                 self.rows = []
             }
+            // Streaming: same ids, only the last row differs. One pass, no diffing.
+            if let last = newRows.last, self.rows.count == newRows.count, self.rows.last?.id == last.id,
+               self.rows.dropLast() == newRows.dropLast() {
+                guard self.rows[self.rows.count - 1] != last else { return }
+                self.rows[self.rows.count - 1] = last
+                self.heights[last.id]?.measured = false
+                self.settle(changed: IndexSet(integer: newRows.count - 1))
+                return
+            }
             guard newRows != self.rows else { return }
             let oldRows = self.rows
             self.rows = newRows
