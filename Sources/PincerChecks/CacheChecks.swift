@@ -355,6 +355,7 @@ func runLiveCacheRecovery(url: String, token: String) async {
 func runLiveCacheRefill(url: String, token: String) async {
     let (defaults, suite) = scratchDefaults()
     let model = AppModel(defaults: defaults)
+    model.appIsActive = true
     let profile = GatewayProfile(name: "Mock refill", url: url, authMode: .token)
     let gateway = model.add(profile, secret: token)
     defer {
