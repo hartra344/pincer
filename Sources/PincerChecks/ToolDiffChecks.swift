@@ -21,9 +21,12 @@ func checkToolDiffs() {
           "edit old_string/new_string → -1 +2 (\(diffLines(edit)))")
     check(edit?.unifiedText.hasPrefix("--- a/a.swift\n+++ b/a.swift\n@@") == true
           && edit?.unifiedText.hasSuffix("\n-let a = 1\n+let a = 2\n+let b = 3") == true, "edit unified text has headers and lines")
-    let write = ToolFileEdit.parse(toolName: "write", arguments: toolArgs(["path": "n.md", "content": "# N\nbody\n"]))
+    let write = ToolFileEdit.parse(toolName: "write", arguments: toolArgs(["path": "n.md", "content": "# N\nbody\n"]),
+                                   details: .object(["changed": true, "created": true]))
     check(write?.files.first?.operation == .add && diffLines(write) == ["+# N", "+body"] && write?.deletions == 0,
-          "new-file write is all additions")
+          "new-file write (created: true) is all additions")
+    let bare = ToolFileEdit.parse(toolName: "write", arguments: toolArgs(["path": "n.md", "content": "# N\nbody\n"]))
+    check(bare?.files.first?.operation == .update && bare?.statusLabel == "Written", "write without details is \"Written\"")
     let patch = ToolFileEdit.parse(toolName: "apply_patch", arguments: toolArgs(["input": """
     *** Begin Patch
     *** Update File: a.txt

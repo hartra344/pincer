@@ -93,6 +93,10 @@ enum Suites {
                 await checkMessageIndex()
                 await checkTranscriptCacheVersioning()
             },
+            Section("Transcript window") {
+                await withScratchCache { root in await withCacheEnvironment(root.path(percentEncoded: false)) { await runTranscriptWindowChecks() } }
+                await withCacheEnvironment("off") { await runTranscriptWindowCacheOffChecks() }
+            },
             Section("Message search in the palette") { checkPaletteMessages() },
             Section("Context usage") { runContextUsageChecks() },
             Section("Quick Capture") { await runQuickCaptureChecks() },
@@ -134,6 +138,7 @@ enum Suites {
         Section("Deep links (demo)") { await runDemoDeepLinks() },
         Section("Channel status (demo)") { await runDemoChannels() },
         Section("Tool diffs (demo)") { await runDemoToolDiffs() },
+        Section("Tool cards (demo)") { await runDemoToolCards() },
         Section("Agent avatars (demo)") { await runDemoAvatars() },
         Section("First-run wizard (demo)") { await runDemoFirstRun() },
         Section("Outbox & retry (demo)") { await runDemoOutbox() },
@@ -154,10 +159,12 @@ enum Suites {
         LiveSection("Quick Capture (live)") { url, token in await runQuickCaptureLive(url: url, token: token) },
         LiveSection("Replies & reactions (live)") { url, token in await runLiveReactionsReply(url: url, token: token) },
         LiveSection("Transcript cache recovery (live)") { url, token in await runLiveCacheRecovery(url: url, token: token) },
+        LiveSection("Transcript window (live)") { url, token in await runLiveTranscriptWindow(url: url, token: token) },
         LiveSection(nil) { url, token in await runLiveCacheRefill(url: url, token: token) },
         LiveSection("Setup wizard (live)") { url, token in await runLiveSetup(url: url, token: token) },
         LiveSection("Deep links (live)") { url, token in await runLiveDeepLinks(url: url, token: token) },
         LiveSection("Tool diffs (live)") { url, token in await runLiveToolDiffs(url: url, token: token) },
+        LiveSection("Tool cards (live)") { url, token in await runLiveToolCards(url: url, token: token) },
         LiveSection("Agent avatars (live)") { url, token in await runLiveAvatars(url: url, token: token) },
         LiveSection("MCP servers (live)") { url, token in await runLiveMCP(url: url, token: token) },
         LiveSection("Outbox & retry (live)") { url, token in await runLiveOutbox(url: url, token: token) },

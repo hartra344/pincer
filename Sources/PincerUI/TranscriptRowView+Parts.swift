@@ -406,6 +406,14 @@ final class TranscriptLabelButton: TranscriptTapView {
     private var symbol = ""
     /// Draws in the secondary label color instead of the accent, for buttons that sit on every row.
     var isSubdued = false
+    /// Grows the touch target beyond the drawn button (iOS), for small icon-only buttons.
+    var hitOutset = CGSize.zero
+
+    #if os(iOS)
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        self.bounds.insetBy(dx: -self.hitOutset.width, dy: -self.hitOutset.height).contains(point)
+    }
+    #endif
 
     func set(title: String, symbol: String) {
         guard title != self.title || symbol != self.symbol else { return }
@@ -861,6 +869,10 @@ final class TranscriptToolView: TranscriptBaseView {
     private let copyButton = TranscriptLabelButton()
     private let toggleButton = TranscriptLabelButton()
     private var copiedToken = 0
+    private var controlButtons: [TranscriptLabelButton] = []
+    private var noteViews: [TranscriptNoteView] = []
+    private var copiedControl: String?
+    private weak var actions: TranscriptRowActions?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -897,6 +909,7 @@ final class TranscriptToolView: TranscriptBaseView {
         let sameTool = self.part?.tool.id == tool.tool.id && self.rowId == row.id
         self.part = tool
         self.rowId = row.id
+        self.actions = actions
         let rowId = row.id
         self.header.configure(tool, trailing: tool.run == nil ? 10 : 6)
         self.header.onTap = { [weak actions] in actions?.setExpanded(tool.key, !tool.isExpanded, row: rowId) }
@@ -907,14 +920,26 @@ final class TranscriptToolView: TranscriptBaseView {
                 tool.isExpanded ? L("expanded") : L("collapsed"),
             ])
         } else {
-            self.header.accessibilityText = AccessibilityText.join([
-                [tool.tool.name, tool.tool.summary].compactMap(\.self).joined(separator: " "),
-                tool.isExpanded ? L("expanded") : L("collapsed"),
-            ])
+            let parts = ToolCardName(tool.tool.name)
+            self.header.accessibilityText = AccessibilityText.join(
+                [parts.server.map { L("\(parts.tool) on \($0)") } ?? tool.tool.name, tool.tool.summary]
+                    + [tool.tool.isRunning ? L("running") : nil, tool.tool.isError ? L("failed") : nil,
+                       tool.isExpanded ? L("expanded") : L("collapsed")])
         }
         if !sameTool {
             self.copiedToken += 1
+            self.copiedControl = nil
             self.showCopy()
+        }
+        self.configureControls(tool.controls)
+        while self.noteViews.count < tool.notes.count {
+            let view = TranscriptNoteView()
+            self.noteViews.append(view)
+            self.addSubview(view)
+        }
+        for (index, view) in self.noteViews.enumerated() {
+            view.isHidden = index >= tool.notes.count
+            if index < tool.notes.count { view.set(tool.notes[index].text) }
         }
         if let diff = tool.diff {
             self.copyButton.isHidden = false
@@ -957,9 +982,78 @@ final class TranscriptToolView: TranscriptBaseView {
         self.redraw()
     }
 
+    private func configureControls(_ controls: [TranscriptPart.Tool.Control]) {
+        while self.controlButtons.count < controls.count {
+            let button = TranscriptLabelButton()
+            button.isSubdued = true
+            self.controlButtons.append(button)
+            self.addSubview(button)
+        }
+        for (index, button) in self.controlButtons.enumerated() {
+            guard index < controls.count else {
+                button.isHidden = true
+                button.onTap = nil
+                continue
+            }
+            let control = controls[index]
+            button.isHidden = false
+            button.isSubdued = control.id != "toggle-output"
+            self.applyAppearance(control, to: button)
+            button.onTap = { [weak self] in self?.tapped(control) }
+        }
+    }
+
+    private func applyAppearance(_ control: TranscriptPart.Tool.Control, to button: TranscriptLabelButton) {
+        if case .copy = control.action, self.copiedControl == control.id {
+            button.set(title: control.iconOnly ? "" : L("Copied"), symbol: "checkmark")
+        } else {
+            button.set(title: control.title, symbol: control.symbol)
+        }
+        button.accessibilityText = control.spoken
+        // Icon-only buttons are 18×16; 28×28 is the least a finger can hit.
+        button.hitOutset = control.iconOnly ? CGSize(width: 5, height: 6) : .zero
+    }
+
+    private func tapped(_ control: TranscriptPart.Tool.Control) {
+        switch control.action {
+        case let .copy(text):
+            Clipboard.copy(text)
+            self.copiedControl = control.id
+            self.copiedToken += 1
+            let token = self.copiedToken
+            self.refreshControls()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self, self.copiedToken == token else { return }
+                self.copiedControl = nil
+                self.refreshControls()
+            }
+        case let .toggle(key, value):
+            guard let rowId else { return }
+            self.actions?.setExpanded(key, value, row: rowId)
+        }
+    }
+
+    private func refreshControls() {
+        guard let part else { return }
+        for (index, control) in part.controls.enumerated() where index < self.controlButtons.count {
+            self.applyAppearance(control, to: self.controlButtons[index])
+        }
+        self.layoutContent()
+    }
+
     override func layoutContent() {
         guard let part else { return }
         let bounds = self.bounds
+        for (index, note) in part.notes.enumerated() where index < self.noteViews.count {
+            if self.noteViews[index].frame != note.frame { self.noteViews[index].frame = note.frame }
+        }
+        for (index, control) in part.controls.enumerated() where index < self.controlButtons.count {
+            let button = self.controlButtons[index]
+            let size = button.buttonSize
+            let x = control.trailing ? control.frame.maxX - size.width : control.frame.minX
+            let frame = CGRect(x: x, y: control.frame.minY, width: size.width, height: control.frame.height)
+            if button.frame != frame { button.frame = frame }
+        }
         var headerWidth = bounds.width
         if part.run != nil {
             let size = self.runButton.buttonSize
@@ -998,7 +1092,26 @@ final class TranscriptToolView: TranscriptBaseView {
         guard part.isExpanded else { return }
         TranscriptColors.separator.setFill()
         PBezierPath(rect: CGRect(x: 0, y: part.headerHeight, width: bounds.width, height: 1)).fill()
-        for section in part.sections {
+        for item in part.decor {
+            switch item {
+            case let .block(rect, tone, stroke):
+                let shape = PBezierPath.rounded(rect.insetBy(dx: 0.5, dy: 0.5), radius: 6)
+                tone.color.setFill()
+                shape.fill()
+                (stroke.map { $0.color.withAlphaComponent(0.5) } ?? TranscriptColors.stroke).setStroke()
+                shape.lineWidth = 1
+                shape.stroke()
+            case let .pill(rect, tone):
+                tone.badgeFill.setFill()
+                PBezierPath.rounded(rect, radius: rect.height / 2).fill()
+            case let .label(text, origin, width, face, tone, truncation):
+                let font = face.font(style)
+                singleLine(text, font, tone.color, truncation: truncation).drawLine(at: origin, width: width, font: font)
+            case let .symbol(name, rect, tone):
+                TranscriptSymbols.draw(name, in: rect, size: style.caption.pointSize, color: tone.color)
+            }
+        }
+        for section in part.sections where !section.title.isEmpty {
             singleLine(section.title, style.captionSemibold, TranscriptColors.secondary)
                 .drawLine(at: CGPoint(x: 10, y: section.titleY), width: bounds.width - 20, font: style.captionSemibold)
         }
@@ -1007,6 +1120,33 @@ final class TranscriptToolView: TranscriptBaseView {
                 .drawLine(at: CGPoint(x: 10, y: y), width: bounds.width - 20, font: style.caption)
         }
     }
+}
+
+/// An invisible, click-through element that gives drawn chips and badges a VoiceOver label.
+final class TranscriptNoteView: TranscriptBaseView {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        #if os(macOS)
+        self.setAccessibilityElement(true)
+        self.setAccessibilityRole(.staticText)
+        #else
+        self.isAccessibilityElement = true
+        self.isUserInteractionEnabled = false
+        self.accessibilityTraits = .staticText
+        #endif
+    }
+
+    func set(_ text: String) {
+        #if os(macOS)
+        self.setAccessibilityLabel(text)
+        #else
+        self.accessibilityLabel = text
+        #endif
+    }
+
+    #if os(macOS)
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    #endif
 }
 
 final class TranscriptToolHeaderView: TranscriptTapView {
@@ -1059,14 +1199,37 @@ final class TranscriptToolHeaderView: TranscriptTapView {
             return
         }
         let nameFont = style.calloutMonoMedium
-        let name = singleLine(part.tool.name, nameFont, TranscriptColors.label)
         let nameX: CGFloat = 34
         let nameY = (bounds.height - TranscriptStyle.lineHeight(nameFont)) / 2
-        let nameWidth = min(name.lineWidth, chevronX - 8 - nameX)
-        name.drawLine(at: CGPoint(x: nameX, y: nameY), width: nameWidth, font: nameFont)
+        var right = chevronX - 8
+        if part.tool.isError {
+            let badgeFont = style.caption2Medium
+            let badge = singleLine(L("Failed"), badgeFont, TranscriptColors.failure)
+            let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
+            let badgeWidth = badge.lineWidth + 10
+            if right - badgeWidth > nameX + 40 {
+                let rect = CGRect(x: right - badgeWidth, y: (bounds.height - badgeHeight) / 2, width: badgeWidth, height: badgeHeight)
+                TranscriptColors.failure.withAlphaComponent(0.14).setFill()
+                PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
+                badge.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: badge.lineWidth, font: badgeFont)
+                right = rect.minX - 8
+            }
+        }
+        let parts = ToolCardName(part.tool.name)
+        var nameWidth: CGFloat = 0
+        if let server = parts.server {
+            let serverText = singleLine("\(server) ›", nameFont, TranscriptColors.secondary, truncation: .byTruncatingTail)
+            let serverWidth = min(serverText.lineWidth, max((right - nameX) / 3, 0))
+            serverText.drawLine(at: CGPoint(x: nameX, y: nameY), width: serverWidth, font: nameFont)
+            nameWidth = serverWidth + 5
+        }
+        let name = singleLine(parts.tool, nameFont, TranscriptColors.label)
+        let toolWidth = min(name.lineWidth, max(right - nameX - nameWidth, 0))
+        name.drawLine(at: CGPoint(x: nameX + nameWidth, y: nameY), width: toolWidth, font: nameFont)
+        nameWidth += toolWidth
         if let summary = part.tool.summary {
             let summaryX = nameX + nameWidth + 8
-            let width = chevronX - 8 - summaryX
+            let width = right - summaryX
             if width > 16 {
                 let font = style.captionMono
                 let oneLine = summary.replacingOccurrences(of: "\n", with: " ")
@@ -1089,13 +1252,13 @@ extension TranscriptToolHeaderView {
 
         let badgeFont = style.caption2Medium
         let badgeText = part.tool.isError ? L("Failed") : edit.statusLabel(isRunning: part.tool.isRunning)
-        let badgeColor = part.tool.isError ? TranscriptColors.red : TranscriptColors.secondary
+        let badgeColor = part.tool.isError ? TranscriptColors.failure : TranscriptColors.secondary
         let badge = singleLine(badgeText, badgeFont, badgeColor)
         let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
         let badgeWidth = badge.lineWidth + 10
         if right - badgeWidth > nameX + 40 {
             let rect = CGRect(x: right - badgeWidth, y: (bounds.height - badgeHeight) / 2, width: badgeWidth, height: badgeHeight)
-            (part.tool.isError ? TranscriptColors.red.withAlphaComponent(0.15) : TranscriptColors.strongFill).setFill()
+            (part.tool.isError ? TranscriptColors.failure.withAlphaComponent(0.14) : TranscriptColors.strongFill).setFill()
             PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
             badge.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: badge.lineWidth, font: badgeFont)
             right = rect.minX - 8
@@ -1148,7 +1311,7 @@ final class TranscriptToolSectionView: TranscriptBaseView {
     func configure(_ section: TranscriptPart.Tool.Section, row: TranscriptRowLayout, resetScroll: Bool) {
         self.contentHeight = section.contentHeight
         self.textView.copyItems = row.copyItems
-        self.textView.set(section.text, identity: "\(row.id):\(section.title)")
+        self.textView.set(section.text, identity: "\(row.id):\(section.id ?? section.title)")
         #if os(macOS)
         if resetScroll { self.scroller.scrollToStart() }
         #else

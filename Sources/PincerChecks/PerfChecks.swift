@@ -87,29 +87,47 @@ func directorySize(_ url: URL, _ include: (String) -> Bool) -> Int64 {
     }
 }
 
-/// Always on: 2 chats × 5k messages build in ≤ 3 s; a selective query ≤ 100 ms (budgets relaxed
-/// to clearly-broken limits with --skip-perf-budgets).
+/// Always on. Timings are relative to work measured in the same run (so machine load scales both
+/// sides) or counter-based; only a very generous absolute ceiling stays for clearly-broken cases:
+/// - build: 2 × 5k saves vs. JSON-encoding the same items (calibration), plus the 10 s ceiling;
+/// - selective query: median of 5 vs. the median save time of one 5k chat, plus a 1 s ceiling;
+/// - append: bytes written vs. the full save's, and time vs. one full 5k save, plus a 5 s ceiling.
+/// --skip-perf-budgets drops the relative time checks (the counters and ceilings stay).
 @MainActor
 func checkMessageIndexPerfSmoke(root: URL?) async {
     let gatewayId = UUID()
     let chats = (0..<2).map { Synthetic.items(chat: $0, count: 5000) }
     let clock = ContinuousClock()
-    let build = await clock.measure {
-        for (chat, items) in chats.enumerated() {
+    let ms = { (d: Duration) in d.formatted(.units(allowed: [.milliseconds])) }
+    let calibration = clock.measure { for items in chats { _ = try? JSONEncoder().encode(items) } }
+    var saveTimes: [Duration] = []
+    var fullSave: TranscriptCache.SaveResult?
+    for (chat, items) in chats.enumerated() {
+        saveTimes.append(await clock.measure {
             await TranscriptCache.save(TranscriptCache.Snapshot(items: items, complete: true), gatewayId: gatewayId, sessionKey: "perf\(chat)", root: root)
-        }
+        })
+        if chat == 0 { fullSave = TranscriptCache.lastSaveStats }
     }
-    checkBudget(build, .seconds(3), hardLimit: .seconds(10), "perf smoke: 2 × 5k messages saved and indexed in \(build.formatted(.units(allowed: [.milliseconds])))")
+    let build = saveTimes.reduce(.zero, +)
+    let oneSave = saveTimes.min() ?? build
+    let buildRatio = Double(build.components.attoseconds) / 1e18 + Double(build.components.seconds)
+    let calibrationSeconds = max(Double(calibration.components.attoseconds) / 1e18 + Double(calibration.components.seconds), 0.001)
+    let ratio = buildRatio / calibrationSeconds
+    print("  · perf smoke: 2 × 5k messages saved and indexed in \(ms(build)) (\(String(format: "%.1f", ratio))× the \(ms(calibration)) to JSON-encode them)")
+    check(build <= .seconds(10), "perf smoke: build under the absolute ceiling")
+    if !skipPerfBudgets { check(ratio <= 60, "perf smoke: build ≤ 60× JSON-encoding the same items") }
     let keys: Set<String> = ["perf0", "perf1"]
-    var worst = Duration.zero
+    var times: [Duration] = []
     var groups: [MessageSearch.ChatGroup] = []
     for _ in 0..<5 {
-        let elapsed = await clock.measure { groups = await indexResults(gatewayId, "lantern glow", keys: keys, root: root) }
-        worst = max(worst, elapsed)
+        times.append(await clock.measure { groups = await indexResults(gatewayId, "lantern glow", keys: keys, root: root) })
     }
+    let median = times.sorted()[times.count / 2]
     check(groups.count == 2 && groups.allSatisfy { $0.hits.count == 3 && $0.hasMore } && groups.first?.sessionKey == "perf1",
           "perf smoke: selective query results")
-    checkBudget(worst, .milliseconds(100), hardLimit: .seconds(1), "perf smoke: selective query, slowest of 5: \(worst.formatted(.units(allowed: [.milliseconds])))")
+    print("  · perf smoke: selective query, median of 5: \(ms(median)), slowest \(ms(times.max() ?? median)) (one 5k save: \(ms(oneSave)))")
+    check(times.max()! <= .seconds(1), "perf smoke: selective query under the absolute ceiling")
+    if !skipPerfBudgets { check(median * 10 <= oneSave, "perf smoke: selective query median ≤ 1/10 of one 5k save") }
     // Cancelling one search mustn't stop another that wasn't cancelled (e.g. a second window's).
     let index = MessageIndex.shared(gatewayId: gatewayId, root: root)
     var bystanderOK = 0
@@ -130,9 +148,13 @@ func checkMessageIndexPerfSmoke(root: URL?) async {
     let incremental = await clock.measure {
         await TranscriptCache.save(TranscriptCache.Snapshot(items: appended, complete: true), gatewayId: gatewayId, sessionKey: "perf0", root: root)
     }
+    let appendStats = TranscriptCache.lastSaveStats
     await checkAsync({ await indexHits(gatewayId, "pelican", root: root).count == 1 }, "perf smoke: appended message indexed")
-    checkBudget(incremental, .milliseconds(1000), hardLimit: .seconds(5),
-                "perf smoke: append to a 5k chat saved and indexed in \(incremental.formatted(.units(allowed: [.milliseconds])))")
+    print("  · perf smoke: append to a 5k chat saved and indexed in \(ms(incremental)) (\(appendStats?.bytesWritten ?? -1) bytes in \(appendStats?.filesWritten ?? -1) files; full save \(fullSave?.bytesWritten ?? -1) bytes in \(fullSave?.filesWritten ?? -1) files)")
+    check(incremental <= .seconds(5), "perf smoke: append under the absolute ceiling")
+    check(appendStats.map { !$0.unchanged && $0.bytesWritten * 5 <= (fullSave?.bytesWritten ?? 0) && $0.filesWritten < (fullSave?.filesWritten ?? 0) } ?? false,
+          "perf smoke: append rewrites ≤ 1/5 of the bytes and fewer files than the full save")
+    if !skipPerfBudgets { check(incremental * 2 <= oneSave, "perf smoke: append ≤ half of one full 5k save") }
     TranscriptCache.removeAll(gatewayId: gatewayId, root: root)
 }
 

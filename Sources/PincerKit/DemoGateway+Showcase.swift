@@ -340,7 +340,8 @@ extension DemoGateway {
                 """)], ago: 10),
             ])
         add(Self.kikoKey, agent: "kiko", title: "Main", preview: "Claw sent the list of home-lab bills.", age: 86_400_000,
-            ["isMain": true], messages: Self.seedKikoChat())
+            ["isMain": true, "totalTokens": 58_000, "inputTokens": 57_000, "outputTokens": 1_000],
+            messages: Self.seedKikoChat())
         add("agent:mochi:main", agent: "mochi", title: "General", preview: "Moving day is Oct 18; I'll keep the checklist.",
             age: 5 * 3_600_000, ["isMain": true, "label": "General"], messages: [
                 said("user", "I'm moving from Boston to Brooklyn on October 18.", ago: 6 * day),
@@ -435,7 +436,8 @@ extension DemoGateway {
             ])
         add("agent:research:dashboard:papers", agent: "research", title: "Paper digest",
             preview: "Three papers summarized.", age: 120_000,
-            ["label": "Paper digest", "category": "Work", "unread": true, "pinned": true],
+            ["label": "Paper digest", "category": "Work", "unread": true, "pinned": true,
+             "totalTokens": 96_000, "inputTokens": 94_000, "outputTokens": 2_000],
             messages: [
                 said("user", "What's new in speculative decoding?", ago: 5 * day),
                 said("assistant", """
@@ -461,6 +463,8 @@ extension DemoGateway {
         add(Self.fileEditsKey, agent: "coder", title: "Fix retry backoff", preview: Self.fileEditsPreview,
             age: 5 * hour * 1000, ["hasActiveRun": true, "status": "running", "activeRunIds": [.string(Self.seededRunId)]],
             messages: Self.seedFileEditsTranscript())
+        add(Self.toolCardsKey, agent: "main", title: Self.toolCardsTitle, preview: Self.toolCardsPreview, age: 3 * 60_000,
+            messages: Self.seedToolCardsTranscript())
         add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
             ["isMain": true, "unread": true], messages: [
                 said("assistant", "Forge can edit code, run builds, and report back briefly.", ago: 14 * day),

@@ -149,7 +149,7 @@ final class TranscriptRowView: TranscriptBaseView {
         return menu
     }
 
-    /// Reply, Add Reaction… and one-click reactions for the message under `point` (in `view`), and
+    /// Reply, Copy Link, Add Reaction… and one-click reactions for the message under `point` (in `view`), and
     /// the chat a forwarded message came from.
     func messageMenuItems(at point: CGPoint, in view: NSView) -> [NSMenuItem] {
         let rowPoint = self.convert(point, from: view)
@@ -162,9 +162,10 @@ final class TranscriptRowView: TranscriptBaseView {
         }
         guard let id = self.layout?.message(at: rowPoint.y) else { return source }
         if !source.isEmpty { source.insert(.separator(), at: 0) }
-        var items: [NSMenuItem] = [TranscriptMenuItem(L("Reply"), symbol: "arrowshape.turn.up.left") { [weak actions] in
-            actions?.reply(to: id)
-        }]
+        var items: [NSMenuItem] = [
+            TranscriptMenuItem(L("Reply"), symbol: "arrowshape.turn.up.left") { [weak actions] in actions?.reply(to: id) },
+            TranscriptMenuItem(L("Copy Link"), symbol: "link") { [weak actions] in actions?.copyLink(to: id) },
+        ]
         if actions.reactionsEnabled {
             let quick = NSMenuItem()
             quick.view = QuickReactionsMenuView { [weak actions] emoji in actions?.toggleReaction(emoji, on: id) }
@@ -180,7 +181,7 @@ final class TranscriptRowView: TranscriptBaseView {
         return items + source
     }
     #else
-    /// Reply, Add Reaction… and one-tap reactions for the message at `point` (row coordinates), and
+    /// Reply, Copy Link, Add Reaction… and one-tap reactions for the message at `point` (row coordinates), and
     /// the chat a forwarded message came from.
     func messageMenuElements(at point: CGPoint, anchor: UIView? = nil) -> [UIMenuElement] {
         guard let actions else { return [] }
@@ -199,6 +200,9 @@ final class TranscriptRowView: TranscriptBaseView {
             UIMenu(options: .displayInline, children: [
                 UIAction(title: L("Reply"), image: UIImage(systemName: "arrowshape.turn.up.left")) { [weak actions] _ in
                     actions?.reply(to: id)
+                },
+                UIAction(title: L("Copy Link"), image: UIImage(systemName: "link")) { [weak actions] _ in
+                    actions?.copyLink(to: id)
                 },
             ]),
         ]

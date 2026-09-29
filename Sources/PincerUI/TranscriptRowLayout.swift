@@ -65,6 +65,44 @@ enum TranscriptPart {
             /// Visible frame of the text inside the card; the text scrolls when it's taller.
             let frame: CGRect
             let contentHeight: CGFloat
+            /// Identifies the text view's content when the title is empty.
+            var id: String?
+        }
+
+        enum Tone { case label, secondary, tertiary, ok, failure, fill, strongFill, terminal }
+        enum Face { case caption, captionSemibold, captionMono, caption2Medium, code }
+
+        /// Non-selectable drawing of an expanded card (badges, chips, titles, block backgrounds),
+        /// in card coordinates and draw order.
+        enum Decor {
+            /// `stroke` outlines it in that tone instead of the neutral stroke.
+            case block(CGRect, Tone, stroke: Tone?)
+            case pill(CGRect, Tone)
+            case label(String, CGPoint, width: CGFloat, Face, Tone, truncation: NSLineBreakMode)
+            case symbol(String, CGRect, Tone)
+        }
+
+        struct Note {
+            let frame: CGRect
+            let text: String
+        }
+
+        /// A Copy or toggle button inside an expanded card.
+        struct Control {
+            enum Action {
+                case copy(String)
+                case toggle(key: String, to: Bool)
+            }
+
+            let id: String
+            let title: String
+            let symbol: String
+            let frame: CGRect
+            let action: Action
+            let spoken: String
+            /// Pinned to the frame's trailing edge (the button's width can differ from the reserved one).
+            var trailing = false
+            var iconOnly = false
         }
 
         struct Run: Equatable {
@@ -94,6 +132,10 @@ enum TranscriptPart {
         /// The call read as a file diff; the card then shows it in place of the raw input.
         var edit: ToolFileEdit?
         var diff: Diff?
+        var decor: [Decor] = []
+        var controls: [Control] = []
+        /// What VoiceOver reads for the chips, badges and captions drawn in the body.
+        var notes: [Note] = []
     }
 
     /// The line under a message: a Copy button and details such as when it was sent.
@@ -353,7 +395,7 @@ struct TranscriptLayoutBuilder {
     /// Find matches counted so far in the row being laid out, per section.
     let marks = TranscriptFindMarks()
 
-    private var style: TranscriptStyle { TranscriptStyle.shared }
+    var style: TranscriptStyle { TranscriptStyle.shared }
 
     func layout(_ row: TranscriptRow, width: CGFloat) -> TranscriptRowLayout {
         var layout = TranscriptRowLayout(id: row.id, width: width)
@@ -795,73 +837,9 @@ struct TranscriptLayoutBuilder {
         }
     }
 
-    private func tool(_ tool: ToolActivity, first: Bool, into stack: inout Stack, layout: inout TranscriptRowLayout) {
-        let key = "tool:\(tool.id)"
-        let edit = tool.fileEdit
-        // A diff is the point of an edit card, so it starts open; long ones start cut short.
-        let expanded = self.context.disclosure.isExpanded(key, default: edit != nil)
-        let width = min(stack.width, TranscriptMetrics.maxCardWidth)
-        let headerHeight = 6 + max(TranscriptStyle.lineHeight(self.style.calloutMonoMedium), TranscriptMetrics.iconBox) + 6
-        let run = self.spawnedRun(tool)
-        if tool.spawnedSessionKey != nil || tool.spawnLabel != nil { layout.hasSpawns = true }
-        if let run { layout.runs[tool.id] = run }
-        var sections: [TranscriptPart.Tool.Section] = []
-        var runningY: CGFloat?
-        var toolMatchY: CGFloat?
-        var diff: TranscriptPart.Tool.Diff?
-        var height = headerHeight
-        if expanded {
-            var y = headerHeight + 1 + 10
-            let inner = max(width - 20, 20)
-            let titleHeight = TranscriptStyle.lineHeight(self.style.captionSemibold)
-            var entries: [(String, String)] = []
-            if let edit {
-                let placed = self.diff(edit, tool: tool, row: layout.id, width: width, y: y)
-                sections.append(placed.section)
-                diff = placed.diff
-                if let match = placed.match {
-                    toolMatchY = placed.section.frame.minY
-                        + min(self.marks.lineBottom(of: match, in: placed.section.text, width: inner), placed.section.frame.height)
-                }
-                y = placed.bottom
-            } else if let arguments = tool.arguments, !arguments.isEmpty {
-                entries.append(("Input", arguments))
-            }
-            if let result = tool.result, !result.isEmpty { entries.append((tool.isError ? "Error" : "Output", result)) }
-            for (index, (title, body)) in entries.enumerated() {
-                if index > 0 || edit != nil { y += 8 }
-                let limited = body.count > TranscriptMetrics.toolOutputLimit
-                    ? String(body.prefix(TranscriptMetrics.toolOutputLimit)) + "\n…" : body
-                let (text, match) = self.marks.mark(
-                    TranscriptText.plain(limited, font: self.style.captionMono, color: TranscriptColors.label), .tool(tool.id))
-                let contentHeight = TranscriptText.size(text, width: inner).height
-                let visible = min(contentHeight, TranscriptMetrics.toolOutputMaxHeight)
-                let titleY = y
-                y += titleHeight + 4
-                if let match {
-                    // Relative to the card for now; moved into row coordinates once the card is placed.
-                    toolMatchY = y + min(self.marks.lineBottom(of: match, in: text, width: inner), visible)
-                }
-                sections.append(.init(title: title, titleY: titleY, text: text,
-                                      frame: CGRect(x: 10, y: y, width: inner, height: visible), contentHeight: contentHeight))
-                y += visible
-            }
-            if entries.count < 2, tool.result?.isEmpty ?? true, tool.isRunning {
-                if !entries.isEmpty || edit != nil { y += 8 }
-                runningY = y
-                y += TranscriptStyle.lineHeight(self.style.caption)
-            }
-            height = y + 10
-        }
-        let part = TranscriptPart.Tool(tool: tool, key: key, isExpanded: expanded, run: run, headerHeight: headerHeight,
-                                       sections: sections, runningY: runningY, edit: edit, diff: diff)
-        stack.add(.tool(part), height: height, width: width, spacing: first ? TranscriptMetrics.blockSpacing : TranscriptMetrics.toolSpacing)
-        if let toolMatchY, let frame = stack.parts.last?.frame { layout.matchY = frame.minY + toolMatchY }
-    }
-
     /// An edit card's diff: a "Changes" title with Copy, the colored lines (the first few when it's
     /// long and not opened in full), and a toggle to show all or fewer lines.
-    private func diff(_ edit: ToolFileEdit, tool: ToolActivity, row: String, width: CGFloat, y top: CGFloat)
+    func diff(_ edit: ToolFileEdit, tool: ToolActivity, row: String, width: CGFloat, y top: CGFloat)
         -> (section: TranscriptPart.Tool.Section, diff: TranscriptPart.Tool.Diff, match: NSRange?, bottom: CGFloat)
     {
         let key = "diff:\(tool.id)"

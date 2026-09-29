@@ -27,7 +27,7 @@ enum TranscriptRow: Equatable {
     }
 
     @MainActor static func rows(for chat: ChatStore) -> [TranscriptRow] {
-        (chat.hasMoreHistory ? [.loadingOlder] : []) + chat.entries.map(TranscriptRow.entry)
+        (chat.hasOlderItems ? [.loadingOlder] : []) + chat.entries.map(TranscriptRow.entry)
     }
 }
 
@@ -66,6 +66,8 @@ struct TranscriptContext {
     var chat: ChatStore?
     /// Starts a reply to a message in the composer. Provided by `ChatView`.
     var reply: (String) -> Void = { _ in }
+    /// Copies a `pincer://` link to a message. Provided by `ChatView`.
+    var copyLink: (String) -> Void = { _ in }
 
     func differs(from other: TranscriptContext) -> Bool {
         self.agent != other.agent || self.sessionKey != other.sessionKey || self.disclosure !== other.disclosure
@@ -95,6 +97,8 @@ protocol TranscriptRowActions: AnyObject {
     func saveFile(_ file: FileRef) async -> Bool
     /// Starts a reply to the message in the composer.
     func reply(to messageId: String)
+    /// Copies a link that opens the chat scrolled to the message.
+    func copyLink(to messageId: String)
     /// Adds your reaction, or removes it when it's already there.
     var reactionsEnabled: Bool { get }
     func toggleReaction(_ emoji: String, on messageId: String)
@@ -539,6 +543,10 @@ final class TranscriptRenderer: TranscriptRowActions {
         return true
     }
 
+    func copyLink(to messageId: String) {
+        self.context.copyLink(messageId)
+    }
+
     func reply(to messageId: String) {
         self.context.reply(messageId)
     }
@@ -568,6 +576,32 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     func showOriginal(_ messageId: String) { self.showOriginal(messageId, missingNotice: nil) }
+
+    private var olderLoop: Task<Void, Never>?
+
+    /// The loading-older row is on screen: pages in older history (the cache first) for as long as
+    /// the row stays visible, so a page that adds no rows (duplicates, rows folding together) doesn't
+    /// stall the list. Failures back off a second and give up after a few.
+    func loadOlderIfShown(stillVisible: @escaping @MainActor () -> Bool) {
+        guard self.olderLoop == nil, let chat = self.context.chat, chat.hasOlderItems else { return }
+        self.olderLoop = Task { @MainActor [weak self] in
+            var failures = 0
+            for _ in 0..<40 {
+                guard chat.hasOlderItems, !Task.isCancelled else { break }
+                if await chat.loadOlder() {
+                    failures = 0
+                } else {
+                    failures += 1
+                    guard failures < 3 else { break }
+                    try? await Task.sleep(for: .seconds(1))
+                }
+                // Let the list apply the new rows before asking whether the row is still on screen.
+                try? await Task.sleep(for: .milliseconds(120))
+                guard stillVisible(), self?.context.chat === chat else { break }
+            }
+            self?.olderLoop = nil
+        }
+    }
 
     /// Scrolls to and flashes a message, paging in older history if needed. `missingNotice`
     /// replaces the chat's note when it can't be found.

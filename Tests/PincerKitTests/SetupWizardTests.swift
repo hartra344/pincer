@@ -333,26 +333,37 @@ final class SetupFakeGateway {
         #expect(relaunched.isPresented, "Show Tips Again")
     }
 
+    /// The delay is a gate the test opens (like BackgroundRefresh's), so no wall-clock waits (#339).
+    private func gatedTips(_ scratch: ScratchDefaults) -> (TipsModel, BackgroundRefreshTests.BudgetGate) {
+        let gate = BackgroundRefreshTests.BudgetGate()
+        return (TipsModel(defaults: scratch.defaults, delay: .seconds(60), sleep: { _ in await gate.wait() }), gate)
+    }
+
     @Test func tipsPresentAfterDelay() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let tips = TipsModel(defaults: scratch.defaults, delay: .milliseconds(50))
+        let (tips, gate) = self.gatedTips(scratch)
         tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
         #expect(tips.isPending && !tips.isPresented)
+        let pending = try #require(tips.pendingTask)
         tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
         #expect(tips.isPending && !tips.isPresented, "repeat evaluate keeps the timer")
-        try await Task.sleep(for: .milliseconds(400))
+        #expect(tips.pendingTask == pending, "repeat evaluate doesn't restart the timer")
+        gate.expire()
+        await pending.value
         #expect(tips.isPresented && !tips.isPending)
     }
 
     @Test func tipsDelayCancelledBySetup() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let tips = TipsModel(defaults: scratch.defaults, delay: .milliseconds(50))
+        let (tips, gate) = self.gatedTips(scratch)
         tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
+        let pending = try #require(tips.pendingTask)
         tips.evaluate(connected: true, setupShowingOrPending: true, isDemo: false)
         #expect(!tips.isPending)
-        try await Task.sleep(for: .milliseconds(300))
+        gate.expire()
+        await pending.value
         #expect(!tips.isPresented, "setup appearing cancels the pending card")
         tips.evaluate(connected: false, setupShowingOrPending: false, isDemo: false)
         #expect(!tips.isPending)
@@ -361,11 +372,13 @@ final class SetupFakeGateway {
     @Test func tipsDismissCancelsPending() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
-        let tips = TipsModel(defaults: scratch.defaults, delay: .milliseconds(50))
+        let (tips, gate) = self.gatedTips(scratch)
         tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
+        let pending = try #require(tips.pendingTask)
         tips.dismiss()
         #expect(!tips.isPending)
-        try await Task.sleep(for: .milliseconds(300))
+        gate.expire()
+        await pending.value
         #expect(!tips.isPresented && tips.hasSeen)
     }
 

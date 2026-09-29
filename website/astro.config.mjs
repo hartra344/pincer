@@ -54,6 +54,7 @@ export default defineConfig({
 						{ slug: 'guides/transcript' },
 						{ slug: 'guides/search' },
 						{ slug: 'guides/composer' },
+						{ slug: 'guides/tool-calls' },
 						{ slug: 'guides/file-diffs' },
 						{ slug: 'guides/subagents-and-runs' },
 						{ slug: 'guides/quick-capture' },

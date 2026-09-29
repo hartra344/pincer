@@ -45,7 +45,7 @@ extension ChatStore {
         return ReplyQuote(targetId: targetId, sender: nil, text: nil)
     }
 
-    /// Loads older history until the message is loaded (at most 40 pages). Returns whether it is;
+    /// Loads older history (the cache first) until the message is loaded (at most 40 pages). Returns whether it is;
     /// when history runs out or the page cap is hit, says so in `notice`. One lookup at a time.
     @discardableResult
     public func locate(_ id: String) async -> Bool {
@@ -53,12 +53,16 @@ extension ChatStore {
         guard self.locatingReplyId == nil else { return false }
         self.locatingReplyId = id
         defer { self.locatingReplyId = nil }
+        while self.olderInCache, !Task.isCancelled {
+            guard await self.loadOlder(cachePageSize: Int.max, stopAt: id) else { return false }
+            if self.message(withId: id) != nil { return true }
+        }
         for _ in 0..<40 where self.hasMoreHistory {
             guard await self.loadOlder() else { return false }
             if self.message(withId: id) != nil { return true }
         }
         if self.message(withId: id) != nil { return true }
-        self.notice = self.hasMoreHistory
+        self.notice = self.hasOlderItems
             ? "The original message is too far back to show."
             : "The original message isn't in this chat's history anymore."
         return false

@@ -126,6 +126,11 @@ public final class ChatStore: Identifiable {
     public internal(set) var hasLoaded = false
     public internal(set) var isSending = false
     public internal(set) var hasMoreHistory = false
+    /// Cached items exist on disk before the first committed item in memory (the window is a
+    /// contiguous newest suffix of the transcript).
+    public internal(set) var olderInCache = false
+    /// Whether anything older than what's loaded can still be paged in, from the cache or the Gateway.
+    public var hasOlderItems: Bool { self.olderInCache || self.hasMoreHistory }
     public internal(set) var isLoadingOlder = false
     public var errorMessage: String?
     /// Whether the transcript contains any reasoning; used to hint at `/reasoning on`.
@@ -162,7 +167,19 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var compactionRunId: String?
 
     @ObservationIgnored let historyLimit = 120
+    /// Most committed items kept in memory for a chat that isn't open.
+    #if os(macOS)
+    static let defaultWindowLimit = 3_000
+    #else
+    static let defaultWindowLimit = 1_200
+    #endif
+    @ObservationIgnored var windowLimit = ChatStore.defaultWindowLimit
+    /// Items per page when scrolling back through the cache; lookups (find, jump) use larger ones.
+    static let olderCachePageSize = 200
+    static let lookupCachePageSize = 2_000
     @ObservationIgnored let gatewayId: UUID
+    /// Where this chat's transcript is cached; tests give each chat its own folder.
+    @ObservationIgnored var cacheRoot: URL? = TranscriptCache.root
     /// Background cache filler: no UI, no live subscription.
     @ObservationIgnored let headless: Bool
     @ObservationIgnored var cacheChecked = false
@@ -210,6 +227,7 @@ public final class ChatStore: Identifiable {
         self.agentId = agentId
         self.gateway = gateway
         self.gatewayId = gateway.id
+        self.cacheRoot = gateway.cacheRoot
         self.headless = headless
         self.sessionRow = gateway.sessions[sessionKey]
         self.isRunning = self.sessionRow?.hasActiveRun == true
@@ -223,7 +241,7 @@ public final class ChatStore: Identifiable {
 
     func updateIsRunning() {
         let running = self.live != nil || self.sessionRow?.hasActiveRun == true
-        guard running != self.isRunning else { return }
+        guard !self.headless, running != self.isRunning else { return }
         self.isRunning = running
         self.gateway?.chatRunStateChanged(self.sessionKey, running: running)
     }

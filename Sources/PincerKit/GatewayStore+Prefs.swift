@@ -249,6 +249,7 @@ extension GatewayStore {
         }
         guard self.invalidatingTranscripts.insert(key).inserted else { return }
         defer { self.invalidatingTranscripts.remove(key) }
+        await self.cancelHeadlessFill(key)
         if change == .deleted {
             self.chats.removeValue(forKey: key)?.stopCaching()
             self.residency.forget(key)
@@ -264,10 +265,27 @@ extension GatewayStore {
         }
     }
 
+    /// Chats that dropped out of `sessions.list` (deleted while we were away, or just archived, or past
+    /// the list limit). Only those the Gateway confirms gone are forgotten: an unfiltered list that
+    /// wasn't cut at its limit no longer has them. A chat with sends still in the outbox is kept: it may
+    /// not exist on the Gateway yet, and forgetting it would drop what the user queued.
+    func forgetVanishedSessions(_ keys: Set<String>) async {
+        guard !keys.isEmpty, self.state.isConnected else { return }
+        let params: [String: JSONValue] = ["limit": 300, "archived": "all"]
+        guard let list = try? await self.connection.request("sessions.list", .object(params), timeout: 30),
+              let rows = list["sessions"]?.array,
+              rows.count < 300
+        else { return }
+        let listed = Set(rows.compactMap(SessionRow.init).map(\.key))
+        for key in keys.subtracting(listed) where self.sessions[key] == nil && self.outbox.entries(for: key).isEmpty {
+            await self.transcriptChanged(key: key, change: .deleted)
+        }
+    }
+
     /// Drops a chat's cached transcript and its messages from search; a refetch re-adds both.
     private func forgetTranscript(_ key: String) async {
-        await TranscriptCache.remove(gatewayId: self.id, sessionKey: key)
-        if MessageIndex.status(gatewayId: self.id) != .unavailable {
+        await TranscriptCache.remove(gatewayId: self.id, sessionKey: key, root: self.cacheRoot)
+        if MessageIndex.status(gatewayId: self.id, root: self.cacheRoot) != .unavailable {
             await self.messageIndex.remove(sessionKey: key)
         }
     }
