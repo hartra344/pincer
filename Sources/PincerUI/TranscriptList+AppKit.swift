@@ -91,9 +91,6 @@ struct TranscriptList: NSViewRepresentable {
 
         /// Whether layout is holding the previous width while the clip view's width animates.
         var isWidthFrozen: Bool { self.freeze.isFrozen }
-        /// Thaws so far and the last one's relayout (layout builds, rows measured, build count after
-        /// it), for the probe: a stalled run loop can thaw mid-slide, so timing can't tell them apart.
-        private(set) var thawStats: (count: Int, builds: Int, rowsMeasured: Int, buildsAfter: Int) = (0, 0, 0, 0)
         let renderer: TranscriptRenderer
         private weak var scrollView: NSScrollView?
         private weak var table: NSTableView?
@@ -398,11 +395,8 @@ struct TranscriptList: NSViewRepresentable {
             self.premeasure.cancelAll()
             if let clip = self.scrollView?.contentView { self.clipSize = clip.frame.size }
             self.queueWidth = 0
-            let builds = self.renderer.layoutBuildCount, measured = self.prefetchStats.rowsMeasured
             // The anchor from before the freeze is kept, so the reader stays on the same message.
             self.settle(changed: IndexSet())
-            self.thawStats = (self.thawStats.count + 1, self.renderer.layoutBuildCount - builds,
-                              self.prefetchStats.rowsMeasured - measured, self.renderer.layoutBuildCount)
         }
 
         private func widthDidChange(from old: CGFloat, to new: CGFloat) {

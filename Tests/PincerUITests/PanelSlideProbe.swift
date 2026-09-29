@@ -131,14 +131,13 @@ struct PanelSlideProbe {
         return ProbeMeter.wall() - start
     }
 
-    /// Polls (every 5 ms, up to 10 s) until a thaw after `thaws` has run and the width is no longer frozen.
-    static func waitUntilThawed(_ host: Host, after thaws: Int) async -> Bool {
-        func thawed() -> Bool { !host.coordinator.isWidthFrozen && host.coordinator.thawStats.count > thaws }
+    /// Polls (every 5 ms, up to 10 s) until the width freeze ends.
+    static func waitUntilThawed(_ host: Host) async -> Bool {
         let start = ProbeMeter.wall()
-        while !thawed(), ProbeMeter.wall() - start < 10 {
+        while host.coordinator.isWidthFrozen, ProbeMeter.wall() - start < 10 {
             try? await Task.sleep(for: .milliseconds(5))
         }
-        return thawed()
+        return !host.coordinator.isWidthFrozen
     }
 
     static func toggle(_ host: Host, name: String, to target: CGFloat, mid: Bool) async -> Toggle {
@@ -148,7 +147,6 @@ struct PanelSlideProbe {
         let gap0 = bottomGap(host)
         let stats0 = host.coordinator.prefetchStats.rowsMeasured
         let builds0 = builds(host)
-        let thaws0 = host.coordinator.thawStats.count
         var cpus: [Double] = []
         for i in 1...frames {
             let width = from + (target - from) * CGFloat(i) / CGFloat(frames)
@@ -172,17 +170,16 @@ struct PanelSlideProbe {
         result.frameCPUAvg = cpus.reduce(0, +) / Double(cpus.count) * 1000
 
         let settleStart = ProbeMeter.threadCPU()
+        let buildsFrames = builds(host), measuredFrames = host.coordinator.prefetchStats.rowsMeasured
         let offloadedFrames = host.coordinator.premeasureStats.offloaded
-        // Await the thaw's relayout at the final width (#401). A stalled runner can leave > 0.1 s after
-        // the last frame, so it may already have run inside the frame loop: read what the thaw itself
-        // did instead of the builds seen in a window after the loop. Later builds are prefetch.
-        result.thawed = await Self.waitUntilThawed(host, after: thaws0)
-        let thaw = host.coordinator.thawStats
-        result.buildsAfterThaw = thaw.builds
-        result.measuredAfterThaw = thaw.rowsMeasured
+        // Await the thaw (due ~0.1 s after the last change) rather than sleeping a fixed time: it lays out
+        // synchronously, so the builds seen right after it are the relayout; later ones are prefetch.
+        result.thawed = await Self.waitUntilThawed(host)
+        result.buildsAfterThaw = builds(host) - buildsFrames
+        result.measuredAfterThaw = host.coordinator.prefetchStats.rowsMeasured - measuredFrames
         result.offloadedAtThaw = host.coordinator.premeasureStats.offloaded - offloadedFrames
         await waitQuiet(host, minimum: 0)
-        result.buildsTail = builds(host) - thaw.buildsAfter
+        result.buildsTail = builds(host) - buildsFrames - result.buildsAfterThaw
         result.settleCPU = (ProbeMeter.threadCPU() - settleStart) * 1000
 
         let stale = staleRows(host)
