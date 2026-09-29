@@ -68,6 +68,9 @@ struct TranscriptContext {
     var reply: (String) -> Void = { _ in }
     /// Copies a `pincer://` link to a message. Provided by `ChatView`.
     var copyLink: (String) -> Void = { _ in }
+    /// Stars or un-stars a message. Provided by `ChatView`.
+    var toggleBookmark: (String) -> Void = { _ in }
+    var isBookmarked: (String) -> Bool = { _ in false }
     /// Opens an ```html fence in the sandboxed preview. Provided by `ChatView`, which owns the sheet.
     var previewHTML: (String) -> Void = { _ in }
 
@@ -103,6 +106,9 @@ protocol TranscriptRowActions: AnyObject {
     func reply(to messageId: String)
     /// Copies a link that opens the chat scrolled to the message.
     func copyLink(to messageId: String)
+    /// Bookmarks the message, or removes its bookmark.
+    func toggleBookmark(_ messageId: String)
+    func isBookmarked(_ messageId: String) -> Bool
     /// Adds your reaction, or removes it when it's already there.
     var reactionsEnabled: Bool { get }
     func toggleReaction(_ emoji: String, on messageId: String)
@@ -567,6 +573,14 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     func copyLink(to messageId: String) {
         self.context.copyLink(messageId)
+    }
+
+    func toggleBookmark(_ messageId: String) {
+        self.context.toggleBookmark(messageId)
+    }
+
+    func isBookmarked(_ messageId: String) -> Bool {
+        self.context.isBookmarked(messageId)
     }
 
     func reply(to messageId: String) {

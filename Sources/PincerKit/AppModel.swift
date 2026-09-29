@@ -256,8 +256,11 @@ public final class AppModel {
         if let existing = self.gateways.first(where: { $0.profile.isDemo }) {
             self.selectedGatewayId = existing.id
             existing.setup.withdrawOffer()
+            DemoBookmarks.seed(into: BookmarkStore.shared(gatewayId: existing.id))
         } else {
-            self.add(.demo(), secret: nil).setup.withdrawOffer()
+            let demo = self.add(.demo(), secret: nil)
+            demo.setup.withdrawOffer()
+            DemoBookmarks.seed(into: BookmarkStore.shared(gatewayId: demo.id))
         }
     }
 
@@ -296,6 +299,7 @@ public final class AppModel {
         store.outbox = Outbox()
         OutboxStore.remove(gatewayId: id)
         store.forgetLocalHealthDismissals()
+        store.forgetGatewayHost()
         self.persist()
         if self.selectedGatewayId == id { self.selectedGatewayId = self.gateways.first?.id }
         self.firstRun.showIfNoGateways()

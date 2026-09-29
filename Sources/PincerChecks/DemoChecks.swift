@@ -58,6 +58,7 @@ func runDemo() async {
     check(!trip.hasMoreHistory && trip.items.count == 302, "trip paged to start (\(trip.items.count))")
     await checkDemoMessageSearch(gateway, trip: trip)
     await checkDemoSeededSearchTerms(gateway, trip: trip)
+    await checkExportAndBookmarks(gateway)
     let allRamen = trip.items.filter { $0.plainText.localizedCaseInsensitiveContains("ramen") }.count
     check(allRamen * 2 <= trip.items.count, "trip transcript is varied (ramen in \(allRamen)/\(trip.items.count))")
     let tripUsage = gateway.contextUsage(for: "agent:main:dashboard:trip")
