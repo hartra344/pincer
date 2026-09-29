@@ -111,6 +111,7 @@ private struct SplitChatPane: View {
         .environment(\.chatWindowKey, self.key)
         .onAppear { self.app.chatWindowOpened(self.ref) }
         .onDisappear { self.app.chatWindowClosed(self.ref) }
+        .modifier(ChatWindowVisibility(gateway: self.gateway, key: self.key))
     }
 }
 
