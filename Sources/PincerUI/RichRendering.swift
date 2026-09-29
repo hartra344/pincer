@@ -92,3 +92,106 @@ enum RichBlockCache {
         return rendered
     }
 }
+
+/// Inline `$…$` / `\(…\)` math in running text, drawn as image attachments that sit on the baseline.
+@MainActor
+enum InlineMathText {
+    struct Masked {
+        let text: String
+        /// Placeholder scalar → the span's LaTeX and its original source.
+        let spans: [Unicode.Scalar: (latex: String, source: String)]
+    }
+
+    /// First private-use scalar used as a placeholder; one per span, so at most `limit` spans a paragraph.
+    private static let base: UInt32 = 0xF0000
+    private static let limit = 512
+
+    static func mask(_ text: String) -> Masked {
+        let found = InlineMath.spans(in: text)
+        guard !found.isEmpty, !text.unicodeScalars.contains(where: { $0.value >= base && $0.value < base + UInt32(limit) })
+        else { return Masked(text: text, spans: [:]) }
+        var out = ""
+        var spans: [Unicode.Scalar: (latex: String, source: String)] = [:]
+        var cursor = text.startIndex
+        for (index, span) in found.prefix(limit).enumerated() {
+            guard let scalar = Unicode.Scalar(base + UInt32(index)) else { break }
+            out += text[cursor..<span.range.lowerBound]
+            out.unicodeScalars.append(scalar)
+            spans[scalar] = (span.latex, String(text[span.range]))
+            cursor = span.range.upperBound
+        }
+        out += text[cursor...]
+        return Masked(text: out, spans: spans)
+    }
+
+    /// Appends `string`, replacing placeholders with drawn math (or the original source if it can't be drawn).
+    static func append(_ string: String, spans: [Unicode.Scalar: (latex: String, source: String)],
+                       attributes: [NSAttributedString.Key: Any], font: PFont, color: PColor,
+                       to result: NSMutableAttributedString)
+    {
+        var pending = ""
+        func flush() {
+            guard !pending.isEmpty else { return }
+            result.append(NSAttributedString(string: pending, attributes: attributes))
+            pending = ""
+        }
+        for scalar in string.unicodeScalars {
+            guard let span = spans[scalar] else { pending.unicodeScalars.append(scalar); continue }
+            if let attachment = self.attachment(span.latex, font: font, color: color) {
+                flush()
+                var attachmentAttributes = attributes
+                attachmentAttributes[.attachment] = attachment
+                result.append(NSAttributedString(string: "\u{FFFC}", attributes: attachmentAttributes))
+            } else {
+                pending += span.source
+            }
+        }
+        flush()
+    }
+
+    private static var cache: [String: NSTextAttachment?] = [:]
+    private static let cacheLimit = 256
+
+    /// One attachment object per formula, size and appearance, so an unchanged prefix of a streaming
+    /// reply compares equal and TextKit doesn't re-lay it out.
+    static func attachment(_ latex: String, font: PFont, color: PColor) -> NSTextAttachment? {
+        let dark = RichBlock.isDark
+        let cgColor = self.resolved(color, dark: dark)
+        let components = (cgColor.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil)?
+            .components ?? []).map { String(format: "%.3f", $0) }.joined(separator: ",")
+        let key = "\(font.pointSize)|\(components)|\(latex)"
+        if let hit = self.cache[key] { return hit }
+        var attachment: NSTextAttachment?
+        if let rendered = InlineMath.render(latex, fontSize: font.pointSize, color: cgColor, scale: self.scale) {
+            let made = NSTextAttachment()
+            #if os(macOS)
+            made.image = NSImage(cgImage: rendered.image, size: rendered.size)
+            #else
+            made.image = UIImage(cgImage: rendered.image, scale: self.scale, orientation: .up)
+            #endif
+            made.bounds = CGRect(x: 0, y: -rendered.descent, width: rendered.size.width, height: rendered.size.height)
+            attachment = made
+        }
+        if self.cache.count >= self.cacheLimit { self.cache.removeAll(keepingCapacity: true) }
+        self.cache[key] = .some(attachment)
+        return attachment
+    }
+
+    private static var scale: CGFloat {
+        #if os(macOS)
+        max(NSScreen.main?.backingScaleFactor ?? 2, 2)
+        #else
+        3
+        #endif
+    }
+
+    private static func resolved(_ color: PColor, dark: Bool) -> CGColor {
+        #if os(macOS)
+        var cgColor = color.cgColor
+        NSAppearance(named: dark ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance { cgColor = color.cgColor }
+        return cgColor
+        #else
+        return color.resolvedColor(with: UITraitCollection(userInterfaceStyle: dark ? .dark : .light)).cgColor
+        #endif
+    }
+}

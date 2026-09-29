@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import PincerKit
 
@@ -15,6 +16,15 @@ func runRichRenderingChecks() {
           "$$ … $$, one-line $$ … $$ and \\[ … \\] are display math; mid-line $$ is text (\(math))")
     check(blocks.contains(.paragraph("After $$ inline $$ text")), "mid-paragraph $$ stays text")
     check(MarkdownBlock.parse("$$\na\n\nb\n$$") == [.code("math", "a\n\nb")], "a blank line inside $$ doesn't end the block")
+
+    // Inline math: $…$ and \(…\), but prices, shell variables and code spans stay text.
+    let inline = InlineMath.spans(in: "Area $\\pi r^2$ and \\(a_i\\), but $5 and $10, $HOME/$USER and `$x$`").map(\.latex)
+    check(inline == ["\\pi r^2", "a_i"], "inline $…$ and \\(…\\) found; prices, shell and code skipped (\(inline))")
+    let black = CGColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
+    check(InlineMath.render("x^2", fontSize: 15, color: black, scale: 2) != nil, "inline math draws natively")
+    check(InlineMath.render("\\nope x", fontSize: 15, color: black, scale: 2) == nil, "inline math with an unknown command stays text")
+    check(TranscriptSearch.renderedTexts(markdown: "Area $\\pi r^2$ here") == ["Area \u{FFFC} here"],
+          "Find skips drawn inline math source")
 
     // Streaming cuts never land inside display math, so the chunks parse to the same blocks.
     let long = String(repeating: "Some words here. ", count: 80)
@@ -85,4 +95,9 @@ func runDemoRichRendering() async {
     }
     check(loaded && diagrams == 2 && formulas == 2,
           "demo chat draws 2 Mermaid diagrams and 2 formulas (got \(diagrams), \(formulas))")
+    var inline = 0
+    for case let .paragraph(paragraph) in blocks {
+        inline += InlineMath.spans(in: paragraph).filter { InlineMath.isDrawable($0.latex) }.count
+    }
+    check(inline == 4, "demo chat draws 4 inline formulas (got \(inline))")
 }
