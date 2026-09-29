@@ -1,0 +1,70 @@
+import Foundation
+import PincerKit
+
+// The "Check the MCP servers" chat (issue #324): upstream-shaped exec, failed exec, edit, bundle-MCP,
+// web_fetch and read calls, from the built-in demo and from the mock Gateway.
+
+private let toolCardsKey = "agent:main:dashboard:tool-cards"
+
+@MainActor
+private func cardTools(_ chat: ChatStore) -> [ToolActivity] {
+    chat.entries.flatMap { entry -> [ToolActivity] in
+        if case let .assistant(turn) = entry { return turn.tools }
+        return []
+    }
+}
+
+@MainActor
+private func checkToolCardsChat(_ gateway: GatewayStore, label: String) async {
+    check(gateway.sessions[toolCardsKey] != nil, "\(label): has the Check the MCP servers chat")
+    let chat = gateway.chat(for: toolCardsKey)
+    await chat.load()
+    let loaded = await waitFor("\(label) tool-cards history") { cardTools(chat).count >= 6 }
+    let calls = cardTools(chat)
+    check(loaded && calls.map(\.name) == ["exec", "exec", "read", "edit", "github__search_issues", "web_fetch"],
+          "\(label): tool calls in order (\(calls.map(\.name)))")
+    guard calls.count >= 6 else { return }
+    check(calls.map(\.isError) == [false, true, false, false, false, false] && calls.allSatisfy { !$0.isRunning },
+          "\(label): only the second exec failed (\(calls.map(\.isError)))")
+    check(calls[0].arguments?.contains("openclaw mcp status --verbose") == true
+          && calls[0].arguments?.contains("workdir") == true, "\(label): exec arguments carry command and workdir")
+    let output = calls[0].result ?? ""
+    check(output.contains("- Era") && output.contains("authorization required (OAuth pending)")
+          && output.split(separator: "\n", omittingEmptySubsequences: false).count >= 20,
+          "\(label): exec output is multi-line and shows the OAuth-pending server")
+    check(calls[1].result?.contains("openclaw mcp auth Era") == true, "\(label): failed exec has stderr-like text")
+    check(calls[3].fileEdit?.primaryPath == "src/mcp/servers.json" && calls[3].fileEdit?.additions == 1
+          && calls[3].fileEdit?.deletions == 1, "\(label): edit is a one-line diff of servers.json")
+    check(calls[4].arguments?.contains("MCP OAuth") == true && calls[4].result?.contains("\"number\": 324") == true,
+          "\(label): MCP call has query args and a JSON list result")
+    check(calls[5].arguments?.contains("\"extractMode\"") == true && calls[5].result?.hasPrefix("# Connecting MCP servers") == true,
+          "\(label): web_fetch has its url args and markdown text")
+    check(calls[2].arguments?.contains("\"offset\"") == true && calls[2].result?.contains("\"servers\"") == true,
+          "\(label): read has path, offset, limit and the file text")
+}
+
+@MainActor
+func runDemoToolCards() async {
+    let gateway = GatewayStore(profile: .demo())
+    gateway.start()
+    gateway.reconnectIfNeeded()
+    let connected = await waitFor("demo for tool cards", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    check(connected, "demo for tool cards connected")
+    guard connected else { return }
+    defer { gateway.stop() }
+    await checkToolCardsChat(gateway, label: "demo")
+}
+
+@MainActor
+func runLiveToolCards(url: String, token: String) async {
+    let profile = GatewayProfile(name: "Mock tool cards", url: url, authMode: .token)
+    profile.secret = token
+    let gateway = GatewayStore(profile: profile)
+    gateway.start()
+    gateway.reconnectIfNeeded()
+    let connected = await waitFor("mock for tool cards", timeout: 25) { gateway.state.isConnected && !gateway.sessions.isEmpty }
+    check(connected, "mock for tool cards connected")
+    guard connected else { return }
+    defer { gateway.stop() }
+    await checkToolCardsChat(gateway, label: "mock")
+}

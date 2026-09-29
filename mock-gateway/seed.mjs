@@ -15,6 +15,7 @@ import { createWebPushState } from './webpush.mjs';
 import { seedRunningSubagentRun, seedSubagents } from './subagents.mjs';
 import { createDevicePairingState } from './devices.mjs';
 import { seededFileEditCalls } from './file-edits.mjs';
+import { seededToolCards, TOOL_CARDS_KEY, TOOL_CARDS_PREVIEW, TOOL_CARDS_TITLE } from './tool-cards.mjs';
 import { seedForwardedMessages } from './forwarded.mjs';
 import { DEFAULT_MODEL, imageBlock, makeMessage, nowMs, textBlock, thinkingBlock, toolCallBlock } from './util.mjs';
 
@@ -214,6 +215,14 @@ export function createSeedState() {
     age: 6 * 3_600_000,
     lastMessagePreview: 'Retries now stop after 4 attempts and skip 4xx errors.',
   });
+  // Upstream-shaped `exec`, MCP, `web_fetch` and `read` calls (see tool-cards.mjs).
+  row(TOOL_CARDS_KEY, {
+    agentId: 'main',
+    label: TOOL_CARDS_TITLE,
+    derivedTitle: TOOL_CARDS_TITLE,
+    age: 3 * 60_000,
+    lastMessagePreview: TOOL_CARDS_PREVIEW,
+  });
 
   // Chats of the seeded automations (see cron.mjs); their runs append here.
   row('agent:main:cron:morning-briefing', {
@@ -307,6 +316,7 @@ export function createSeedState() {
     makeMessage('assistant', [textBlock('Forge can edit code, run builds, and report concise status.')]),
   );
   seedSubagents({ row, sessions, transcripts, makeMessage, textBlock, thinkingBlock, toolCallBlock, base });
+  transcripts.get(TOOL_CARDS_KEY).push(...seededToolCards({ makeMessage, textBlock, toolCallBlock }));
   const [editCall, writeCall, patchCall] = seededFileEditCalls();
   const fileEditResult = (call) => makeMessage('toolResult', [textBlock(call.result)], {
     extra: { toolCallId: call.id, toolName: call.name, details: call.details, isError: false },
