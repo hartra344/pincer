@@ -18,6 +18,7 @@ struct ToolsInspectorView: View {
     var mcpServer: String?
     @State private var filter = ToolFilter.all
     @State private var search = ""
+    @State private var clearedServer = false
 
     var body: some View {
         let model = self.model
@@ -26,6 +27,15 @@ struct ToolsInspectorView: View {
                 Text(self.scopeTitle).font(.headline)
                 if let detail = self.scopeDetail {
                     Text(detail).font(.caption).foregroundStyle(.secondary)
+                }
+                if let server = self.mcpServer, !self.clearedServer {
+                    HStack {
+                        Label(L("Server: \(server)"), systemImage: "point.3.connected.trianglepath.dotted")
+                            .font(.callout)
+                        Button(L("Show all tools"), systemImage: "xmark.circle.fill") { self.clearedServer = true }
+                            .labelStyle(.iconOnly)
+                            .buttonStyle(.borderless)
+                    }
                 }
                 if let inspection = model.inspection {
                     Text(inspection.summary).foregroundStyle(.secondary)
@@ -90,7 +100,7 @@ struct ToolsInspectorView: View {
 
 extension ToolsInspectorView {
     private func serverGroups(_ groups: [InspectedToolGroup]) -> [InspectedToolGroup] {
-        guard let server = self.mcpServer else { return groups }
+        guard let server = self.mcpServer, !self.clearedServer else { return groups }
         return groups.compactMap { group in
             let tools = group.tools.filter { $0.source == .mcp && $0.sourceDetail == server }
             return tools.isEmpty ? nil : InspectedToolGroup(id: group.id, label: group.label, tools: tools)
@@ -180,7 +190,7 @@ struct AgentToolsPage: View {
                 ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
                                        description: Text("Connect to the Gateway to see this agent's tools.", bundle: .module))
             } else if let model {
-                ToolsInspectorView(model: model, scopeTitle: self.mcpServer.map { "MCP server: \($0)" } ?? "Agent: \(agent?.title ?? self.agentId)",
+                ToolsInspectorView(model: model, scopeTitle: "Agent: \(agent?.title ?? self.agentId)",
                                    scopeDetail: model.effective == nil ? nil : self.liveChatTitle(model).map(ToolsPolicy.livePolicyNote),
                                    policySettings: ToolPolicySettings(self.gateway),
                                    openPolicySettings: { destination in self.navigator.destination = destination },

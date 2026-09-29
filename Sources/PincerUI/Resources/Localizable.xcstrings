@@ -613,6 +613,16 @@
         }
       }
     },
+    "Add a server to give your agents more tools.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a server to give your agents more tools."
+          }
+        }
+      }
+    },
     "Add an MCP server": {
       "localizations": {
         "en": {
@@ -729,6 +739,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Agents"
+          }
+        }
+      }
+    },
+    "Agents lose its tools until someone signs in again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agents lose its tools until someone signs in again."
           }
         }
       }
@@ -909,16 +929,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Applies to every agent"
-          }
-        }
-      }
-    },
-    "Apply": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apply"
           }
         }
       }
@@ -1233,16 +1243,6 @@
         }
       }
     },
-    "Cancel Sign-In": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cancel Sign-In"
-          }
-        }
-      }
-    },
     "Cancel reply": {
       "localizations": {
         "en": {
@@ -1263,12 +1263,12 @@
         }
       }
     },
-    "Changes stay with your other unsaved settings until you use Review & Save.": {
+    "Changes stay with your other unsaved settings until you use Review & Save. Other settings are kept. Edit them in Raw Config.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Changes stay with your other unsaved settings until you use Review & Save."
+            "value": "Changes stay with your other unsaved settings until you use Review & Save. Other settings are kept. Edit them in Raw Config."
           }
         }
       }
@@ -1533,6 +1533,16 @@
         }
       }
     },
+    "Code or link": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code or link"
+          }
+        }
+      }
+    },
     "Collapse": {
       "localizations": {
         "en": {
@@ -1673,6 +1683,16 @@
         }
       }
     },
+    "Complete": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete"
+          }
+        }
+      }
+    },
     "Config": {
       "localizations": {
         "en": {
@@ -1759,6 +1779,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connect to the Gateway to review pairing requests."
+          }
+        }
+      }
+    },
+    "Connect to the Gateway to see MCP servers.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect to the Gateway to see MCP servers."
           }
         }
       }
@@ -2023,6 +2053,16 @@
         }
       }
     },
+    "Copy Error": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Error"
+          }
+        }
+      }
+    },
     "Copy ID": {
       "localizations": {
         "en": {
@@ -2039,6 +2079,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Copy Log File Path"
+          }
+        }
+      }
+    },
+    "Copy Name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Name"
           }
         }
       }
@@ -2273,16 +2323,6 @@
         }
       }
     },
-    "Couldn't Sign In": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't Sign In"
-          }
-        }
-      }
-    },
     "Couldn't load more.": {
       "localizations": {
         "en": {
@@ -2319,16 +2359,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't remove %1$@: %2$@"
-          }
-        }
-      }
-    },
-    "Couldn't start sign-in.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't start sign-in."
           }
         }
       }
@@ -2833,12 +2863,12 @@
         }
       }
     },
-    "Each person signs in separately.": {
+    "Each person connects from chat the first time an agent uses this server.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Each person signs in separately."
+            "value": "Each person connects from chat the first time an agent uses this server."
           }
         }
       }
@@ -2889,6 +2919,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Edited"
+          }
+        }
+      }
+    },
+    "Edited. Not saved yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edited. Not saved yet."
           }
         }
       }
@@ -3059,6 +3099,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Expires"
+          }
+        }
+      }
+    },
+    "Expires %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expires %@"
           }
         }
       }
@@ -3469,6 +3519,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Health"
+          }
+        }
+      }
+    },
+    "Hide": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide"
           }
         }
       }
@@ -3923,6 +3983,16 @@
         }
       }
     },
+    "Letters, numbers, . _ - (start with a letter or number)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letters, numbers, . _ - (start with a letter or number)"
+          }
+        }
+      }
+    },
     "Levels": {
       "localizations": {
         "en": {
@@ -4119,16 +4189,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "MCP Servers"
-          }
-        }
-      }
-    },
-    "MCP servers give agents extra tools. Adding, editing or removing a server is saved with your other settings; reconnecting and signing in happen right away.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "MCP servers give agents extra tools. Adding, editing or removing a server is saved with your other settings; reconnecting and signing in happen right away."
           }
         }
       }
@@ -4503,12 +4563,12 @@
         }
       }
     },
-    "No MCP servers yet. Add one to give your agents more tools.": {
+    "No MCP Servers": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "No MCP servers yet. Add one to give your agents more tools."
+            "value": "No MCP Servers"
           }
         }
       }
@@ -4963,6 +5023,16 @@
         }
       }
     },
+    "Not saved yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not saved yet."
+          }
+        }
+      }
+    },
     "Not scheduled": {
       "localizations": {
         "en": {
@@ -5069,16 +5139,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Offline — messages send when you reconnect"
-          }
-        }
-      }
-    },
-    "One sign-in is shared by everyone using this Gateway.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "One sign-in is shared by everyone using this Gateway."
           }
         }
       }
@@ -5283,6 +5343,16 @@
         }
       }
     },
+    "Or sign in on the Gateway host:": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Or sign in on the Gateway host:"
+          }
+        }
+      }
+    },
     "Origin": {
       "localizations": {
         "en": {
@@ -5299,6 +5369,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Other"
+          }
+        }
+      }
+    },
+    "Other settings are kept. Edit them in Raw Config.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other settings are kept. Edit them in Raw Config."
           }
         }
       }
@@ -5403,12 +5483,42 @@
         }
       }
     },
+    "Paste Code or URL": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste Code or URL"
+          }
+        }
+      }
+    },
+    "Paste Code or URL…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste Code or URL…"
+          }
+        }
+      }
+    },
     "Paste Image": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Paste Image"
+          }
+        }
+      }
+    },
+    "Paste the code the provider showed, or the full link you were sent to after approving.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste the code the provider showed, or the full link you were sent to after approving."
           }
         }
       }
@@ -6123,6 +6233,16 @@
         }
       }
     },
+    "Removed when you save: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Removed when you save: %@"
+          }
+        }
+      }
+    },
     "Removes this request. The sender isn't blocked and can ask again.": {
       "localizations": {
         "en": {
@@ -6513,12 +6633,12 @@
         }
       }
     },
-    "Retrying at %@": {
+    "Retrying %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Retrying at %@"
+            "value": "Retrying %@"
           }
         }
       }
@@ -6529,6 +6649,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Retrying…"
+          }
+        }
+      }
+    },
+    "Reveal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reveal"
           }
         }
       }
@@ -6853,6 +6983,16 @@
         }
       }
     },
+    "Save your changes first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save your changes first."
+          }
+        }
+      }
+    },
     "Saved": {
       "localizations": {
         "en": {
@@ -7063,6 +7203,26 @@
         }
       }
     },
+    "Server changes are saved with Review & Save. Reconnect and sign-in happen right away.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server changes are saved with Review & Save. Reconnect and sign-in happen right away."
+          }
+        }
+      }
+    },
+    "Server: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server: %@"
+          }
+        }
+      }
+    },
     "Session": {
       "localizations": {
         "en": {
@@ -7253,16 +7413,6 @@
         }
       }
     },
-    "Show Tools": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Show Tools"
-          }
-        }
-      }
-    },
     "Show Usage": {
       "localizations": {
         "en": {
@@ -7279,6 +7429,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show all %lld lines"
+          }
+        }
+      }
+    },
+    "Show all tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show all tools"
           }
         }
       }
@@ -7433,6 +7593,16 @@
         }
       }
     },
+    "Sign out of %@?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign out of %@?"
+          }
+        }
+      }
+    },
     "Sign out on the Gateway host:": {
       "localizations": {
         "en": {
@@ -7463,6 +7633,26 @@
         }
       }
     },
+    "Sign-in timed out. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in timed out. Try again."
+          }
+        }
+      }
+    },
+    "Sign-in was denied.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in was denied."
+          }
+        }
+      }
+    },
     "Signed in": {
       "localizations": {
         "en": {
@@ -7479,6 +7669,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Signed in as %@"
+          }
+        }
+      }
+    },
+    "Signs in with auth profile %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signs in with auth profile %@."
           }
         }
       }
@@ -7629,6 +7829,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Status Unknown"
+          }
+        }
+      }
+    },
+    "Status is as seen by %@'s main session.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status is as seen by %@'s main session."
           }
         }
       }
@@ -7799,6 +8009,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The Gateway couldn't finish removing the agent's data. Deleting again retries it."
+          }
+        }
+      }
+    },
+    "The Gateway didn't accept that. Check it and try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway didn't accept that. Check it and try again."
           }
         }
       }
@@ -8029,16 +8249,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "This Gateway can't list nodes."
-          }
-        }
-      }
-    },
-    "This Gateway can't reconnect servers from Pincer. Changes apply when you save.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "This Gateway can't reconnect servers from Pincer. Changes apply when you save."
           }
         }
       }
@@ -8513,6 +8723,16 @@
         }
       }
     },
+    "Turn Off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn Off"
+          }
+        }
+      }
+    },
     "Turn On": {
       "localizations": {
         "en": {
@@ -8529,6 +8749,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Turn on after installing"
+          }
+        }
+      }
+    },
+    "Turn on and save first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on and save first."
           }
         }
       }
@@ -8903,6 +9133,16 @@
         }
       }
     },
+    "Will Be Removed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Will Be Removed"
+          }
+        }
+      }
+    },
     "Working folder": {
       "localizations": {
         "en": {
@@ -8989,6 +9229,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "You have %lld unsaved change%@."
+          }
+        }
+      }
+    },
+    "You'll need to sign in again after saving.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You'll need to sign in again after saving."
           }
         }
       }
@@ -9149,16 +9399,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "failed"
-          }
-        }
-      }
-    },
-    "filesystem": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "filesystem"
           }
         }
       }

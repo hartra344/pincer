@@ -14,6 +14,7 @@ struct MCPServerEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft: MCPServerDraft
     @State private var showProblems = false
+    @State private var revealed: Set<Int> = []
     private let initial: MCPServerDraft
 
     init(draft: MCPServerDraft) {
@@ -30,7 +31,7 @@ struct MCPServerEditor: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField(L("Name"), text: self.$draft.name, prompt: Text("filesystem"))
+                    TextField(L("Name"), text: self.$draft.name, prompt: Text("Letters, numbers, . _ - (start with a letter or number)"))
                         .autocorrectionDisabled()
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
@@ -39,7 +40,16 @@ struct MCPServerEditor: View {
                     Picker(L("Transport"), selection: self.$draft.transport) {
                         ForEach(MCPTransport.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
+                    let dropped = self.draft.droppedFieldsOnTransportChange
+                    if !dropped.isEmpty {
+                        Label(L("Removed when you save: \(dropped.joined(separator: ", "))"), systemImage: "info.circle")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
                     Toggle(L("Enabled"), isOn: self.$draft.enabled)
+                    if self.draft.resetsSignIn {
+                        Label(L("You'll need to sign in again after saving."), systemImage: "person.badge.key")
+                            .font(.caption).foregroundStyle(.orange)
+                    }
                 } footer: {
                     if self.draft.isRename {
                         Text("Renaming adds a server under the new name and removes the old one. Saved secrets need to be entered again.", bundle: .module)
@@ -51,8 +61,9 @@ struct MCPServerEditor: View {
                     self.stdioSections(shown)
                 }
                 Section {
-                    Text("Changes stay with your other unsaved settings until you use Review & Save.", bundle: .module)
-                        .font(.caption).foregroundStyle(.secondary)
+                    EmptyView()
+                } footer: {
+                    Text("Changes stay with your other unsaved settings until you use Review & Save. Other settings are kept. Edit them in Raw Config.", bundle: .module)
                 }
             }
             .formStyle(.grouped)
@@ -63,7 +74,7 @@ struct MCPServerEditor: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(L("Cancel")) { self.dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(L("Apply")) {
+                    Button(L("Done")) {
                         if problems.isEmpty {
                             self.gateway.mcp.apply(self.draft)
                             self.dismiss()
@@ -103,16 +114,33 @@ struct MCPServerEditor: View {
                 #endif
         }
         Section {
+            let secret = Set(zip(self.draft.args.indices, zip(self.draft.args, MCPServer.maskedArgs(self.draft.args)))
+                .filter { $0.1.0 != $0.1.1 }.map(\.0))
             ForEach(self.draft.args.indices, id: \.self) { index in
                 HStack {
-                    TextField(L("Argument"), text: self.argBinding(index))
-                        .autocorrectionDisabled()
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                    Button(L("Remove argument"), systemImage: "minus.circle") { self.draft.args.remove(at: index) }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.borderless)
+                    if secret.contains(index), !self.revealed.contains(index) {
+                        SecureField(L("Argument"), text: self.argBinding(index))
+                        Button(L("Reveal"), systemImage: "eye") { self.revealed.insert(index) }
+                            .labelStyle(.iconOnly)
+                            .buttonStyle(.borderless)
+                    } else {
+                        TextField(L("Argument"), text: self.argBinding(index))
+                            .autocorrectionDisabled()
+                            #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                            #endif
+                        if secret.contains(index) {
+                            Button(L("Hide"), systemImage: "eye.slash") { self.revealed.remove(index) }
+                                .labelStyle(.iconOnly)
+                                .buttonStyle(.borderless)
+                        }
+                    }
+                    Button(L("Remove argument"), systemImage: "minus.circle") {
+                        self.draft.args.remove(at: index)
+                        self.revealed = []
+                    }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.borderless)
                 }
             }
             Button(L("Add Argument"), systemImage: "plus") { self.draft.args.append("") }

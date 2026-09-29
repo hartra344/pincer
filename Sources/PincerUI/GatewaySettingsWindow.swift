@@ -468,6 +468,7 @@ private struct SearchResults: View {
         let pages = SettingsCatalog.destinations(matching: self.query)
             .filter { $0.destination != .skills || self.gateway.supportsSkills }
             .filter { $0.destination != .sessions || self.gateway.supportsSessionManager }
+            .filter { $0.destination != .mcpServers || self.gateway.supportsMCPServers }
         if results.isEmpty, pages.isEmpty {
             Text("No settings match “\(self.query)”.", bundle: .module).foregroundStyle(.secondary)
         }
@@ -764,7 +765,9 @@ struct ReviewChangesSheet: View {
     }
 
     private func isSecret(_ path: [String]) -> Bool {
-        self.settings.field(at: path)?.kind == .secret
+        // MCP env and header values are secrets whatever they're called.
+        if path.count >= 5, path.starts(with: MCPServers.path), ["env", "headers"].contains(path[3]) { return true }
+        return self.settings.field(at: path)?.kind == .secret
     }
 
     static func summary(_ value: JSONValue?, secret: Bool, missing: String) -> String {

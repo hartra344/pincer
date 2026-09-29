@@ -49,7 +49,7 @@ struct MCPStatusText {
                 case .connecting: (self.title, self.detail, self.tone) = (L("Connecting…"), nil, .neutral)
                 case .idle: (self.title, self.detail, self.tone) = (L("Idle"), nil, .neutral)
                 case .backoff:
-                    let title = status.nextRetryAt.map { L("Retrying at \($0.formatted(date: .omitted, time: .shortened))") } ?? L("Retrying…")
+                    let title = status.nextRetryAt.map { L("Retrying \($0.formatted(.relative(presentation: .numeric)))") } ?? L("Retrying…")
                     (self.title, self.detail, self.tone) = (title, status.lastError, .bad)
                 default: (self.title, self.detail, self.tone) = (L("Error"), status.lastError, .bad)
                 }
@@ -76,19 +76,65 @@ struct MCPStatusLabel: View {
     }
 }
 
+// MARK: Helpers
+
+/// Who signs a server in.
+enum MCPSignInKind: Equatable {
+    /// Not an OAuth server.
+    case none
+    /// One sign-in for the Gateway, done from here.
+    case shared
+    /// Each person connects from chat.
+    case perRequester
+    /// Uses a saved auth profile.
+    case profile(String)
+}
+
+extension MCPServer {
+    var signInKind: MCPSignInKind {
+        guard self.usesOAuth else { return .none }
+        if self.oauthIdentity == "per-requester" { return .perRequester }
+        if let profile = self.oauthAuthProfileId, !profile.isEmpty { return .profile(profile) }
+        return .shared
+    }
+}
+
 extension MCPServersModel {
     /// Whether any server needs a look (an error or a sign-in), for the sidebar dot.
     var needsAttention: Bool {
         self.servers.contains { server in
             let status = self.status(for: server.name)
-            return status.state == .error || status.state == .backoff || status.needsSignIn
+            return status.state == .error || status.state == .backoff
+                || (server.signInKind == .shared && status.needsSignIn)
         }
+    }
+
+    /// Why Reconnect and sign-in can't run yet: they act on the saved server, not the draft.
+    func actionBlock(_ name: String) -> String? {
+        guard let server = self.server(name) else { return nil }
+        if self.isNew(name) || self.isChanged(name) { return L("Save your changes first.") }
+        if !server.enabled { return L("Turn on and save first.") }
+        return nil
+    }
+
+    /// Servers removed in the draft but still saved on the Gateway.
+    func removedServers(in settings: GatewaySettingsModel) -> [MCPServer] {
+        (settings.savedValue(at: MCPServers.path)?.object ?? [:]).keys
+            .filter { self.isRemoved($0) }
+            .compactMap { self.savedServer($0) }
     }
 }
 
-/// The `openclaw` command for a server on hosts whose Gateway can't sign in remotely.
+/// The `openclaw` commands for Gateways that can't sign in remotely.
 private func mcpLoginCommand(_ name: String) -> String { "openclaw mcp login \(name)" }
 private func mcpLogoutCommand(_ name: String) -> String { "openclaw mcp logout \(name)" }
+
+extension GatewayStore {
+    /// "Scout" for "As seen by Scout's main session".
+    fileprivate var defaultAgentTitle: String {
+        self.agents.first { $0.id == self.defaultAgentId }?.title ?? self.defaultAgentId
+    }
+}
 
 // MARK: Server actions
 
@@ -99,36 +145,36 @@ private struct MCPServerActions: View {
     let flow: MCPSignInFlow
     let edit: () -> Void
     let remove: () -> Void
-    let showTools: () -> Void
+    let signOut: () -> Void
 
     var body: some View {
-        let status = self.model.status(for: self.server.name)
-        let busy = self.model.operation(for: self.server.name).isRunning
-        Button(L("Edit…"), systemImage: "pencil", action: self.edit)
-            .disabled(!self.model.canEdit)
-        if self.model.supportsReconnect, self.server.enabled, status.state != .unsaved {
-            Button(L("Reconnect"), systemImage: "arrow.clockwise") {
-                Task { await self.model.reconnect(self.server.name) }
-            }
-            .disabled(busy)
+        let name = self.server.name
+        let status = self.model.status(for: name)
+        let block = self.model.actionBlock(name)
+        let ready = self.model.canEdit && block == nil && !self.model.operation(for: name).isRunning
+        if self.model.canEdit {
+            Button(L("Edit…"), systemImage: "pencil", action: self.edit)
         }
-        if self.server.usesOAuth, self.model.supportsOAuth, status.state != .unsaved {
+        if self.model.supportsReconnect {
+            Button(L("Reconnect"), systemImage: "arrow.clockwise") { Task { await self.model.reconnect(name) } }
+                .disabled(!ready)
+        }
+        if self.server.signInKind == .shared, self.model.supportsOAuth {
             if status.auth?.state == .authorized {
-                Button(L("Sign Out"), systemImage: "rectangle.portrait.and.arrow.right") {
-                    Task { await self.model.signOut(self.server.name) }
-                }
-                .disabled(busy)
+                Button(L("Sign Out"), systemImage: "rectangle.portrait.and.arrow.right", action: self.signOut)
+                    .disabled(!ready)
             } else {
                 Button(status.auth?.isExpired == true ? L("Sign In Again") : L("Sign In"), systemImage: "person.badge.key") {
-                    Task { await self.flow.start(self.server.name, model: self.model) }
+                    Task { await self.flow.start(name, model: self.model) }
                 }
-                .disabled(busy || self.flow.isSigningIn(self.server.name))
+                .disabled(!ready || self.flow.isSigningIn(name))
             }
         }
-        Button(L("Show Tools"), systemImage: "wrench.and.screwdriver", action: self.showTools)
-        Divider()
-        Button(L("Remove…"), systemImage: "trash", role: .destructive, action: self.remove)
-            .disabled(!self.model.canEdit)
+        Button(L("Copy Name"), systemImage: "doc.on.doc") { Clipboard.copy(name) }
+        if self.model.canEdit {
+            Divider()
+            Button(L("Remove…"), systemImage: "trash", role: .destructive, action: self.remove)
+        }
     }
 }
 
@@ -139,38 +185,30 @@ struct MCPServersPage: View {
     @Environment(SettingsNavigator.self) private var navigator
     @State private var editor: MCPEditorTarget?
     @State private var removing: String?
+    @State private var signingOut: String?
     @State private var flow = MCPSignInFlow()
 
     var body: some View {
         let model = self.gateway.mcp
         let connected = self.gateway.state.isConnected
-        GatewaySettingsForm {
-            if !model.canEdit {
-                Section { FullManagementBadge { self.navigator.destination = .connection } }
-            }
-            Section {
-                if model.servers.isEmpty {
-                    Text("No MCP servers yet. Add one to give your agents more tools.", bundle: .module)
-                        .foregroundStyle(.secondary)
-                }
-                ForEach(model.servers) { server in
-                    self.row(server, model: model)
-                }
-                if let error = model.loadState.error, connected {
-                    Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-                }
-            } footer: {
-                self.footer(model)
+        Group {
+            if !connected, !model.hasConfig {
+                ContentUnavailableView(L("Not Connected"), systemImage: "bolt.horizontal.circle",
+                                       description: Text("Connect to the Gateway to see MCP servers.", bundle: .module))
+            } else {
+                self.list(model, connected: connected)
             }
         }
         .navigationTitle(L("MCP Servers"))
         .toolbar {
-            ToolbarItem {
-                Button { self.editor = MCPEditorTarget(draft: MCPServerDraft()) } label: {
-                    Label(L("Add Server"), systemImage: "plus")
+            if model.canEdit {
+                ToolbarItem {
+                    Button { self.editor = MCPEditorTarget(draft: MCPServerDraft()) } label: {
+                        Label(L("Add Server"), systemImage: "plus")
+                    }
+                    .disabled(!model.hasConfig)
+                    .help(L("Add an MCP server"))
                 }
-                .disabled(!model.canEdit)
-                .help(L("Add an MCP server"))
             }
             ToolbarItem {
                 Button { Task { await model.load() } } label: { Label(L("Refresh"), systemImage: "arrow.clockwise") }
@@ -190,29 +228,92 @@ struct MCPServersPage: View {
         } message: {
             Text("The server is removed when you save your changes.", bundle: .module)
         }
+        .mcpSignOutConfirmation(self.$signingOut, model: model)
         .mcpSignIn(self.flow, model: model)
         .task(id: connected) { if connected { await model.load() } }
     }
 
+    private func list(_ model: MCPServersModel, connected: Bool) -> some View {
+        let removed = model.removedServers(in: self.gateway.settings)
+        let rows = (model.servers + removed).sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return GatewaySettingsForm {
+            if !model.canEdit {
+                Section { FullManagementBadge { self.navigator.destination = .connection } }
+            }
+            if let message = self.flow.message {
+                Section {
+                    HStack {
+                        Label(message, systemImage: "info.circle")
+                        Spacer()
+                        Button(L("Dismiss")) { self.flow.message = nil }.buttonStyle(.borderless)
+                    }
+                }
+            }
+            if rows.isEmpty {
+                Section {
+                    ContentUnavailableView {
+                        Label(L("No MCP Servers"), systemImage: "point.3.connected.trianglepath.dotted")
+                    } description: {
+                        Text("Add a server to give your agents more tools.", bundle: .module)
+                    } actions: {
+                        if model.canEdit {
+                            Button(L("Add Server")) { self.editor = MCPEditorTarget(draft: MCPServerDraft()) }
+                        }
+                    }
+                }
+            } else {
+                Section {
+                    ForEach(rows) { server in
+                        if model.isRemoved(server.name) {
+                            self.removedRow(server, model: model)
+                        } else {
+                            self.row(server, model: model)
+                        }
+                    }
+                    if let error = model.loadState.error, connected {
+                        Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
+                    }
+                } footer: {
+                    self.footer(model, rows: rows)
+                }
+            }
+        }
+    }
+
+    private func removedRow(_ server: MCPServer, model: MCPServersModel) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                Text(server.name).strikethrough().foregroundStyle(.secondary)
+                Text("Will Be Removed", bundle: .module).font(.caption).foregroundStyle(.orange)
+            }
+            Spacer()
+            Button(L("Undo")) { model.undoRemove(server.name) }.buttonStyle(.borderless)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
     private func row(_ server: MCPServer, model: MCPServersModel) -> some View {
         let status = model.status(for: server.name)
+        let edited = model.isChanged(server.name) && !model.isNew(server.name)
         return HStack {
             NavigationLink(value: SettingsRoute.mcpServer(server.name)) {
                 HStack {
                     VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
                         HStack(spacing: Theme.Spacing.sm) {
                             Text(server.name)
-                            if model.isChanged(server.name) {
-                                Image(systemName: "circle.fill").font(.system(size: 7)).foregroundStyle(.tint)
-                                    .accessibilityLabel(L("Unsaved changes"))
+                            if edited {
+                                Text("Edited", bundle: .module).font(.caption2).foregroundStyle(.tint)
                             }
                         }
                         Text(server.transport?.title ?? L("Unknown transport"))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    MCPStatusLabel(status: status).frame(maxWidth: 220, alignment: .trailing)
+                    if status.state != .unknown {
+                        MCPStatusLabel(status: status).frame(maxWidth: 220, alignment: .trailing)
+                    }
                 }
+                .accessibilityElement(children: .combine)
             }
             Toggle(L("Enabled"), isOn: Binding(
                 get: { server.enabled }, set: { model.setEnabled(server.name, $0) }))
@@ -220,34 +321,55 @@ struct MCPServersPage: View {
                 .disabled(!model.canEdit)
         }
         .contextMenu { self.actions(server, model: model) }
+        #if os(iOS)
         .swipeActions(edge: .trailing) {
-            Button(L("Remove"), role: .destructive) { self.removing = server.name }
-                .disabled(!model.canEdit)
-            Button(L("Edit")) { self.editor = MCPEditorTarget(draft: MCPServerDraft(server: server)) }
-                .tint(.accentColor)
-                .disabled(!model.canEdit)
+            if model.canEdit {
+                Button(L("Remove"), role: .destructive) { self.removing = server.name }
+            }
         }
+        .swipeActions(edge: .leading) {
+            if model.canEdit {
+                Button(server.enabled ? L("Turn Off") : L("Turn On")) { model.setEnabled(server.name, !server.enabled) }
+                    .tint(server.enabled ? .gray : .green)
+            }
+        }
+        #endif
     }
 
     private func actions(_ server: MCPServer, model: MCPServersModel) -> some View {
         MCPServerActions(server: server, model: model, flow: self.flow,
                          edit: { self.editor = MCPEditorTarget(draft: MCPServerDraft(server: server)) },
                          remove: { self.removing = server.name },
-                         showTools: { self.navigator.path.append(.mcpServer(server.name)) })
+                         signOut: { self.signingOut = server.name })
     }
 
-    @ViewBuilder private func footer(_ model: MCPServersModel) -> some View {
+    @ViewBuilder private func footer(_ model: MCPServersModel, rows: [MCPServer]) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            Text("MCP servers give agents extra tools. Adding, editing or removing a server is saved with your other settings; reconnecting and signing in happen right away.", bundle: .module)
-            if !model.supportsLiveStatus {
+            Text("Server changes are saved with Review & Save. Reconnect and sign-in happen right away.", bundle: .module)
+            switch model.statusSource {
+            case .live: EmptyView()
+            case .session: Text("Status is as seen by \(self.gateway.defaultAgentTitle)'s main session.", bundle: .module)
+            case .none:
                 Text("This Gateway doesn't report MCP status. Tools show up once an agent connects to the server.", bundle: .module)
             }
-            if !model.supportsOAuth, model.servers.contains(where: \.usesOAuth) {
+            if !model.supportsOAuth, rows.contains(where: { $0.signInKind == .shared }) {
                 Text("This Gateway can't sign in from Pincer. Sign in on the Gateway host with `openclaw mcp login <name>`.", bundle: .module)
             }
-            if !model.supportsReconnect {
-                Text("This Gateway can't reconnect servers from Pincer. Changes apply when you save.", bundle: .module)
+        }
+    }
+}
+
+extension View {
+    /// "Sign out of x?" before `MCPServersModel.signOut` runs.
+    func mcpSignOutConfirmation(_ name: Binding<String?>, model: MCPServersModel) -> some View {
+        self.confirmationDialog(L("Sign out of \(name.wrappedValue ?? "")?"), isPresented: Binding(
+            get: { name.wrappedValue != nil }, set: { if !$0 { name.wrappedValue = nil } }), titleVisibility: .visible) {
+            Button(L("Sign Out"), role: .destructive) {
+                if let server = name.wrappedValue { Task { await model.signOut(server) } }
+                name.wrappedValue = nil
             }
+        } message: {
+            Text("Agents lose its tools until someone signs in again.", bundle: .module)
         }
     }
 }
@@ -261,11 +383,23 @@ struct MCPServerPage: View {
     @Environment(\.openURL) private var openURL
     @State private var editor: MCPEditorTarget?
     @State private var confirmRemove = false
+    @State private var signingOut: String?
+    @State private var pasting = false
     @State private var flow = MCPSignInFlow()
 
     var body: some View {
         let model = self.gateway.mcp
-        if let server = model.server(self.name) {
+        if model.isRemoved(self.name) {
+            GatewaySettingsForm {
+                Section {
+                    Label(L("Will Be Removed"), systemImage: "trash").foregroundStyle(.orange)
+                    Button(L("Undo")) { model.undoRemove(self.name) }
+                } footer: {
+                    Text("The server is removed when you save your changes.", bundle: .module)
+                }
+            }
+            .navigationTitle(self.name)
+        } else if let server = model.server(self.name) {
             let status = model.status(for: server.name)
             let operation = model.operation(for: server.name)
             GatewaySettingsForm {
@@ -283,6 +417,9 @@ struct MCPServerPage: View {
                 MCPServerEditor(draft: target.draft)
                     .environment(self.gateway)
             }
+            .sheet(isPresented: self.$pasting) {
+                MCPPasteCodeSheet { await self.flow.complete(pasted: $0, model: model) }
+            }
             .confirmationDialog(L("Remove \(server.name)?"), isPresented: self.$confirmRemove, titleVisibility: .visible) {
                 Button(L("Remove"), role: .destructive) {
                     model.remove(server.name)
@@ -291,6 +428,7 @@ struct MCPServerPage: View {
             } message: {
                 Text("The server is removed when you save your changes.", bundle: .module)
             }
+            .mcpSignOutConfirmation(self.$signingOut, model: model)
             .mcpSignIn(self.flow, model: model)
             .onChange(of: status.auth?.state) { self.flow.reconcile(server.name, state: status.auth?.state) }
             .task(id: self.gateway.state.isConnected) { if self.gateway.state.isConnected { await model.load() } }
@@ -309,12 +447,24 @@ struct MCPServerPage: View {
                 if operation.isRunning { ProgressView().controlSize(.small) }
             }
             .disabled(!model.canEdit)
-            LabeledContent(L("Status")) { MCPStatusLabel(status: status) }
+            if status.state != .unknown {
+                LabeledContent(L("Status")) { MCPStatusLabel(status: status) }
+            }
+            if let error = status.lastError, status.state == .error || status.state == .backoff {
+                Button(L("Copy Error"), systemImage: "doc.on.doc") { Clipboard.copy(error) }
+            }
             if let error = operation.error {
                 Label(error, systemImage: "exclamationmark.octagon.fill").foregroundStyle(.red)
             }
+            if model.isChanged(server.name) {
+                Label(model.isNew(server.name) ? L("Not saved yet.") : L("Edited. Not saved yet."), systemImage: "circle.fill")
+                    .font(.caption).foregroundStyle(.tint)
+            }
         } footer: {
-            if !model.supportsLiveStatus {
+            switch model.statusSource {
+            case .live: EmptyView()
+            case .session: Text("Status is as seen by \(self.gateway.defaultAgentTitle)'s main session.", bundle: .module)
+            case .none:
                 Text("This Gateway doesn't report MCP status. Tools show up once an agent connects to the server.", bundle: .module)
             }
         }
@@ -323,43 +473,71 @@ struct MCPServerPage: View {
     @ViewBuilder
     private func accountSection(_ server: MCPServer, status: MCPServerStatus, model: MCPServersModel,
                                 operation: OperationState) -> some View {
+        let block = model.actionBlock(server.name)
+        let auth = status.auth
         Section {
-            if model.supportsOAuth, status.state != .unsaved {
-                let auth = status.auth
-                if auth?.state == .authorized {
-                    Label(auth?.account.map { L("Signed in as \($0)") } ?? L("Signed in"), systemImage: "checkmark.seal.fill")
-                        .foregroundStyle(.green)
-                    Button(L("Sign Out"), role: .destructive) { Task { await model.signOut(server.name) } }
-                        .disabled(operation.isRunning || !model.canEdit)
-                } else if self.flow.waiting?.server == server.name {
-                    HStack {
-                        ProgressView().controlSize(.small)
-                        Text("Waiting for Sign-In…", bundle: .module).foregroundStyle(.secondary)
-                    }
-                    Button(L("Open in Browser"), systemImage: "safari") { self.flow.openInBrowser(self.openURL) }
-                    Button(L("Cancel Sign-In"), role: .cancel) { Task { await self.flow.cancel(model: model) } }
-                } else {
-                    Text(auth?.isExpired == true ? L("Your sign-in expired.") : L("Not signed in."))
-                        .foregroundStyle(.secondary)
-                    Button(auth?.isExpired == true ? L("Sign In Again") : L("Sign In"), systemImage: "person.badge.key") {
-                        Task { await self.flow.start(server.name, model: model) }
-                    }
-                    .disabled(operation.isRunning || self.flow.isSigningIn(server.name) || !model.canEdit)
-                }
-            } else {
-                self.commandRow(L("Sign in on the Gateway host:"), mcpLoginCommand(server.name))
-                if status.auth?.state == .authorized {
-                    self.commandRow(L("Sign out on the Gateway host:"), mcpLogoutCommand(server.name))
-                }
+            switch server.signInKind {
+            case .perRequester:
+                Text("Each person connects from chat the first time an agent uses this server.", bundle: .module)
+                    .foregroundStyle(.secondary)
+            case let .profile(id):
+                Text("Signs in with auth profile \(id).", bundle: .module).foregroundStyle(.secondary)
+            default:
+                self.sharedAccount(server, status: status, model: model, operation: operation, block: block)
+            }
+            if server.signInKind != .none, server.signInKind != .shared, auth?.state == .authorized {
+                Label(auth?.account.map { L("Signed in as \($0)") } ?? L("Signed in"), systemImage: "checkmark.seal.fill")
+                    .foregroundStyle(.green)
             }
         } header: {
             Text("Account", bundle: .module)
         } footer: {
-            if let identity = server.oauthIdentity {
-                Text(identity == "per-requester"
-                     ? L("Each person signs in separately.")
-                     : L("One sign-in is shared by everyone using this Gateway."))
+            if server.signInKind == .shared, let block, model.supportsOAuth {
+                Text(block)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func sharedAccount(_ server: MCPServer, status: MCPServerStatus, model: MCPServersModel,
+                               operation: OperationState, block: String?) -> some View {
+        let auth = status.auth
+        let ready = model.canEdit && block == nil && !operation.isRunning
+        if let message = self.flow.message {
+            Label(message, systemImage: "info.circle").foregroundStyle(.secondary)
+        }
+        if !model.supportsOAuth {
+            self.commandRow(L("Sign in on the Gateway host:"), mcpLoginCommand(server.name))
+            if auth?.state == .authorized {
+                self.commandRow(L("Sign out on the Gateway host:"), mcpLogoutCommand(server.name))
+            }
+        } else if auth?.state == .authorized {
+            Label(auth?.account.map { L("Signed in as \($0)") } ?? L("Signed in"), systemImage: "checkmark.seal.fill")
+                .foregroundStyle(.green)
+            if let expiresAt = auth?.expiresAt {
+                Text("Expires \(expiresAt.formatted(.relative(presentation: .named)))", bundle: .module)
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Button(L("Sign Out"), role: .destructive) { self.signingOut = server.name }
+                .disabled(!ready)
+        } else if self.flow.waiting?.server == server.name {
+            HStack {
+                ProgressView().controlSize(.small)
+                Text("Waiting for Sign-In…", bundle: .module).foregroundStyle(.secondary)
+            }
+            Button(L("Open in Browser"), systemImage: "safari") { self.flow.openInBrowser(self.openURL) }
+            Button(L("Paste Code or URL…"), systemImage: "doc.on.clipboard") { self.pasting = true }
+            Button(L("Cancel"), role: .cancel) { Task { await self.flow.cancel(model: model) } }
+        } else {
+            Text(auth?.isExpired == true ? L("Your sign-in expired.") : L("Not signed in."))
+                .foregroundStyle(.secondary)
+            Button(auth?.isExpired == true ? L("Sign In Again") : L("Sign In"), systemImage: "person.badge.key") {
+                Task { await self.flow.start(server.name, model: model) }
+            }
+            .disabled(!ready || self.flow.isSigningIn(server.name))
+        }
+        if model.supportsOAuth, !model.canEdit || self.flow.fallbackServer == server.name {
+            self.commandRow(L("Or sign in on the Gateway host:"), mcpLoginCommand(server.name))
         }
     }
 
@@ -390,10 +568,12 @@ struct MCPServerPage: View {
                     Text(tool).font(.callout.monospaced()).textSelection(.enabled)
                 }
             }
-            NavigationLink {
-                AgentToolsPage(agentId: self.gateway.defaultAgentId, mcpServer: server.name)
-            } label: {
-                Label(L("Open in Tools Inspector"), systemImage: "wrench.and.screwdriver")
+            if server.enabled, !model.isNew(server.name), model.statusSource != .none {
+                NavigationLink {
+                    AgentToolsPage(agentId: self.gateway.defaultAgentId, mcpServer: server.name)
+                } label: {
+                    Label(L("Open in Tools Inspector"), systemImage: "wrench.and.screwdriver")
+                }
             }
         } header: {
             Text("Tools", bundle: .module)
@@ -418,22 +598,29 @@ struct MCPServerPage: View {
             }
         } header: {
             Text("Configuration", bundle: .module)
+        } footer: {
+            Text("Other settings are kept. Edit them in Raw Config.", bundle: .module)
         }
     }
 
     private func actionsSection(_ server: MCPServer, status: MCPServerStatus, model: MCPServersModel,
                                 operation: OperationState) -> some View {
-        Section {
-            Button(L("Edit…"), systemImage: "pencil") {
-                self.editor = MCPEditorTarget(draft: MCPServerDraft(server: server))
+        let block = model.actionBlock(server.name)
+        return Section {
+            if model.canEdit {
+                Button(L("Edit…"), systemImage: "pencil") {
+                    self.editor = MCPEditorTarget(draft: MCPServerDraft(server: server))
+                }
             }
-            .disabled(!model.canEdit)
             if model.supportsReconnect {
                 Button(L("Reconnect"), systemImage: "arrow.clockwise") { Task { await model.reconnect(server.name) } }
-                    .disabled(operation.isRunning || !server.enabled || status.state == .unsaved)
+                    .disabled(operation.isRunning || block != nil || !model.canEdit)
             }
-            Button(L("Remove Server…"), role: .destructive) { self.confirmRemove = true }
-                .disabled(!model.canEdit)
+            if model.canEdit {
+                Button(L("Remove Server…"), role: .destructive) { self.confirmRemove = true }
+            }
+        } footer: {
+            if model.supportsReconnect, let block { Text(block) }
         }
     }
 }

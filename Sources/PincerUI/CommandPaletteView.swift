@@ -56,7 +56,7 @@ struct CommandPaletteView: View {
     }
 
     private enum Command: String {
-        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, skills, usage, sessionUsage,
+        case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, skills, mcpServers, usage, sessionUsage,
              gatewayLogs, devices, setupGateway, sessions, manageSession, addGateway
     }
 
@@ -425,6 +425,10 @@ struct CommandPaletteView: View {
                 items.append(item(.skills, "Skills…", "wand.and.stars",
                                   keywords: ["skills", "clawhub", "install", "plugins", "requirements"]))
             }
+            if self.gateway?.supportsMCPServers == true {
+                items.append(item(.mcpServers, "MCP Servers…", "point.3.connected.trianglepath.dotted",
+                                  keywords: ["mcp", "model context protocol", "servers", "oauth", "sign in", "tools", "stdio"]))
+            }
             if self.gateway?.supportsSessionManager == true {
                 items.append(item(.sessions, "Manage Sessions…", "rectangle.stack",
                                   keywords: ["sessions", "archive", "archived", "delete", "branches", "rewind", "recover"]))
@@ -579,6 +583,8 @@ struct CommandPaletteView: View {
             if let gateway { self.openGatewaySettings(gateway, at: .execPolicy) }
         case .skills:
             if let gateway { self.openGatewaySettings(gateway, at: .skills) }
+        case .mcpServers:
+            if let gateway { self.openGatewaySettings(gateway, at: .mcpServers) }
         case .usage:
             if let gateway { self.openGatewaySettings(gateway, at: .usage) }
         case .devices:
