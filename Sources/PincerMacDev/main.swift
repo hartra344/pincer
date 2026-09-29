@@ -63,5 +63,13 @@ if let index = CommandLine.arguments.firstIndex(of: "--sidebar-working-snapshots
     }
 }
 
+// `--toolbar-stability-check` switches between demo chats and fails if the window toolbar rebuilds
+// an item, which makes the sidebar's buttons flash (#262). See ToolbarStabilityCheck.
+if CommandLine.arguments.contains("--toolbar-stability-check") {
+    Task { @MainActor in
+        exit(await ToolbarStabilityCheck.run())
+    }
+}
+
 PincerMacApp.main()
 #endif

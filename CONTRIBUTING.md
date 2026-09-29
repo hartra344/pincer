@@ -25,6 +25,14 @@ Pincer is laid out so parallel branches rarely touch the same file. Add new work
 - Feature behaviour is documented in `website/src/content/docs`: add or edit a guide page and give a new page a sidebar entry in `website/astro.config.mjs`.
 - `README.md` only gets a line when a whole new feature area appears. No feature bullets there.
 
+## macOS window toolbar
+
+Switching chats must not remove or re-add a window toolbar item. When one is rebuilt, macOS redraws every toolbar button and the sidebar's Organize and New Chat buttons flash (#84, #262).
+
+- A per-chat `.id` never goes on a full-size detail view or on the root view of a `ToolbarItem`. Put it inside a stable container (a `ZStack` with a fixed or full-size frame), as `GatewayDetail` in `RootView.swift` and `ChatHeaderAvatar` do.
+- The chat's title, subtitle and toolbar items live in `ChatChrome`, outside the per-chat `.id`.
+- CI runs `PincerMacDev --toolbar-stability-check`, which fails if a chat switch rebuilds a toolbar item. Run it locally with `PINCER_DEV_NAMESPACE=toolbar-check PINCER_KEYCHAIN=memory swift run PincerMacDev --toolbar-stability-check` (it opens a window for a few seconds).
+
 ## Running checks
 
 `scripts/run-checks.sh` runs the unit tests and every `PincerChecks` mode side by side, each live mode against its own fresh mock. To run one by hand, each mode runs only its own suite:
