@@ -122,7 +122,7 @@ struct TranscriptPremeasureHostedTests {
     /// Tearing the table down mid-test crashes AppKit; the tests leak their windows instead.
     static var keepAlive: [(NSWindow, TranscriptList.Coordinator)] = []
 
-    struct Host {
+    @MainActor struct Host {
         let coordinator: TranscriptList.Coordinator
         let scroll: NSScrollView
         let context: TranscriptContext
