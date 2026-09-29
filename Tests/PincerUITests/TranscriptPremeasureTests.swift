@@ -62,6 +62,36 @@ struct TranscriptPremeasureTests {
         #expect(TranscriptPremeasurer.offMainLayouts.withLock { $0 } > 0)
     }
 
+    @Test func tableCellsMatchMainAndWarmTheRow() async {
+        let source = "| Name | Notes |\n|---|---:|\n| alpha | a fairly long note that has to wrap in a narrow column, more than once |\n| beta | short |"
+        let width: CGFloat = 640
+        let contentWidth = TranscriptMetrics.contentWidth(rowWidth: width)
+        let row = await premeasure(source, tone: .primary, width: contentWidth)
+        let body = try! #require(row.bodies.first)
+        #expect(!body.cells.isEmpty)
+        let driver = TranscriptPremeasureDriver()
+        #expect(driver.adopt([row], width: width, epoch: driver.epoch.current) == ["r"])
+        let key = body.key.textKey
+        #expect(TranscriptText.isWarm(key, contentWidth: contentWidth))
+        let main = TranscriptText.markdown(source, tone: .primary, dark: false)
+        guard case let .table(table) = main.first(where: { if case .table = $0 { true } else { false } })! else { return }
+        let before = TranscriptText.measureStats.mainLayouts
+        var naturals = Array(repeating: CGFloat(0), count: table.cells[0].count)
+        for cells in table.cells { for (column, cell) in cells.enumerated() { naturals[column] = max(naturals[column], TranscriptText.naturalWidth(cell, memoized: true)) } }
+        let widths = TranscriptTableMetrics.columnWidths(naturals: naturals, available: contentWidth)
+        for cells in table.cells {
+            for (column, cell) in cells.enumerated() {
+                _ = TranscriptText.size(cell, width: max(widths[column] - TranscriptTableMetrics.padding, 1), memoized: true)
+            }
+        }
+        #expect(TranscriptText.measureStats.mainLayouts == before)
+        for cell in body.cells {
+            let text = table.cells[cell.row][cell.column]
+            #expect(TranscriptText.size(text, width: cell.width).height == cell.height)
+            #expect(TranscriptText.naturalWidth(text) == cell.natural)
+        }
+    }
+
     @Test func resultsFromAnOlderEpochOrWidthAreDropped() async {
         let driver = TranscriptPremeasureDriver()
         let row = await premeasure("Stale **result**", tone: .primary, width: TranscriptMetrics.contentWidth(rowWidth: 640))

@@ -802,27 +802,17 @@ struct TranscriptLayoutBuilder {
     /// its natural column widths and scrolls sideways.
     private func table(_ table: TranscriptText.Table, width available: CGFloat) -> TranscriptPart.Table {
         let columns = table.cells.first?.count ?? 0
-        let minimumColumn: CGFloat = 72, maximumColumn: CGFloat = 320, padding: CGFloat = 20
-        var ideals = Array(repeating: CGFloat(0), count: columns)
+        let padding = TranscriptTableMetrics.padding
+        var naturals = Array(repeating: CGFloat(0), count: columns)
         for row in table.cells {
             for (column, cell) in row.enumerated() {
-                ideals[column] = max(ideals[column], TranscriptText.naturalWidth(cell) + padding)
+                naturals[column] = max(naturals[column], TranscriptText.naturalWidth(cell, memoized: true))
             }
         }
-        ideals = ideals.map { min($0, maximumColumn) }
-        let minimums = ideals.map { min($0, minimumColumn) }
-        var widths = ideals
-        let idealTotal = ideals.reduce(0, +), minimumTotal = minimums.reduce(0, +)
-        if idealTotal > available, minimumTotal <= available {
-            let slack = available - minimumTotal
-            let flexible = idealTotal - minimumTotal
-            widths = zip(ideals, minimums).map { ideal, minimum in
-                floor(flexible > 0 ? minimum + (ideal - minimum) / flexible * slack : minimum)
-            }
-        }
+        let widths = TranscriptTableMetrics.columnWidths(naturals: naturals, available: available)
         let heights = table.cells.map { row in
             row.enumerated().map { column, cell in
-                TranscriptText.size(cell, width: max(widths[column] - padding, 1)).height
+                TranscriptText.size(cell, width: max(widths[column] - padding, 1), memoized: true).height
             }.max().map { max($0, TranscriptStyle.lineHeight(self.style.body)) + 10 } ?? 0
         }
         return TranscriptPart.Table(cells: table.cells, columnWidths: widths, rowHeights: heights, plainText: table.plainText)

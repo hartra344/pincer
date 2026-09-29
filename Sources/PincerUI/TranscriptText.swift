@@ -91,7 +91,22 @@ enum TranscriptText {
             case let .text(text): if !known(text, contentWidth) { return false }
             case let .quote(text): if !known(text, self.quoteWidth(for: contentWidth)) { return false }
             case let .code(_, _, text): if !known(text, .greatestFiniteMagnitude) { return false }
-            case .table, .rule: break
+            case let .table(table):
+                var naturals = Array(repeating: CGFloat(0), count: table.cells.first?.count ?? 0)
+                for row in table.cells {
+                    for (column, cell) in row.enumerated() where cell.length > 0 {
+                        guard let hit = self.heightMemo.value(for: MemoKey(object: ObjectIdentifier(cell), width: -1, exact: false))
+                        else { return false }
+                        naturals[column] = max(naturals[column], hit.size.width)
+                    }
+                }
+                let widths = TranscriptTableMetrics.columnWidths(naturals: naturals, available: contentWidth)
+                for row in table.cells {
+                    for (column, cell) in row.enumerated() where !known(cell, max(widths[column] - TranscriptTableMetrics.padding, 1)) {
+                        return false
+                    }
+                }
+            case .rule: break
             }
         }
         return true
@@ -118,6 +133,14 @@ enum TranscriptText {
             }
             self.heightMemo.set((text, CGSize(width: height.usedWidth, height: height.height)),
                                 for: MemoKey(object: ObjectIdentifier(text), width: height.width, exact: height.exact))
+        }
+        for cell in body.cells where cell.index < segments.count {
+            guard case let .table(table) = segments[cell.index], cell.row < table.cells.count, cell.column < table.cells[cell.row].count
+            else { continue }
+            let text = table.cells[cell.row][cell.column]
+            self.heightMemo.set((text, CGSize(width: cell.natural, height: 0)), for: MemoKey(object: ObjectIdentifier(text), width: -1, exact: false))
+            self.heightMemo.set((text, CGSize(width: cell.usedWidth, height: cell.height)),
+                                for: MemoKey(object: ObjectIdentifier(text), width: cell.width, exact: false))
         }
         return true
     }
@@ -441,10 +464,23 @@ enum TranscriptText {
         return size
     }
 
-    /// Width of `string` on one line, ignoring paragraph alignment.
-    static func naturalWidth(_ string: NSAttributedString) -> CGFloat {
+    /// Width of `string` on one line, ignoring paragraph alignment. `memoized` is as for `size`.
+    static func naturalWidth(_ string: NSAttributedString, memoized: Bool = false) -> CGFloat {
+        guard string.length > 0 else { return 0 }
+        var key: MemoKey?
+        if memoized {
+            self.syncGeneration()
+            let memoKey = MemoKey(object: ObjectIdentifier(string), width: -1, exact: false)
+            if let hit = self.heightMemo.value(for: memoKey) {
+                self.measureStats.memoHits += 1
+                return hit.size.width
+            }
+            key = memoKey
+        }
         self.measureStats.mainLayouts += 1
-        return self.measurer.naturalWidth(string)
+        let width = self.measurer.naturalWidth(string)
+        if let key { self.heightMemo.set((string, CGSize(width: width, height: 0)), for: key) }
+        return width
     }
 }
 

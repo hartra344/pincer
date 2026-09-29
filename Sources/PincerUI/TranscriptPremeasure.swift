@@ -97,6 +97,28 @@ final class TranscriptTextMeasurer {
 
 // MARK: - Off-main premeasure
 
+/// How a table's columns share the width. Main lays tables out with it and the worker measures
+/// their cells with it, so both land on the same column widths.
+enum TranscriptTableMetrics {
+    static let minimumColumn: CGFloat = 72
+    static let maximumColumn: CGFloat = 320
+    static let padding: CGFloat = 20
+
+    /// Columns share `available` when each can keep a readable minimum; otherwise the table keeps its
+    /// natural column widths (each column's widest cell plus padding) and scrolls sideways.
+    static func columnWidths(naturals: [CGFloat], available: CGFloat) -> [CGFloat] {
+        let ideals = naturals.map { min($0 + self.padding, self.maximumColumn) }
+        let minimums = ideals.map { min($0, self.minimumColumn) }
+        let idealTotal = ideals.reduce(0, +), minimumTotal = minimums.reduce(0, +)
+        guard idealTotal > available, minimumTotal <= available else { return ideals }
+        let slack = available - minimumTotal
+        let flexible = idealTotal - minimumTotal
+        return zip(ideals, minimums).map { ideal, minimum in
+            floor(flexible > 0 ? minimum + (ideal - minimum) / flexible * slack : minimum)
+        }
+    }
+}
+
 /// One message body as the text cache keys it, plus the style it is built with.
 struct PremeasureKey: Hashable, Sendable {
     let source: String
@@ -124,10 +146,22 @@ struct SegmentHeight: Sendable {
     let usedWidth: CGFloat
 }
 
+/// A measured table cell: `natural` is its one-line width, and `height` its height at `width`.
+struct CellMeasure: Sendable {
+    let index: Int
+    let row: Int
+    let column: Int
+    let natural: CGFloat
+    let width: CGFloat
+    let height: CGFloat
+    let usedWidth: CGFloat
+}
+
 struct PremeasuredBody: @unchecked Sendable {
     let key: PremeasureKey
     let segments: [TranscriptText.Segment]
     let heights: [SegmentHeight]
+    var cells: [CellMeasure] = []
 }
 
 /// What the worker hands back for one row. The attributed strings inside are built on the worker
@@ -190,6 +224,7 @@ final class TranscriptPremeasurer: @unchecked Sendable {
                 continue
             }
             var heights: [SegmentHeight] = []
+            var cells: [CellMeasure] = []
             func add(_ index: Int, _ text: NSAttributedString, width: CGFloat) {
                 guard text.length > 0 else { return }
                 let size = self.measurer.size(text, width: width)
@@ -201,10 +236,29 @@ final class TranscriptPremeasurer: @unchecked Sendable {
                 case let .text(text): add(index, text, width: job.contentWidth)
                 case let .quote(text): add(index, text, width: TranscriptText.quoteWidth(for: job.contentWidth))
                 case let .code(_, _, text): add(index, text, width: .greatestFiniteMagnitude)
-                case .table, .rule: break
+                case let .table(table):
+                    var naturals = Array(repeating: CGFloat(0), count: table.cells.first?.count ?? 0)
+                    var natural: [[CGFloat]] = []
+                    for cellRow in table.cells {
+                        let widths = cellRow.map { self.measurer.naturalWidth($0) }
+                        layouts += widths.count
+                        for (column, width) in widths.enumerated() { naturals[column] = max(naturals[column], width) }
+                        natural.append(widths)
+                    }
+                    let widths = TranscriptTableMetrics.columnWidths(naturals: naturals, available: job.contentWidth)
+                    for (rowIndex, cellRow) in table.cells.enumerated() {
+                        for (column, cell) in cellRow.enumerated() where cell.length > 0 {
+                            let width = max(widths[column] - TranscriptTableMetrics.padding, 1)
+                            let size = self.measurer.size(cell, width: width)
+                            layouts += 1
+                            cells.append(CellMeasure(index: index, row: rowIndex, column: column, natural: natural[rowIndex][column],
+                                                     width: width, height: size.height, usedWidth: size.width))
+                        }
+                    }
+                case .rule: break
                 }
             }
-            row.bodies.append(PremeasuredBody(key: key, segments: segments, heights: heights))
+            row.bodies.append(PremeasuredBody(key: key, segments: segments, heights: heights, cells: cells))
         }
         Self.offMainLayouts.withLock { $0 += layouts }
         return row
