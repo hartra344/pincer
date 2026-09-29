@@ -103,10 +103,9 @@ header.header {
 }
 .site-title {
 	font-family: var(--font-display);
-	font-weight: 800;
-	font-size: 1.6rem;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
+	font-weight: 700;
+	font-size: 1.3rem;
+	letter-spacing: -0.02em;
 	color: var(--pc-text);
 }
 .site-title img {
@@ -119,24 +118,23 @@ header.header {
 }
 h1#_top {
 	font-family: var(--font-display);
-	font-weight: 800;
-	font-size: clamp(2.4rem, 5vw, 3.4rem);
-	line-height: 1;
-	letter-spacing: 0.02em;
-	text-transform: uppercase;
+	font-weight: 700;
+	font-size: clamp(2rem, 4.5vw, 2.75rem);
+	line-height: 1.1;
+	letter-spacing: -0.02em;
 	text-wrap: balance;
 }
 .sl-markdown-content h2 {
 	font-family: var(--font-display);
-	font-weight: 700;
-	font-size: 2rem;
-	line-height: 1.1;
-	letter-spacing: 0.03em;
-	text-transform: uppercase;
+	font-weight: 650;
+	font-size: 1.6rem;
+	line-height: 1.2;
+	letter-spacing: -0.02em;
 }
 .sl-markdown-content h3 {
 	font-weight: 650;
-	letter-spacing: -0.005em;
+	font-size: 1.25rem;
+	letter-spacing: 0;
 }
 .sl-markdown-content :is(h2, h3, h4) .sl-anchor-link {
 	text-transform: none;
@@ -158,10 +156,9 @@ h1#_top {
 /* Sidebar: designation strips for groups; the current page is a lit line. */
 .sidebar-content .large {
 	font-family: var(--font-display);
-	font-weight: 700;
-	font-size: 0.95rem !important;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
+	font-weight: 650;
+	font-size: 0.875rem !important;
+	letter-spacing: 0;
 	color: var(--pc-muted);
 	padding-block: 0.3rem;
 }
@@ -210,8 +207,8 @@ starlight-menu-button + * a[aria-current='true'] {
 starlight-toc h2,
 mobile-starlight-toc h2 {
 	font-family: var(--font-display);
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
+	font-weight: 650;
+	letter-spacing: 0;
 }
 
 /* Asides */
@@ -222,10 +219,8 @@ mobile-starlight-toc h2 {
 }
 .starlight-aside__title {
 	font-family: var(--font-display);
-	font-size: 1.05rem;
-	font-weight: 700;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
+	font-weight: 600;
+	letter-spacing: 0;
 }
 .starlight-aside__content {
 	color: var(--sl-color-text);
@@ -237,9 +232,11 @@ mobile-starlight-toc h2 {
 }
 .tab > [role='tab'] {
 	font-family: var(--font-display);
-	font-size: 1.05rem;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
+	font-size: 0.95rem;
+	font-weight: 600;
+	letter-spacing: 0;
+	white-space: nowrap;
+	padding-inline: 0.9rem;
 	color: var(--pc-muted) !important;
 }
 .tab > [role='tab']:hover {
@@ -248,14 +245,14 @@ mobile-starlight-toc h2 {
 .tab [role='tab'][aria-selected='true'] {
 	--sl-tab-color-border: var(--pc-lamp) !important;
 	color: var(--pc-text) !important;
-	font-weight: 700;
+	font-weight: 600;
 }
 
 /* Steps */
 .sl-steps > li::before {
 	font-family: var(--font-display);
-	font-size: 1.1rem;
-	font-weight: 800;
+	font-size: 0.95rem;
+	font-weight: 700;
 	letter-spacing: 0;
 	border-radius: var(--radius-s);
 	background: var(--pc-raised);
@@ -274,9 +271,9 @@ mobile-starlight-toc h2 {
 	background: var(--pc-panel);
 	color: var(--sl-color-white);
 	font-family: var(--font-display);
-	font-size: 1rem;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
+	font-size: 0.9rem;
+	font-weight: 600;
+	letter-spacing: 0;
 	border-block: 1px solid var(--pc-line-strong);
 }
 .sl-markdown-content :is(th, td) {
