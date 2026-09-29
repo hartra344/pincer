@@ -69,12 +69,24 @@ public final class GatewayStore: Identifiable {
     public private(set) var hello: GatewayHello?
     public private(set) var agents: [AgentSummary] = []
     public private(set) var defaultAgentId = "main"
-    public private(set) var sessions: [String: SessionRow] = [:] {
-        didSet {
+    /// Session rows by key. Writes that change nothing are dropped, so they don't invalidate every
+    /// view reading the list (sidebar, open chats) or clear the cached subagent trees.
+    public private(set) var sessions: [String: SessionRow] {
+        get {
+            self.access(keyPath: \.sessions)
+            return self.sessionStorage
+        }
+        set {
+            guard newValue != self.sessionStorage else { return }
+            self.withMutation(keyPath: \.sessions) { self.sessionStorage = newValue }
+            self.sortedRowsCache = nil
             self.subagentTrees = [:]
             self.settleRunTimeline()
+            for (key, chat) in self.chats { chat.syncSessionRow(newValue[key]) }
         }
     }
+    @ObservationIgnored private var sessionStorage: [String: SessionRow] = [:]
+    @ObservationIgnored private var sortedRowsCache: [SessionRow]?
     /// `subagentTree(rootKey:)` per root and connection state, until the rows change.
     @ObservationIgnored var subagentTrees: [String: SubagentTree] = [:]
     /// Streamed run activity, read through `runTimeline`; bumping the revision publishes it.
@@ -113,6 +125,7 @@ public final class GatewayStore: Identifiable {
     }
     public var showArchived = false {
         didSet {
+            if showArchived != oldValue { self.sortedRowsCache = nil }
             guard showArchived != oldValue, self.bootstrapped else { return }
             Task { await self.refreshSessions() }
         }
@@ -1125,14 +1138,21 @@ public final class GatewayStore: Identifiable {
         self.agents.first { $0.id == id } ?? AgentSummary(id: id, name: id == "main" ? "Main" : id.capitalized)
     }
 
+    /// Visible rows, pinned then main chats then most recent. Cached until the rows or `showArchived` change.
     var sortedRows: [SessionRow] {
-        self.sessions.values
-            .filter { self.showArchived || !$0.isArchived }
+        let sessions = self.sessions
+        let showArchived = self.showArchived
+        if let cached = self.sortedRowsCache { return cached }
+        let rows = sessions.values
+            .filter { showArchived || !$0.isArchived }
             .sorted { lhs, rhs in
                 if lhs.isPinned != rhs.isPinned { return lhs.isPinned }
                 if lhs.isMain != rhs.isMain { return lhs.isMain }
-                return lhs.activityMs > rhs.activityMs
+                if lhs.activityMs != rhs.activityMs { return lhs.activityMs > rhs.activityMs }
+                return lhs.key < rhs.key
             }
+        self.sortedRowsCache = rows
+        return rows
     }
 
     /// Subagent runs are the agent's own work; their parent chat carries the result.
