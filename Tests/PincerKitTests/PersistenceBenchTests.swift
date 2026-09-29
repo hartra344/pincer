@@ -53,6 +53,54 @@ struct PersistenceBenchTests {
         await MessageIndex.shutdown(root: temp.url)
     }
 
+    /// After the change only: the production path, where the save hands the index `.tail`.
+    @Test func indexTailPerSave() async throws {
+        guard Bench.phase == "index-tail" else { return }
+        let temp = TempDir()
+        defer { temp.remove() }
+        let gateway = UUID()
+        let key = "agent:main:bench"
+        var items = (0..<20000).map(Bench.item)
+        await TranscriptCache.saveReturningStats(.init(items: items, complete: true, activityMs: 1), gatewayId: gateway,
+                                                 sessionKey: key, root: temp.url)
+        let index = MessageIndex.shared(gatewayId: gateway, root: temp.url)
+        Bench.report("indexTail.firstSavePathFull", index.lastIndexStats.path == .full ? 1 : 0)
+
+        items.append(Bench.item(20000))
+        let cpu = Bench.cpuSeconds()
+        let clock = ContinuousClock()
+        var result = TranscriptCache.SaveResult()
+        let wall = await clock.measure {
+            result = await TranscriptCache.saveReturningStats(.init(items: items, complete: true, activityMs: 2),
+                                                              gatewayId: gateway, sessionKey: key, root: temp.url)
+        }
+        let stats = index.lastIndexStats
+        Bench.report("indexTail.saveWholeWallMs", Bench.ms(wall))
+        Bench.report("indexTail.saveWholeCpuMs", (Bench.cpuSeconds() - cpu) * 1000)
+        Bench.report("indexTail.saveBytesWritten", Double(result.bytesWritten))
+        Bench.report("indexTail.pathIsTail", stats.path == .tail ? 1 : 0)
+        Bench.report("indexTail.documentsBuilt", Double(stats.documentsBuilt))
+        Bench.report("indexTail.rowsRead", Double(stats.rowsRead))
+        Bench.report("indexTail.rowsWritten", Double(stats.rowsWritten))
+
+        // The index call alone, with the token the second save produced as its base.
+        guard case let .tail(_, _, token)? = result.change else {
+            Bench.report("indexTail.changeWasTail", 0)
+            return
+        }
+        items.append(Bench.item(20001))
+        let next = TranscriptCache.Snapshot(items: items, complete: true, activityMs: 3)
+        let indexCpu = Bench.cpuSeconds()
+        let indexWall = await clock.measure {
+            await index.index(sessionKey: key, snapshot: next, fileMtime: Date(),
+                              change: .tail(unchangedPrefix: 20001, baseToken: token, token: "bench-next"))
+        }
+        Bench.report("indexTail.indexOnly.wallMs", Bench.ms(indexWall))
+        Bench.report("indexTail.indexOnly.cpuMs", (Bench.cpuSeconds() - indexCpu) * 1000)
+        Bench.report("indexTail.indexOnly.pathIsTail", index.lastIndexStats.path == .tail ? 1 : 0)
+        await MessageIndex.shutdown(root: temp.url)
+    }
+
     /// One app launch against the mock: connect, let the background prefetch run, quit.
     @Test func launch() async throws {
         guard Bench.phase == "launch" else { return }
