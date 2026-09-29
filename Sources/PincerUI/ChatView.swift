@@ -319,10 +319,15 @@ private struct TranscriptPane: View {
                                     topInset: self.topInset)
                 if !self.gateway.state.isConnected {
                     Text("Connecting…", bundle: .module).font(.callout).foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
             }
             .padding(.bottom, self.bottomInset)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            #if os(macOS)
+            // Like the transcript list: fill the pane, then add the insets once.
+            .ignoresSafeArea(.container, edges: [.top, .bottom])
+            #endif
         } else if self.chat.entries.isEmpty {
             ContentUnavailableView {
                 Label(L("Say hello to \(self.agent.name)"), systemImage: "bubble.left.and.bubble.right")
@@ -661,8 +666,7 @@ struct ChatLoadingSkeleton: View {
         .padding(.horizontal, TranscriptMetrics.sidePadding)
         .padding(.top, self.topInset)
         .padding(.bottom, self.bottomInset)
-        .frame(maxWidth: TranscriptMetrics.maxCardWidth + TranscriptMetrics.contentX, alignment: .topLeading)
-        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .opacity(self.pulses && self.dim ? 0.55 : 1)
         .onAppear { self.onscreen = true }
         .onDisappear { self.onscreen = false }
