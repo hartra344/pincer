@@ -159,7 +159,6 @@ struct SidebarList: UIViewRepresentable {
                 dataSource.apply(snapshot, animatingDifferences: false)
             }
             let oldGroups = Dictionary(old.groups.map { ($0.header.id, $0) }, uniquingKeysWith: { a, _ in a })
-            var changed: [String] = []
             for group in model.groups {
                 let id = group.header.id
                 let previous = oldGroups[id]
@@ -172,15 +171,8 @@ struct SidebarList: UIViewRepresentable {
                     if group.header.isCollapsed { section.collapse([id]) } else { section.expand([id]) }
                     dataSource.apply(section, to: id, animatingDifferences: animate && previous != nil)
                 }
-                if let previous {
-                    if previous.header != group.header { changed.append(id) }
-                    let before = Dictionary(previous.entries.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-                    for entry in group.entries where before[entry.id].map({ $0 != entry }) ?? false {
-                        changed.append(entry.id)
-                    }
-                }
             }
-            self.reconfigure(changed)
+            self.reconfigure(SidebarModel.changedRowKeys(old: old, new: model))
         }
 
         /// Refreshes rows in place. Cells size themselves, so a preview appearing or going away

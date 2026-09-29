@@ -157,16 +157,16 @@ struct SidebarList: NSViewRepresentable {
         /// Same rows as before: refresh the ones that changed in place.
         private func reconfigure(changedFrom old: SidebarModel) {
             guard let outline else { return }
-            let oldHeaders = Dictionary(old.groups.map { ($0.header.id, $0.header) }, uniquingKeysWith: { a, _ in a })
             let oldEntries = Dictionary(old.groups.flatMap(\.entries).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             var resized = IndexSet()
-            for (id, node) in self.nodes {
+            for id in SidebarModel.changedRowKeys(old: old, new: self.model) {
+                guard let node = self.nodes[id] else { continue }
                 let row = outline.row(forItem: node)
                 guard row >= 0 else { continue }
-                if let header = self.headers[id], header != oldHeaders[id] {
+                if let header = self.headers[id] {
                     (outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarHeaderCell)?
                         .configure(header, actions: self.actions) { [weak self] in self?.toggle(id) }
-                } else if let entry = self.entries[id], let previous = oldEntries[id], entry != previous {
+                } else if let entry = self.entries[id], let previous = oldEntries[id] {
                     (outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarChatCell)?
                         .configure(entry, actions: self.actions)
                     if (entry.preview == nil) != (previous.preview == nil) { resized.insert(row) }
