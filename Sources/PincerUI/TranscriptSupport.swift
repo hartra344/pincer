@@ -478,6 +478,7 @@ final class TranscriptRenderer: TranscriptRowActions {
             _ = chat.agentReactions
             _ = chat.locatingReplyId
             _ = gateway.reactions
+            _ = BookmarkStore.shared(gatewayId: gateway.id).bookmarks
         } onChange: { [weak self, weak chat] in
             Task { @MainActor in
                 guard let self, let chat, chat === self.context.chat else { return }
