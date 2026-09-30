@@ -425,7 +425,7 @@ enum ReactionFeature {
 
 struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, readAloud, dictation, sidebar, notifications, keyboardShortcuts, device, storage, tips
+        case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, readAloud, dictation, sidebar, notifications, keyboardShortcuts, device, storage, spotlight, tips
 
         /// Sections that exist on this platform.
         static var available: [Self] {
@@ -437,7 +437,7 @@ struct SettingsForm: View {
         }
 
         #if os(macOS)
-        static let generalTab: [Self] = [.you, .launch, .quickCapture, .menuBar, .device, .storage, .tips]
+        static let generalTab: [Self] = [.you, .launch, .quickCapture, .menuBar, .device, .storage, .spotlight, .tips]
         static let appearanceTab: [Self] = [.appearance, .avatars, .colors]
         static let conversationTab: [Self] = [.conversation, .readAloud, .dictation, .sidebar]
         static let notificationsTab: [Self] = [.notifications]
@@ -587,6 +587,8 @@ struct SettingsForm: View {
             }
         case .storage:
             TranscriptCacheSettingsSection()
+        case .spotlight:
+            SpotlightSettingsSection()
         }
     }
 }

@@ -13143,6 +13143,36 @@
         }
       }
     },
+    "Show Chats in Spotlight": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Chats in Spotlight"
+          }
+        }
+      }
+    },
+    "Include Message Text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include Message Text"
+          }
+        }
+      }
+    },
+    "Spotlight always shows chat titles. Message text is the last few cached messages and stays on this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spotlight always shows chat titles. Message text is the last few cached messages and stays on this device."
+          }
+        }
+      }
+    },
     "Show Pincer in the menu bar": {
       "localizations": {
         "en": {

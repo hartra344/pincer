@@ -313,6 +313,7 @@ public final class AppModel {
     public func remove(_ id: UUID) {
         guard let index = self.gateways.firstIndex(where: { $0.id == id }) else { return }
         let store = self.gateways.remove(at: index)
+        SpotlightCenter.shared.forgetGateway(id)
         let push = self.push
         Task {
             await push.forget(store)
