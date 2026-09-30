@@ -24,14 +24,8 @@ struct PrefsHarness {
         let keys = self.store.syncedMaps.map(\.syncedDefaultsKey)
         let defaults = self.scratch.defaults
         let isSynced = { self.store.state.isConnected && keys.allSatisfy { defaults.bool(forKey: $0) } }
-        var synced = await eventually(timeout: .seconds(30), isSynced)
-        if !synced {
-            // At the start of a parallel run the first connect or pull can time out under load and then
-            // sit in backoff; a fresh connection (which pulls again) gets past it.
-            self.store.stop()
-            self.store.start()
-            synced = await eventually(timeout: .seconds(60), isSynced)
-        }
+        // Long enough for the store's own bootstrap-pull retries when the start of a parallel run starves it.
+        let synced = await eventually(timeout: .seconds(90), isSynced)
         let unsynced = keys.filter { !defaults.bool(forKey: $0) }
         try #require(synced, "the store connects and first-syncs users.prefs (state: \(self.store.state), gets: \(self.gateway.gets), unsynced: \(unsynced.count))")
     }
@@ -63,6 +57,17 @@ struct PrefsWriteFailureTests {
         await h.store.push(h.map, "k", "v")
         #expect(h.store.pendingPrefChanges[PrefsHarness.pref]?["k"] == .some("v"))
         #expect(h.gateway.map(PrefsHarness.pref)?["k"] == nil)
+    }
+
+    @Test func failedFirstReadIsRetriedWithoutReconnecting() async throws {
+        let gateway = try FakePrefsGateway()
+        gateway.failingGets = 2
+        let h = try await PrefsHarness(sharing: gateway)
+        defer {
+            h.finish()
+            gateway.stop()
+        }
+        #expect(h.gateway.gets >= 2)
     }
 
     @Test func conflictedSetStaysPending() async throws {

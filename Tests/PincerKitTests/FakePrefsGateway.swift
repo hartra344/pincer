@@ -18,6 +18,7 @@ final class FakePrefsGateway: @unchecked Sendable {
     private var prefValues: [String: JSONValue] = [:]
     private var setParams: [JSONValue] = []
     private var getCount = 0
+    private var getFailures = 0
     private var reply: SetReply = .ok
     /// Whether an accepted set also sends `users.prefs.changed`, like the real Gateway.
     private var echoes = true
@@ -70,6 +71,11 @@ final class FakePrefsGateway: @unchecked Sendable {
     /// The `users.prefs.set` params received, oldest first (answered or not).
     var sets: [JSONValue] { self.locked { self.setParams } }
     var gets: Int { self.locked { self.getCount } }
+    /// How many upcoming `users.prefs.get` requests fail with `UNAVAILABLE`.
+    var failingGets: Int {
+        get { self.locked { self.getFailures } }
+        set { self.locked { self.getFailures = newValue } }
+    }
     /// Whether message subscriptions with a `subscriptionId` are refused, like a Gateway before 2026.9.7.
     var rejectsSubscriptionIds: Bool {
         get { self.locked { self.rejectsSubscriptionId } }
@@ -133,9 +139,17 @@ final class FakePrefsGateway: @unchecked Sendable {
                               "snapshot": [:]], on: connection)
         case "users.prefs.get":
             let keys = params["keys"]?.array?.compactMap(\.string)
-            let entries: [String: JSONValue] = self.locked {
+            let entries: [String: JSONValue]? = self.locked {
                 self.getCount += 1
+                if self.getFailures > 0 {
+                    self.getFailures -= 1
+                    return nil
+                }
                 return self.prefValues.filter { keys?.contains($0.key) ?? true }
+            }
+            guard let entries else {
+                self.respond(id, error: "UNAVAILABLE", on: connection)
+                return
             }
             self.respond(id, ["status": "ok", "entries": .object(entries)], on: connection)
         case "users.prefs.set":

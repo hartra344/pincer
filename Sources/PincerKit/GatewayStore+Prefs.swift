@@ -103,11 +103,17 @@ extension GatewayStore {
         return maps
     }
 
-    func pullMaps(_ maps: [SyncedMap], epoch: Int? = nil) async {
-        guard let fetched = await self.fetchRemoteMaps(maps.map(\.pref)) else { return }
-        if let epoch, !self.isCurrent(epoch) { return }
+    /// Returns false when the read failed.
+    @discardableResult
+    func pullMaps(_ maps: [SyncedMap], epoch: Int? = nil) async -> Bool {
+        guard let fetched = await self.fetchRemoteMaps(maps.map(\.pref)) else { return false }
+        if let epoch, !self.isCurrent(epoch) { return true }
         for map in maps { await self.pull(map, fetched: fetched[map.pref] ?? nil) }
+        return true
     }
+
+    /// Seconds between bootstrap pulls after the read or a first-sync write fails.
+    static let bootstrapPullRetryDelays: [Double] = [2, 5, 10, 30, 30]
 
     /// Everything synced through `users.prefs`, except the group maps `loadGroups` owns, in one read.
     func pullBootstrapPrefs(epoch: Int) async {
@@ -116,7 +122,16 @@ extension GatewayStore {
             Self.groupIconsPref, Reactions.prefKey, Self.healthDismissalsPref, AvatarPreferences.prefKey,
         ]).union((0..<Self.bookmarkShardCount).map { Self.bookmarksPref(shard: $0) })
         let maps = self.syncedMaps.filter { prefs.contains($0.pref) }
-        await self.pullMaps(maps, epoch: epoch)
+        // A slow link can time out the first read (or its first-sync write); unsynced maps don't push,
+        // so without a retry this device's changes would wait for the next reconnect.
+        var delays = Self.bootstrapPullRetryDelays[...]
+        while await !self.pullMaps(maps, epoch: epoch)
+            || maps.contains(where: { !self.defaults.bool(forKey: $0.syncedDefaultsKey) }),
+            self.isCurrent(epoch), let delay = delays.popFirst()
+        {
+            try? await Task.sleep(for: .seconds(delay))
+            guard self.isCurrent(epoch) else { return }
+        }
         if self.isCurrent(epoch) { await self.retryPendingPrefs(maps) }
         let queued = self.queuedAvatarChoices
         self.queuedAvatarChoices = [:]
