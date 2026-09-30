@@ -401,6 +401,16 @@
         }
       }
     },
+    "%@ unsent messages in these chats will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ unsent messages in these chats will be discarded too."
+          }
+        }
+      }
+    },
     "%@ used": {
       "localizations": {
         "en": {
@@ -557,16 +567,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%d percent"
-          }
-        }
-      }
-    },
-    "%lld / %lld": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld / %lld"
           }
         }
       }
@@ -969,6 +969,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 tool call"
+          }
+        }
+      }
+    },
+    "1 unsent message in these chats will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 unsent message in these chats will be discarded too."
           }
         }
       }
@@ -2503,12 +2513,12 @@
         }
       }
     },
-    "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send.": {
+    "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline, with their attachments, wait here until they send.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send."
+            "value": "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline, with their attachments, wait here until they send."
           }
         }
       }
@@ -10253,12 +10263,12 @@
         }
       }
     },
-    "Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected.": {
+    "Queued and failed messages, and their attachments, are deleted from this device without being sent. Chats and cached transcripts aren’t affected.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected."
+            "value": "Queued and failed messages, and their attachments, are deleted from this device without being sent. Chats and cached transcripts aren’t affected."
           }
         }
       }
@@ -13923,6 +13933,26 @@
         }
       }
     },
+    "The %@ unsent messages in this chat will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ unsent messages in this chat will be discarded too."
+          }
+        }
+      }
+    },
+    "The 1 unsent message in this chat will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The 1 unsent message in this chat will be discarded too."
+          }
+        }
+      }
+    },
     "The Gateway audio couldn't be played.": {
       "localizations": {
         "en": {
@@ -15119,6 +15149,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tokens"
+          }
+        }
+      }
+    },
+    "Too large to queue offline — sends when you’re connected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too large to queue offline — sends when you’re connected"
           }
         }
       }
