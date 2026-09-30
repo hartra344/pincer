@@ -31,7 +31,10 @@ struct SidebarModel: Equatable {
         var level: Int { self.isSubsection ? 1 : 0 }
 
         /// VoiceOver value for the disclosure state, which a custom label would otherwise hide.
-        func accessibilityValue(isCollapsed: Bool) -> String { isCollapsed ? L("Collapsed") : L("Expanded") }
+        func accessibilityValue(isCollapsed: Bool) -> String { AccessibilityText.sectionState(isCollapsed: isCollapsed) }
+
+        /// VoiceOver hint: what activating the header does.
+        var accessibilityHint: String { AccessibilityText.sectionHint(isCollapsed: self.isCollapsed) }
 
         var accessibilityValue: String { self.accessibilityValue(isCollapsed: self.isCollapsed) }
 
@@ -50,6 +53,7 @@ struct SidebarModel: Equatable {
         }
 
         var addAccessibilityLabel: String {
+            if case .agent = self.section.kind { return AccessibilityText.newChatWith(agent: self.section.title) }
             guard self.isSubsection else { return L("New chat") }
             return self.agentName.map { L("New chat in \(self.section.title) with \($0)") } ?? L("New chat in \(self.section.title)")
         }
