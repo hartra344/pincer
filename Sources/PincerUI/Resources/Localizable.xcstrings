@@ -101,26 +101,6 @@
         }
       }
     },
-    "%@ group": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ group"
-          }
-        }
-      }
-    },
-    "%@ group in %@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ group in %2$@"
-          }
-        }
-      }
-    },
     "%@ is already used": {
       "localizations": {
         "en": {
@@ -477,16 +457,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@: reply failed"
-          }
-        }
-      }
-    },
-    "%lld / %lld": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld / %lld"
           }
         }
       }
@@ -4313,12 +4283,12 @@
         }
       }
     },
-    "Dictate": {
+    "Dictate Message": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dictate"
+            "value": "Dictate Message"
           }
         }
       }
@@ -4329,6 +4299,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dictate a message with your voice"
+          }
+        }
+      }
+    },
+    "Dictation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictation"
           }
         }
       }
@@ -7693,16 +7673,6 @@
         }
       }
     },
-    "Next match (⌘G)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Next match (⌘G)"
-          }
-        }
-      }
-    },
     "Next run": {
       "localizations": {
         "en": {
@@ -8479,6 +8449,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "On Windows"
+          }
+        }
+      }
+    },
+    "On-device dictation isn't available for %@, so dictation won't work while this is on.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device dictation isn't available for %@, so dictation won't work while this is on."
+          }
+        }
+      }
+    },
+    "On-device dictation isn't available for %@. Turn off “On-device only” in Settings to use Apple’s servers.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device dictation isn't available for %@. Turn off “On-device only” in Settings to use Apple’s servers."
+          }
+        }
+      }
+    },
+    "On-device only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On-device only"
           }
         }
       }
@@ -9469,16 +9469,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Previous match (%@)"
-          }
-        }
-      }
-    },
-    "Previous match (⇧⌘G)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Previous match (⇧⌘G)"
           }
         }
       }
@@ -14859,6 +14849,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "What's New"
+          }
+        }
+      }
+    },
+    "When on, your speech is recognized on this device and isn't sent to Apple. When off, Apple's servers may be used for languages that don't have an on-device model.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When on, your speech is recognized on this device and isn't sent to Apple. When off, Apple's servers may be used for languages that don't have an on-device model."
           }
         }
       }
