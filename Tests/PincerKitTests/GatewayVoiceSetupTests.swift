@@ -290,6 +290,31 @@ struct GatewayVoiceSetupTests {
         #expect(model.knownKeyName(for: "elevenlabs") == "ELEVENLABS_API_KEY")
     }
 
+    @Test func unreadableKeyIsAnErrorBadgeNotNeedsKey() async {
+        let g = FakeGateway()
+        redactedStoreRef(g)
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.badge(for: "elevenlabs") == .error("The ElevenLabs key is set, but the Gateway can't read it."))
+
+        let none = FakeGateway()
+        let bare = makeModel(none)
+        await bare.refresh()
+        #expect(bare.badge(for: "elevenlabs") == .needsKey, "needs key only when no key is set")
+    }
+
+    @Test func voiceListGatewayErrorBecomesFailedWithoutCode() async {
+        let model = makeModel(FakeGateway())
+        model.voiceLister = { _ in throw rpc("UNAVAILABLE", "ElevenLabs API error (401): invalid_api_key") }
+        do {
+            _ = try await model.listElevenLabsVoices(apiKey: "k")
+            Issue.record("expected an error")
+        } catch let error as TTSSetupError {
+            #expect(error == .failed("ElevenLabs API error (401): invalid_api_key"))
+            #expect(error.errorDescription?.contains("UNAVAILABLE") == false)
+        } catch { Issue.record("expected TTSSetupError, got \(error)") }
+    }
+
     @Test func badgeFollowsConfiguredState() async {
         let g = FakeGateway()
         let model = makeModel(g)
