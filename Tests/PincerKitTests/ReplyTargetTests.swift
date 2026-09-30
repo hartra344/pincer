@@ -255,16 +255,23 @@ struct ReplyTargetTests {
         for id in ["7421093845", "1234567", "123456789", "abcdefgh", "9101", "", "chan-1", "run-1"] { #expect(!ChatStore.looksLikeTranscriptId(id), "\(id)") }
     }
 
-    @Test func locatingAChannelMessageIdFailsFastWithANotice() async {
+    @Test func quoteTapOnAChannelMessageIdFailsFastWithANotice() async {
         let store = self.chat([Self.user("u1")])
-        let found = await store.locate("7421093845")
+        let found = await store.locateReplyTarget("7421093845")
         #expect(!found && store.locatingReplyId == nil && store.notice == "The original message isn't in this chat's history anymore.")
         #expect(store.items.count == 1)
     }
 
-    @Test func locatingALoadedIdNeedsNoPaging() async {
+    @Test func quoteTapOnALoadedIdNeedsNoPaging() async {
         let store = self.chat([Self.user("12345678")])
-        #expect(await store.locate("12345678") && store.notice == nil)
+        #expect(await store.locateReplyTarget("12345678") && store.notice == nil)
+    }
+
+    @Test func plainLocateStillPagesForAnyId() async {
+        // Only quote taps are gated on the id's shape; other callers (search, links) page for any id.
+        let store = self.chat([Self.user("u1")])
+        _ = await store.locate("7421093845")
+        #expect(store.notice != nil && store.locatingReplyId == nil)
     }
 
     @Test func groupChatsKeepTheQuoteOfTheAnsweredMessage() throws {

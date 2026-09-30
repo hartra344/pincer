@@ -7,11 +7,11 @@ import Foundation
 
 private func windowItems(_ count: Int, from start: Int = 0) -> [ChatItem] {
     (start..<(start + count)).map { n in
-        messageItem(String(format: "%08x", n), n.isMultiple(of: 3) ? .user : .assistant, "window message \(n)", at: 1_700_000_000 + Double(n))
+        messageItem("w\(n)", n.isMultiple(of: 3) ? .user : .assistant, "window message \(n)", at: 1_700_000_000 + Double(n))
     }
 }
 
-private func windowIds(_ range: Range<Int>) -> [String] { range.map { String(format: "%08x", $0) } }
+private func windowIds(_ range: Range<Int>) -> [String] { range.map { "w\($0)" } }
 
 @MainActor
 func runTranscriptWindowChecks() async {
@@ -111,9 +111,9 @@ func runTranscriptWindowChecks() async {
     let jumping = makeChat()
     await jumping.restoreFromCache()
     jumping.hasLoaded = true
-    check(jumping.message(withId: "00000003") == nil, "an old message starts outside the window")
-    let found = await jumping.locate("00000003")
-    check(found && jumping.message(withId: "00000003") != nil, "locate finds it by paging the cache")
+    check(jumping.message(withId: "w3") == nil, "an old message starts outside the window")
+    let found = await jumping.locate("w3")
+    check(found && jumping.message(withId: "w3") != nil, "locate finds it by paging the cache")
 
     jumping.items += windowItems(1, from: total + 2)
     await jumping.saveSnapshot()

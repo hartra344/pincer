@@ -507,15 +507,15 @@ func runLiveReactionsReply(url: String, token: String) async {
         let freshTrip = fresh.chat(for: "agent:main:dashboard:trip")
         await freshTrip.load()
         check(freshTrip.message(withId: oldId) == nil && freshTrip.items.count == 120, "old message not in the first page")
-        let channelId = await freshTrip.locate("7421093845")
+        let channelId = await freshTrip.locateReplyTarget("7421093845")
         check(!channelId && freshTrip.locatingReplyId == nil
               && freshTrip.notice == "The original message isn't in this chat's history anymore.",
-              "a channel message id fails fast with a notice")
+              "a channel message id fails fast with a notice (quote taps)")
         freshTrip.notice = nil
         let found = await freshTrip.locate(oldId)
         check(found && freshTrip.message(withId: oldId) != nil && freshTrip.items.count > 120 && freshTrip.notice == nil,
               "locate pages until found (\(freshTrip.items.count))")
-        let missing = await freshTrip.locate("deadbeef")
+        let missing = await freshTrip.locate("not-a-message")
         check(!missing && !freshTrip.hasMoreHistory && freshTrip.notice == "The original message isn't in this chat's history anymore.",
               "missing original → notice once history runs out")
         fresh.stop()

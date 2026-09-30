@@ -356,7 +356,7 @@ struct TranscriptWindowTests {
         await self.seed(gateway)
         await chat.restoreFromCache()
         chat.hasLoaded = true
-        let target = "00000003"
+        let target = "u3"
         #expect(chat.message(withId: target) == nil)
         #expect(await chat.locate(target))
         #expect(chat.message(withId: target) != nil)
@@ -374,7 +374,7 @@ struct TranscriptWindowTests {
         await self.seed(gateway)
         await chat.restoreFromCache()
         chat.hasLoaded = true
-        #expect(await chat.locate("deadbeef") == false)
+        #expect(await chat.locate("nope") == false)
         #expect(chat.notice != nil)
         self.expectNewestSuffix(chat)
     }
@@ -595,8 +595,8 @@ struct TranscriptWindowTests {
         chat.items = V8.items(self.total)
         chat.hasLoaded = true
         await chat.trimToWindow()
-        #expect(await chat.locate("00000003"))
-        #expect(chat.message(withId: "00000003") != nil)
+        #expect(await chat.locate("u3"))
+        #expect(chat.message(withId: "u3") != nil)
     }
 
     @Test func aWarmIdleChatTrimsWhenAnotherIsSelected() async {
