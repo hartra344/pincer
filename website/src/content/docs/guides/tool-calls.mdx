@@ -13,7 +13,8 @@ Tap or click a card's header to expand it, and again to collapse it. The header 
 
 - an icon and the tool's name. For an [MCP tool](#mcp-tools) it reads `server · tool`.
 - a one-line summary: the command, path, URL or query, cut short in the middle so both ends stay visible.
-- a spinner while the tool is running, and a red **Failed** badge when the call failed. The card's border turns red too. Every kind of card shows the badge, including the plain one for tools Pincer has no special layout for.
+- how long the call took, for example `1.2 s`, at the right before the chevron. It appears once the call has finished, and only when the gateway reported a time. It's the first thing dropped when the header is tight, so the name and summary stay readable.
+- a spinner while the tool is running, and a red **Failed** badge when the call failed. A failed card gets an outlined red ✕ icon, a border in red and a darker chevron, so it stands out in a long chat. Every kind of card shows the badge, including the plain one for tools Pincer has no special layout for.
 
 Pincer only works out the details when you expand a card, so long chats stay quick.
 
@@ -45,6 +46,16 @@ Edits, writes and patches show as diffs instead. See [File edit diffs](../file-d
 
 A fetch shows the URL, and a search shows the query, each in a chip with an icon. Extra chips show settings like the extract mode or the number of results. A fetch's output badge shows the HTTP status, and how long it took, when the gateway reports them.
 
+### Search results
+
+A `web_search` result appears as a list of links instead of JSON. The section is titled **Results**, and its badges show the search provider (for example `brave`), the number of results, how long the search took, and **cached** when the gateway served a saved answer.
+
+Each result has its title as a link, a dimmed line with the site name and host, and up to two lines of the snippet. Click or tap a title to open the page in your browser. On macOS, hovering a title shows the full URL. **Copy** copies one `title` and `url` pair per result.
+
+Some providers answer the question instead of listing pages. Then the card shows the answer as the output, followed by a **Sources** list of links. If the search failed, the card shows the error like any other tool.
+
+Only `http` and `https` links are shown. If the gateway's result is in a shape Pincer doesn't recognize, or the chat was cached by an earlier version of Pincer without the result details, the card shows the output as plain text. **Show raw JSON** in the section's title row always shows the full result. To get the links for an old cached chat, clear the cache under **Settings → Storage** (see [Local cache](../local-cache/#clearing-the-cache)).
+
 ## MCP tools
 
 Tools that come from an MCP server show the server and the tool separately, `github · search_issues`, so you can see which server handled the call. The server is also a chip in the expanded card, followed by the tool's arguments. Choose **Open MCP Server** in the expanded card to jump to that server in [MCP Servers](../mcp-servers/). If the server isn't in your config, for example one a plugin declares, the control reads **Show MCP Servers** and opens the list.
@@ -56,6 +67,20 @@ Arguments appear as a list of keys and values instead of a block of JSON. Keys a
 Choose **Raw JSON** in the section's title row to see the arguments as the agent sent them, pretty-printed, and **Formatted** to go back. Arguments already shown as the command or as a chip aren't repeated in the list.
 
 Any tool Pincer has no special layout for uses this list, with its output as plain text.
+
+## Syntax highlighting
+
+Output that is JSON, and JSON values in a call's arguments, is lightly coloured: keys, strings, numbers, and `true`, `false` and `null` each get their own colour. A file read is coloured by its file extension (Swift, JavaScript and TypeScript, Python, shell, Ruby, Go, Rust, C-family, JSON and YAML) with strings, numbers, comments and a few keywords. Markdown and unknown types stay plain. The colours meet contrast in light and dark mode, and the text itself never changes, so copying and Find work as before. Highlighting is worked out only when you expand a card.
+
+## Searching within a card
+
+To look for something inside one card's output, choose the magnifier button next to **Copy** in the output's title row. A search field opens in the card. As you type, every match in the card's output and arguments is highlighted and the field shows where you are, for example "3 of 12".
+
+- **Return** goes to the next match, and **Shift-Return** to the previous one. The card and chat scroll to show it.
+- On macOS, **⌘G** and **⇧⌘G** also move between matches, and **⌘F** with the cursor inside a card's output searches just that card. Anywhere else **⌘F** still opens [Find in Chat](../transcript/#find-in-chat).
+- **Esc**, or the magnifier again, closes the search and clears the highlights.
+
+Searching shows all of the card's lines, so a match is never hidden behind **Show all**. Only that card is redrawn as you type; the rest of the chat isn't touched. On iPhone and iPad the field works the same with the on-screen or a hardware keyboard.
 
 ## Finding text in tool calls
 
@@ -71,4 +96,4 @@ See [Accessibility](../accessibility/) for more.
 
 ## Try it in the demo
 
-In the [demo](../../getting-started/try-the-demo/), open the **Check the MCP servers** chat. It has a command with multi-line output, a failed command, a file edit, an MCP tool call, a web fetch and a file read, all simulated.
+In the [demo](../../getting-started/try-the-demo/), open the **Check the MCP servers** chat. It has a command with multi-line output, a failed command, a file edit, an MCP tool call, a web fetch, a web search with a list of results and a file read, all simulated.
