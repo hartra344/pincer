@@ -107,16 +107,14 @@ struct TranscriptFindTrimTests {
         let clip = scroll.contentView
         clip.scroll(to: NSPoint(x: 0, y: 0))
         scroll.reflectScrolledClipView(clip)
-        try await Task.sleep(for: .milliseconds(50))
+        #expect(await eventually(timeout: .seconds(30)) { reports.last == false })
         #expect(!coordinator.isAnchoredAtBottom)
-        #expect(reports.last == false)
 
         let table = try #require(scroll.documentView as? NSTableView)
         clip.scroll(to: NSPoint(x: 0, y: table.frame.height))
         scroll.reflectScrolledClipView(clip)
-        try await Task.sleep(for: .milliseconds(50))
+        #expect(await eventually(timeout: .seconds(30)) { reports.last == true })
         #expect(coordinator.isAnchoredAtBottom)
-        #expect(reports.last == true)
 
         let kept = Array(rows.suffix(600))
         let start = ContinuousClock.now

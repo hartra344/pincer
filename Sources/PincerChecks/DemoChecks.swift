@@ -182,9 +182,14 @@ func runDemo() async {
           "demo long line capped for display")
     let demoCursor = demoLogs.cursor ?? 0
     let demoLast = demoLogs.entries.last?.id ?? 0
-    // The demo emits log lines on its own clock; give it time to produce new ones.
-    try? await Task.sleep(for: .milliseconds(700))
-    await demoLogs.poll()
+    // The demo emits log lines on its own clock: poll until some arrive.
+    let demoDeadline = Date().addingTimeInterval(30)
+    var demoGrew = false
+    while !demoGrew, Date() < demoDeadline {
+        try? await Task.sleep(for: .milliseconds(200))
+        await demoLogs.poll()
+        demoGrew = (demoLogs.entries.last?.id ?? 0) > demoLast
+    }
     let demoNew = demoLogs.entries.filter { $0.id > demoLast }
     check(!demoNew.isEmpty && (demoLogs.cursor ?? 0) > demoCursor && !demoNew.contains(where: \.isMarker),
           "demo log grows between polls (\(demoNew.count) new)")

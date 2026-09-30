@@ -18,7 +18,7 @@ extension GatewayStore {
         guard self.visibleChatsByViewer[viewer] != key else { return }
         self.visibleChatsByViewer[viewer] = key
         // Seen now, so a reply still waiting to be marked unread (#426) was read.
-        if let key { self.pendingReplyUnread.remove(key) }
+        if let key, self.pendingReplyUnread.remove(key) != nil { self.replyUnreadTimers[key]?.cancel() }
         self.markVisibleChatsRead()
     }
 
@@ -43,7 +43,12 @@ extension GatewayStore {
 extension GatewayStore {
     /// How long a finished reply waits for the Gateway's own row change (and for a window that is
     /// opening on the chat) before Pincer marks it.
-    static var replyUnreadGrace: Duration = .milliseconds(1500)
+    static let defaultReplyUnreadGrace: Duration = .milliseconds(1500)
+
+    /// Records that `key`'s finished reply has been decided (marked, or deliberately not); tests wait on it.
+    func replyUnreadDecided(_ key: String) {
+        self.replyUnreadDecisions[key, default: 0] += 1
+    }
 
     /// Called when a run's reply finishes in `key`.
     func noteReplyLanded(_ key: String, runId: String?, message: JSONValue?) {
@@ -53,12 +58,16 @@ extension GatewayStore {
             if self.markedReplyRuns.count >= 200 { self.markedReplyRuns.removeAll() }
             self.markedReplyRuns.insert(runId)
         }
-        guard !self.visibleChatKeys.contains(key) else { return }
+        guard !self.visibleChatKeys.contains(key) else { return self.replyUnreadDecided(key) }
         let replyAt = message["timestamp"]?.double ?? Date().timeIntervalSince1970 * 1000
         self.pendingReplyUnread.insert(key)
-        Task { [weak self] in
-            try? await Task.sleep(for: Self.replyUnreadGrace)
-            guard let self, self.pendingReplyUnread.remove(key) != nil,
+        let grace = self.replyUnreadGrace
+        self.replyUnreadTimers[key] = Task { [weak self] in
+            // Cancelled when the chat is shown: the sleep ends early and the decision is "read".
+            try? await Task.sleep(for: grace)
+            guard let self else { return }
+            defer { self.replyUnreadDecided(key) }
+            guard self.pendingReplyUnread.remove(key) != nil,
                   self.state.isConnected, !self.visibleChatKeys.contains(key),
                   let row = self.sessions[key], Self.shouldMarkReplyUnread(row: row, replyAt: replyAt)
             else { return }

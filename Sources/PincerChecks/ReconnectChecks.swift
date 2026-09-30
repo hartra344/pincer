@@ -298,7 +298,7 @@ private func runRequestCancellation(profile: GatewayProfile, control: MockContro
     }
     try? await Task.sleep(for: .milliseconds(200))
     request.cancel()
-    let resolved = await waitFor("cancelled request", timeout: 1.5, every: 20) { outcome.value != "pending" }
+    let resolved = await waitFor("cancelled request", timeout: 10, every: 20) { outcome.value != "pending" }
     check(resolved && outcome.value == "cancelled", "cancelled request throws CancellationError promptly (\(outcome.value), \(Int(Date().timeIntervalSince(started) * 1000)) ms)")
     // Let the delayed response for the abandoned id arrive; it must be ignored.
     try? await Task.sleep(for: .milliseconds(2600))

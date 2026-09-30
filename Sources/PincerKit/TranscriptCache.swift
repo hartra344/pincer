@@ -641,7 +641,7 @@ public enum TranscriptCache {
     /// Deletes the Gateway's transcripts and message search index. `permanently`: the Gateway
     /// was removed from the app, so saves still under way don't write them again.
     public static func removeAll(gatewayId: UUID, permanently: Bool = false, root: URL? = Self.root) {
-        MessageIndex.whileDeleting(root: root) {
+        MessageIndex.whileDeleting(root: root, gatewayId: gatewayId) {
             MessageIndex.discard(gatewayId: gatewayId, root: root, permanently: permanently)
             self.deleteDirectory(gatewayId: gatewayId, root: root)
         }

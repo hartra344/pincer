@@ -86,7 +86,7 @@ private final class Harness {
 }
 
 @MainActor
-private func waitUntil(_ label: String = "", timeout: Duration = .seconds(30), _ condition: () -> Bool) async -> Bool {
+private func waitUntil(_ label: String = "", timeout: Duration = .seconds(120), _ condition: () -> Bool) async -> Bool {
     let deadline = ContinuousClock.now + timeout
     while !condition() {
         if ContinuousClock.now > deadline { return false }
@@ -166,6 +166,7 @@ struct ReadAloudControllerTests {
         let h = Harness(timeout: .milliseconds(50))
         h.speakDelay = .seconds(300)
         h.controller.toggle(messageId: "m1", text: "Slow.", gateway: h.gateway)
+        // Generous deadline: a stalled main actor can eat a short one before the fallback gets to run.
         #expect(await waitUntil { h.controller.phase == .idle })
         #expect(h.speaker.spoken.map(\.text) == ["Slow."] && h.player.played.isEmpty)
     }
