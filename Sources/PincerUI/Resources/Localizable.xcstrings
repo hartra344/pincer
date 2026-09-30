@@ -17813,6 +17813,66 @@
         }
       }
     },
+    "testing MCP connections": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "testing MCP connections"
+          }
+        }
+      }
+    },
+    "OAuth options": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OAuth options"
+          }
+        }
+      }
+    },
+    "TLS settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TLS settings"
+          }
+        }
+      }
+    },
+    "Choose shared or per-requester.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose shared or per-requester."
+          }
+        }
+      }
+    },
+    "Per-person sign-in can't use an auth profile.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Per-person sign-in can't use an auth profile."
+          }
+        }
+      }
+    },
+    "Enter a whole number of milliseconds.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a whole number of milliseconds."
+          }
+        }
+      }
+    },
     "Needs sign-in": {
       "localizations": {
         "en": {
