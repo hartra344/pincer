@@ -15,6 +15,80 @@ extension GatewayStore {
         self.outbox.enqueue(entry)
     }
 
+    static func uploadPolicyKey(_ id: UUID) -> String { "pincer.uploadPolicy.\(id.uuidString)" }
+
+    static func savedUploadPolicy(in defaults: UserDefaults, id: UUID) -> UploadPolicy? {
+        defaults.data(forKey: Self.uploadPolicyKey(id)).flatMap { try? JSONDecoder().decode(UploadPolicy.self, from: $0) }
+    }
+
+    func saveUploadPolicy(_ policy: UploadPolicy) {
+        guard policy != self.lastUploadPolicy else { return }
+        self.lastUploadPolicy = policy
+        if let data = try? JSONEncoder().encode(policy) { self.defaults.set(data, forKey: Self.uploadPolicyKey(self.id)) }
+    }
+
+    /// What this Gateway accepts: the live hello's policy when connected, else the last one seen,
+    /// else the defaults.
+    public var uploadLimits: UploadLimits {
+        if let hello = self.hello, self.state.isConnected { return UploadLimits(hello: hello) }
+        return UploadLimits(policy: self.lastUploadPolicy ?? self.hello.map(UploadPolicy.init(hello:)))
+    }
+
+    /// Whether the limits come from a real hello (now or earlier) rather than the defaults.
+    public var uploadLimitsKnown: Bool { self.hello != nil || self.lastUploadPolicy != nil }
+
+    /// Why this entry waits for a better network, if it does: a large upload (nothing Send Now
+    /// released) that the flush would send next in its chat, while the Gateway is connected and
+    /// the network is expensive or constrained. Anything behind another unsent message, or
+    /// offline, is just queued.
+    public func hold(for entry: OutboxEntry) -> OutboxHold? {
+        guard entry.state == .queued, !entry.sendOnAnyNetwork, !entry.isMemoryOnly,
+              self.state.isConnected, self.hello != nil,
+              self.outbox.nextToSend(sessionKey: entry.sessionKey)?.id == entry.id
+        else { return nil }
+        guard self.uploadBytes(for: entry) >= OutboxEntry.largeUploadBytes else { return nil }
+        if self.network.isConstrained { return .constrained }
+        if self.network.isExpensive { return .expensive }
+        return nil
+    }
+
+    /// Total attachment bytes of an entry, from disk refs or the in-memory copies.
+    public func uploadBytes(for entry: OutboxEntry) -> Int {
+        max(entry.attachmentBytes, self.outboxAttachments[entry.id]?.reduce(0) { $0 + $1.data.count } ?? 0)
+    }
+
+    /// The limits come from a saved policy rather than a live hello (offline): the UI says so.
+    public var uploadLimitsAreLastKnown: Bool {
+        !(self.hello != nil && self.state.isConnected) && self.lastUploadPolicy != nil
+    }
+
+    /// Brings every chat's rows in line with the current holds (the network changed).
+    public func resyncOutboxHolds() {
+        for key in self.outbox.sessionKeys { self.chats[key]?.syncOutbox(self.outbox.entries(for: key)) }
+    }
+
+    /// Watches the network: the holds shown in chats follow it, and a cheap network flushes what waited.
+    func startNetworkWatch() {
+        guard self.networkWatch == nil else { return }
+        self.network.start()
+        self.networkWatch = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let network = self?.network else { return }
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    withObservationTracking {
+                        _ = network.isExpensive
+                        _ = network.isConstrained
+                    } onChange: {
+                        continuation.resume()
+                    }
+                }
+                guard let self else { return }
+                self.resyncOutboxHolds()
+                if self.state.isConnected { await self.flushOutbox() }
+            }
+        }
+    }
+
     /// Attachment bytes this Gateway's outbox keeps on disk.
     public var outboxAttachmentBytes: Int {
         self.outbox.entries.reduce(0) { $0 + $1.attachments.reduce(0) { $0 + $1.byteCount } }
@@ -78,6 +152,10 @@ extension GatewayStore {
             // The demo keeps its outbox in memory, seeded with a failed message to retry.
             for entry in DemoGateway.seedOutbox() where self.outbox.entry(id: entry.id) == nil {
                 self.injectOutboxEntry(entry)
+            }
+            // The queued seating plan's bytes, where `deliver` looks for in-memory attachments.
+            if self.outbox.entry(id: DemoOutbox.queuedAttachmentId) != nil {
+                self.outboxAttachments[DemoOutbox.queuedAttachmentId] = [DemoGateway.seatingPlan]
             }
             return
         }
@@ -150,7 +228,7 @@ extension GatewayStore {
         self.outboxFlushing = true
         defer { self.outboxFlushing = false }
         var checked: Set<String> = []
-        while self.state.isConnected, self.hello != nil, let entry = self.outbox.nextToSend() {
+        while self.state.isConnected, self.hello != nil, let entry = self.outbox.nextToSend(holding: { self.hold(for: $0) != nil }) {
             let chat = self.chat(for: entry.sessionKey)
             // A send that may have landed before (the app quit or the socket dropped mid-send)
             // is checked against the transcript first, past the Gateway's dedupe window too.

@@ -283,6 +283,12 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     /// Where an unsent message is in the outbox; nil for committed items and for sends the
     /// Gateway accepted that the transcript hasn't caught up with yet.
     public var outboxState: OutboxState?
+    /// Why a queued message is held back: a large upload that would go out next in its chat, but
+    /// the Gateway is connected and the network is expensive or constrained. Nil for plain
+    /// queued messages (offline, or behind another unsent message).
+    public var outboxHold: OutboxHold?
+    /// Total attachment bytes of a held message, for its status tooltip; nil when not held.
+    public var outboxUploadBytes: Int?
     /// Model that generated this message, as recorded by the Gateway (assistant messages only).
     public var model: String?
     public var provider: String?

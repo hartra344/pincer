@@ -516,14 +516,22 @@ final class TranscriptLabelButton: TranscriptTapView {
 /// Delete.
 final class TranscriptSendStatusView: TranscriptBaseView {
     private var status: TranscriptPart.SendStatus?
+    private let sendNowButton = TranscriptLabelButton()
     private let retryButton = TranscriptLabelButton()
     private let deleteButton = TranscriptLabelButton()
     private weak var actions: TranscriptRowActions?
+    private var spinner: TranscriptSpinner?
     /// Where the buttons start, after the status text.
     private var textWidth: CGFloat = 0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        self.sendNowButton.set(title: L("Send Now"), symbol: "arrow.up.circle")
+        self.sendNowButton.accessibilityText = L("Send now")
+        self.sendNowButton.onTap = { [weak self] in
+            guard let self, let id = self.status?.id else { return }
+            self.actions?.sendNow(id)
+        }
         self.retryButton.set(title: L("Retry"), symbol: "arrow.clockwise")
         self.retryButton.accessibilityText = L("Retry sending")
         self.retryButton.onTap = { [weak self] in
@@ -537,7 +545,7 @@ final class TranscriptSendStatusView: TranscriptBaseView {
             guard let self, let id = self.status?.id else { return }
             self.actions?.deleteSend(id)
         }
-        for button in [self.retryButton, self.deleteButton] { self.addSubview(button) }
+        for button in [self.sendNowButton, self.retryButton, self.deleteButton] { self.addSubview(button) }
         // VoiceOver hears the status in the message's label (with Retry and Delete as the row's
         // actions); only the buttons here are elements.
         #if os(iOS)
@@ -550,8 +558,10 @@ final class TranscriptSendStatusView: TranscriptBaseView {
         let old = self.status
         self.status = status
         self.actions = actions
+        self.sendNowButton.isHidden = !status.canSendNow
         self.retryButton.isHidden = !status.canRetry
         self.deleteButton.isHidden = !status.canDelete
+        self.updateSpinner(visible: status.kind == .sending)
         if old != status {
             self.redraw()
             self.setNeedsLayoutContent()
@@ -559,6 +569,23 @@ final class TranscriptSendStatusView: TranscriptBaseView {
         #if os(macOS)
         self.toolTip = status.detail
         #endif
+    }
+
+    override func didHide() { self.updateSpinner(visible: false) }
+
+    /// A small native spinner in the icon slot while sending; created on first use.
+    private func updateSpinner(visible: Bool) {
+        if !visible {
+            self.spinner?.setAnimating(false)
+            return
+        }
+        if self.spinner == nil {
+            let view = TranscriptSpinner(size: 12)
+            self.addSubview(view)
+            self.spinner = view
+            self.setNeedsLayoutContent()
+        }
+        self.spinner?.setAnimating(true)
     }
 
     private func setNeedsLayoutContent() {
@@ -569,14 +596,21 @@ final class TranscriptSendStatusView: TranscriptBaseView {
         #endif
     }
 
+    #if os(macOS)
+    private static let heldSymbol = "pause.circle"
+    #else
+    private static let heldSymbol = "wifi.exclamationmark"
+    #endif
+
     private var font: PFont { TranscriptStyle.shared.caption }
     private static let iconWidth: CGFloat = 18
 
     override func layoutContent() {
-        let buttons = [self.retryButton, self.deleteButton].filter { !$0.isHidden }
+        let buttons = [self.sendNowButton, self.retryButton, self.deleteButton].filter { !$0.isHidden }
         let buttonsWidth = buttons.reduce(CGFloat(0)) { $0 + $1.buttonSize.width + 10 }
         let natural = Self.iconWidth + singleLine(self.status?.text ?? "", self.font, TranscriptColors.secondary).lineWidth
         let textWidth = min(natural, max(self.bounds.width - buttonsWidth - 4, 40))
+        self.spinner?.place(center: CGPoint(x: 7, y: self.bounds.height / 2))
         var x = textWidth + 10
         for button in buttons {
             let size = button.buttonSize
@@ -595,8 +629,15 @@ final class TranscriptSendStatusView: TranscriptBaseView {
         let font = self.font
         let color = status.isFailed ? TranscriptColors.red : TranscriptColors.secondary
         let height = self.bounds.height
-        let symbol = status.isFailed ? "exclamationmark.circle.fill" : status.canDelete ? "clock" : "arrow.up.circle"
-        TranscriptSymbols.draw(symbol, in: CGRect(x: 0, y: 0, width: 14, height: height), size: font.pointSize, color: color)
+        let symbol = switch status.kind {
+        case .failed: "exclamationmark.circle.fill"
+        case .held: Self.heldSymbol
+        case .queued: "clock"
+        case .sending: ""
+        }
+        if !symbol.isEmpty {
+            TranscriptSymbols.draw(symbol, in: CGRect(x: 0, y: 0, width: 14, height: height), size: font.pointSize, color: color)
+        }
         singleLine(status.text, font, color)
             .drawLine(at: CGPoint(x: Self.iconWidth, y: (height - TranscriptStyle.lineHeight(font)) / 2),
                       width: max(self.textWidth - Self.iconWidth, 0), font: font)

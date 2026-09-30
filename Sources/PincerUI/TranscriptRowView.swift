@@ -65,7 +65,7 @@ final class TranscriptRowView: TranscriptBaseView {
         self.applySendActions(layout.sendStatus)
     }
 
-    /// Retry and Delete for an unsent message, as accessibility actions on the row.
+    /// Send Now, Retry and Delete for an unsent message, as accessibility actions on the row.
     private func applySendActions(_ status: TranscriptPart.SendStatus?) {
         #if os(macOS)
         let actions = self.sendActions(status).map { action in
@@ -90,6 +90,11 @@ final class TranscriptRowView: TranscriptBaseView {
     func sendActions(_ status: TranscriptPart.SendStatus? = nil) -> [SendAction] {
         guard let status = status ?? self.layout?.sendStatus, let actions else { return [] }
         var result: [SendAction] = []
+        if status.canSendNow {
+            result.append(SendAction(title: L("Send Now"), symbol: "arrow.up.circle", isDestructive: false) { [weak actions] in
+                actions?.sendNow(status.id)
+            })
+        }
         if status.canRetry {
             result.append(SendAction(title: L("Retry"), symbol: "arrow.clockwise", isDestructive: false) { [weak actions] in
                 actions?.retrySend(status.id)

@@ -153,6 +153,8 @@ protocol TranscriptRowActions: AnyObject {
     var liveAvatar: TranscriptLiveAvatar? { get }
     /// Sends an unsent (failed) message again, with its original idempotency key.
     func retrySend(_ id: String)
+    /// Uploads a held large message over the current (expensive or constrained) network.
+    func sendNow(_ id: String)
     /// Deletes a queued or failed message.
     func deleteSend(_ id: String)
 }
@@ -766,6 +768,10 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     func retrySend(_ id: String) {
         self.context.chat?.retry(outboxId: id)
+    }
+
+    func sendNow(_ id: String) {
+        self.context.chat?.sendNow(outboxId: id)
     }
 
     func deleteSend(_ id: String) {

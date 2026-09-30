@@ -417,7 +417,8 @@ struct Composer: View {
 
     private var attachmentIngest: AttachmentIngest {
         AttachmentIngest(
-            limits: UploadLimits(hello: self.gateway.hello),
+            limits: self.gateway.uploadLimits,
+            limitsAreLastKnown: self.gateway.uploadLimitsAreLastKnown,
             add: { self.attachments.append($0) },
             report: { self.attachmentError = $0 })
     }
