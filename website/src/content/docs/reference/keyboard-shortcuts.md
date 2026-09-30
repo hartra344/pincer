@@ -77,7 +77,7 @@ On the message search page, <kbd>Esc</kbd> goes back to the palette only when yo
 | --- | --- |
 | Send | <kbd>Return</kbd> |
 | New line | <kbd>⇧</kbd> <kbd>Return</kbd> or <kbd>⌥</kbd> <kbd>Return</kbd> |
-| Start or Stop Dictation | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>D</kbd> |
+| Dictate Message (Stop Dictation while listening) | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>D</kbd> |
 | Stop the current run | <kbd>⌘</kbd> <kbd>.</kbd> |
 | Reply to Last Message | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>R</kbd> |
 | [Read Last Reply Aloud](../../guides/read-aloud/), or stop | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>L</kbd> |
