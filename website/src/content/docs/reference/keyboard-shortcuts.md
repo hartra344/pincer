@@ -66,13 +66,12 @@ On the message search page, <kbd>Esc</kbd> goes back to the palette only when yo
 
 ## Transcript
 
-**Previous Message** and **Next Message** move to the neighboring message in the focused chat and can be changed in Keyboard Shortcuts settings. The rest work on macOS while the transcript has focus, and it shows a focus ring around the current message. See [Accessibility](../../guides/accessibility/#keyboard).
+**Previous Message** and **Next Message** move to the neighboring message in the focused chat and can be changed in Keyboard Shortcuts settings. On macOS they also move keyboard focus into the transcript, with a focus ring on that message. The rest work there while the transcript has focus. See [Accessibility](../../guides/accessibility/#keyboard).
 
 | Action | Shortcut |
 | --- | --- |
 | Previous or next message | <kbd>↑</kbd> <kbd>↓</kbd> |
-| Open the message's actions | <kbd>Return</kbd> or <kbd>Space</kbd> |
-| Move into or out of the transcript | <kbd>Tab</kbd> or <kbd>⇧</kbd> <kbd>Tab</kbd> |
+| Open the message's actions (first message of a grouped reply) | <kbd>Return</kbd> or <kbd>Space</kbd> |
 | Back to the composer | <kbd>Esc</kbd> |
 
 ## Find in Chat
