@@ -497,8 +497,9 @@ extension TranscriptLayoutBuilder {
             let canCollapse = !finding && output.lineCount > toolOutputPreviewLines
             let showsAll = finding || !canCollapse || self.context.disclosure.isExpanded(outKey, default: false)
             let shown = showsAll ? output.text : Self.firstLines(output.text, toolOutputPreviewLines)
+            // Fully shown output takes its whole height; only the collapsed preview is capped.
             let maxHeight = showsAll && output.lineCount > toolOutputPreviewLines
-                ? TranscriptMetrics.diffMaxHeight : TranscriptMetrics.toolOutputMaxHeight
+                ? CGFloat.greatestFiniteMagnitude : TranscriptMetrics.toolOutputMaxHeight
             let attributed = TranscriptText.plain(shown, font: style.captionMono, color: failed ? TranscriptColors.failure : TranscriptColors.label)
             if isExec {
                 let padX: CGFloat = 10
