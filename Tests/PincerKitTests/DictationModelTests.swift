@@ -13,6 +13,8 @@ private final class FakeEngine: DictationEngine {
     var cancels = 0
     var onPartial: (@MainActor (String, Bool) -> Void)?
     var onError: (@MainActor (DictationIssue) -> Void)?
+    /// Like the real recognizer: after stop() (endAudio) the final transcript arrives a moment later.
+    var finalAfterStop: (text: String, delay: Duration)?
     private var waiting: CheckedContinuation<Void, Never>?
 
     func authorize() async -> DictationIssue? {
@@ -32,7 +34,15 @@ private final class FakeEngine: DictationEngine {
         self.onError = onError
     }
 
-    func stop() { stops += 1 }
+    func stop() {
+        stops += 1
+        guard let (text, delay) = finalAfterStop else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            self?.onPartial?(text, true)
+        }
+    }
+
     func cancel() { cancels += 1 }
 }
 
@@ -363,5 +373,107 @@ struct DictationModelTests {
         controller.start(messageId: "m1", text: "Read this.", gateway: nil)
         #expect(model.phase == .finishing && engine.stops == 1 && draft.text == "A one")
         model.cancel()
+    }
+
+    // MARK: - #464: words spoken just before Send
+
+    // Old flow: Composer called finish() (engine.stop → endAudio), then immediately sent the stale partial and
+    // cleared the draft. The cleared draft reached draftChangedExternally("") → cancel() → engine.cancel(), which
+    // killed the recognition task, so the final "send the report" never landed and the message went out truncated.
+    // finishForSend() must instead wait for the final result before Composer reads the draft.
+    @Test func finishForSendWaitsForTheFinalResult() async {
+        let engine = FakeEngine()
+        engine.finalAfterStop = ("send the report", .milliseconds(50))
+        let model = DictationModel(engine: engine)
+        let draft = Draft("")
+        #expect(await start(model, draft))
+        engine.onPartial?("send the", false)
+        #expect(draft.text == "send the")
+        await model.finishForSend()
+        #expect(draft.text == "send the report")
+        #expect(model.phase == .idle && !model.isActive && model.issue == nil)
+        #expect(engine.stops == 1 && engine.cancels == 0)
+        model.draftChangedExternally("")
+        #expect(engine.cancels == 0, "no-op once idle")
+    }
+
+    @Test func finishForSendTimesOutAndIgnoresALateFinal() async {
+        let engine = FakeEngine()
+        engine.finalAfterStop = ("send the report", .milliseconds(300))
+        let model = DictationModel(engine: engine)
+        let draft = Draft("Note:")
+        #expect(await start(model, draft))
+        engine.onPartial?("send the", false)
+        await model.finishForSend(timeout: .milliseconds(30))
+        #expect(model.phase == .idle && !model.isActive && model.issue == nil)
+        #expect(draft.text == "Note: send the" && engine.cancels == 1)
+        draft.set("")
+        try? await Task.sleep(for: .milliseconds(400))
+        #expect(draft.text == "" && draft.history.last == "", "late final is ignored and doesn't touch the draft")
+    }
+
+    @Test func finishForSendAppliesPartialsThatArriveWhileWaiting() async {
+        let engine = FakeEngine()
+        let model = DictationModel(engine: engine)
+        let draft = Draft("")
+        #expect(await start(model, draft))
+        engine.onPartial?("one", false)
+        let waiter = Task { @MainActor in await model.finishForSend(timeout: .seconds(5)) }
+        try? await Task.sleep(for: .milliseconds(20))
+        #expect(model.phase == .finishing)
+        engine.onPartial?("one two", false)
+        engine.onPartial?("one two three", true)
+        await waiter.value
+        #expect(draft.text == "one two three" && model.phase == .idle)
+    }
+
+    @Test func finishForSendEndsQuietlyOnEngineError() async {
+        let engine = FakeEngine()
+        let model = DictationModel(engine: engine)
+        let draft = Draft("")
+        #expect(await start(model, draft))
+        engine.onPartial?("hello", false)
+        let waiter = Task { @MainActor in await model.finishForSend(timeout: .seconds(5)) }
+        try? await Task.sleep(for: .milliseconds(20))
+        engine.onError?(.failed("no speech detected"))
+        await waiter.value
+        #expect(model.phase == .idle && model.issue == nil && draft.text == "hello")
+    }
+
+    @Test func finishForSendAfterStopWasTappedSharesTheWait() async {
+        let engine = FakeEngine()
+        engine.finalAfterStop = ("hello world", .milliseconds(50))
+        let model = DictationModel(engine: engine, finishGrace: .seconds(5))
+        let draft = Draft("")
+        #expect(await start(model, draft))
+        engine.onPartial?("hello", false)
+        model.finish()
+        #expect(model.phase == .finishing)
+        await model.finishForSend()
+        #expect(draft.text == "hello world" && model.phase == .idle && engine.stops == 1)
+    }
+
+    @Test func finishForSendWhileIdleReturnsImmediately() async {
+        let engine = FakeEngine()
+        let model = DictationModel(engine: engine)
+        let started = ContinuousClock.now
+        await model.finishForSend(timeout: .seconds(5))
+        #expect(ContinuousClock.now - started < .seconds(1))
+        #expect(engine.stops == 0 && engine.cancels == 0 && model.phase == .idle)
+    }
+
+    @Test func finishForSendDuringPermissionPromptCancelsImmediately() async {
+        let engine = FakeEngine()
+        engine.authorizeHold = true
+        let model = DictationModel(engine: engine)
+        model.toggle(draft: "", caret: nil) { _ in }
+        #expect(model.phase == .requestingPermission)
+        let started = ContinuousClock.now
+        await model.finishForSend(timeout: .seconds(5))
+        #expect(ContinuousClock.now - started < .seconds(1))
+        #expect(model.phase == .idle && !model.isActive)
+        engine.releaseAuthorize()
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(engine.starts == 0 && model.phase == .idle, "a late grant doesn't start listening")
     }
 }
