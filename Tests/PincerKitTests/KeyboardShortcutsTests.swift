@@ -103,8 +103,8 @@ struct KeyboardShortcutsTests {
     // MARK: - Message navigation (#195)
 
     @Test func messageNavigationCommandsAreInGoWithOptionCommandArrows() {
-        #expect(ShortcutCommand.previousMessage.group == .go)
-        #expect(ShortcutCommand.nextMessage.group == .go)
+        #expect(ShortcutCommand.previousMessage.category == .go)
+        #expect(ShortcutCommand.nextMessage.category == .go)
         #expect(ShortcutCommand.previousMessage.title == "Previous Message")
         #expect(ShortcutCommand.nextMessage.title == "Next Message")
         #expect(ShortcutCommand.previousMessage.defaultCombo == KeyCombo(KeyCombo.Special.upArrow.rawValue, [.option, .command]))
