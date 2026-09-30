@@ -22,6 +22,7 @@ const SECTIONS = [
   'exec-approvals-variants',
   'usage',
   'tts',
+  'tts-setup',
   'channel-pairing',
   'health',
   'setup',

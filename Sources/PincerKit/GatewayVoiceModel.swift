@@ -2,8 +2,9 @@ import Foundation
 import Observation
 
 /// Gateway text-to-speech for one Gateway: `tts.status/providers/personas` for the Voice settings
-/// page, and `tts.speak` for Read Aloud. Pincer never calls `tts.convert` (it returns a path on the
-/// Gateway host, which a remote client can't read).
+/// page, and `tts.speak` for Read Aloud. Pincer never plays `tts.convert` output (it returns a path on
+/// the Gateway host, which a remote client can't read); it only uses it to explain a fallback.
+/// Setup (key, model, voice) lives in `GatewayVoiceModel+Setup.swift`.
 @MainActor @Observable
 public final class GatewayVoiceModel {
     public typealias Request = @MainActor (_ method: String, _ params: JSONValue) async throws -> JSONValue
@@ -27,14 +28,37 @@ public final class GatewayVoiceModel {
     /// Methods the Gateway answered with unknown-method.
     public private(set) var rejectedMethods: Set<String> = []
 
-    @ObservationIgnored private let request: Request
-    @ObservationIgnored private let methods: @MainActor () -> Set<String>?
-    @ObservationIgnored private let scopes: @MainActor () -> [String]
-    @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
+    /// Per-provider setup read from `config.get` (key source, model, voice, voice settings).
+    public internal(set) var setups: [String: TTSProviderSetup] = [:]
+    /// `tts.provider` from config (nil when unset); differs from `status.provider` when prefs or a persona override it.
+    public internal(set) var configuredProvider: String?
+    /// Names in the Gateway secrets store (admin only).
+    /// Whether `tts.setProvider` succeeded this session (the provider then comes from local prefs).
+    public internal(set) var providerSetThisSession = false
+    public internal(set) var secretNames: Set<String> = []
+    /// The last Test voice failure or fallback per provider id, for the provider badge.
+    public internal(set) var lastTestError: [String: String] = [:]
+    /// ElevenLabs voices from the last successful listing (names for the Test summary).
+    public internal(set) var voices: [ElevenLabsVoice] = []
+    /// Demo/test hook: replaces the ElevenLabs voices request. Receives the session key (nil when none was pasted).
+    @ObservationIgnored public var voiceLister: (@MainActor (_ apiKey: String?) async throws -> [ElevenLabsVoice])?
+
+    @ObservationIgnored let request: Request
+    @ObservationIgnored let methods: @MainActor () -> Set<String>?
+    @ObservationIgnored let scopes: @MainActor () -> [String]
+    @ObservationIgnored let allowsWritesWithoutAdmin: Bool
+    @ObservationIgnored let gatewayName: @MainActor () -> String
+    /// API keys pasted this session; memory only, never persisted or logged.
+    @ObservationIgnored var sessionKeys: [String: String] = [:]
+    /// Providers whose key this session saved, so the secret's name is known even though config.get redacts it.
+    public internal(set) var wroteKey: Set<String> = []
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var statusAttempted = false
 
-    init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool) {
+    init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool,
+         gatewayName: @escaping @MainActor () -> String = { "" })
+    {
+        self.gatewayName = gatewayName
         self.request = { method, params in try await connection.request(method, params, timeout: 30) }
         self.methods = { hello()?.methods }
         self.scopes = { hello()?.scopes ?? [] }
@@ -45,8 +69,10 @@ public final class GatewayVoiceModel {
     public init(methods: @escaping @MainActor () -> Set<String>? = { nil },
                 scopes: @escaping @MainActor () -> [String] = { [GatewayConnection.adminScope] },
                 allowsWritesWithoutAdmin: Bool = false,
+                gatewayName: @escaping @MainActor () -> String = { "" },
                 request: @escaping Request)
     {
+        self.gatewayName = gatewayName
         self.request = request
         self.methods = methods
         self.scopes = scopes
@@ -125,6 +151,8 @@ public final class GatewayVoiceModel {
             } catch { firstError = firstError ?? Self.message(error) }
         }
         guard generation == self.generation else { return }
+        await self.loadSetups()
+        guard generation == self.generation else { return }
         self.loadError = firstError
     }
 
@@ -146,6 +174,7 @@ public final class GatewayVoiceModel {
         }
         let result = try await self.call(Self.setProviderMethod, ["provider": .string(id)])
         let provider = result["provider"]?.text ?? id
+        self.providerSetThisSession = true
         if var status = self.status {
             status.provider = provider
             self.status = status
@@ -182,9 +211,14 @@ public final class GatewayVoiceModel {
         self.loadError = nil
         self.isLoading = false
         self.rejectedMethods = []
+        self.setups = [:]
+        self.configuredProvider = nil
+        self.secretNames = []
+        self.providerSetThisSession = false
+        self.lastTestError = [:]
     }
 
-    private func call(_ method: String, _ params: JSONValue = [:]) async throws -> JSONValue {
+    func call(_ method: String, _ params: JSONValue = [:]) async throws -> JSONValue {
         do {
             return try await self.request(method, params)
         } catch {
