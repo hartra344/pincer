@@ -151,12 +151,31 @@ struct ToolWebSearchTests {
         #expect((kept["content"]?.string?.count ?? 0) <= 4001)
     }
 
-    @Test func errorKindIsNotListable() throws {
+    @Test func errorKindShowsItsMessageAndDocs() throws {
         let payload: JSONValue = .object(["kind": "error", "provider": "brave", "error": "provider_error",
-                                          "message": .string(Self.envelope("Rate limited")), "docs": "https://x.example.com"])
+                                          "message": .string(Self.envelope("Rate limited")), "docs": "https://docs.example.com/limits"])
         let web = try #require(WebSearch.parse(payload))
-        #expect(web.kind == .error && !web.isListable && web.searchTexts.isEmpty && web.copyText.isEmpty)
-        #expect(ToolActivity.fileEditDetails(payload)?["kind"] == nil, "errors fall back to the normal error output")
+        #expect(web.kind == .error && web.isListable && web.results.isEmpty)
+        #expect(web.message == "Rate limited" && web.docs?.absoluteString == "https://docs.example.com/limits")
+        #expect(web.searchTexts == ["Rate limited", "https://docs.example.com/limits"])
+        #expect(web.copyText == "Rate limited\nhttps://docs.example.com/limits")
+        let kept = try #require(WebSearch.parse(ToolActivity.fileEditDetails(payload)), "trimmed details keep the error")
+        #expect(kept.kind == .error && kept.message == "Rate limited" && kept.docs == web.docs)
+    }
+
+    @Test func errorWithoutMessageOrWithBadDocsDegrades() throws {
+        let bare = try #require(WebSearch.parse(.object(["kind": "error", "provider": "brave"])))
+        #expect(!bare.isListable && bare.searchTexts.isEmpty)
+        let bad = try #require(WebSearch.parse(.object(["kind": "error", "provider": "brave", "message": "x", "docs": "javascript:alert(1)"])))
+        #expect(bad.docs == nil && bad.searchTexts == ["x"])
+    }
+
+    @Test func spokenDurationsOverAMinute() {
+        #expect(ToolDuration.format(125_000).spoken == "Took 2 minutes 5 seconds")
+        #expect(ToolDuration.format(60_000).spoken == "Took 1 minute")
+        #expect(ToolDuration.format(61_000).spoken == "Took 1 minute 1 second")
+        #expect(ToolDuration.format(120_000).spoken == "Took 2 minutes")
+        #expect(ToolDuration.format(181_000).spoken == "Took 3 minutes 1 second")
     }
 
     @Test func rawKindAndUnknownShapesFallBack() {
