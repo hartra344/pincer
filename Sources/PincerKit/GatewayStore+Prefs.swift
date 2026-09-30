@@ -284,29 +284,88 @@ extension GatewayStore {
         }
     }
 
+    /// Every session key on the Gateway, archived included, read page by page; nil unless the whole
+    /// list arrived (a failed request, a page cap or a Gateway that can't say whether more follow),
+    /// so nothing is ever forgotten from a partial list.
+    func completeSessionKeys() async -> Set<String>? {
+        let connection = self.connection
+        return await Self.completeSessionKeys(maxPages: Self.maxListPages) { params in
+            guard self.state.isConnected else { throw CancellationError() }
+            return try await connection.request("sessions.list", params, timeout: 30)
+        }
+    }
+
+    /// The paging itself: `request` runs `sessions.list` with the given params.
+    static func completeSessionKeys(maxPages: Int, limit: Int = 300,
+                                    request: (JSONValue) async throws -> JSONValue) async -> Set<String>? {
+        var keys = Set<String>()
+        var offset = 0
+        for _ in 0..<maxPages {
+            var params: [String: JSONValue] = ["limit": JSONValue(limit), "archived": "all"]
+            if offset > 0 { params["offset"] = JSONValue(offset) }
+            guard let list = try? await request(.object(params)), let rows = list["sessions"]?.array else { return nil }
+            keys.formUnion(rows.compactMap(SessionRow.init).map(\.key))
+            if let hasMore = list["hasMore"]?.bool {
+                guard hasMore else { return keys }
+                let next = list["nextOffset"]?.int ?? offset + rows.count
+                guard next > offset else { return nil }
+                offset = next
+            } else {
+                return rows.count < limit ? keys : nil
+            }
+        }
+        return nil
+    }
+
+    static let maxListPages = 40
+
     /// Chats that dropped out of `sessions.list` (deleted while we were away, or just archived, or past
-    /// the list limit). Only those the Gateway confirms gone are forgotten: an unfiltered list that
-    /// wasn't cut at its limit no longer has them. A chat with sends still in the outbox is kept: it may
-    /// not exist on the Gateway yet, and forgetting it would drop what the user queued.
+    /// the list limit). Only those the Gateway confirms gone are forgotten: a complete list no longer
+    /// has them. A chat with sends still in the outbox is kept: it may not exist on the Gateway yet,
+    /// and forgetting it would drop what the user queued.
     func forgetVanishedSessions(_ keys: Set<String>) async {
-        guard !keys.isEmpty, self.state.isConnected else { return }
-        let params: [String: JSONValue] = ["limit": 300, "archived": "all"]
-        guard let list = try? await self.connection.request("sessions.list", .object(params), timeout: 30),
-              let rows = list["sessions"]?.array,
-              rows.count < 300
-        else { return }
-        let listed = Set(rows.compactMap(SessionRow.init).map(\.key))
-        for key in keys.subtracting(listed) where self.sessions[key] == nil && self.outbox.entries(for: key).isEmpty {
+        guard !keys.isEmpty, self.state.isConnected, let listed = await self.completeSessionKeys() else { return }
+        for key in keys.subtracting(listed) where self.isForgettable(key) {
             await self.transcriptChanged(key: key, change: .deleted)
         }
     }
 
+    private func isForgettable(_ key: String) -> Bool {
+        self.sessions[key] == nil && self.chats[key] == nil && self.outbox.entries(for: key).isEmpty
+    }
+
+    /// Once per connect: drops cached transcripts (and their search rows) of sessions deleted while the
+    /// app wasn't running. The cache holds no session keys, only their digests, so a transcript is
+    /// orphaned when its digest matches no session on a COMPLETE list, none in memory and none in the
+    /// outbox; the search index, which does store keys, names the ones to forget in full.
+    func reconcileOrphanedTranscripts(epoch: Int) async {
+        guard let root = self.cacheRoot, let listed = await self.completeSessionKeys(), self.isCurrent(epoch) else { return }
+        func isLive(_ key: String) -> Bool {
+            listed.contains(key) || !self.isForgettable(key)
+        }
+        if MessageIndex.status(gatewayId: self.id, root: root) != .unavailable {
+            for key in await self.messageIndex.indexedSessionKeys() where !isLive(key) {
+                guard self.isCurrent(epoch) else { return }
+                await self.forgetTranscript(key)
+            }
+        }
+        let listedDigests = Set(listed.map(TranscriptCache.digest(of:)))
+        for digest in TranscriptCache.cachedDigests(gatewayId: self.id, root: root) where !listedDigests.contains(digest) {
+            guard self.isCurrent(epoch) else { return }
+            // A chat created, or sends queued, since the list was read may own this file.
+            let inUse = Set(self.sessions.keys).union(self.chats.keys).union(self.outbox.sessionKeys)
+            if inUse.contains(where: { TranscriptCache.digest(of: $0) == digest }) { continue }
+            await TranscriptCache.remove(gatewayId: self.id, digest: digest, root: root)
+        }
+    }
+
     /// Drops a chat's cached transcript and its messages from search; a refetch re-adds both.
-    private func forgetTranscript(_ key: String) async {
+    func forgetTranscript(_ key: String) async {
         await TranscriptCache.remove(gatewayId: self.id, sessionKey: key, root: self.cacheRoot)
         if MessageIndex.status(gatewayId: self.id, root: self.cacheRoot) != .unavailable {
             await self.messageIndex.remove(sessionKey: key)
         }
+        await self.forgetSpotlight(sessionKey: key)
     }
 
     /// The Skills page: `skills.status` is advertised.

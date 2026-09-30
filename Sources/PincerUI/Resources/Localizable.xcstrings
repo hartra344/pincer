@@ -13383,6 +13383,56 @@
         }
       }
     },
+    "Yesterday": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yesterday"
+          }
+        }
+      }
+    },
+    "Yesterday %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yesterday %@"
+          }
+        }
+      }
+    },
+    "Show Chats in Spotlight": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Chats in Spotlight"
+          }
+        }
+      }
+    },
+    "Include Message Text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include Message Text"
+          }
+        }
+      }
+    },
+    "Chat titles appear in Spotlight. Message text comes from the last few cached messages and never leaves this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat titles appear in Spotlight. Message text comes from the last few cached messages and never leaves this device."
+          }
+        }
+      }
+    },
     "Show Pincer in the menu bar": {
       "localizations": {
         "en": {

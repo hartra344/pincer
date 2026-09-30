@@ -313,6 +313,7 @@ public final class AppModel {
     public func remove(_ id: UUID) {
         guard let index = self.gateways.firstIndex(where: { $0.id == id }) else { return }
         let store = self.gateways.remove(at: index)
+        SpotlightCenter.shared.forgetGateway(id)
         let push = self.push
         Task {
             await push.forget(store)
@@ -342,6 +343,7 @@ public final class AppModel {
     public func clearTranscriptCache() async {
         await Task.detached(priority: .userInitiated) { TranscriptCache.removeEverything() }.value
         for gateway in self.gateways { await gateway.cacheCleared() }
+        await self.spotlightCacheCleared()
     }
 
     /// Unsent messages (queued or failed) across every Gateway.

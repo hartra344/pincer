@@ -94,6 +94,7 @@ enum Suites {
             Section("Command palette") { runCommandPaletteChecks() },
             Section("Composer drafts") { await checkDrafts() },
             Section("Message search") { checkMessageSearchLogic() },
+            Section("Palette search ordering") { checkPaletteSearchOrdering() },
             Section("Message index") {
                 await checkMessageIndex()
                 await checkTranscriptCacheVersioning()
@@ -129,6 +130,7 @@ enum Suites {
         Section("Built-in demo") { await runDemo() },
         Section("Demo message search with the cache off") { await checkDemoSearchWithoutCache() },
         Section("Shortcuts on the demo") { await runDemoIntents() },
+        Section("Search track (demo)") { await runDemoSearchTrackChecks() },
         Section("Chat navigation") { await runNavigation() },
         Section("Quick Capture (demo)") { await runQuickCaptureDemo() },
         Section("Replies & reactions (demo)") { await runDemoReactionsReply() },

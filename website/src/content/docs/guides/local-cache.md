@@ -82,6 +82,10 @@ To free the space or start fresh, open **Settings** (**General** tab on macOS) a
 
 Nothing on your gateways is deleted. Chats you have open stay on screen and are saved again right away, and you can search them again as soon as Clear Cache finishes. While you're connected, Pincer downloads the other chats again in the background, and message search fills back in as they're cached, without a relaunch.
 
+## Deleted chats
+
+If a chat is deleted on the gateway while Pincer isn't running, its cache is cleaned up after the next connect. Pincer does this only when the gateway returns its complete chat list, so a partial or failed list never deletes anything. A chat with queued sends in the outbox keeps its cache.
+
 ## Search index
 
 The search index is derived from the cache, so you never need to manage it yourself:

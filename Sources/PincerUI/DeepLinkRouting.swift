@@ -1,4 +1,7 @@
 import PincerKit
+#if canImport(CoreSpotlight)
+import CoreSpotlight
+#endif
 import SwiftUI
 
 // MARK: Entry points
@@ -18,6 +21,16 @@ struct DeepLinkRouting: ViewModifier {
                 }
                 self.app.open(route)
             }
+            #if canImport(CoreSpotlight)
+            .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                guard let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+                      let url = URL(string: id), self.app.open(url: url) != nil
+                else {
+                    self.app.routeNotice = RouteNotice(PincerRoute.Notice.invalidLink)
+                    return
+                }
+            }
+            #endif
             #if os(macOS)
             // Links and Handoff land in the open main window rather than a new one.
             .handlesExternalEvents(preferring: ["*"], allowing: ["*"])

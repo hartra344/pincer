@@ -593,6 +593,7 @@ public final class GatewayStore: Identifiable {
             guard self.isCurrent(epoch) else { return }
         }
         self.startPrefetch()
+        Task { await self.reconcileOrphanedTranscripts(epoch: epoch) }
         self.reconcileMessageIndex()
         self.enforceChatBudget()
         await self.flushOutbox()
@@ -807,6 +808,7 @@ public final class GatewayStore: Identifiable {
         }
         self.addAgentHomes(to: &next)
         self.sessions = next
+        self.scheduleSpotlightReindex()
         if let defaults = list["defaults"], let model = defaults["model"]?.text {
             self.defaultModelRef = ModelRef.qualified(model, provider: defaults["modelProvider"]?.text)
         }
