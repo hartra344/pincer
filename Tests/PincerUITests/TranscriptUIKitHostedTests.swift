@@ -77,18 +77,28 @@ struct TranscriptUIKitHostedTests {
         }
     }
 
-    /// Yields to the main queue in 100 ms slices until four in a row use under 1 ms of main-thread CPU (the prefetch
-    /// is idle) or `cap` seconds pass, then waits for the worker to drain.
-    static func idle(_ host: Host, cap: Double = 30) async {
+    /// Waits on state rather than time, so a slow runner only makes it longer: the worker has nothing in flight and the
+    /// number of measured rows has held still for five 100 ms slices that used under 1 ms of main-thread CPU each
+    /// (the prefetch is idle), or `cap` seconds pass.
+    static func idle(_ host: Host, cap: Double = 90) async {
         let start = ProbeMeter.wall()
         var quiet = 0
+        var measured = -1
         while ProbeMeter.wall() - start < cap {
             let slice = ProbeMeter.threadCPU()
             try? await Task.sleep(for: .milliseconds(100))
-            quiet = ProbeMeter.threadCPU() - slice < 0.001 ? quiet + 1 : 0
-            if quiet >= 4 { break }
+            let now = host.coordinator.controller.heights.values.filter(\.measured).count
+            let still = now == measured && Self.driver(host.coordinator).inFlightCount == 0
+            measured = now
+            quiet = still && ProbeMeter.threadCPU() - slice < 0.001 ? quiet + 1 : 0
+            if quiet >= 5 { break }
         }
-        _ = await eventually(timeout: .seconds(5)) { Self.driver(host.coordinator).inFlightCount == 0 }
+        await Self.drained(host)
+    }
+
+    /// Waits for the worker to have nothing in flight.
+    static func drained(_ host: Host) async {
+        _ = await eventually(timeout: .seconds(30)) { Self.driver(host.coordinator).inFlightCount == 0 }
     }
 
     static func scrollSteps(_ host: Host, _ steps: Int) -> (mainLayouts: Int, memoHits: Int) {
@@ -107,6 +117,7 @@ struct TranscriptUIKitHostedTests {
         TranscriptText.resetMeasureStats()
         host.coordinator.update(rows: Self.rows(count: 3000, salt: "k1"), context: host.context, insets: (0, 0))
         await Self.idle(host)
+        _ = await eventually(timeout: .seconds(30)) { host.coordinator.premeasureStats.adopted > 0 }
         let open = TranscriptText.measureStats
         #expect(TranscriptPremeasurer.offMainLayouts.withLock { $0 } > offBefore, "open: the worker measured rows")
         #expect(host.coordinator.premeasureStats.adopted > 0)
@@ -121,6 +132,7 @@ struct TranscriptUIKitHostedTests {
         let target = host.coordinator.rowTop(1500) ?? 0
         host.view.contentOffset.y = target
         host.coordinator.scrollViewDidEndDecelerating(host.view)
+        _ = await eventually(timeout: .seconds(30)) { host.coordinator.premeasureStats.offloaded > offloadedBeforeJump }
         await Self.idle(host)
         let jumped = host.coordinator.premeasureStats
         let far = Self.scrollSteps(host, 40)
@@ -177,6 +189,8 @@ struct TranscriptUIKitHostedTests {
             try? await Task.sleep(for: .milliseconds(10))
         }
         await Self.idle(host)
+        _ = await eventually(timeout: .seconds(30)) { host.coordinator.premeasureStats.adopted > 0 }
+        await Self.drained(host)
         let stats = host.coordinator.premeasureStats
         print("\nTranscriptPremeasure UIKit streaming: premeasureStats \(stats)")
         #expect(stats.adopted > 0, "results were adopted while the last row streamed")
@@ -191,7 +205,7 @@ struct TranscriptUIKitHostedTests {
         let rows = Self.rows(count: 3000, salt: "k3")
         host.coordinator.update(rows: rows, context: host.context, insets: (0, 0))
         // Catch jobs on the worker, then reshape the list under them.
-        _ = await eventually(timeout: .seconds(2)) { Self.driver(host.coordinator).inFlightCount > 0 }
+        _ = await eventually(timeout: .seconds(10)) { Self.driver(host.coordinator).inFlightCount > 0 }
         let sawInFlight = Self.driver(host.coordinator).inFlightCount > 0
         let older = Self.rows(count: 100, salt: "k3old")
         host.coordinator.update(rows: older + rows, context: host.context, insets: (0, 0))
