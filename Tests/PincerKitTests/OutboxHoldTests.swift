@@ -91,74 +91,31 @@ struct OutboxHoldTests {
 
     // MARK: Store
 
-    @Test func holdFollowsSizeNetworkAndOverride() {
+    /// Holds need a connected Gateway (only the flush holds; offline entries are just queued), so
+    /// the connected cases live in the live checks.
+    @Test func offlineEntriesAreNeverHeld() {
         let network = NetworkConditions()
         let store = self.store(network)
         defer { self.finish(store) }
         let big = self.entry("big", bytes: self.large)
-        let small = self.entry("small", bytes: 1024)
         store.injectOutboxEntry(big)
-        store.injectOutboxEntry(small)
-        #expect(store.hold(for: big) == nil, "unmetered network: nothing held")
-
-        network.override(expensive: true, constrained: false)
-        #expect(store.hold(for: big) == .expensive)
-        #expect(store.hold(for: small) == nil, "small uploads never wait")
-        #expect(store.hold(for: self.entry("text")) == nil)
-
-        network.override(expensive: true, constrained: true)
-        #expect(store.hold(for: big) == .constrained, "constrained wins when both")
-
-        network.override(expensive: false, constrained: true)
-        #expect(store.hold(for: big) == .constrained)
-
-        store.outbox.allowAnyNetwork(id: "big")
-        let overridden = store.outbox.entry(id: "big")!
-        #expect(store.hold(for: overridden) == nil, "Send Now lifts the hold")
-        network.override(expensive: false, constrained: false)
-    }
-
-    @Test func onlyQueuedEntriesAreHeld() {
-        let network = NetworkConditions()
-        let store = self.store(network)
-        defer { self.finish(store) }
-        network.override(expensive: true, constrained: false)
-        var failed = self.entry("f", bytes: self.large)
-        failed.state = .failed(OutboxFailure(message: "no", retryable: true))
-        #expect(store.hold(for: failed) == nil)
-        network.override(expensive: false, constrained: false)
-    }
-
-    @Test func sendNowMarksTheEntryAndSyncsTheRow() {
-        let network = NetworkConditions()
-        let store = self.store(network)
-        defer { self.finish(store) }
-        network.override(expensive: true, constrained: false)
-        store.injectOutboxEntry(self.entry("big", bytes: self.large))
+        for (expensive, constrained) in [(false, false), (true, false), (true, true), (false, true)] {
+            network.override(expensive: expensive, constrained: constrained)
+            #expect(store.hold(for: big) == nil)
+        }
         store.resyncOutboxHolds()
-        let chat = store.chat(for: self.key)
-        #expect(chat.items.first { $0.idempotencyKey == "big" }?.outboxHold == .expensive)
+        #expect(store.chat(for: self.key).items.first { $0.idempotencyKey == "big" }?.outboxHold == nil)
+    }
 
-        chat.sendNow(outboxId: "big")
+    @Test func sendNowMarksTheEntry() {
+        let store = self.store(NetworkConditions())
+        defer { self.finish(store) }
+        store.injectOutboxEntry(self.entry("big", bytes: self.large))
+        store.chat(for: self.key).sendNow(outboxId: "big")
         #expect(store.outbox.entry(id: "big")?.sendOnAnyNetwork == true)
-        store.resyncOutboxHolds()
-        #expect(chat.items.first { $0.idempotencyKey == "big" }?.outboxHold == nil)
-        network.override(expensive: false, constrained: false)
     }
 
-    @Test func rowsResyncWhenTheNetworkChanges() {
-        let network = NetworkConditions()
-        let store = self.store(network)
-        defer { self.finish(store) }
-        store.injectOutboxEntry(self.entry("big", bytes: self.large))
-        let chat = store.chat(for: self.key)
-        store.resyncOutboxHolds()
-        #expect(chat.items.first { $0.idempotencyKey == "big" }?.outboxHold == nil)
-        network.override(expensive: false, constrained: true)
-        store.resyncOutboxHolds()
-        #expect(chat.items.first { $0.idempotencyKey == "big" }?.outboxHold == .constrained)
-        network.override(expensive: false, constrained: false)
-        store.resyncOutboxHolds()
-        #expect(chat.items.first { $0.idempotencyKey == "big" }?.outboxHold == nil)
+    @Test func thresholdIsTwoMebibytes() {
+        #expect(OutboxEntry.largeUploadBytes == 2 * 1024 * 1024)
     }
 }

@@ -345,24 +345,49 @@ private func runLiveOutboxUploadRules(url: String, token: String, key: String) a
     check(sentCopies == [0], "the Gateway never received it (\(sentCopies ?? []))")
     if let id = failed?.id { chat.deleteQueued(outboxId: id) }
 
-    // Held: large upload on an expensive network waits; Send Now sends it anyway.
+    // Held: only automatic sends wait. A deliberate send while connected goes out now, even large on
+    // an expensive network; one the flush sends later (after the message ahead of it is gone) is held.
     network.override(expensive: true, constrained: false)
-    let heldText = "outbox held \(nonce)"
-    let afterText = "outbox after held \(nonce)"
     let heavy = OutgoingAttachment(fileName: "clip.bin", mimeType: "application/octet-stream",
                                    data: Data(count: OutboxEntry.largeUploadBytes + 1))
-    let heldOutcome = await chat.sendMessage(heldText, attachments: [heavy])
-    check(heldOutcome == .queued, "a large upload on an expensive network queues (\(heldOutcome))")
-    _ = await chat.sendMessage(afterText)
-    let heldEntry = gateway.outbox.entries.first { $0.text == heldText }
+    let nowText = "outbox large now \(nonce)"
+    let nowOutcome = await chat.sendMessage(nowText, attachments: [heavy])
+    if case .sent = nowOutcome {} else { check(false, "a deliberate large send while connected goes now (\(nowOutcome))") }
+    _ = await waitFor("deliberate upload settles", timeout: 30) { !chat.isRunning }
+
+    /// Queues `heldText` and `afterText` behind a rejected head, then drops the head so the flush reaches them.
+    func queueBehindBlocker(_ heldText: String, _ afterText: String?) async -> OutboxEntry? {
+        _ = await chat.sendMessage("outbox blocker \(UUID().uuidString.prefix(6)) [mock:reject-send]")
+        let blocker = gateway.outbox.entries.last
+        let outcome = await chat.sendMessage(heldText, attachments: [heavy])
+        check(outcome == .queued, "a large upload behind a failed message queues (\(outcome))")
+        if let afterText { _ = await chat.sendMessage(afterText) }
+        let beforeHold: OutboxHold? = gateway.outbox.entries.first { $0.text == heldText }.flatMap { gateway.hold(for: $0) }
+        check(beforeHold == nil, "behind a failed message it's just queued, not held")
+        if let blocker { chat.deleteQueued(outboxId: blocker.id) }
+        await gateway.flushOutbox()
+        gateway.resyncOutboxHolds()
+        return gateway.outbox.entries.first { $0.text == heldText }
+    }
+
+    let heldText = "outbox held \(nonce)"
+    let afterText = "outbox after held \(nonce)"
+    let heldEntry = await queueBehindBlocker(heldText, afterText)
     let hold: OutboxHold? = heldEntry.flatMap { gateway.hold(for: $0) }
-    check(hold == OutboxHold.expensive, "it reads as held for Wi‑Fi")
+    check(hold == OutboxHold.expensive, "the flush holds it for Wi‑Fi / Personal Hotspot (\(String(describing: hold)))")
     let rowHold: OutboxHold? = heldEntry.flatMap { outboxItem(chat, $0.id) }?.outboxHold
     check(rowHold == OutboxHold.expensive, "the row carries the hold")
+    let rowBytes = heldEntry.flatMap { outboxItem(chat, $0.id) }?.outboxUploadBytes
+    check(rowBytes == OutboxEntry.largeUploadBytes + 1, "…and the upload size (\(rowBytes ?? -1))")
     let afterState: OutboxState? = gateway.outbox.entries.first { $0.text == afterText }?.state
     check(afterState == OutboxState.queued, "the message behind it waits (order kept)")
     try? await Task.sleep(for: .milliseconds(800))
-    check(gateway.outbox.entry(id: heldEntry?.id ?? "") != nil && gateway.unsentCount == 2, "nothing went out while held (\(gateway.unsentCount) unsent)")
+    check(gateway.unsentCount == 2, "nothing went out while held (\(gateway.unsentCount) unsent)")
+    network.override(expensive: true, constrained: true)
+    gateway.resyncOutboxHolds()
+    let constrainedHold: OutboxHold? = heldEntry.flatMap { outboxItem(chat, $0.id) }?.outboxHold
+    check(constrainedHold == OutboxHold.constrained, "Low Data Mode wins over expensive on the row")
+    network.override(expensive: true, constrained: false)
     guard let heldId = heldEntry?.id else { return }
     chat.sendNow(outboxId: heldId)
     let flushed = await waitFor("send now flushed", timeout: 30) { gateway.unsentCount == 0 }
@@ -375,8 +400,8 @@ private func runLiveOutboxUploadRules(url: String, token: String, key: String) a
 
     // A network that turns cheap releases a held upload by itself.
     let waitText = "outbox wifi \(nonce)"
-    _ = await chat.sendMessage(waitText, attachments: [heavy])
-    check(gateway.unsentCount == 1, "held again on the expensive network")
+    _ = await queueBehindBlocker(waitText, nil)
+    check(gateway.unsentCount == 1, "held again on the expensive network (\(gateway.unsentCount))")
     network.override(expensive: false, constrained: false)
     let released = await waitFor("wifi releases hold", timeout: 30) { gateway.unsentCount == 0 }
     check(released, "joining Wi‑Fi sends it without a tap (\(gateway.unsentCount) left)")
