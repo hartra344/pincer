@@ -31,6 +31,9 @@ public struct PincerScene: Scene {
         }
         #if os(macOS)
         .defaultSize(width: 1180, height: 780)
+        // Only this scene claims links, Handoff and Spotlight results; otherwise SwiftUI may pick a
+        // Chat or settings scene (all default to allowing everything) and open a second window.
+        .handlesExternalEvents(matching: ["*"])
         .commands {
             TranscriptFindCommands()
             ChatWindowCommands(app: self.app)
@@ -62,6 +65,7 @@ public struct PincerScene: Scene {
                 .themed()
         }
         .defaultSize(width: 720, height: 780)
+        .handlesExternalEvents(matching: [])
 
         WindowGroup(L("Gateway Settings"), id: "gateway-settings", for: UUID.self) { $gatewayId in
             GatewaySettingsWindow(gatewayId: gatewayId)
@@ -70,6 +74,7 @@ public struct PincerScene: Scene {
         }
         .defaultSize(width: 860, height: 640)
         .restorationBehavior(.disabled)
+        .handlesExternalEvents(matching: [])
 
         WindowGroup(L("Automations"), id: "automations", for: UUID.self) { $gatewayId in
             AutomationsWindow(gatewayId: gatewayId)
@@ -78,6 +83,7 @@ public struct PincerScene: Scene {
         }
         .defaultSize(width: 900, height: 640)
         .restorationBehavior(.disabled)
+        .handlesExternalEvents(matching: [])
 
         Settings {
             SettingsView()
