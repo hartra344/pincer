@@ -56,4 +56,40 @@ struct OrphanCacheReconcileTests {
         self.temp.remove()
         self.scratch.remove()
     }
+
+    @Test func digestOnlyOrphanIsRemovedToo() async {
+        let gateway = self.demoGateway()
+        let orphan = "agent:main:dashboard:no-index-rows"
+        await self.cache(gateway, orphan, "snorvel crumpet")
+        await self.settle { await self.found(gateway, "snorvel") }
+        await gateway.messageIndex.remove(sessionKey: orphan)
+        #expect(await !self.found(gateway, "snorvel"))
+        #expect(self.cached(gateway, orphan), "only the cache file is left")
+        gateway.start()
+        await self.settle { gateway.state.isConnected && !gateway.sessions.isEmpty }
+        await self.settle { !self.cached(gateway, orphan) }
+        #expect(!self.cached(gateway, orphan))
+        gateway.stop()
+        await TranscriptCache.shutdown(root: self.temp.url)
+        self.temp.remove()
+        self.scratch.remove()
+    }
+
+    @Test func digestOnlyFileOfAnOutboxChatIsKept() async {
+        let gateway = self.demoGateway()
+        let unsent = "agent:main:dashboard:queued-digest-only"
+        await self.cache(gateway, unsent, "wimble scone")
+        await self.settle { await self.found(gateway, "wimble") }
+        await gateway.messageIndex.remove(sessionKey: unsent)
+        gateway.outbox.enqueue(OutboxEntry(sessionKey: unsent, text: "x", createdAt: Date(),
+                                           state: .failed(OutboxFailure(message: "held", retryable: false))))
+        gateway.start()
+        await self.settle { gateway.state.isConnected && !gateway.sessions.isEmpty }
+        try? await Task.sleep(for: .seconds(1))
+        #expect(self.cached(gateway, unsent))
+        gateway.stop()
+        await TranscriptCache.shutdown(root: self.temp.url)
+        self.temp.remove()
+        self.scratch.remove()
+    }
 }
