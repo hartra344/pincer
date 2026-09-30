@@ -943,12 +943,42 @@
         }
       }
     },
+    "API Key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API Key"
+          }
+        }
+      }
+    },
     "API Key (%@)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "API Key (%@)"
+          }
+        }
+      }
+    },
+    "API key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API key"
+          }
+        }
+      }
+    },
+    "API key (only used to list voices)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API key (only used to list voices)"
           }
         }
       }
@@ -1873,6 +1903,16 @@
         }
       }
     },
+    "Automatic: %@ via %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatic: %1$@ via %2$@"
+          }
+        }
+      }
+    },
     "Automation": {
       "localizations": {
         "en": {
@@ -2519,6 +2559,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose a model…"
+          }
+        }
+      }
+    },
+    "Choose a provider to set it up below. A provider needs an API key before it can be used.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a provider to set it up below. A provider needs an API key before it can be used."
           }
         }
       }
@@ -3903,6 +3953,16 @@
         }
       }
     },
+    "Current key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current key"
+          }
+        }
+      }
+    },
     "Custom": {
       "localizations": {
         "en": {
@@ -4743,6 +4803,16 @@
         }
       }
     },
+    "Effective Configuration": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Effective Configuration"
+          }
+        }
+      }
+    },
     "Elevated": {
       "localizations": {
         "en": {
@@ -5173,12 +5243,32 @@
         }
       }
     },
+    "Failed: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed: %@"
+          }
+        }
+      }
+    },
     "Faster": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Faster"
+          }
+        }
+      }
+    },
+    "Fell back to %@: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fell back to %1$@: %2$@"
           }
         }
       }
@@ -5493,12 +5583,32 @@
         }
       }
     },
+    "From %@ %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From %1$@ %2$@"
+          }
+        }
+      }
+    },
     "From Any App": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "From Any App"
+          }
+        }
+      }
+    },
+    "From environment variable %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From environment variable %@"
           }
         }
       }
@@ -5689,6 +5799,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gateway token"
+          }
+        }
+      }
+    },
+    "Gateway voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway voice"
           }
         }
       }
@@ -6089,6 +6209,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "In reply to %1$@: %2$@. "
+          }
+        }
+      }
+    },
+    "In use": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In use"
           }
         }
       }
@@ -6693,6 +6823,16 @@
         }
       }
     },
+    "Load Voices": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load Voices"
+          }
+        }
+      }
+    },
     "Load images the agent links from the web": {
       "localizations": {
         "en": {
@@ -6749,6 +6889,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Loading settings…"
+          }
+        }
+      }
+    },
+    "Loading voices…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Loading voices…"
           }
         }
       }
@@ -7193,6 +7343,16 @@
         }
       }
     },
+    "Model ID": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model ID"
+          }
+        }
+      }
+    },
     "Models": {
       "localizations": {
         "en": {
@@ -7359,6 +7519,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Needs attention"
+          }
+        }
+      }
+    },
+    "Needs key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs key"
           }
         }
       }
@@ -8513,6 +8683,16 @@
         }
       }
     },
+    "Open Gateway Voice Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Gateway Voice Settings"
+          }
+        }
+      }
+    },
     "Open Login Items Settings…": {
       "localizations": {
         "en": {
@@ -8943,12 +9123,42 @@
         }
       }
     },
+    "Paste a voice ID": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste a voice ID"
+          }
+        }
+      }
+    },
     "Paste the code the provider showed, or the full link you were sent to after approving.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Paste the code the provider showed, or the full link you were sent to after approving."
+          }
+        }
+      }
+    },
+    "Paste your API key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste your API key"
+          }
+        }
+      }
+    },
+    "Paste your API key to browse voices, or paste a voice ID below.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste your API key to browse voices, or paste a voice ID below."
           }
         }
       }
@@ -9009,6 +9219,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Persona"
+          }
+        }
+      }
+    },
+    "Persona & Channels": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persona & Channels"
           }
         }
       }
@@ -9433,12 +9653,32 @@
         }
       }
     },
+    "Provided by the Gateway's environment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provided by the Gateway's environment"
+          }
+        }
+      }
+    },
     "Provider": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Provider"
+          }
+        }
+      }
+    },
+    "Provider default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider default"
           }
         }
       }
@@ -9689,6 +9929,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Read Only"
+          }
+        }
+      }
+    },
+    "Read-only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read-only"
           }
         }
       }
@@ -10453,6 +10703,16 @@
         }
       }
     },
+    "Reset to Defaults": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reset to Defaults"
+          }
+        }
+      }
+    },
     "Responding": {
       "localizations": {
         "en": {
@@ -11073,6 +11333,36 @@
         }
       }
     },
+    "Save Key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Key"
+          }
+        }
+      }
+    },
+    "Save Model": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Model"
+          }
+        }
+      }
+    },
+    "Save Voice Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save Voice Settings"
+          }
+        }
+      }
+    },
     "Save changes to %@?": {
       "localizations": {
         "en": {
@@ -11169,6 +11459,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saved in Keychain"
+          }
+        }
+      }
+    },
+    "Saved in the Gateway's config": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved in the Gateway's config"
+          }
+        }
+      }
+    },
+    "Saved on the Gateway": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved on the Gateway"
           }
         }
       }
@@ -11413,6 +11723,16 @@
         }
       }
     },
+    "Search voices": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search voices"
+          }
+        }
+      }
+    },
     "Searching…": {
       "localizations": {
         "en": {
@@ -11539,6 +11859,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sending…"
+          }
+        }
+      }
+    },
+    "Sent to the Gateway over your connection and stored there. Pincer doesn't keep it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent to the Gateway over your connection and stored there. Pincer doesn't keep it."
           }
         }
       }
@@ -12233,6 +12563,16 @@
         }
       }
     },
+    "Similarity boost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Similarity boost"
+          }
+        }
+      }
+    },
     "Skill Not Found": {
       "localizations": {
         "en": {
@@ -12373,6 +12713,26 @@
         }
       }
     },
+    "Speak Replies on Channels is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speak Replies on Channels is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud."
+          }
+        }
+      }
+    },
+    "Speaker boost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaker boost"
+          }
+        }
+      }
+    },
     "Speaking": {
       "localizations": {
         "en": {
@@ -12413,6 +12773,26 @@
         }
       }
     },
+    "Speaks a short sentence through the Gateway and plays it here. If the chosen voice fails, the Gateway may use another provider; the result says so.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaks a short sentence through the Gateway and plays it here. If the chosen voice fails, the Gateway may use another provider; the result says so."
+          }
+        }
+      }
+    },
+    "Speed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speed"
+          }
+        }
+      }
+    },
     "Split Right": {
       "localizations": {
         "en": {
@@ -12439,6 +12819,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spotlight"
+          }
+        }
+      }
+    },
+    "Stability": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stability"
           }
         }
       }
@@ -12563,6 +12953,16 @@
         }
       }
     },
+    "Stop preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop preview"
+          }
+        }
+      }
+    },
     "Stop the Current Run": {
       "localizations": {
         "en": {
@@ -12633,6 +13033,16 @@
         }
       }
     },
+    "Stored in Gateway secrets as %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stored in Gateway secrets as %@"
+          }
+        }
+      }
+    },
     "Stream Only": {
       "localizations": {
         "en": {
@@ -12679,6 +13089,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Succeeded"
+          }
+        }
+      }
+    },
+    "Success: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Success: %@"
           }
         }
       }
@@ -12783,12 +13203,42 @@
         }
       }
     },
+    "Test": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test"
+          }
+        }
+      }
+    },
     "Test Device Voice": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Test Device Voice"
+          }
+        }
+      }
+    },
+    "Test Voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test Voice"
+          }
+        }
+      }
+    },
+    "Testing…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Testing…"
           }
         }
       }
@@ -13733,6 +14183,16 @@
         }
       }
     },
+    "This is how your Gateway voice sounds.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is how your Gateway voice sounds."
+          }
+        }
+      }
+    },
     "This node was already removed.": {
       "localizations": {
         "en": {
@@ -14443,6 +14903,16 @@
         }
       }
     },
+    "Use": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use"
+          }
+        }
+      }
+    },
     "Use %@ for “%@”?": {
       "localizations": {
         "en": {
@@ -14523,6 +14993,16 @@
         }
       }
     },
+    "Use for Gateway voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use for Gateway voice"
+          }
+        }
+      }
+    },
     "Use letters, numbers, dots, dashes and underscores, starting with a letter or number.": {
       "localizations": {
         "en": {
@@ -14549,6 +15029,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Use your Tailscale Serve name (wss://…ts.net) or tailnet IP (ws://100.x.y.z:18789). Plain ws:// is only allowed for Tailscale, LAN and loopback addresses."
+          }
+        }
+      }
+    },
+    "Using this device's voice: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Using this device's voice: %@"
           }
         }
       }
@@ -14623,6 +15113,26 @@
         }
       }
     },
+    "Voice ID": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice ID"
+          }
+        }
+      }
+    },
+    "Voice Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice Settings"
+          }
+        }
+      }
+    },
     "Wait for the current run to finish.": {
       "localizations": {
         "en": {
@@ -14689,6 +15199,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "What should the agent do?"
+          }
+        }
+      }
+    },
+    "What the Gateway will use right now, and where each value comes from.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What the Gateway will use right now, and where each value comes from."
           }
         }
       }

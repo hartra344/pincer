@@ -16,31 +16,27 @@ struct ReadAloudGatewayVoiceRows: View {
 
     var body: some View {
         if let gateway = self.gateway {
-            LabeledContent(L("Gateway Voice")) {
+            LabeledContent(L("Gateway voice")) {
                 Text(self.summary(gateway))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.trailing)
+            }
+            if let reason = ReadAloudController.shared.lastFallback {
+                Label(reason.message, systemImage: "exclamationmark.triangle")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Button(L("Open Gateway Voice Settings")) { self.open(gateway) }
         }
     }
 
     private func summary(_ gateway: GatewayStore) -> String {
-        let voice = gateway.voice
-        let name = gateway.profile.name
-        guard voice.supportsStatus, voice.supports(GatewayVoiceModel.speakMethod) else {
-            return L("This Gateway can't speak; Read Aloud uses this device's voice.")
+        switch gateway.voice.readAloudSummary {
+        case let .automatic(provider, model, name):
+            let voice = model.map { "\(provider) (\($0))" } ?? provider
+            return String(format: L("Automatic: %@ via %@"), voice, name.isEmpty ? gateway.profile.name : name)
+        case let .fallback(reason):
+            return String(format: L("Using this device's voice: %@"), reason.message)
         }
-        guard voice.canWrite else {
-            return L("This device can't use the Gateway's voice; Read Aloud uses this device's voice.")
-        }
-        guard let status = voice.status else { return L("Open Gateway Voice Settings to check.") }
-        let provider = voice.providers.first { $0.id == status.provider }?.name
-            ?? status.providerStates.first { $0.id == status.provider }?.label ?? status.provider
-        guard voice.canSpeak else {
-            return L("No Gateway voice is set up; Read Aloud uses this device's voice.")
-        }
-        return L("Automatic: \(provider) via \(name)")
     }
 
     private func open(_ gateway: GatewayStore) {

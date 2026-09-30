@@ -23,7 +23,7 @@ struct ReadAloudSettingsSection: View {
 
     /// The stored voice when this device still has it, otherwise System Default, so the picker is never blank.
     private var displayedVoice: String {
-        self.voices.contains { $0.identifier == self.deviceVoice } ? self.deviceVoice : ""
+        ReadAloudSettings.displayedDeviceVoice(stored: self.deviceVoice, available: self.voices.map(\.identifier))
     }
 
     private var rateDescription: String {
