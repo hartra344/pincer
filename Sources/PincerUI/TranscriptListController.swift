@@ -80,14 +80,22 @@ final class TranscriptListController {
 
     var anchor = TranscriptAnchor.bottom {
         didSet {
-            guard (oldValue == .bottom) != (self.anchor == .bottom), let report = self.bottomAnchorChanged else { return }
+            guard (oldValue == .bottom) != (self.anchor == .bottom), let bottom = self.bottom else { return }
             let atBottom = self.anchor == .bottom
-            DispatchQueue.main.async { report(atBottom) }
+            DispatchQueue.main.async { [weak bottom] in bottom?.anchorChanged(atBottom: atBottom) }
         }
     }
 
-    /// Told (on a later main-queue turn) whenever the list starts or stops following the bottom.
-    var bottomAnchorChanged: ((Bool) -> Void)?
+    /// The bottom-state hook (#439): told (on a later main-queue turn) whenever the list starts or
+    /// stops following the bottom, fed the scroll position, and runs the scroll-to-bottom command.
+    private(set) weak var bottom: TranscriptBottomState?
+
+    /// Connects `state`, which then runs `scrollToBottom` for the button.
+    func attach(_ state: TranscriptBottomState?, scrollToBottom: @escaping () -> Void) {
+        guard state !== self.bottom else { return }
+        self.bottom = state
+        state?.perform = scrollToBottom
+    }
     /// Whether the list is following the bottom (#335: the open chat may be trimmed then).
     var isAnchoredAtBottom: Bool { self.anchor == .bottom }
 

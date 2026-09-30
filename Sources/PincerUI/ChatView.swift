@@ -37,7 +37,7 @@ struct ChatView: View {
     /// A built export waiting for its sheet to close: the save panel or share sheet can't open over it (#430).
     @State private var pendingExport: ExportedFile?
     @State private var exportError: String?
-    @State private var scrollToBottom = ScrollToBottomModel()
+    @State private var bottomState = TranscriptBottomState()
     @Environment(\.chatPaneIsActive) private var paneIsActive
     @Environment(\.chatPaneHandles) private var paneHandles
     #if os(iOS)
@@ -98,7 +98,7 @@ struct ChatView: View {
         TranscriptPane(
             chat: self.chat, find: self.find, jump: self.jump, disclosure: self.disclosure,
             previewing: self.$previewing, previewingHTML: self.$previewingHTML, quickLookURL: self.$quickLookURL,
-            exporting: self.$exporting, scrollToBottom: self.scrollToBottom,
+            exporting: self.$exporting, bottomState: self.bottomState,
             bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
             topInset: self.topChrome + self.transcriptSafeArea.top,
             reasoningOff: self.reasoningOff)
@@ -133,7 +133,7 @@ struct ChatView: View {
                 // An overlay, so it doesn't change the measured height: its bottom sits just above
                 // the stack's top, centred over the Send button, and rides up with the keyboard.
                 .overlay(alignment: .topTrailing) {
-                    ScrollToBottomButton(model: self.scrollToBottom, chat: self.chat)
+                    ScrollToBottomButton(model: self.bottomState, chat: self.chat)
                         .alignmentGuide(.top) { $0[.bottom] + Theme.Spacing.md }
                         .padding(.trailing, ScrollToBottomButton.trailingPadding)
                 }
@@ -382,13 +382,13 @@ private struct TranscriptPane: View {
     @Binding var previewingHTML: HTMLPreviewItem?
     @Binding var quickLookURL: URL?
     @Binding var exporting: ExportedFile?
-    let scrollToBottom: ScrollToBottomModel
+    let bottomState: TranscriptBottomState
     let bottomInset: CGFloat
     let topInset: CGFloat
     let reasoningOff: Bool
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
-    /// Not observed: only the list's bottom-anchor callback and Find's toggle drive it.
+    /// Not observed: only the list's bottom state and Find's toggle drive it.
     @State private var findTrim = TranscriptFindTrim()
 
     private var agent: AgentSummary {
@@ -400,7 +400,11 @@ private struct TranscriptPane: View {
         let _ = BodyCounter.hit("TranscriptPane")
         #endif
         self.content
-            .onAppear { self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff) }
+            .onAppear {
+                self.find.update(entries: self.chat.entries, reasoningOff: self.reasoningOff)
+                self.followBottom()
+            }
+            .onChange(of: ObjectIdentifier(self.chat)) { self.followBottom() }
             .onChange(of: self.find.isPresented) { _, shown in
                 if shown { Task { await self.chat.loadAllCached() } }
                 self.findTrim.findChanged(isPresented: shown, chat: self.chat)
@@ -423,7 +427,7 @@ private struct TranscriptPane: View {
             }
             .padding(.bottom, self.bottomInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .onAppear { self.scrollToBottom.reset() }
+            .onAppear { self.bottomState.reset() }
             #if os(macOS)
             // Like the transcript list: fill the pane, then add the insets once.
             .ignoresSafeArea(.container, edges: [.top, .bottom])
@@ -435,7 +439,7 @@ private struct TranscriptPane: View {
                 Text("Messages you send here go straight to your Gateway as the owner.", bundle: .module)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onAppear { self.scrollToBottom.reset() }
+            .onAppear { self.bottomState.reset() }
         } else {
             TranscriptList(
                 rows: TranscriptRow.rows(for: self.chat),
@@ -468,11 +472,15 @@ private struct TranscriptPane: View {
                 topInset: self.topInset,
                 highlight: self.find.highlight,
                 jump: self.jump,
-                scrollToBottom: self.scrollToBottom,
-                bottomAnchorChanged: { [findTrim = self.findTrim, chat = self.chat] in
-                    findTrim.bottomAnchorChanged($0, chat: chat)
-                })
+                bottomState: self.bottomState)
                 .ignoresSafeArea(.container, edges: [.top, .bottom])
+        }
+    }
+
+    /// Find's trim waits for the list to follow the bottom again (#335).
+    private func followBottom() {
+        self.bottomState.onAnchorChange = { [findTrim = self.findTrim, chat = self.chat] in
+            findTrim.bottomAnchorChanged($0, chat: chat)
         }
     }
 }

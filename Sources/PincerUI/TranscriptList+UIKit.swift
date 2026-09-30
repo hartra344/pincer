@@ -19,10 +19,9 @@ struct TranscriptList: UIViewRepresentable {
     var highlight = TranscriptHighlight()
     /// A message to scroll to and flash, e.g. from a `pincer://` link.
     var jump: TranscriptJump?
-    /// Told how far the reader is from the latest message; runs the scroll-to-bottom button's scroll.
-    var scrollToBottom: ScrollToBottomModel?
-    /// Told (on a later main-queue turn) whenever the list starts or stops following the bottom.
-    var bottomAnchorChanged: ((Bool) -> Void)?
+    /// Told how far the reader is from the latest message and whether the list follows the bottom;
+    /// runs the scroll-to-bottom button's scroll (#439).
+    var bottomState: TranscriptBottomState?
 
     func makeCoordinator() -> Coordinator { Coordinator(context: self.context) }
 
@@ -31,8 +30,7 @@ struct TranscriptList: UIViewRepresentable {
     }
 
     func updateUIView(_ view: UICollectionView, context: Context) {
-        context.coordinator.attach(self.scrollToBottom)
-        context.coordinator.bottomAnchorChanged = self.bottomAnchorChanged
+        context.coordinator.attach(self.bottomState)
         context.coordinator.update(rows: self.rows, context: self.context, insets: (self.topInset, self.bottomInset))
         context.coordinator.apply(self.highlight)
         context.coordinator.apply(self.jump)
@@ -54,11 +52,6 @@ struct TranscriptList: UIViewRepresentable {
         var renderer: TranscriptRenderer { self.controller.renderer }
         var prefetchStats: (steps: Int, rowsMeasured: Int, seconds: Double) { self.controller.prefetchStats }
         var premeasureStats: PremeasureStats { self.controller.premeasureStats }
-        var bottomAnchorChanged: ((Bool) -> Void)? {
-            get { self.controller.bottomAnchorChanged }
-            set { self.controller.bottomAnchorChanged = newValue }
-        }
-
         /// Whether the list is following the bottom (#335: the open chat may be trimmed then).
         var isAnchoredAtBottom: Bool { self.controller.isAnchoredAtBottom }
 
@@ -337,16 +330,12 @@ struct TranscriptList: UIViewRepresentable {
 
         // MARK: Scroll to bottom
 
-        private weak var scrollToBottomModel: ScrollToBottomModel?
-
-        func attach(_ model: ScrollToBottomModel?) {
-            guard model !== self.scrollToBottomModel else { return }
-            self.scrollToBottomModel = model
-            model?.perform = { [weak self] in self?.scrollToBottom() }
+        func attach(_ state: TranscriptBottomState?) {
+            self.controller.attach(state) { [weak self] in self?.scrollToBottom() }
         }
 
         private func reportPosition() {
-            guard let model = self.scrollToBottomModel, let view = self.collectionView else { return }
+            guard let model = self.controller.bottom, let view = self.collectionView else { return }
             let insets = view.adjustedContentInset
             model.report(distance: self.rows.isEmpty ? 0 : self.maxOffset - view.contentOffset.y,
                          viewport: view.bounds.height - insets.top - insets.bottom, lastRowId: self.rows.last?.id)
