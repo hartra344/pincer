@@ -755,7 +755,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.context.chat?.deleteQueued(outboxId: id)
     }
 
-    func showOriginal(_ messageId: String) { self.showOriginal(messageId, missingNotice: nil) }
+    func showOriginal(_ messageId: String) { self.showOriginal(messageId, missingNotice: nil, isReplyTarget: true) }
 
     private var olderLoop: Task<Void, Never>?
 
@@ -785,10 +785,10 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     /// Scrolls to and flashes a message, paging in older history if needed. `missingNotice`
     /// replaces the chat's note when it can't be found.
-    func showOriginal(_ messageId: String, missingNotice: String?) {
+    func showOriginal(_ messageId: String, missingNotice: String?, isReplyTarget: Bool = false) {
         guard let chat = self.context.chat, chat.locatingReplyId == nil else { return }
         Task { @MainActor [weak self] in
-            let found = await chat.locate(messageId)
+            let found = isReplyTarget ? await chat.locateReplyTarget(messageId) : await chat.locate(messageId)
             if !found, let missingNotice { chat.notice = missingNotice }
             guard found, let self, chat === self.context.chat,
                   let row = self.rowId(containing: messageId) else { return }

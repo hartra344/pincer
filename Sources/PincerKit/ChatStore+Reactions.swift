@@ -82,17 +82,23 @@ extension ChatStore {
         return UUID(uuidString: id) != nil
     }
 
+    /// `locate` for a quote tap. An id that can't be a transcript id is a bridged channel's message id
+    /// that isn't in this chat, so there's nothing to page for.
+    @discardableResult
+    public func locateReplyTarget(_ id: String) async -> Bool {
+        if self.message(withId: id) != nil { return true }
+        guard Self.looksLikeTranscriptId(id) else {
+            self.notice = "The original message isn't in this chat's history anymore."
+            return false
+        }
+        return await self.locate(id)
+    }
+
     /// Loads older history (the cache first) until the message is loaded (at most 40 pages). Returns whether it is;
     /// when history runs out or the page cap is hit, says so in `notice`. One lookup at a time.
     @discardableResult
     public func locate(_ id: String) async -> Bool {
         if self.message(withId: id) != nil { return true }
-        // Anything else is a bridged channel's message id (an agent reply to a message that isn't in
-        // this transcript): paging through history for it would find nothing.
-        if !Self.looksLikeTranscriptId(id) {
-            self.notice = "The original message isn't in this chat's history anymore."
-            return false
-        }
         guard self.locatingReplyId == nil else { return false }
         self.locatingReplyId = id
         defer { self.locatingReplyId = nil }
