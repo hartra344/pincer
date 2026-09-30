@@ -84,6 +84,23 @@ public struct TTSPersona: Hashable, Sendable, Identifiable, Decodable {
     public var displayName: String { self.label.flatMap { $0.isEmpty ? nil : $0 } ?? self.id }
 }
 
+/// Gateway `messages.tts.auto`: when replies on channels are spoken. Pincer can only switch Off/Always.
+public enum TTSAutoMode: String, Sendable, CaseIterable {
+    case off, always, inbound, tagged
+
+    public var displayName: String {
+        switch self {
+        case .off: L("Off")
+        case .always: L("Always")
+        case .inbound: L("Only After Voice Messages")
+        case .tagged: L("Only When Tagged")
+        }
+    }
+
+    /// Modes Pincer can't set back once replaced (the Gateway has no RPC for them).
+    public var isNotSettable: Bool { self == .inbound || self == .tagged }
+}
+
 public struct TTSStatus: Hashable, Sendable, Decodable {
     public var enabled: Bool
     /// "off", "always", "inbound" or "tagged".
@@ -122,6 +139,9 @@ public struct TTSStatus: Hashable, Sendable, Decodable {
         guard let value = Self(json) else { throw DecodingError.dataCorruptedError(in: try decoder.singleValueContainer(), debugDescription: "not an object") }
         self = value
     }
+
+    /// nil for a value this version doesn't know.
+    public var autoMode: TTSAutoMode? { TTSAutoMode(rawValue: self.auto.lowercased()) }
 
     /// Whether any provider can synthesize. False only when states are listed and none is configured.
     public var hasConfiguredProvider: Bool {

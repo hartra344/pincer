@@ -156,6 +156,14 @@ public final class GatewayVoiceModel {
         self.loadError = firstError
     }
 
+    public var autoMode: TTSAutoMode? { self.status?.autoMode }
+
+    /// True when turning auto-speak Off/Always would replace inbound/tagged, which Pincer can't set back.
+    public func setAutoSpeakNeedsConfirmation(_ on: Bool) -> Bool {
+        _ = on
+        return self.autoMode?.isNotSettable ?? false
+    }
+
     /// `tts.enable` / `tts.disable`: whether the Gateway attaches spoken audio to every channel reply.
     public func setAutoSpeakChannels(_ on: Bool) async throws {
         let result = try await self.call(on ? Self.enableMethod : Self.disableMethod)
