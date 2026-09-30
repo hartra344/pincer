@@ -548,7 +548,7 @@ struct TranscriptList: NSViewRepresentable {
                 let row = table.row(for: cell)
                 if row >= 0 { from = row }
             } else if let id = current?.itemLoadingToken as? String {
-                from = self.rows.firstIndex { $0.id == id }
+                from = self.controller.index[id]
             }
             guard let row = self.controller.adjacentRow(from: from, forward: forward, kind: kind) else { return nil }
             if let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? TranscriptCell {
@@ -569,7 +569,7 @@ struct TranscriptList: NSViewRepresentable {
                 return [AccessibilityText.speaker(role: .user), AccessibilityText.summary(String(item.plainText.prefix(400)), limit: 80)]
                     .filter { !$0.isEmpty }.joined(separator: ", ")
             case let .assistant(turn):
-                return [AccessibilityText.speaker(role: .assistant), AccessibilityText.summary(String((turn.text.first ?? "").prefix(400)), limit: 80)]
+                return [AccessibilityText.speaker(role: .assistant, author: self.controller.context.agent.name), AccessibilityText.summary(String((turn.text.first ?? "").prefix(400)), limit: 80)]
                     .filter { !$0.isEmpty }.joined(separator: ", ")
             case let .marker(_, label):
                 return label
@@ -578,7 +578,7 @@ struct TranscriptList: NSViewRepresentable {
 
         /// Loads the row a token stands for: it becomes the current message, scrolled into view.
         fileprivate func rotorElement(forToken token: Any) -> NSAccessibilityElementProtocol? {
-            guard let table, let id = token as? String, let row = self.rows.firstIndex(where: { $0.id == id }) else { return nil }
+            guard let table, let id = token as? String, let row = self.controller.index[id] else { return nil }
             self.controller.navigationRowId = id
             self.controller.scrollIntoView(row)
             return table.view(atColumn: 0, row: row, makeIfNecessary: true) as? TranscriptCell

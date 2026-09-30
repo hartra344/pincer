@@ -753,6 +753,7 @@ private final class SidebarHeaderCell: NSTableCellView {
         self.add.alphaValue = canAdd ? 1 : 0
         self.add.isEnabled = canAdd
         self.add.setAccessibilityElement(canAdd)
+        self.add.setAccessibilityRole(.button)
         self.onAdd = header.addAction(actions)
         self.add.toolTip = header.addAccessibilityLabel
         self.add.setAccessibilityLabel(header.addAccessibilityLabel)
