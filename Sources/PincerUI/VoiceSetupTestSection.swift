@@ -66,7 +66,7 @@ struct VoiceSetupTestSection: View {
                 .foregroundStyle(.red).lineLimit(2).help(message)
         case let .fellBack(to, reason):
             let selected = self.model.displayName(for: self.model.status?.provider ?? "")
-            Label(String(format: L("Spoke with %@ instead of %@: %@"), to, selected, reason.message), systemImage: "exclamationmark.triangle.fill")
+            Label(String(format: L("Spoke with %@ instead of %@: %@"), to, selected, reason.message(provider: selected)), systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
         }
     }

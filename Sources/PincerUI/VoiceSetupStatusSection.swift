@@ -12,17 +12,17 @@ struct VoiceSetupStatusSection: View {
     var body: some View {
         Section {
             VStack(alignment: .leading, spacing: 4) {
-                switch (self.active.isEmpty || !self.status.hasConfiguredProvider, self.badge) {
-                case (true, _):
+                switch (self.active.isEmpty || !self.status.hasConfiguredProvider, self.model.providerProblem(for: self.active), self.badge) {
+                case (true, nil, _):
                     Label(L("Gateway Voice: Not set up"), systemImage: "speaker.slash").font(.headline)
                     Text("Read Aloud uses this device's voice until a provider is ready.", bundle: .module)
                         .font(.caption).foregroundStyle(.secondary)
-                case let (_, .error(reason)):
-                    Label(String(format: L("%@: key isn't working"), self.model.displayName(for: self.active)), systemImage: "xmark.octagon.fill")
+                case let (_, problem?, _):
+                    Label(String(format: L("%@ isn't working"), self.model.displayName(for: self.active)), systemImage: "xmark.octagon.fill")
                         .font(.headline).foregroundStyle(.red)
-                    Text(reason).font(.caption).foregroundStyle(.secondary)
-                    Text("Check the key below, then run Test Voice.", bundle: .module).font(.caption).foregroundStyle(.secondary)
-                case (_, .needsKey):
+                    Text(problem.message).font(.caption).foregroundStyle(.secondary)
+                    Text(self.advice(problem.cause)).font(.caption).foregroundStyle(.secondary)
+                case (_, _, .needsKey):
                     Label(String(format: L("%@ needs a key"), self.model.displayName(for: self.active)), systemImage: "exclamationmark.triangle.fill")
                         .font(.headline).foregroundStyle(.orange)
                     Text("Read Aloud uses this device's voice until a provider is ready.", bundle: .module)
@@ -36,6 +36,15 @@ struct VoiceSetupStatusSection: View {
                 }
             }
             .accessibilityElement(children: .combine)
+        }
+    }
+
+    private func advice(_ cause: TTSProviderProblem.Cause) -> String {
+        switch cause {
+        case .key: L("Check the API key below, then run Test Voice.")
+        case .model: L("Choose a different model below, then run Test Voice.")
+        case .voice: L("Choose a different voice below, then run Test Voice.")
+        case .other: L("Run Test Voice again, or check the settings below.")
         }
     }
 

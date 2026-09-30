@@ -37,6 +37,10 @@ struct ReadAloudGatewayVoiceRows: View {
             case let .automatic(provider, model, name):
                 let voice = model.map { "\(provider) (\($0))" } ?? provider
                 Text(String(format: L("%@ via %@"), voice, name.isEmpty ? gateway.profile.name : name)).foregroundStyle(.secondary)
+            case let .gatewayFallback(selected, reason, using):
+                let tail = using.map { String(format: L("Gateway uses %@."), $0) } ?? L("Using this device's voice.")
+                Label(String(format: L("%@ can't be used (%@). %@"), selected, reason.message(provider: selected), tail), systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
             case .fallback(.notConfigured):
                 Text("Not set up. Using this device's voice.", bundle: .module).foregroundStyle(.secondary)
             case let .fallback(reason):
