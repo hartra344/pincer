@@ -402,14 +402,14 @@ extension TranscriptList.Coordinator: TranscriptListHost {
     func row(atContentY y: CGFloat) -> Int? { self.row(at: y) }
 
     var visibleRows: ClosedRange<Int>? {
-        guard let view = self.collectionView,
+        guard let view = self.collectionView, view.bounds.height > 0,
               let first = self.row(at: view.contentOffset.y),
               let last = self.row(at: view.contentOffset.y + view.bounds.height) else { return nil }
         return first...last
     }
 
     func rowWindow(screens: CGFloat, minimum: CGFloat) -> (range: ClosedRange<Int>, center: Int)? {
-        guard let view = self.collectionView, !self.rows.isEmpty else { return nil }
+        guard let view = self.collectionView, view.bounds.height > 0, !self.rows.isEmpty else { return nil }
         let visible = CGRect(origin: view.contentOffset, size: view.bounds.size)
         let around = visible.insetBy(dx: 0, dy: -max(visible.height * screens, minimum))
         guard let first = self.row(at: around.minY), let last = self.row(at: around.maxY),

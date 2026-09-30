@@ -267,7 +267,9 @@ public final class ChatStore: Identifiable {
 
     // MARK: Loading
 
-    @ObservationIgnored var loadInFlight = false
+    @ObservationIgnored var loadTask: Task<Void, Never>?
+    @ObservationIgnored var loadGeneration = 0
+    var loadInFlight: Bool { self.loadTask != nil }
     @ObservationIgnored var subscribedEpoch: Int?
     @ObservationIgnored var stale = false
     @ObservationIgnored var loadCount = 0

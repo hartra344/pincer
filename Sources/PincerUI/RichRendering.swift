@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import PincerKit
+import Synchronization
 #if os(macOS)
 import AppKit
 #else
@@ -93,8 +94,50 @@ enum RichBlockCache {
     }
 }
 
+#if os(macOS)
+typealias PImage = NSImage
+#else
+typealias PImage = UIImage
+#endif
+
+/// A drawn formula that sits on the baseline. Its image and bounds are fixed up front, and layout
+/// reads them through `attachmentBounds` / `image(forBounds:)`, so TextKit never creates (or asks
+/// for) an attachment cell. That is what lets rows with inline math be measured off the main thread.
+final class InlineMathAttachment: NSTextAttachment, @unchecked Sendable {
+    /// Times something asked for the cell, for tests; layout must leave it at 0.
+    static let cellRequests = Mutex<Int>(0)
+
+    nonisolated init(image: PImage, bounds: CGRect) {
+        super.init(data: nil, ofType: nil)
+        self.image = image
+        self.bounds = bounds
+    }
+
+    nonisolated required init?(coder: NSCoder) { super.init(coder: coder) }
+
+    nonisolated override func attachmentBounds(for textContainer: NSTextContainer?, proposedLineFragment lineFrag: CGRect,
+                                               glyphPosition position: CGPoint, characterIndex charIndex: Int) -> CGRect
+    {
+        self.bounds
+    }
+
+    nonisolated override func image(forBounds imageBounds: CGRect, textContainer: NSTextContainer?, characterIndex charIndex: Int) -> PImage? {
+        self.image
+    }
+
+    #if os(macOS)
+    nonisolated override var attachmentCell: NSTextAttachmentCellProtocol? {
+        get {
+            Self.cellRequests.withLock { $0 += 1 }
+            return nil
+        }
+        set { super.attachmentCell = newValue }
+    }
+    #endif
+}
+
 /// Inline `$…$` / `\(…\)` math in running text, drawn as image attachments that sit on the baseline.
-@MainActor
+/// Usable from any thread: the attachment cache is lock protected.
 enum InlineMathText {
     struct Masked {
         let text: String
@@ -125,9 +168,9 @@ enum InlineMathText {
     }
 
     /// Appends `string`, replacing placeholders with drawn math (or the original source if it can't be drawn).
-    static func append(_ string: String, spans: [Unicode.Scalar: (latex: String, source: String)],
+    nonisolated static func append(_ string: String, spans: [Unicode.Scalar: (latex: String, source: String)],
                        attributes: [NSAttributedString.Key: Any], font: PFont, color: PColor,
-                       dark: Bool = RichBlock.isDark, to result: NSMutableAttributedString)
+                       dark: Bool, scale: CGFloat, to result: NSMutableAttributedString)
     {
         var pending = ""
         func flush() {
@@ -137,7 +180,7 @@ enum InlineMathText {
         }
         for scalar in string.unicodeScalars {
             guard let span = spans[scalar] else { pending.unicodeScalars.append(scalar); continue }
-            if let attachment = self.attachment(span.latex, font: font, color: color, dark: dark) {
+            if let attachment = self.attachment(span.latex, font: font, color: color, dark: dark, scale: scale) {
                 flush()
                 var attachmentAttributes = attributes
                 attachmentAttributes[.attachment] = attachment
@@ -149,34 +192,41 @@ enum InlineMathText {
         flush()
     }
 
-    private static var cache: [String: NSTextAttachment?] = [:]
-    private static let cacheLimit = 256
+    private struct Slot: @unchecked Sendable { let value: InlineMathAttachment? }
+    private nonisolated static let cache = Mutex<[String: Slot]>([:])
+    private nonisolated static let cacheLimit = 256
 
-    /// One attachment object per formula, size and appearance, so an unchanged prefix of a streaming
-    /// reply compares equal and TextKit doesn't re-lay it out.
-    static func attachment(_ latex: String, font: PFont, color: PColor, dark: Bool = RichBlock.isDark) -> NSTextAttachment? {
+    /// One attachment object per formula, size, appearance and scale, so an unchanged prefix of a
+    /// streaming reply compares equal and TextKit doesn't re-lay it out.
+    nonisolated static func attachment(_ latex: String, font: PFont, color: PColor, dark: Bool, scale: CGFloat) -> NSTextAttachment? {
         let cgColor = self.resolved(color, dark: dark)
         let components = (cgColor.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil)?
             .components ?? []).map { String(format: "%.3f", $0) }.joined(separator: ",")
-        let key = "\(font.pointSize)|\(components)|\(latex)"
-        if let hit = self.cache[key] { return hit }
-        var attachment: NSTextAttachment?
-        if let rendered = InlineMath.render(latex, fontSize: font.pointSize, color: cgColor, scale: self.scale) {
-            let made = NSTextAttachment()
+        let key = "\(font.pointSize)|\(scale)|\(components)|\(latex)"
+        if let hit = self.cache.withLock({ $0[key] }) { return hit.value }
+        var drawn: InlineMathAttachment?
+        if let rendered = InlineMath.render(latex, fontSize: font.pointSize, color: cgColor, scale: scale) {
             #if os(macOS)
-            made.image = NSImage(cgImage: rendered.image, size: rendered.size)
+            let image = NSImage(cgImage: rendered.image, size: rendered.size)
             #else
-            made.image = UIImage(cgImage: rendered.image, scale: self.scale, orientation: .up)
+            let image = UIImage(cgImage: rendered.image, scale: scale, orientation: .up)
             #endif
-            made.bounds = CGRect(x: 0, y: -rendered.descent, width: rendered.size.width, height: rendered.size.height)
-            attachment = made
+            drawn = InlineMathAttachment(image: image, bounds: CGRect(x: 0, y: -rendered.descent, width: rendered.size.width,
+                                                                     height: rendered.size.height))
         }
-        if self.cache.count >= self.cacheLimit { self.cache.removeAll(keepingCapacity: true) }
-        self.cache[key] = .some(attachment)
-        return attachment
+        let slot = Slot(value: drawn)
+        let stored: Slot = self.cache.withLock { entries in
+            // Another thread may have drawn it meanwhile; keep the first so identity stays stable.
+            if let hit = entries[key] { return hit }
+            if entries.count >= self.cacheLimit { entries.removeAll(keepingCapacity: true) }
+            entries[key] = slot
+            return slot
+        }
+        return stored.value
     }
 
-    private static var scale: CGFloat {
+    /// Pixels per point math is drawn at. Read on main; the premeasure worker gets it through its environment.
+    @MainActor static var scale: CGFloat {
         #if os(macOS)
         max(NSScreen.main?.backingScaleFactor ?? 2, 2)
         #else
@@ -184,7 +234,7 @@ enum InlineMathText {
         #endif
     }
 
-    private static func resolved(_ color: PColor, dark: Bool) -> CGColor {
+    private nonisolated static func resolved(_ color: PColor, dark: Bool) -> CGColor {
         #if os(macOS)
         var cgColor = color.cgColor
         NSAppearance(named: dark ? .darkAqua : .aqua)?.performAsCurrentDrawingAppearance { cgColor = color.cgColor }

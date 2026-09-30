@@ -92,7 +92,6 @@ final class TranscriptListController {
 
     /// Connects `state`, which then runs `scrollToBottom` for the button.
     func attach(_ state: TranscriptBottomState?, scrollToBottom: @escaping () -> Void) {
-        guard state !== self.bottom else { return }
         self.bottom = state
         state?.perform = scrollToBottom
     }
@@ -158,7 +157,6 @@ final class TranscriptListController {
         let changed = context.differs(from: self.context)
         self.context = context
         self.renderer.update(context: context)
-        if rowCount != self.rows.count { self.olderRowWasVisible = false }
         return changed
     }
 
@@ -186,6 +184,8 @@ final class TranscriptListController {
             return .tail(row)
         }
         let unique = Self.uniqued(newRows)
+        // Compared after de-duplication, so a repeated id doesn't re-arm the older-row trigger.
+        if unique.count != self.rows.count { self.olderRowWasVisible = false }
         guard unique != self.rows else { return .unchanged }
         let oldRows = self.rows
         self.rows = unique

@@ -6,6 +6,8 @@ import Foundation
 /// is injected so tests don't need a run loop.
 struct TranscriptWidthFreeze {
     static let quietInterval: TimeInterval = 0.1
+    /// Longest the thaw waits for the worker to measure the window around the viewport at the final width.
+    static let prewarmBudget: TimeInterval = 0.05
 
     /// The width layout keeps using while frozen.
     private(set) var frozenWidth: CGFloat?

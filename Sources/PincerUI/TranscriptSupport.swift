@@ -359,8 +359,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     // MARK: Premeasure
 
     /// What a background pass would build and measure for `row`; nil when the row has to be laid out on
-    /// main: one streaming (its text changes every flush), highlighted by Find, without text, or with
-    /// inline math (drawn from main-actor caches).
+    /// main: one streaming (its text changes every flush), highlighted by Find, or without text.
     func premeasureBodies(for row: TranscriptRow) -> [PremeasureKey]? {
         guard !self.highlight.rows.contains(row.id) else { return nil }
         let sources: [(String, TranscriptText.Tone)]
@@ -375,8 +374,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         }
         var keys: [PremeasureKey] = []
         for (source, tone) in sources where !source.isEmpty {
-            if source.contains("$") || source.contains("\\("), !InlineMath.spans(in: source).isEmpty { return nil }
-            let key = PremeasureKey(source: source, tone: tone, styleGeneration: TranscriptStyle.generation)
+            let key = PremeasureKey(source: source, tone: tone, styleGeneration: TranscriptStyle.generation, dark: self.settings.dark)
             if !keys.contains(key) { keys.append(key) }
         }
         return keys.isEmpty ? nil : keys

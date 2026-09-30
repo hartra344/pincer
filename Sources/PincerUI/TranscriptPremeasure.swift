@@ -38,15 +38,17 @@ struct TextBuildEnvironment: @unchecked Sendable {
     let colors: (primary: PColor, secondary: PColor, error: PColor, fill: PColor)
     let styleGeneration: Int
     let dark: Bool
+    /// Pixels per point inline math is drawn at; read on main because screens aren't thread safe.
+    let mathScale: CGFloat
 
     @MainActor private static var memo: TextBuildEnvironment?
 
     @MainActor static func current(dark: Bool) -> TextBuildEnvironment {
-        if let memo, memo.styleGeneration == TranscriptStyle.generation, memo.dark == dark { return memo }
+        if let memo, memo.styleGeneration == TranscriptStyle.generation, memo.dark == dark, memo.mathScale == InlineMathText.scale { return memo }
         let made = TextBuildEnvironment(
             fonts: TranscriptFonts(TranscriptStyle.shared),
             colors: (TranscriptColors.label, TranscriptColors.secondary, TranscriptColors.red, TranscriptColors.fill),
-            styleGeneration: TranscriptStyle.generation, dark: dark)
+            styleGeneration: TranscriptStyle.generation, dark: dark, mathScale: InlineMathText.scale)
         self.memo = made
         return made
     }
@@ -221,13 +223,34 @@ final class TranscriptPremeasurer: @unchecked Sendable {
         }
     }
 
+    /// Measures `jobs` on the worker while main waits at most `budget` seconds; returns the rows finished
+    /// by then. The worker stops between jobs at the deadline, so nothing runs on after main gave up.
+    nonisolated func measureWithin(_ budget: TimeInterval, jobs: [PremeasureJob], env: TextBuildEnvironment,
+                                   epoch: TranscriptPremeasureEpoch) -> [PremeasuredRow]
+    {
+        struct Box { var rows: [PremeasuredRow] = []; var expired = false }
+        let box = Mutex(Box())
+        let done = DispatchSemaphore(value: 0)
+        self.queue.async {
+            for job in jobs {
+                if box.withLock({ $0.expired }) { break }
+                let row = epoch.current == job.epoch ? self.measure(job, env: env, epoch: epoch)
+                    : PremeasuredRow(rowId: job.rowId, epoch: job.epoch, contentWidth: job.contentWidth, discarded: true)
+                box.withLock { if !$0.expired { $0.rows.append(row) } }
+            }
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + budget)
+        return box.withLock { $0.expired = true; return $0.rows }
+    }
+
     /// The same builder and measurer main uses, so the sizes are what main would compute.
     private func measure(_ job: PremeasureJob, env: TextBuildEnvironment, epoch: TranscriptPremeasureEpoch) -> PremeasuredRow {
         #if DEBUG
         dispatchPrecondition(condition: .notOnQueue(.main))
         #endif
         var row = PremeasuredRow(rowId: job.rowId, epoch: job.epoch, contentWidth: job.contentWidth)
-        let hooks = TranscriptText.BuildHooks(parse: MarkdownBlock.inline, math: nil)
+        let hooks = TranscriptText.BuildHooks.worker(env: env)
         var layouts = 0
         for key in job.bodies {
             if epoch.current != job.epoch { row.discarded = true; row.bodies = []; break }
@@ -365,6 +388,21 @@ final class TranscriptPremeasureDriver {
             jobs.append(PremeasureJob(rowId: row.id, bodies: keys, contentWidth: contentWidth, epoch: self.epoch.current))
         }
         return (now, jobs)
+    }
+
+    /// Once a width change goes quiet, measures the cold rows among `indexes` (the window around the
+    /// viewport, nearest first) at the final `width` on the worker, waiting at most `budget`, so the
+    /// thaw relayout finds them warm. Returns how many rows were warmed. Call after `cancelAll()`.
+    @discardableResult
+    func prewarm(_ indexes: [Int], all: [TranscriptRow], width: CGFloat, renderer: TranscriptRenderer,
+                 budget: TimeInterval = TranscriptWidthFreeze.prewarmBudget) -> Int
+    {
+        let jobs = self.split(indexes, all: all, width: width, renderer: renderer, overflow: .measureNow).offload
+        guard !jobs.isEmpty else { return 0 }
+        let epoch = self.epoch.current
+        let rows = TranscriptPremeasurer.shared.measureWithin(budget, jobs: jobs, env: renderer.textEnvironment, epoch: self.epoch)
+        self.stats.offloaded += rows.count
+        return self.adopt(rows, width: width, epoch: epoch).count
     }
 
     /// Sends `jobs` to the worker; `completion` runs on main after their results are adopted.

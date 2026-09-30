@@ -46,17 +46,29 @@ enum TranscriptText {
     }
 
     /// How inline text reaches Markdown parsing and inline math. Main uses the shared caches and draws
-    /// math; the premeasure worker parses uncached and rejects any row with math (which stays on main).
+    /// math; the premeasure worker parses uncached and draws math from the same lock-protected cache.
     struct BuildHooks {
         var parse: (String) -> AttributedString
         var math: ((String, [Unicode.Scalar: (latex: String, source: String)], [NSAttributedString.Key: Any],
                     PFont, PColor, NSMutableAttributedString) -> Void)?
 
         @MainActor static func main(cached: Bool, dark: Bool = RichBlock.isDark) -> BuildHooks {
-            BuildHooks(parse: { cached ? MarkdownCache.inline($0) : MarkdownBlock.inline($0) },
+            let scale = InlineMathText.scale
+            return BuildHooks(parse: { cached ? MarkdownCache.inline($0) : MarkdownBlock.inline($0) },
                        math: { string, spans, attributes, font, color, result in
-                           InlineMathText.append(string, spans: spans, attributes: attributes, font: font, color: color, dark: dark, to: result)
+                           InlineMathText.append(string, spans: spans, attributes: attributes, font: font, color: color, dark: dark,
+                                                 scale: scale, to: result)
                        })
+        }
+
+        /// Off-main hooks: parses uncached and draws math from the lock-protected cache at `env`'s appearance and scale.
+        nonisolated static func worker(env: TextBuildEnvironment) -> BuildHooks {
+            let dark = env.dark, scale = env.mathScale
+            return BuildHooks(parse: MarkdownBlock.inline,
+                              math: { string, spans, attributes, font, color, result in
+                                  InlineMathText.append(string, spans: spans, attributes: attributes, font: font, color: color,
+                                                        dark: dark, scale: scale, to: result)
+                              })
         }
     }
 
