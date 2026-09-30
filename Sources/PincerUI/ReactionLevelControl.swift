@@ -117,9 +117,15 @@ struct ReactionLevelMenu: View {
     }
 
     private func scope(_ channel: String, _ account: String?) -> String {
-        let name = channel.capitalized
+        let name = ReactionLevels.displayName(channel: channel)
         guard let account else { return L("Applies to all \(name) chats") }
-        return L("Applies to all chats on \(account)")
+        return L("Applies to all chats on \(self.accountName(channel, account))")
+    }
+
+    private func accountName(_ channel: String, _ account: String) -> String {
+        let status = self.gateway.channels.snapshot?.channel(channel)?.effectiveAccounts.first { $0.accountId == account }?.name
+        let configured = self.gateway.settings.config["channels"]?[channel]?["accounts"]?[account]?["name"]?.text
+        return [status, configured].compactMap { $0 }.first { !$0.isEmpty } ?? account
     }
 
     private func isOn(_ channel: String, _ account: String?, _ level: ReactionLevel, _ current: ReactionLevel) -> Binding<Bool> {

@@ -120,6 +120,15 @@ public enum ReactionLevels {
         return account
     }
 
+    public static func displayName(channel: String) -> String {
+        switch channel.lowercased() {
+        case "whatsapp": "WhatsApp"
+        case "telegram": "Telegram"
+        case "signal": "Signal"
+        default: channel.capitalized
+        }
+    }
+
     /// The chat's account when it has its own `reactionLevel`; otherwise nil, so the channel's setting is edited.
     public static func overridingAccount(config: JSONValue?, channel: String, account: String?) -> String? {
         guard let account = self.editableAccount(config: config, channel: channel, account: account),
