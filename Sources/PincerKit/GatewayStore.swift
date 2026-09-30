@@ -235,9 +235,13 @@ public final class GatewayStore: Identifiable {
         onTranscriptChanged: { [weak self] key, change in await self?.transcriptChanged(key: key, change: change) },
         onSessionsChanged: { [weak self] in await self?.refreshSessions() })
     /// Gateway text-to-speech: the Voice settings page and Read Aloud's `tts.speak`. The demo may write without scopes.
-    @ObservationIgnored public private(set) lazy var voice = GatewayVoiceModel(
-        connection: self.connection, hello: { [weak self] in self?.hello },
-        allowsWritesWithoutAdmin: self.profile.isDemo)
+    @ObservationIgnored public private(set) lazy var voice: GatewayVoiceModel = {
+        let voice = GatewayVoiceModel(
+            connection: self.connection, hello: { [weak self] in self?.hello },
+            allowsWritesWithoutAdmin: self.profile.isDemo, gatewayName: { [weak self] in self?.profile.name ?? "" })
+        if self.profile.isDemo { voice.voiceLister = DemoGateway.demoVoiceLister }
+        return voice
+    }()
     /// Token and cost usage; loaded when the Usage page opens.
     @ObservationIgnored public private(set) lazy var usage = UsageModel(
         connection: self.connection, hello: { [weak self] in self?.hello })

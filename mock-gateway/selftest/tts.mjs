@@ -4,7 +4,7 @@ import { connectClient } from './helpers.mjs';
 export async function run(ctx) {
   const { url, device, deviceToken } = ctx;
   const c = await connectClient(url, device, deviceToken, true);
-  for (const m of ['tts.status', 'tts.providers', 'tts.personas', 'tts.enable', 'tts.disable', 'tts.setProvider', 'tts.setPersona', 'tts.convert', 'tts.speak']) {
+  for (const m of ['tts.status', 'tts.providers', 'tts.personas', 'tts.enable', 'tts.disable', 'tts.setProvider', 'tts.setPersona', 'tts.convert', 'tts.speak', 'secrets.store.set']) {
     assert.ok(c.hello.features.methods.includes(m), m);
   }
   const status = await c.send('tts.status', {});

@@ -328,6 +328,34 @@ struct KeyboardShortcutsTests {
         #expect(ShortcutCommand.listed(in: ShortcutCommand.readAloud.category).contains(.readAloud))
     }
 
+    // MARK: - Dictation (#462)
+
+    @Test func toggleDictationDefaultIsShiftCommandD() {
+        let command = ShortcutCommand.toggleDictation
+        #expect(command.rawValue == "toggleDictation")
+        #expect(command.category == .edit)
+        #expect(!command.title.isEmpty)
+        let combo = command.defaultCombo
+        #expect(combo == KeyCombo("d", [.shift, .command]))
+        #expect(combo?.displayString == "⇧⌘D")
+        #expect(!ReservedShortcuts.blocked.map(\.combo).contains(combo!))
+        let others = ShortcutCommand.allCases.filter { $0 != command }.compactMap(\.defaultCombo)
+        #expect(!others.contains(combo!))
+    }
+
+    @Test func toggleDictationIsListedInSettings() {
+        #expect(ShortcutCommand.listed(in: .edit).contains(.toggleDictation))
+        #expect(!ShortcutCommand.unavailable.contains(.toggleDictation))
+    }
+
+    @MainActor
+    @Test func toggleDictationDefaultIsInUseAndValidatesOK() {
+        let store = ShortcutStore(defaults: ScratchDefaults().defaults)
+        let combo = ShortcutCommand.toggleDictation.defaultCombo!
+        #expect(store.commands(using: combo) == [.toggleDictation])
+        #expect(store.validate(combo, for: .toggleDictation) == .ok)
+    }
+
     @MainActor
     @Test func readAloudDefaultIsInUse() {
         let store = ShortcutStore(defaults: ScratchDefaults().defaults)

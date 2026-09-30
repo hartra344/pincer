@@ -1,0 +1,132 @@
+---
+title: Gateway voice
+description: Set up your gateway's text-to-speech voice from Pincer, including ElevenLabs, and see exactly which voice is in use.
+---
+
+**Gateway Settings → Voice** is the full setup page for your gateway's text-to-speech voice. You can pick a provider, save its API key, choose a model and a voice, and run a test, all without editing the gateway's config file. It's the voice [Read Aloud](../read-aloud/) uses when it's set to **Automatic**.
+
+The page only appears if your gateway has text-to-speech.
+
+## The status at the top
+
+The top of the page tells you at a glance whether the gateway voice is working:
+
+- **Gateway Voice: Not set up**: no provider is ready. Read Aloud uses your device's voice until one is.
+- **&lt;Provider&gt; needs a key**: the active provider has no API key yet.
+- **&lt;Provider&gt; isn't working**: the last test failed. The reason is shown, with a hint on what to check: the key, the model or the voice.
+- A line such as **ElevenLabs · Eleven v4 Turbo · Rachel** with a **Ready** badge: all good.
+
+## Set up ElevenLabs in under a minute
+
+1. Open **Gateway Settings → Voice** and choose **ElevenLabs** in the **Provider** list. It shows **Needs Key** until you finish step 2.
+2. Paste your key into **API key** and choose **Save Key**. Pincer saves it on the gateway, then checks it and shows **Key saved and working**. If ElevenLabs refuses it you see "ElevenLabs rejected the key: …" instead.
+3. Under **Model**, pick **Eleven v4 Turbo**. **Custom…** takes any model ID ElevenLabs accepts, with **Save Model**.
+4. Under **Voice**, choose a voice from **Browse Voices**. The play button next to each one plays a preview. You can also paste a **Voice ID** and choose **Use**.
+5. If ElevenLabs isn't the provider in use yet, choose **Use ElevenLabs for Gateway Voice**.
+6. Choose **Test Voice**.
+
+:::note
+To browse your ElevenLabs voices, Pincer asks ElevenLabs directly (the gateway has no way to list them). It uses the key you pasted this session, kept in memory only and forgotten when you close the page. If you didn't paste a key this time, the page asks for it once (**Load Voices**), or you can paste a voice ID instead.
+:::
+
+## What the badges mean
+
+Each provider in the list has a badge, and **In Use** marks the one the gateway is speaking with:
+
+| Badge | Meaning |
+| --- | --- |
+| **Ready** | The gateway has what it needs (usually an API key) and can speak with this provider. |
+| **Needs Key** | The provider is available on the gateway but has no API key. Select it to add one. |
+| **Not Working** | The last test or key check failed. The reason is shown under the name. |
+
+You can select any provider to set it up. **Use &lt;Provider&gt; for Gateway Voice** only appears for one that's Ready.
+
+## Where the key is stored
+
+When your gateway supports it (OpenClaw 2026.8 or later), the key is saved in the gateway's **secrets store** as `ELEVENLABS_API_KEY`. The gateway's config holds only a reference to it (a SecretRef), never the key itself. On older gateways, Pincer saves the key as an environment setting in the gateway's config (`env.vars.ELEVENLABS_API_KEY`) and points the voice config at that variable. If the gateway process already has that variable set, the existing one wins.
+
+Pincer never saves the key on your Mac, iPhone or iPad, and never writes it into the config. **Current key** shows where it comes from:
+
+- "Stored in the Gateway's secrets as ELEVENLABS_API_KEY"
+- "Stored as the Gateway environment variable ELEVENLABS_API_KEY"
+- "Set in the Gateway's config file"
+- "From the Gateway's environment or an auth profile"
+- "Not set"
+
+The gateway hides key values and secret names in the config it sends, so the name is only shown when Pincer can confirm it. If a key is set but the gateway can't read it, the line ends "…but the Gateway can't read it".
+
+## Permissions
+
+Changing the gateway's voice (key, model, voice, voice settings) needs **Full Management** access, the gateway's `operator.admin` scope. With less than that, the page is read-only and a note says so. **Test Voice** and choosing the active provider or persona need write access ("Testing needs write access." appears without it). See [Gateway settings](../gateway-settings/) for how access levels work.
+
+## Voice settings
+
+Under **Voice Settings** you can adjust, for ElevenLabs:
+
+- **Speed** (0.5 to 2)
+- **Stability**, **Similarity Boost** and **Style** (0 to 100%)
+- **Speaker Boost** on or off
+
+**Reset to Defaults** puts them back to ElevenLabs' defaults.
+
+## Test Voice
+
+**Test Voice** asks the gateway to speak a short sentence and plays it. The result appears under the button:
+
+- **Success: ElevenLabs · Eleven v4 Turbo · Rachel · 820 ms**: it worked. That's the provider, model, voice and how long it took.
+- **&lt;Provider&gt; couldn't speak: …**: the provider refused, and the message is its own. Typical causes are a wrong or expired key, or a model or voice ElevenLabs doesn't know.
+- **Spoke with &lt;X&gt; instead of &lt;Y&gt;: …**: the gateway made audio, but with a different provider than the one you chose, and the reason follows. For example the chosen provider isn't set up, its key is set but the gateway can't read it, it rejected the model or voice, or this device has no write access.
+
+The gateway's speak call quietly falls back through its list of providers, so it can succeed with the wrong voice. To avoid a misleading result, when that happens Pincer then tests the chosen provider directly and reports the provider's real error rather than just "it fell back".
+
+A fallback isn't a silent failure: your choice isn't what's being used yet, so fix the reason shown.
+
+## What the Gateway Will Use
+
+**What the Gateway Will Use** is read-only. It lists the provider, model, voice and speed the gateway will actually use. Under each value is where it came from: **Gateway config**, **Local /tts preferences**, a **Persona**, or **Default**.
+
+The gateway config can be overridden by:
+
+- **Local `/tts` preferences** kept on the gateway host, such as the provider, persona and auto-speak mode.
+- **Personas**, which can pin their own provider and voice.
+- **Agent-level overrides** in the gateway config.
+
+The provider is chosen in this order: local `/tts` preferences, then the active persona's provider, then the gateway config's `tts.provider`. When the provider in use isn't the one in the config, the row is marked "Overridden by local /tts prefs or persona". If you have a `model` key in the ElevenLabs config, the page warns that it's ignored (see [below](#editing-the-config-by-hand)). If a value doesn't match what you saved, check its source line.
+
+## Why `/tts status` says "disabled"
+
+That's about **auto-speak on channels**, the **Speak Replies on Channels** switch under **Persona & Channels**. When it's off, the gateway doesn't attach voice to replies on Telegram, Discord and so on, and `/tts status` reports "disabled". It has no effect on **Test Voice** or on Read Aloud in Pincer.
+
+## Editing the config by hand
+
+If you edit the gateway's `openclaw.json` yourself, the ElevenLabs settings live under `tts.providers.elevenlabs`. The model key is `modelId` and the voice key is `speakerVoiceId`. The older `voiceId` still works, but `speakerVoiceId` wins if both are set:
+
+```json
+{
+  "tts": {
+    "provider": "elevenlabs",
+    "providers": {
+      "elevenlabs": {
+        "apiKey": { "source": "store", "provider": "default", "id": "ELEVENLABS_API_KEY" },
+        "modelId": "eleven_v4_turbo",
+        "speakerVoiceId": "pMsXgVXv3BLzUgSXRplE",
+        "voiceSettings": {
+          "stability": 0.5,
+          "similarityBoost": 0.75,
+          "style": 0,
+          "useSpeakerBoost": true,
+          "speed": 1
+        }
+      }
+    }
+  }
+}
+```
+
+:::caution
+Some gateway examples write the ElevenLabs model as `model`. The ElevenLabs provider only reads `modelId`, and the gateway accepts unknown keys without complaint, so a `model` key is silently ignored and the default (Multilingual v2) stays in use. If your model change doesn't take effect, check the key name. Pincer always writes `modelId`, and warns if the config has a `model` key that's being ignored.
+:::
+
+## Try it in the demo
+
+In [the demo](../../getting-started/try-the-demo/), ElevenLabs starts as **Needs Key**. Paste any key to make it **Ready**, then pick a model and voice and choose **Test Voice**. A key that starts with `sk_invalid` or `bad` shows what a rejected key looks like, and the model `eleven_bogus` shows a rejected model.

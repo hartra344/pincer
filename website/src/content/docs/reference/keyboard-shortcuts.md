@@ -77,10 +77,13 @@ On the message search page, <kbd>Esc</kbd> goes back to the palette only when yo
 | --- | --- |
 | Send | <kbd>Return</kbd> |
 | New line | <kbd>⇧</kbd> <kbd>Return</kbd> or <kbd>⌥</kbd> <kbd>Return</kbd> |
+| Dictate Message (Stop Dictation while listening) | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>D</kbd> |
 | Stop the current run | <kbd>⌘</kbd> <kbd>.</kbd> |
 | Reply to Last Message | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>R</kbd> |
 | [Read Last Reply Aloud](../../guides/read-aloud/), or stop | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>L</kbd> |
 | Cancel the reply | <kbd>Esc</kbd> |
+
+Dictation is in the [composer guide](../../guides/composer/#dictation). It works on iPad with a hardware keyboard, and toggles the pane you're using in split view.
 
 On macOS, **Reply to Last Message** is also in the **Edit** menu. See [Replying to a message](../../guides/composer/#replying-to-a-message).
 

@@ -74,6 +74,12 @@ enum ComposerKey {
     case up, down, tab, escape
 }
 
+/// Asks the field to put the caret at a UTF-16 offset; a new `serial` makes it apply once, after any text change in the same update.
+struct CaretRequest: Equatable {
+    var offset: Int
+    var serial: Int
+}
+
 /// Multi-line composer field that turns pasted images and files into attachments instead of
 /// letting the platform text view paste their file path (or nothing).
 struct ComposerTextView: View {
@@ -96,6 +102,12 @@ struct ComposerTextView: View {
     var onKey: (ComposerKey) -> Bool = { _ in false }
     /// Whether the caret is an insertion point at the end of the text.
     var onCaretAtEnd: (Bool) -> Void = { _ in }
+    /// The selection in UTF-16 units, each time it changes.
+    var onSelectionChange: (NSRange) -> Void = { _ in }
+    /// Where to put the caret after the text was set from outside (dictation); nil leaves it at the end.
+    var caretRequest: CaretRequest?
+    /// Whether the field has keyboard focus.
+    var onFocusChange: (Bool) -> Void = { _ in }
     /// Asked just before the field focuses itself on appearing; false leaves focus where it is
     /// (e.g. Find in Chat opening with the chat).
     var autoFocus: @MainActor () -> Bool = { true }
@@ -105,7 +117,8 @@ struct ComposerTextView: View {
             text: self.$text, maxLines: self.maxLines, isEditable: self.isEditable, menuActive: self.menuActive,
             escapeActive: self.escapeActive, focusRequest: self.focusRequest, onSubmit: self.onSubmit,
             onCommandSubmit: self.onCommandSubmit,
-            onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd, autoFocus: self.autoFocus)
+            onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd, onSelectionChange: self.onSelectionChange, onFocusChange: self.onFocusChange,
+            caretRequest: self.caretRequest, autoFocus: self.autoFocus)
             .overlay(alignment: .topLeading) {
                 if self.text.isEmpty {
                     Text(self.placeholder)
@@ -190,6 +203,9 @@ private struct PlatformComposerTextView: NSViewRepresentable {
     let onMedia: ([PastedMedia]) -> Void
     let onKey: (ComposerKey) -> Bool
     let onCaretAtEnd: (Bool) -> Void
+    let onSelectionChange: (NSRange) -> Void
+    let onFocusChange: (Bool) -> Void
+    let caretRequest: CaretRequest?
     let autoFocus: @MainActor () -> Bool
 
     private static let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
@@ -238,9 +254,12 @@ private struct PlatformComposerTextView: NSViewRepresentable {
             context.coordinator.focusRequest = self.focusRequest
             DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
         }
+        let caret = context.coordinator.takeCaret(self.caretRequest, length: (self.text as NSString).length)
         if textView.string != self.text {
             textView.string = self.text
-            textView.setSelectedRange(NSRange(location: (self.text as NSString).length, length: 0))
+            textView.setSelectedRange(NSRange(location: caret ?? (self.text as NSString).length, length: 0))
+        } else if let caret {
+            textView.setSelectedRange(NSRange(location: caret, length: 0))
         }
     }
 
@@ -256,10 +275,19 @@ private struct PlatformComposerTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: PlatformComposerTextView
         var focusRequest: Int
+        var caretSerial: Int?
 
         init(_ parent: PlatformComposerTextView) {
             self.parent = parent
             self.focusRequest = parent.focusRequest
+            self.caretSerial = parent.caretRequest?.serial
+        }
+
+        /// The clamped offset of a caret request not yet applied, once.
+        func takeCaret(_ request: CaretRequest?, length: Int) -> Int? {
+            guard let request, request.serial != self.caretSerial else { return nil }
+            self.caretSerial = request.serial
+            return min(max(request.offset, 0), length)
         }
 
         func textDidChange(_ notification: Notification) {
@@ -268,10 +296,15 @@ private struct PlatformComposerTextView: NSViewRepresentable {
             textView.enclosingScrollView?.invalidateIntrinsicContentSize()
         }
 
+        func textDidBeginEditing(_ notification: Notification) { self.parent.onFocusChange(true) }
+
+        func textDidEndEditing(_ notification: Notification) { self.parent.onFocusChange(false) }
+
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             let range = textView.selectedRange()
             self.parent.onCaretAtEnd(range.length == 0 && range.location == (textView.string as NSString).length)
+            self.parent.onSelectionChange(range)
         }
 
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
@@ -382,6 +415,9 @@ private struct PlatformComposerTextView: UIViewRepresentable {
     let onMedia: ([PastedMedia]) -> Void
     let onKey: (ComposerKey) -> Bool
     let onCaretAtEnd: (Bool) -> Void
+    let onSelectionChange: (NSRange) -> Void
+    let onFocusChange: (Bool) -> Void
+    let caretRequest: CaretRequest?
     let autoFocus: @MainActor () -> Bool
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -417,9 +453,12 @@ private struct PlatformComposerTextView: UIViewRepresentable {
             context.coordinator.focusRequest = self.focusRequest
             DispatchQueue.main.async { textView.becomeFirstResponder() }
         }
+        let caret = context.coordinator.takeCaret(self.caretRequest, length: (self.text as NSString).length)
         if textView.text != self.text {
             textView.text = self.text
-            textView.selectedRange = NSRange(location: (self.text as NSString).length, length: 0)
+            textView.selectedRange = NSRange(location: caret ?? (self.text as NSString).length, length: 0)
+        } else if let caret {
+            textView.selectedRange = NSRange(location: caret, length: 0)
         }
     }
 
@@ -435,10 +474,19 @@ private struct PlatformComposerTextView: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var parent: PlatformComposerTextView
         var focusRequest: Int
+        var caretSerial: Int?
 
         init(_ parent: PlatformComposerTextView) {
             self.parent = parent
             self.focusRequest = parent.focusRequest
+            self.caretSerial = parent.caretRequest?.serial
+        }
+
+        /// The clamped offset of a caret request not yet applied, once.
+        func takeCaret(_ request: CaretRequest?, length: Int) -> Int? {
+            guard let request, request.serial != self.caretSerial else { return nil }
+            self.caretSerial = request.serial
+            return min(max(request.offset, 0), length)
         }
 
         func textViewDidChange(_ textView: UITextView) {
@@ -446,9 +494,14 @@ private struct PlatformComposerTextView: UIViewRepresentable {
             textView.invalidateIntrinsicContentSize()
         }
 
+        func textViewDidBeginEditing(_ textView: UITextView) { self.parent.onFocusChange(true) }
+
+        func textViewDidEndEditing(_ textView: UITextView) { self.parent.onFocusChange(false) }
+
         func textViewDidChangeSelection(_ textView: UITextView) {
             let range = textView.selectedRange
             self.parent.onCaretAtEnd(range.length == 0 && range.location == (textView.text as NSString).length)
+            self.parent.onSelectionChange(range)
         }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {

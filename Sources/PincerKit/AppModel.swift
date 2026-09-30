@@ -2,6 +2,16 @@ import Foundation
 import PincerPush
 import Observation
 
+public struct DictationToggleRequest: Equatable, Sendable {
+    public var sessionKey: String
+    public var serial: Int
+
+    public init(sessionKey: String, serial: Int) {
+        self.sessionKey = sessionKey
+        self.serial = serial
+    }
+}
+
 /// Top-level state: saved Gateways ("servers" in the rail) and which one is selected.
 @MainActor
 @Observable
@@ -20,6 +30,11 @@ public final class AppModel {
     }
     public let notifier = Notifier.shared
     public let push = PushRegistrar.shared
+    /// The palette's request to start or stop dictation in one chat's composer.
+    public var dictationToggleRequest: DictationToggleRequest?
+    /// Chats whose composer is dictating, for the palette's Dictate/Stop item.
+    public var dictationActiveKeys: Set<String> = []
+    public var dictationAvailable = false
     /// Counts `open(_:)` calls (from notifications), so the UI can bring the chat on screen.
     public private(set) var openRequests = 0
     /// Find in Chat to open with a chat, e.g. after picking a message search result.

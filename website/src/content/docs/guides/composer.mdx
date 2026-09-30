@@ -41,7 +41,9 @@ To send something from another app, use the share sheet. See [Share to Pincer](.
 
 ## Dictation
 
-Click or tap the **microphone** button next to the text box and start talking. Your words appear in the text box as you speak, after anything you've already typed. Pincer never sends a dictated message on its own: read it over, fix anything, then send it as usual.
+Click or tap the **microphone** button next to the text box and start talking. Your words appear in the text box as you speak. They go where your cursor is. If you've selected text, your words replace it once Pincer hears them; if you say nothing, the selection stays. If the text box isn't focused when you start, they go at the end. Pincer never sends a dictated message on its own: read it over, fix anything, then send it as usual.
+
+You can also press <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>D</kbd> (**Dictate Message**), or choose **Dictate Message** (**Stop Dictation** while listening) in the [command palette](../command-palette-and-navigation/). On an iPad, the shortcut works with a hardware keyboard. In split view, it toggles the pane you're using. To change it, see [Keyboard shortcuts](../../reference/keyboard-shortcuts/#change-a-shortcut).
 
 Dictation stops when you:
 
@@ -50,13 +52,17 @@ Dictation stops when you:
 - start typing, or
 - send the message or switch to another chat. The text is kept as it is.
 
+When you send while still listening, Pincer waits a moment for the last words to be recognized, so they're included in the message.
+
 Starting dictation stops [Read Aloud](../read-aloud/) if a reply is being read.
 
 The first time, Pincer asks for permission to use the **microphone** and **speech recognition**. If you said no, the microphone button shows why and offers **Open Settings**, where you can allow it. On a Mac, that's **System Settings → Privacy & Security**.
 
 :::note
-When your device can recognize speech on its own, Pincer keeps dictation **on the device**. Otherwise, your device may send the audio to Apple to turn it into text. It isn't sent to your gateway. Only the text you send reaches the gateway.
+Unless you turn on **On-device only** (below), your device may send the audio to Apple to turn it into text. It isn't sent to your gateway. Only the text you send reaches the gateway.
 :::
+
+To keep your voice on the device, turn on **Settings → Conversation → Dictation → On-device only**. When on, your speech is recognized on this device and isn't sent to Apple. When off, Apple's servers may be used for languages that don't have an on-device model. If your language has no on-device model while it's on, Settings says so ("On-device dictation isn't available for *language*, so dictation won't work while this is on."), and the microphone button explains it and doesn't dictate. Turn the setting off to use Apple's servers.
 
 The microphone button doesn't appear if speech recognition isn't available for your language.
 

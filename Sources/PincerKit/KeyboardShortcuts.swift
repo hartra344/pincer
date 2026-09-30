@@ -155,7 +155,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
     // File
     case newChat, openChatInNewWindow, addGateway, exportChat, showBookmarks
     // Edit
-    case findInChat, findNext, findPrevious, replyToLastMessage, editLastMessage, regenerateLastReply, readAloud
+    case findInChat, findNext, findPrevious, replyToLastMessage, editLastMessage, regenerateLastReply, readAloud, toggleDictation
     // View
     case toggleSplitView, swapSplitChats, nextUnreadChat, showRuns, reloadPincer
     // Go
@@ -184,7 +184,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
     public var category: Category {
         switch self {
         case .newChat, .openChatInNewWindow, .addGateway, .exportChat, .showBookmarks: .file
-        case .findInChat, .findNext, .findPrevious, .replyToLastMessage, .editLastMessage, .regenerateLastReply, .readAloud: .edit
+        case .findInChat, .findNext, .findPrevious, .replyToLastMessage, .editLastMessage, .regenerateLastReply, .readAloud, .toggleDictation: .edit
         case .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .reloadPincer: .view
         case .commandPalette, .searchMessages, .goBack, .goForward: .go
         case .stopRun, .gatewaySettings: .chat
@@ -206,6 +206,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .editLastMessage: L("Edit Last Message")
         case .regenerateLastReply: L("Regenerate Last Reply")
         case .readAloud: L("Read Last Reply Aloud")
+        case .toggleDictation: L("Dictate Message")
         case .toggleSplitView: L("Split Right")
         case .swapSplitChats: L("Swap Chats")
         case .nextUnreadChat: L("Next Unread Chat")
@@ -233,6 +234,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .findPrevious: KeyCombo("g", [.shift, .command])
         case .replyToLastMessage: KeyCombo("r", [.shift, .command])
         case .readAloud: KeyCombo("l", [.option, .command])
+        case .toggleDictation: KeyCombo("d", [.shift, .command])
         case .toggleSplitView: KeyCombo("\\", [.option, .command])
         case .nextUnreadChat: KeyCombo(KeyCombo.Special.downArrow.rawValue, [.option, .shift])
         case .showRuns: KeyCombo("r", [.option, .command])

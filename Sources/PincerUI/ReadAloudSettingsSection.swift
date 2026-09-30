@@ -17,6 +17,15 @@ struct ReadAloudSettingsSection: View {
             .sorted { ($0.quality.rawValue, $1.name) > ($1.quality.rawValue, $0.name) }
     }
 
+    private var shownDeviceVoice: Binding<String> {
+        Binding(get: { self.displayedVoice }, set: { self.deviceVoice = $0 })
+    }
+
+    /// The stored voice when this device still has it, otherwise System Default, so the picker is never blank.
+    private var displayedVoice: String {
+        ReadAloudSettings.displayedDeviceVoice(stored: self.deviceVoice, available: self.voices.map(\.identifier))
+    }
+
     private var rateDescription: String {
         let range = ReadAloudSettings.rateRange
         let fraction = (Float(self.rate) - range.lowerBound) / (range.upperBound - range.lowerBound)
@@ -29,7 +38,8 @@ struct ReadAloudSettingsSection: View {
                 Text("Automatic", bundle: .module).tag(ReadAloudSettings.sourceAutomatic)
                 Text("This Device Only", bundle: .module).tag(ReadAloudSettings.sourceDevice)
             }
-            Picker(L("Device Voice"), selection: self.$deviceVoice) {
+            ReadAloudGatewayVoiceRows()
+            Picker(L("Device Voice"), selection: self.shownDeviceVoice) {
                 Text("System Default", bundle: .module).tag("")
                 ForEach(self.voices, id: \.identifier) { Text($0.name).tag($0.identifier) }
             }
@@ -41,6 +51,7 @@ struct ReadAloudSettingsSection: View {
                 } maximumValueLabel: {
                     Text("Faster", bundle: .module)
                 }
+                .labelsHidden()
                 .frame(maxWidth: 260)
                 .accessibilityValue(self.rateDescription)
             }
