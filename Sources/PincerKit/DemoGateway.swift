@@ -10,6 +10,8 @@ actor DemoGateway {
     static let url = "demo://pincer"
     /// The demo as an older Gateway that rejects `chat.send`'s `replyToId`, for checks.
     static let noReplyToURL = "demo://pincer?replyTo=off"
+    /// The demo as an older Gateway without `session.reactions.*`, for checks of the `users.prefs` fallback.
+    static let noSessionReactionsURL = "demo://pincer?sessionReactions=off"
 
     typealias Row = [String: JSONValue]
 
@@ -105,6 +107,8 @@ actor DemoGateway {
     /// The last `agent` seq the seeded running helper sent; it keeps streaming tool calls until stopped.
     var seededRunningSeq = DemoGateway.seededRunningLastSeq
     var seededStreamTask: Task<Void, Never>?
+    /// Shared reactions by session key, then message id (DemoGateway+Reactions.swift).
+    var sessionReactions: [String: [String: [DemoReaction]]] = [:]
     var messageSubscriptions: Set<String> = []
     var eventSeq = 0
     var sink: (@Sendable (GatewayEvent) -> Void)?
@@ -126,8 +130,12 @@ actor DemoGateway {
     /// MCP servers config and status (DemoGateway+MCP.swift).
     var mcp = DemoMCPState()
 
-    init(acceptsReplyTo: Bool = true) {
+    /// Whether the Gateway has `session.reactions.*` and `users.self` (an older one doesn't: the users.prefs fallback).
+    let hasSessionReactions: Bool
+
+    init(acceptsReplyTo: Bool = true, hasSessionReactions: Bool = true) {
         self.acceptsReplyTo = acceptsReplyTo
+        self.hasSessionReactions = hasSessionReactions
         self.prefs[Reactions.prefKey] = [
             "agent:main:main|demo-main-status": "👍",
             "agent:main:main|demo-main-gauge": "🎉",
@@ -136,6 +144,7 @@ actor DemoGateway {
         self.branchTips = Self.seedSessionManager(sessions: &seeded.sessions, transcripts: &seeded.transcripts)
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
+        self.sessionReactions = Self.seedSessionReactions()
         Self.seedSubagents(sessions: &self.sessions, transcripts: &self.transcripts)
         self.approvalHistory = Self.seedApprovalHistory()
         let pending = Self.seedPendingApproval()
@@ -209,7 +218,7 @@ actor DemoGateway {
             "type": "hello-ok",
             "protocol": .number(Double(GatewayConnection.protocolVersion)),
             "server": ["version": "demo", "connId": .string(Self.shortId("conn_"))],
-            "features": ["methods": JSONValue(Self.methods), "events": []],
+            "features": ["methods": JSONValue(self.advertisedMethods), "events": JSONValue(self.hasSessionReactions ? ["session.reaction"] : [])],
             "snapshot": [
                 "presence": .array(self.presence()),
                 "health": self.health(),
@@ -235,6 +244,7 @@ actor DemoGateway {
         if let result = try self.handleSessionManager(method, params) { return result }
         if let result = try self.handleVoice(method, params) { return result }
         if let result = try self.handleCatalog(method, params) { return result }
+        if let result = try self.handleReactions(method, params) { return result }
         if let result = try self.handleSessionList(method, params) { return result }
         if let result = try self.handleGroups(method, params) { return result }
         if let result = try self.handleRuns(method, params) { return result }

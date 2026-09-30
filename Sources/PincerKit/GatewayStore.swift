@@ -479,6 +479,8 @@ public final class GatewayStore: Identifiable {
         self.replyToUnsupported = false
         self.reactionForwardingOff = []
         self.reactionNoticeShown = []
+        self.sessionReactionsOff = false
+        self.selfProfile = nil
         self.lastError = nil
         self.bootstrapTask?.cancel()
         let epoch = self.connectionEpoch
@@ -889,6 +891,9 @@ public final class GatewayStore: Identifiable {
             let keys = payload["keys"]?.array?.compactMap(\.string)
             let maps = self.syncedMaps.filter { keys?.contains($0.pref) ?? true && !self.consumeOwnWrite($0.pref) }
             if !maps.isEmpty { Task { await self.pullMaps(maps) } }
+        case "session.reaction":
+            guard let key = payload["sessionKey"]?.text else { return }
+            for chat in self.chats.values where chat.matchesProgressCardKey(key) { chat.handleReactionEvent(payload) }
         case "chat":
             guard let key = payload["sessionKey"]?.text else { return }
             if let runId = payload["runId"]?.text { self.runSessions[runId] = key }
@@ -1368,6 +1373,10 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var reactionForwardingOff: Set<String> = []
     /// Chats already told a reaction didn't reach their channel on this connection.
     @ObservationIgnored var reactionNoticeShown: Set<String> = []
+    /// Gateway reactions (`session.reactions.*`) failed as unavailable on this connection, so reactions use `users.prefs`.
+    public internal(set) var sessionReactionsOff = false
+    /// Your `users.self` profile id (the Gateway's reaction identity) for one connection; `id` is nil without a profile.
+    @ObservationIgnored var selfProfile: (epoch: Int, id: String?)?
 
     @ObservationIgnored var invalidatingTranscripts: Set<String> = []
 

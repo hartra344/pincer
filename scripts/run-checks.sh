@@ -4,7 +4,7 @@
 #
 #   scripts/run-checks.sh [extra swift flags…]
 #
-# Env: CHECKS_LOG_DIR (default: a temp folder), CHECKS_PORT_BASE (default 18801; uses 5 ports).
+# Env: CHECKS_LOG_DIR (default: a temp folder), CHECKS_PORT_BASE (default 18801; uses 6 ports).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -67,6 +67,7 @@ start_mock extras $((PORT_BASE + 1)) MOCK_LONG_CHAT=400
 start_mock no-usage $((PORT_BASE + 2)) MOCK_NO_USAGE=1
 start_mock no-reply-to $((PORT_BASE + 3)) MOCK_NO_REPLY_TO=1
 start_mock reconnect $((PORT_BASE + 4))
+start_mock no-session-reactions $((PORT_BASE + 5)) MOCK_NO_REACTIONS=1
 wait_for_mocks
 
 names=()
@@ -101,6 +102,7 @@ lane live-extras "${fast[@]}" "$CHECKS" --skip-intent-checks --skip-perf-budgets
 lane live-no-usage "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-no-usage "$(url 2)" dev-token
 lane live-no-reply-to "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-no-reply-to "$(url 3)" dev-token
 lane live-reconnect "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-reconnect "$(url 4)" dev-token
+lane live-no-session-reactions "$CHECKS" --skip-intent-checks --skip-perf-budgets --live-no-session-reactions "$(url 5)" dev-token
 
 status=0
 summary=()

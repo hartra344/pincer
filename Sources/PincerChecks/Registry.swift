@@ -81,6 +81,7 @@ enum Suites {
             Section("Replies & reactions") { checkReactionsReply() },
             Section("Agent reply targets") { checkReplyTargets() },
             Section("Reaction level") { checkReactionLevel() },
+            Section("Gateway reactions") { checkGatewayReactions() },
             Section("Agent questions") { runAgentQuestionChecks() },
             Section("Gateway config schema") { runConfigChecks() },
             Section("Progress card") { runProgressCardChecks() },
@@ -133,6 +134,7 @@ enum Suites {
         Section("Replies & reactions (demo)") { await runDemoReactionsReply() },
         Section("Agent reply targets (demo)") { await runDemoReplyTargets() },
         Section("Reaction level (demo)") { await runDemoReactionLevel() },
+        Section("Reactions on users.prefs (demo, Gateway reactions off)") { await runDemoPrefsReactions() },
         Section("Messages from other agents (demo)") { await runDemoForwarded() },
         Section("Menu bar (demo)") { await runMenuBarDemo() },
         Section("Scroll to bottom (demo)") { await runDemoScrollToBottom() },
@@ -171,6 +173,7 @@ enum Suites {
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
         LiveSection("Messages from other agents (live)") { url, token in await runLiveForwarded(url: url, token: token) },
+        LiveSection("Gateway reactions (live)") { url, token in await runLiveGatewayReactions(url: url, token: token) },
         LiveSection("Quick Capture (live)") { url, token in await runQuickCaptureLive(url: url, token: token) },
         LiveSection("Replies & reactions (live)") { url, token in await runLiveReactionsReply(url: url, token: token) },
         LiveSection("Agent reply targets (live)") { url, token in await runLiveReplyTargets(url: url, token: token) },
@@ -204,6 +207,11 @@ enum Suites {
     /// A Gateway without replyToId (mock with MOCK_NO_REPLY_TO=1).
     static let liveNoReplyTo: [LiveSection] = [
         LiveSection(title: { "Gateway without replyToId at \($0)" }) { url, token in await runLiveNoReplyTo(url: url, token: token) },
+    ]
+
+    /// A Gateway without session.reactions.* (mock with MOCK_NO_REACTIONS=1).
+    static let liveNoSessionReactions: [LiveSection] = [
+        LiveSection(title: { "Gateway without session.reactions at \($0)" }) { url, token in await runLiveNoSessionReactions(url: url, token: token) },
     ]
 
     /// A mock started with MOCK_PAIRING=auto MOCK_LEGACY_PAIRING=1.

@@ -113,7 +113,7 @@ Reactions appear as small chips under a message, above its footer. Each chip sho
 - **Add or remove:** click a chip to add the same reaction, or click one of yours to remove it.
 - **Who reacted:** hover over a chip on macOS, or touch and hold it on iOS. On iOS, that menu also has **Remove My Reaction**.
 
-Your reactions sync between your devices through the gateway's `users.prefs` (see [Synced preferences](../../reference/synced-preferences/)). The emoji you used recently are kept on each device.
+On a gateway with shared reactions (it offers `session.reactions.set` and `session.reactions.list`), your reactions are saved on the gateway with the chat. Other people and clients on the chat see them, and you see theirs, under their names. Changes from others show up live. On an older gateway, your reactions sync between your devices through `users.prefs` instead (see [Synced preferences](../../reference/synced-preferences/)) and are kept in Pincer only. The emoji you used recently are kept on each device.
 
 ### The agent's reactions
 
@@ -132,9 +132,11 @@ Change it under **Gateway Settings → Channels**, on the channel's page or on o
 
 ### Reactions in bridged chats
 
-In a chat bridged from another channel, such as Discord, reacting to one of **your** messages also adds the reaction there, if the gateway offers `message.action` and the message came through that channel. Removing your reaction removes it there too. If the channel refuses, the reaction stays in Pincer and a note says "Couldn't add the reaction in Discord. It's saved in Pincer only."
+In a chat bridged from another channel, such as Discord, reacting to one of **your** messages also adds the reaction there. With shared reactions the gateway does this itself. On an older gateway, Pincer does it when the gateway offers `message.action` and the message came through that channel. Removing your reaction removes it there too. If the channel refuses, the reaction stays in Pincer and a note says "Couldn't add the reaction in Discord. It's saved in Pincer only."
 
-Reactions on the agent's messages in bridged chats, and all reactions in chats you have with the agent directly, are kept in Pincer only. Your reactions aren't sent to the agent as feedback, so it doesn't see them yet.
+### Reactions as feedback
+
+With shared reactions, the agent sees each change to your reactions as a System line at the start of its next turn. It doesn't start a new run, so a 👍 or 👎 works as quiet feedback without interrupting anything. On an older gateway your reactions stay in Pincer and the agent doesn't see them.
 
 ## Images
 
