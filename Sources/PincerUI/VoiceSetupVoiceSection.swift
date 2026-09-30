@@ -16,6 +16,12 @@ struct VoiceSetupVoiceSection: View {
 
     static let defaultVoiceId = "pMsXgVXv3BLzUgSXRplE"
 
+    /// A raw ID is already visible in the Voice ID field below.
+    private var showsCurrentRow: Bool {
+        guard let current = self.current else { return true }
+        return self.model.voiceDisplay(current, provider: self.provider) != current
+    }
+
     private var isElevenLabs: Bool { self.provider == "elevenlabs" }
     private var current: String? { self.model.setups[self.provider]?.voice.flatMap { $0.isEmpty ? nil : $0 } }
 
@@ -27,7 +33,7 @@ struct VoiceSetupVoiceSection: View {
 
     var body: some View {
         Section {
-            LabeledContent(L("Voice")) { self.currentVoice }
+            if self.showsCurrentRow { LabeledContent(L("Voice")) { self.currentVoice } }
             if self.isElevenLabs { self.browser }
             HStack {
                 TextField(L("Voice ID"), text: self.$voiceId, prompt: Text("Paste a voice ID", bundle: .module))
@@ -42,11 +48,12 @@ struct VoiceSetupVoiceSection: View {
                         .disabled(self.voiceId.trimmingCharacters(in: .whitespaces).isEmpty || self.voiceId == self.current)
                 }
             }
+            VoiceScopedMessage(setup: self.setup, scope: "voice")
         } header: {
             Text("Voice", bundle: .module)
         }
         .task(id: self.current) { self.voiceId = self.current ?? "" }
-        .task(id: self.provider) { if self.isElevenLabs { await self.load(key: nil) } }
+        .task(id: "\(self.provider)-\(self.setup.keyGeneration)") { if self.isElevenLabs { await self.load(key: nil) } }
     }
 
     @ViewBuilder private var currentVoice: some View {
@@ -98,7 +105,7 @@ struct VoiceSetupVoiceSection: View {
     private func save(_ raw: String) {
         let id = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !id.isEmpty else { return }
-        Task { await self.setup.run { try await self.model.saveVoice(id, provider: self.provider) } }
+        Task { await self.setup.run("voice") { try await self.model.saveVoice(id, provider: self.provider) } }
     }
 
     private func load(key: String?) async {

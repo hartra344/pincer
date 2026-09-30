@@ -8,6 +8,8 @@ struct VoiceSetupProviderSection: View {
     let setup: VoiceSetupController
     let status: TTSStatus
     let selected: String
+    /// The key section shows its own button right after a key was saved.
+    var hideUseButton = false
 
     private var rows: [TTSProviderState] {
         if !self.model.providers.isEmpty {
@@ -19,7 +21,10 @@ struct VoiceSetupProviderSection: View {
     var body: some View {
         Section {
             ForEach(self.rows, id: \.id) { row in self.row(row.id) }
-            VoiceUseProviderButton(model: self.model, setup: self.setup, provider: self.selected)
+            if !self.hideUseButton {
+                VoiceUseProviderButton(model: self.model, setup: self.setup, provider: self.selected)
+            }
+            VoiceScopedMessage(setup: self.setup, scope: "provider")
         } header: {
             Text("Provider", bundle: .module)
         } footer: {

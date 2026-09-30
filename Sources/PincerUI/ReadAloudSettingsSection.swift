@@ -38,6 +38,7 @@ struct ReadAloudSettingsSection: View {
                 Text("Automatic", bundle: .module).tag(ReadAloudSettings.sourceAutomatic)
                 Text("This Device Only", bundle: .module).tag(ReadAloudSettings.sourceDevice)
             }
+            ReadAloudGatewayVoiceRows()
             Picker(L("Device Voice"), selection: self.shownDeviceVoice) {
                 Text("System Default", bundle: .module).tag("")
                 ForEach(self.voices, id: \.identifier) { Text($0.name).tag($0.identifier) }
@@ -54,7 +55,6 @@ struct ReadAloudSettingsSection: View {
                 .frame(maxWidth: 260)
                 .accessibilityValue(self.rateDescription)
             }
-            ReadAloudGatewayVoiceRows()
             Toggle(L("Read New Replies Aloud"), isOn: self.$autoRead)
             Button(self.controller.isActive ? L("Stop") : L("Test Device Voice")) {
                 if self.controller.isActive {

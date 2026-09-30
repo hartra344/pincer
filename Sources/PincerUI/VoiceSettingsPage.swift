@@ -21,9 +21,9 @@ struct VoiceSettingsPage: View {
             } else if !connected {
                 Section { } footer: { Text("Connect to the Gateway to see its voice settings.", bundle: .module) }
             }
-            if let message = self.setup.error ?? model.loadError {
+            if let message = (self.setup.messageScope == nil ? self.setup.error : nil) ?? model.loadError {
                 Section { Label(message, systemImage: "xmark.octagon.fill").foregroundStyle(.red) }
-            } else if let notice = self.setup.notice {
+            } else if self.setup.messageScope == nil, let notice = self.setup.notice {
                 Section { Label(notice, systemImage: "checkmark.circle").foregroundStyle(.secondary) }
             }
         }
@@ -45,7 +45,8 @@ struct VoiceSettingsPage: View {
         let keys = TTSProviderKeys.forProvider(provider)
         let editable = model.canConfigure
         VoiceSetupStatusSection(model: model, status: status)
-        VoiceSetupProviderSection(model: model, setup: self.setup, status: status, selected: provider)
+        VoiceSetupProviderSection(model: model, setup: self.setup, status: status, selected: provider,
+                                   hideUseButton: self.setup.keySavedProvider == provider)
         if !editable {
             Section { FullManagementBadge { self.navigator.destination = .connection } }
         }

@@ -23,6 +23,7 @@ struct VoiceSetupSettingsSection: View {
                 Toggle(L("Speaker Boost"), isOn: self.$draft.useSpeakerBoost)
                     .disabled(!self.editable)
                     .onChange(of: self.draft.useSpeakerBoost) { _, _ in self.commit() }
+                VoiceScopedMessage(setup: self.setup, scope: "settings")
                 if self.editable {
                     Button(L("Reset to Defaults")) {
                         self.draft = .elevenLabsDefault
@@ -38,7 +39,7 @@ struct VoiceSetupSettingsSection: View {
     private func commit() {
         let value = self.draft
         guard value != self.saved else { return }
-        Task { await self.setup.run { try await self.model.saveVoiceSettings(value, provider: self.provider) } }
+        Task { await self.setup.run("settings") { try await self.model.saveVoiceSettings(value, provider: self.provider) } }
     }
 
     private func display(_ value: Double, percent: Bool) -> String {

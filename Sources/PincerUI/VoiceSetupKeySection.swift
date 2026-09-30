@@ -17,6 +17,7 @@ struct VoiceSetupKeySection: View {
         case saved
     }
 
+    private var badgeFailed: Bool { if case .error = self.model.badge(for: self.provider) { return true } else { return false } }
     private var keys: TTSProviderKeys { TTSProviderKeys.forProvider(self.provider) }
     private var name: String { self.model.displayName(for: self.provider) }
     private var notResolving: Bool { self.model.keyIsNotResolving(self.provider) }
@@ -34,7 +35,10 @@ struct VoiceSetupKeySection: View {
                 }
                 if self.editable { self.entry }
                 self.checkLine
-                VoiceUseProviderButton(model: self.model, setup: self.setup, provider: self.provider, prominent: true)
+                VoiceScopedMessage(setup: self.setup, scope: "key")
+                if self.setup.keySavedProvider == self.provider {
+                    VoiceUseProviderButton(model: self.model, setup: self.setup, provider: self.provider, prominent: true)
+                }
             }
         } header: {
             Text("API Key", bundle: .module)
@@ -48,6 +52,7 @@ struct VoiceSetupKeySection: View {
     @ViewBuilder private var entry: some View {
         SecureField(L("API key"), text: self.$key, prompt: Text("Paste API key", bundle: .module))
             .autocorrectionDisabled()
+            .textContentType(nil)
             #if os(iOS)
             .textInputAutocapitalization(.never)
             #endif
@@ -59,7 +64,7 @@ struct VoiceSetupKeySection: View {
     @ViewBuilder private var checkLine: some View {
         if self.checking {
             HStack { ProgressView().controlSize(.small); Text("Checking key…", bundle: .module).foregroundStyle(.secondary) }
-        } else if let check = self.check {
+        } else if let check = self.check, !(check == .working && self.badgeFailed) {
             switch check {
             case .working:
                 Label(L("Key saved and working"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
@@ -76,8 +81,11 @@ struct VoiceSetupKeySection: View {
         guard !value.isEmpty, !self.checking else { return }
         self.key = ""
         self.check = nil
+        self.setup.keySavedProvider = nil
         Task {
-            guard await self.setup.run({ try await self.model.saveKey(value, provider: self.provider) }) else { return }
+            guard await self.setup.run("key", { try await self.model.saveKey(value, provider: self.provider) }) else { return }
+            self.setup.keySavedProvider = self.provider
+            self.setup.keyGeneration += 1
             self.checking = true
             self.check = await self.verify()
             self.checking = false

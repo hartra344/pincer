@@ -30,7 +30,7 @@ struct VoiceSetupModelSection: View {
                 self.custom = self.current ?? ""
             } else if !value.isEmpty, value != self.current {
                 self.choosingCustom = false
-                Task { await self.setup.run { try await self.model.saveModel(value, provider: self.provider) } }
+                Task { await self.setup.run("model") { try await self.model.saveModel(value, provider: self.provider) } }
             }
         }
     }
@@ -50,7 +50,7 @@ struct VoiceSetupModelSection: View {
             }
             .disabled(!self.editable)
             if self.isCustom {
-                TextField(L("Model ID"), text: self.$custom, prompt: Text("e.g. eleven_v4_turbo"))
+                TextField(L("Model ID"), text: self.$custom, prompt: Text("Model ID, e.g. eleven_v4_turbo", bundle: .module))
                     .autocorrectionDisabled()
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
@@ -67,6 +67,7 @@ struct VoiceSetupModelSection: View {
                 Label(String(format: L("The Gateway config has model \"%@\", which is ignored. Choose a model here to replace it."), ignored), systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(.orange)
             }
+            VoiceScopedMessage(setup: self.setup, scope: "model")
         } header: {
             Text("Model", bundle: .module)
         }
@@ -75,6 +76,6 @@ struct VoiceSetupModelSection: View {
     private func saveCustom() {
         let id = self.custom.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !id.isEmpty, id != self.current else { return }
-        Task { if await self.setup.run({ try await self.model.saveModel(id, provider: self.provider) }) { self.choosingCustom = false } }
+        Task { if await self.setup.run("model", { try await self.model.saveModel(id, provider: self.provider) }) { self.choosingCustom = false } }
     }
 }

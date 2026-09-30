@@ -10,6 +10,11 @@ final class VoiceSetupController {
     var busy = false
     var notice: String?
     var error: String?
+    /// The section that triggered `notice`/`error` (nil: shown at the page bottom).
+    var messageScope: String?
+    /// Bumped when a key was saved, so the voice list reloads.
+    var keyGeneration = 0
+    var keySavedProvider: String?
     /// The provider whose setup is showing (may differ from the Gateway's active provider).
     var selectedProvider: String?
     private(set) var playingId: String?
@@ -19,9 +24,10 @@ final class VoiceSetupController {
 
     /// Runs `work`, reporting the outcome or error on the page. Returns whether it succeeded.
     @discardableResult
-    func run(_ work: @MainActor () async throws -> ConfigApplyOutcome?) async -> Bool {
+    func run(_ scope: String? = nil, _ work: @MainActor () async throws -> ConfigApplyOutcome?) async -> Bool {
         self.error = nil
         self.notice = nil
+        self.messageScope = scope
         self.busy = true
         defer { self.busy = false }
         do {
@@ -128,7 +134,7 @@ struct VoiceUseProviderButton: View {
             let title = String(format: L("Use %@ for Gateway Voice"), self.model.displayName(for: self.provider))
             let button = Button(title) {
                 let id = self.provider
-                Task { await self.setup.run { try await self.model.setProvider(id); return nil } }
+                Task { await self.setup.run("provider") { try await self.model.setProvider(id); return nil } }
             }
             .disabled(!self.model.canWrite)
             if self.prominent { button.buttonStyle(.borderedProminent) } else { button }
@@ -141,5 +147,21 @@ extension GatewayVoiceModel {
     func modelDisplayName(_ id: String?, provider: String) -> String? {
         guard let id, !id.isEmpty else { return nil }
         return self.modelOptions(for: provider).first { $0.id == id }?.name ?? id
+    }
+}
+
+/// The outcome of the last change, next to the control that made it.
+struct VoiceScopedMessage: View {
+    let setup: VoiceSetupController
+    let scope: String
+
+    var body: some View {
+        if self.setup.messageScope == self.scope {
+            if let error = self.setup.error {
+                Label(error, systemImage: "xmark.octagon.fill").font(.callout).foregroundStyle(.red)
+            } else if let notice = self.setup.notice {
+                Label(notice, systemImage: "checkmark.circle").font(.callout).foregroundStyle(.secondary)
+            }
+        }
     }
 }
