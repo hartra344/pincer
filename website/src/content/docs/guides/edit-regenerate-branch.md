@@ -32,11 +32,6 @@ When a chat has more than one path, a **Branch 1 of 2** control with previous an
 The Gateway only reports where each branch ends, not where it forks. Pincer puts the switcher on the message your latest Edit & Resend or Regenerate sent (remembered until the app quits), otherwise on the last message you sent on the current branch. After relaunching, or on another device, it may sit lower than the real fork point.
 :::
 
-### Branch chip in the header
-
-If the chat has more than one branch and the message where they fork is scrolled out of view, a **Branch 2 of 3** chip appears in the chat header (the toolbar on Mac, the navigation bar on iPhone and iPad, the pane header in split view). Open it for a menu of the branches, each with its title and message count and a checkmark on the current one. Choose **Show Fork Point** to scroll back to that message. The chip hides when the inline switcher is visible.
-
-Switching from the chip needs Full Management (admin) access and isn't available while the agent is working.
 ## What you need
 
 - **Branch from Here** needs write access to the Gateway.
