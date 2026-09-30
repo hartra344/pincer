@@ -1,5 +1,8 @@
 import PincerKit
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 /// Gateway Settings → Voice: the Gateway's text-to-speech provider and persona (`tts.*`), and whether
 /// it speaks every channel reply. Read Aloud in Pincer uses `tts.speak` and needs none of these.
@@ -8,7 +11,7 @@ struct VoiceSettingsPage: View {
     @Environment(SettingsNavigator.self) private var navigator
     @State private var setup = VoiceSetupController()
     @State private var confirmingAuto = false
-    @State private var pendingAuto = false
+    @State private var pendingAuto = TTSAutoMode.off
 
     private var model: GatewayVoiceModel { self.gateway.voice }
 
@@ -75,8 +78,8 @@ struct VoiceSettingsPage: View {
             Text("Persona & Channels", bundle: .module)
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
-            Text("Speak Replies on Channels is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud.", bundle: .module)
-            Text("“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config; Pincer can only switch replies Off or Always.", bundle: .module)
+                Text("Speak Replies on Channels is gateway-wide. It controls when the Gateway attaches spoken audio to replies on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud.", bundle: .module)
+                Text("“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config or /tts preferences; Pincer can only switch replies Off or Always.", bundle: .module)
             }
         }
         .disabled(!model.canWrite)
@@ -87,35 +90,40 @@ struct VoiceSettingsPage: View {
 
     @ViewBuilder private func autoSpeakRow(_ model: GatewayVoiceModel, _ status: TTSStatus) -> some View {
         let current = model.autoMode
+        let currentName = current?.displayName ?? String(format: L("Unknown (%@)"), status.auto)
+        let selection = Binding<String>(get: { status.auto.lowercased() }, set: { self.choose($0, model) })
         LabeledContent(L("Speak Replies on Channels")) {
             Menu {
-                Button(TTSAutoMode.off.displayName) { self.choose(false, model) }
-                Button(TTSAutoMode.always.displayName) { self.choose(true, model) }
+                Picker(L("Speak Replies on Channels"), selection: selection) {
+                    if current != .off, current != .always { Text(currentName).tag(status.auto.lowercased()) }
+                    Text(TTSAutoMode.off.displayName).tag(TTSAutoMode.off.rawValue)
+                    Text(TTSAutoMode.always.displayName).tag(TTSAutoMode.always.rawValue)
+                }
             } label: {
-                Text(current?.displayName ?? String(format: L("Unknown (%@)"), status.auto))
+                Text(currentName)
             }
         }
-        .confirmationDialog(self.pendingText(current), isPresented: self.$confirmingAuto, titleVisibility: .visible) {
-            Button(self.pendingAuto ? TTSAutoMode.always.displayName : TTSAutoMode.off.displayName, role: .destructive) {
-                self.apply { try await model.setAutoSpeakChannels(self.pendingAuto) }
+        .confirmationDialog(String(format: L("Replace “%@” with “%@”?"), currentName, self.pendingAuto.displayName),
+                            isPresented: self.$confirmingAuto, titleVisibility: .visible) {
+            Button(self.pendingAuto == .always ? L("Switch to Always") : L("Turn Off"), role: .destructive) {
+                self.apply { try await model.setAutoSpeakChannels(self.pendingAuto == .always) }
             }
             Button(L("Cancel"), role: .cancel) {}
         } message: {
-            Text("Pincer can't set it back; the Gateway only offers on/off.", bundle: .module)
+            Text(String(format: L("To go back to %@, edit the Gateway's config or use /tts."), currentName))
         }
     }
 
-    private func pendingText(_ current: TTSAutoMode?) -> String {
-        let new = (self.pendingAuto ? TTSAutoMode.always : TTSAutoMode.off).displayName
-        return String(format: L("Replace “%@” with “%@”?"), current?.displayName ?? "", new)
-    }
-
-    private func choose(_ on: Bool, _ model: GatewayVoiceModel) {
-        if model.setAutoSpeakNeedsConfirmation(on) {
-            self.pendingAuto = on
+    private func choose(_ raw: String, _ model: GatewayVoiceModel) {
+        guard let mode = TTSAutoMode(rawValue: raw), mode == .off || mode == .always, model.autoMode != mode else { return }
+        if model.setAutoSpeakNeedsConfirmation(mode == .always) {
+            #if os(iOS)
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            #endif
+            self.pendingAuto = mode
             self.confirmingAuto = true
-        } else if model.autoMode != (on ? .always : .off) {
-            self.apply { try await model.setAutoSpeakChannels(on) }
+        } else {
+            self.apply { try await model.setAutoSpeakChannels(mode == .always) }
         }
     }
 
