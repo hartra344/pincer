@@ -25,3 +25,13 @@ extension GatewayStore {
     /// Starts pushing bookmark edits; called when the gateway is added.
     func wireBookmarkSync() { _ = self.bookmarkStore }
 }
+
+extension GatewayStore {
+    /// Forgets this device's bookmarks and sync state when the gateway is removed. The gateway's
+    /// user prefs keep them for other devices; nothing is pushed.
+    func forgetLocalBookmarks() {
+        BookmarkStore.forget(gatewayId: self.id)
+        self.defaults.removeObject(forKey: "pincer.bookmarksSynced.\(self.id.uuidString)")
+        self.defaults.removeObject(forKey: Self.pendingPrefsKey(self.id))
+    }
+}

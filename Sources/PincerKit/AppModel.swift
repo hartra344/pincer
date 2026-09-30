@@ -320,13 +320,14 @@ public final class AppModel {
             store.stop()
             // A prefs pull that was in flight may have written them back.
             store.forgetLocalHealthDismissals()
+            store.forgetLocalBookmarks()
             ReactionStore(gatewayId: id.uuidString, defaults: self.localDefaults).removeAll()
         }
         store.profile.forgetCredentials()
         TranscriptCache.removeAll(gatewayId: id, permanently: true)
         self.history.prune { $0.gatewayId != id }
         DraftStore.removeAll(gatewayId: id)
-        BookmarkStore.shared(gatewayId: id).removeAll()
+        store.forgetLocalBookmarks()
         ReactionStore(gatewayId: id.uuidString, defaults: self.localDefaults).removeAll()
         store.retireOutbox(save: false)
         store.outbox = Outbox()

@@ -132,6 +132,7 @@ actor DemoGateway {
             "agent:main:main|demo-main-status": "👍",
             "agent:main:main|demo-main-gauge": "🎉",
         ]
+        self.prefs[DemoBookmarks.prefKey] = DemoBookmarks.prefEntries()
         var seeded = Self.seed()
         self.branchTips = Self.seedSessionManager(sessions: &seeded.sessions, transcripts: &seeded.transcripts)
         self.sessions = seeded.sessions

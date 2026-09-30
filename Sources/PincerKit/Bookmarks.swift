@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// A starred message (#42). OpenClaw has no bookmark or pin API for messages, so bookmarks are
-/// kept on this device, per gateway.
+/// kept per gateway, on this device and synced through the gateway's `users.prefs` (#382).
 public struct Bookmark: Codable, Hashable, Identifiable, Sendable {
     public var sessionKey: String
     /// The message's transcript id, as Copy Link and message jumps use it.
@@ -43,7 +43,7 @@ extension Bookmark {
     /// The synced entry value: compact JSON `{"p":preview,"r":role,"m":messageDateMs?,"c":createdAtMs}`.
     var syncedValue: String {
         struct Wire: Encodable { let p: String; let r: String; let m: Int64?; let c: Int64 }
-        let wire = Wire(p: self.preview, r: self.role, m: self.messageDate.map(Self.ms), c: Self.ms(self.createdAt))
+        let wire = Wire(p: Self.syncedPreview(self.preview), r: self.role, m: self.messageDate.map(Self.ms), c: Self.ms(self.createdAt))
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return (try? encoder.encode(wire)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
@@ -57,6 +57,13 @@ extension Bookmark {
               let wire = try? JSONDecoder().decode(Wire.self, from: Data(value.utf8)) else { return nil }
         self.init(sessionKey: parts[0], messageId: parts[1], preview: wire.p, role: wire.r,
                   messageDate: wire.m.map(Self.date), createdAt: Self.date(wire.c))
+    }
+
+    /// The gateway caps each pref value at 4 KiB, so synced previews are short.
+    static let syncedPreviewLength = 40
+
+    private static func syncedPreview(_ preview: String) -> String {
+        preview.count > Self.syncedPreviewLength ? String(preview.prefix(Self.syncedPreviewLength - 1)) + "…" : preview
     }
 
     private static func ms(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded()) }
@@ -74,6 +81,10 @@ public final class BookmarkStore {
 
     /// Most bookmarks kept per gateway; adding beyond drops the oldest.
     public static let limit = 500
+    /// Byte budget for the synced map: the gateway rejects a pref value over 4 KiB.
+    static let syncedByteBudget = 3800
+    /// How many bookmarks the last `add` dropped to stay within the limits.
+    public private(set) var droppedCount = 0
     /// Called with the synced entry changes (`nil` = delete) after a local edit, never for `apply(synced:)`
     /// or `removeAll()`.
     @ObservationIgnored public var onChange: (([String: String?]) -> Void)?
@@ -86,6 +97,14 @@ public final class BookmarkStore {
         let store = BookmarkStore(gatewayId: gatewayId)
         self.stores[gatewayId] = store
         return store
+    }
+
+    /// Clears the bookmarks without pushing, and drops the shared instance.
+    static func forget(gatewayId: UUID) {
+        let store = self.shared(gatewayId: gatewayId)
+        store.onChange = nil
+        store.removeAll()
+        self.stores[gatewayId] = nil
     }
 
     public init(gatewayId: UUID, defaults: UserDefaults = .standard) {
@@ -114,11 +133,15 @@ public final class BookmarkStore {
         var changes: [String: String?] = [bookmark.id: bookmark.syncedValue]
         self.bookmarks.insert(bookmark, at: 0)
         self.index.insert(bookmark.id)
-        if self.bookmarks.count > Self.limit {
-            let dropped = self.bookmarks.sorted { $0.createdAt > $1.createdAt }.suffix(self.bookmarks.count - Self.limit)
-            let ids = Set(dropped.map(\.id))
+        self.droppedCount = 0
+        let oldestFirst = self.bookmarks.sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
+        var kept = oldestFirst.count
+        while kept > 1, kept > Self.limit || Self.syncedSize(oldestFirst.suffix(kept)) > Self.syncedByteBudget { kept -= 1 }
+        if kept < oldestFirst.count {
+            let ids = Set(oldestFirst.prefix(oldestFirst.count - kept).map(\.id))
             self.bookmarks.removeAll { ids.contains($0.id) }
             self.index.subtract(ids)
+            self.droppedCount = ids.count
             for id in ids { changes[id] = .some(nil) }
         }
         self.save()
@@ -164,12 +187,26 @@ public final class BookmarkStore {
     /// Replaces the bookmarks with the pulled entries (newest first), skipping undecodable ones.
     /// Doesn't fire `onChange`.
     func apply(synced: [String: String]) {
+        let local = Dictionary(self.bookmarks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // Synced previews are shortened; keep the full one when this device has it.
         let decoded = synced.compactMap { Bookmark(syncedKey: $0.key, value: $0.value) }
+            .map { remote -> Bookmark in
+                guard let known = local[remote.id] else { return remote }
+                var merged = remote
+                merged.preview = known.preview
+                return merged
+            }
             .sorted { ($0.createdAt, $0.id) > ($1.createdAt, $1.id) }
         guard decoded != self.bookmarks else { return }
         self.bookmarks = decoded
         self.index = Set(decoded.map(\.id))
         self.save()
+    }
+
+    /// The encoded size of `bookmarks` as a synced map, which is one gateway pref value.
+    private static func syncedSize(_ bookmarks: some Sequence<Bookmark>) -> Int {
+        let entries = Dictionary(bookmarks.map { ($0.id, $0.syncedValue) }, uniquingKeysWith: { first, _ in first })
+        return (try? JSONEncoder().encode(entries).count) ?? 0
     }
 
     /// The bookmarks as synced entries.
