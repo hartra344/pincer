@@ -230,7 +230,7 @@ public final class GatewayStore: Identifiable {
     /// Gateway text-to-speech: the Voice settings page and Read Aloud's `tts.speak`. The demo may write without scopes.
     @ObservationIgnored public private(set) lazy var voice = GatewayVoiceModel(
         connection: self.connection, hello: { [weak self] in self?.hello },
-        allowsWritesWithoutAdmin: self.profile.isDemo)
+        allowsWritesWithoutAdmin: self.profile.isDemo, gatewayName: { [weak self] in self?.profile.name ?? "" })
     /// Token and cost usage; loaded when the Usage page opens.
     @ObservationIgnored public private(set) lazy var usage = UsageModel(
         connection: self.connection, hello: { [weak self] in self?.hello })

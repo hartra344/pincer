@@ -1,0 +1,115 @@
+import Foundation
+
+/// The single place that knows where a TTS provider's settings live in the Gateway config. Values are
+/// provisional until the upstream research notes confirm them; a correction is a change here only.
+public struct TTSProviderKeys: Sendable, Equatable {
+    public let provider: String
+    public let apiKey: String?
+    public let model: String?
+    public let voice: String?
+    public let voiceSettings: String?
+    public let envVar: String?
+
+    public init(provider: String, apiKey: String? = "apiKey", model: String? = "model", voice: String? = "voice",
+                voiceSettings: String? = nil, envVar: String? = nil)
+    {
+        self.provider = provider
+        self.apiKey = apiKey
+        self.model = model
+        self.voice = voice
+        self.voiceSettings = voiceSettings
+        self.envVar = envVar
+    }
+
+    /// Config path of the TTS section.
+    public static let configRoot = ["messages", "tts"]
+    /// Key under the root that holds per-provider objects.
+    public static let providersKey = "providers"
+    /// `provider` alias of a `{source:"store"}` SecretRef.
+    public static let storeSecretProvider = "default"
+    /// `provider` alias of a `{source:"env"}` SecretRef.
+    public static let envSecretProvider = "default"
+    /// Config path (under the root of the config) of literal env vars, for Gateways without a secrets store.
+    public static let envVarsPath = ["env", "vars"]
+
+    public static let all: [TTSProviderKeys] = [
+        TTSProviderKeys(provider: "elevenlabs", model: "modelId", voice: "voiceId", voiceSettings: "voiceSettings",
+                        envVar: "ELEVENLABS_API_KEY"),
+        TTSProviderKeys(provider: "openai", envVar: "OPENAI_API_KEY"),
+        TTSProviderKeys(provider: "google", envVar: "GEMINI_API_KEY"),
+        TTSProviderKeys(provider: "minimax", envVar: "MINIMAX_API_KEY"),
+        TTSProviderKeys(provider: "azure", envVar: "AZURE_SPEECH_KEY"),
+        TTSProviderKeys(provider: "microsoft", apiKey: nil),
+        TTSProviderKeys(provider: "xai", envVar: "XAI_API_KEY"),
+        TTSProviderKeys(provider: "inworld", envVar: "INWORLD_API_KEY"),
+        TTSProviderKeys(provider: "gradium", envVar: "GRADIUM_API_KEY"),
+        TTSProviderKeys(provider: "openrouter", envVar: "OPENROUTER_API_KEY"),
+        TTSProviderKeys(provider: "volcengine", envVar: "VOLCENGINE_API_KEY"),
+    ]
+
+    /// Unknown providers get the generic `apiKey` / `model` / `voice` names and `<ID>_API_KEY`.
+    public static func forProvider(_ id: String) -> TTSProviderKeys {
+        let id = id.lowercased()
+        if let known = all.first(where: { $0.provider == id }) { return known }
+        let env = id.uppercased().map { $0.isLetter || $0.isNumber ? $0 : "_" }
+        return TTSProviderKeys(provider: id, envVar: String(env) + "_API_KEY")
+    }
+
+    public static func knownModels(_ provider: String) -> [TTSModelOption] {
+        switch provider.lowercased() {
+        case "elevenlabs":
+            [TTSModelOption(id: "eleven_v4_turbo", name: "Eleven v4 Turbo"), TTSModelOption(id: "eleven_v4", name: "Eleven v4"),
+             TTSModelOption(id: "eleven_v3", name: "Eleven v3"), TTSModelOption(id: "eleven_multilingual_v2", name: "Multilingual v2"),
+             TTSModelOption(id: "eleven_flash_v2_5", name: "Flash v2.5")]
+        default: []
+        }
+    }
+
+    /// Known models, then any `tts.providers` model ids not already listed.
+    static func models(_ provider: String, advertised: [String]) -> [TTSModelOption] {
+        var options = knownModels(provider)
+        for id in advertised where !options.contains(where: { $0.id == id }) { options.append(TTSModelOption(id: id, name: id)) }
+        return options
+    }
+}
+
+public struct TTSModelOption: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let name: String
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+public struct TTSVoiceSettings: Sendable, Equatable {
+    public var stability: Double
+    public var similarityBoost: Double
+    public var style: Double
+    public var useSpeakerBoost: Bool
+    public var speed: Double
+
+    public init(stability: Double, similarityBoost: Double, style: Double, useSpeakerBoost: Bool, speed: Double) {
+        self.stability = stability
+        self.similarityBoost = similarityBoost
+        self.style = style
+        self.useSpeakerBoost = useSpeakerBoost
+        self.speed = speed
+    }
+
+    public static let elevenLabsDefault = TTSVoiceSettings(stability: 0.5, similarityBoost: 0.75, style: 0, useSpeakerBoost: true, speed: 1)
+
+    var json: JSONValue {
+        [
+            "stability": .number(stability), "similarityBoost": .number(similarityBoost), "style": .number(style),
+            "useSpeakerBoost": .bool(useSpeakerBoost), "speed": .number(speed),
+        ]
+    }
+
+    init(json: JSONValue) {
+        let d = Self.elevenLabsDefault
+        self.init(stability: json["stability"]?.double ?? d.stability, similarityBoost: json["similarityBoost"]?.double ?? d.similarityBoost,
+                  style: json["style"]?.double ?? d.style, useSpeakerBoost: json["useSpeakerBoost"]?.bool ?? d.useSpeakerBoost,
+                  speed: json["speed"]?.double ?? d.speed)
+    }
+}
