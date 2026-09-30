@@ -98,6 +98,8 @@ public final class BookmarkStore {
     public static let syncedByteBudget = 3800
     /// How many bookmarks the last `add` dropped to stay within the limits.
     public private(set) var droppedCount = 0
+    /// Counts the adds that dropped bookmarks, so a view can react with `.onChange`.
+    public private(set) var dropNotice = 0
     /// Called with the synced entry changes (`nil` = delete) after a local edit, never for `apply(synced:)`
     /// or `removeAll()`.
     @ObservationIgnored public var onChange: (([String: String?]) -> Void)?
@@ -149,6 +151,7 @@ public final class BookmarkStore {
         self.droppedCount = 0
         let dropped = self.trim(shard: Bookmark.shard(ofKey: bookmark.id))
         self.droppedCount = dropped.count
+        if !dropped.isEmpty { self.dropNotice += 1 }
         for victim in dropped { changes[victim.id] = .some(nil) }
         self.save()
         self.onChange?(changes)
