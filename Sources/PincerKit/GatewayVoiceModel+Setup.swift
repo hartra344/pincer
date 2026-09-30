@@ -14,7 +14,8 @@ public struct TTSProviderSetup: Equatable, Sendable {
         case none
         /// A plaintext value the Gateway returned.
         case inline
-        case secretRef(source: String, provider: String, id: String)
+        /// `id` is nil when the Gateway redacted it.
+        case secretRef(source: String, provider: String, id: String?)
         /// Present, but the Gateway hid it.
         case redacted
     }
@@ -239,7 +240,8 @@ extension GatewayVoiceModel {
         var setup = TTSProviderSetup()
         if let keyName = keys.apiKey, let key = json[keyName] {
             if case .object = key, let source = key["source"]?.text, let id = key["id"]?.text {
-                setup.keySource = .secretRef(source: source, provider: key["provider"]?.text ?? "", id: id)
+                let shown = id.uppercased().contains("REDACTED") ? nil : id
+                setup.keySource = .secretRef(source: source, provider: key["provider"]?.text ?? "", id: shown)
             } else if let text = key.text, !text.isEmpty {
                 setup.keySource = text.uppercased().contains("REDACTED") ? .redacted : .inline
             }
@@ -321,6 +323,7 @@ extension GatewayVoiceModel {
         }
         let outcome = try await self.writeConfig(patch, note: "Pincer: Gateway voice key")
         self.sessionKeys[provider] = key
+        self.wroteKey.insert(provider)
         self.lastTestError[provider] = nil
         return outcome
     }
@@ -542,30 +545,33 @@ extension GatewayVoiceModel {
         return id
     }
 
+    /// The ref's name when it isn't redacted, was written by this session, or is listed in the secrets store.
+    public func knownKeyName(for provider: String) -> String? {
+        guard case let .secretRef(source, _, id) = self.setups[provider]?.keySource else { return nil }
+        if let id { return id }
+        guard let env = TTSProviderKeys.forProvider(provider).envVar else { return nil }
+        if self.wroteKey.contains(provider) || (source == "store" && self.secretNames.contains(env)) { return env }
+        return nil
+    }
+
     /// How the API key is provided, for the key section's source line.
     public func keySourceText(for provider: String) -> String {
         let keys = TTSProviderKeys.forProvider(provider)
         guard keys.apiKey != nil else { return L("No key needed") }
-        let env = keys.envVar ?? ""
         switch self.setups[provider]?.keySource ?? .none {
-        case let .secretRef(source, _, id):
-            let redacted = id.uppercased().contains("REDACTED")
-            let known = source == "store" && self.secretNames.contains(env)
-            if redacted, !known {
-                switch source {
-                case "store": return self.isConfigured(provider) == false ? L("Set in the Gateway's secrets, but the Gateway can't read it") : L("Stored in the Gateway's secrets")
-                case "env": return self.isConfigured(provider) == false ? L("Set to an environment variable, but the Gateway can't read it") : L("From an environment variable on the Gateway")
-                default: return L("Set to a secret reference")
-                }
-            }
-            let name = redacted ? env : id
-            if self.isConfigured(provider) == false {
-                return String(format: L("Set to %@ (%@), but the Gateway can't read it"), name, source)
-            }
-            switch source {
-            case "store": return String(format: L("Stored in the Gateway's secrets as %@"), name)
-            case "env": return String(format: L("Stored as the Gateway environment variable %@"), name)
-            default: return String(format: L("Read from %@ (%@)"), name, source)
+        case let .secretRef(source, _, _):
+            let name = self.knownKeyName(for: provider)
+            let broken = self.isConfigured(provider) == false
+            switch (source, name) {
+            case let ("store", name?):
+                return String(format: broken ? L("Set in the Gateway's secrets as %@, but the Gateway can't read it") : L("Stored in the Gateway's secrets as %@"), name)
+            case ("store", nil):
+                return broken ? L("Set in the Gateway's secrets, but the Gateway can't read it") : L("Stored in the Gateway's secrets")
+            case let ("env", name?):
+                return String(format: broken ? L("Set to the environment variable %@, but the Gateway can't read it") : L("Stored as the Gateway environment variable %@"), name)
+            case ("env", nil):
+                return broken ? L("Set to an environment variable, but the Gateway can't read it") : L("From an environment variable on the Gateway")
+            default: return L("Set to a secret reference")
             }
         case .inline, .redacted:
             return L("Set in the Gateway's config file")
