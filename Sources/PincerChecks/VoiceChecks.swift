@@ -190,5 +190,11 @@ func runLiveVoice(url: String, token: String) async {
     guard let gateway = await voiceConnect(profile, "mock") else { return }
     defer { gateway.stop() }
     await voiceChecks(gateway, label: "mock")
-    await voiceSetupChecks(gateway, label: "mock")
+    check(!gateway.voice.canConfigure && gateway.voice.configureBlockedReason?.contains("Full Management") == true,
+          "mock: a device without operator.admin can't configure the voice")
+    let adminProfile = GatewayProfile(name: "Mock voice admin", url: url, authMode: .token, access: .admin)
+    adminProfile.secret = token
+    guard let admin = await voiceConnect(adminProfile, "mock admin") else { return }
+    defer { admin.stop() }
+    await voiceSetupChecks(admin, label: "mock")
 }
