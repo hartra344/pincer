@@ -23,7 +23,7 @@ final class FakePrefsGateway: @unchecked Sendable {
     private var echoes = true
     private var echoCount = 0
     private let queue = DispatchQueue(label: "FakePrefsGateway")
-    let port: UInt16
+    private(set) var port: UInt16 = 0
 
     init() throws {
         let options = NWProtocolWebSocket.Options()

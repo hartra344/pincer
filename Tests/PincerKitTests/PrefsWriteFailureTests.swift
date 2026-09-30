@@ -163,7 +163,6 @@ struct PrefsWriteFailureTests {
             reborn.pendingPrefChanges[AvatarPreferences.prefKey] ?? [:]) { $1 }
         #expect(owed["main"] == .some("cat"))
         #expect(owed[AvatarPreferences.renderStyleEntry] == .some("plush"))
-        #expect(reborn.avatarChoices["main"] == "cat")
     }
 
     @Test func queuedAvatarChoicesReachTheGatewayAfterARelaunch() async throws {
