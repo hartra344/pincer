@@ -22,6 +22,7 @@ struct Composer: View {
     @State private var focusRequest = 0
     @State private var sendPending = false
     @State private var selection: NSRange?
+    @State private var fieldFocused = false
     @State private var caretRequest: CaretRequest?
     @State private var dictationHolder = DictationHolder()
     private var dictation: DictationModel { self.dictationHolder.model }
@@ -68,27 +69,8 @@ struct Composer: View {
             }
             HStack(alignment: .bottom, spacing: Theme.Spacing.md) {
                 self.attachMenu
-                ComposerTextView(
-                    placeholder: self.placeholder,
-                    text: self.$chat.draft.text,
-                    menuActive: !self.suggestions.isEmpty,
-                    escapeActive: self.chat.replyTarget != nil || self.chat.editTarget != nil || self.dictation.isActive,
-                    focusRequest: self.focusRequest,
-                    onSubmit: self.submit,
-                    onMedia: self.ingest,
-                    onKey: self.menuKey,
-                    onCaretAtEnd: { if self.caretAtEnd != $0 { self.caretAtEnd = $0 } },
-                    onSelectionChange: self.selectionChanged,
-                    caretRequest: self.caretRequest,
-                    autoFocus: { [find = self.find, app = self.app, gateway = self.gateway, chat = self.chat] in
-                        // Opening on a message search result: the Find field keeps focus.
-                        !(find?.isPresented ?? false) && !ChatView.hasFindRequest(app: app, gateway: gateway, chat: chat)
-                    })
-                    .padding(.vertical, 11)
-                    .frame(minHeight: Self.controlHeight)
-                DictationButton(
-                    model: self.dictation, app: self.app, draft: self.$chat.draft.text, selection: self.selection,
-                    onCaret: self.placeCaret)
+                self.textField
+                self.dictationButton
                 ContextMeter(chat: self.chat)
                 if self.chat.isRunning {
                     Button {
@@ -269,6 +251,34 @@ struct Composer: View {
             return [waiting, L("Connect to run commands")].compactMap(\.self).joined(separator: " · ")
         }
         return [waiting, Self.offlineHint].compactMap(\.self).joined(separator: " · ")
+    }
+
+    private var textField: some View {
+        ComposerTextView(
+            placeholder: self.placeholder,
+            text: self.$chat.draft.text,
+            menuActive: !self.suggestions.isEmpty,
+            escapeActive: self.chat.replyTarget != nil || self.chat.editTarget != nil || self.dictation.isActive,
+            focusRequest: self.focusRequest,
+            onSubmit: self.submit,
+            onMedia: self.ingest,
+            onKey: self.menuKey,
+            onCaretAtEnd: { if self.caretAtEnd != $0 { self.caretAtEnd = $0 } },
+            onSelectionChange: self.selectionChanged,
+            caretRequest: self.caretRequest,
+            onFocusChange: { self.fieldFocused = $0 },
+            autoFocus: { [find = self.find, app = self.app, gateway = self.gateway, chat = self.chat] in
+                // Opening on a message search result: the Find field keeps focus.
+                !(find?.isPresented ?? false) && !ChatView.hasFindRequest(app: app, gateway: gateway, chat: chat)
+            })
+            .padding(.vertical, 11)
+            .frame(minHeight: Self.controlHeight)
+    }
+
+    private var dictationButton: some View {
+        DictationButton(
+            model: self.dictation, app: self.app, draft: self.$chat.draft.text, selection: self.selection,
+            onCaret: self.placeCaret, isFieldFocused: self.fieldFocused, onRequestFocus: { self.focusRequest += 1 })
     }
 
     private func selectionChanged(_ range: NSRange) {

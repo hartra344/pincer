@@ -106,6 +106,8 @@ struct ComposerTextView: View {
     var onSelectionChange: (NSRange) -> Void = { _ in }
     /// Where to put the caret after the text was set from outside (dictation); nil leaves it at the end.
     var caretRequest: CaretRequest?
+    /// Whether the field has keyboard focus.
+    var onFocusChange: (Bool) -> Void = { _ in }
     /// Asked just before the field focuses itself on appearing; false leaves focus where it is
     /// (e.g. Find in Chat opening with the chat).
     var autoFocus: @MainActor () -> Bool = { true }
@@ -115,7 +117,7 @@ struct ComposerTextView: View {
             text: self.$text, maxLines: self.maxLines, isEditable: self.isEditable, menuActive: self.menuActive,
             escapeActive: self.escapeActive, focusRequest: self.focusRequest, onSubmit: self.onSubmit,
             onCommandSubmit: self.onCommandSubmit,
-            onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd, onSelectionChange: self.onSelectionChange,
+            onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd, onSelectionChange: self.onSelectionChange, onFocusChange: self.onFocusChange,
             caretRequest: self.caretRequest, autoFocus: self.autoFocus)
             .overlay(alignment: .topLeading) {
                 if self.text.isEmpty {
@@ -202,6 +204,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
     let onKey: (ComposerKey) -> Bool
     let onCaretAtEnd: (Bool) -> Void
     let onSelectionChange: (NSRange) -> Void
+    let onFocusChange: (Bool) -> Void
     let caretRequest: CaretRequest?
     let autoFocus: @MainActor () -> Bool
 
@@ -292,6 +295,10 @@ private struct PlatformComposerTextView: NSViewRepresentable {
             self.parent.text = textView.string
             textView.enclosingScrollView?.invalidateIntrinsicContentSize()
         }
+
+        func textDidBeginEditing(_ notification: Notification) { self.parent.onFocusChange(true) }
+
+        func textDidEndEditing(_ notification: Notification) { self.parent.onFocusChange(false) }
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
@@ -409,6 +416,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
     let onKey: (ComposerKey) -> Bool
     let onCaretAtEnd: (Bool) -> Void
     let onSelectionChange: (NSRange) -> Void
+    let onFocusChange: (Bool) -> Void
     let caretRequest: CaretRequest?
     let autoFocus: @MainActor () -> Bool
 
@@ -485,6 +493,10 @@ private struct PlatformComposerTextView: UIViewRepresentable {
             self.parent.text = textView.text
             textView.invalidateIntrinsicContentSize()
         }
+
+        func textViewDidBeginEditing(_ textView: UITextView) { self.parent.onFocusChange(true) }
+
+        func textViewDidEndEditing(_ textView: UITextView) { self.parent.onFocusChange(false) }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
             let range = textView.selectedRange

@@ -396,7 +396,7 @@ struct CommandPaletteView: View {
         }
         if row != nil, self.app.dictationAvailable || self.app.dictationActive {
             let listening = self.app.dictationActive
-            items.append(item(.toggleDictation, listening ? L("Stop Dictation") : L("Start Dictation"), listening ? "mic.fill" : "mic",
+            items.append(item(.toggleDictation, listening ? L("Stop Dictation") : L("Dictate Message"), listening ? "mic.fill" : "mic",
                               keywords: ["dictate", "voice", "speech", "microphone"], shortcut: ShortcutCommand.toggleDictation.displayShortcut))
         }
         let showsThinking = self.thinkingDisplay != .none

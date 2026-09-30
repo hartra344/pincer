@@ -21,6 +21,9 @@ struct DictationButton: View {
     let selection: NSRange?
     /// Called with the UTF-16 offset just after the dictated text, every time the transcript changes.
     let onCaret: (Int) -> Void
+    /// Whether the text field has keyboard focus; when it doesn't, dictation goes at the end of the draft.
+    let isFieldFocused: Bool
+    let onRequestFocus: () -> Void
     @Environment(\.chatPaneIsActive) private var paneIsActive
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 14
 
@@ -28,8 +31,13 @@ struct DictationButton: View {
         Group {
             if self.model.isAvailable || self.model.isActive {
                 let listening = self.model.isActive
-                self.focusedPaneShortcut(Button(action: self.toggle) {
-                    Image(systemName: listening ? "mic.fill" : "mic")
+                self.focusedPaneShortcut(Button(action: { self.toggle() }) {
+                    Label {
+                        Text(listening ? L("Stop Dictation") : L("Dictate Message"))
+                    } icon: {
+                        Image(systemName: listening ? "mic.fill" : "mic")
+                    }
+                    .labelStyle(.iconOnly)
                         .font(.system(size: min(self.iconSize, 22), weight: .semibold))
                         .foregroundStyle(listening ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
                         .symbolEffect(.pulse, isActive: self.model.isListening)
@@ -38,19 +46,19 @@ struct DictationButton: View {
                 })
                 .buttonStyle(.plain)
                 .frame(width: 32, height: Composer.controlHeight)
-                .help(listening ? L("Stop Dictation") : L("Dictate a message with your voice"))
-                .accessibilityLabel(listening ? L("Stop Dictation") : L("Dictate"))
+                .help(self.helpText(listening: listening))
+                .accessibilityLabel(listening ? L("Stop Dictation") : L("Dictate Message"))
             }
         }
         .onChange(of: self.app.dictationToggleRequests) {
-            if self.paneIsActive, self.model.isAvailable || self.model.isActive { self.toggle() }
+            if self.paneIsActive, self.model.isAvailable || self.model.isActive { self.toggle(focusing: true) }
         }
         .onChange(of: self.model.isActive, initial: true) { self.publishState() }
         .onChange(of: self.model.isAvailable) { self.publishState() }
         .onChange(of: self.paneIsActive) { self.publishState() }
         // Outside the availability check, so "isn't available" can still be shown.
         .onChange(of: self.model.phase) { old, phase in
-            if phase == .idle, old == .listening || old == .finishing {
+            if phase == .idle, old == .listening || old == .finishing, !self.model.endedForSend {
                 AccessibilityNotification.Announcement(L("Dictation stopped")).post()
             }
         }
@@ -66,8 +74,17 @@ struct DictationButton: View {
         }
     }
 
-    private func toggle() {
-        self.model.toggle(draft: self.draft, selection: self.selection) { text, caret in
+    private func helpText(listening: Bool) -> String {
+        guard !listening else { return L("Stop Dictation") }
+        let base = L("Dictate a message with your voice")
+        return ShortcutCommand.toggleDictation.displayShortcut.map { "\(base) (\($0))" } ?? base
+    }
+
+    /// From the shortcut or palette, a field without focus gets it, and dictation starts at the end of the draft.
+    private func toggle(focusing: Bool = false) {
+        let selection = self.isFieldFocused ? self.selection : nil
+        if focusing, !self.model.isActive, !self.isFieldFocused { self.onRequestFocus() }
+        self.model.toggle(draft: self.draft, selection: selection) { text, caret in
             self.draft = text
             self.onCaret(caret)
         }
