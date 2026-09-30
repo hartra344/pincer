@@ -14,6 +14,48 @@ extension DemoGateway {
     static let toolCardsMCPCall = "call_demo_mcp_issues"
     static let toolCardsFetchCall = "call_demo_web_fetch"
     static let toolCardsReadCall = "call_demo_read_config"
+    static let toolCardsSearchCall = "call_demo_web_search"
+    static let toolCardsSwiftReadCall = "call_demo_read_swift"
+    static let toolCardsSearchQuery = "MCP server OAuth authorization required"
+    static let toolCardsSwiftPath = "Sources/PincerKit/MCPServerStatus.swift"
+    static let toolCardsSwiftText = """
+    import Foundation
+
+    /// Whether an MCP server can be called right now.
+    public struct MCPServerStatus: Equatable {
+        public let name: String
+        public let toolCount: Int
+        public let needsAuth: Bool
+
+        public init(name: String, toolCount: Int = 0, needsAuth: Bool = false) {
+            self.name = name
+            self.toolCount = toolCount
+            self.needsAuth = needsAuth
+        }
+
+        // A server with no tools and a pending sign-in is "stuck", not "empty".
+        public var summary: String {
+            if needsAuth { return "\\(name): sign-in required" }
+            return toolCount == 1 ? "\\(name): 1 tool" : "\\(name): \\(toolCount) tools"
+        }
+    }
+    """
+    static let toolCardsSearchResults: [WebSearchSeed] = [
+        WebSearchSeed(title: "Authorization — Model Context Protocol", url: "https://modelcontextprotocol.io/specification/draft/basic/authorization",
+                      snippet: "MCP servers that use HTTP transports SHOULD conform to OAuth 2.1. A server that needs a token answers 401 with a WWW-Authenticate header pointing at its protected resource metadata.",
+                      published: "2026-07-18", siteName: "modelcontextprotocol.io"),
+        WebSearchSeed(title: "Connecting MCP servers | OpenClaw", url: "https://docs.openclaw.example/mcp/connecting",
+                      snippet: "Servers that use OAuth report authorization required until you run openclaw mcp auth <server>.",
+                      published: "2026-09-02", siteName: "docs.openclaw.example"),
+        WebSearchSeed(title: "Why does my MCP server return 401 Unauthorized?", url: "https://github.com/modelcontextprotocol/typescript-sdk/discussions/412",
+                      snippet: "The client has to start the OAuth flow itself. If no browser session is available the token request never completes and the server stays in a pending state.",
+                      published: "2026-05-27", siteName: "github.com"),
+        WebSearchSeed(title: "Debugging streamable HTTP MCP servers", url: "https://blog.example.dev/debugging-streamable-http-mcp",
+                      snippet: nil, published: "2026-03-11", siteName: "blog.example.dev"),
+        WebSearchSeed(title: "MCP OAuth without a browser: device code flow", url: "https://stackoverflow.com/questions/79112345/mcp-oauth-headless",
+                      snippet: "Headless machines can borrow a token from a machine with a browser and copy it over, or use the device authorization grant when the server supports it.",
+                      published: nil, siteName: "stackoverflow.com"),
+    ]
 
     static let toolCardsExecCommand = "openclaw mcp status --verbose 2>&1 | grep -A4 \"^- Era\""
     static let toolCardsExecOutput = """
@@ -94,6 +136,95 @@ extension DemoGateway {
     Servers that use OAuth report `authorization required` until you run `openclaw mcp auth <server>`.
     """
 
+    /// One `web_search` result as upstream's `web-search-output.ts` would normalise it.
+    struct WebSearchSeed {
+        let title: String
+        let url: String
+        let snippet: String?
+        let published: String?
+        let siteName: String?
+    }
+
+    /// Upstream wraps provider prose in an untrusted-content envelope (`wrapWebContent`).
+    static func externalEnvelope(_ text: String, _ salt: Int) -> String {
+        let id = String(format: "%016llx", UInt64(0x9e37_79b9_7f4a_7c15) &* UInt64(salt + 1))
+        return "<<<EXTERNAL_UNTRUSTED_CONTENT id=\"\(id)\">>>\nSource: Web Search\n---\n\(text)\n<<<END_EXTERNAL_UNTRUSTED_CONTENT id=\"\(id)\">>>"
+    }
+
+    /// The `kind: "results"` payload of upstream's `web_search`: the tool result text is
+    /// `JSON.stringify(payload, null, 2)` and `details` is the payload itself.
+    static func webSearchResult(provider: String = "brave", query: String, tookMs: Int,
+                                results: [WebSearchSeed]) -> (text: String, details: JSONValue)
+    {
+        var salt = 0
+        func wrap(_ text: String) -> String {
+            salt += 1
+            return Self.externalEnvelope(text, salt)
+        }
+        var rows: [[(String, JSONValue)]] = []
+        for result in results {
+            var row: [(String, JSONValue)] = [("title", .string(wrap(result.title))), ("url", .string(result.url))]
+            if let snippet = result.snippet { row.append(("snippet", .string(wrap(snippet)))) }
+            if let published = result.published { row.append(("published", .string(published))) }
+            if let siteName = result.siteName { row.append(("siteName", .string(wrap(siteName)))) }
+            rows.append(row)
+        }
+        let external: [(String, JSONValue)] = [("untrusted", .bool(true)), ("source", "web_search"),
+                                               ("wrapped", .bool(true)), ("provider", .string(provider))]
+        let payload: [(String, JSONValue)] = [
+            ("kind", "results"), ("provider", .string(provider)), ("query", .string(query)),
+            ("count", .number(Double(results.count))), ("tookMs", .number(Double(tookMs))),
+            ("results", .array(rows.map { .object(Dictionary(uniqueKeysWithValues: $0)) })),
+            ("externalContent", .object(Dictionary(uniqueKeysWithValues: external))),
+        ]
+        var text = "{\n"
+        for (index, (key, value)) in payload.enumerated() {
+            let rendered: String
+            switch key {
+            case "results": rendered = Self.prettyArray(rows, indent: 2)
+            case "externalContent": rendered = Self.prettyObject(external, indent: 2)
+            default: rendered = Self.prettyScalar(value)
+            }
+            text += "  \(Self.prettyScalar(.string(key))): \(rendered)" + (index < payload.count - 1 ? ",\n" : "\n")
+        }
+        text += "}"
+        return (text, .object(Dictionary(uniqueKeysWithValues: payload)))
+    }
+
+    private static func prettyScalar(_ value: JSONValue) -> String {
+        switch value {
+        case let .string(string):
+            var out = "\""
+            for scalar in string.unicodeScalars {
+                switch scalar {
+                case "\"": out += "\\\""
+                case "\\": out += "\\\\"
+                case "\n": out += "\\n"
+                case "\r": out += "\\r"
+                case "\t": out += "\\t"
+                default: out.unicodeScalars.append(scalar)
+                }
+            }
+            return out + "\""
+        case let .number(number): return number == number.rounded() ? String(Int(number)) : String(number)
+        case let .bool(flag): return flag ? "true" : "false"
+        default: return "null"
+        }
+    }
+
+    private static func prettyObject(_ fields: [(String, JSONValue)], indent: Int) -> String {
+        let pad = String(repeating: " ", count: indent + 2)
+        let body = fields.map { "\(pad)\(prettyScalar(.string($0.0))): \(prettyScalar($0.1))" }.joined(separator: ",\n")
+        return "{\n\(body)\n\(String(repeating: " ", count: indent))}"
+    }
+
+    private static func prettyArray(_ rows: [[(String, JSONValue)]], indent: Int) -> String {
+        if rows.isEmpty { return "[]" }
+        let pad = String(repeating: " ", count: indent + 2)
+        let body = rows.map { pad + Self.prettyObject($0, indent: indent + 2) }.joined(separator: ",\n")
+        return "[\n\(body)\n\(String(repeating: " ", count: indent))]"
+    }
+
     static func seedToolCardsTranscript() -> [JSONValue] {
         let minute = 60.0
         let start = 12 * minute
@@ -105,6 +236,7 @@ extension DemoGateway {
             return Self.message("toolResult", [Self.text(text)], ago: ago, extra: extra)
         }
         let fetchURL = "https://docs.openclaw.example/mcp/connecting"
+        let search = Self.webSearchResult(query: Self.toolCardsSearchQuery, tookMs: 640, results: Self.toolCardsSearchResults)
         return [
             Self.message("user", [Self.text("Check the MCP servers. Era looks stuck.")], ago: start),
             Self.message("assistant", [
@@ -185,6 +317,16 @@ extension DemoGateway {
                 "query": "rate limits", "limit": 3,
             ])], ago: start - 230),
             result("call_demo_mcp_sanitized", "acme-docs__search", Self.toolCardsDocsSearchJSON, ago: start - 231),
+            Self.message("assistant", [
+                Self.text("Let me see what others do about OAuth servers with no browser."),
+                Self.toolCall(Self.toolCardsSearchCall, "web_search", ["query": .string(Self.toolCardsSearchQuery), "count": 5]),
+            ], ago: start - 232),
+            result(Self.toolCardsSearchCall, "web_search", search.text, ago: start - 234, details: search.details),
+            Self.message("assistant", [
+                Self.text("Checking how the client models server status."),
+                Self.toolCall(Self.toolCardsSwiftReadCall, "read", ["path": .string(Self.toolCardsSwiftPath)]),
+            ], ago: start - 236),
+            result(Self.toolCardsSwiftReadCall, "read", Self.toolCardsSwiftText, ago: start - 237),
             Self.message("assistant", [Self.text("""
             \(Self.toolCardsPreview) Run `openclaw mcp auth Era` on a machine with a browser to finish the sign-in.
             """)], id: DemoBookmarks.toolsSummaryMessageId, ago: start - 240),
