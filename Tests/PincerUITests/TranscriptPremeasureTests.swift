@@ -149,9 +149,9 @@ struct TranscriptPremeasureHostedTests {
         return Host(coordinator: coordinator, scroll: scroll, context: context)
     }
 
-    /// The coordinator's private driver, by reflection (its stats are public through `premeasureStats`).
+    /// The coordinator's driver, owned by the shared controller.
     static func driver(_ coordinator: TranscriptList.Coordinator) -> TranscriptPremeasureDriver {
-        Mirror(reflecting: coordinator).children.first { $0.label == "premeasure" }!.value as! TranscriptPremeasureDriver
+        coordinator.controller.premeasure
     }
 
     static func assistant(_ id: String, text: String, streaming: Bool = false, at n: Int) -> TranscriptRow {

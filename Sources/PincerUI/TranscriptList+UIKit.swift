@@ -40,80 +40,34 @@ struct TranscriptList: UIViewRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate {
-        private enum Anchor: Equatable {
-            case bottom
-            /// The reader is at the very top, wherever the rows below end up.
-            case top
-            /// Row id, and how far its top sits below the top of the viewport.
-            case row(String, CGFloat)
-        }
-
-        private struct Height {
-            var value: CGFloat
-            var width: CGFloat
-            var measured: Bool
-        }
-
-        private var context: TranscriptContext
-        private var rows: [TranscriptRow] = []
-        private var index: [String: Int] = [:]
-        private var heights: [String: Height] = [:]
+        let controller: TranscriptListController
         /// Top of each row in content coordinates, and the total content height.
         fileprivate private(set) var tops: [CGFloat] = []
         fileprivate private(set) var contentHeight: CGFloat = 0
         /// Ids whose height value changed since the offsets were last built.
         private var dirtyHeights = Set<String>()
-        private var anchor = Anchor.bottom {
-            didSet {
-                guard (oldValue == .bottom) != (self.anchor == .bottom), let report = self.bottomAnchorChanged else { return }
-                let atBottom = self.anchor == .bottom
-                DispatchQueue.main.async { report(atBottom) }
-            }
-        }
-        var bottomAnchorChanged: ((Bool) -> Void)?
-        /// Whether the list is following the bottom (#335: the open chat may be trimmed then).
-        var isAnchoredAtBottom: Bool { self.anchor == .bottom }
         private var isAdjusting = false
         private var isScrollingToTop = false
         private var lastOffset: CGFloat = 0
-        private var prefetchScheduled = false
-        private var scrollMeasureScheduled = false
-        private var queue = TranscriptMeasureQueue()
-        private var queueWidth: CGFloat = 0
-        private var fixesScheduled = false
-        /// Time spent measuring rows in idle slices and scroll callbacks, for the probe.
-        var prefetchStats: (steps: Int, rowsMeasured: Int, seconds: Double) = (0, 0, 0)
-        /// Rows prepared on the worker, and text measured there; separate from `prefetchStats`.
-        private let premeasure = TranscriptPremeasureDriver()
-        var premeasureStats: PremeasureStats { self.premeasure.stats }
-        let renderer: TranscriptRenderer
         private weak var collectionView: TranscriptCollectionView?
 
-        init(context: TranscriptContext) {
-            self.context = context
-            self.renderer = TranscriptRenderer(context: context)
-            super.init()
-            self.premeasure.currentWidth = { [weak self] in self?.width ?? 0 }
-            self.renderer.onInvalidate = { [weak self] ids, keepInPlace in
-                self?.invalidate(ids, keepInPlace: keepInPlace)
-            }
-            self.renderer.visibleRowIds = { [weak self] in self?.visibleRowIds() ?? [] }
-            self.renderer.onRelayout = { [weak self] id, width, height in
-                self?.relaidOut(id, width: width, height: height)
-            }
-            self.renderer.onReveal = { [weak self] id in
-                guard let self else { return }
-                // A row paged in from older history arrives with the next update.
-                if self.index[id] != nil { self.reveal(id) } else { self.pendingReveal = id }
-            }
+        var renderer: TranscriptRenderer { self.controller.renderer }
+        var prefetchStats: (steps: Int, rowsMeasured: Int, seconds: Double) { self.controller.prefetchStats }
+        var premeasureStats: PremeasureStats { self.controller.premeasureStats }
+        var bottomAnchorChanged: ((Bool) -> Void)? {
+            get { self.controller.bottomAnchorChanged }
+            set { self.controller.bottomAnchorChanged = newValue }
         }
 
-        private var pendingReveal: String?
+        /// Whether the list is following the bottom (#335: the open chat may be trimmed then).
+        var isAnchoredAtBottom: Bool { self.controller.isAnchoredAtBottom }
 
-        private func revealPending() {
-            guard let id = self.pendingReveal, self.index[id] != nil else { return }
-            self.pendingReveal = nil
-            self.reveal(id)
+        private var rows: [TranscriptRow] { self.controller.rows }
+
+        init(context: TranscriptContext) {
+            self.controller = TranscriptListController(context: context, prefetchBudget: 0.004)
+            super.init()
+            self.controller.host = self
         }
 
         func makeCollectionView() -> UICollectionView {
@@ -143,15 +97,12 @@ struct TranscriptList: UIViewRepresentable {
         // MARK: Data
 
         func update(rows newRows: [TranscriptRow], context: TranscriptContext, insets: (top: CGFloat, bottom: CGFloat)) {
-            let contextChanged = context.differs(from: self.context)
-            self.context = context
-            self.renderer.update(context: context)
+            let contextChanged = self.controller.beginUpdate(context: context, rowCount: newRows.count)
             defer {
-                self.revealPending()
-                self.loadOlderIfShown()
+                self.controller.revealPending()
+                self.controller.loadOlderIfShown()
                 self.reportPosition()
             }
-            if newRows.count != self.rows.count { self.olderRowWasVisible = false }
             guard let view = self.collectionView else { return }
             let top = TranscriptLayout.verticalInset + max(0, insets.top)
             let bottom = TranscriptLayout.verticalInset + max(0, insets.bottom)
@@ -164,61 +115,24 @@ struct TranscriptList: UIViewRepresentable {
                 self.isAdjusting = false
                 if !self.rows.isEmpty, !contextChanged { self.settle() }
             }
-            if contextChanged {
-                self.premeasure.cancelAll()
-                self.heights.removeAll()
-                self.rows = []
-            }
-            var seen = Set<String>()
-            let unique = newRows.filter { seen.insert($0.id).inserted }
-            if case .top = self.anchor, unique.first?.id != self.rows.first?.id {
-                // Rows arriving above: keep reading the same row instead of following the top.
-                self.anchor = self.currentAnchor(allowTop: false)
-            }
-            // Streaming: same ids, only the last row differs. One pass, no diffing.
-            if let last = unique.last, self.rows.count == unique.count, self.rows.last?.id == last.id,
-               self.rows.dropLast() == unique.dropLast() {
-                guard self.rows[self.rows.count - 1] != last else { return }
-                self.rows[self.rows.count - 1] = last
-                self.heights[last.id]?.measured = false
-                self.queue.markUnmeasured(unique.count - 1)
-                self.settle()
+            switch self.controller.accept(newRows, contextChanged: contextChanged) {
+            case .unchanged:
                 return
-            }
-            guard unique != self.rows else { return }
-            let oldRows = self.rows
-            self.rows = unique
-            self.index = Dictionary(unique.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
-
-            if oldRows.isEmpty {
-                self.anchor = .bottom
-                self.rebuildQueue()
+            case .tail:
+                self.settle()
+            case .initial:
                 self.rebuildOffsets()
                 self.reload(view)
                 self.settle()
-                return
-            }
-
-            // Rows whose content changed (a streaming reply, a tool finishing) are updated in
-            // place; their old height stays as the estimate until they're measured again.
-            let oldById = Dictionary(oldRows.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-            for item in unique {
-                guard let old = oldById[item.id], old != item else { continue }
-                self.heights[item.id]?.measured = false
-            }
-            self.rebuildQueue()
-            if oldRows.map(\.id) != unique.map(\.id) {
-                // Sending jumps to the end, even from far up, and follows the reply from there.
-                let oldIds = Set(oldRows.map(\.id))
-                if unique.contains(where: { !oldIds.contains($0.id) && $0.isPendingSend }) { self.anchor = .bottom }
-                // Trimmed back to the window (#335): forget the heights of the rows that left.
-                if oldRows.count > unique.count + 256 { self.heights = self.heights.filter { self.index[$0.key] != nil } }
+            case let .rows(_, oldIds):
                 // Rows only come and go when a message is sent or arrives, or history loads, so a
                 // reload (which re-dequeues the few cells on screen) is cheap enough.
-                self.rebuildOffsets()
-                self.reload(view)
+                if oldIds != nil {
+                    self.rebuildOffsets()
+                    self.reload(view)
+                }
+                self.settle()
             }
-            self.settle()
         }
 
         private func reload(_ view: UICollectionView) {
@@ -229,29 +143,6 @@ struct TranscriptList: UIViewRepresentable {
             }
         }
 
-        /// Rows whose layout changed without the rows themselves changing: an image arrived, a
-        /// card opened, a setting changed. `keepInPlace` is a row the reader just tapped, which
-        /// should stay where it is on screen while it grows or shrinks below that point.
-        private func invalidate(_ ids: Set<String>?, keepInPlace: String?) {
-            if let ids {
-                for id in ids {
-                    self.heights[id]?.measured = false
-                    if let row = self.index[id] { self.queue.markUnmeasured(row) }
-                }
-            } else {
-                self.premeasure.cancelAll()
-                for id in self.heights.keys { self.heights[id]?.measured = false }
-                self.queue.markAllUnmeasured(count: self.rows.count)
-            }
-            if let keepInPlace, let row = self.index[keepInPlace], let view = self.collectionView {
-                self.anchor = .row(keepInPlace, self.tops[row] - view.contentOffset.y)
-                self.settle()
-                self.anchor = self.currentAnchor()
-            } else {
-                self.settle()
-            }
-        }
-
         /// Measures rows around the viewport, applies any height changes, puts the reader back
         /// where they were and brings the cells on screen up to date.
         fileprivate func settle() {
@@ -259,19 +150,26 @@ struct TranscriptList: UIViewRepresentable {
             self.isAdjusting = true
             defer { self.isAdjusting = false }
             // Jump to the anchor first so the rows measured are the ones about to be on screen.
-            self.restore(self.anchor)
+            self.restore(self.controller.anchor)
             // Measuring rows above the anchor moves the viewport over rows that weren't measured
             // yet, so go again until the rows on screen are all measured.
             var passes = 0
-            while passes < 4, self.measureAroundViewport() {
+            while passes < 4 {
+                let changed = self.controller.measureAroundViewport()
+                guard !changed.isEmpty else { break }
+                self.markDirty(changed)
                 self.applyHeights()
-                self.restore(self.anchor)
+                self.restore(self.controller.anchor)
                 passes += 1
             }
-            self.restore(self.anchor)
+            self.restore(self.controller.anchor)
             view.layoutIfNeeded()
             self.refreshVisibleCells()
-            self.schedulePrefetch()
+            self.controller.schedulePrefetch()
+        }
+
+        private func markDirty(_ rows: IndexSet) {
+            for row in rows where row < self.rows.count { self.dirtyHeights.insert(self.rows[row].id) }
         }
 
         private func refreshVisibleCells() {
@@ -280,18 +178,11 @@ struct TranscriptList: UIViewRepresentable {
             guard width > 40 else { return }
             for path in view.indexPathsForVisibleItems where path.item < self.rows.count {
                 let layout = self.renderer.layout(for: self.rows[path.item], width: width)
-                self.correctHeight(self.rows[path.item].id, width: width, height: layout.height)
+                self.controller.correctHeight(self.rows[path.item].id, width: width, height: layout.height)
                 guard let cell = view.cellForItem(at: path) as? TranscriptCell else { continue }
                 cell.apply(layout, actions: self.renderer)
             }
-            self.pinVisibleImages()
-        }
-
-        private func pinVisibleImages() {
-            guard let view = self.collectionView, !self.rows.isEmpty, self.width > 40,
-                  let first = self.row(at: view.contentOffset.y),
-                  let last = self.row(at: view.contentOffset.y + view.bounds.height) else { return }
-            self.renderer.pinImages(of: self.rows[first...last], width: self.width)
+            self.controller.pinVisibleImages()
         }
 
         /// The viewport changed size: rotation, split view, the keyboard or the composer.
@@ -299,42 +190,11 @@ struct TranscriptList: UIViewRepresentable {
             self.settle()
         }
 
-        /// Highlights Find's matches and scrolls the selected one into view when asked to.
-        private var lastJump: UUID?
+        func apply(_ jump: TranscriptJump?) { self.controller.apply(jump) }
 
-        func apply(_ jump: TranscriptJump?) {
-            guard let jump, jump.id != self.lastJump else { return }
-            self.lastJump = jump.id
-            self.renderer.showOriginal(jump.messageId, missingNotice: PincerRoute.Notice.unknownMessage)
-        }
+        func apply(_ highlight: TranscriptHighlight) { self.controller.apply(highlight) }
 
-        func apply(_ highlight: TranscriptHighlight) {
-            if highlight != self.renderer.highlight { self.premeasure.cancelAll() }
-            guard let id = self.renderer.update(highlight: highlight) else { return }
-            self.reveal(id)
-        }
-
-        /// Scrolls so the selected match (or the top of its row) sits a little above the middle
-        /// of the visible area, clear of the bars and chrome floating over the transcript.
-        private func reveal(_ id: String) {
-            guard let view = self.collectionView, let row = self.index[id] else { return }
-            let width = self.width
-            guard width > 40 else { return }
-            let layout = self.renderer.layout(for: self.rows[row], width: width)
-            let old = self.heights[id]?.value
-            self.heights[id] = Height(value: max(1, layout.height), width: width, measured: true)
-            self.syncQueueWidth(width)
-            self.queue.markMeasured(row)
-            if old.map({ abs($0 - layout.height) > 0.5 }) ?? true {
-                self.dirtyHeights.insert(id)
-                self.applyHeights()
-            }
-            let insets = view.adjustedContentInset
-            let visible = max(view.bounds.height - insets.top - insets.bottom, 1)
-            let y = min(layout.matchY ?? 0, layout.height)
-            self.anchor = .row(id, insets.top + visible * 0.4 - y)
-            self.settle()
-        }
+        func prefetchStep() { self.controller.prefetchStep() }
 
         // MARK: Heights
 
@@ -351,22 +211,15 @@ struct TranscriptList: UIViewRepresentable {
             return max(0, view.bounds.width - insets.left - insets.right)
         }
 
-        private func height(at row: Int) -> CGFloat {
-            let item = self.rows[row]
-            if let height = self.heights[item.id] { return height.value }
-            let estimate = TranscriptLayout.estimatedHeight(item, width: self.width, hasReactions: { self.context.hasReactions($0) })
-            self.heights[item.id] = Height(value: estimate, width: self.width, measured: false)
-            return estimate
-        }
-
         private func rebuildOffsets() {
             var tops: [CGFloat] = []
             tops.reserveCapacity(self.rows.count)
             var y: CGFloat = 0
+            let width = self.width
             for row in self.rows.indices {
                 if row > 0 { y += TranscriptLayout.rowSpacing }
                 tops.append(y)
-                y += self.height(at: row)
+                y += self.controller.height(at: row, width: width)
             }
             self.tops = tops
             self.contentHeight = y
@@ -375,7 +228,7 @@ struct TranscriptList: UIViewRepresentable {
 
         fileprivate func frame(at row: Int) -> CGRect {
             let insets = self.horizontalInsets
-            let height = self.heights[self.rows[row].id]?.value ?? 1
+            let height = self.controller.heights[self.rows[row].id]?.value ?? 1
             return CGRect(x: insets.left, y: self.tops[row], width: self.width, height: height)
         }
 
@@ -395,7 +248,7 @@ struct TranscriptList: UIViewRepresentable {
             // content height and invalidate that one item.
             if self.dirtyHeights.count == 1, let last = self.rows.last, self.dirtyHeights.contains(last.id),
                self.tops.count == self.rows.count, let top = self.tops.last {
-                let new = self.height(at: self.rows.count - 1)
+                let new = self.controller.height(at: self.rows.count - 1, width: self.width)
                 let delta = new - (self.contentHeight - top)
                 self.contentHeight += delta
                 self.dirtyHeights.removeAll()
@@ -411,195 +264,6 @@ struct TranscriptList: UIViewRepresentable {
             self.collectionView?.collectionViewLayout.invalidateLayout()
         }
 
-        private func measure(_ row: Int, width: CGFloat) -> Bool {
-            let item = self.rows[row]
-            if let height = self.heights[item.id], height.measured, height.width == width {
-                self.queue.markMeasured(row)
-                return false
-            }
-            let old = self.heights[item.id]?.value
-            let value = max(1, self.renderer.layout(for: item, width: width).height)
-            self.heights[item.id] = Height(value: value, width: width, measured: true)
-            self.queue.markMeasured(row)
-            self.prefetchStats.rowsMeasured += 1
-            let moved = old.map { abs($0 - value) > 0.5 } ?? true
-            if moved { self.dirtyHeights.insert(item.id) }
-            return moved
-        }
-
-        private func syncQueueWidth(_ width: CGFloat) {
-            guard width != self.queueWidth else { return }
-            self.queueWidth = width
-            self.premeasure.cancelAll()
-            self.queue.markAllUnmeasured(count: self.rows.count)
-        }
-
-        /// Recomputes what needs measuring after rows came, went or changed.
-        private func rebuildQueue() {
-            let width = self.width
-            self.queueWidth = width
-            self.queue.rebuild(count: self.rows.count) { row in
-                guard let height = self.heights[self.rows[row].id] else { return true }
-                return !height.measured || height.width != width
-            }
-        }
-
-        private func visibleRowIds() -> Set<String> {
-            guard let view = self.collectionView, !self.rows.isEmpty,
-                  let first = self.row(at: view.contentOffset.y),
-                  let last = self.row(at: view.contentOffset.y + view.bounds.height) else { return [] }
-            return Set(self.rows[first...last].map(\.id))
-        }
-
-        /// The rows within `screens` viewport heights of the viewport, and the one in the middle.
-        private func window(screens: CGFloat, minimum: CGFloat = 200) -> (range: ClosedRange<Int>, center: Int)? {
-            guard let view = self.collectionView, !self.rows.isEmpty else { return nil }
-            let visible = CGRect(origin: view.contentOffset, size: view.bounds.size)
-            let around = visible.insetBy(dx: 0, dy: -max(visible.height * screens, minimum))
-            guard let first = self.row(at: around.minY), let last = self.row(at: around.maxY),
-                  let center = self.row(at: visible.midY) else { return nil }
-            return (first...last, center)
-        }
-
-        /// Measures unmeasured rows from a screen above the viewport to a screen below it, so rows
-        /// have their real height before they scroll into view. Returns whether any changed.
-        private func measureAroundViewport() -> Bool {
-            let width = self.width
-            guard width > 40, let window = self.window(screens: 1) else { return false }
-            self.syncQueueWidth(width)
-            let start = Date()
-            defer { self.prefetchStats.seconds += Date().timeIntervalSince(start) }
-            var changed = false
-            for row in self.queue.next(center: window.center, window: window.range, limit: .max)
-            where self.measure(row, width: width) { changed = true }
-            return changed
-        }
-
-        /// The scroll callback's share: rows on screen and a little beyond, within a few
-        /// milliseconds. Whatever doesn't fit waits for the next turn of the run loop.
-        private func measureNearViewport() -> Bool {
-            let width = self.width
-            guard width > 40, let window = self.window(screens: 0.5) else { return false }
-            self.syncQueueWidth(width)
-            let start = Date()
-            defer { self.prefetchStats.seconds += Date().timeIntervalSince(start) }
-            let deadline = start.addingTimeInterval(0.004)
-            var changed = false
-            // Rows on screen are always measured; only the margin is held to the budget.
-            if let onScreen = self.window(screens: 0, minimum: 0) {
-                for row in self.queue.next(center: onScreen.center, window: onScreen.range, limit: .max)
-                where self.measure(row, width: width) { changed = true }
-            }
-            let now = self.premeasure.plan(self.queue.next(center: window.center, window: window.range, limit: .max),
-                                           all: self.rows, width: width, renderer: self.renderer, overflow: .measureNow) { [weak self] in
-                self?.scheduleScrollMeasure()
-            }
-            for row in now {
-                if Date() >= deadline {
-                    self.scheduleScrollMeasure()
-                    break
-                }
-                if self.measure(row, width: width) { changed = true }
-            }
-            return changed
-        }
-
-        private func scheduleScrollMeasure() {
-            guard !self.scrollMeasureScheduled else { return }
-            self.scrollMeasureScheduled = true
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.scrollMeasureScheduled = false
-                self.applyNearViewport()
-            }
-        }
-
-        private func applyNearViewport() {
-            guard self.measureNearViewport() else { return }
-            self.isAdjusting = true
-            defer { self.isAdjusting = false }
-            self.applyHeights()
-            self.restore(self.anchor)
-        }
-
-        /// A row's layout was rebuilt after being evicted from the renderer's cache. If a change
-        /// (a reaction, say) made it a different height than measured, correct the layout.
-        private func relaidOut(_ id: String, width: CGFloat, height: CGFloat) {
-            self.correctHeight(id, width: width, height: height)
-        }
-
-        /// If a row's fresh layout is a different height than the one stored, fixes the layout on
-        /// the next turn (this can run while collection view is building cells).
-        private func correctHeight(_ id: String, width: CGFloat, height: CGFloat) {
-            guard width == self.width, self.index[id] != nil, let old = self.heights[id], old.measured,
-                  old.width == width, abs(old.value - height) > 0.5 else { return }
-            self.heights[id] = Height(value: max(1, height), width: width, measured: true)
-            self.dirtyHeights.insert(id)
-            guard !self.fixesScheduled else { return }
-            self.fixesScheduled = true
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.fixesScheduled = false
-                guard !self.dirtyHeights.isEmpty else { return }
-                self.isAdjusting = true
-                defer { self.isAdjusting = false }
-                self.applyHeights()
-                self.restore(self.anchor)
-            }
-        }
-
-        /// Measures the rest of the transcript near the viewport in small slices while the reader
-        /// isn't scrolling, nearest rows first, so heights are final before rows scroll into view.
-        /// Correcting a height mid-scroll means moving the scroll position under the reader's
-        /// finger. Rows more than `screensAhead` screens away keep their estimates, and once the
-        /// window is measured a step costs no more than finding the window.
-        private func schedulePrefetch() {
-            guard !self.prefetchScheduled else { return }
-            self.prefetchScheduled = true
-            DispatchQueue.main.async { [weak self] in self?.prefetchStep() }
-        }
-
-        func prefetchStep() {
-            self.prefetchScheduled = false
-            guard let view = self.collectionView, !self.queue.isEmpty,
-                  !view.isTracking, !view.isDecelerating, !self.isScrollingToTop else { return }
-            let width = self.width
-            guard width > 40, let window = self.window(screens: CGFloat(TranscriptMeasureQueue.screensAhead)) else { return }
-            self.syncQueueWidth(width)
-            let start = Date()
-            defer {
-                self.prefetchStats.steps += 1
-                self.prefetchStats.seconds += Date().timeIntervalSince(start)
-            }
-            let deadline = start.addingTimeInterval(0.004)
-            var changed = false
-            var remaining = false
-            var measured = 0
-            while !remaining {
-                let batch = self.queue.next(center: window.center, window: window.range, limit: 32 + self.premeasure.inFlightCount)
-                if batch.isEmpty { break }
-                // Rows still on the worker stay queued; its completion runs another step.
-                let now = self.premeasure.plan(batch, all: self.rows, width: width, renderer: self.renderer, overflow: .wait) { [weak self] in
-                    self?.schedulePrefetch()
-                }
-                if now.isEmpty { break }
-                let before = self.queue.count
-                for row in now {
-                    if measured > 0, Date() >= deadline { remaining = true; break }
-                    if self.measure(row, width: width) { changed = true }
-                    measured += 1
-                }
-                if self.queue.count == before { break }
-            }
-            if changed {
-                self.isAdjusting = true
-                self.applyHeights()
-                self.restore(self.anchor)
-                self.isAdjusting = false
-            }
-            if remaining { self.schedulePrefetch() }
-        }
-
         // MARK: Cells
 
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
@@ -611,7 +275,7 @@ struct TranscriptList: UIViewRepresentable {
             if let cell = cell as? TranscriptCell, indexPath.item < self.rows.count {
                 let item = self.rows[indexPath.item]
                 let layout = self.renderer.layout(for: item, width: self.width)
-                self.correctHeight(item.id, width: self.width, height: layout.height)
+                self.controller.correctHeight(item.id, width: self.width, height: layout.height)
                 cell.apply(layout, actions: self.renderer)
             }
             return cell
@@ -639,28 +303,7 @@ struct TranscriptList: UIViewRepresentable {
             // The status-bar scroll to top is an animation that setting the offset would cut
             // short; it finishes at the top and is settled once it gets there.
             guard !self.isScrollingToTop else { return }
-            // Scrolling up leaves the bottom right away; only scrolling down re-sticks early.
-            let movingUp = offset < self.lastOffset - 0.5
-            self.anchor = self.currentAnchor(stickDistance: movingUp ? 1 : TranscriptLayout.stickToBottomDistance)
-            self.applyNearViewport()
-            self.pinVisibleImages()
-            self.loadOlderIfShown()
-        }
-
-        private var olderRowWasVisible = false
-
-        /// Pages older history in when the loading row comes into view (once per appearance; a
-        /// prepend resets it, so a short transcript keeps loading).
-        private func loadOlderIfShown() {
-            let visible = self.isOlderRowVisible
-            defer { self.olderRowWasVisible = visible }
-            guard visible, !self.olderRowWasVisible else { return }
-            self.renderer.loadOlderIfShown { [weak self] in self?.isOlderRowVisible ?? false }
-        }
-
-        private var isOlderRowVisible: Bool {
-            guard case .loadingOlder? = self.rows.first, let view = self.collectionView else { return false }
-            return view.indexPathsForVisibleItems.contains { $0.item == 0 }
+            self.controller.readerScrolled(movingUp: TranscriptListController.isMovingUp(from: self.lastOffset, to: offset))
         }
 
         func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
@@ -682,14 +325,14 @@ struct TranscriptList: UIViewRepresentable {
 
         func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
             self.isScrollingToTop = false
-            self.anchor = .top
+            self.controller.anchor = .top
             self.settle()
             self.scrollEnded()
         }
 
         private func scrollEnded() {
-            self.anchor = self.currentAnchor()
-            self.schedulePrefetch()
+            self.controller.anchor = self.controller.currentAnchor()
+            self.controller.schedulePrefetch()
         }
 
         // MARK: Scroll to bottom
@@ -714,7 +357,7 @@ struct TranscriptList: UIViewRepresentable {
         func scrollToBottom() {
             guard let view = self.collectionView, !self.rows.isEmpty else { return }
             self.isScrollingToTop = false
-            self.anchor = .bottom
+            self.controller.anchor = .bottom
             let target = self.maxOffset
             let height = view.bounds.height
             let animated = !UIAccessibility.isReduceMotionEnabled
@@ -729,46 +372,83 @@ struct TranscriptList: UIViewRepresentable {
 
         func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
             // Rows measured on the way may have moved the end; land on it exactly.
-            if self.anchor == .bottom { self.settle() }
-            self.schedulePrefetch()
+            if self.controller.anchor == .bottom { self.settle() }
+            self.controller.schedulePrefetch()
         }
 
-        /// The row at the middle of the viewport, or the bottom when the reader is at the end. The
-        /// middle row is used because rows entering at the edges may still change height.
-        private func currentAnchor(stickDistance: CGFloat = TranscriptLayout.stickToBottomDistance,
-                                   allowTop: Bool = true) -> Anchor {
-            guard let view = self.collectionView, !self.rows.isEmpty else { return .bottom }
-            let offset = view.contentOffset.y
-            if self.maxOffset - offset <= stickDistance { return .bottom }
-            // The loading row is never the anchor: history prepended above it would move the reader.
-            let loadingFirst: Bool = if case .loadingOlder = self.rows[0] { true } else { false }
-            if allowTop, !loadingFirst, offset - self.minOffset <= 1 { return .top }
-            guard var row = self.row(at: offset + view.bounds.height / 2) else { return .bottom }
-            if loadingFirst, row == 0, self.rows.count > 1 { row = 1 }
-            return .row(self.rows[row].id, self.tops[row] - offset)
-        }
-
-        private func restore(_ anchor: Anchor) {
-            guard let view = self.collectionView else { return }
-            let target: CGFloat
-            switch anchor {
-            case .bottom:
-                target = self.maxOffset
-            case .top:
-                target = self.minOffset
-            case let .row(id, offset):
-                guard let row = self.index[id], row < self.tops.count else {
-                    self.anchor = self.currentAnchor()
-                    return
-                }
-                target = min(max(self.tops[row] - offset, self.minOffset), self.maxOffset)
-            }
+        private func restore(_ anchor: TranscriptAnchor) {
+            guard let view = self.collectionView, let target = self.controller.restoreTarget(anchor) else { return }
             guard abs(view.contentOffset.y - target) > 0.5 else { return }
             let wasAdjusting = self.isAdjusting
             self.isAdjusting = true
             view.contentOffset.y = target
             self.isAdjusting = wasAdjusting
         }
+    }
+}
+
+extension TranscriptList.Coordinator: TranscriptListHost {
+    var layoutWidth: CGFloat { self.width }
+
+    var isLayoutFrozen: Bool { false }
+
+    var isScrolling: Bool {
+        guard let view = self.collectionView else { return true }
+        return view.isTracking || view.isDecelerating || self.isScrollingToTop
+    }
+
+    var viewport: TranscriptViewport? {
+        guard let view = self.collectionView else { return nil }
+        return TranscriptViewport(offset: view.contentOffset.y, height: view.bounds.height, range: self.minOffset...self.maxOffset)
+    }
+
+    func rowTop(_ row: Int) -> CGFloat? {
+        row < self.tops.count ? self.tops[row] : nil
+    }
+
+    func row(atContentY y: CGFloat) -> Int? { self.row(at: y) }
+
+    var visibleRows: ClosedRange<Int>? {
+        guard let view = self.collectionView,
+              let first = self.row(at: view.contentOffset.y),
+              let last = self.row(at: view.contentOffset.y + view.bounds.height) else { return nil }
+        return first...last
+    }
+
+    func rowWindow(screens: CGFloat, minimum: CGFloat) -> (range: ClosedRange<Int>, center: Int)? {
+        guard let view = self.collectionView, !self.rows.isEmpty else { return nil }
+        let visible = CGRect(origin: view.contentOffset, size: view.bounds.size)
+        let around = visible.insetBy(dx: 0, dy: -max(visible.height * screens, minimum))
+        guard let first = self.row(at: around.minY), let last = self.row(at: around.maxY),
+              let center = self.row(at: visible.midY) else { return nil }
+        return (first...last, center)
+    }
+
+    func heightsChanged(_ rows: IndexSet) {
+        self.markDirty(rows)
+        guard !self.dirtyHeights.isEmpty else { return }
+        let wasAdjusting = self.isAdjusting
+        self.isAdjusting = true
+        self.applyHeights()
+        self.restore(self.controller.anchor)
+        self.isAdjusting = wasAdjusting
+    }
+
+    func settle(changed: IndexSet) { self.settle() }
+
+    /// Scrolls so the selected match (or the top of its row) sits a little above the middle
+    /// of the visible area, clear of the bars and chrome floating over the transcript.
+    func reveal(_ id: String) {
+        guard let view = self.collectionView, let result = self.controller.prepareReveal(id) else { return }
+        if result.moved {
+            self.dirtyHeights.insert(id)
+            self.applyHeights()
+        }
+        let insets = view.adjustedContentInset
+        self.controller.anchor = TranscriptListController.revealAnchor(
+            id: id, insetTop: insets.top, visibleHeight: view.bounds.height - insets.top - insets.bottom,
+            matchY: result.layout.matchY, rowHeight: result.layout.height)
+        self.settle()
     }
 }
 

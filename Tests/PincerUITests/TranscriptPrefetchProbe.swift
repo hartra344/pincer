@@ -87,16 +87,9 @@ struct TranscriptPrefetchProbe {
         return rows
     }
 
-    /// Rows whose height is final, read from the coordinator's `heights` dictionary by reflection so it
-    /// works without any instrumentation. nil when the storage isn't shaped like that (renamed).
+    /// Rows whose height is final, from the shared controller's heights.
     static func measuredRows(_ coordinator: TranscriptList.Coordinator) -> Int? {
-        guard let heights = Mirror(reflecting: coordinator).children.first(where: { $0.label == "heights" })?.value else { return nil }
-        var measured = 0
-        for pair in Mirror(reflecting: heights).children {
-            guard let value = Mirror(reflecting: pair.value).children.dropFirst().first?.value else { return nil }
-            if Mirror(reflecting: value).children.first(where: { $0.label == "measured" })?.value as? Bool == true { measured += 1 }
-        }
-        return measured
+        coordinator.controller.heights.values.filter(\.measured).count
     }
 
     struct Spin {
