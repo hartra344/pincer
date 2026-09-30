@@ -84,8 +84,7 @@ extension ChatStore {
         }
         self.items.append(pending)
         gateway.outbox.enqueue(entry)
-        let held = !requiresConnection && gateway.hold(for: entry) != nil
-        guard connected, !held, gateway.outbox.isHead(id: idempotencyKey) else {
+        guard connected, gateway.outbox.isHead(id: idempotencyKey) else {
             if requiresConnection || entry.isMemoryOnly {
                 // Behind an earlier message of this chat: this send can't wait in the queue.
                 self.discardUnsent(idempotencyKey)
@@ -266,6 +265,8 @@ extension ChatStore {
             if items[index].outboxState != entry.state { items[index].outboxState = entry.state }
             let hold = self.gateway?.hold(for: entry)
             if items[index].outboxHold != hold { items[index].outboxHold = hold }
+            let bytes = hold == nil ? nil : self.gateway?.uploadBytes(for: entry)
+            if items[index].outboxUploadBytes != bytes { items[index].outboxUploadBytes = bytes }
         }
         for entry in entries where !seen.contains(entry.id) {
             var item = ChatItem(id: "outbox:\(entry.id)", role: .user, blocks: (entry.text.isEmpty ? [] : [.text(entry.text)])
@@ -273,6 +274,7 @@ extension ChatStore {
                                 timestamp: entry.createdAt, idempotencyKey: entry.id, isPending: true)
             item.outboxState = entry.state
             item.outboxHold = self.gateway?.hold(for: entry)
+            item.outboxUploadBytes = item.outboxHold == nil ? nil : self.gateway?.uploadBytes(for: entry)
             item.replyToId = entry.replyToId
             item.replyToPreview = entry.replyPreview
             items.append(item)

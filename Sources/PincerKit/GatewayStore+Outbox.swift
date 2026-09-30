@@ -41,11 +41,20 @@ extension GatewayStore {
     /// released) that's still queued while the network is expensive or constrained.
     public func hold(for entry: OutboxEntry) -> OutboxHold? {
         guard entry.state == .queued, !entry.sendOnAnyNetwork, !entry.isMemoryOnly else { return nil }
-        let bytes = max(entry.attachmentBytes, self.outboxAttachments[entry.id]?.reduce(0) { $0 + $1.data.count } ?? 0)
-        guard bytes >= OutboxEntry.largeUploadBytes else { return nil }
+        guard self.uploadBytes(for: entry) >= OutboxEntry.largeUploadBytes else { return nil }
         if self.network.isConstrained { return .constrained }
         if self.network.isExpensive { return .expensive }
         return nil
+    }
+
+    /// Total attachment bytes of an entry, from disk refs or the in-memory copies.
+    public func uploadBytes(for entry: OutboxEntry) -> Int {
+        max(entry.attachmentBytes, self.outboxAttachments[entry.id]?.reduce(0) { $0 + $1.data.count } ?? 0)
+    }
+
+    /// The limits come from a saved policy rather than a live hello (offline): the UI says so.
+    public var uploadLimitsAreLastKnown: Bool {
+        !(self.hello != nil && self.state.isConnected) && self.lastUploadPolicy != nil
     }
 
     /// Brings every chat's rows in line with the current holds (the network changed).

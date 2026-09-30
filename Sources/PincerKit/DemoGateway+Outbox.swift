@@ -38,7 +38,7 @@ extension DemoGateway {
                 id: DemoOutbox.queuedAttachmentId,
                 sessionKey: DemoOutbox.sessionKey,
                 agentId: "main",
-                text: "And here’s the seating plan — can you check nobody’s next to their ex?",
+                text: "And here’s the seating plan — can you check nobody’s sitting next to their ex?",
                 createdAt: now.addingTimeInterval(-30),
                 attachments: [DemoOutbox.seatingPlanRef]),
         ]

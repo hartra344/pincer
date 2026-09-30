@@ -50,7 +50,7 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
     public var sendOnAnyNetwork: Bool
 
     /// Total attachment bytes at which an entry counts as a large upload.
-    public static let largeUploadBytes = 5 * 1024 * 1024
+    public static let largeUploadBytes = 2 * 1024 * 1024
 
     /// Bytes of the attachments kept on disk with this entry (memory-only ones aren't counted here).
     public var attachmentBytes: Int { self.attachments.reduce(0) { $0 + $1.byteCount } }

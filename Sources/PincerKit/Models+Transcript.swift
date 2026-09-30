@@ -286,6 +286,8 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     /// Why a queued message waits on a connected Gateway (a large upload on an expensive or
     /// constrained network); nil otherwise.
     public var outboxHold: OutboxHold?
+    /// Total attachment bytes of a held message, for its status tooltip; nil when not held.
+    public var outboxUploadBytes: Int?
     /// Model that generated this message, as recorded by the Gateway (assistant messages only).
     public var model: String?
     public var provider: String?
