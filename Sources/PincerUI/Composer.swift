@@ -204,19 +204,19 @@ struct Composer: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .composerControl()
-        .disabled(!self.gateway.state.isConnected)
-        .help(self.gateway.state.isConnected ? L("Attach files") : Self.attachmentsNeedConnection)
+        .disabled(!self.canAttach)
+        .help(self.canAttach ? L("Attach files") : Self.attachmentsNeedConnection)
         .accessibilityLabel(Text("Attach files", bundle: .module))
-        .accessibilityHint(self.gateway.state.isConnected ? "" : Self.attachmentsNeedConnection)
+        .accessibilityHint(self.canAttach ? "" : Self.attachmentsNeedConnection)
         .overlay(alignment: .trailing) {
             #if os(iOS)
             PhotosPicker(selection: self.$photoItems, maxSelectionCount: 6, matching: .images) {
                 Image(systemName: "photo").font(.title3)
             }
-            .disabled(!self.gateway.state.isConnected)
-            .help(self.gateway.state.isConnected ? L("Attach photos") : Self.attachmentsNeedConnection)
+            .disabled(!self.canAttach)
+            .help(self.canAttach ? L("Attach photos") : Self.attachmentsNeedConnection)
             .accessibilityLabel(Text("Attach photos", bundle: .module))
-            .accessibilityHint(self.gateway.state.isConnected ? "" : Self.attachmentsNeedConnection)
+            .accessibilityHint(self.canAttach ? "" : Self.attachmentsNeedConnection)
             .offset(x: 30)
             #endif
         }
@@ -238,9 +238,16 @@ struct Composer: View {
     private var canSend: Bool {
         guard !self.chat.isSendingEdit else { return false }
         guard !self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !self.attachments.isEmpty else { return false }
-        // Offline, plain messages queue in the outbox; attachments and commands need the Gateway.
-        return self.gateway.state.isConnected || (self.attachments.isEmpty && !self.isTypingCommand)
+        // Offline, messages queue in the outbox (attachments too while they fit on disk); commands need the Gateway.
+        return self.gateway.state.isConnected || (self.attachmentsFitOffline && !self.isTypingCommand)
     }
+
+    /// Offline, attachments queue like text while the outbox can keep them on disk.
+    private var attachmentsFitOffline: Bool {
+        self.gateway.canPersistAttachments(bytes: self.attachments.reduce(0) { $0 + $1.data.count })
+    }
+
+    private var canAttach: Bool { self.gateway.state.isConnected || self.attachmentsFitOffline }
 
     private static var offlineHint: String { L("Offline — messages send when you reconnect") }
     private static var attachmentsNeedConnection: String { L("Attachments need a connection") }
@@ -255,7 +262,7 @@ struct Composer: View {
         guard !self.gateway.state.isConnected else { return nil }
         let queued = self.chat.unsentEntries.filter { $0.state == .queued }.count
         let waiting = queued == 0 ? nil : L("\(queued) messages queued")
-        if !self.attachments.isEmpty {
+        if !self.attachments.isEmpty, !self.attachmentsFitOffline {
             return [waiting, Self.attachmentsNeedConnection].compactMap(\.self).joined(separator: " · ")
         }
         if self.isTypingCommand {

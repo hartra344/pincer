@@ -622,7 +622,7 @@ private struct TranscriptCacheSettingsSection: View {
                     Text("Chats are downloaded again from your Gateways when you open them, and message search is rebuilt. Nothing on your Gateways is deleted.", bundle: .module)
                 }
             LabeledContent(L("Outbox")) {
-                Text(self.app.unsentCount == 1 ? "1 message" : "\(self.app.unsentCount.formatted()) messages")
+                Text(self.outboxSummary)
                     .monospacedDigit()
             }
             Button(L("Clear Outbox…"), role: .destructive) { self.confirmingUnsent = true }
@@ -638,6 +638,13 @@ private struct TranscriptCacheSettingsSection: View {
             Text("Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send.", bundle: .module)
         }
         .task { await self.measure() }
+    }
+
+    private var outboxSummary: String {
+        let messages = self.app.unsentCount == 1 ? "1 message" : "\(self.app.unsentCount.formatted()) messages"
+        let bytes = self.app.outboxAttachmentBytes
+        guard bytes > 0 else { return messages }
+        return "\(messages) · \(bytes.formatted(.byteCount(style: .file)))"
     }
 
     private func measure() async {
