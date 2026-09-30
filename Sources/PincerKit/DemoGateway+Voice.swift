@@ -34,7 +34,6 @@ struct DemoVoiceState {
         return rest.elementsEqual(["apiKey"]) || rest.elementsEqual(["apiKey", "id"])
     }
 }
-}
 
 extension DemoGateway {
     static let voiceMethods = [
