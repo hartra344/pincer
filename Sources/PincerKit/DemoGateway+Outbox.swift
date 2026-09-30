@@ -1,4 +1,7 @@
+import CoreGraphics
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 /// Where the demo's seeded unsent message lives, for checks and screenshots.
 public enum DemoOutbox {
@@ -7,6 +10,12 @@ public enum DemoOutbox {
     public static let sessionKey = "agent:main:dashboard:dinner"
     /// The seeded failed message's idempotency key.
     public static let failedId = "demo-outbox-failed-shopping-list"
+    /// The seeded queued message with the seating-plan image, behind the failed one.
+    public static let queuedAttachmentId = "demo-outbox-queued-seating-plan"
+    static let seatingPlanId = UUID(uuidString: "5EA71A9E-0000-4000-8000-000000000483")!
+    static let seatingPlanRef = OutboxAttachmentRef(
+        id: seatingPlanId, fileName: "seating-plan.png", mimeType: "image/png",
+        byteCount: DemoGateway.seatingPlan.data.count)
     static let title = "Dinner party"
     static let preview = "Pinot Noir suits both Wellingtons."
 }
@@ -25,7 +34,44 @@ extension DemoGateway {
                 createdAt: now.addingTimeInterval(-40),
                 state: .failed(OutboxFailure(message: "The Gateway timed out.", retryable: true)),
                 attempts: 1),
+            OutboxEntry(
+                id: DemoOutbox.queuedAttachmentId,
+                sessionKey: DemoOutbox.sessionKey,
+                agentId: "main",
+                text: "And here’s the seating plan — can you check nobody’s sitting next to their ex?",
+                createdAt: now.addingTimeInterval(-30),
+                attachments: [DemoOutbox.seatingPlanRef]),
         ]
+    }
+
+    /// The seated-plan image the queued message carries, generated once.
+    static let seatingPlan = OutgoingAttachment(
+        id: DemoOutbox.seatingPlanId, fileName: "seating-plan.png", mimeType: "image/png", data: DemoGateway.seatingPlanPNG())
+
+    /// A 240×160 table diagram: a round table with six seats.
+    static func seatingPlanPNG() -> Data {
+        let (width, height) = (240, 160)
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return Data() }
+        context.setFillColor(CGColor(red: 0.97, green: 0.95, blue: 0.91, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let center = CGPoint(x: 120, y: 80)
+        context.setFillColor(CGColor(red: 0.72, green: 0.52, blue: 0.36, alpha: 1))
+        context.fillEllipse(in: CGRect(x: center.x - 42, y: center.y - 42, width: 84, height: 84))
+        for seat in 0..<6 {
+            let angle = CGFloat(seat) * .pi / 3 + .pi / 6
+            let hue = CGFloat(seat) / 6
+            context.setFillColor(CGColor(red: 0.30 + hue * 0.5, green: 0.55 - hue * 0.2, blue: 0.80 - hue * 0.5, alpha: 1))
+            context.fillEllipse(in: CGRect(x: center.x + cos(angle) * 62 - 13, y: center.y + sin(angle) * 62 - 13, width: 26, height: 26))
+        }
+        guard let image = context.makeImage() else { return Data() }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return Data() }
+        CGImageDestinationAddImage(destination, image, nil)
+        CGImageDestinationFinalize(destination)
+        return data as Data
     }
 
     /// The Gateway-side transcript of the *Dinner party* chat the failed message follows.

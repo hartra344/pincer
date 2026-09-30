@@ -24,7 +24,7 @@ public struct ReplyQuote: Hashable, Sendable {
     public enum Sender: Hashable, Sendable {
         case you
         case agent
-        /// The Gateway's `senderLabel`, when the original isn't loaded.
+        /// A name: another agent, a bridged channel sender, or the Gateway's `senderLabel` when the original isn't loaded.
         case label(String)
     }
 
@@ -32,6 +32,12 @@ public struct ReplyQuote: Hashable, Sendable {
     public var sender: Sender?
     /// Nil when neither the original nor a preview is known ("Original message").
     public var text: String?
+}
+
+/// Who an assistant message answers, as the agent's `[[reply_to…]]` directive names it.
+public enum ReplyDirective: Hashable, Sendable {
+    case id(String)
+    case current
 }
 
 public enum Replies {
@@ -82,6 +88,75 @@ public enum Replies {
         return text.isEmpty ? quote : "\(quote)\n\n\(text)"
     }
 
+    /// `text` without its `[[reply_to:<id>]]` / `[[reply_to_current]]` directives (the syntax the Gateway
+    /// strips before delivery, matched case-insensitively; ones in code spans or fences are literal),
+    /// and the first target they named.
+    public static func extractDirective(_ text: String) -> (text: String, target: ReplyDirective?) {
+        guard text.contains("[[") else { return (text, nil) }
+        var out = ""
+        var target: ReplyDirective?
+        var index = text.startIndex
+        var lineStart = true
+        var fenced = false
+        var inlineTicks = 0
+        while index < text.endIndex {
+            let rest = text[index...]
+            if lineStart {
+                let trimmed = rest.drop(while: { $0 == " " || $0 == "\t" })
+                if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") { fenced.toggle() }
+            }
+            let ch = text[index]
+            if !fenced, ch == "`" {
+                var run = 0
+                var end = index
+                while end < text.endIndex, text[end] == "`" {
+                    run += 1
+                    end = text.index(after: end)
+                }
+                inlineTicks = inlineTicks == 0 ? run : (inlineTicks == run ? 0 : inlineTicks)
+                out += text[index..<end]
+                index = end
+                lineStart = false
+                continue
+            }
+            if !fenced, inlineTicks == 0, rest.hasPrefix("[["), let tag = Self.parseTag(rest) {
+                if target == nil { target = tag.target }
+                index = tag.end
+                var trailing = index
+                while trailing < text.endIndex, text[trailing] == " " || text[trailing] == "\t" { trailing = text.index(after: trailing) }
+                let atStart = out.allSatisfy(\.isWhitespace)
+                index = atStart ? trailing : (trailing < text.endIndex && text[trailing] != "\n" ? index : trailing)
+                continue
+            }
+            out.append(ch)
+            lineStart = ch == "\n"
+            if ch == "\n" { inlineTicks = 0 }
+            index = text.index(after: index)
+        }
+        guard target != nil else { return (text, nil) }
+        return (out.trimmingCharacters(in: .whitespacesAndNewlines), target)
+    }
+
+    private static func parseTag(_ rest: Substring) -> (target: ReplyDirective, end: String.Index)? {
+        var cursor = rest.dropFirst(2)
+        cursor = cursor.drop(while: \.isWhitespace)
+        let lower = cursor.lowercased()
+        if lower.hasPrefix("reply_to_current") {
+            let after = cursor.dropFirst("reply_to_current".count).drop(while: \.isWhitespace)
+            guard after.hasPrefix("]]") else { return nil }
+            return (.current, after.index(after.startIndex, offsetBy: 2))
+        }
+        guard lower.hasPrefix("reply_to") else { return nil }
+        var after = cursor.dropFirst("reply_to".count).drop(while: \.isWhitespace)
+        guard after.first == ":" else { return nil }
+        after = after.dropFirst()
+        guard let close = after.range(of: "]]") else { return nil }
+        let value = after[after.startIndex..<close.lowerBound]
+        let id = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, !id.contains("\n") else { return nil }
+        return (.id(id), close.upperBound)
+    }
+
     /// Whether a `chat.send` failure is an older Gateway refusing the `replyToId` param.
     public static func isReplyToRejection(_ error: Error) -> Bool {
         guard case let GatewayError.rpc(code, message, _) = error else { return false }
@@ -94,12 +169,59 @@ public enum Replies {
 public enum ReactionActor: Hashable, Sendable {
     case you
     case agent(String)
+    /// Someone else who reacted through the Gateway (a shared session's member), by display name.
+    case person(String)
 
     public var name: String {
         switch self {
         case .you: "You"
-        case let .agent(name): name
+        case let .agent(name), let .person(name): name
         }
+    }
+}
+
+/// One reactor in a Gateway reaction summary (`session.reactions.*`).
+public struct ReactionIdentity: Hashable, Sendable {
+    public var id: String
+    public var label: String?
+
+    public init(id: String, label: String? = nil) {
+        self.id = id
+        self.label = label
+    }
+}
+
+/// The Gateway's aggregate of one emoji on one message: who reacted, in the order added.
+public struct ReactionSummary: Hashable, Sendable {
+    public var emoji: String
+    public var identities: [ReactionIdentity]
+
+    public init(emoji: String, identities: [ReactionIdentity]) {
+        self.emoji = emoji
+        self.identities = identities
+    }
+
+    public init?(_ json: JSONValue) {
+        guard let emoji = json["emoji"]?.text, !emoji.isEmpty else { return nil }
+        self.emoji = emoji
+        self.identities = (json["identities"]?.array ?? []).compactMap { entry in
+            guard let id = entry["id"]?.text, !id.isEmpty else { return nil }
+            return ReactionIdentity(id: id, label: entry["label"]?.text)
+        }
+    }
+
+    public static func parse(_ json: JSONValue?) -> [ReactionSummary] {
+        (json?.array ?? []).compactMap(ReactionSummary.init)
+    }
+
+    /// The summaries per message id of a `session.reactions.list` result.
+    public static func parseMap(_ json: JSONValue?) -> [String: [ReactionSummary]] {
+        var map: [String: [ReactionSummary]] = [:]
+        for (messageId, value) in json?.object ?? [:] {
+            let list = parse(value)
+            if !list.isEmpty { map[messageId] = list }
+        }
+        return map
     }
 }
 
@@ -221,6 +343,86 @@ public enum Reactions {
         for emoji in agent { add(emoji, .agent(agentName)) }
         for emoji in mine { add(emoji, .you) }
         return groups
+    }
+
+    // MARK: Gateway reactions (session.reactions.*)
+
+    /// Agent reactions (inferred from its `message` tool calls) then the Gateway's shared ones, one group per
+    /// emoji. `selfId` (the `users.self` profile id) makes your own identity `.you`; others are named by label.
+    public static func groups(agent: [String], agentName: String, shared: [ReactionSummary],
+                              selfId: String?) -> [ReactionGroup]
+    {
+        var groups: [ReactionGroup] = []
+        func add(_ emoji: String, _ actor: ReactionActor) {
+            if let index = groups.firstIndex(where: { $0.emoji == emoji }) {
+                if !groups[index].actors.contains(actor) { groups[index].actors.append(actor) }
+            } else {
+                groups.append(ReactionGroup(emoji: emoji, actors: [actor]))
+            }
+        }
+        for emoji in agent { add(emoji, .agent(agentName)) }
+        for summary in shared {
+            for identity in summary.identities {
+                add(summary.emoji, actor(for: identity, selfId: selfId))
+            }
+        }
+        return groups
+    }
+
+    static func actor(for identity: ReactionIdentity, selfId: String?) -> ReactionActor {
+        if identity.id == selfId { return .you }
+        let label = identity.label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return .person(label.isEmpty ? "Someone" : label)
+    }
+
+    /// Your emoji on one message in the Gateway's summaries.
+    public static func mine(in summaries: [ReactionSummary], selfId: String?) -> [String] {
+        summaries.filter { $0.identities.contains { $0.id == selfId } }.map(\.emoji)
+    }
+
+    /// `summaries` with your reaction `emoji` added or removed, for the optimistic update.
+    public static func applying(_ emoji: String, remove: Bool, to summaries: [ReactionSummary],
+                                selfId: String, label: String? = nil) -> [ReactionSummary]
+    {
+        var result = summaries
+        let index = result.firstIndex { $0.emoji == emoji }
+        if remove {
+            guard let index else { return result }
+            result[index].identities.removeAll { $0.id == selfId }
+            if result[index].identities.isEmpty { result.remove(at: index) }
+        } else if let index {
+            if !result[index].identities.contains(where: { $0.id == selfId }) {
+                result[index].identities.append(ReactionIdentity(id: selfId, label: label))
+            }
+        } else {
+            result.append(ReactionSummary(emoji: emoji, identities: [ReactionIdentity(id: selfId, label: label)]))
+        }
+        return result
+    }
+
+    /// `params` for `session.reactions.set`.
+    public static func setParams(sessionParams: [String: JSONValue], messageId: String, emoji: String,
+                                 remove: Bool) -> [String: JSONValue]
+    {
+        var params = sessionParams
+        params["messageId"] = .string(messageId)
+        params["emoji"] = .string(emoji)
+        if remove { params["remove"] = .bool(true) }
+        return params
+    }
+
+    /// Whether a `session.reactions.*` failure means this Gateway or login can't do gateway reactions at all
+    /// (unknown method, no identified author, role forbids it), so reactions fall back to `users.prefs`.
+    public static func isGatewayReactionsUnavailable(_ error: Error) -> Bool {
+        guard case let GatewayError.rpc(code, message, _) = error else { return false }
+        let text = message.lowercased()
+        return code == "FORBIDDEN" || text.contains("unknown method") || text.contains("identified reaction author")
+    }
+
+    /// Whether the message is gone or not one the Gateway knows (so a stale pref entry can be dropped).
+    public static func isUnknownMessage(_ error: Error) -> Bool {
+        guard case let GatewayError.rpc(_, message, _) = error else { return false }
+        return message.lowercased().contains("unknown message")
     }
 
     // MARK: Agent reactions

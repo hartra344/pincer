@@ -147,6 +147,12 @@ public final class GatewayStore: Identifiable {
     /// The task `start()` reads the saved outbox in; tests await it instead of polling `outboxRestored`.
     @ObservationIgnored var outboxLoadTask: Task<Void, Never>?
 
+    /// The Gateway's last-known upload policy (from its latest hello, saved across launches).
+    public internal(set) var lastUploadPolicy: UploadPolicy?
+    /// Cellular / Low Data Mode state; large queued uploads wait while it's expensive or constrained.
+    @ObservationIgnored public let network: NetworkConditions
+    @ObservationIgnored var networkWatch: Task<Void, Never>?
+
     @ObservationIgnored let connection: GatewayConnection
     @ObservationIgnored internal(set) var chats: [String: ChatStore] = [:]
     @ObservationIgnored private var runSessions: [String: String] = [:]
@@ -299,17 +305,18 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored let defaults: UserDefaults
     @ObservationIgnored private let identity: DeviceIdentity
 
-    public convenience init(profile: GatewayProfile) {
-        self.init(profile: profile, defaults: .standard, identity: .loadOrCreate())
+    public convenience init(profile: GatewayProfile, network: NetworkConditions = .shared) {
+        self.init(profile: profile, defaults: .standard, identity: .loadOrCreate(), network: network)
     }
 
     /// A store keeping its device settings in `defaults`, so checks running side by side don't
     /// share `UserDefaults.standard`.
-    public convenience init(profile: GatewayProfile, defaults: UserDefaults) {
-        self.init(profile: profile, defaults: defaults, identity: .loadOrCreate())
+    public convenience init(profile: GatewayProfile, defaults: UserDefaults, network: NetworkConditions = .shared) {
+        self.init(profile: profile, defaults: defaults, identity: .loadOrCreate(), network: network)
     }
 
-    init(profile: GatewayProfile, defaults: UserDefaults, identity: DeviceIdentity) {
+    init(profile: GatewayProfile, defaults: UserDefaults, identity: DeviceIdentity, network: NetworkConditions = .shared) {
+        self.network = network
         self.profile = profile
         self.id = profile.id
         self.defaults = defaults
@@ -321,6 +328,7 @@ public final class GatewayStore: Identifiable {
         self.gatewayHost = profile.isDemo ? nil : defaults.string(forKey: Self.gatewayHostKey(profile.id))
         self.organization = SidebarOrganization(
             rawValue: defaults.string(forKey: "pincer.org.v2.\(profile.id.uuidString)") ?? "") ?? .servers
+        self.lastUploadPolicy = profile.isDemo ? nil : Self.savedUploadPolicy(in: defaults, id: profile.id)
         self.showAutomations = defaults.bool(forKey: "pincer.showAutomations.\(profile.id.uuidString)")
         self.showSlashCommands = defaults.bool(forKey: "pincer.showSlashCommands.\(profile.id.uuidString)")
         self.serverNameOverrides = defaults.dictionary(forKey: "pincer.serverNames.\(profile.id.uuidString)") as? [String: String] ?? [:]
@@ -380,6 +388,7 @@ public final class GatewayStore: Identifiable {
     public func start() {
         guard self.pumpTask == nil else { return }
         self.outboxLoadTask = Task { await self.loadOutbox() }
+        self.startNetworkWatch()
         // A single ordered stream keeps chat deltas and state changes in wire order.
         let stream = CoalescingEventBuffer<Inbound> {
             if case let .event(event) = $0 { return event.coalescingKey }
@@ -467,6 +476,7 @@ public final class GatewayStore: Identifiable {
             self.outbox.connectionLost()
             self.channels.disconnected()
             self.devices.reset()
+            self.resyncOutboxHolds()
         }
         guard state == .connected, let hello else {
             self.health.connectionChanged(state, hello: nil)
@@ -474,6 +484,8 @@ public final class GatewayStore: Identifiable {
         }
         self.hasConnected = true
         self.hello = hello
+        self.resyncOutboxHolds()
+        if !self.profile.isDemo { self.saveUploadPolicy(UploadPolicy(hello: hello)) }
         if !self.profile.isDemo, let host = hello.gatewayHost, host != self.gatewayHost {
             self.gatewayHost = host
             self.defaults.set(host, forKey: Self.gatewayHostKey(self.id))
@@ -484,6 +496,8 @@ public final class GatewayStore: Identifiable {
         self.replyToUnsupported = false
         self.reactionForwardingOff = []
         self.reactionNoticeShown = []
+        self.sessionReactionsOff = false
+        self.selfProfile = nil
         self.lastError = nil
         self.bootstrapTask?.cancel()
         let epoch = self.connectionEpoch
@@ -903,6 +917,9 @@ public final class GatewayStore: Identifiable {
             let keys = payload["keys"]?.array?.compactMap(\.string)
             let maps = self.syncedMaps.filter { keys?.contains($0.pref) ?? true && !self.consumeOwnWrite($0.pref) }
             if !maps.isEmpty { Task { await self.pullMaps(maps) } }
+        case "session.reaction":
+            guard let key = payload["sessionKey"]?.text else { return }
+            for chat in self.chats.values where chat.matchesProgressCardKey(key) { chat.handleReactionEvent(payload) }
         case "chat":
             guard let key = payload["sessionKey"]?.text else { return }
             if let runId = payload["runId"]?.text { self.runSessions[runId] = key }
@@ -1382,6 +1399,10 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var reactionForwardingOff: Set<String> = []
     /// Chats already told a reaction didn't reach their channel on this connection.
     @ObservationIgnored var reactionNoticeShown: Set<String> = []
+    /// Gateway reactions (`session.reactions.*`) failed as unavailable on this connection, so reactions use `users.prefs`.
+    public internal(set) var sessionReactionsOff = false
+    /// Your `users.self` profile id (the Gateway's reaction identity) for one connection; `id` is nil without a profile.
+    @ObservationIgnored var selfProfile: (epoch: Int, id: String?)?
 
     @ObservationIgnored var invalidatingTranscripts: Set<String> = []
 

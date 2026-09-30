@@ -20,6 +20,7 @@ import UserNotifications
 //     --live-extras (each half also runs alone with its own URL TOKEN, against a fresh mock)
 //   swift run PincerChecks --live-no-usage URL TOKEN → a Gateway without usage (mock with MOCK_NO_USAGE=1)
 //   swift run PincerChecks --live-no-reply-to URL TOKEN → a Gateway without replyToId (mock with MOCK_NO_REPLY_TO=1)
+//   swift run PincerChecks --live-no-session-reactions URL TOKEN → a Gateway without session.reactions.* (mock with MOCK_NO_REACTIONS=1)
 //   swift run PincerChecks --live-scope-upgrade URL TOKEN → operator.admin upgrade fallback
 //     (mock with MOCK_PAIRING=auto MOCK_LEGACY_PAIRING=1)
 //   swift run PincerChecks --live-reconnect URL TOKEN → only the #202 reconnect/bootstrap checks (fresh mock)
@@ -80,6 +81,7 @@ let liveScopeUpgrade = liveTarget("--live-scope-upgrade")
 let liveReconnect = liveTarget("--live-reconnect")
 let liveNoUsage = liveTarget("--live-no-usage")
 let liveNoReplyTo = liveTarget("--live-no-reply-to")
+let liveNoSessionReactions = liveTarget("--live-no-session-reactions")
 let perf = arguments.contains("--perf")
 let memoryProbe = arguments.contains("--memory-probe")
 let memoryProbe20k = arguments.contains("--memory-probe-20k")
@@ -88,7 +90,7 @@ let demoAll = arguments.contains("--demo")
 let demoCore = demoAll || arguments.contains("--demo-core")
 let demoExtras = demoAll || arguments.contains("--demo-extras")
 let modeSelected = liveCore != nil || liveExtras != nil || liveScopeUpgrade != nil || liveReconnect != nil || liveNoUsage != nil
-    || liveNoReplyTo != nil || perf || memoryProbe || memoryProbe20k || memoryProbe20kFill || demoCore || demoExtras
+    || liveNoReplyTo != nil || liveNoSessionReactions != nil || perf || memoryProbe || memoryProbe20k || memoryProbe20kFill || demoCore || demoExtras
 
 if !modeSelected {
     await runSections(Suites.unit(skipIntentChecks: arguments.contains("--skip-intent-checks")))
@@ -103,6 +105,7 @@ if memoryProbe20kFill { await runSections([Section("Memory probe (headless full 
 if memoryProbe { await runSections([Section("Memory probe (20 chats × 5k items)") { await runMemoryProbe() }]) }
 if let (url, token) = liveNoUsage { await runSections(Suites.liveNoUsage, url: url, token: token) }
 if let (url, token) = liveNoReplyTo { await runSections(Suites.liveNoReplyTo, url: url, token: token) }
+if let (url, token) = liveNoSessionReactions { await runSections(Suites.liveNoSessionReactions, url: url, token: token) }
 if demoCore { await runSections(Suites.demoCore) }
 if demoExtras { await runSections(Suites.demoExtras) }
 

@@ -46,6 +46,13 @@ struct ChatView: View {
     #endif
 
     private var row: SessionRow? { self.chat.sessionRow }
+
+    /// The chat ⋯ menu's Reactions submenu reads the config, so load it for a chat on a supported channel.
+    private func loadReactionLevels() async {
+        guard self.gateway.state.isConnected, let row = self.row, ReactionLevels.target(of: row) != nil,
+              self.gateway.canEditReactionLevels, !self.gateway.settings.hasLoaded else { return }
+        await self.gateway.settings.load()
+    }
     private var agent: AgentSummary { self.gateway.agent(self.row?.agentId ?? SessionKey.agentId(from: self.chat.sessionKey) ?? "main") }
 
     /// Heights of the floating chrome, so the transcript can scroll underneath it.
@@ -177,6 +184,7 @@ struct ChatView: View {
         .task(id: self.chat.sessionKey) {
             await self.chat.load()
         }
+        .task(id: self.gateway.state.isConnected) { await self.loadReactionLevels() }
         // In the split view only the focused side answers menu commands (#404).
         .focusedSceneValue(\.transcriptFind, self.paneIsActive ? self.find : nil)
         .focusedSceneValue(\.transcriptNavigator, self.paneIsActive ? self.navigator : nil)
@@ -633,6 +641,7 @@ struct ChatSessionMenu: View {
                 }
                 ThinkingDisplayPicker()
                 ReasoningMenu(row: row)
+                ReactionLevelMenu(row: row)
                 ShowRunsButton(isPresented: Binding(get: { self.showRuns }, set: {
                     self.willAct()
                     self.showRuns = $0

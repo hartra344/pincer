@@ -155,12 +155,16 @@ enum TranscriptPart {
 
     /// Where an unsent message is: queued, or failed with Retry and Delete.
     struct SendStatus: Equatable {
+        enum Kind: Equatable { case queued, held, sending, failed }
+        var kind: Kind = .queued
         /// The outbox entry (the message's idempotency key).
         let id: String
         let text: String
         let isFailed: Bool
         let canRetry: Bool
         let canDelete: Bool
+        /// A large upload held for Wi‑Fi can be sent over this network anyway.
+        var canSendNow = false
         /// Full reason, for the tooltip.
         var detail: String?
         /// For VoiceOver: "Not sent yet, queued.", "Sending." or "Failed to send: reason."
@@ -346,6 +350,8 @@ struct BranchPosition: Equatable {
 struct TranscriptDecoration: Equatable {
     var quote: ReplyQuote?
     var isLocating = false
+    /// Quotes on an assistant row's messages, by message id.
+    var messageQuotes: [String: ReplyQuote] = [:]
     var reactions: [String: [ReactionGroup]] = [:]
     /// The row's messages you've bookmarked.
     var bookmarks: Set<String> = []
@@ -486,6 +492,10 @@ struct TranscriptLayoutBuilder {
             }
         case let .assistant(turn):
             ids = turn.textIds.compactMap(\.self)
+            for id in ids {
+                if let item = chat.message(withId: id), let quote = chat.quote(for: item) { decoration.messageQuotes[id] = quote }
+            }
+            decoration.isLocating = decoration.messageQuotes.values.contains { chat.locatingReplyId == $0.targetId }
             if let sender = turn.sender { agent = sender.displayName(agents: self.context.gateway.agents) }
         case .marker:
             break
@@ -555,19 +565,44 @@ struct TranscriptLayoutBuilder {
         }
     }
 
+    /// A large upload waiting for a cheaper network; Send Now uploads it anyway.
+    static func heldStatus(id: String, hold: OutboxHold, bytes: Int?) -> TranscriptPart.SendStatus {
+        let size = bytes.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? L("large")
+        let text: String, detail: String, spoken: String
+        switch hold {
+        case .constrained:
+            text = L("Waiting — Low Data Mode")
+            detail = L("This is a large upload (\(size)), so it’s waiting while Low Data Mode is on. Send Now uploads it anyway.")
+            spoken = L("Not sent yet. It’s a large upload, \(size), waiting while Low Data Mode is on.")
+        case .expensive:
+            #if os(macOS)
+            text = L("Waiting — Personal Hotspot")
+            detail = L("This is a large upload (\(size)), so it’s waiting until you’re off Personal Hotspot. Send Now uploads it anyway.")
+            spoken = L("Not sent yet. It’s a large upload, \(size), waiting until you’re off Personal Hotspot.")
+            #else
+            text = L("Waiting for Wi‑Fi")
+            detail = L("This is a large upload (\(size)), so it’s waiting for Wi‑Fi to save cellular data. Send Now uploads it anyway.")
+            spoken = L("Not sent yet. It’s a large upload, \(size), waiting for Wi‑Fi.")
+            #endif
+        }
+        return .init(kind: .held, id: id, text: text, isFailed: false, canRetry: false, canDelete: true, canSendNow: true,
+                     detail: detail, spoken: spoken)
+    }
+
     /// The status line of a queued or failed message; nil while sending and once accepted.
     static func sendStatus(_ item: ChatItem) -> TranscriptPart.SendStatus? {
         guard item.isPending, let state = item.outboxState, let id = item.idempotencyKey else { return nil }
         switch state {
         case .queued:
-            return .init(id: id, text: L("Queued"), isFailed: false, canRetry: false, canDelete: true, spoken: L("Not sent yet, queued."))
+            if let hold = item.outboxHold { return Self.heldStatus(id: id, hold: hold, bytes: item.outboxUploadBytes) }
+            return .init(kind: .queued, id: id, text: L("Queued"), isFailed: false, canRetry: false, canDelete: true, spoken: L("Not sent yet, queued."))
         case .sending:
-            return .init(id: id, text: L("Sending…"), isFailed: false, canRetry: false, canDelete: false, spoken: L("Sending."))
+            return .init(kind: .sending, id: id, text: L("Sending…"), isFailed: false, canRetry: false, canDelete: false, spoken: L("Sending."))
         case let .failed(failure):
             let prefix = "Couldn’t send: "
             let reason = failure.message.hasPrefix(prefix) ? String(failure.message.dropFirst(prefix.count)) : failure.message
             let sentence = reason.hasSuffix(".") ? reason : reason + "."
-            return .init(id: id, text: reason.isEmpty ? L("Failed") : L("Failed — \(reason)"), isFailed: true,
+            return .init(kind: .failed, id: id, text: reason.isEmpty ? L("Failed") : L("Failed — \(reason)"), isFailed: true,
                          canRetry: failure.retryable, canDelete: true, detail: failure.message,
                          spoken: reason.isEmpty ? L("Failed to send.") : L("Failed to send: \(sentence)"))
         }
@@ -590,6 +625,11 @@ struct TranscriptLayoutBuilder {
             toolCount: turn.tools.count, attachmentCount: turn.images.count + turn.files.count,
             isStreaming: turn.isStreaming, isError: turn.isError, isBookmarked: !layout.decoration.bookmarks.isEmpty,
             summaryLimit: 0)
+        var firstQuote: TranscriptPart.ReplyQuote?
+        for index in turn.textIds.indices where firstQuote == nil { firstQuote = self.agentQuote(turn, index, layout: layout) }
+        if let quote = firstQuote {
+            layout.accessibilityLabel = L("In reply to \(quote.sender ?? L("a message")): \(quote.preview.string). ") + layout.accessibilityLabel
+        }
         let reasoning = self.settings.reasoningOff ? "" : thinking
         let hasSteps = !reasoning.isEmpty || !turn.tools.isEmpty
         let hasReply = !turn.text.isEmpty || !turn.images.isEmpty || !turn.files.isEmpty
@@ -626,6 +666,9 @@ struct TranscriptLayoutBuilder {
             for (index, message) in turn.text.enumerated() {
                 if index > 0 { stack.y += TranscriptMetrics.messageSpacing - TranscriptMetrics.blockSpacing }
                 start = stack.isEmpty ? stack.y : stack.y + TranscriptMetrics.blockSpacing
+                if let quote = self.agentQuote(turn, index, layout: layout) {
+                    stack.add(.replyQuote(quote), height: Self.quoteHeight(quote), width: min(stack.width, TranscriptMetrics.maxCardWidth))
+                }
                 self.markdown(message, tone: turn.isError ? .error : .primary, section: .message(index), live: turn.isStreaming,
                               into: &stack, layout: &layout)
                 guard index < last else { continue }
@@ -651,6 +694,13 @@ struct TranscriptLayoutBuilder {
                 stack.add(.typing, height: 14, width: 26)
             }
         }
+    }
+
+    /// The quote above one of an assistant turn's messages that answers an earlier message.
+    private func agentQuote(_ turn: AssistantTurn, _ index: Int, layout: TranscriptRowLayout) -> TranscriptPart.ReplyQuote? {
+        guard let id = Self.messageId(turn, index), let quote = layout.decoration.messageQuotes[id] else { return nil }
+        let width = min(TranscriptMetrics.contentWidth(rowWidth: layout.width), TranscriptMetrics.maxCardWidth)
+        return self.replyQuote(quote, isLocating: layout.decoration.isLocating, width: width)
     }
 
     private enum ThinkingSteps { case hidden, live, grouped }

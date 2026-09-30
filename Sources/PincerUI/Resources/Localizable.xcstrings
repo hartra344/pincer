@@ -31,6 +31,16 @@
         }
       }
     },
+    "%@ is larger than the Gateway allows (%@).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is larger than the Gateway allows (%@)."
+          }
+        }
+      }
+    },
     "%@ Secrets are write-only: Pincer shows whether they're set, never their values.": {
       "localizations": {
         "en": {
@@ -131,12 +141,42 @@
         }
       }
     },
+    "%@ group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ group"
+          }
+        }
+      }
+    },
+    "%@ group in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ group in %2$@"
+          }
+        }
+      }
+    },
     "%@ is already used": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%@ is already used"
+          }
+        }
+      }
+    },
+    "%@ is larger than the Gateway allows (%@, last known limit).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is larger than the Gateway allows (%@, last known limit)."
           }
         }
       }
@@ -467,6 +507,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ · %2$@ ago"
+          }
+        }
+      }
+    },
+    "%@ · Default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Default"
+          }
+        }
+      }
+    },
+    "%@ · Inherited from the channel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Inherited from the channel"
+          }
+        }
+      }
+    },
+    "%@ · Set for the channel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Set for the channel"
+          }
+        }
+      }
+    },
+    "%@ · Set for this account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Set for this account"
           }
         }
       }
@@ -1143,6 +1223,16 @@
         }
       }
     },
+    "Acknowledge only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acknowledge only"
+          }
+        }
+      }
+    },
     "Actions": {
       "localizations": {
         "en": {
@@ -1269,6 +1359,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add Plugin"
+          }
+        }
+      }
+    },
+    "The agent sees your reactions on its next turn.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent sees your reactions on its next turn."
           }
         }
       }
@@ -1679,6 +1779,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Appearance"
+          }
+        }
+      }
+    },
+    "Applies to all %@ chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies to all %@ chats"
+          }
+        }
+      }
+    },
+    "Applies to all chats on %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies to all chats on %@"
           }
         }
       }
@@ -4143,6 +4263,16 @@
         }
       }
     },
+    "Couldn’t send: %@ is larger than this Gateway accepts (%@).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t send: %@ is larger than this Gateway accepts (%@)."
+          }
+        }
+      }
+    },
     "Couldn’t send: not connected to the Gateway.": {
       "localizations": {
         "en": {
@@ -4619,6 +4749,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diagram source"
+          }
+        }
+      }
+    },
+    "Dictate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictate"
           }
         }
       }
@@ -5549,6 +5689,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Expression"
+          }
+        }
+      }
+    },
+    "Extensive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensive"
           }
         }
       }
@@ -6533,6 +6683,16 @@
         }
       }
     },
+    "How freely the agent reacts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How freely the agent reacts"
+          }
+        }
+      }
+    },
     "ID": {
       "localizations": {
         "en": {
@@ -6619,6 +6779,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "In Use"
+          }
+        }
+      }
+    },
+    "In effect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In effect"
           }
         }
       }
@@ -7049,6 +7219,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kind"
+          }
+        }
+      }
+    },
+    "large": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "large"
           }
         }
       }
@@ -7793,6 +7973,16 @@
         }
       }
     },
+    "Minimal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimal"
+          }
+        }
+      }
+    },
     "Minimize": {
       "localizations": {
         "en": {
@@ -8299,6 +8489,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Next match (%@)"
+          }
+        }
+      }
+    },
+    "Next match (⌘G)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next match (⌘G)"
           }
         }
       }
@@ -8813,6 +9013,16 @@
         }
       }
     },
+    "Not Configured": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Configured"
+          }
+        }
+      }
+    },
     "Not Connected": {
       "localizations": {
         "en": {
@@ -8849,6 +9059,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Not Saved"
+          }
+        }
+      }
+    },
+    "Not sent yet. It’s a large upload, %@, waiting for Wi‑Fi.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet. It’s a large upload, %@, waiting for Wi‑Fi."
+          }
+        }
+      }
+    },
+    "Not sent yet. It’s a large upload, %@, waiting until you’re off Personal Hotspot.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet. It’s a large upload, %@, waiting until you’re off Personal Hotspot."
+          }
+        }
+      }
+    },
+    "Not sent yet. It’s a large upload, %@, waiting while Low Data Mode is on.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet. It’s a large upload, %@, waiting while Low Data Mode is on."
           }
         }
       }
@@ -9269,6 +9509,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Chat"
+          }
+        }
+      }
+    },
+    "Send now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send now"
           }
         }
       }
@@ -10283,6 +10533,16 @@
         }
       }
     },
+    "Previous match (⇧⌘G)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous match (⇧⌘G)"
+          }
+        }
+      }
+    },
     "Print": {
       "localizations": {
         "en": {
@@ -10573,6 +10833,16 @@
         }
       }
     },
+    "Reactions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reactions"
+          }
+        }
+      }
+    },
     "Read": {
       "localizations": {
         "en": {
@@ -10619,6 +10889,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Read Aloud uses this device's voice until a provider is ready."
+          }
+        }
+      }
+    },
+    "Read Aloud uses this voice when this device is allowed to and the Gateway has a voice set up. To always use this device's own voice, change the Voice option in the Read Aloud section of Settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read Aloud uses this voice when this device is allowed to and the Gateway has a voice set up. To always use this device's own voice, change the Voice option in the Read Aloud section of Settings."
           }
         }
       }
@@ -12063,6 +12343,16 @@
         }
       }
     },
+    "Same as channel (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same as channel (%@)"
+          }
+        }
+      }
+    },
     "Save": {
       "localizations": {
         "en": {
@@ -12569,6 +12859,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Send Again"
+          }
+        }
+      }
+    },
+    "Send Now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send Now"
           }
         }
       }
@@ -14443,12 +14743,62 @@
         }
       }
     },
+    "The agent doesn't react itself. The 👀 acknowledgement still shows if it's set up.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent doesn't react itself. The 👀 acknowledgement still shows if it's set up."
+          }
+        }
+      }
+    },
     "The agent is waiting for your answer": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The agent is waiting for your answer"
+          }
+        }
+      }
+    },
+    "The agent never reacts.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent never reacts."
+          }
+        }
+      }
+    },
+    "The agent never reacts. Also turns off the 👀 acknowledgement.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent never reacts. Also turns off the 👀 acknowledgement."
+          }
+        }
+      }
+    },
+    "The agent reacts freely.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent reacts freely."
+          }
+        }
+      }
+    },
+    "The agent reacts now and then, when it fits.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent reacts now and then, when it fits."
           }
         }
       }
@@ -14619,6 +14969,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The server is removed when you save your changes."
+          }
+        }
+      }
+    },
+    "The stored value isn't a valid level, so the agent uses %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The stored value isn't a valid level, so the agent uses %@."
           }
         }
       }
@@ -15223,12 +15583,52 @@
         }
       }
     },
+    "This is a large upload (%@), so it’s waiting for Wi‑Fi to save cellular data. Send Now uploads it anyway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a large upload (%@), so it’s waiting for Wi‑Fi to save cellular data. Send Now uploads it anyway."
+          }
+        }
+      }
+    },
+    "This is a large upload (%@), so it’s waiting until you’re off Personal Hotspot. Send Now uploads it anyway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a large upload (%@), so it’s waiting until you’re off Personal Hotspot. Send Now uploads it anyway."
+          }
+        }
+      }
+    },
+    "This is a large upload (%@), so it’s waiting while Low Data Mode is on. Send Now uploads it anyway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a large upload (%@), so it’s waiting while Low Data Mode is on. Send Now uploads it anyway."
+          }
+        }
+      }
+    },
     "This is a simulated sign-in for the demo. No account is used.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "This is a simulated sign-in for the demo. No account is used."
+          }
+        }
+      }
+    },
+    "This is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer."
           }
         }
       }
@@ -16299,6 +16699,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting for approval…"
+          }
+        }
+      }
+    },
+    "Waiting for Wi‑Fi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for Wi‑Fi"
+          }
+        }
+      }
+    },
+    "Waiting — Low Data Mode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting — Low Data Mode"
+          }
+        }
+      }
+    },
+    "Waiting — Personal Hotspot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting — Personal Hotspot"
           }
         }
       }

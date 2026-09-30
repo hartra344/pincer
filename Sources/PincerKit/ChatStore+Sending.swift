@@ -126,6 +126,16 @@ extension ChatStore {
             gateway.outbox.markFailed(id: key, kind: .rejected(message), message: message)
             return .failedInline(message)
         }
+        if let tooLarge = attachments.first(where: { attachment in
+            let limits = gateway.uploadLimits
+            return attachment.data.count > (attachment.isImage ? limits.imageBytes : limits.fileBytes)
+        }) {
+            let limits = gateway.uploadLimits
+            let limit = tooLarge.isImage ? limits.imageBytes : limits.fileBytes
+            let message = L("Couldn’t send: \(tooLarge.fileName) is larger than this Gateway accepts (\(Int64(limit).formatted(.byteCount(style: .file)))).")
+            gateway.outbox.markFailed(id: key, kind: .rejected(message), message: message)
+            return .failedInline(message)
+        }
         gateway.outbox.markSending(id: key)
         self.isSending = true
         defer { self.isSending = false }
@@ -208,6 +218,14 @@ extension ChatStore {
         }
     }
 
+    /// Uploads a held large message now, over whatever network this is.
+    public func sendNow(outboxId: String) {
+        guard let gateway, gateway.outbox.entry(id: outboxId)?.state == .queued else { return }
+        gateway.updateOutbox { $0.allowAnyNetwork(id: outboxId) }
+        self.syncOutbox(gateway.outbox.entries(for: self.sessionKey))
+        if gateway.state.isConnected { Task { await gateway.flushOutbox() } }
+    }
+
     /// Deletes a queued or failed message; one being sent right now can't be.
     public func deleteQueued(outboxId: String) {
         guard let gateway, let entry = gateway.outbox.entry(id: outboxId), entry.state != .sending else { return }
@@ -245,12 +263,18 @@ extension ChatStore {
                 continue
             }
             if items[index].outboxState != entry.state { items[index].outboxState = entry.state }
+            let hold = self.gateway?.hold(for: entry)
+            if items[index].outboxHold != hold { items[index].outboxHold = hold }
+            let bytes = hold == nil ? nil : self.gateway?.uploadBytes(for: entry)
+            if items[index].outboxUploadBytes != bytes { items[index].outboxUploadBytes = bytes }
         }
         for entry in entries where !seen.contains(entry.id) {
             var item = ChatItem(id: "outbox:\(entry.id)", role: .user, blocks: (entry.text.isEmpty ? [] : [.text(entry.text)])
                                 + entry.attachments.map { .file(FileRef(name: $0.fileName, mimeType: $0.mimeType)) },
                                 timestamp: entry.createdAt, idempotencyKey: entry.id, isPending: true)
             item.outboxState = entry.state
+            item.outboxHold = self.gateway?.hold(for: entry)
+            item.outboxUploadBytes = item.outboxHold == nil ? nil : self.gateway?.uploadBytes(for: entry)
             item.replyToId = entry.replyToId
             item.replyToPreview = entry.replyPreview
             items.append(item)

@@ -29,7 +29,16 @@ export function createConfigState() {
     config: {
       gateway: { port: 18789, bind: 'tailnet', auth: { mode: 'token', token: 'dev-token' } },
       agents: { defaults: { model: 'anthropic/claude-sonnet-4-5', thinkingDefault: 'low', timeoutSeconds: 600 } },
-      channels: { discord: { enabled: true, token: 'discord-bot-secret', dmPolicy: 'pairing' } },
+      channels: {
+        discord: { enabled: true, token: 'discord-bot-secret', dmPolicy: 'pairing' },
+        // Telegram sets a level with a per-account override, WhatsApp leaves it unset (default); Discord has no control.
+        telegram: {
+          enabled: true,
+          reactionLevel: 'minimal',
+          accounts: { default: { name: 'Personal bot' }, home: { name: 'Home bot', reactionLevel: 'extensive' } },
+        },
+        whatsapp: { enabled: true },
+      },
       tools: { allow: ['exec', 'read', 'write'] },
       mcp: { servers: seedMcpServers() },
       ...seedTtsConfig(),
@@ -72,6 +81,22 @@ function pluginSchemas(state) {
     properties[plugin.id] = { type: 'object', properties: { enabled: { type: 'boolean' }, config } };
   }
   return properties;
+}
+
+const REACTION_LEVEL_SCHEMA = { type: 'string', enum: ['off', 'ack', 'minimal', 'extensive'], description: 'How freely the agent reacts to messages on this channel.' };
+
+function reactionChannelSchema() {
+  return {
+    type: 'object',
+    properties: {
+      enabled: { type: 'boolean' },
+      reactionLevel: REACTION_LEVEL_SCHEMA,
+      accounts: {
+        type: 'object',
+        additionalProperties: { type: 'object', properties: { name: { type: 'string' }, reactionLevel: REACTION_LEVEL_SCHEMA } },
+      },
+    },
+  };
 }
 
 function buildSchema(state) {
@@ -117,6 +142,8 @@ function buildSchema(state) {
               dmPolicy: { type: 'string', enum: ['pairing', 'allowlist', 'open', 'disabled'] },
             },
           },
+          telegram: reactionChannelSchema(),
+          whatsapp: reactionChannelSchema(),
         },
       },
       tools: { type: 'object', properties: { allow: { type: 'array', items: { type: 'string' } } } },

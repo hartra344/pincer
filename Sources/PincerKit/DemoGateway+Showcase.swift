@@ -415,6 +415,37 @@ extension DemoGateway {
                              extra: ["toolCallId": "call_seed_lab_ack", "toolName": "message", "isError": false]),
                 said("assistant", "I'll keep an eye on the home-lab channel and flag anything unusual.", ago: 20),
             ])
+        // A bridged Telegram chat (account "home") whose agent replies carry `openclawDelivery` reply targets.
+        let telegram: Row = ["provenance": ["sourceChannel": "telegram"]]
+        func tgUser(_ id: String, _ messageId: String, _ text: String, ago: Double) -> JSONValue {
+            Self.message("user", [Self.text(text)], id: id,
+                         openclaw: ["transport": ["channel": "telegram", "messageId": .string(messageId),
+                                                  "conversationRef": "5550142"],
+                                    "senderId": "5550142", "senderName": "Maya"],
+                         ago: ago, extra: telegram.merging(["senderLabel": "Maya"]) { _, new in new })
+        }
+        func tgReply(_ text: String, delivery: JSONValue, ago: Double) -> JSONValue {
+            Self.message("assistant", [Self.text(text)], ago: ago, extra: ["openclawDelivery": delivery])
+        }
+        add("agent:main:telegram:home:direct:5550142", agent: "main", title: "Maya", preview: "Friday pickup is at 3:15.",
+            age: 45_000,
+            ["label": "Maya", "category": "Home", "channel": "telegram", "lastChannel": "telegram", "lastAccountId": "home"],
+            messages: [
+                tgUser("demo-tg-clinic", "9101", "Can you find the pediatrician's opening hours?", ago: 40 * minute),
+                tgUser("demo-tg-dentist", "9102", "Also, when is my dentist appointment?", ago: 39 * minute),
+                tgReply("Dr. Alvarez's office is open Monday to Friday, 8:00 to 17:00, and Saturday 9:00 to 12:00.",
+                        delivery: ["replyToId": "demo-tg-clinic"], ago: 38 * minute),
+                tgReply("Your dentist appointment is Thursday at 10:30 with Dr. Kim.",
+                        delivery: ["replyToCurrent": true], ago: 37 * minute + 30),
+                tgUser("demo-tg-pharmacy", "9104", "Did the pharmacy call back about the refill?", ago: 20 * minute),
+                tgUser("demo-tg-bus", "9105", "Is the 7:40 bus running today?", ago: 19 * minute),
+                // The agent names the pharmacy message by Telegram's own message id, not a transcript id.
+                tgReply("The pharmacy called at 9:05: the refill is ready for pickup until 6 pm.",
+                        delivery: ["replyToId": "9104"], ago: 18 * minute),
+                tgUser("demo-tg-pickup", "9103", "And what time is school pickup on Friday?", ago: 5 * minute),
+                tgReply("[[reply_to_current]] Friday pickup is at 3:15, half an hour earlier than usual.",
+                        delivery: ["replyToCurrent": true], ago: 4 * minute),
+            ])
         add("agent:main:dashboard:trip", agent: "main", title: "Japan trip", preview: "Kyoto day plan drafted.",
             age: 60_000, ["label": "Japan trip", "category": "Personal", "color": "pink", "pinned": true,
                           "totalTokens": 192_000, "inputTokens": 192_000],

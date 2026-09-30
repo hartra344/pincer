@@ -18,6 +18,23 @@ public struct OutgoingAttachment: Identifiable, Hashable, Sendable {
     public var isImage: Bool { self.mimeType.hasPrefix("image/") }
 }
 
+/// The Gateway's upload policy from its hello, saved per Gateway so limits are known offline.
+public struct UploadPolicy: Codable, Equatable, Sendable {
+    public var maxPayload: Int?
+    public var maxImageBytes: Int?
+    public var maxAttachmentBytes: Int?
+
+    public init(maxPayload: Int? = nil, maxImageBytes: Int? = nil, maxAttachmentBytes: Int? = nil) {
+        self.maxPayload = maxPayload
+        self.maxImageBytes = maxImageBytes
+        self.maxAttachmentBytes = maxAttachmentBytes
+    }
+
+    public init(hello: GatewayHello) {
+        self.init(maxPayload: hello.maxPayload, maxImageBytes: hello.maxImageBytes, maxAttachmentBytes: hello.maxAttachmentBytes)
+    }
+}
+
 /// Largest attachment the Gateway takes. Base64 inflates ~4/3 and the whole frame must fit
 /// `maxPayload`, so both limits stay under 70% of it.
 public struct UploadLimits: Sendable, Equatable {
@@ -28,6 +45,11 @@ public struct UploadLimits: Sendable, Equatable {
         let payloadBudget = Int(Double(maxPayload ?? 25_000_000) * 0.7)
         self.imageBytes = min(maxImageBytes ?? 5_000_000, payloadBudget)
         self.fileBytes = min(maxAttachmentBytes ?? 10_000_000, payloadBudget)
+    }
+
+    /// Limits from a saved or live policy; without one, the defaults.
+    public init(policy: UploadPolicy?) {
+        self.init(maxPayload: policy?.maxPayload, maxImageBytes: policy?.maxImageBytes, maxAttachmentBytes: policy?.maxAttachmentBytes)
     }
 
     public init(hello: GatewayHello?) {
@@ -176,6 +198,12 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var outcomeRunId: String?
     /// Reactions the agent added with its `message` tool, by transcript id.
     public internal(set) var agentReactions: [String: [String]] = [:]
+    /// Reactions on this chat's messages as the Gateway stores them (`session.reactions.*`), by transcript id.
+    public internal(set) var sharedReactions: [String: [ReactionSummary]] = [:]
+    /// Your Gateway reaction identity once this chat has synced its reactions on the connection; nil while
+    /// reactions use `users.prefs`.
+    public internal(set) var reactionSelfId: String?
+    @ObservationIgnored var reactionSync = ReactionSync()
     /// Committed items by transcript id.
     @ObservationIgnored var itemsByTranscriptId: [String: ChatItem] = [:]
     /// The latest "Compact now" request, for the composer's context meter.
