@@ -394,8 +394,8 @@ struct CommandPaletteView: View {
                               enabled: !row.isModelSelectionLocked))
             items.append(item(.togglePin, row.isPinned ? L("Unpin Chat") : L("Pin Chat"), row.isPinned ? "pin.slash" : "pin"))
         }
-        if row != nil, self.app.dictationAvailable || self.app.dictationActive {
-            let listening = self.app.dictationActive
+        if let row, self.app.dictationAvailable || self.app.dictationActiveKeys.contains(row.key) {
+            let listening = self.app.dictationActiveKeys.contains(row.key)
             items.append(item(.toggleDictation, listening ? L("Stop Dictation") : L("Dictate Message"), listening ? "mic.fill" : "mic",
                               keywords: ["dictate", "voice", "speech", "microphone"], shortcut: ShortcutCommand.toggleDictation.displayShortcut))
         }
@@ -610,7 +610,9 @@ struct CommandPaletteView: View {
         case .setupGateway:
             gateway?.setup.present()
         case .toggleDictation:
-            self.app.dictationToggleRequests += 1
+            guard let row else { return }
+            self.app.dictationToggleRequest = DictationToggleRequest(
+                sessionKey: row.key, serial: (self.app.dictationToggleRequest?.serial ?? 0) + 1)
         }
     }
 }

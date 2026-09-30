@@ -16,6 +16,7 @@ final class DictationHolder {
 struct DictationButton: View {
     let model: DictationModel
     let app: AppModel
+    let sessionKey: String
     @Binding var draft: String
     /// The field's selection in UTF-16 units; nil until it reports one.
     let selection: NSRange?
@@ -50,10 +51,13 @@ struct DictationButton: View {
                 .accessibilityLabel(listening ? L("Stop Dictation") : L("Dictate Message"))
             }
         }
-        .onChange(of: self.app.dictationToggleRequests) {
-            if self.paneIsActive, self.model.isAvailable || self.model.isActive { self.toggle(focusing: true) }
+        .onChange(of: self.app.dictationToggleRequest) { _, request in
+            guard request?.sessionKey == self.sessionKey, self.model.isAvailable || self.model.isActive else { return }
+            self.toggle(focusing: true)
         }
         .onChange(of: self.model.isActive, initial: true) { self.publishState() }
+        .onDisappear { self.app.dictationActiveKeys.remove(self.sessionKey) }
+        .onChange(of: self.sessionKey) { old, _ in self.app.dictationActiveKeys.remove(old) }
         .onChange(of: self.model.isAvailable) { self.publishState() }
         .onChange(of: self.paneIsActive) { self.publishState() }
         // Outside the availability check, so "isn't available" can still be shown.
@@ -90,11 +94,14 @@ struct DictationButton: View {
         }
     }
 
-    /// The focused pane's composer tells the palette whether to offer Start or Stop.
+    /// Tells the palette whether this chat is dictating and whether dictation is available.
     private func publishState() {
-        guard self.paneIsActive else { return }
-        self.app.dictationActive = self.model.isActive
-        self.app.dictationAvailable = self.model.isAvailable
+        if self.model.isActive {
+            self.app.dictationActiveKeys.insert(self.sessionKey)
+        } else {
+            self.app.dictationActiveKeys.remove(self.sessionKey)
+        }
+        if self.paneIsActive { self.app.dictationAvailable = self.model.isAvailable }
     }
 
     @ViewBuilder private func focusedPaneShortcut(_ button: some View) -> some View {

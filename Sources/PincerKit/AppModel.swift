@@ -2,6 +2,16 @@ import Foundation
 import PincerPush
 import Observation
 
+public struct DictationToggleRequest: Equatable, Sendable {
+    public var sessionKey: String
+    public var serial: Int
+
+    public init(sessionKey: String, serial: Int) {
+        self.sessionKey = sessionKey
+        self.serial = serial
+    }
+}
+
 /// Top-level state: saved Gateways ("servers" in the rail) and which one is selected.
 @MainActor
 @Observable
@@ -20,10 +30,10 @@ public final class AppModel {
     }
     public let notifier = Notifier.shared
     public let push = PushRegistrar.shared
-    /// Counts palette/shortcut requests to start or stop dictation; the focused pane's composer acts on each.
-    public var dictationToggleRequests = 0
-    /// What the focused pane's composer reports, for the palette's Start/Stop Dictation item.
-    public var dictationActive = false
+    /// The palette's request to start or stop dictation in one chat's composer.
+    public var dictationToggleRequest: DictationToggleRequest?
+    /// Chats whose composer is dictating, for the palette's Dictate/Stop item.
+    public var dictationActiveKeys: Set<String> = []
     public var dictationAvailable = false
     /// Counts `open(_:)` calls (from notifications), so the UI can bring the chat on screen.
     public private(set) var openRequests = 0
