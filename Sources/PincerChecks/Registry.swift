@@ -129,6 +129,7 @@ enum Suites {
         Section("Chat navigation") { await runNavigation() },
         Section("Quick Capture (demo)") { await runQuickCaptureDemo() },
         Section("Replies & reactions (demo)") { await runDemoReactionsReply() },
+        Section("Bookmark sync (demo)") { await runDemoBookmarkSync() },
         Section("Messages from other agents (demo)") { await runDemoForwarded() },
         Section("Menu bar (demo)") { await runMenuBarDemo() },
         Section("Scroll to bottom (demo)") { await runDemoScrollToBottom() },
