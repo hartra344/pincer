@@ -160,4 +160,9 @@ struct ReactionLevelTests {
         #expect(ReactionLevels.overridingAccount(config: config, channel: "telegram", account: "") == nil)
         #expect(ReactionLevels.overridingAccount(config: nil, channel: "telegram", account: "home") == nil)
     }
+
+    @Test func displayNames() {
+        #expect(ReactionLevels.displayName(channel: "whatsapp") == "WhatsApp" && ReactionLevels.displayName(channel: "TELEGRAM") == "Telegram")
+        #expect(ReactionLevels.displayName(channel: "signal") == "Signal" && ReactionLevels.displayName(channel: "matrix") == "Matrix")
+    }
 }
