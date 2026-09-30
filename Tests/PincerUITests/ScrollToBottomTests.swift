@@ -6,7 +6,7 @@ import Testing
 import AppKit
 
 /// #420: the scroll-to-bottom button above the composer. Exercises the real AppKit transcript
-/// list end to end: `ScrollToBottomModel.report` publishing asynchronously, `scrollToBottom()`'s
+/// list end to end: `TranscriptBottomState.report` publishing asynchronously, `scrollToBottom()`'s
 /// jump-then-animate landing, and that stick-to-bottom anchoring still works afterwards.
 ///
 /// Run: `swift test --filter ScrollToBottom`
@@ -70,7 +70,7 @@ struct ScrollToBottomTests {
     @Test func buttonVisibilityAndScrollToBottom() async {
         let rows = TranscriptPrefetchProbe.rows(count: 400)
         let (host, context) = await Self.makeHost(rows: rows)
-        let model = ScrollToBottomModel()
+        let model = TranscriptBottomState()
         host.coordinator.attach(model)
         // Force a fresh report now that the model is attached.
         host.coordinator.update(rows: rows, context: context, insets: (0, 0))
@@ -99,7 +99,7 @@ struct ScrollToBottomTests {
     @Test func newMessagesWhileScrolledUp() async {
         let rows = TranscriptPrefetchProbe.rows(count: 400)
         let (host, context) = await Self.makeHost(rows: rows)
-        let model = ScrollToBottomModel()
+        let model = TranscriptBottomState()
         host.coordinator.attach(model)
         host.coordinator.update(rows: rows, context: context, insets: (0, 0))
         await Self.spin(0.3)
