@@ -117,7 +117,8 @@ func runDemoOutbox() async {
     check(reason == "The Gateway timed out.", "demo: it failed on a timeout, not a drop (\(reason ?? "nil"))")
     check(isFailed(item.outboxState, retryable: true) && item.isPending && item.role == .user,
           "demo: it reads Failed with Retry (\(String(describing: item.outboxState)))")
-    check(chat.items.last?.idempotencyKey == id, "demo: the failed message is the chat's latest")
+    check(chat.items.suffix(2).map(\.idempotencyKey) == [id, DemoOutbox.queuedAttachmentId],
+          "demo: the failed message and the queued attachment are the chat's latest")
     let text = item.plainText
     check(gateway.unsentCount == 2, "demo: the failed message and the queued attachment are unsent (\(gateway.unsentCount))")
 
@@ -146,6 +147,16 @@ func runDemoOutbox() async {
         gateway.unsentCount == 0 && outboxItem(chat, id) == nil && committedCopies(chat, text) == 1
     }
     check(delivered, "demo: Retry delivers it (\(committedCopies(chat, text)) cop(ies), \(gateway.unsentCount) unsent)")
+    let queuedSent = await waitFor("demo queued attachment delivered", timeout: 15) {
+        outboxItem(chat, queuedId) == nil && gateway.outbox.entry(id: queuedId) == nil
+    }
+    check(queuedSent, "demo: Retry then sends the queued attachment too")
+    await chat.load(force: true)
+    let hasImage = chat.items.contains { item in
+        item.role == .user && !item.isPending && item.blocks.contains { if case .image = $0 { true } else { false } }
+            && item.plainText.contains("seating plan")
+    }
+    check(hasImage, "demo: the seating-plan image appears in the transcript")
     _ = await waitFor("demo reply", timeout: 15) { !chat.isRunning }
     await chat.load(force: true)
     check(committedCopies(chat, text) == 1 && !chat.items.contains { $0.idempotencyKey == id && $0.isPending },
