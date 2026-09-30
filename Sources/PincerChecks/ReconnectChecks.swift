@@ -41,6 +41,10 @@ final class MockControl {
         return try? await self.connection.request("mock.control", .object(params))
     }
 
+    func request(_ method: String, _ params: [String: JSONValue]) async -> JSONValue? {
+        try? await self.connection.request(method, .object(params))
+    }
+
     func stats() async -> Stats {
         let result = await self.call("stats")
         let total = (result?["total"]?.object ?? [:]).compactMapValues { $0.int }
