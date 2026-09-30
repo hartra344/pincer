@@ -23,7 +23,7 @@ Attachments queue with their message. Pincer saves a copy of each file in the ou
 
 Some things need a connection:
 
-- **Attachments that don't fit in the outbox.** If a message's attachments would take the outbox over its [size limit](#attachments-in-the-outbox), the composer says **Too large to queue offline — sends when you’re connected**. If the outbox is kept in memory only, it says **Attachments need a connection**. Either way it keeps the message in your [draft](../composer/#drafts) until you're back online.
+- **Attachments that don't fit in the outbox.** If a message's attachments would take the outbox over its [size limit](#attachments-in-the-outbox), the composer says **Too large to queue offline — sends when you’re connected**. If the outbox is kept in memory only, the **+** button is unavailable while you're offline (**Attachments need a connection**). Either way the composer keeps the message in your [draft](../composer/#drafts) until you're back online.
 - **Slash commands.** Typing `/` while offline shows **Connect to run commands**, and Send stays unavailable.
 - **[Quick Capture](../quick-capture/)** and the setup wizard's test message aren't queued. If you're offline they show an error and keep what you typed.
 
