@@ -1,6 +1,46 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Switch to Always": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to Always"
+          }
+        }
+      }
+    },
+    "To go back to %@, edit the Gateway's config or use /tts.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To go back to %@, edit the Gateway's config or use /tts."
+          }
+        }
+      }
+    },
+    "Speak Replies on Channels is gateway-wide. It controls when the Gateway attaches spoken audio to replies on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speak Replies on Channels is gateway-wide. It controls when the Gateway attaches spoken audio to replies on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud."
+          }
+        }
+      }
+    },
+    "“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config or /tts preferences; Pincer can only switch replies Off or Always.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config or /tts preferences; Pincer can only switch replies Off or Always."
+          }
+        }
+      }
+    },
     "Always": {
       "localizations": {
         "en": {
@@ -97,26 +137,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Replace “%@” with “%@”?"
-          }
-        }
-      }
-    },
-    "Pincer can't set it back; the Gateway only offers on/off.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pincer can't set it back; the Gateway only offers on/off."
-          }
-        }
-      }
-    },
-    "“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config; Pincer can only switch replies Off or Always.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config; Pincer can only switch replies Off or Always."
           }
         }
       }
@@ -13349,16 +13369,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speak Replies on Channels"
-          }
-        }
-      }
-    },
-    "Speak Replies on Channels is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Speak Replies on Channels is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud."
           }
         }
       }

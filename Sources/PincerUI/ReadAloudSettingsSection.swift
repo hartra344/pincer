@@ -66,7 +66,7 @@ struct ReadAloudSettingsSection: View {
         } header: {
             Text("Read Aloud", bundle: .module)
         } footer: {
-            Text("Speaks a reply from its context menu. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on.", bundle: .module)
+            Text("Tap Listen under a reply, or use Read Last Reply Aloud (its keyboard shortcut) from the command palette. Press Esc or tap the Speaking pill to stop. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on.", bundle: .module)
         }
     }
 }

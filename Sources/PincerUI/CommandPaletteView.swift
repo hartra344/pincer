@@ -418,7 +418,7 @@ struct CommandPaletteView: View {
         ]
         if let setup = CommandPalette.setupGatewayItem(gateway: self.gateway) { items.append(setup) }
         if self.gateway?.voice.supportsStatus == true {
-            items.append(item(.voiceSettings, L("Voice…"), "speaker.wave.2",
+            items.append(item(.voiceSettings, L("Gateway Voice Settings…"), "speaker.wave.2",
                               keywords: ["gateway voice", "tts", "text to speech", "read aloud", "elevenlabs", "openai", "persona", "provider"]))
         }
         if self.gateway != nil {
@@ -464,7 +464,7 @@ struct CommandPaletteView: View {
         let speaking = ReadAloudController.shared.isActive
         return [PaletteItem(id: "command:\(Command.readAloud.rawValue)",
                             title: speaking ? L("Stop Reading Aloud") : L("Read Last Reply Aloud"),
-                            symbol: speaking ? "speaker.slash" : "speaker.wave.2",
+                            symbol: speaking ? "stop.fill" : "speaker.wave.2",
                             keywords: ["listen", "speak", "speech", "tts", "voice"],
                             shortcut: ShortcutCommand.readAloud.displayShortcut, section: .commands,
                             action: .command(Command.readAloud.rawValue), isEnabled: state.isEnabled)]
