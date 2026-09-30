@@ -346,6 +346,8 @@ struct BranchPosition: Equatable {
 struct TranscriptDecoration: Equatable {
     var quote: ReplyQuote?
     var isLocating = false
+    /// Quotes on an assistant row's messages, by message id.
+    var messageQuotes: [String: ReplyQuote] = [:]
     var reactions: [String: [ReactionGroup]] = [:]
     /// The row's messages you've bookmarked.
     var bookmarks: Set<String> = []
@@ -486,6 +488,10 @@ struct TranscriptLayoutBuilder {
             }
         case let .assistant(turn):
             ids = turn.textIds.compactMap(\.self)
+            for id in ids {
+                if let item = chat.message(withId: id), let quote = chat.quote(for: item) { decoration.messageQuotes[id] = quote }
+            }
+            decoration.isLocating = decoration.messageQuotes.values.contains { chat.locatingReplyId == $0.targetId }
             if let sender = turn.sender { agent = sender.displayName(agents: self.context.gateway.agents) }
         case .marker:
             break
@@ -590,6 +596,11 @@ struct TranscriptLayoutBuilder {
             toolCount: turn.tools.count, attachmentCount: turn.images.count + turn.files.count,
             isStreaming: turn.isStreaming, isError: turn.isError, isBookmarked: !layout.decoration.bookmarks.isEmpty,
             summaryLimit: 0)
+        var firstQuote: TranscriptPart.ReplyQuote?
+        for index in turn.textIds.indices where firstQuote == nil { firstQuote = self.agentQuote(turn, index, layout: layout) }
+        if let quote = firstQuote {
+            layout.accessibilityLabel = L("In reply to \(quote.sender ?? L("a message")): \(quote.preview.string). ") + layout.accessibilityLabel
+        }
         let reasoning = self.settings.reasoningOff ? "" : thinking
         let hasSteps = !reasoning.isEmpty || !turn.tools.isEmpty
         let hasReply = !turn.text.isEmpty || !turn.images.isEmpty || !turn.files.isEmpty
@@ -626,6 +637,9 @@ struct TranscriptLayoutBuilder {
             for (index, message) in turn.text.enumerated() {
                 if index > 0 { stack.y += TranscriptMetrics.messageSpacing - TranscriptMetrics.blockSpacing }
                 start = stack.isEmpty ? stack.y : stack.y + TranscriptMetrics.blockSpacing
+                if let quote = self.agentQuote(turn, index, layout: layout) {
+                    stack.add(.replyQuote(quote), height: Self.quoteHeight(quote), width: min(stack.width, TranscriptMetrics.maxCardWidth))
+                }
                 self.markdown(message, tone: turn.isError ? .error : .primary, section: .message(index), live: turn.isStreaming,
                               into: &stack, layout: &layout)
                 guard index < last else { continue }
@@ -651,6 +665,13 @@ struct TranscriptLayoutBuilder {
                 stack.add(.typing, height: 14, width: 26)
             }
         }
+    }
+
+    /// The quote above one of an assistant turn's messages that answers an earlier message.
+    private func agentQuote(_ turn: AssistantTurn, _ index: Int, layout: TranscriptRowLayout) -> TranscriptPart.ReplyQuote? {
+        guard let id = Self.messageId(turn, index), let quote = layout.decoration.messageQuotes[id] else { return nil }
+        let width = min(TranscriptMetrics.contentWidth(rowWidth: layout.width), TranscriptMetrics.maxCardWidth)
+        return self.replyQuote(quote, isLocating: layout.decoration.isLocating, width: width)
     }
 
     private enum ThinkingSteps { case hidden, live, grouped }

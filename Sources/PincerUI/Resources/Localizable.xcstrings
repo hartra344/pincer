@@ -131,6 +131,26 @@
         }
       }
     },
+    "%@ group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ group"
+          }
+        }
+      }
+    },
+    "%@ group in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ group in %2$@"
+          }
+        }
+      }
+    },
     "%@ is already used": {
       "localizations": {
         "en": {
@@ -467,6 +487,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ · %2$@ ago"
+          }
+        }
+      }
+    },
+    "%@ · Default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Default"
+          }
+        }
+      }
+    },
+    "%@ · Inherited from the channel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Inherited from the channel"
+          }
+        }
+      }
+    },
+    "%@ · Set for the channel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Set for the channel"
+          }
+        }
+      }
+    },
+    "%@ · Set for this account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Set for this account"
           }
         }
       }
@@ -1143,6 +1203,16 @@
         }
       }
     },
+    "Acknowledge only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acknowledge only"
+          }
+        }
+      }
+    },
     "Actions": {
       "localizations": {
         "en": {
@@ -1679,6 +1749,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Appearance"
+          }
+        }
+      }
+    },
+    "Applies to all %@ chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies to all %@ chats"
+          }
+        }
+      }
+    },
+    "Applies to all chats on %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies to all chats on %@"
           }
         }
       }
@@ -4623,6 +4713,16 @@
         }
       }
     },
+    "Dictate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictate"
+          }
+        }
+      }
+    },
     "Dictate Message": {
       "localizations": {
         "en": {
@@ -5549,6 +5649,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Expression"
+          }
+        }
+      }
+    },
+    "Extensive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensive"
           }
         }
       }
@@ -6533,6 +6643,16 @@
         }
       }
     },
+    "How freely the agent reacts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How freely the agent reacts"
+          }
+        }
+      }
+    },
     "ID": {
       "localizations": {
         "en": {
@@ -6619,6 +6739,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "In Use"
+          }
+        }
+      }
+    },
+    "In effect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In effect"
           }
         }
       }
@@ -7793,6 +7923,16 @@
         }
       }
     },
+    "Minimal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimal"
+          }
+        }
+      }
+    },
     "Minimize": {
       "localizations": {
         "en": {
@@ -8303,6 +8443,16 @@
         }
       }
     },
+    "Next match (⌘G)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next match (⌘G)"
+          }
+        }
+      }
+    },
     "Next run": {
       "localizations": {
         "en": {
@@ -8809,6 +8959,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "None yet."
+          }
+        }
+      }
+    },
+    "Not Configured": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Configured"
           }
         }
       }
@@ -10283,6 +10443,16 @@
         }
       }
     },
+    "Previous match (⇧⌘G)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous match (⇧⌘G)"
+          }
+        }
+      }
+    },
     "Print": {
       "localizations": {
         "en": {
@@ -10573,6 +10743,16 @@
         }
       }
     },
+    "Reactions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reactions"
+          }
+        }
+      }
+    },
     "Read": {
       "localizations": {
         "en": {
@@ -10619,6 +10799,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Read Aloud uses this device's voice until a provider is ready."
+          }
+        }
+      }
+    },
+    "Read Aloud uses this voice when this device is allowed to and the Gateway has a voice set up. To always use this device's own voice, change the Voice option in the Read Aloud section of Settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read Aloud uses this voice when this device is allowed to and the Gateway has a voice set up. To always use this device's own voice, change the Voice option in the Read Aloud section of Settings."
           }
         }
       }
@@ -12059,6 +12249,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Same Wi-Fi"
+          }
+        }
+      }
+    },
+    "Same as channel (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same as channel (%@)"
           }
         }
       }
@@ -14453,12 +14653,62 @@
         }
       }
     },
+    "The agent doesn't react itself. The 👀 acknowledgement still shows if it's set up.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent doesn't react itself. The 👀 acknowledgement still shows if it's set up."
+          }
+        }
+      }
+    },
     "The agent is waiting for your answer": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The agent is waiting for your answer"
+          }
+        }
+      }
+    },
+    "The agent never reacts.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent never reacts."
+          }
+        }
+      }
+    },
+    "The agent never reacts. Also turns off the 👀 acknowledgement.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent never reacts. Also turns off the 👀 acknowledgement."
+          }
+        }
+      }
+    },
+    "The agent reacts freely.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent reacts freely."
+          }
+        }
+      }
+    },
+    "The agent reacts now and then, when it fits.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent reacts now and then, when it fits."
           }
         }
       }
@@ -14629,6 +14879,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The server is removed when you save your changes."
+          }
+        }
+      }
+    },
+    "The stored value isn't a valid level, so the agent uses %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The stored value isn't a valid level, so the agent uses %@."
           }
         }
       }
@@ -15239,6 +15499,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "This is a simulated sign-in for the demo. No account is used."
+          }
+        }
+      }
+    },
+    "This is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer."
           }
         }
       }

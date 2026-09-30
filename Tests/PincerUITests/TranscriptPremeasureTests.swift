@@ -242,7 +242,7 @@ struct TranscriptPremeasureHostedTests {
         let host = await Self.makeHost()
         let count = 300
         var rows = Self.rows(count: count, salt: "s2")
-        let streamingIndex = count - 1, mathIndex = count - 5, findIndex = count - 9, controlIndex = count - 13
+        let streamingIndex = count - 1, mathIndex = count - 17, findIndex = count - 9, controlIndex = count - 13
         let body = String(repeating: "filler words that wrap ", count: 12)
         rows[streamingIndex] = Self.assistant("stream", text: "Streaming reply " + body, streaming: true, at: streamingIndex)
         rows[mathIndex] = Self.assistant("math", text: "Energy scales as $x^2$ and \\(y^3\\) here. " + body, at: mathIndex)
@@ -255,7 +255,7 @@ struct TranscriptPremeasureHostedTests {
 
         let renderer = host.coordinator.renderer
         #expect(renderer.premeasureBodies(for: rows[streamingIndex]) == nil)
-        #expect(renderer.premeasureBodies(for: rows[mathIndex]) == nil)
+        #expect(renderer.premeasureBodies(for: rows[mathIndex]) != nil)
         #expect(renderer.premeasureBodies(for: rows[findIndex]) == nil)
         #expect(renderer.premeasureBodies(for: rows[controlIndex]) != nil)
 
@@ -265,7 +265,7 @@ struct TranscriptPremeasureHostedTests {
         let offloaded = Self.driver(host.coordinator).offloadedIds
         #expect(offloaded.contains("a-control"), "eligible neighbours are offloaded")
         #expect(!offloaded.contains("a-stream"))
-        #expect(!offloaded.contains("a-math"))
+        #expect(offloaded.contains("a-math"), "rows with inline math are offloaded too (#432)")
         #expect(!offloaded.contains("a-find"))
         #endif
     }

@@ -29,9 +29,24 @@ extension ChatStore {
         await self.restoreFromCache()
         guard let gateway, gateway.state.isConnected else { return }
         if self.hasLoaded, !force, !self.stale { return }
-        if self.loadInFlight, !force { return }
-        self.loadInFlight = true
-        defer { self.loadInFlight = false }
+        if !force, let running = self.loadTask {
+            await running.value
+            // The caller that started it went away mid-fetch; this one still wants the history.
+            if running.isCancelled, !Task.isCancelled { await self.load() }
+            return
+        }
+        self.loadGeneration += 1
+        let generation = self.loadGeneration
+        // Waiters await this task; only the caller that started it passes its cancellation on.
+        let task = Task {
+            await self.fetchHistory(gateway)
+            if self.loadGeneration == generation { self.loadTask = nil }
+        }
+        self.loadTask = task
+        await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+    }
+
+    private func fetchHistory(_ gateway: GatewayStore) async {
         self.isLoading = !self.hasLoaded
         defer { self.isLoading = false }
         do {

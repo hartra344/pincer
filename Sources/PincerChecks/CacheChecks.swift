@@ -270,9 +270,9 @@ private func checkSegmentedCache(root: URL?) async {
     writeRawCache(legacy, gatewayId: gatewayId, sessionKey: key, root: root)
 
     let (migrated, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: key, root: root)
-    check(outcome == .migrated(from: 7) && migrated?.items.map(\.id) == ids, "v7 single file migrates to v8 (\(outcome))")
-    let saved = await waitFor("v7 saved back as v8", timeout: 5) { (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])?["version"] as? Int == 8 }
-    check(saved && fileExists(segments), "migrated v7 saved back as a v8 manifest with segments")
+    check(outcome == .migrated(from: 7) && migrated?.items.map(\.id) == ids, "v7 single file migrates to the current version (\(outcome))")
+    let saved = await waitFor("v7 saved back as v8", timeout: 5) { (try? JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])?["version"] as? Int == TranscriptCache.Snapshot.currentVersion }
+    check(saved && fileExists(segments), "migrated v7 saved back as a manifest with segments")
 
     let snapshot = TranscriptCache.Snapshot(items: migrated?.items ?? [], complete: true, activityMs: 5)
     let mtime = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date

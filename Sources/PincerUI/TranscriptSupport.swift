@@ -363,8 +363,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     // MARK: Premeasure
 
     /// What a background pass would build and measure for `row`; nil when the row has to be laid out on
-    /// main: one streaming (its text changes every flush), highlighted by Find, without text, or with
-    /// inline math (drawn from main-actor caches).
+    /// main: one streaming (its text changes every flush), highlighted by Find, or without text.
     func premeasureBodies(for row: TranscriptRow) -> [PremeasureKey]? {
         guard !self.highlight.rows.contains(row.id) else { return nil }
         let sources: [(String, TranscriptText.Tone)]
@@ -379,8 +378,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         }
         var keys: [PremeasureKey] = []
         for (source, tone) in sources where !source.isEmpty {
-            if source.contains("$") || source.contains("\\("), !InlineMath.spans(in: source).isEmpty { return nil }
-            let key = PremeasureKey(source: source, tone: tone, styleGeneration: TranscriptStyle.generation)
+            let key = PremeasureKey(source: source, tone: tone, styleGeneration: TranscriptStyle.generation, dark: self.settings.dark)
             if !keys.contains(key) { keys.append(key) }
         }
         return keys.isEmpty ? nil : keys
@@ -769,7 +767,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.context.chat?.deleteQueued(outboxId: id)
     }
 
-    func showOriginal(_ messageId: String) { self.showOriginal(messageId, missingNotice: nil) }
+    func showOriginal(_ messageId: String) { self.showOriginal(messageId, missingNotice: nil, isReplyTarget: true) }
 
     private var olderLoop: Task<Void, Never>?
 
@@ -799,10 +797,10 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     /// Scrolls to and flashes a message, paging in older history if needed. `missingNotice`
     /// replaces the chat's note when it can't be found.
-    func showOriginal(_ messageId: String, missingNotice: String?) {
+    func showOriginal(_ messageId: String, missingNotice: String?, isReplyTarget: Bool = false) {
         guard let chat = self.context.chat, chat.locatingReplyId == nil else { return }
         Task { @MainActor [weak self] in
-            let found = await chat.locate(messageId)
+            let found = isReplyTarget ? await chat.locateReplyTarget(messageId) : await chat.locate(messageId)
             if !found, let missingNotice { chat.notice = missingNotice }
             guard found, let self, chat === self.context.chat,
                   let row = self.rowId(containing: messageId) else { return }

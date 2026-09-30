@@ -97,6 +97,8 @@ To search every chat at once, use [Search messages](../search/) (<kbd>⇧</kbd> 
 
 To reply to a particular message, click **Reply** in its footer, choose **Reply** from its context menu (right-click on macOS, touch and hold on iOS), or press <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>R</kbd> to reply to the last message. You can reply to your own messages and to any finished message from the agent. Writing the reply is covered in [Replying to a message](../composer/#replying-to-a-message). The same menu has **Copy Link**, which copies a [link to the message](../deep-links-and-handoff/#copy-a-link-to-a-message).
 
+The agent can also reply to a particular message. When it answers an earlier message rather than your latest one, its reply shows the same quote card, and tapping it jumps to that message. In a one-to-one chat, a reply that simply answers your latest message shows no quote, to keep the chat quiet. In a group chat the quote always shows, since it tells people who the reply is for. If Pincer can't find the original message, the card just says "Original message" and can't be tapped.
+
 A reply shows the message it answers in a small card above its text, with who wrote it and the first two lines. The gateway keeps this with the message, so the quote is still there after a reload and on your other devices. The quote isn't searched by Find in Chat and isn't part of **Copy**.
 
 Click or tap the quote to jump to the original. Pincer scrolls to it and highlights it briefly. If it's further back than what's loaded, Pincer loads older history until it finds it, with a small spinner in the quote meanwhile. If the original isn't in the chat's history anymore, for example after a reset, a note says "The original message isn't in this chat's history anymore." If it's more than 40 pages back, Pincer stops looking and says "The original message is too far back to show."
@@ -117,13 +119,22 @@ Your reactions sync between your devices through the gateway's `users.prefs` (se
 
 When the agent reacts with its `message` tool (`action: "react"`), Pincer shows that reaction on the message it targeted, under the agent's name. These come from the chat's history, so they're still there after a reload, and you can't remove them. While the agent works on your latest message, it shows a faint 👀 ("Claw is working on this"), which goes away when the run ends.
 
-How freely the agent reacts on Telegram, WhatsApp and Signal is the gateway's `channels.<channel>.reactionLevel` setting. If your gateway's settings schema lists it, you can change it under **Gateway Settings → Channels** or **All Settings**. Pincer doesn't have its own control for it yet.
+How freely the agent reacts is the **Reactions** setting, "How freely the agent reacts". It's the gateway's `channels.<channel>.reactionLevel`, and it applies to Telegram, WhatsApp and Signal (Discord has no such setting):
+
+| Level | What the agent does |
+| --- | --- |
+| **Off** | The agent doesn't react. On WhatsApp and Signal the 👀 is turned off too. |
+| **Acknowledge only** | The agent doesn't react on its own. The 👀 still shows if your gateway's `ackReaction` is set up. |
+| **Minimal** (default) | The agent reacts now and then. |
+| **Extensive** | The agent reacts freely. |
+
+Change it under **Gateway Settings → Channels**, on the channel's page or on one of its accounts. The **In effect** row shows the level and where it comes from: **Set for this account**, **Inherited from the channel**, **Set for the channel**, or **Default**. An account's setting wins over its channel's, and the channel's over the default, which is **Minimal** on all three channels. Choose **Same as channel** (for an account) or **Default** (for a channel) to remove the setting. Like other settings on those pages, it's sent when you save. In a chat bridged from one of these channels, the chat's **⋯** menu has a **Reactions** submenu that changes the same setting at once. It says what it changes: "Applies to all Telegram chats", or "Applies to all chats on the account" when that account has its own setting. The same reset rows are there (for example **Same as channel (Minimal)**), and if a save fails the chat's notice banner says so. If the stored value isn't a valid level, the page says which level the agent uses instead. The control is hidden for other channels, and when the device can't edit settings or the gateway doesn't offer `config.patch`.
 
 ### Reactions in bridged chats
 
 In a chat bridged from another channel, such as Discord, reacting to one of **your** messages also adds the reaction there, if the gateway offers `message.action` and the message came through that channel. Removing your reaction removes it there too. If the channel refuses, the reaction stays in Pincer and a note says "Couldn't add the reaction in Discord. It's saved in Pincer only."
 
-Reactions on the agent's messages in bridged chats, and all reactions in chats you have with the agent directly, are kept in Pincer only. Your reactions aren't sent to the agent as feedback.
+Reactions on the agent's messages in bridged chats, and all reactions in chats you have with the agent directly, are kept in Pincer only. Your reactions aren't sent to the agent as feedback, so it doesn't see them yet.
 
 ## Images
 

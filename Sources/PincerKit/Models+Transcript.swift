@@ -292,6 +292,15 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     /// Transcript id of the message this user turn replies to (`__openclaw.replyToId`).
     public var replyToId: String?
     public var replyToPreview: ReplyPreview?
+    /// The agent answers the message this turn responds to (`openclawDelivery.replyToCurrent`
+    /// or `[[reply_to_current]]`), assistant messages only.
+    public var replyToCurrent: Bool {
+        get { self.storedReplyToCurrent ?? false }
+        set { self.storedReplyToCurrent = newValue ? true : nil }
+    }
+
+    /// Optional so transcripts cached before it existed still decode.
+    private var storedReplyToCurrent: Bool?
     /// The bridged channel's own id for this message (`__openclaw.transport.messageId`), e.g. a
     /// Discord snowflake. Agent `message` tool reactions name it.
     public var channelMessageId: String?
@@ -302,6 +311,9 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     /// Set when another agent, an automation or a helper wrote this message (it's shown as
     /// theirs, not as yours or this chat's agent's).
     public var sender: MessageSender?
+    /// Who sent a bridged channel's user message (the entry's `senderLabel`, else
+    /// `__openclaw.senderName`/`senderUsername`), e.g. a Telegram contact. Nil for your own turns.
+    public var channelSenderName: String?
 
     /// An optimistic send on its way: in flight, or accepted and waiting for the transcript. Not
     /// a queued or failed one.
@@ -341,6 +353,20 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         self.isError = false
         self.idempotencyKey = idempotencyKey
         self.isPending = isPending
+    }
+
+    /// A bridged user message's sender name, as upstream `resolveMessageSenderLabel` reads it:
+    /// `senderLabel` without a trailing ` (<uuid>)`, else `__openclaw.senderName`, else `senderUsername`.
+    static func channelSenderName(_ json: JSONValue) -> String? {
+        if let raw = json["senderLabel"]?.text?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            let label = raw.replacing(/\s+\([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\)$/, with: "")
+            return label.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let meta = json["__openclaw"]
+        for key in ["senderName", "senderUsername"] {
+            if let name = meta?[key]?.text?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return name }
+        }
+        return nil
     }
 
     /// The Gateway stores a sent user turn under `<clientKey>:user` (upstream `buildRunUserTurnIdempotencyKey`),
@@ -390,6 +416,7 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         self.channelMessageId = transport?["messageId"]?.text
         self.transportChannel = transport?["channel"]?.text
         self.conversationRef = transport?["conversationRef"]?.text
+        if self.role == .user, self.sender == nil { self.channelSenderName = Self.channelSenderName(json) }
         // Only the Gateway marker proves a cap; the sentinel text alone could be literal.
         let recoverable = self.role == .assistant || self.transcriptId?.hasPrefix(Self.pendingInputPrefix) == true
         self.isCapped = recoverable && meta?["truncated"]?.bool == true
@@ -407,12 +434,37 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
             }.filter { if case let .text(text) = $0 { !text.isEmpty } else { true } }
         }
         self.blocks += Self.mediaFactBlocks(meta?["media"], existing: self.blocks)
+        if self.role == .assistant, self.sender == nil { self.readReplyTarget(json) }
         if self.blocks.isEmpty, self.role == .assistant, let errorMessage {
             self.blocks = [.text(errorMessage)]
             self.isError = true
         }
         if self.blocks.isEmpty, self.role != .marker, self.role != .toolResult {
             return nil
+        }
+    }
+
+    /// An assistant message's reply target: the structured `__openclaw.replyToId` first, then
+    /// `openclawDelivery`, then a `[[reply_to…]]` directive in the text (which never shows).
+    private mutating func readReplyTarget(_ json: JSONValue) {
+        let delivery = json["openclawDelivery"]
+        if self.replyToId == nil, let id = delivery?["replyToId"]?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !id.isEmpty
+        {
+            self.replyToId = id
+        }
+        if delivery?["replyToCurrent"]?.bool == true { self.replyToCurrent = true }
+        var directive: ReplyDirective?
+        self.blocks = self.blocks.compactMap { block in
+            guard case let .text(text) = block, text.contains("[[") else { return block }
+            let parsed = Replies.extractDirective(text)
+            if directive == nil { directive = parsed.target }
+            return parsed.text.isEmpty && parsed.target != nil ? nil : .text(parsed.text)
+        }
+        switch directive {
+        case let .id(id)? where self.replyToId == nil: self.replyToId = id
+        case .current? where self.replyToId == nil: self.replyToCurrent = true
+        default: break
         }
     }
 

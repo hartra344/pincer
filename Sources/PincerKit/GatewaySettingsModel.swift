@@ -288,6 +288,29 @@ public final class GatewaySettingsModel {
         return false
     }
 
+    /// Writes one channel's reaction level straight away with `config.patch`, leaving any other unsaved
+    /// edits in place. Returns an error message, or nil when saved.
+    public func saveReactionLevel(channel: String, account: String?, level: ReactionLevel?) async -> String? {
+        if !self.canEdit { return ConfigWriteError.adminRequired.message }
+        if self.snapshot == nil { await self.reloadConfig() }
+        guard self.snapshot != nil else { return "Gateway Settings hasn't loaded yet." }
+        let patch = ReactionLevels.patch(channel: channel, account: account, level: level)
+        for attempt in 0..<2 {
+            do {
+                let result = try await self.client.patch(patch, replacePaths: [], baseHash: self.snapshot?.hash,
+                                                         note: "Pincer: Reaction level")
+                if let fresh = try? await self.client.snapshot() { self.apply(fresh) }
+                self.record(ConfigApplyOutcome(configWrite: result))
+                return nil
+            } catch .staleHash where attempt == 0 {
+                await self.reloadConfig()
+            } catch {
+                return error.message
+            }
+        }
+        return ConfigWriteError.staleHash.message + " Try again."
+    }
+
     /// Replaces the whole config with `config.apply`. Redacted secrets left as they are are kept.
     @discardableResult
     public func saveRaw(_ text: String) async -> Bool {

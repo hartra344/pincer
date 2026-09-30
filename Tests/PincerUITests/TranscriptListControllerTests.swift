@@ -287,4 +287,48 @@ struct TranscriptListControllerTests {
         #expect(prepared?.row == 7)
         #expect(controller.heights["u-u7"]?.isCurrent(at: 400) == true)
     }
+
+    /// One list update as the views run it: raw input through `beginUpdate` and `accept`, then the older-row check.
+    func update(_ controller: TranscriptListController, _ context: TranscriptContext, _ rows: [TranscriptRow]) {
+        let changed = controller.beginUpdate(context: context, rowCount: rows.count)
+        _ = controller.accept(rows, contextChanged: changed)
+        controller.loadOlderIfShown()
+    }
+
+    /// #467: a duplicated row id made the raw count differ from the list's on every update, re-arming the trigger.
+    @Test func duplicateIdsDoNotReArmTheOlderRowTrigger() async {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let (controller, host, context) = self.make(scratch)
+        let chat = context.chat!
+        let rows: [TranscriptRow] = [.loadingOlder] + Self.rows(0..<3) + [Self.user(2)]
+        // An empty cached page is consumed by the first load-older run, which clears `olderInCache`.
+        chat.hasMoreHistory = false
+        chat.olderInCache = true
+        self.update(controller, context, rows)
+        for _ in 0..<200 where chat.olderInCache { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(!chat.olderInCache, "the older row fires once when it first shows")
+        try? await Task.sleep(for: .milliseconds(400))
+
+        chat.olderInCache = true
+        for _ in 0..<3 { self.update(controller, context, rows) }
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(chat.olderInCache, "repeated updates of the same rows don't fire it again")
+        withExtendedLifetime(host) {}
+    }
+
+    /// #468: the closure handed to a later `attach` for the same state replaces the earlier one.
+    @Test func attachingTheSameStateAdoptsANewScrollToBottom() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let (controller, _, _) = self.make(scratch)
+        let bottom = TranscriptBottomState()
+        var calls: [String] = []
+        controller.attach(bottom) { calls.append("old") }
+        controller.attach(bottom) { calls.append("new") }
+        bottom.perform?()
+        #expect(calls == ["new"])
+        controller.attach(nil) { calls.append("detached") }
+        #expect(controller.bottom == nil)
+    }
 }

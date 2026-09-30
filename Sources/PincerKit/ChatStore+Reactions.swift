@@ -25,13 +25,20 @@ extension ChatStore {
         }?.transcriptId
     }
 
-    /// The quote card for a user turn that replies to another message.
+    /// The quote card for a turn that replies to another message: yours by `replyToId`, the agent's by its
+    /// delivery target (a transcript id, a bridged channel's message id, or a webchat send's idempotency key).
     public func quote(for item: ChatItem) -> ReplyQuote? {
-        guard let targetId = item.replyToId else { return nil }
+        guard var targetId = item.replyToId else { return nil }
+        if item.role == .assistant {
+            guard let resolved = self.resolveAgentReplyTarget(targetId, for: item) else { return nil }
+            targetId = resolved
+        }
         if let target = self.message(withId: targetId) {
             let line = Replies.previewLine(MediaDirectives.extract(from: target.plainText).text)
             let sender: ReplyQuote.Sender = if let from = target.sender {
                 .label(from.displayName(agents: self.gateway?.agents ?? []))
+            } else if let name = target.channelSenderName {
+                .label(name)
             } else {
                 target.role == .user ? .you : .agent
             }
@@ -43,6 +50,50 @@ extension ChatStore {
                               text: Replies.previewLine(preview.text))
         }
         return ReplyQuote(targetId: targetId, sender: nil, text: nil)
+    }
+
+    /// The transcript id an assistant message's reply target names, or the raw id when its message isn't loaded.
+    /// Nil when, in a direct chat, it's the user message the reply directly follows: nothing to point at.
+    /// In a group the quote stays, since it says whose message was answered.
+    private func resolveAgentReplyTarget(_ id: String, for item: ChatItem) -> String? {
+        var targetId = id
+        if self.message(withId: id) == nil,
+           let match = self.items.first(where: { $0.role == .user && ($0.channelMessageId == id || $0.idempotencyKey == id) }),
+           let matchId = match.transcriptId
+        {
+            targetId = matchId
+        }
+        if !self.isGroupChat, let index = self.items.firstIndex(where: { $0.id == item.id }),
+           let answered = self.items[..<index].last(where: { $0.role == .user && $0.isReplyable }),
+           answered.transcriptId == targetId
+        {
+            return nil
+        }
+        return targetId
+    }
+
+    private var isGroupChat: Bool {
+        guard let row = self.gateway?.sessions[self.sessionKey] else { return false }
+        return row.server != nil || row.chatType == "group" || row.chatType == "channel"
+    }
+
+    /// Transcript ids are 8 hex characters (or a UUID); channel message ids are other shapes.
+    static func looksLikeTranscriptId(_ id: String) -> Bool {
+        let hex = Set("0123456789abcdefABCDEF")
+        if id.count == 8 { return id.allSatisfy(hex.contains) }
+        return UUID(uuidString: id) != nil
+    }
+
+    /// `locate` for a quote tap. An id that can't be a transcript id is a bridged channel's message id
+    /// that isn't in this chat, so there's nothing to page for.
+    @discardableResult
+    public func locateReplyTarget(_ id: String) async -> Bool {
+        if self.message(withId: id) != nil { return true }
+        guard Self.looksLikeTranscriptId(id) else {
+            self.notice = "The original message isn't in this chat's history anymore."
+            return false
+        }
+        return await self.locate(id)
     }
 
     /// Loads older history (the cache first) until the message is loaded (at most 40 pages). Returns whether it is;

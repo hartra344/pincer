@@ -8,9 +8,9 @@ struct TranscriptCacheSegmentsTests {
     let gateway = UUID()
     let key = "agent:main:main"
 
-    @Test func currentVersionIsEight() {
-        #expect(TranscriptCache.Snapshot.currentVersion == 8)
-        #expect(TranscriptCache.migrations[7] != nil)
+    @Test func currentVersionIsNine() {
+        #expect(TranscriptCache.Snapshot.currentVersion == 9)
+        #expect(TranscriptCache.migrations[7] != nil && TranscriptCache.migrations[8] != nil)
     }
 
     @Test func roundTripWritesManifestAndSegments() async throws {
@@ -21,7 +21,7 @@ struct TranscriptCacheSegmentsTests {
 
         let url = V8.manifestURL(self.gateway, self.key, temp.url)
         let manifest = try V8.manifest(url)
-        #expect(manifest["version"] as? Int == 8 && manifest["complete"] as? Bool == false)
+        #expect(manifest["version"] as? Int == TranscriptCache.Snapshot.currentVersion && manifest["complete"] as? Bool == false)
         #expect(manifest["retained"] as? Bool == true && manifest["activityMs"] as? Double == 99)
         #expect(manifest["items"] == nil && manifest["token"] is String)
         let segments = try #require(manifest["segments"] as? [[String: Any]])
@@ -92,14 +92,14 @@ struct TranscriptCacheSegmentsTests {
         #expect(outcome == .migrated(from: 7))
         #expect(loaded?.items == items)
 
-        // The migration is saved back as v8: a small manifest plus segments, items identical.
+        // The migration is saved back as the current version: a small manifest plus segments, items identical.
         var manifest: [String: Any] = [:]
         for _ in 0..<200 {
             manifest = (try? V8.manifest(url)) ?? [:]
-            if manifest["version"] as? Int == 8 { break }
+            if manifest["version"] as? Int == TranscriptCache.Snapshot.currentVersion { break }
             try await Task.sleep(for: .milliseconds(25))
         }
-        #expect(manifest["version"] as? Int == 8 && manifest["items"] == nil)
+        #expect(manifest["version"] as? Int == TranscriptCache.Snapshot.currentVersion && manifest["items"] == nil)
         #expect(!V8.segmentFiles(url).isEmpty)
         let (again, second) = await TranscriptCache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
         #expect(second == .loaded && again?.items == items)

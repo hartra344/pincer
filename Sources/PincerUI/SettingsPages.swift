@@ -21,13 +21,18 @@ struct ObjectSections: View {
     private var settings: GatewaySettingsModel { self.gateway.settings }
 
     private var fields: [ConfigField] {
-        var fields = self.settings.fields(at: self.path).filter { !self.skipping.contains($0.path) }
+        var fields = self.settings.fields(at: self.path).filter { !self.skipping.contains($0.path) && !self.hasReactionControl($0.path) }
         for credential in self.credentials where Array(credential.path.dropLast()) == self.path {
             let existing = fields.firstIndex { $0.path == credential.path }
             let field = ConfigField.credential(credential, existing: existing.map { fields[$0] })
             if let existing { fields[existing] = field } else { fields.insert(field, at: 0) }
         }
         return fields.sorted { $0.order < $1.order }
+    }
+
+    /// The dedicated Reactions section edits this key, so the schema editor leaves it out (when that section shows).
+    private func hasReactionControl(_ path: [String]) -> Bool {
+        ReactionLevels.isControlled(path: path) && self.gateway.canEditReactionLevels
     }
 
     var body: some View {
@@ -235,6 +240,9 @@ struct ConfigObjectPage: View {
         let field = settings.field(at: self.path)
         let parentIsMap = settings.field(at: Array(self.path.dropLast()))?.isMap ?? false
         GatewaySettingsForm {
+            if let target = ReactionLevels.target(for: self.path) {
+                ReactionLevelSection(channel: target.channel, account: target.account)
+            }
             ObjectSections(path: self.path)
             if parentIsMap, settings.canEdit, settings.value(at: self.path) != nil {
                 Section {

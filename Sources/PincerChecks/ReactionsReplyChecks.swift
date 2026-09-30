@@ -507,6 +507,11 @@ func runLiveReactionsReply(url: String, token: String) async {
         let freshTrip = fresh.chat(for: "agent:main:dashboard:trip")
         await freshTrip.load()
         check(freshTrip.message(withId: oldId) == nil && freshTrip.items.count == 120, "old message not in the first page")
+        let channelId = await freshTrip.locateReplyTarget("7421093845")
+        check(!channelId && freshTrip.locatingReplyId == nil
+              && freshTrip.notice == "The original message isn't in this chat's history anymore.",
+              "a channel message id fails fast with a notice (quote taps)")
+        freshTrip.notice = nil
         let found = await freshTrip.locate(oldId)
         check(found && freshTrip.message(withId: oldId) != nil && freshTrip.items.count > 120 && freshTrip.notice == nil,
               "locate pages until found (\(freshTrip.items.count))")
@@ -584,4 +589,86 @@ func runLiveNoReplyTo(url: String, token: String) async {
               && sent[0].plainText.hasSuffix("\n\n\(nonce)"),
               index == 0 ? "rejected replyToId → one message quoting the original" : "later sends quote straight away")
     }
+}
+
+// MARK: Agent reply targets (#110)
+
+private func deliveryAssistant(_ id: String, _ text: String, delivery: String? = nil, structured: String? = nil) -> ChatItem? {
+    let delivery = delivery.map { #","openclawDelivery":\#($0)"# } ?? ""
+    let structured = structured.map { #","replyToId":"\#($0)""# } ?? ""
+    return item(#"{"role":"assistant","content":[{"type":"text","text":"\#(text)"}]\#(delivery),"__openclaw":{"id":"\#(id)"\#(structured)}}"#)
+}
+
+@MainActor
+func checkReplyTargets() {
+    // Parsing: delivery facts on assistant messages only, structured id wins.
+    check(deliveryAssistant("a1", "x", delivery: #"{"replyToId":" u1 "}"#)?.replyToId == "u1", "openclawDelivery.replyToId parses (trimmed)")
+    check(deliveryAssistant("a2", "x", delivery: #"{"replyToCurrent":true}"#)?.replyToCurrent == true
+          && deliveryAssistant("a3", "x", delivery: #"{"replyToCurrent":false}"#)?.replyToCurrent == false
+          && deliveryAssistant("a4", "x")?.replyToCurrent == false, "openclawDelivery.replyToCurrent parses")
+    check(deliveryAssistant("a5", "x", delivery: #"{"replyToId":"d"}"#, structured: "s")?.replyToId == "s", "__openclaw.replyToId beats the delivery target")
+    let user = item(#"{"role":"user","content":[{"type":"text","text":"x"}],"openclawDelivery":{"replyToId":"a1","replyToCurrent":true},"__openclaw":{"id":"u1"}}"#)
+    check(user?.replyToId == nil && user?.replyToCurrent == false, "delivery facts aren't read on user messages")
+
+    // Directives.
+    let byId = Replies.extractDirective("[[reply_to:abc-123]] Recovered answer")
+    check(byId.target == .id("abc-123") && byId.text == "Recovered answer", "[[reply_to:id]] is extracted and stripped (\(byId))")
+    let current = Replies.extractDirective("[[reply_to_current]] Ready")
+    check(current.target == .current && current.text == "Ready", "[[reply_to_current]] is extracted and stripped")
+    check(Replies.extractDirective("[[ reply_to : 123 ]]ok").target == .id("123") && Replies.extractDirective("[[ reply_to : 123 ]]ok").text == "ok",
+          "whitespace variants")
+    let padded = Replies.extractDirective("[[reply_to:\nid\n ]]Visible reply")
+    check(padded.target == .id("id") && padded.text == "Visible reply", "newline padding inside the tag is accepted like upstream (\(padded))")
+    let plainText = Replies.extractDirective("  keep  ")
+    check(plainText.target == nil && plainText.text == "  keep  ", "plain text is untouched")
+    check(Replies.extractDirective("[[reply_to:message-7 Visible reply").target == nil
+          && Replies.extractDirective("Visible\n[[reply_to_current] literally").target == nil
+          && Replies.extractDirective("Use `[[reply_to_current]]` here").target == nil, "malformed and code-span directives stay literal")
+    let leaked = deliveryAssistant("a6", "[[reply_to:u1]] Here you go")
+    check(leaked?.replyToId == "u1" && leaked?.plainText == "Here you go", "a leaked directive supplies the target and is stripped from the text")
+    check(deliveryAssistant("a7", "[[reply_to:x]] hi", delivery: #"{"replyToId":"d"}"#)?.replyToId == "d", "delivery beats a leaked directive")
+}
+
+/// The seeded Telegram chat both the demo and the mock carry: an answer to an earlier message,
+/// one to the latest message, and one with a leaked directive.
+@MainActor
+private func checkTelegramReplyShapes(_ chat: ChatStore, idPrefix: String, label: String) async {
+    await chat.load()
+    let loaded = await waitFor("\(label) telegram history") { chat.items.contains { $0.plainText.hasPrefix("Dr. Alvarez") } }
+    check(loaded, "\(label): bridged Telegram chat loads")
+    let clinic = chat.items.first { $0.role == .assistant && $0.plainText.hasPrefix("Dr. Alvarez") }
+    let dentist = chat.items.first { $0.role == .assistant && $0.plainText.hasPrefix("Your dentist appointment") }
+    let pickup = chat.items.first { $0.role == .assistant && $0.plainText.contains("Friday pickup") }
+    check(clinic?.replyToId == "\(idPrefix)-clinic" && clinic?.replyToCurrent == false, "\(label): delivery replyToId parsed (\(clinic?.replyToId ?? "nil"))")
+    if let clinic, let quote = chat.quote(for: clinic) {
+        check(quote.targetId == "\(idPrefix)-clinic" && quote.sender == .label("Maya") && quote.text?.hasPrefix("Can you find") == true,
+              "\(label): the answer to the earlier message shows a quote card naming Maya (\(quote.sender), \(quote.text ?? "nil"))")
+    } else {
+        check(false, "\(label): quote card on the seeded assistant reply")
+    }
+    check(dentist?.replyToCurrent == true && dentist.flatMap { chat.quote(for: $0) } == nil, "\(label): replyToCurrent → no quote")
+    check(pickup?.replyToCurrent == true && pickup?.plainText.contains("[[") == false && pickup?.plainText.hasPrefix("Friday pickup is at 3:15") == true
+          && pickup.flatMap { chat.quote(for: $0) } == nil, "\(label): leaked [[reply_to_current]] is stripped (\(pickup?.plainText.prefix(30) ?? "nil"))")
+    let reloaded = chat.items.first { $0.id == clinic?.id }
+    check(reloaded?.replyToId == clinic?.replyToId, "\(label): stable across items")
+}
+
+@MainActor
+func runDemoReplyTargets() async {
+    guard let gateway = await connectDemo(.demo(), "demo for reply targets") else { return }
+    defer {
+        gateway.stop()
+        forgetLocalPrefs(gateway)
+    }
+    await checkTelegramReplyShapes(gateway.chat(for: "agent:main:telegram:home:direct:5550142"), idPrefix: "demo-tg", label: "demo")
+}
+
+@MainActor
+func runLiveReplyTargets(url: String, token: String) async {
+    guard let gateway = await connectLive("Mock reply targets", url: url, token: token) else { return }
+    defer {
+        gateway.stop()
+        forgetLocalPrefs(gateway)
+    }
+    await checkTelegramReplyShapes(gateway.chat(for: "agent:main:telegram:home:direct:5550142"), idPrefix: "mock-tg", label: "mock")
 }

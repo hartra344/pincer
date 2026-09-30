@@ -24,7 +24,7 @@ public struct ReplyQuote: Hashable, Sendable {
     public enum Sender: Hashable, Sendable {
         case you
         case agent
-        /// The Gateway's `senderLabel`, when the original isn't loaded.
+        /// A name: another agent, a bridged channel sender, or the Gateway's `senderLabel` when the original isn't loaded.
         case label(String)
     }
 
@@ -32,6 +32,12 @@ public struct ReplyQuote: Hashable, Sendable {
     public var sender: Sender?
     /// Nil when neither the original nor a preview is known ("Original message").
     public var text: String?
+}
+
+/// Who an assistant message answers, as the agent's `[[reply_to…]]` directive names it.
+public enum ReplyDirective: Hashable, Sendable {
+    case id(String)
+    case current
 }
 
 public enum Replies {
@@ -80,6 +86,75 @@ public enum Replies {
         let quote = ([first] + lines.dropFirst().map { "> \($0)" }).joined(separator: "\n")
             .trimmingCharacters(in: .whitespaces)
         return text.isEmpty ? quote : "\(quote)\n\n\(text)"
+    }
+
+    /// `text` without its `[[reply_to:<id>]]` / `[[reply_to_current]]` directives (the syntax the Gateway
+    /// strips before delivery, matched case-insensitively; ones in code spans or fences are literal),
+    /// and the first target they named.
+    public static func extractDirective(_ text: String) -> (text: String, target: ReplyDirective?) {
+        guard text.contains("[[") else { return (text, nil) }
+        var out = ""
+        var target: ReplyDirective?
+        var index = text.startIndex
+        var lineStart = true
+        var fenced = false
+        var inlineTicks = 0
+        while index < text.endIndex {
+            let rest = text[index...]
+            if lineStart {
+                let trimmed = rest.drop(while: { $0 == " " || $0 == "\t" })
+                if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") { fenced.toggle() }
+            }
+            let ch = text[index]
+            if !fenced, ch == "`" {
+                var run = 0
+                var end = index
+                while end < text.endIndex, text[end] == "`" {
+                    run += 1
+                    end = text.index(after: end)
+                }
+                inlineTicks = inlineTicks == 0 ? run : (inlineTicks == run ? 0 : inlineTicks)
+                out += text[index..<end]
+                index = end
+                lineStart = false
+                continue
+            }
+            if !fenced, inlineTicks == 0, rest.hasPrefix("[["), let tag = Self.parseTag(rest) {
+                if target == nil { target = tag.target }
+                index = tag.end
+                var trailing = index
+                while trailing < text.endIndex, text[trailing] == " " || text[trailing] == "\t" { trailing = text.index(after: trailing) }
+                let atStart = out.allSatisfy(\.isWhitespace)
+                index = atStart ? trailing : (trailing < text.endIndex && text[trailing] != "\n" ? index : trailing)
+                continue
+            }
+            out.append(ch)
+            lineStart = ch == "\n"
+            if ch == "\n" { inlineTicks = 0 }
+            index = text.index(after: index)
+        }
+        guard target != nil else { return (text, nil) }
+        return (out.trimmingCharacters(in: .whitespacesAndNewlines), target)
+    }
+
+    private static func parseTag(_ rest: Substring) -> (target: ReplyDirective, end: String.Index)? {
+        var cursor = rest.dropFirst(2)
+        cursor = cursor.drop(while: \.isWhitespace)
+        let lower = cursor.lowercased()
+        if lower.hasPrefix("reply_to_current") {
+            let after = cursor.dropFirst("reply_to_current".count).drop(while: \.isWhitespace)
+            guard after.hasPrefix("]]") else { return nil }
+            return (.current, after.index(after.startIndex, offsetBy: 2))
+        }
+        guard lower.hasPrefix("reply_to") else { return nil }
+        var after = cursor.dropFirst("reply_to".count).drop(while: \.isWhitespace)
+        guard after.first == ":" else { return nil }
+        after = after.dropFirst()
+        guard let close = after.range(of: "]]") else { return nil }
+        let value = after[after.startIndex..<close.lowerBound]
+        let id = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, !id.contains("\n") else { return nil }
+        return (.id(id), close.upperBound)
     }
 
     /// Whether a `chat.send` failure is an older Gateway refusing the `replyToId` param.

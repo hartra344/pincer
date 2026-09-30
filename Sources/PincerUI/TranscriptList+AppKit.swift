@@ -312,6 +312,7 @@ struct TranscriptList: NSViewRepresentable {
             self.controller.premeasure.cancelAll()
             if let clip = self.scrollView?.contentView { self.clipSize = clip.frame.size }
             self.controller.resetQueueWidth()
+            self.controller.prewarmAroundViewport()
             let builds = self.renderer.layoutBuildCount, measured = self.prefetchStats.rowsMeasured
             // The anchor from before the freeze is kept, so the reader stays on the same message.
             self.settle(changed: IndexSet())
