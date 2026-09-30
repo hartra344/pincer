@@ -139,6 +139,10 @@ extension GatewayStore {
             for entry in DemoGateway.seedOutbox() where self.outbox.entry(id: entry.id) == nil {
                 self.injectOutboxEntry(entry)
             }
+            // The queued seating plan's bytes, where `deliver` looks for in-memory attachments.
+            if self.outbox.entry(id: DemoOutbox.queuedAttachmentId) != nil {
+                self.outboxAttachments[DemoOutbox.queuedAttachmentId] = [DemoGateway.seatingPlan]
+            }
             return
         }
         let (saved, _) = await OutboxStore.load(gatewayId: self.id, root: self.outboxRoot)

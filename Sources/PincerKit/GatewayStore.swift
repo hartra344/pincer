@@ -300,14 +300,14 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored let defaults: UserDefaults
     @ObservationIgnored private let identity: DeviceIdentity
 
-    public convenience init(profile: GatewayProfile) {
-        self.init(profile: profile, defaults: .standard, identity: .loadOrCreate())
+    public convenience init(profile: GatewayProfile, network: NetworkConditions = .shared) {
+        self.init(profile: profile, defaults: .standard, identity: .loadOrCreate(), network: network)
     }
 
     /// A store keeping its device settings in `defaults`, so checks running side by side don't
     /// share `UserDefaults.standard`.
-    public convenience init(profile: GatewayProfile, defaults: UserDefaults) {
-        self.init(profile: profile, defaults: defaults, identity: .loadOrCreate())
+    public convenience init(profile: GatewayProfile, defaults: UserDefaults, network: NetworkConditions = .shared) {
+        self.init(profile: profile, defaults: defaults, identity: .loadOrCreate(), network: network)
     }
 
     init(profile: GatewayProfile, defaults: UserDefaults, identity: DeviceIdentity, network: NetworkConditions = .shared) {
