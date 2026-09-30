@@ -284,7 +284,7 @@ struct SessionManagerRowView: View {
             }
         }
         let duration = SessionManager.runDuration(self.row, now: Date()).map(Self.spokenDuration)
-        let updated = self.row.activityDate?.formatted(.relative(presentation: .named))
+        let updated = self.row.activityDate.map { L("updated \($0.formatted(.relative(presentation: .named)))") }
         return AccessibilityText.sessionManagerRow(
             title: self.row.title, agentName: self.row.agentId, runStatus: status,
             duration: duration, updated: updated,

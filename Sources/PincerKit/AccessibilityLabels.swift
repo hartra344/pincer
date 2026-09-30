@@ -52,7 +52,7 @@ public enum AccessibilityText {
     }
 
     /// One Session Manager row, e.g. `Research, Claude, Interrupted, 2 min 5 s, updated 3:04 PM`.
-    /// `runStatus` is one of `running`, `done`, `failed`, `interrupted` (localized here).
+    /// `updated` is already phrased (`updated 3:04 PM`). `runStatus` is one of `running`, `done`, `failed`, `interrupted` (localized here).
     public static func sessionManagerRow(
         title: String,
         agentName: String?,
@@ -67,7 +67,7 @@ public enum AccessibilityText {
             agentName,
             runStatus.map(Self.runStatusLabel),
             duration,
-            updated.map { L("updated \($0)") },
+            updated,
         ] + extra)
     }
 
