@@ -18,7 +18,7 @@ public enum TranscriptCache {
         /// as complete as it will get even though `complete` is false.
         public var retained: Bool
 
-        public static let currentVersion = 8
+        public static let currentVersion = 9
 
         public init(version: Int = Self.currentVersion, items: [ChatItem], complete: Bool, activityMs: Double? = nil,
                     retained: Bool = false)
@@ -137,6 +137,10 @@ public enum TranscriptCache {
     //    existing ones byte-identical and a save writes only what changed. `migrations[7]` does
     //    nothing; the v7 single file is decoded, then saved back as a manifest and segments.
 
+    //  - #110 (agent reply targets, v9) added `ChatItem.replyToCurrent` and `channelSenderName`, stored as optionals, so older
+    //    files decode and `migrations[8]` does nothing. Assistant messages cached earlier have no reply target
+    //    (the newest page is refetched on open).
+
     /// Upgrades a snapshot's JSON object from the version it's keyed by to the next one.
     typealias Migration = @Sendable (inout [String: Any]) throws -> Void
 
@@ -160,6 +164,7 @@ public enum TranscriptCache {
         },
         6: forwardedSenderMigration,
         7: { _ in },
+        8: { _ in },
     ]
 
     /// v6 → v7 (#207): cached inter-session turns become the sending agent's.

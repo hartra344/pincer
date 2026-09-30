@@ -195,7 +195,8 @@ struct StreamingRenderingTests {
                 if case let .text(p) = x.segment, case let .text(q) = y.segment { #expect(p === q) }
             }
         }
-        #expect(TranscriptText.liveMemoCount.rows == base + 2)
+        // Hosted suites running alongside may leave live rows behind; past capacity the oldest of those goes.
+        #expect(TranscriptText.liveMemoCount.rows == min(base + 2, TranscriptText.liveRowCapacity))
         for id in ids { _ = TranscriptText.liveMarkdown(text, tone: .primary, row: id) }
         #expect(TranscriptText.liveMemoCount.rows <= TranscriptText.liveRowCapacity)
         for id in ids { TranscriptText.endLive(row: id) }

@@ -2,6 +2,7 @@ import Foundation
 @testable import PincerKit
 import Testing
 @testable import PincerUI
+import CoreGraphics
 #if os(macOS)
 import AppKit
 import Darwin
@@ -43,6 +44,7 @@ enum ProbeMeter {
 
     /// phys_footprint in MiB, the number Activity Monitor and jetsam use.
     static func footprintMiB() -> Double {
+        #if os(macOS)
         var info = rusage_info_current()
         let result = withUnsafeMutablePointer(to: &info) {
             $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
@@ -50,6 +52,9 @@ enum ProbeMeter {
             }
         }
         return result == 0 ? Double(info.ri_phys_footprint) / 1_048_576 : -1
+        #else
+        return -1
+        #endif
     }
 }
 
@@ -185,6 +190,7 @@ struct TranscriptPrefetchProbe {
 }
 #endif
 
+#if os(macOS)
 /// ~60 large synthetic images through the real loader (inline base64, so no network). Reports the decoded
 /// bytes the loader retains and the process footprint once.
 ///
@@ -248,3 +254,4 @@ struct ImageRSSProbe {
         #expect(loader.failures.isEmpty)
     }
 }
+#endif

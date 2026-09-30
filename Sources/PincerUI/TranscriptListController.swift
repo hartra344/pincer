@@ -92,7 +92,6 @@ final class TranscriptListController {
 
     /// Connects `state`, which then runs `scrollToBottom` for the button.
     func attach(_ state: TranscriptBottomState?, scrollToBottom: @escaping () -> Void) {
-        guard state !== self.bottom else { return }
         self.bottom = state
         state?.perform = scrollToBottom
     }
@@ -158,7 +157,6 @@ final class TranscriptListController {
         let changed = context.differs(from: self.context)
         self.context = context
         self.renderer.update(context: context)
-        if rowCount != self.rows.count { self.olderRowWasVisible = false }
         return changed
     }
 
@@ -186,6 +184,8 @@ final class TranscriptListController {
             return .tail(row)
         }
         let unique = Self.uniqued(newRows)
+        // Compared after de-duplication, so a repeated id doesn't re-arm the older-row trigger.
+        if unique.count != self.rows.count { self.olderRowWasVisible = false }
         guard unique != self.rows else { return .unchanged }
         let oldRows = self.rows
         self.rows = unique
@@ -331,6 +331,16 @@ final class TranscriptListController {
     /// A height counts as changed when it's new or moved by more than half a point.
     static func heightMoved(from old: CGFloat?, to new: CGFloat) -> Bool {
         old.map { abs($0 - new) > 0.5 } ?? true
+    }
+
+    /// After a width change settles: warms the rows a screen either side of the viewport at the
+    /// final width on the worker (within a short budget), so the thaw relayout finds them cached.
+    func prewarmAroundViewport() {
+        guard let host else { return }
+        let width = host.layoutWidth
+        guard width > Self.minimumWidth, let window = host.rowWindow(screens: 1, minimum: 200) else { return }
+        let indexes = window.range.sorted { abs($0 - window.center) < abs($1 - window.center) }
+        self.premeasure.prewarm(indexes, all: self.rows, width: width, renderer: self.renderer)
     }
 
     /// Measures unmeasured rows from a screen above the viewport to a screen below it, so rows

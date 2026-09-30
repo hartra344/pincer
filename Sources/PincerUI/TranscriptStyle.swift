@@ -61,11 +61,16 @@ final class TranscriptStyle {
         self.listMarker = PFont.monospacedDigitSystemFont(ofSize: body.pointSize, weight: .regular)
     }
 
+    #if os(iOS)
+    /// Text size to build fonts at instead of the system's; set by tests to exercise non-default Dynamic Type sizes.
+    static var textSizeOverride: UIContentSizeCategory?
+    #endif
+
     static func font(_ style: PFont.TextStyle) -> PFont {
         #if os(macOS)
         NSFont.preferredFont(forTextStyle: style, options: [:])
         #else
-        UIFont.preferredFont(forTextStyle: style)
+        UIFont.preferredFont(forTextStyle: style, compatibleWith: self.textSizeOverride.map { UITraitCollection(preferredContentSizeCategory: $0) })
         #endif
     }
 
@@ -237,7 +242,14 @@ enum TranscriptSymbols {
         let target = CGRect(x: rect.midX - drawn.width / 2, y: rect.midY - drawn.height / 2,
                             width: drawn.width, height: drawn.height)
         #if os(macOS)
-        let tinted = image.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [color])) ?? image
+        // Palette rendering with one color fills a multi-layer symbol's (face.smiling) background layer into a dot.
+        let mono = image.withSymbolConfiguration(NSImage.SymbolConfiguration.preferringMonochrome()) ?? image
+        let tinted = NSImage(size: target.size, flipped: false) { rect in
+            mono.draw(in: rect)
+            color.setFill()
+            rect.fill(using: .sourceIn)
+            return true
+        }
         tinted.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         #else
         image.withTintColor(color, renderingMode: .alwaysOriginal).draw(in: target)

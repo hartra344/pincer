@@ -7,6 +7,7 @@ const SECTIONS = [
   'tool-cards',
   'send-hooks',
   'replies',
+  'reaction-level',
   'reactions',
   'webpush',
   'approvals',

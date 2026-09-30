@@ -36,7 +36,17 @@ struct DemoMCPState {
     static let account = "demo@pincer.app"
     static let redacted = "__OPENCLAW_REDACTED__"
 
-    static let seedConfig: JSONValue = ["mcp": ["servers": [
+    static let seedConfig: JSONValue = [
+        // Telegram sets a level with a per-account override, WhatsApp leaves it unset (default), Discord has no control.
+        "channels": [
+            "telegram": ["enabled": true, "reactionLevel": "minimal", "accounts": [
+                "default": ["name": "Personal bot"],
+                "home": ["name": "Home bot", "reactionLevel": "extensive"],
+            ]],
+            "whatsapp": ["enabled": true],
+            "discord": ["enabled": true],
+        ],
+        "mcp": ["servers": [
         "filesystem": ["command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/demo/Projects"],
                        "env": ["LOG_LEVEL": "info"]],
         "home-assistant": ["command": "uvx",
@@ -50,7 +60,8 @@ struct DemoMCPState {
                      "env": ["PGPASSWORD": "mock-pg-password"]],
         "sentry": ["url": "https://mcp.sentry.dev/sse", "transport": "sse", "enabled": false],
         "acme.docs": ["url": "https://mcp.acme.example/docs", "transport": "streamable-http"],
-    ]]]
+    ]],
+    ]
 
     static let seedTools: [String: [String]] = [
         "filesystem": ["read_file", "write_file", "list_directory", "search_files"],
@@ -433,11 +444,33 @@ extension DemoGateway {
     }
 
     private static let mcpConfigSchema: JSONValue = [
-        "schema": ["type": "object", "properties": ["mcp": ["type": "object", "properties": [
-            "servers": ["type": "object", "additionalProperties": ["type": "object"]],
-        ]]]],
+        "schema": ["type": "object", "properties": [
+            "mcp": ["type": "object", "properties": [
+                "servers": ["type": "object", "additionalProperties": ["type": "object"]],
+            ]],
+            "channels": ["type": "object", "properties": [
+                "telegram": DemoGateway.reactionChannelSchema(accounts: true),
+                "whatsapp": DemoGateway.reactionChannelSchema(accounts: true),
+                "discord": ["type": "object", "properties": ["enabled": ["type": "boolean"]]],
+            ]],
+        ]],
         "uiHints": [:], "version": "demo", "generatedAt": "2026-01-01T00:00:00Z",
     ]
+
+    private static let reactionLevelSchema: JSONValue = [
+        "type": "string", "enum": ["off", "ack", "minimal", "extensive"],
+        "title": "Reaction level", "description": "How freely the agent reacts to messages on this channel.",
+    ]
+
+    private static func reactionChannelSchema(accounts: Bool) -> JSONValue {
+        var properties: [String: JSONValue] = ["enabled": ["type": "boolean"], "reactionLevel": reactionLevelSchema]
+        if accounts {
+            properties["accounts"] = ["type": "object", "additionalProperties": ["type": "object", "properties": [
+                "name": ["type": "string"], "reactionLevel": reactionLevelSchema,
+            ]]]
+        }
+        return ["type": "object", "properties": .object(properties)]
+    }
 
     private func mcpWriteConfig(_ method: String, _ params: JSONValue) throws -> JSONValue {
         guard params["baseHash"]?.string == self.mcp.hash else {

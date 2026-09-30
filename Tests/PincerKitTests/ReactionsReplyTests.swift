@@ -69,11 +69,14 @@ struct ReactionsReplyTests {
         for file in files {
             let text = try String(contentsOf: file, encoding: .utf8)
             for match in text.matches(of: call) { called.insert(String(match.1)) }
+            // The Gateway's real reaction methods (openclaw/openclaw#161053) are the only allowed ones.
+            let stripped = text.replacingOccurrences(of: "session.reactions.set", with: "")
+                .replacingOccurrences(of: "session.reactions.list", with: "")
             for method in forbidden {
-                #expect(!text.contains("\"\(method)"), "\(file.lastPathComponent) mentions \(method)")
+                #expect(!stripped.contains("\"\(method)"), "\(file.lastPathComponent) mentions \(method)")
             }
         }
         #expect(called.contains("message.action") && called.contains("chat.send"))
-        #expect(!called.contains { $0.localizedCaseInsensitiveContains("react") })
+        #expect(Set(called.filter { $0.localizedCaseInsensitiveContains("react") }) == ["session.reactions.set", "session.reactions.list"])
     }
 }

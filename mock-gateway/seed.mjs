@@ -17,6 +17,7 @@ import { createDevicePairingState } from './devices.mjs';
 import { seededFileEditCalls } from './file-edits.mjs';
 import { seededToolCards, TOOL_CARDS_KEY, TOOL_CARDS_PREVIEW, TOOL_CARDS_TITLE } from './tool-cards.mjs';
 import { seedForwardedMessages } from './forwarded.mjs';
+import { seedReactions } from './reactions.mjs';
 import { DEFAULT_MODEL, imageBlock, makeMessage, nowMs, textBlock, thinkingBlock, toolCallBlock } from './util.mjs';
 
 export const CRC_TABLE = (() => {
@@ -150,6 +151,17 @@ export function createSeedState() {
     unread: true,
     age: 20_000,
     lastMessagePreview: 'Discord bridge is online.',
+  });
+  row('agent:main:telegram:home:direct:5550142', {
+    agentId: 'main',
+    label: 'Maya',
+    derivedTitle: 'Maya',
+    category: 'Home',
+    channel: 'telegram',
+    lastChannel: 'telegram',
+    lastAccountId: 'home',
+    age: 45_000,
+    lastMessagePreview: 'Friday pickup is at 3:15.',
   });
   row('agent:main:dashboard:trip', {
     agentId: 'main',
@@ -289,6 +301,26 @@ export function createSeedState() {
     }),
     makeMessage('assistant', [textBlock('I will keep an eye on the home-lab channel and flag anomalies.')]),
   );
+  // A bridged Telegram chat whose agent replies carry `openclawDelivery` reply targets: the first answers an
+  // earlier message (quote card), the second answers the latest one (`replyToCurrent`, no quote), and the
+  // last leaks a `[[reply_to_current]]` directive into its text.
+  const tgUser = (id, messageId, text) => makeMessage('user', [textBlock(text)], {
+    openclaw: { id, transport: { channel: 'telegram', messageId, conversationRef: '5550142' }, senderId: '5550142', senderName: 'Maya' },
+    extra: { provenance: { sourceChannel: 'telegram' }, senderLabel: 'Maya' },
+  });
+  const tgReply = (text, openclawDelivery) => makeMessage('assistant', [textBlock(text)], { extra: { openclawDelivery } });
+  transcripts.get('agent:main:telegram:home:direct:5550142').push(
+    tgUser('mock-tg-clinic', '9101', "Can you find the pediatrician's opening hours?"),
+    tgUser('mock-tg-dentist', '9102', 'Also, when is my dentist appointment?'),
+    tgReply("Dr. Alvarez's office is open Monday to Friday, 8:00 to 17:00, and Saturday 9:00 to 12:00.", { replyToId: 'mock-tg-clinic' }),
+    tgReply('Your dentist appointment is Thursday at 10:30 with Dr. Kim.', { replyToCurrent: true }),
+    tgUser('mock-tg-pharmacy', '9104', 'Did the pharmacy call back about the refill?'),
+    tgUser('mock-tg-bus', '9105', 'Is the 7:40 bus running today?'),
+    // Named by Telegram's own message id rather than a transcript id.
+    tgReply('The pharmacy called at 9:05: the refill is ready for pickup until 6 pm.', { replyToId: '9104' }),
+    tgUser('mock-tg-pickup', '9103', 'And what time is school pickup on Friday?'),
+    tgReply('[[reply_to_current]] Friday pickup is at 3:15, half an hour earlier than usual.', { replyToCurrent: true }),
+  );
   // Long enough to need several older pages.
   for (let day = 1; day <= 150; day++) {
     transcripts.get('agent:main:dashboard:trip').push(
@@ -375,5 +407,6 @@ export function createSeedState() {
     channelsState: createChannelsState(),
   };
   seedRunningSubagentRun(state);
+  seedReactions(state);
   return state;
 }

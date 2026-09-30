@@ -198,6 +198,12 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var outcomeRunId: String?
     /// Reactions the agent added with its `message` tool, by transcript id.
     public internal(set) var agentReactions: [String: [String]] = [:]
+    /// Reactions on this chat's messages as the Gateway stores them (`session.reactions.*`), by transcript id.
+    public internal(set) var sharedReactions: [String: [ReactionSummary]] = [:]
+    /// Your Gateway reaction identity once this chat has synced its reactions on the connection; nil while
+    /// reactions use `users.prefs`.
+    public internal(set) var reactionSelfId: String?
+    @ObservationIgnored var reactionSync = ReactionSync()
     /// Committed items by transcript id.
     @ObservationIgnored var itemsByTranscriptId: [String: ChatItem] = [:]
     /// The latest "Compact now" request, for the composer's context meter.
@@ -289,7 +295,9 @@ public final class ChatStore: Identifiable {
 
     // MARK: Loading
 
-    @ObservationIgnored var loadInFlight = false
+    @ObservationIgnored var loadTask: Task<Void, Never>?
+    @ObservationIgnored var loadGeneration = 0
+    var loadInFlight: Bool { self.loadTask != nil }
     @ObservationIgnored var subscribedEpoch: Int?
     @ObservationIgnored var stale = false
     @ObservationIgnored var loadCount = 0

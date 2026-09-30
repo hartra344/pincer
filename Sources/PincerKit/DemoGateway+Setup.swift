@@ -100,6 +100,17 @@ extension DemoGateway {
             summary["name"] = nil
             channels[entry.id] = .object(summary)
             accounts[entry.id] = [.object(account)]
+            if entry.id == "telegram", var home = health[entry.id]?.object {
+                home["accountId"] = "home"
+                home["name"] = "Home bot"
+                home["lifecycle"] = nil
+                home["accounts"] = nil
+                // The second bot is healthy, so Telegram's one problem stays the default account's.
+                home["connected"] = true
+                home["reconnectAttempts"] = 0
+                home["lastError"] = nil
+                accounts[entry.id] = [.object(account), .object(home)]
+            }
             defaults[entry.id] = "default"
         }
         var result: [String: JSONValue] = [

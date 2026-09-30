@@ -221,6 +221,22 @@ extension GatewayStore {
         Task { await self.push(self.syncedMap(Reactions.prefKey), key, value) }
     }
 
+    /// The Gateway advertises `session.reactions.set` and `.list` (and none failed as unavailable this connection).
+    public var supportsSessionReactions: Bool {
+        guard !self.sessionReactionsOff, let methods = self.hello?.methods else { return false }
+        return methods.contains("session.reactions.set") && methods.contains("session.reactions.list")
+    }
+
+    /// Your profile id, which the Gateway records reactions under (`users.self`); nil without a profile.
+    func selfProfileId() async -> String? {
+        let epoch = self.connectionEpoch
+        if let cached = self.selfProfile, cached.epoch == epoch { return cached.id }
+        let result = try? await self.connection.request("users.self", .object([:]), timeout: 15)
+        let id = result?["profile"]?["id"]?.text
+        if self.connectionEpoch == epoch { self.selfProfile = (epoch, id) }
+        return id
+    }
+
     /// Whether reactions can be mirrored to bridged channels. Unlike older methods, `message.action`
     /// is only tried when the Gateway advertises it.
     public var supportsMessageAction: Bool {
