@@ -12,6 +12,16 @@ public enum ToolDuration {
         }
         let seconds = ms / 1000
         let text = String(format: "%d m %02d s", seconds / 60, seconds % 60)
-        return (text, L("Took \(text)"))
+        let minutes = seconds / 60
+        let rest = seconds % 60
+        let spoken = switch (minutes, rest) {
+        case (1, 0): L("Took 1 minute")
+        case (_, 0): L("Took \(minutes) minutes")
+        case (1, 1): L("Took 1 minute 1 second")
+        case (1, _): L("Took 1 minute \(rest) seconds")
+        case (_, 1): L("Took \(minutes) minutes 1 second")
+        default: L("Took \(minutes) minutes \(rest) seconds")
+        }
+        return (text, spoken)
     }
 }

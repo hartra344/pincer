@@ -14,7 +14,7 @@ extension TranscriptLayoutBuilder {
         var badges: [(String, TranscriptPart.Tool.Tone, String)] = []
         if let provider = web.provider { badges.append((provider, .strongFill, L("Provider \(provider)"))) }
         if web.kind == .results {
-            let count = max(web.count ?? 0, web.results.count)
+            let count = web.results.count
             let text = count == 1 ? L("1 result") : L("\(count) results")
             badges.append((text, .strongFill, text))
         }
@@ -23,7 +23,17 @@ extension TranscriptLayoutBuilder {
             badges.append((text, .strongFill, spoken))
         }
         if web.cached { badges.append((L("cached"), .strongFill, L("Cached result"))) }
-        self.titleRow(web.kind == .answer ? L("Answer") : L("Results"), failed: false, badges: badges, copy: web.copyText, into: &card)
+        let title = switch web.kind {
+        case .answer: L("Answer")
+        case .error: L("Error")
+        case .results: L("Results")
+        }
+        self.titleRow(title, failed: web.kind == .error, badges: badges, copy: web.copyText, searchTool: tool.id, into: &card)
+        if card.search != nil {
+            card.y += 6
+            card.search?.frame = CGRect(x: card.x, y: card.y, width: card.inner, height: 26)
+            card.y += 26
+        }
         card.y += 4
         switch web.kind {
         case .results:
@@ -49,7 +59,15 @@ extension TranscriptLayoutBuilder {
                                  tool: tool, into: &card)
             }
         case .error:
-            break
+            if let message = web.message {
+                card.y += self.textSection("\(tool.id):web-error", TranscriptText.plain(message, font: self.style.caption, color: TranscriptColors.failure),
+                                           tool: tool, x: card.x, width: card.inner, maxHeight: .greatestFiniteMagnitude, into: &card)
+            }
+            if let docs = web.docs {
+                card.y += 8
+                self.linkSection("\(tool.id):web-docs", docs.absoluteString, link: docs, titleLength: docs.absoluteString.utf16.count,
+                                 tool: tool, into: &card)
+            }
         }
     }
 
@@ -65,13 +83,13 @@ extension TranscriptLayoutBuilder {
         titleAttributes[.toolTip] = link.absoluteString
         #endif
         string.addAttributes(titleAttributes, range: titleRange)
-        // The meta line is the second line; leave it tertiary.
+        // The meta line is the second line; leave it in the dimmer secondary.
         let nsText = text as NSString
         let metaStart = titleRange.length + 1
         if metaStart < nsText.length {
             let metaEnd = nsText.range(of: "\n", range: NSRange(location: metaStart, length: nsText.length - metaStart))
             let length = (metaEnd.location == NSNotFound ? nsText.length : metaEnd.location) - metaStart
-            string.addAttribute(.foregroundColor, value: TranscriptColors.tertiary, range: NSRange(location: metaStart, length: length))
+            string.addAttribute(.foregroundColor, value: TranscriptColors.secondary, range: NSRange(location: metaStart, length: length))
         }
         card.y += self.textSection(id, string, tool: tool, x: card.x, width: card.inner, maxHeight: .greatestFiniteMagnitude, into: &card)
     }

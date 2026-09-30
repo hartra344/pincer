@@ -100,6 +100,7 @@ public struct ToolCallPresentation: Hashable, Sendable {
         let details = mergedDetails(tool.details, unwrapped?.details)
 
         let (kind, server, display) = classify(name: tool.name, hasCommand: argString("command", "cmd") != nil)
+        let web = kind == .webSearch ? WebSearch.parse(details) : nil
 
         var headline: String?
         var chips: [Chip] = []
@@ -146,7 +147,8 @@ public struct ToolCallPresentation: Hashable, Sendable {
             if let query = argString("query") { headline = query; consumed.insert("query") }
             if let count = arg("count") {
                 consumed.insert("count")
-                if case let .number(raw) = count {
+                // The list's own "N results" badge says it better.
+                if case let .number(raw) = count, !(web?.isListable ?? false) {
                     chips.append(Chip(symbol: "number", label: "Result count", value: raw))
                 }
             }
@@ -181,7 +183,7 @@ public struct ToolCallPresentation: Hashable, Sendable {
         return ToolCallPresentation(
             kind: kind, displayName: display, mcpServer: server, headline: headline, chips: chips,
             arguments: arguments, rawArguments: parsedArgs == nil ? nil : tool.arguments,
-            output: output, rawResult: tool.result, web: kind == .webSearch ? WebSearch.parse(details) : nil)
+            output: output, rawResult: tool.result, web: web)
     }
 
     private static func classify(name: String, hasCommand: Bool) -> (Kind, String?, String) {

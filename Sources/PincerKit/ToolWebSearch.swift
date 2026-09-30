@@ -44,13 +44,16 @@ public struct WebSearch: Hashable, Sendable {
     public let results: [Result]
     public let answer: String?
     public let citations: [Citation]
+    /// Provider error text (envelope removed) and its docs link, for `.error`.
+    public let message: String?
+    public let docs: URL?
 
     /// True when there is a list (or an answer) to draw instead of the raw output text.
     public var isListable: Bool {
         switch self.kind {
         case .results: !self.results.isEmpty
         case .answer: self.answer != nil
-        case .error: false
+        case .error: self.message != nil
         }
     }
 
@@ -60,7 +63,7 @@ public struct WebSearch: Hashable, Sendable {
         case .results: self.results.map { "\($0.title)\n\($0.url.absoluteString)" }.joined(separator: "\n")
         case .answer: ([self.answer].compactMap { $0 } + self.citations.map { "\($0.label)\n\($0.url.absoluteString)" })
                 .joined(separator: "\n")
-        case .error: ""
+        case .error: [self.message, self.docs?.absoluteString].compactMap { $0 }.joined(separator: "\n")
         }
     }
 
@@ -69,7 +72,7 @@ public struct WebSearch: Hashable, Sendable {
         switch self.kind {
         case .results: self.results.map(\.text)
         case .answer: ([self.answer].compactMap { $0 } + self.citations.map(\.label))
-        case .error: []
+        case .error: [self.message].compactMap { $0 } + (self.docs.map { [$0.absoluteString] } ?? [])
         }
     }
 
@@ -79,6 +82,7 @@ public struct WebSearch: Hashable, Sendable {
         static let snippetStored = 300
         static let snippetShown = 180
         static let answer = 4000
+        static let message = 600
     }
 
     static func url(_ value: JSONValue?) -> URL? {
@@ -112,13 +116,15 @@ public struct WebSearch: Hashable, Sendable {
         return WebSearch(kind: kind, provider: details["provider"]?.text, count: details["count"]?.int,
                          cached: details["cached"]?.bool ?? false, truncated: details["truncated"]?.bool ?? false,
                          results: results, answer: kind == .answer ? Self.wrapped(details["content"], limit: Limits.answer) : nil,
-                         citations: citations)
+                         citations: citations, message: kind == .error ? Self.wrapped(details["message"], limit: Limits.message) : nil,
+                         docs: kind == .error ? Self.url(details["docs"]) : nil)
     }
 
     /// Whether `object` looks like a web_search payload worth keeping a trimmed copy of.
     static func isPayload(_ object: [String: JSONValue]) -> Bool {
-        guard let kind = object["kind"]?.text, kind == "results" || kind == "answer" else { return false }
-        return object["provider"]?.text != nil && (object["results"]?.array != nil || object["content"]?.string != nil)
+        guard let kind = object["kind"]?.text, kind == "results" || kind == "answer" || kind == "error" else { return false }
+        return object["provider"]?.text != nil
+            && (object["results"]?.array != nil || object["content"]?.string != nil || object["message"]?.string != nil)
     }
 
     /// The payload cut to what the card draws: at most 10 rows, envelopes removed, snippets and answer capped.
@@ -148,6 +154,10 @@ public struct WebSearch: Hashable, Sendable {
                 item["title"] = clean(row["title"], Limits.title)
                 return .object(item)
             }.prefix(Limits.rows).map { $0 })
+        }
+        if object["kind"]?.text == "error" {
+            kept["message"] = clean(object["message"], Limits.message)
+            if let docs = object["docs"]?.text { kept["docs"] = .string(docs) }
         }
         if object["kind"]?.text == "answer" { kept["content"] = clean(object["content"], Limits.answer) }
         return kept
