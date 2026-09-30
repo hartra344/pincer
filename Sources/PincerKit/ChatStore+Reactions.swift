@@ -51,7 +51,8 @@ extension ChatStore {
     }
 
     /// The transcript id an assistant message's reply target names, or the raw id when its message isn't loaded.
-    /// Nil when it's the user message the reply directly follows: nothing to point at.
+    /// Nil when, in a direct chat, it's the user message the reply directly follows: nothing to point at.
+    /// In a group the quote stays, since it says whose message was answered.
     private func resolveAgentReplyTarget(_ id: String, for item: ChatItem) -> String? {
         var targetId = id
         if self.message(withId: id) == nil,
@@ -60,7 +61,7 @@ extension ChatStore {
         {
             targetId = matchId
         }
-        if let index = self.items.firstIndex(where: { $0.id == item.id }),
+        if !self.isGroupChat, let index = self.items.firstIndex(where: { $0.id == item.id }),
            let answered = self.items[..<index].last(where: { $0.role == .user && $0.isReplyable }),
            answered.transcriptId == targetId
         {
@@ -69,14 +70,26 @@ extension ChatStore {
         return targetId
     }
 
+    private var isGroupChat: Bool {
+        guard let row = self.gateway?.sessions[self.sessionKey] else { return false }
+        return row.server != nil || row.chatType == "group" || row.chatType == "channel"
+    }
+
+    /// Transcript ids are 8 hex characters (or a UUID); channel message ids are other shapes.
+    static func looksLikeTranscriptId(_ id: String) -> Bool {
+        let hex = Set("0123456789abcdefABCDEF")
+        if id.count == 8 { return id.allSatisfy(hex.contains) }
+        return UUID(uuidString: id) != nil
+    }
+
     /// Loads older history (the cache first) until the message is loaded (at most 40 pages). Returns whether it is;
     /// when history runs out or the page cap is hit, says so in `notice`. One lookup at a time.
     @discardableResult
     public func locate(_ id: String) async -> Bool {
         if self.message(withId: id) != nil { return true }
-        // A bare number is a bridged channel's message id (an agent reply to a message that isn't
-        // in this transcript), never a transcript id: paging through history for it would find nothing.
-        if id.allSatisfy(\.isNumber) {
+        // Anything else is a bridged channel's message id (an agent reply to a message that isn't in
+        // this transcript): paging through history for it would find nothing.
+        if !Self.looksLikeTranscriptId(id) {
             self.notice = "The original message isn't in this chat's history anymore."
             return false
         }
