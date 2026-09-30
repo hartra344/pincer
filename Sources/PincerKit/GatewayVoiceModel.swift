@@ -30,6 +30,8 @@ public final class GatewayVoiceModel {
 
     /// Per-provider setup read from `config.get` (key source, model, voice, voice settings).
     public internal(set) var setups: [String: TTSProviderSetup] = [:]
+    /// `tts.provider` from config (nil when unset); differs from `status.provider` when prefs or a persona override it.
+    public internal(set) var configuredProvider: String?
     /// The last Test voice failure or fallback per provider id, for the provider badge.
     public internal(set) var lastTestError: [String: String] = [:]
     /// ElevenLabs voices from the last successful listing (names for the Test summary).
@@ -203,6 +205,7 @@ public final class GatewayVoiceModel {
         self.isLoading = false
         self.rejectedMethods = []
         self.setups = [:]
+        self.configuredProvider = nil
         self.lastTestError = [:]
     }
 

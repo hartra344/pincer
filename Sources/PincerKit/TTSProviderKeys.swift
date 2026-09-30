@@ -9,10 +9,14 @@ public struct TTSProviderKeys: Sendable, Equatable {
     public let voice: String?
     public let voiceSettings: String?
     public let envVar: String?
+    /// Equivalent voice key the Gateway also reads (`speakerVoiceId` beats `voiceId` when both exist, so
+    /// both are written).
+    public let voiceAlias: String?
 
     public init(provider: String, apiKey: String? = "apiKey", model: String? = "model", voice: String? = "voice",
-                voiceSettings: String? = nil, envVar: String? = nil)
+                voiceSettings: String? = nil, envVar: String? = nil, voiceAlias: String? = nil)
     {
+        self.voiceAlias = voiceAlias
         self.provider = provider
         self.apiKey = apiKey
         self.model = model
@@ -22,7 +26,9 @@ public struct TTSProviderKeys: Sendable, Equatable {
     }
 
     /// Config path of the TTS section.
-    public static let configRoot = ["messages", "tts"]
+    public static let configRoot = ["tts"]
+    /// Where older Gateways kept it (read only, when `configRoot` is absent).
+    public static let legacyConfigRoot = ["messages", "tts"]
     /// Key under the root that holds per-provider objects.
     public static let providersKey = "providers"
     /// `provider` alias of a `{source:"store"}` SecretRef.
@@ -34,22 +40,25 @@ public struct TTSProviderKeys: Sendable, Equatable {
 
     public static let all: [TTSProviderKeys] = [
         TTSProviderKeys(provider: "elevenlabs", model: "modelId", voice: "voiceId", voiceSettings: "voiceSettings",
-                        envVar: "ELEVENLABS_API_KEY"),
-        TTSProviderKeys(provider: "openai", envVar: "OPENAI_API_KEY"),
-        TTSProviderKeys(provider: "google", envVar: "GEMINI_API_KEY"),
-        TTSProviderKeys(provider: "minimax", envVar: "MINIMAX_API_KEY"),
-        TTSProviderKeys(provider: "azure", envVar: "AZURE_SPEECH_KEY"),
-        TTSProviderKeys(provider: "microsoft", apiKey: nil),
-        TTSProviderKeys(provider: "xai", envVar: "XAI_API_KEY"),
-        TTSProviderKeys(provider: "inworld", envVar: "INWORLD_API_KEY"),
-        TTSProviderKeys(provider: "gradium", envVar: "GRADIUM_API_KEY"),
-        TTSProviderKeys(provider: "openrouter", envVar: "OPENROUTER_API_KEY"),
-        TTSProviderKeys(provider: "volcengine", envVar: "VOLCENGINE_API_KEY"),
+                        envVar: "ELEVENLABS_API_KEY", voiceAlias: "speakerVoiceId"),
+        TTSProviderKeys(provider: "openai", envVar: "OPENAI_API_KEY", voiceAlias: "speakerVoice"),
+        TTSProviderKeys(provider: "google", voice: "voiceName", envVar: "GEMINI_API_KEY", voiceAlias: "speakerVoice"),
+        TTSProviderKeys(provider: "minimax", voice: "voiceId", envVar: "MINIMAX_API_KEY", voiceAlias: "speakerVoiceId"),
+        TTSProviderKeys(provider: "azure-speech", model: nil, envVar: "AZURE_SPEECH_KEY", voiceAlias: "speakerVoice"),
+        TTSProviderKeys(provider: "microsoft", apiKey: nil, model: nil, voiceAlias: "speakerVoice"),
+        TTSProviderKeys(provider: "xai", model: nil, voice: "voiceId", envVar: "XAI_API_KEY", voiceAlias: "speakerVoiceId"),
+        TTSProviderKeys(provider: "inworld", model: "modelId", voice: "voiceId", envVar: "INWORLD_API_KEY", voiceAlias: "speakerVoiceId"),
+        TTSProviderKeys(provider: "gradium", model: nil, voice: "voiceId", envVar: "GRADIUM_API_KEY", voiceAlias: "speakerVoiceId"),
+        TTSProviderKeys(provider: "openrouter", envVar: "OPENROUTER_API_KEY", voiceAlias: "speakerVoice"),
+        TTSProviderKeys(provider: "volcengine", model: nil, envVar: "VOLCENGINE_TTS_API_KEY", voiceAlias: "speakerVoice"),
+        TTSProviderKeys(provider: "xiaomi", envVar: "XIAOMI_API_KEY", voiceAlias: "speakerVoice"),
     ]
+
+    static let aliases = ["azure": "azure-speech", "edge": "microsoft", "mimo": "xiaomi", "doubao": "volcengine", "bytedance": "volcengine"]
 
     /// Unknown providers get the generic `apiKey` / `model` / `voice` names and `<ID>_API_KEY`.
     public static func forProvider(_ id: String) -> TTSProviderKeys {
-        let id = id.lowercased()
+        let id = aliases[id.lowercased()] ?? id.lowercased()
         if let known = all.first(where: { $0.provider == id }) { return known }
         let env = id.uppercased().map { $0.isLetter || $0.isNumber ? $0 : "_" }
         return TTSProviderKeys(provider: id, envVar: String(env) + "_API_KEY")

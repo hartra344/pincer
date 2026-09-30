@@ -189,8 +189,14 @@ extension GatewayVoiceModel {
     func loadSetups() async {
         guard self.supports(Self.configGetMethod), let result = try? await self.call(Self.configGetMethod) else { return }
         let snapshot = ConfigSnapshot(response: result)
-        var node: JSONValue? = snapshot.config
-        for key in TTSProviderKeys.configRoot { node = node?[key] }
+        func section(_ path: [String]) -> JSONValue? {
+            var node: JSONValue? = snapshot.config
+            for key in path { node = node?[key] }
+            if case .object = node { return node }
+            return nil
+        }
+        let node = section(TTSProviderKeys.configRoot) ?? section(TTSProviderKeys.legacyConfigRoot)
+        self.configuredProvider = node?["provider"]?.text
         var setups: [String: TTSProviderSetup] = [:]
         for (id, value) in node?[TTSProviderKeys.providersKey]?.object ?? [:] {
             setups[id] = Self.parseSetup(value, keys: TTSProviderKeys.forProvider(id))
@@ -202,13 +208,17 @@ extension GatewayVoiceModel {
         var setup = TTSProviderSetup()
         if let keyName = keys.apiKey, let key = json[keyName] {
             if case .object = key, let source = key["source"]?.text, let id = key["id"]?.text {
-                setup.keySource = .secretRef(source: source, provider: key["provider"]?.text ?? "", id: id)
+                // config.get redacts the ref's id; the name Pincer writes is the only one it could be.
+                let shown = id.uppercased().contains("REDACTED") ? (keys.envVar ?? id) : id
+                setup.keySource = .secretRef(source: source, provider: key["provider"]?.text ?? "", id: shown)
             } else if let text = key.text, !text.isEmpty {
                 setup.keySource = text.uppercased().contains("REDACTED") ? .redacted : .inline
             }
         }
         if let name = keys.model, let value = json[name]?.text, !value.isEmpty { setup.model = value }
-        if let name = keys.voice, let value = json[name]?.text, !value.isEmpty { setup.voice = value }
+        for name in [keys.voiceAlias, keys.voice].compactMap({ $0 }) {
+            if let value = json[name]?.text, !value.isEmpty { setup.voice = value; break }
+        }
         if let name = keys.voiceSettings, let value = json[name], case .object = value { setup.voiceSettings = TTSVoiceSettings(json: value) }
         return setup
     }
@@ -289,7 +299,9 @@ extension GatewayVoiceModel {
     public func saveVoice(_ id: String, provider: String) async throws -> ConfigApplyOutcome {
         let keys = try self.requireKeyField(provider)
         guard let field = keys.voice else { throw ConfigWriteError.other(L("That provider has no voice setting.")) }
-        let outcome = try await self.writeConfig(self.providerPatch(provider, [field: .string(id)]), note: "Pincer: Gateway voice")
+        var fields: [String: JSONValue] = [field: .string(id)]
+        if let alias = keys.voiceAlias { fields[alias] = .string(id) }
+        let outcome = try await self.writeConfig(self.providerPatch(provider, fields), note: "Pincer: Gateway voice")
         self.lastTestError[provider] = nil
         return outcome
     }
@@ -428,7 +440,9 @@ extension GatewayVoiceModel {
         let keys = TTSProviderKeys.forProvider(provider)
         let elevenLabs = provider == "elevenlabs"
         let defaultSpeed = TTSVoiceSettings.elevenLabsDefault
-        var rows = [TTSEffectiveRow(label: L("Provider"), value: self.displayName(for: provider), source: L("Gateway config"))]
+        // tts.status doesn't say where the provider came from: a different one in config means /tts prefs or a persona won.
+        let providerSource = self.configuredProvider.map { $0 == provider ? L("Gateway config") : L("Local /tts prefs") } ?? L("Default")
+        var rows = [TTSEffectiveRow(label: L("Provider"), value: self.displayName(for: provider), source: providerSource)]
         if let persona = status.persona, !persona.isEmpty {
             let name = status.personas.first { $0.id == persona }?.displayName ?? persona
             rows.append(TTSEffectiveRow(label: L("Persona"), value: name, source: L("Local /tts prefs")))
