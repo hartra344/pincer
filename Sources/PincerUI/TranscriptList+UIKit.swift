@@ -339,6 +339,7 @@ struct TranscriptList: UIViewRepresentable {
         }
 
         private func reportPosition() {
+            self.controller.reportBranchAnchor()
             guard let model = self.controller.bottom, let view = self.collectionView else { return }
             let insets = view.adjustedContentInset
             model.report(distance: self.rows.isEmpty ? 0 : self.maxOffset - view.contentOffset.y,

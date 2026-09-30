@@ -369,6 +369,7 @@ func runDemo() async {
     await runDemoSkills(gateway)
     await runMessageEditChecks(gateway, admin: true, "demo")
     await runDemoSessions(gateway)
+    await runBranchHeaderChipChecks(gateway)
 
     // Pairing Requests: the demo grants operator.pairing (settings stay read-only).
     let pairing = gateway.pairingInbox

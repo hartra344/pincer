@@ -315,6 +315,45 @@ struct MessageEditTests {
         await self.finish(gateway)
     }
 
+    private func imageCount(_ item: ChatItem?) -> Int {
+        item?.blocks.filter { if case .image = $0 { true } else { false } }.count ?? 0
+    }
+
+    /// #397: sessions.rewind's editorAttachments go out again with the edit.
+    @Test func editResendsTheRewoundMessagesImage() async {
+        let gateway = await self.connected()
+        let (chat, user) = await self.editableFork(gateway)
+        #expect(self.imageCount(user) == 1, "the seeded message carries an image")
+        #expect(chat.beginEdit(user.id))
+        _ = await chat.sendEdit("shade, with the photo", attachments: [])
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant }
+        await chat.load(force: true)
+        let sent = chat.items.last { $0.role == .user && $0.plainText == "shade, with the photo" }
+        #expect(self.imageCount(sent) == 1)
+        await self.finish(gateway)
+    }
+
+    @Test func regenerateResendsTheRewoundMessagesImage() async {
+        let gateway = await self.connected()
+        let (chat, _) = await self.editableFork(gateway)
+        let reply = self.messages(chat, .assistant).last!
+        #expect(await chat.regenerate(reply.id))
+        await self.settle { !chat.isRunning && chat.items.last?.role == .assistant && chat.items.last?.id != reply.id }
+        await chat.load(force: true)
+        #expect(self.imageCount(self.messages(chat, .user).last) == 1)
+        await self.finish(gateway)
+    }
+
+    @Test func branchFromAnImageMessageKeepsItsTextForTheComposer() async {
+        let gateway = await self.connected()
+        let source = await self.loaded(gateway, Self.garden)
+        let user = self.messages(source, .user).last!
+        let key = await source.branch(from: user.id)
+        let fork = await self.loaded(gateway, key ?? "")
+        #expect(fork.draft.text == user.plainText)
+        await self.finish(gateway)
+    }
+
     @Test func regenerateLeavesEditMode() async {
         let gateway = await self.connected()
         let (chat, user) = await self.editableFork(gateway)

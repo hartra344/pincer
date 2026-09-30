@@ -576,6 +576,9 @@ struct ChatChrome: ViewModifier {
                 #else
                 ToolbarItem(placement: .topBarLeading) { if !split { ChatHeaderAvatar() } }
                 #endif
+                ToolbarItem(placement: .primaryAction) {
+                    if !split, let key { BranchHeaderChipView(chat: self.gateway.chat(for: key)) }
+                }
                 ToolbarItem(placement: .primaryAction) { ChatModelItem(row: split ? nil : self.row) }
                 ToolbarItem(placement: .primaryAction) {
                     ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector, row: split ? nil : self.row)

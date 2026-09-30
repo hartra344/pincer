@@ -155,6 +155,11 @@ final class TranscriptListController {
     /// starts the list over.
     func beginUpdate(context: TranscriptContext, rowCount: Int) -> Bool {
         let changed = context.differs(from: self.context)
+        if context.chat !== self.context.chat { self.context.chat?.showForkPointHandler = nil }
+        context.chat?.showForkPointHandler = { [weak self] in
+            guard let self, let id = self.context.chat?.branchAnchorId else { return }
+            self.renderer.showOriginal(id, missingNotice: nil)
+        }
         self.context = context
         self.renderer.update(context: context)
         return changed
@@ -627,6 +632,16 @@ final class TranscriptListController {
     func visibleRowIds() -> Set<String> {
         guard let visible = self.visibleRange else { return [] }
         return Set(self.rows[visible].map(\.id))
+    }
+
+    /// Tells the chat whether the branch anchor's row is on screen (only writes on a change).
+    func reportBranchAnchor() {
+        guard let chat = self.context.chat else { return }
+        guard let anchor = chat.branchAnchorId, let row = self.renderer.rowId(containing: anchor) else {
+            chat.setBranchAnchorVisible(false)
+            return
+        }
+        chat.setBranchAnchorVisible(self.visibleRowIds().contains(row))
     }
 
     func pinVisibleImages() {

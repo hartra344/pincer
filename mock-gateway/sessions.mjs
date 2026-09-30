@@ -15,7 +15,7 @@
 // - branches are transcript DAG tips: the active leaf first, then other tips newest first. The
 //   mock keeps the active path in `state.transcripts` and inactive tips in `state.sessionBranches`.
 //   Rewind moves the active path to just before a user message and returns its text as
-//   `editorText`; the old tip stays as a branch. Both refuse while a run is active.
+//   `editorText` (plus `editorAttachments` [{mimeType, data}] for its image blocks); the old tip stays as a branch. Both refuse while a run is active.
 // - recover turns a restart-tombstoned session (restartRecoveryStatus: "tombstoned") into a fresh
 //   dashboard session of the same agent; the source is archived (archiveReason restart-recovery).
 // - every mutation emits `sessions.changed` (reasons: branch-switch, rewind, archive, create,
@@ -190,6 +190,21 @@ function messageText(message) {
   return parts.length ? parts.join('\n') : undefined;
 }
 
+/** Upstream editorAttachments: the message's image blocks as {mimeType, data} (base64). */
+function editorAttachmentsOf(message) {
+  if (!Array.isArray(message?.content)) return {};
+  const editorAttachments = message.content
+    .filter((b) => b?.type === 'image' && typeof b.data === 'string' && b.data.trim() && typeof b.mimeType === 'string' && b.mimeType.startsWith('image/'))
+    .map((b) => ({ mimeType: b.mimeType, data: b.data }));
+  return editorAttachments.length ? { editorAttachments } : {};
+}
+
+/** A user message with a tiny inline image block (a 1x1 PNG), as chat.history stores pasted images. */
+const DEMO_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+function withImage(message) {
+  return { ...message, content: [...message.content, { type: 'image', mimeType: 'image/png', data: DEMO_IMAGE_BASE64 }] };
+}
+
 /** projectSessionDisplayMessage: user/assistant text only, trimmed and capped. */
 function previewItem(message, maxChars) {
   if (!message || message.display === false) return null;
@@ -288,7 +303,7 @@ export function seedSessionManager({ row, transcripts, makeMessage, textBlock, b
   const herbs = [...opening, user('What about an herbs-only bed instead?', g0 + DAY), assistant('Basil, thyme, oregano and parsley in quadrants, with chives along the border.', g0 + DAY + MIN)];
   const shade = [
     ...opening,
-    user('Make it shade tolerant; it only gets four hours of sun.', base - 5 * 3_600_000 - MIN),
+    withImage(user('Make it shade tolerant; it only gets four hours of sun.', base - 5 * 3_600_000 - MIN)),
     assistant('Swap the tomatoes for lettuce, kale and chard; they cope with four hours of sun.', base - 5 * 3_600_000),
   ];
   transcripts.set('agent:main:dashboard:garden', shade);
@@ -491,7 +506,7 @@ export function handleSessionManagerRequest(state, conn, msg, helpers) {
       row.lastMessagePreview = kept.length ? messageText(kept[kept.length - 1])?.slice(0, 120) : undefined;
       row.updatedAt = Date.now();
       const editorText = messageText(target);
-      sendRes(conn, id, editorText ? { editorText } : {});
+      sendRes(conn, id, { ...(editorText ? { editorText } : {}), ...editorAttachmentsOf(target) });
       changed(key, 'rewind', { agentId: row.agentId ?? sessionAgentId(key), session: clone(row) });
       return true;
     }
@@ -530,7 +545,7 @@ export function handleSessionManagerRequest(state, conn, msg, helpers) {
       state.sessions.set(newKey, child);
       state.transcripts.set(newKey, kept);
       const editorText = messageText(target);
-      sendRes(conn, id, editorText ? { sessionKey: newKey, editorText } : { sessionKey: newKey });
+      sendRes(conn, id, { sessionKey: newKey, ...(editorText ? { editorText } : {}), ...editorAttachmentsOf(target) });
       changed(newKey, 'fork', { agentId, session: clone(child) });
       return true;
     }

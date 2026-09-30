@@ -39,6 +39,20 @@ extension ChatStore {
         return users.last?.transcriptId
     }
 
+    /// Records whether the anchor row is on screen; a no-op unless it changed.
+    public func setBranchAnchorVisible(_ visible: Bool) {
+        if self.isBranchAnchorVisible != visible { self.isBranchAnchorVisible = visible }
+    }
+
+    /// The header chip's content, or nil while there's nothing to show (no branches, or the inline switcher is on screen).
+    public var branchHeaderChip: BranchHeaderChip? {
+        BranchHeaderChip(branches: self.branches, anchorVisible: self.isBranchAnchorVisible,
+                         canSwitch: self.canSwitchBranches && !self.isRunning)
+    }
+
+    /// Scrolls the transcript to the message where branches fork.
+    public func showForkPoint() { self.showForkPointHandler?() }
+
     /// Reloads `branches` (`sessions.branches.list`, read scope). Failures leave the list empty:
     /// branches are an extra, never an error banner. Overlapping calls apply only the newest
     /// response; an older caller returns once that one has landed.
@@ -88,5 +102,34 @@ extension ChatStore {
         await gateway.transcriptChanged(key: self.sessionKey, change: .changed(editorText: nil))
         await self.refreshBranches()
         return true
+    }
+}
+
+/// One branch in the footer switcher and the header chip's menu.
+public struct BranchMenuEntry: Equatable, Sendable {
+    public let leafEntryId: String
+    public let title: String
+    public let isActive: Bool
+
+    /// "Title · N messages".
+    public static func title(for branch: SessionBranch) -> String {
+        [branch.title, L("\(String(branch.messageCount)) messages")].joined(separator: " · ")
+    }
+}
+
+/// The "Branch 2 of 3" chip shown in the chat header while the inline switcher is scrolled away.
+public struct BranchHeaderChip: Equatable, Sendable {
+    public let label: String
+    public let entries: [BranchMenuEntry]
+    /// Switching is possible: admin scope and no run in flight.
+    public let canSwitch: Bool
+
+    public init?(branches: [SessionBranch], anchorVisible: Bool, canSwitch: Bool) {
+        guard branches.count > 1, !anchorVisible, let active = branches.firstIndex(where: \.active) else { return nil }
+        self.label = L("Branch \(active + 1) of \(branches.count)")
+        self.entries = branches.map {
+            BranchMenuEntry(leafEntryId: $0.leafEntryId, title: BranchMenuEntry.title(for: $0), isActive: $0.active)
+        }
+        self.canSwitch = canSwitch
     }
 }

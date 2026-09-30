@@ -582,7 +582,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     /// The transcript row showing a message.
-    private func rowId(containing messageId: String) -> String? {
+    func rowId(containing messageId: String) -> String? {
         for entry in self.context.chat?.entries ?? [] {
             switch entry {
             case let .user(item) where item.transcriptId == messageId: return entry.id
@@ -749,7 +749,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     var branchEntries: [TranscriptBranchEntry] {
         (self.context.chat?.branches ?? []).map { branch in
             TranscriptBranchEntry(leafEntryId: branch.leafEntryId,
-                                  title: [branch.title, L("\(String(branch.messageCount)) messages")].joined(separator: " · "),
+                                  title: BranchMenuEntry.title(for: branch),
                                   isActive: branch.active)
         }
     }

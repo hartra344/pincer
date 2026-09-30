@@ -74,7 +74,7 @@ extension DemoGateway {
                     "demo-garden-herbs-a", at: g0 + day + minute),
         ]
         let shade = opening + [
-            message("user", "Make it shade tolerant; it only gets four hours of sun.", "demo-garden-shade-q", at: shadeAt - minute),
+            Self.withImage(message("user", "Make it shade tolerant; it only gets four hours of sun.", "demo-garden-shade-q", at: shadeAt - minute)),
             message("assistant", "Swap the tomatoes for lettuce, kale and chard; they cope with four hours of sun.",
                     "demo-garden-shade-a", at: shadeAt),
         ]
@@ -408,8 +408,11 @@ extension DemoGateway {
         self.retainTip(key, active)
         self.transcripts[key] = Array(active[..<index])
         self.historyChanged(key, reason: "rewind")
+        var result: Row = [:]
         let text = Self.plainText(active[index])
-        return text.isEmpty ? [:] : ["editorText": .string(text)]
+        if !text.isEmpty { result["editorText"] = .string(text) }
+        if let attachments = Self.editorAttachments(active[index]) { result["editorAttachments"] = attachments }
+        return .object(result)
     }
 
     /// Like upstream sessions.fork: a new chat holding the active path before user message `entryId`.
@@ -427,8 +430,29 @@ extension DemoGateway {
         let text = Self.plainText(active[index])
         var result: Row = ["sessionKey": .string(newKey)]
         if !text.isEmpty { result["editorText"] = .string(text) }
+        if let attachments = Self.editorAttachments(active[index]) { result["editorAttachments"] = attachments }
         return .object(result)
     }
+
+    /// Image blocks of a user message as upstream's `editorAttachments` ({mimeType, data}, base64).
+    private static func editorAttachments(_ message: JSONValue) -> JSONValue? {
+        let images = (message["content"]?.array ?? []).compactMap { block -> JSONValue? in
+            guard block["type"]?.string == "image", let data = block["data"]?.string, !data.isEmpty,
+                  let mime = block["mimeType"]?.string, mime.hasPrefix("image/") else { return nil }
+            return ["mimeType": .string(mime), "data": .string(data)]
+        }
+        return images.isEmpty ? nil : .array(images)
+    }
+
+    /// Adds a tiny inline image block (the shape of a pasted image in chat.history) to a user message.
+    private static func withImage(_ message: JSONValue) -> JSONValue {
+        guard var row = message.object else { return message }
+        row["content"] = .array((row["content"]?.array ?? []) + [["type": "image", "mimeType": "image/png", "data": .string(demoImageBase64)]])
+        return .object(row)
+    }
+
+    /// A 1×1 PNG.
+    static let demoImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 
     /// A child chat with `path` as its transcript (whole-chat fork for sessions.create `fork`).
     func forkSession(from key: String, path: [JSONValue]) -> String {

@@ -182,6 +182,11 @@ public final class ChatStore: Identifiable {
     public var editTarget: MessageEditTarget?
     /// The chat's transcript tips (`sessions.branches.list`), oldest first; see `refreshBranches()`.
     public internal(set) var branches: [SessionBranch] = []
+    /// Whether the branch anchor's row is on screen, reported by the transcript list on transitions only.
+    /// While it is, the inline switcher is showing, so the header chip stays hidden.
+    public internal(set) var isBranchAnchorVisible = false
+    /// Set by the transcript list: scrolls to and flashes the branch anchor message.
+    @ObservationIgnored public var showForkPointHandler: (@MainActor () -> Void)?
     /// An Edit & Resend is in flight (rewind, then send); Send is off meanwhile.
     public internal(set) var isSendingEdit = false
     /// Idempotency key of the message the latest Edit & Resend or Regenerate sent: where its branches fork.

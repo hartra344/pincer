@@ -596,6 +596,7 @@ struct TranscriptList: NSViewRepresentable {
         }
 
         private func reportPosition() {
+            self.controller.reportBranchAnchor()
             guard let model = self.controller.bottom, let scroll = self.scrollView else { return }
             let clip = scroll.contentView
             let distance = self.rows.isEmpty ? 0 : self.offsetRange().upperBound - clip.bounds.minY

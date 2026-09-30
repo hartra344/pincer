@@ -2353,6 +2353,26 @@
         }
       }
     },
+    "Show Fork Point": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Fork Point"
+          }
+        }
+      }
+    },
+    "Shows this chat’s branches": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shows this chat’s branches"
+          }
+        }
+      }
+    },
     "Branch from Here": {
       "localizations": {
         "en": {
