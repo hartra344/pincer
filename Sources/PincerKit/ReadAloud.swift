@@ -27,6 +27,12 @@ public enum ReadAloudSettings {
     public static let rateRange: ClosedRange<Float> = 0.3 ... 0.7
     public static let gatewayTextLimit = 4000
     public static let gatewayTimeout: Duration = .seconds(15)
+
+    /// The device voice to show in a picker: the stored id when it's still available, else "" (the
+    /// "Default" row), so the picker never has a selection that matches no row (#457).
+    public static func displayedDeviceVoice(stored: String, available: [String]) -> String {
+        available.contains(stored) ? stored : ""
+    }
 }
 
 @MainActor @Observable
@@ -46,6 +52,9 @@ public final class ReadAloudController {
 
     public private(set) var phase: Phase = .idle
     public private(set) var lastSource: Source?
+    /// Why the last read used the device voice (or a different provider) instead of the selected Gateway
+    /// voice; nil when the Gateway voice spoke as configured.
+    public private(set) var lastFallback: TTSFallbackReason?
     /// The dictation in progress, if any. Read Aloud ends it before speaking, and auto-read stays quiet meanwhile.
     @ObservationIgnored weak var activeDictation: DictationModel?
     public var isDictating: Bool { self.activeDictation?.isActive == true }
@@ -124,39 +133,63 @@ public final class ReadAloudController {
         defer { if generation == self.generation { self.phase = .idle } }
         if self.usesGatewayVoice, let gateway { await gateway.loadStatusIfNeeded() }
         guard generation == self.generation, !Task.isCancelled else { return }
-        if self.usesGatewayVoice, let gateway, gateway.canSpeak {
-            let limited = SpeechText.truncated(text, limit: ReadAloudSettings.gatewayTextLimit)
-            if let clip = await self.fetchClip(limited, from: gateway), !clip.isHeaderless, generation == self.generation {
-                self.lastSource = .gateway(clip.provider)
-                self.phase = .speaking(messageId)
-                if await self.clipPlayer.play(clip) { return }
-                guard generation == self.generation, !Task.isCancelled else { return }
+        var fallback: TTSFallbackReason?
+        if !self.usesGatewayVoice {
+            fallback = .deviceOnlySetting
+        } else if let gateway {
+            if gateway.canSpeak {
+                let limited = SpeechText.truncated(text, limit: ReadAloudSettings.gatewayTextLimit)
+                let (clip, failure) = await self.fetchClip(limited, from: gateway)
+                if let clip, !clip.isHeaderless, generation == self.generation {
+                    self.lastSource = .gateway(clip.provider)
+                    let selected = gateway.status?.provider
+                    if let used = clip.provider, let selected, !selected.isEmpty, used != selected {
+                        self.lastFallback = gateway.fallbackReasonForRead(selected: selected)
+                    } else {
+                        self.lastFallback = nil
+                    }
+                    self.phase = .speaking(messageId)
+                    if await self.clipPlayer.play(clip) { return }
+                    guard generation == self.generation, !Task.isCancelled else { return }
+                    fallback = .other(L("The Gateway audio couldn't be played."))
+                } else {
+                    fallback = failure ?? .other(L("The Gateway audio couldn't be played."))
+                }
+            } else {
+                fallback = gateway.cannotSpeakReason
             }
         }
         guard generation == self.generation, !Task.isCancelled else { return }
+        self.lastFallback = fallback
         self.lastSource = .device
         self.phase = .speaking(messageId)
         let voice = self.defaults.string(forKey: ReadAloudSettings.deviceVoiceKey).flatMap { $0.isEmpty ? nil : $0 }
         _ = await self.localSpeaker.speak(text, voice: voice, rate: self.deviceRate)
     }
 
-    /// The Gateway's audio, or nil on any failure or after the timeout.
-    private func fetchClip(_ text: String, from gateway: GatewayVoiceModel) async -> TTSClip? {
+    /// The Gateway's audio, or why there is none (any failure, or the timeout).
+    private func fetchClip(_ text: String, from gateway: GatewayVoiceModel) async -> (TTSClip?, TTSFallbackReason?) {
         let timeout = self.gatewayTimeout
-        let (stream, results) = AsyncStream.makeStream(of: TTSClip?.self)
-        let speak = Task { @MainActor in results.yield(try? await gateway.speak(text)) }
+        let (stream, results) = AsyncStream.makeStream(of: (TTSClip?, TTSFallbackReason?).self)
+        let speak = Task { @MainActor in
+            do {
+                results.yield((try await gateway.speak(text), nil))
+            } catch {
+                results.yield((nil, .other(GatewayVoiceModel.message(error))))
+            }
+        }
         // Detached so the timeout still fires while the main actor is busy.
         let timer = Task.detached {
             try? await Task.sleep(for: timeout)
-            results.yield(nil)
+            results.yield((nil, .other(L("The Gateway took too long to answer."))))
         }
         defer {
             speak.cancel()
             timer.cancel()
             results.finish()
         }
-        for await clip in stream { return clip }
-        return nil
+        for await result in stream { return result }
+        return (nil, nil)
     }
 
     /// Plays a short sample with the device voice (Settings → Read Aloud → Test).

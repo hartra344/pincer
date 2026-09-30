@@ -3,6 +3,7 @@
 // setEnabled / install / uninstall. Writes need operator.admin, like the real Gateway.
 import crypto from 'node:crypto';
 import { seedMcpServers, syncMcpFromConfig } from './mcp.mjs';
+import { isTtsApiKeyPath, seedTtsConfig, ttsSchemaProperties } from './tts.mjs';
 
 export const REDACTED = '__OPENCLAW_REDACTED__';
 export const ADMIN_SCOPE = 'operator.admin';
@@ -31,6 +32,7 @@ export function createConfigState() {
       channels: { discord: { enabled: true, token: 'discord-bot-secret', dmPolicy: 'pairing' } },
       tools: { allow: ['exec', 'read', 'write'] },
       mcp: { servers: seedMcpServers() },
+      ...seedTtsConfig(),
       plugins: {
         enabled: true,
         entries: {
@@ -115,6 +117,7 @@ function buildSchema(state) {
       },
       tools: { type: 'object', properties: { allow: { type: 'array', items: { type: 'string' } } } },
       mcp: { type: 'object', properties: { servers: { type: 'object', additionalProperties: { type: 'object' } } } },
+      ...ttsSchemaProperties(),
       plugins: {
         type: 'object',
         properties: {
@@ -158,7 +161,7 @@ const MCP_NAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 function redact(value, path = []) {
   if (Array.isArray(value)) return value.map((item, index) => redact(item, [...path, String(index)]));
   if (isObject(value)) return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redact(v, [...path, k])]));
-  if (typeof value === 'string' && (sensitive(path) || isMcpSecret(path))) return REDACTED;
+  if (typeof value === 'string' && (sensitive(path) || isMcpSecret(path) || isTtsApiKeyPath(path))) return REDACTED;
   return value;
 }
 

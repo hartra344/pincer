@@ -9,6 +9,7 @@ private final class ScriptedDictationEngine: DictationEngine {
     var onError: (@MainActor (DictationIssue) -> Void)?
     var stops = 0
     var cancels = 0
+    var finalAfterStop: (text: String, delay: Duration)?
 
     func authorize() async -> DictationIssue? { authorizeResult }
 
@@ -17,7 +18,15 @@ private final class ScriptedDictationEngine: DictationEngine {
         self.onError = onError
     }
 
-    func stop() { stops += 1 }
+    func stop() {
+        stops += 1
+        guard let (text, delay) = finalAfterStop else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            self?.onPartial?(text, true)
+        }
+    }
+
     func cancel() { cancels += 1 }
 }
 
@@ -56,4 +65,42 @@ func runDictationChecks() async {
     model.toggle(draft: "keep", caret: nil) { draft = $0 }
     _ = await waitFor("dictation denied", timeout: 5) { !model.isActive }
     check(model.issue == .speechDenied && model.issue?.canOpenSettings == true && draft == "done", "denied permission surfaces an issue")
+
+    let sel = DictationSplice(draft: "Hello big world", selection: NSRange(location: 6, length: 3))
+    check(sel.applying("small") == "Hello small world" && sel.caret(after: "small") == 11, "a selection is replaced and the caret follows the dictation")
+    check(DictationSplice(draft: "a😀b", selection: NSRange(location: 2, length: 0)).applying("X") == "a X 😀b"
+          && DictationSplice(draft: "Hi", selection: NSRange(location: 99, length: 5)).applying("x") == "Hi x", "selection snaps to characters and clamps")
+    engine.authorizeResult = nil
+    var caret = -1
+    draft = "one three"
+    model.toggle(draft: draft, selection: NSRange(location: 3, length: 0)) { text, offset in draft = text; caret = offset }
+    _ = await waitFor("dictation listening at a caret", timeout: 5) { model.isListening }
+    engine.onPartial?("two", false)
+    check(draft == "one two three" && caret == 7, "dictation lands at the caret and reports it (\(draft), \(caret))")
+    model.cancel()
+
+    // Send while listening (#464): the final result that arrives just after stop() must land in the draft.
+    let sendEngine = ScriptedDictationEngine()
+    sendEngine.finalAfterStop = ("send the report", .milliseconds(50))
+    let sendModel = DictationModel(engine: sendEngine)
+    var sendDraft = ""
+    sendModel.toggle(draft: sendDraft, selection: nil) { text, _ in sendDraft = text }
+    _ = await waitFor("dictation listening before send", timeout: 5) { sendModel.isListening }
+    sendEngine.onPartial?("send the", false)
+    await sendModel.finishForSend()
+    check(sendDraft == "send the report" && sendModel.phase == .idle, "Send waits for the final words (\(sendDraft))")
+
+    let slowEngine = ScriptedDictationEngine()
+    slowEngine.finalAfterStop = ("too slow", .milliseconds(300))
+    let slowModel = DictationModel(engine: slowEngine)
+    var slowDraft = ""
+    slowModel.toggle(draft: slowDraft, selection: nil) { text, _ in slowDraft = text }
+    _ = await waitFor("dictation listening before slow send", timeout: 5) { slowModel.isListening }
+    slowEngine.onPartial?("partial", false)
+    await slowModel.finishForSend(timeout: .milliseconds(30))
+    try? await Task.sleep(for: .milliseconds(350))
+    check(slowDraft == "partial" && !slowModel.isActive && slowEngine.cancels == 1, "Send gives up after the timeout and ignores a late final")
+
+    await sendModel.finishForSend()
+    check(!sendModel.isActive, "finishForSend while idle returns at once")
 }
