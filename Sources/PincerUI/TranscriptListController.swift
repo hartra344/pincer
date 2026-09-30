@@ -218,6 +218,23 @@ final class TranscriptListController {
         return .rows(changed: changed, oldIds: idsChanged ? oldIds : nil)
     }
 
+    /// The next or previous row of `kind` from `row`, or nil at the ends (#195). `from == nil`
+    /// starts before the first row going forward and after the last going backward.
+    static func adjacentRow(in rows: [TranscriptRow], from row: Int?, forward: Bool,
+                            kind: TranscriptNavKind = .message) -> Int? {
+        let start = row.map { forward ? $0 + 1 : $0 - 1 } ?? (forward ? 0 : rows.count - 1)
+        var i = start
+        while rows.indices.contains(i) {
+            if kind.includes(rows[i]) { return i }
+            i += forward ? 1 : -1
+        }
+        return nil
+    }
+
+    func adjacentRow(from row: Int?, forward: Bool, kind: TranscriptNavKind = .message) -> Int? {
+        Self.adjacentRow(in: self.rows, from: row, forward: forward, kind: kind)
+    }
+
     static func uniqued(_ rows: [TranscriptRow]) -> [TranscriptRow] {
         var seen = Set<String>()
         return rows.filter { seen.insert($0.id).inserted }
@@ -594,5 +611,22 @@ final class TranscriptListController {
     private var isOlderRowVisible: Bool {
         guard case .loadingOlder? = self.rows.first, let visible = self.host?.visibleRows else { return false }
         return visible.lowerBound == 0
+    }
+}
+
+/// Which rows keyboard and rotor navigation stops on (#195).
+enum TranscriptNavKind {
+    case message, reply, user, tool
+
+    func includes(_ row: TranscriptRow) -> Bool {
+        guard case let .entry(entry) = row else { return false }
+        switch (self, entry) {
+        case (_, .marker): return false
+        case (.message, _): return true
+        case (.reply, .assistant): return true
+        case (.user, .user): return true
+        case let (.tool, .assistant(turn)): return !turn.tools.isEmpty
+        default: return false
+        }
     }
 }
