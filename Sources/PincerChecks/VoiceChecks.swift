@@ -99,10 +99,11 @@ private func voiceSetupChecks(_ gateway: GatewayStore, label: String) async {
         try await voice.setProvider("elevenlabs")
         check(voice.status?.provider == "elevenlabs", "\(label): ElevenLabs can be selected once it has a key")
         let broken = await voice.test(sample: "Hello from Pincer.")
-        if case let .failed(message) = broken.outcome {
-            check(message.contains("401") && message.lowercased().contains("api key"), "\(label): a broken key is a clear provider error (\(message))")
+        if case let .fellBack(to, reason) = broken.outcome {
+            check(to == "OpenAI" && reason.message.contains("401") && reason.message.lowercased().contains("api key"),
+                  "\(label): a broken key is reported with the provider's error, not a silent fallback (\(reason.message))")
         } else {
-            check(false, "\(label): a broken key must fail, not fall back (\(broken.outcome))")
+            check(false, "\(label): a broken key must be reported (\(broken.outcome))")
         }
         if case .error = voice.badge(for: "elevenlabs") { check(true, "\(label): the badge shows the error") }
         else { check(false, "\(label): the badge shows the error") }
@@ -132,8 +133,9 @@ private func voiceSetupChecks(_ gateway: GatewayStore, label: String) async {
 
         _ = try await voice.saveModel("eleven_bogus", provider: "elevenlabs")
         let bogus = await voice.test(sample: "Hello from Pincer.")
-        if case let .failed(message) = bogus.outcome { check(message.contains("eleven_bogus"), "\(label): a rejected model names the model (\(message))") }
-        else { check(false, "\(label): a rejected model fails (\(bogus.outcome))") }
+        if case let .fellBack(_, reason) = bogus.outcome {
+            check(reason.message.contains("eleven_bogus"), "\(label): a rejected model names the model (\(reason.message))")
+        } else { check(false, "\(label): a rejected model is reported (\(bogus.outcome))") }
         _ = try await voice.saveModel("eleven_v4_turbo", provider: "elevenlabs")
         let again = await voice.test(sample: "Hello from Pincer.")
         check(again.outcome == .success, "\(label): fixing the model makes Test succeed again")
