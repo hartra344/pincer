@@ -873,6 +873,16 @@
         }
       }
     },
+    "1 problem": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 problem"
+          }
+        }
+      }
+    },
     "1 reconnect attempt": {
       "localizations": {
         "en": {
@@ -6373,6 +6383,16 @@
         }
       }
     },
+    "Interrupted by a Gateway restart": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrupted by a Gateway restart"
+          }
+        }
+      }
+    },
     "Invalid Config": {
       "localizations": {
         "en": {
@@ -9503,6 +9523,16 @@
         }
       }
     },
+    "Previous Message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Message"
+          }
+        }
+      }
+    },
     "Previous branch": {
       "localizations": {
         "en": {
@@ -9539,16 +9569,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Previous match (⇧⌘G)"
-          }
-        }
-      }
-    },
-    "Previous Message": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Previous Message"
           }
         }
       }
@@ -14083,6 +14103,16 @@
         }
       }
     },
+    "Timed Out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timed Out"
+          }
+        }
+      }
+    },
     "Timed out waiting for %@.": {
       "localizations": {
         "en": {
@@ -14233,22 +14263,22 @@
         }
       }
     },
-    "Tool calls": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tool calls"
-          }
-        }
-      }
-    },
     "Tool Calls": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Tool Calls"
+          }
+        }
+      }
+    },
+    "Tool calls": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool calls"
           }
         }
       }
@@ -15253,6 +15283,16 @@
         }
       }
     },
+    "Your Messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Messages"
+          }
+        }
+      }
+    },
     "Your agent didn't answer. You can try again, or skip and chat later.": {
       "localizations": {
         "en": {
@@ -15339,16 +15379,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your edits are kept."
-          }
-        }
-      }
-    },
-    "Your Messages": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Your Messages"
           }
         }
       }

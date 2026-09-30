@@ -40,12 +40,18 @@ public enum AccessibilityText {
         L("New chat with \(agent)")
     }
 
-    /// Session Manager run status: `Running`, `Done`, `Failed`, `Interrupted`.
+    /// Session Manager run status, spoken as the screen shows it: `Queued`, `Running`, `Done`, `Error`,
+    /// `Stopped`, `Timed Out`, or `Interrupted` (case-insensitive; `failed` is `Failed`). Anything
+    /// else, such as an already-joined status, is returned unchanged.
     public static func runStatusLabel(_ status: String) -> String {
         switch status.lowercased() {
+        case "queued": L("Queued")
         case "running": L("Running")
         case "done": L("Done")
+        case "error": L("Error")
         case "failed": L("Failed")
+        case "stopped": L("Stopped")
+        case "timed out": L("Timed Out")
         case "interrupted": L("Interrupted")
         default: status
         }
