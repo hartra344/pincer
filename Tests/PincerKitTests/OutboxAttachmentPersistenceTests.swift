@@ -30,8 +30,8 @@ struct OutboxAttachmentPersistenceTests {
         OutboxAttachmentStore.drain(gatewayId: store.id, root: self.temp.url)
     }
 
-    func attachment() -> OutgoingAttachment {
-        OutgoingAttachment(fileName: "photo.png", mimeType: "image/png", data: self.bytes)
+    func attachment(fileName: String = "photo.png", mimeType: String = "image/png") -> OutgoingAttachment {
+        OutgoingAttachment(fileName: fileName, mimeType: mimeType, data: self.bytes)
     }
 
     func dir(_ store: GatewayStore, _ entryId: String) throws -> URL {
@@ -39,8 +39,10 @@ struct OutboxAttachmentPersistenceTests {
     }
 
     /// Queues a send with one attachment while offline and returns the entry.
-    func queue(_ store: GatewayStore, text: String = "look") async throws -> OutboxEntry {
-        let outcome = await store.chat(for: self.key).sendMessage(text, attachments: [self.attachment()])
+    func queue(_ store: GatewayStore, text: String = "look", mimeType: String = "image/png",
+               fileName: String = "photo.png") async throws -> OutboxEntry {
+        let outcome = await store.chat(for: self.key).sendMessage(
+            text, attachments: [self.attachment(fileName: fileName, mimeType: mimeType)])
         if case .sent = outcome { Issue.record("offline send shouldn't go out") }
         let entry = try #require(store.outbox.entries.last)
         await self.settle(store)
@@ -256,5 +258,44 @@ struct OutboxAttachmentPersistenceTests {
         #expect(await self.started(store))
         await self.settle(store)
         #expect(!self.temp.exists(orphan))
+    }
+
+    @Test func unsafeEntryIdsCantBeDirectories() {
+        let gateway = UUID()
+        for id in ["", ".", "..", "a/b"] {
+            #expect(OutboxAttachmentStore.directory(gatewayId: gateway, entryId: id, root: self.temp.url) == nil, "\(id)")
+            #expect(!OutboxAttachmentStore.enqueueWrite([self.attachment()], entryId: id, gatewayId: gateway, root: self.temp.url))
+        }
+        self.temp.remove()
+    }
+
+    @Test func restoredEntriesShowFileChipsAndAppAggregatesBytes() async throws {
+        defer { self.finish() }
+        let app = AppModel(defaults: self.scratch.defaults)
+        let first = app.add(GatewayProfile(name: "Home", url: "ws://127.0.0.1:9", authMode: .none), secret: nil)
+        first.outboxRoot = self.temp.url
+        #expect(await self.restored(first))
+        let entry = try await self.queue(first, mimeType: "application/pdf", fileName: "doc.pdf")
+        #expect(app.outboxAttachmentBytes == self.bytes.count)
+        let chips = first.chat(for: self.key).items.last?.blocks.compactMap { block -> String? in
+            if case let .file(ref) = block { ref.name } else { nil }
+        }
+        #expect(chips == ["doc.pdf"])
+        first.saveOutboxNow()
+        first.stop()
+
+        let second = GatewayStore(profile: first.profile, defaults: self.scratch.defaults, identity: Fixtures.identity())
+        second.outboxRoot = self.temp.url
+        defer { second.stop() }
+        #expect(await self.started(second))
+        let restoredChips = second.chat(for: self.key).items.first { $0.idempotencyKey == entry.id }?.blocks.compactMap { block -> String? in
+            if case let .file(ref) = block { ref.name } else { nil }
+        }
+        #expect(restoredChips == ["doc.pdf"])
+    }
+
+    func restored(_ store: GatewayStore) async -> Bool {
+        await store.outboxLoadTask?.value
+        return await eventually(timeout: .seconds(1)) { store.outboxRestored }
     }
 }
