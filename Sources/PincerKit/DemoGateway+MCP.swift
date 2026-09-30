@@ -366,10 +366,19 @@ extension DemoGateway {
             }
             try? await Task.sleep(for: .seconds(2))
         }
-        var tools = name == "linear" ? DemoMCPState.linearTools : (DemoMCPState.seedTools[name] ?? DemoMCPState.genericTools)
+        var tools = name == "linear" ? DemoMCPState.linearTools
+            : (DemoMCPState.seedTools[name] ?? (name == "acme.docs" ? DemoMCPState.acmeTools : DemoMCPState.genericTools))
         let include = server["toolFilter"]?["include"]?.array?.compactMap(\.string) ?? []
         let exclude = server["toolFilter"]?["exclude"]?.array?.compactMap(\.string) ?? []
-        tools = tools.filter { (include.isEmpty || include.contains($0)) && !exclude.contains($0) }
+        // Like the Gateway: `*` is the only wildcard; include applies first, then exclude.
+        func matches(_ tool: String, _ patterns: [String]) -> Bool {
+            patterns.contains { pattern in
+                let regex = "^" + pattern.split(separator: "*", omittingEmptySubsequences: false)
+                    .map { NSRegularExpression.escapedPattern(for: String($0)) }.joined(separator: ".*") + "$"
+                return tool.range(of: regex, options: .regularExpression) != nil
+            }
+        }
+        tools = tools.filter { (include.isEmpty || matches($0, include)) && !matches($0, exclude) }
         let counts = ["github": (3, 2), "filesystem": (1, 0), "linear": (2, 1)][name] ?? (0, 0)
         return ["ok": true, "tools": JSONValue(tools), "resources": .number(Double(counts.0)), "prompts": .number(Double(counts.1)),
                 "diagnostics": []]

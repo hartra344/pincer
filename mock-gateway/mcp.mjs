@@ -311,7 +311,7 @@ function probeResult(state, name, server, isSaved, timeoutMs) {
   }
   const filter = server.toolFilter ?? {};
   const kept = toolsFor(name, mcpState(state).runtime.get(name) ?? {})
-    .filter((tool) => (!filter.include?.length || filter.include.includes(tool)) && !filter.exclude?.includes(tool));
+    .filter((tool) => (!filter.include?.length || matchesToolPattern(tool, filter.include)) && !matchesToolPattern(tool, filter.exclude ?? []));
   const [resources, prompts] = PROBE_COUNTS[name] ?? [0, 0];
   return { delay, result: { ok: true, tools: kept, resources, prompts, diagnostics: [] } };
 }
@@ -514,4 +514,9 @@ export function handleMcpRequest(state, conn, msg, { sendRes, sendErr, broadcast
       return false;
   }
   return true;
+}
+
+// Like the Gateway: `*` is the only wildcard; include applies first, then exclude.
+function matchesToolPattern(tool, patterns) {
+  return patterns.some((pattern) => new RegExp(`^${pattern.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`).test(tool));
 }

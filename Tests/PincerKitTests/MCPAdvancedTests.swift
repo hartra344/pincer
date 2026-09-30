@@ -368,7 +368,7 @@ struct MCPProbeAndPluginTests {
                 log("inspect:\(id)")
                 return Fixtures.json(#"{"plugin":{"id":"\#(id)","name":"Linear"},"declared":{"mcpServers":["linear"]},"mcpAuth":[{"serverName":"linear","state":"requires-authorization"}]}"#)
             case "mcp.status":
-                return Fixtures.json(#"{"servers":[{"name":"linear","source":"plugin","state":"idle","auth":{"mode":"oauth-shared","state":"authorized","account":"a@b.c"}},{"name":"cfg","state":"connected"}]}"#)
+                return Fixtures.json(#"{"servers":[{"name":"linear","source":"plugin","pluginId":"linear","state":"idle","auth":{"mode":"oauth-shared","state":"authorized","account":"a@b.c"}},{"name":"cfg","state":"connected"}]}"#)
             default:
                 return [:]
             }
@@ -402,7 +402,33 @@ struct MCPProbeAndPluginTests {
         let live = m.status(for: plugin)
         #expect(live?.state == .idle && live?.auth?.state == .authorized)
         // Config-sourced entries are not plugin statuses.
-        #expect(m.pluginStatuses.keys.sorted() == ["linear"])
+        #expect(m.pluginStatuses.keys.sorted() == ["linear/linear"] && live?.state == .idle)
+    }
+
+    @Test func pluginStatusNeedsPluginIdAndSource() async {
+        let m = model(methods: ["plugins.list", "plugins.inspect", "mcp.status"]) { method, params in
+            switch method {
+            case "plugins.list": return Fixtures.json(#"{"plugins":[{"id":"linear","installed":true,"enabled":true}]}"#)
+            case "plugins.inspect": return Fixtures.json(#"{"plugin":{"id":"linear"},"declared":{"mcpServers":["linear"]}}"#)
+            case "mcp.status":
+                return Fixtures.json(#"{"servers":[{"name":"linear","source":"plugin","state":"idle"},{"name":"linear","source":"config","pluginId":"linear","state":"connected"},{"name":"x","source":"plugin","pluginId":"other","state":"error"}]}"#)
+            default: return [:]
+            }
+        }
+        await m.load()
+        #expect(m.pluginStatuses.keys.sorted() == ["other/x"])
+        #expect(m.status(for: m.pluginServers[0]) == nil)
+    }
+
+    @Test func probeStripsEnabledForDisabledServers() async {
+        var sent: JSONValue?
+        let m = model(methods: ["mcp.probe"]) { _, params in sent = params; return ["ok": true] }
+        var draft = MCPServerDraft()
+        draft.name = "n"
+        draft.command = "x"
+        draft.enabled = false
+        _ = await m.probe(name: "n", draft: draft)
+        #expect(sent?["server"]?["command"]?.string == "x" && sent?["server"]?["enabled"] == nil)
     }
 
     @Test func noLiveStatusMeansNoPluginStatus() async {

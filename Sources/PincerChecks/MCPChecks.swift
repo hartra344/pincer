@@ -93,6 +93,8 @@ private func mcpPluginAndProbeChecks(_ gateway: GatewayStore, label: String) asy
     check(slow.ok && slow.toolCount == 2, "\(label): probe home-assistant succeeds with the default timeout (\(slow.ok) \(slow.diagnostics))")
     let notion = await mcp.probe(name: "notion")
     check(!notion.ok && notion.auth != nil && notion.auth?.state != .authorized, "\(label): probe notion needs authorization")
+    let disabled = await mcp.probe(name: "sentry")
+    check(mcp.server("sentry")?.enabled == false && disabled.ok, "\(label): a disabled server can still be probed (\(disabled.diagnostics))")
     let acme = await mcp.probe(name: "acme.docs")
     check(acme.ok && acme.toolCount == 2, "\(label): probe acme.docs ok with 2 tools (\(acme.toolCount))")
     let oauth = await mcp.probe(name: "linear")
