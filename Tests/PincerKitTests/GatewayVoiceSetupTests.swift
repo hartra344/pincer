@@ -13,6 +13,7 @@ private final class FakeGateway {
     var speakProvider = "openai"
     var convertError: GatewayError?
     var storedSecrets: [String] = []
+    var auto = "off"
     var configProvider: String?
     var methods: [String] { calls.map(\.method) }
 
@@ -22,7 +23,7 @@ private final class FakeGateway {
         switch method {
         case "tts.status":
             let states = configured.sorted { $0.key < $1.key }.map { "{\"id\":\"\($0.key)\",\"label\":\"\($0.key == "elevenlabs" ? "ElevenLabs" : "OpenAI")\",\"configured\":\($0.value)}" }
-            return Fixtures.json("{\"enabled\":false,\"auto\":\"off\",\"provider\":\"\(provider)\",\"providerStates\":[\(states.joined(separator: ","))]}")
+            return Fixtures.json("{\"enabled\":\(auto != "off"),\"auto\":\"\(auto)\",\"provider\":\"\(provider)\",\"providerStates\":[\(states.joined(separator: ","))]}")
         case "tts.providers":
             return Fixtures.json("{\"providers\":[{\"id\":\"openai\",\"name\":\"OpenAI\",\"configured\":\(configured["openai"] ?? false),\"models\":[\"gpt-4o-mini-tts\"],\"voices\":[\"alloy\"]},{\"id\":\"elevenlabs\",\"name\":\"ElevenLabs\",\"configured\":\(configured["elevenlabs"] ?? false),\"models\":[\"eleven_v3\"],\"voices\":[]}],\"active\":\"\(provider)\"}")
         case "config.get":
@@ -507,5 +508,192 @@ struct GatewayVoiceSetupTests {
         let data = Data(#"{"voices":[{"voice_id":"a","name":"Rachel","category":"premade","preview_url":"https://x.test/a.mp3"},{"name":"no id"}]}"#.utf8)
         let voices = try GatewayVoiceModel.parseElevenLabsVoices(data)
         #expect(voices == [ElevenLabsVoice(id: "a", name: "Rachel", category: "premade", previewURL: URL(string: "https://x.test/a.mp3"))])
+    }
+}
+
+
+// MARK: Auto-speak mode (#411) and removing a key (#474)
+
+@Suite("Gateway voice auto mode and remove key")
+@MainActor
+struct GatewayVoiceAutoModeAndRemoveKeyTests {
+    @Test func autoModeParsesAndNamesEveryMode() {
+        #expect(TTSAutoMode.allCases.map(\.rawValue) == ["off", "always", "inbound", "tagged"])
+        #expect(TTSAutoMode.off.displayName == "Off" && TTSAutoMode.always.displayName == "Always")
+        #expect(TTSAutoMode.inbound.displayName == "Only After Voice Messages")
+        #expect(TTSAutoMode.tagged.displayName == "Only When Tagged")
+        #expect(TTSAutoMode.allCases.filter(\.isNotSettable) == [.inbound, .tagged])
+    }
+
+    @Test func statusAutoModeIsCaseInsensitiveAndUnknownIsNil() async {
+        for (raw, mode) in [("inbound", TTSAutoMode.inbound), ("TAGGED", .tagged), ("Always", .always)] {
+            let g = FakeGateway()
+            g.auto = raw
+            let model = makeModel(g)
+            await model.refresh()
+            #expect(model.autoMode == mode)
+        }
+        let g = FakeGateway()
+        g.auto = "sometimes"
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.autoMode == nil && model.status?.auto == "sometimes")
+    }
+
+    @Test func confirmationIsNeededOnlyWhenReplacingInboundOrTagged() async {
+        for (raw, needs) in [("off", false), ("always", false), ("inbound", true), ("tagged", true)] {
+            let g = FakeGateway()
+            g.auto = raw
+            let model = makeModel(g)
+            await model.refresh()
+            #expect(model.setAutoSpeakNeedsConfirmation(true) == needs, "\(raw) → on")
+            #expect(model.setAutoSpeakNeedsConfirmation(false) == needs, "\(raw) → off")
+        }
+    }
+
+    @Test func effectiveConfigUsesDisplayNameAndFlagsUnknownMode() async {
+        let g = FakeGateway()
+        g.auto = "inbound"
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.effectiveConfig.contains { $0.value == "Only After Voice Messages" })
+        g.auto = "weird"
+        await model.refresh()
+        #expect(model.effectiveConfig.contains { $0.value == "Unknown (weird)" })
+    }
+
+    // MARK: Remove key
+
+    @Test func removeStoreKeyNullsApiKeyThenDeletesSecret() async throws {
+        let g = FakeGateway()
+        g.tts["elevenlabs"] = Fixtures.json(#"{"apiKey":{"source":"store","provider":"default","id":"__OPENCLAW_REDACTED__"}}"#)
+        g.storedSecrets = ["ELEVENLABS_API_KEY"]
+        let model = makeModel(g, methods: allMethods.union(["secrets.store.delete"]))
+        await model.refresh()
+        #expect(model.canRemoveKey("elevenlabs"))
+        _ = try await model.removeKey(provider: "elevenlabs")
+
+        #expect(providerNode(g.patch(), "elevenlabs") == ["apiKey": .null])
+        #expect(g.patch()?["env"] == nil)
+        #expect(g.calls("secrets.store.delete") == [["name": "ELEVENLABS_API_KEY"]])
+        let order = g.methods.filter { $0 == "config.patch" || $0 == "secrets.store.delete" }
+        #expect(order == ["config.patch", "secrets.store.delete"], "config is cleared before the secret is deleted")
+    }
+
+    @Test func removeEnvRefAlsoNullsTheEnvVar() async throws {
+        let g = FakeGateway()
+        g.tts["elevenlabs"] = Fixtures.json(#"{"apiKey":{"source":"env","provider":"default","id":"ELEVENLABS_API_KEY"}}"#)
+        let model = makeModel(g, methods: allMethods.union(["secrets.store.delete"]))
+        await model.refresh()
+        _ = try await model.removeKey(provider: "elevenlabs")
+        let patch = try #require(g.patch())
+        #expect(providerNode(patch, "elevenlabs") == ["apiKey": .null])
+        #expect(patch["env"]?["vars"]?["ELEVENLABS_API_KEY"] == .null)
+        #expect(g.calls("secrets.store.delete").isEmpty)
+    }
+
+    @Test func removePlaintextKeyJustNullsIt() async throws {
+        let g = FakeGateway()
+        g.tts["openai"] = Fixtures.json(#"{"apiKey":"sk-plain"}"#)
+        let model = makeModel(g, methods: allMethods.union(["secrets.store.delete"]))
+        await model.refresh()
+        _ = try await model.removeKey(provider: "openai")
+        let patch = try #require(g.patch())
+        #expect(providerNode(patch, "openai") == ["apiKey": .null])
+        #expect(patch["env"] == nil)
+        #expect(g.calls("secrets.store.delete").isEmpty)
+    }
+
+    @Test func storeDeleteIsSkippedWhenNotAdvertisedAndNotFoundIsIgnored() async throws {
+        let g = FakeGateway()
+        g.tts["elevenlabs"] = Fixtures.json(#"{"apiKey":{"source":"store","provider":"default","id":"__OPENCLAW_REDACTED__"}}"#)
+        g.storedSecrets = ["ELEVENLABS_API_KEY"]
+        let old = makeModel(g)
+        await old.refresh()
+        _ = try await old.removeKey(provider: "elevenlabs")
+        #expect(g.calls("secrets.store.delete").isEmpty && g.calls("config.patch").count == 1)
+
+        let g2 = FakeGateway()
+        g2.tts["elevenlabs"] = Fixtures.json(#"{"apiKey":{"source":"store","provider":"default","id":"ELEVENLABS_API_KEY"}}"#)
+        g2.errors["secrets.store.delete"] = rpc("NOT_FOUND", "secret not found")
+        let model = makeModel(g2, methods: allMethods.union(["secrets.store.delete"]))
+        await model.refresh()
+        _ = try await model.removeKey(provider: "elevenlabs")
+        #expect(g2.calls("secrets.store.delete").count == 1)
+    }
+
+    @Test func removeKeyRequiresAdminAndSendsNothing() async {
+        let g = FakeGateway()
+        g.tts["openai"] = Fixtures.json(#"{"apiKey":"sk-plain"}"#)
+        let model = makeModel(g, scopes: ["operator.write"])
+        #expect(!model.canRemoveKey("openai"))
+        await #expect(throws: ConfigWriteError.adminRequired) { _ = try await model.removeKey(provider: "openai") }
+        #expect(g.calls("config.patch").isEmpty && g.calls("secrets.store.delete").isEmpty)
+    }
+
+    @Test func canRemoveKeyOnlyWhenAKeyIsSet() async {
+        let g = FakeGateway()
+        g.tts["openai"] = Fixtures.json(#"{"apiKey":"sk-plain"}"#)
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.canRemoveKey("openai") && !model.canRemoveKey("elevenlabs"))
+    }
+
+    @Test func removeKeyClearsSessionKeyAndRefreshes() async throws {
+        let g = FakeGateway()
+        g.tts["openai"] = Fixtures.json(#"{"apiKey":"sk-plain"}"#)
+        let model = makeModel(g)
+        await model.refresh()
+        model.sessionKeys["openai"] = "typed"
+        let before = g.calls("tts.status").count
+        _ = try await model.removeKey(provider: "openai")
+        #expect(model.sessionKeys["openai"] == nil)
+        #expect(g.calls("tts.status").count > before)
+    }
+}
+
+@Suite("Gateway voice effective config (#475)")
+@MainActor
+struct GatewayVoiceEffectiveConfigTests {
+    @Test func ignoredModelKeyIsFlaggedAndModelIdWins() async {
+        let g = FakeGateway()
+        g.tts["elevenlabs"] = ["model": "eleven_turbo_v2_5"]
+        g.provider = "elevenlabs"
+        g.configured["elevenlabs"] = true
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.setups["elevenlabs"]?.ignoredModel == "eleven_turbo_v2_5" && model.setups["elevenlabs"]?.model == nil)
+        let row = model.effectiveConfig.first { $0.label == "Model" }
+        #expect(row?.overrideNote?.contains("ignores") == true && row?.source == "Default")
+
+        g.tts["elevenlabs"] = ["model": "eleven_turbo_v2_5", "modelId": "eleven_v3"]
+        await model.refresh()
+        #expect(model.setups["elevenlabs"]?.model == "eleven_v3" && model.setups["elevenlabs"]?.ignoredModel == nil)
+    }
+
+    @Test func speakerVoiceIdBeatsVoiceIdInTheVoiceRow() async {
+        let g = FakeGateway()
+        g.tts["elevenlabs"] = ["voiceId": "old", "speakerVoiceId": "new"]
+        g.provider = "elevenlabs"
+        g.configured["elevenlabs"] = true
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.setups["elevenlabs"]?.voice == "new" && model.setups["elevenlabs"]?.hasLegacyVoiceKey == true)
+        #expect(model.effectiveConfig.first { $0.label == "Voice" }?.keyPath?.hasSuffix("speakerVoiceId") == true)
+    }
+
+    @Test func personaProvidedProviderIsLabelledAsPersona() async {
+        let model = GatewayVoiceModel(methods: { nil }, scopes: { ["operator.admin"] }, request: { method, _ in
+            switch method {
+            case "tts.status":
+                return Fixtures.json(#"{"enabled":false,"auto":"off","provider":"elevenlabs","persona":"narrator","personas":[{"id":"narrator","label":"Narrator","provider":"elevenlabs"}],"providerStates":[{"id":"elevenlabs","label":"ElevenLabs","configured":true}]}"#)
+            case "config.get":
+                return ["hash": "h", "config": ["tts": ["provider": "openai", "providers": [:]]]]
+            default: return [:]
+            }
+        })
+        await model.refresh()
+        let row = model.effectiveConfig.first { $0.label == "Provider" }
+        #expect(row?.source == "Persona \"narrator\"" && row?.overrideNote != nil, "\(String(describing: row))")
     }
 }

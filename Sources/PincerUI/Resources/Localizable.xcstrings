@@ -1563,6 +1563,16 @@
         }
       }
     },
+    "Always": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always"
+          }
+        }
+      }
+    },
     "Always Allow": {
       "localizations": {
         "en": {
@@ -6093,6 +6103,16 @@
         }
       }
     },
+    "Gateway Voice Settings…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway Voice Settings…"
+          }
+        }
+      }
+    },
     "Gateway Voice: Not set up": {
       "localizations": {
         "en": {
@@ -6963,6 +6983,16 @@
         }
       }
     },
+    "Key removed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key removed"
+          }
+        }
+      }
+    },
     "Key saved": {
       "localizations": {
         "en": {
@@ -7249,6 +7279,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "List subagent runs under their chat"
+          }
+        }
+      }
+    },
+    "Listen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listen"
           }
         }
       }
@@ -9113,6 +9153,26 @@
         }
       }
     },
+    "Only After Voice Messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only After Voice Messages"
+          }
+        }
+      }
+    },
+    "Only When Tagged": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only When Tagged"
+          }
+        }
+      }
+    },
     "Only approve devices you recognize. Compare the fingerprint with the one the device shows while it waits.": {
       "localizations": {
         "en": {
@@ -10513,6 +10573,16 @@
         }
       }
     },
+    "Read Aloud Settings…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read Aloud Settings…"
+          }
+        }
+      }
+    },
     "Read Aloud is set to This Device Only.": {
       "localizations": {
         "en": {
@@ -10903,6 +10973,26 @@
         }
       }
     },
+    "Remove Key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Key"
+          }
+        }
+      }
+    },
+    "Remove Key…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Key…"
+          }
+        }
+      }
+    },
     "Remove My Reaction": {
       "localizations": {
         "en": {
@@ -10969,6 +11059,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove item %lld"
+          }
+        }
+      }
+    },
+    "Remove the %@ key from the Gateway?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove the %@ key from the Gateway?"
           }
         }
       }
@@ -11129,6 +11229,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Replace"
+          }
+        }
+      }
+    },
+    "Replace “%@” with “%@”?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace “%@” with “%@”?"
           }
         }
       }
@@ -13383,12 +13493,12 @@
         }
       }
     },
-    "Speak Replies on Channels is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud.": {
+    "Speak Replies on Channels is gateway-wide. It controls when the Gateway attaches spoken audio to replies on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Speak Replies on Channels is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud."
+            "value": "Speak Replies on Channels is gateway-wide. It controls when the Gateway attaches spoken audio to replies on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud."
           }
         }
       }
@@ -13429,16 +13539,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speaking…"
-          }
-        }
-      }
-    },
-    "Speaks a reply from its context menu. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Speaks a reply from its context menu. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on."
           }
         }
       }
@@ -13853,6 +13953,16 @@
         }
       }
     },
+    "Switch to Always": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to Always"
+          }
+        }
+      }
+    },
     "System": {
       "localizations": {
         "en": {
@@ -13899,6 +14009,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port."
+          }
+        }
+      }
+    },
+    "Tap Listen under a reply, or use Read Last Reply Aloud (its keyboard shortcut) from the command palette. Press Esc or tap the Speaking pill to stop. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap Listen under a reply, or use Read Last Reply Aloud (its keyboard shortcut) from the command palette. Press Esc or tap the Speaking pill to stop. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on."
           }
         }
       }
@@ -14099,6 +14219,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The Gateway audio couldn't be played."
+          }
+        }
+      }
+    },
+    "The Gateway can't use %@ until you add a key again. Replies fall back to the next provider or this device's voice.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway can't use %@ until you add a key again. Replies fall back to the next provider or this device's voice."
           }
         }
       }
@@ -15273,6 +15403,16 @@
         }
       }
     },
+    "To go back to %@, edit the Gateway's config or use /tts.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To go back to %@, edit the Gateway's config or use /tts."
+          }
+        }
+      }
+    },
     "To:": {
       "localizations": {
         "en": {
@@ -15669,6 +15809,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unknown"
+          }
+        }
+      }
+    },
+    "Unknown (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown (%@)"
           }
         }
       }
@@ -17299,6 +17449,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "“%@” isn’t a valid Gateway address. Use wss://host.tailnet.ts.net or ws://100.x.y.z:18789."
+          }
+        }
+      }
+    },
+    "“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config or /tts preferences; Pincer can only switch replies Off or Always.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config or /tts preferences; Pincer can only switch replies Off or Always."
           }
         }
       }

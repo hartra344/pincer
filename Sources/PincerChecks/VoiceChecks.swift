@@ -4,7 +4,7 @@ import PincerKit
 /// Gateway text-to-speech (`GatewayVoiceModel`) against the demo or the mock: status, providers and
 /// personas load, provider/persona round-trips, and `tts.speak` returns a decodable WAV.
 @MainActor
-private func voiceChecks(_ gateway: GatewayStore, label: String) async {
+private func voiceChecks(_ gateway: GatewayStore, label: String, seededAuto: TTSAutoMode = .off) async {
     let voice = gateway.voice
     check(GatewayVoiceModel.speakMethod.isEmpty == false
           && [GatewayVoiceModel.statusMethod, GatewayVoiceModel.providersMethod, GatewayVoiceModel.personasMethod,
@@ -14,7 +14,7 @@ private func voiceChecks(_ gateway: GatewayStore, label: String) async {
     check(voice.supportsStatus && voice.canWrite && voice.canSpeak, "\(label): voice supported, writable, can speak")
     await voice.refresh()
     check(voice.loadError == nil, "\(label): voice refresh has no error (\(voice.loadError ?? "ok"))")
-    check(voice.status?.provider == "openai" && voice.status?.enabled == false && voice.status?.auto == "off", "\(label): tts.status loads")
+    check(voice.status?.provider == "openai" && voice.status?.enabled == (seededAuto != .off) && voice.status?.auto == seededAuto.rawValue, "\(label): tts.status loads")
     check(voice.providers.map(\.id).contains("openai") && voice.providers.contains { $0.id == "openai" && $0.configured && $0.voices.contains("alloy") }
           && voice.providers.contains { !$0.configured }, "\(label): providers include a configured and an unconfigured one")
     check(Set(voice.personas.map(\.id)) == ["narrator", "concise"] && voice.activePersona == nil, "\(label): personas load, none active")
@@ -167,6 +167,108 @@ private func voiceFallbackChecks() async {
           "fallback: Read Aloud summary names the selected provider, the reason and the one in use (\(voice.readAloudSummary))")
 }
 
+/// #411 auto-speak modes, #474 Remove Key and #475 ElevenLabs key names, over a raw admin connection: `speakerVoiceId`
+/// beats `voiceId`, a `model` key is flagged as ignored, and removing the key leaves ElevenLabs unconfigured.
+@MainActor
+private func voiceFollowUpChecks(profile: GatewayProfile, label: String) async {
+    let connection = GatewayConnection(profile: profile)
+    let ready = Scripted(false)
+    await connection.setHandlers(onEvent: { _ in }, onState: { state, _ in
+        if state.isConnected { Task { @MainActor in ready.value = true } }
+    })
+    await connection.start()
+    defer { Task { await connection.stop() } }
+    guard await waitFor("\(label) raw voice connection", timeout: 25, { ready.value }) else {
+        check(false, "\(label): raw voice connection")
+        return
+    }
+    let voice = GatewayVoiceModel(methods: { nil }, scopes: { ["operator.admin"] }, allowsWritesWithoutAdmin: true,
+                                  request: { try await connection.request($0, $1) })
+    func patch(_ node: JSONValue) async throws {
+        var params: JSONValue = ["raw": .string(JSONValue.object(["tts": ["providers": ["elevenlabs": node]]]).compactString()),
+                                 "note": "Pincer checks"]
+        if let hash = try? await connection.request("config.get", [:])["hash"]?.text, case var .object(o) = params {
+            o["baseHash"] = .string(hash)
+            params = .object(o)
+        }
+        _ = try await connection.request("config.patch", params)
+        await voice.refresh()
+    }
+
+    // Auto-speak: tts.enable / tts.disable replace it with Always / Off.
+    await voice.refresh()
+    do {
+        try await voice.setAutoSpeakChannels(true)
+        await voice.refresh()
+        check(voice.autoMode == .always && voice.status?.enabled == true && !voice.setAutoSpeakNeedsConfirmation(false), "\(label): tts.enable reports auto Always")
+        try await voice.setAutoSpeakChannels(false)
+        await voice.refresh()
+        check(voice.autoMode == .off && voice.status?.enabled == false, "\(label): tts.disable reports auto Off")
+    } catch { check(false, "\(label): auto mode round-trip threw \(error)") }
+
+    do {
+        _ = try await voice.saveKey("xi-good-key-123", provider: "elevenlabs")
+        await voice.refresh()
+        check(voice.canRemoveKey("elevenlabs"), "\(label): a saved key can be removed")
+
+        // A `model` key is never read: flagged, and modelId stays unset.
+        try await patch(["model": "eleven_turbo_v2_5", "modelId": .null])
+        check(voice.setups["elevenlabs"]?.ignoredModel == "eleven_turbo_v2_5" && voice.setups["elevenlabs"]?.model == nil,
+              "\(label): an ElevenLabs `model` key is flagged as ignored")
+        check(voice.effectiveConfig.isEmpty || voice.status?.provider != "elevenlabs" || voice.effectiveConfig.contains { $0.label == "Model" && $0.overrideNote != nil },
+              "\(label): the effective config row explains the ignored model")
+
+        // speakerVoiceId beats voiceId: a bad voiceId is harmless while speakerVoiceId is good, and fatal once it's gone.
+        try await patch(["voiceId": "bogus-voice", "speakerVoiceId": "21m00Tcm4TlvDq8ikWAM"])
+        check(voice.setups["elevenlabs"]?.voice == "21m00Tcm4TlvDq8ikWAM", "\(label): the voice shown is speakerVoiceId")
+        _ = try await connection.request("tts.setProvider", ["provider": "elevenlabs"])
+        await voice.refresh()
+        let good = await voice.test(sample: "Hello from Pincer.")
+        check(good.outcome == .success && good.clip?.provider == "elevenlabs", "\(label): speakerVoiceId wins over a bad voiceId (\(good.summary))")
+        try await patch(["speakerVoiceId": .null])
+        let bad = await voice.test(sample: "Hello from Pincer.")
+        if case let .fellBack(_, reason) = bad.outcome {
+            check(reason.message.contains("bogus-voice"), "\(label): without speakerVoiceId the voiceId is used (\(reason.message))")
+        } else { check(false, "\(label): without speakerVoiceId the bad voiceId is used (\(bad.outcome))") }
+        // `model` is never read (a bogus one still converts); `modelId` is (a bogus one is rejected).
+        try await patch(["voiceId": "21m00Tcm4TlvDq8ikWAM", "model": "eleven_bogus"])
+        let ignored = await voice.test(sample: "Hello from Pincer.")
+        check(ignored.outcome == .success, "\(label): a bogus `model` key is ignored by the provider (\(ignored.summary))")
+        try await patch(["model": .null, "modelId": "eleven_bogus"])
+        let rejected = await voice.test(sample: "Hello from Pincer.")
+        if case let .fellBack(_, reason) = rejected.outcome { check(reason.message.contains("eleven_bogus"), "\(label): a bogus `modelId` is rejected (\(reason.message))") }
+        else { check(false, "\(label): a bogus `modelId` is rejected (\(rejected.outcome))") }
+        try await patch(["voiceId": .null, "model": .null, "modelId": .null])
+
+        // Prefs set with tts.setProvider beat a persona's provider (the RPCs can't clear them, so the persona label is a unit test).
+        _ = try await connection.request("tts.setProvider", ["provider": "openai"])
+        var personaPatch: JSONValue = ["raw": .string(JSONValue.object(["tts": ["personas": ["studio": ["label": "Studio", "provider": "elevenlabs", "providers": ["elevenlabs": [:]]]]]]).compactString()), "note": "Pincer checks"]
+        if let hash = try? await connection.request("config.get", [:])["hash"]?.text, case var .object(o) = personaPatch { o["baseHash"] = .string(hash); personaPatch = .object(o) }
+        _ = try await connection.request("config.patch", personaPatch)
+        await voice.refresh()
+        check(voice.personas.contains { $0.id == "studio" && $0.provider == "elevenlabs" }, "\(label): a config persona is listed")
+        try await voice.setPersona("studio")
+        await voice.refresh()
+        check(voice.activePersona == "studio", "\(label): the persona activates")
+        try await voice.setProvider("openai")
+        check(voice.status?.provider == "openai", "\(label): prefs beat the persona's provider")
+        try await voice.setPersona(nil)
+        try await patch(["voiceId": .null, "model": .null])
+
+        // Remove Key: config cleared, the secret deleted, the provider unconfigured.
+        _ = try await connection.request("tts.setProvider", ["provider": "openai"])
+        let outcome = try await voice.removeKey(provider: "elevenlabs")
+        _ = outcome
+        check(voice.setups["elevenlabs"]?.keySource == TTSProviderSetup.KeySource.none && voice.badge(for: "elevenlabs") == .needsKey && !voice.canRemoveKey("elevenlabs"),
+              "\(label): removeKey leaves ElevenLabs unconfigured")
+        let secrets = try? await connection.request("secrets.store.list", [:])
+        let names = (secrets?["entries"]?.array ?? []).compactMap { $0["name"]?.text ?? $0.text }
+        check(!names.contains("ELEVENLABS_API_KEY"), "\(label): removeKey deleted the stored secret (\(names))")
+        do { try await voice.setProvider("elevenlabs"); check(false, "\(label): a removed key can't be selected") }
+        catch { check(true, "\(label): a removed key can't be selected") }
+    } catch { check(false, "\(label): voice follow-ups threw \(error)") }
+}
+
 @MainActor
 private func voiceConnect(_ profile: GatewayProfile, _ label: String) async -> GatewayStore? {
     let gateway = GatewayStore(profile: profile)
@@ -184,6 +286,7 @@ func runDemoVoice() async {
     await voiceChecks(gateway, label: "demo")
     await voiceSetupChecks(gateway, label: "demo")
     await voiceFallbackChecks()
+    await voiceFollowUpChecks(profile: GatewayProfile.demo(), label: "demo")
 }
 
 @MainActor
@@ -192,7 +295,12 @@ func runLiveVoice(url: String, token: String) async {
     profile.secret = token
     guard let gateway = await voiceConnect(profile, "mock") else { return }
     defer { gateway.stop() }
-    await voiceChecks(gateway, label: "mock")
+    // MOCK_TTS_AUTO=inbound|tagged|always on the mock seeds the config default, which the client must report (prefs win once written).
+    let seeded = ProcessInfo.processInfo.environment["MOCK_TTS_AUTO"].flatMap { TTSAutoMode(rawValue: $0.lowercased()) } ?? .off
+    await gateway.voice.refresh()
+    check(gateway.voice.autoMode == seeded && gateway.voice.status?.enabled == (seeded != .off), "mock: auto mode \(seeded.rawValue) is reported")
+    check(gateway.voice.setAutoSpeakNeedsConfirmation(true) == seeded.isNotSettable, "mock: replacing \(seeded.rawValue) needs confirmation only for inbound/tagged")
+    await voiceChecks(gateway, label: "mock", seededAuto: seeded)
     check(!gateway.voice.canConfigure && gateway.voice.configureBlockedReason?.contains("Full Management") == true,
           "mock: a device without operator.admin can't configure the voice")
     let adminProfile = GatewayProfile(name: "Mock voice admin", url: url, authMode: .token, access: .admin)
@@ -200,4 +308,5 @@ func runLiveVoice(url: String, token: String) async {
     guard let admin = await voiceConnect(adminProfile, "mock admin") else { return }
     defer { admin.stop() }
     await voiceSetupChecks(admin, label: "mock")
+    await voiceFollowUpChecks(profile: adminProfile, label: "mock")
 }

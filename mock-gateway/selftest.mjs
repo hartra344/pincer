@@ -22,6 +22,7 @@ const SECTIONS = [
   'usage',
   'tts',
   'tts-setup',
+  'tts-keys',
   'channel-pairing',
   'health',
   'setup',
