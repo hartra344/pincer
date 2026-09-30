@@ -419,6 +419,8 @@ struct MCPTestConnectionRows: View {
     let state: MCPProbeState
     var stale = false
     var disabledReason: String?
+    /// Where to sign in after a probe reports the server needs it.
+    var signInHint = L("Save, then sign in from the server's page.")
     let run: () -> Void
 
     var body: some View {
@@ -434,7 +436,7 @@ struct MCPTestConnectionRows: View {
             Text(reason).font(.caption).foregroundStyle(.secondary)
         }
         if let result = self.state.result, !self.state.running {
-            MCPProbeResultView(result: result, stale: self.stale).id(MCPScrollTarget.resultID)
+            MCPProbeResultView(result: result, stale: self.stale, signInHint: self.signInHint).id(MCPScrollTarget.resultID)
         }
     }
 }
@@ -443,6 +445,7 @@ struct MCPTestConnectionRows: View {
 struct MCPProbeResultView: View {
     let result: MCPProbeResult
     var stale = false
+    var signInHint = L("Save, then sign in from the server's page.")
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
@@ -461,11 +464,12 @@ struct MCPProbeResultView: View {
     }
 
     @ViewBuilder private var headline: some View {
-        if !self.result.ok {
+        // Auth first: an OAuth server that isn't signed in reports not-ok with `auth` set.
+        if self.needsSignIn {
+            Label(L("Needs sign-in"), systemImage: "person.badge.key").foregroundStyle(.orange)
+            Text(self.signInHint).font(.caption).foregroundStyle(.secondary)
+        } else if !self.result.ok {
             Label(L("Couldn't connect"), systemImage: "xmark.octagon.fill").foregroundStyle(.red)
-        } else if self.needsSignIn {
-            Label(L("Connected. Needs sign-in."), systemImage: "person.badge.key").foregroundStyle(.orange)
-            Text("Save, then sign in from the server's page.", bundle: .module).font(.caption).foregroundStyle(.secondary)
         } else {
             Label(self.summary, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
         }

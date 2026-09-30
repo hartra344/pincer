@@ -299,7 +299,7 @@ struct MCPServersPage: View {
         if !model.pluginServers.isEmpty {
             Section {
                 ForEach(model.pluginServers) { server in
-                    MCPPluginServerRow(server: server, status: model.status(for: server.name)) {
+                    MCPPluginServerRow(server: server, status: model.status(for: server)) {
                         self.navigator.go(to: SettingsLocation(destination: .plugins, routes: [.plugin(server.pluginId)]))
                     }
                 }
@@ -408,7 +408,7 @@ extension View {
 /// A read-only row for a server a plugin declares. Tapping opens the plugin.
 private struct MCPPluginServerRow: View {
     let server: PluginMCPServer
-    let status: MCPServerStatus
+    let status: MCPServerStatus?
     let open: () -> Void
 
     var body: some View {
@@ -444,8 +444,8 @@ private struct MCPPluginServerRow: View {
         VStack(alignment: .trailing, spacing: Theme.Spacing.xxs) {
             if !self.server.isAvailable {
                 Text("Unavailable", bundle: .module).font(.caption).foregroundStyle(.orange)
-            } else if self.status.state != .unknown {
-                MCPStatusLabel(status: self.status)
+            } else if let status = self.status, status.state != .unknown {
+                MCPStatusLabel(status: status)
             } else if let auth = self.server.auth {
                 MCPAuthBadge(auth: auth)
             }
@@ -738,7 +738,7 @@ struct MCPServerPage: View {
     }
 
     @ViewBuilder private func testRows(_ server: MCPServer, model: MCPServersModel, block: String?) -> some View {
-        MCPTestConnectionRows(state: self.probe, disabledReason: block) {
+        MCPTestConnectionRows(state: self.probe, disabledReason: block, signInHint: L("Use Sign In on this page, then test again.")) {
             self.probe = MCPProbeState(running: true)
             Task { self.probe = MCPProbeState(result: await model.probe(name: server.name, timeoutMs: 15000)) }
         }

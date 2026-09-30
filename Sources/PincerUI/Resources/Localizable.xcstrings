@@ -17793,12 +17793,42 @@
         }
       }
     },
-    "Connected. Needs sign-in.": {
+    "Needs sign-in": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connected. Needs sign-in."
+            "value": "Needs sign-in"
+          }
+        }
+      }
+    },
+    "Use Sign In on this page, then test again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Sign In on this page, then test again."
+          }
+        }
+      }
+    },
+    "Shared (one sign-in for everyone)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared (one sign-in for everyone)"
+          }
+        }
+      }
+    },
+    "Per person (each person signs in)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Per person (each person signs in)"
           }
         }
       }
