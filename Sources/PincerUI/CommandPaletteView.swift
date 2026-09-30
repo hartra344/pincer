@@ -312,6 +312,7 @@ struct CommandPaletteView: View {
                             Spacer(minLength: 8)
                             if let shortcut = item.shortcut {
                                 Text(shortcut).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                    .fixedSize().layoutPriority(1)
                             }
                         }
                         Text(self.messages?.snippets[item.id] ?? self.snippetText(snippet))
@@ -330,6 +331,7 @@ struct CommandPaletteView: View {
                     Spacer(minLength: 8)
                     if let shortcut = item.shortcut {
                         Text(shortcut).font(.caption.monospaced()).foregroundStyle(.secondary)
+                            .fixedSize().layoutPriority(1)
                     }
                 }
             }

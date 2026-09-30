@@ -15,7 +15,7 @@ Message search looks through the text of every chat Pincer has cached for the se
 There are three ways in:
 
 - **⇧⌘F**, or **Go → Search Messages…**, opens the search straight away. It's available on macOS and on iPad with a keyboard, whenever a gateway is selected.
-- In the **⌘K** command palette, type at least two characters and choose **Search Messages for “…”**. It's listed right after the chats that match, or first when no chat name matches, so pressing <kbd>Return</kbd> on a query that doesn't name a chat searches messages.
+- In the **⌘K** command palette, type at least two characters and choose **Search Messages for “…”**. It's listed after the chats that match, and after any command whose title starts with what you type (typing `dict` lists **Dictate Message** first). When no chat or command title starts with your query, it's first, so pressing <kbd>Return</kbd> on a query that doesn't name one searches messages.
 - In the sidebar, type in **Find a chat**. A **Search messages for “…”** row appears above the chat list and opens the search with what you typed. This is the way in by touch, on iPhone and iPad.
 
 ## What matches
@@ -40,10 +40,27 @@ New messages become searchable as soon as they're cached, whether you sent them 
 Results are grouped by chat, and the chat with the newest match comes first. Each group has:
 
 - a heading with the chat's title, plus **· Archived** for an archived chat;
-- up to **3** matching messages, newest first. Each shows who sent it ("You", "via Discord" or the agent's name), when (the time today, the weekday for the past six days, otherwise the date) and a couple of lines of text around the match, highlighted the same way Find in Chat does;
+- up to **3** matching messages, newest first. Each shows who sent it ("You", "via Discord" or the agent's name), when (the time today, “Yesterday”, the weekday for the days before that up to six days back, otherwise the date, so a message from yesterday says “Yesterday”, just like in the chat) and a couple of lines of text around the match, highlighted the same way Find in Chat does;
 - **More matches in *chat*…** when the chat has more than 3 matches. It opens the chat with Find in Chat on its newest match.
 
 Results cover up to **30** chats. A very common word may leave out chats whose matches are all older.
+
+## Spotlight
+
+Pincer can also add your chats to Spotlight on Mac, iPhone and iPad, so you can find a chat without opening Pincer. Choosing a result opens that chat.
+
+- **Chat titles** are indexed by default.
+- **Recent message text** is added only if you turn on **Include Message Text**. It comes from the local cache only (up to the last few messages of each chat), never from the gateway.
+- Only your **200 most recent chats** per gateway are indexed. Archived and deleted chats are removed. [Demo](../../getting-started/try-the-demo/) chats are never indexed.
+
+In **Settings** (the **General** tab on macOS), the **Search** section has two toggles:
+
+| Setting | Default |
+| --- | --- |
+| **Show Chats in Spotlight** | On. Turning it off removes Pincer's chats from Spotlight. |
+| **Include Message Text** | Off. Available only while Show Chats in Spotlight is on. |
+
+Removing a gateway removes its chats from Spotlight too.
 
 ## Keyboard
 

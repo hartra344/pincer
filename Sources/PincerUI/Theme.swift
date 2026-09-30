@@ -206,7 +206,7 @@ extension Date {
             return self.formatted(date: .omitted, time: .shortened)
         }
         if calendar.isDateInYesterday(self) {
-            return "Yesterday \(self.formatted(date: .omitted, time: .shortened))"
+            return String(format: L("Yesterday %@"), self.formatted(date: .omitted, time: .shortened))
         }
         return self.formatted(date: .abbreviated, time: .shortened)
     }

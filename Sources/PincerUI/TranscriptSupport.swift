@@ -36,6 +36,8 @@ enum TranscriptRow: Equatable {
 @MainActor
 final class TranscriptDisclosure {
     private var expanded: [String: Bool] = [:]
+    /// Queries and current matches of the search within a tool card.
+    let toolSearch = ToolCardSearchStore()
 
     func isExpanded(_ id: String, default value: Bool) -> Bool {
         self.expanded[id] ?? value
@@ -622,6 +624,21 @@ final class TranscriptRenderer: TranscriptRowActions {
     func setExpanded(_ key: String, _ expanded: Bool, row: String) {
         self.context.disclosure.set(key, expanded: expanded)
         self.invalidate([row], keepInPlace: row)
+    }
+
+    /// Search within a tool card: opens or closes it, sets the query or the current match. Only the
+    /// card's row is laid out again; `reveal` scrolls to the current match.
+    func setToolSearch(_ toolId: String, row: String, open: Bool? = nil, query: String? = nil, current: Int? = nil,
+                       reveal: Bool = false)
+    {
+        let store = self.context.disclosure.toolSearch
+        var state = store.state(for: toolId)
+        if let query { state.query = query }
+        if let current { state.current = current }
+        store.set(state, for: toolId)
+        if let open { self.context.disclosure.set(ToolCardSearchStore.key(toolId), expanded: open) }
+        self.invalidate([row], keepInPlace: row)
+        if reveal { self.onReveal?(row) }
     }
 
     func openRun(_ sessionKey: String) {

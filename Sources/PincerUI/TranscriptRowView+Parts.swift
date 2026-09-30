@@ -1210,10 +1210,12 @@ final class TranscriptToolView: TranscriptBaseView {
     private var noteViews: [TranscriptNoteView] = []
     private var copiedControl: String?
     private weak var actions: TranscriptRowActions?
+    let searchBar = TranscriptToolSearchBar()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         self.addSubview(self.header)
+        self.addSubview(self.searchBar)
         self.addSubview(self.runButton)
         self.runButton.set(title: L("Open run"), symbol: "sparkles")
         self.addSubview(self.copyButton)
@@ -1250,12 +1252,13 @@ final class TranscriptToolView: TranscriptBaseView {
         let rowId = row.id
         self.header.configure(tool, trailing: tool.run == nil ? 10 : 6)
         self.header.onTap = { [weak actions] in actions?.setExpanded(tool.key, !tool.isExpanded, row: rowId) }
+        let spokenDuration = tool.tool.isRunning ? nil : tool.tool.durationMs.map { ToolDuration.format($0).spoken }
         if let edit = tool.edit {
             #if os(macOS)
-            self.header.toolTip = nil
+            self.header.toolTip = edit.fullPaths
             #endif
             self.header.accessibilityText = AccessibilityText.join([
-                edit.accessibilitySummary(isRunning: tool.tool.isRunning),
+                edit.accessibilitySummary(isRunning: tool.tool.isRunning), spokenDuration,
                 tool.tool.isRunning ? L("running") : nil, tool.tool.isError ? L("failed") : nil,
                 tool.isExpanded ? L("expanded") : L("collapsed"),
             ])
@@ -1265,7 +1268,7 @@ final class TranscriptToolView: TranscriptBaseView {
             self.header.toolTip = parts.server.map { L("\(parts.tool) on \($0)") }
             #endif
             self.header.accessibilityText = AccessibilityText.join(
-                [parts.server.map { L("\(parts.tool) on \($0)") } ?? tool.tool.name, tool.tool.summary]
+                [parts.server.map { L("\(parts.tool) on \($0)") } ?? tool.tool.name, tool.tool.summary, spokenDuration]
                     + [tool.tool.isRunning ? L("running") : nil, tool.tool.isError ? L("failed") : nil,
                        tool.isExpanded ? L("expanded") : L("collapsed")])
         }
@@ -1322,6 +1325,7 @@ final class TranscriptToolView: TranscriptBaseView {
                 view.isHidden = true
             }
         }
+        self.searchBar.configure(tool.search, toolId: tool.tool.id, row: rowId, actions: actions)
         self.redraw()
     }
 
@@ -1529,7 +1533,7 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         let iconRect = CGRect(x: 10, y: (bounds.height - 16) / 2, width: 16, height: 16)
         if !part.tool.isRunning {
             if part.tool.isError {
-                TranscriptSymbols.draw("xmark.octagon.fill", in: iconRect, size: style.callout.pointSize, color: TranscriptColors.red)
+                TranscriptSymbols.draw("xmark.octagon", in: iconRect, size: style.callout.pointSize, color: TranscriptColors.failure)
             } else {
                 let symbol = part.edit.map(TranscriptDiffText.symbol(for:)) ?? ToolSymbols.symbol(for: part.tool.name)
                 TranscriptSymbols.draw(symbol, in: iconRect, size: style.callout.pointSize, color: TranscriptColors.secondary)
@@ -1538,7 +1542,7 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         let chevronX = bounds.width - self.trailing - 10
         TranscriptSymbols.draw(part.isExpanded ? "chevron.down" : "chevron.right",
                                in: CGRect(x: chevronX, y: 0, width: 10, height: bounds.height),
-                               size: style.caption2Medium.pointSize, weight: .bold, color: TranscriptColors.tertiary)
+                               size: style.caption2Medium.pointSize, weight: .bold, color: TranscriptColors.secondary)
         if let edit = part.edit {
             self.drawEdit(edit, part: part, chevronX: chevronX)
             return
@@ -1546,21 +1550,39 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         let nameFont = style.calloutMonoMedium
         let nameX: CGFloat = 34
         let nameY = (bounds.height - TranscriptStyle.lineHeight(nameFont)) / 2
-        var right = chevronX - 8
-        if part.tool.isError {
-            let badgeFont = style.caption2Medium
-            let badge = singleLine(L("Failed"), badgeFont, TranscriptColors.failure)
-            let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
-            let badgeWidth = badge.lineWidth + 10
-            if right - badgeWidth > nameX + 40 {
-                let rect = CGRect(x: right - badgeWidth, y: (bounds.height - badgeHeight) / 2, width: badgeWidth, height: badgeHeight)
-                TranscriptColors.failure.withAlphaComponent(0.14).setFill()
-                PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
-                badge.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: badge.lineWidth, font: badgeFont)
-                right = rect.minX - 8
-            }
+        let duration = self.durationLine(part)
+        let badgeFont = style.caption2Medium
+        let failed = part.tool.isError ? singleLine(L("Failed"), badgeFont, TranscriptColors.failure) : nil
+        let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
+        // Left edge of the Failed badge (or the chevron's) for a given reserve; nil when the badge doesn't fit.
+        func badgeRect(reserve: CGFloat) -> CGRect? {
+            guard let failed else { return nil }
+            let width = failed.lineWidth + 10
+            let right = chevronX - 8 - reserve
+            guard right - width > nameX + 40 else { return nil }
+            return CGRect(x: right - width, y: (bounds.height - badgeHeight) / 2, width: width, height: badgeHeight)
         }
+        func rightEdge(reserve: CGFloat) -> CGFloat { badgeRect(reserve: reserve).map { $0.minX - 8 } ?? chevronX - 8 - reserve }
         let parts = ToolCardName(part.tool.name)
+        let nameWidthNatural = singleLine(parts.tool, nameFont, TranscriptColors.label).lineWidth
+        var reserve: CGFloat = 0
+        if let duration {
+            let candidate = duration.lineWidth + 8
+            let unchanged = (badgeRect(reserve: 0) != nil) == (badgeRect(reserve: candidate) != nil)
+            let room = rightEdge(reserve: candidate) - (nameX + nameWidthNatural)
+            // The summary keeps at least 60pt after the name, or the name keeps 40pt when there's no summary.
+            if unchanged, room >= (part.tool.summary == nil ? 40 : 68) { reserve = candidate }
+        }
+        if let duration, reserve > 0 {
+            self.draw(duration, right: chevronX - 8, nameFont: nameFont)
+        }
+        var right = chevronX - 8 - reserve
+        if let failed, let rect = badgeRect(reserve: reserve) {
+            TranscriptColors.failure.withAlphaComponent(0.14).setFill()
+            PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
+            failed.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: failed.lineWidth, font: badgeFont)
+            right = rect.minX - 8
+        }
         var nameWidth: CGFloat = 0
         let name = singleLine(parts.tool, nameFont, TranscriptColors.label)
         let available = max(right - nameX, 0)
@@ -1593,6 +1615,20 @@ final class TranscriptToolHeaderView: TranscriptTapView {
 }
 
 extension TranscriptToolHeaderView {
+    /// The run time as drawn, nil while running or when the call reported none.
+    fileprivate func durationLine(_ part: TranscriptPart.Tool) -> NSAttributedString? {
+        guard !part.tool.isRunning, let ms = part.tool.durationMs else { return nil }
+        return singleLine(ToolDuration.format(ms).text, TranscriptStyle.shared.captionMono, TranscriptColors.secondary)
+    }
+
+    /// Draws `line` with its right edge at `right`, on the name's baseline.
+    fileprivate func draw(_ line: NSAttributedString, right: CGFloat, nameFont: PFont) {
+        let font = TranscriptStyle.shared.captionMono
+        let nameY = (self.bounds.height - TranscriptStyle.lineHeight(nameFont)) / 2
+        line.drawLine(at: CGPoint(x: right - line.lineWidth, y: nameY + nameFont.ascender - font.ascender),
+                      width: line.lineWidth, font: font)
+    }
+
     /// File name (directory dimmer), then the +/− counts and a status badge before the chevron.
     fileprivate func drawEdit(_ edit: ToolFileEdit, part: TranscriptPart.Tool, chevronX: CGFloat) {
         let style = TranscriptStyle.shared
@@ -1600,35 +1636,56 @@ extension TranscriptToolHeaderView {
         let nameFont = style.calloutMonoMedium
         let nameX: CGFloat = 34
         let nameY = (bounds.height - TranscriptStyle.lineHeight(nameFont)) / 2
-        var right = chevronX - 8
-
         let badgeFont = style.caption2Medium
         let badgeText = part.tool.isError ? L("Failed") : edit.statusLabel(isRunning: part.tool.isRunning)
         let badgeColor = part.tool.isError ? TranscriptColors.failure : TranscriptColors.secondary
         let badge = singleLine(badgeText, badgeFont, badgeColor)
         let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
         let badgeWidth = badge.lineWidth + 10
-        if right - badgeWidth > nameX + 40 {
-            let rect = CGRect(x: right - badgeWidth, y: (bounds.height - badgeHeight) / 2, width: badgeWidth, height: badgeHeight)
-            (part.tool.isError ? TranscriptColors.failure.withAlphaComponent(0.14) : TranscriptColors.strongFill).setFill()
-            PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
-            badge.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: badge.lineWidth, font: badgeFont)
-            right = rect.minX - 8
-        }
-
         let countFont = style.captionMono
         let countY = nameY + nameFont.ascender - countFont.ascender
         let counts = [(edit.deletionsLabel, TranscriptDiffText.deletion), (edit.additionsLabel, TranscriptDiffText.addition)]
-            .compactMap { label, color in label.map { ($0, color) } }
-        for (text, color) in counts {
-            let count = singleLine(text, countFont, color)
-            guard right - count.lineWidth > nameX + 40 else { break }
-            count.drawLine(at: CGPoint(x: right - count.lineWidth, y: countY), width: count.lineWidth, font: countFont)
-            right -= count.lineWidth + 6
-        }
-        if !counts.isEmpty { right -= 2 }
-
+            .compactMap { label, color in label.map { (singleLine($0, countFont, color)) } }
         let name = singleLine(edit.title, nameFont, TranscriptColors.label, truncation: .byTruncatingMiddle)
+
+        // What fits left of the chevron after `reserve`: the status badge, then the counts.
+        func place(reserve: CGFloat) -> (badge: CGRect?, counts: [(NSAttributedString, CGFloat)], right: CGFloat) {
+            var right = chevronX - 8 - reserve
+            var badgeRect: CGRect?
+            if right - badgeWidth > nameX + 40 {
+                badgeRect = CGRect(x: right - badgeWidth, y: (bounds.height - badgeHeight) / 2, width: badgeWidth, height: badgeHeight)
+                right -= badgeWidth + 8
+            }
+            var placed: [(NSAttributedString, CGFloat)] = []
+            for count in counts {
+                guard right - count.lineWidth > nameX + 40 else { break }
+                placed.append((count, right - count.lineWidth))
+                right -= count.lineWidth + 6
+            }
+            if !counts.isEmpty { right -= 2 }
+            return (badgeRect, placed, right)
+        }
+        var layout = place(reserve: 0)
+        if let duration = self.durationLine(part) {
+            let candidate = duration.lineWidth + 8
+            let shifted = place(reserve: candidate)
+            // Badge and counts keep their place; the name (and directory) must still read.
+            let room = shifted.right - (nameX + min(name.lineWidth, 160))
+            if (shifted.badge != nil) == (layout.badge != nil), shifted.counts.count == layout.counts.count, room >= 40 {
+                layout = shifted
+                self.draw(duration, right: chevronX - 8, nameFont: nameFont)
+            }
+        }
+        if let rect = layout.badge {
+            (part.tool.isError ? TranscriptColors.failure.withAlphaComponent(0.14) : TranscriptColors.strongFill).setFill()
+            PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
+            badge.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: badge.lineWidth, font: badgeFont)
+        }
+        for (count, x) in layout.counts {
+            count.drawLine(at: CGPoint(x: x, y: countY), width: count.lineWidth, font: countFont)
+        }
+        let right = layout.right
+
         let nameWidth = min(name.lineWidth, max(right - nameX, 0))
         name.drawLine(at: CGPoint(x: nameX, y: nameY), width: nameWidth, font: nameFont)
         if let directory = edit.directory {
@@ -1646,6 +1703,8 @@ extension TranscriptToolHeaderView {
 final class TranscriptToolSectionView: TranscriptBaseView {
     private let textView = TranscriptTextView(wraps: true)
     private var contentHeight: CGFloat = 0
+    /// Bottom of the current card-search match in the text, kept in view when the text scrolls.
+    private var searchMatchBottom: CGFloat?
     #if os(macOS)
     private let scroller = TranscriptScroller(axis: .vertical)
     #endif
@@ -1662,6 +1721,7 @@ final class TranscriptToolSectionView: TranscriptBaseView {
 
     func configure(_ section: TranscriptPart.Tool.Section, row: TranscriptRowLayout, resetScroll: Bool) {
         self.contentHeight = section.contentHeight
+        self.searchMatchBottom = section.searchMatchBottom
         self.textView.copyItems = row.copyItems
         self.textView.set(section.text, identity: "\(row.id):\(section.id ?? section.title)")
         #if os(macOS)
@@ -1670,7 +1730,35 @@ final class TranscriptToolSectionView: TranscriptBaseView {
         self.textView.isScrollEnabled = section.contentHeight > section.frame.height + 0.5
         if resetScroll { self.textView.contentOffset = .zero }
         #endif
+        self.scrollToSearchMatch(height: section.frame.height)
     }
+
+    /// Scrolls a tall text so the current card-search match is inside the visible frame.
+    private func scrollToSearchMatch(height: CGFloat) {
+        guard let bottom = self.searchMatchBottom, self.contentHeight > height + 0.5 else { return }
+        let offset = bottom > height ? min(bottom - height / 2, self.contentHeight - height) : 0
+        #if os(macOS)
+        self.scroller.contentView.scroll(to: CGPoint(x: 0, y: offset))
+        self.scroller.reflectScrolledClipView(self.scroller.contentView)
+        #else
+        self.textView.contentOffset = CGPoint(x: 0, y: offset)
+        #endif
+    }
+
+    #if os(macOS)
+    /// ⌘F with the focus in this card's text searches the card instead of the chat.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "f",
+           let responder = self.window?.firstResponder as? NSView, responder.isDescendant(of: self),
+           let card = self.superview as? TranscriptToolView
+        {
+            card.searchBar.open()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+    #endif
 
     override func layoutContent() {
         let bounds = self.bounds

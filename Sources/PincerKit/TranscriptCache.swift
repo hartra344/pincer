@@ -272,8 +272,31 @@ public enum TranscriptCache {
     }
 
     public static func file(gatewayId: UUID, sessionKey: String, root: URL? = Self.root) -> URL? {
-        let digest = SHA256.hash(data: Data(sessionKey.utf8)).map { String(format: "%02x", $0) }.joined()
-        return self.directory(gatewayId: gatewayId, root: root)?.appending(path: "\(digest).json")
+        self.directory(gatewayId: gatewayId, root: root)?.appending(path: "\(self.digest(of: sessionKey)).json")
+    }
+
+    /// The cache file's name (without extension) for a chat.
+    public static func digest(of sessionKey: String) -> String {
+        SHA256.hash(data: Data(sessionKey.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Digests of the transcripts on disk for a Gateway (the file names carry no session key).
+    public static func cachedDigests(gatewayId: UUID, root: URL? = Self.root) -> [String] {
+        guard let directory = self.directory(gatewayId: gatewayId, root: root),
+              let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path(percentEncoded: false))
+        else { return [] }
+        return names.compactMap { name in
+            guard name.hasSuffix(".json") else { return nil }
+            let digest = String(name.dropLast(5))
+            return digest.count == 64 && digest.allSatisfy(\.isHexDigit) ? digest : nil
+        }
+    }
+
+    /// Deletes a transcript known only by its digest, through the writer like `remove(gatewayId:sessionKey:)`.
+    /// Its search rows go with the session (see `GatewayStore.reconcileOrphanedTranscripts`).
+    static func remove(gatewayId: UUID, digest: String, root: URL?) async {
+        guard let url = self.directory(gatewayId: gatewayId, root: root)?.appending(path: "\(digest).json") else { return }
+        await Writer.shared.remove(url)
     }
 
     /// The sidecar of a current-version transcript that's on disk; nil otherwise, so a missing,

@@ -3,17 +3,31 @@ title: Tool calls
 description: How Pincer shows the agent's commands, web lookups and MCP tool calls as readable cards in the chat transcript.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotCommands from '../../../assets/screenshots/features/tool-calls-commands-light.png';
+import shotCommandsDark from '../../../assets/screenshots/features/tool-calls-commands-dark.png';
+import shotWeb from '../../../assets/screenshots/features/tool-calls-web-light.png';
+import shotWebDark from '../../../assets/screenshots/features/tool-calls-web-dark.png';
+import shotSearch from '../../../assets/screenshots/features/tool-calls-search-light.png';
+import shotRead from '../../../assets/screenshots/features/tool-calls-read-light.png';
+import shotCommandsIOS from '../../../assets/screenshots/features/ios/tool-calls-commands-light.png';
+import shotCommandsDarkIOS from '../../../assets/screenshots/features/ios/tool-calls-commands-dark.png';
+import shotWebIOS from '../../../assets/screenshots/features/ios/tool-calls-web-light.png';
+import shotWebDarkIOS from '../../../assets/screenshots/features/ios/tool-calls-web-dark.png';
+import shotSearchIOS from '../../../assets/screenshots/features/ios/tool-calls-search-light.png';
+
 When an agent runs a command, fetches a page or calls a tool, the transcript shows a tool card. Collapsed, it's a single line. Expanded, it shows what the agent asked for and what came back, laid out for that kind of tool instead of as raw JSON.
 
-{/* Screenshot: an expanded exec card (terminal block, chips, exit badge) once the demo capture exists. */}
+<DocScreenshot src={shotCommands} alt="An expanded exec card with the command, working directory and timeout chips, an exit 0 badge and the output, above a failed exec card with a red border, a Failed badge and exit 1." caption="macOS, built-in demo. Open Check the MCP servers and set Thinking Steps to All. Each header shows how long the call took." ios={shotCommandsIOS} iosAlt="The expanded exec card with its output on iPhone, above the collapsed failed exec card and the other tool calls. Each header shows its duration." iosCaption="iOS, built-in demo. The collapsed cards below the open one show the failed exec in red and each call's duration." />
 
 ## Collapsed and expanded
 
-Tap or click a card's header to expand it, and again to collapse it. The header shows:
+Tap or click a card's header to expand it, and again to collapse it; the chevron at the right shows which way it's open. The header shows:
 
 - an icon and the tool's name. For an [MCP tool](#mcp-tools) it reads `server · tool`.
 - a one-line summary: the command, path, URL or query, cut short in the middle so both ends stay visible.
-- a spinner while the tool is running, and a red **Failed** badge when the call failed. The card's border turns red too. Every kind of card shows the badge, including the plain one for tools Pincer has no special layout for.
+- how long the call took, for example `1.2 s`, at the right before the chevron. It appears once the call has finished, and only when the gateway reported a time. It's the first thing dropped when the header is tight, so the name and summary stay readable.
+- a spinner while the tool is running, and a red **Failed** badge when the call failed. A failed card gets an outlined red ✕ icon and a red border, so it stands out in a long chat. Every kind of card shows the badge, including the plain one for tools Pincer has no special layout for.
 
 Pincer only works out the details when you expand a card, so long chats stay quick.
 
@@ -45,6 +59,18 @@ Edits, writes and patches show as diffs instead. See [File edit diffs](../file-d
 
 A fetch shows the URL, and a search shows the query, each in a chip with an icon. Extra chips show settings like the extract mode or the number of results. A fetch's output badge shows the HTTP status, and how long it took, when the gateway reports them.
 
+### Search results
+
+A `web_search` result appears as a list of links instead of JSON. The section is titled **Results**, and its badges show the search provider (for example `brave`), the number of results, how long the search took, and **cached** when the gateway served a saved answer.
+
+Each result is a title link, a dimmed line with the site, host and publish date when the provider gives them, and the snippet. The titles are ordinary links inside the card's selectable text, so click or tap one to open the page, and use the VoiceOver links rotor to move between them. On macOS, hovering a title shows the full URL. **Copy** copies one `title` and `url` pair per result.
+
+Some providers answer the question instead of listing pages. Then the section is titled **Answer**, the card shows the answer text, and a **Sources** list of links follows. If the search failed, the card shows the provider's own error message, with its documentation link when it sent one, like any other tool.
+
+<DocScreenshot src={shotWeb} alt="A web_search card listing five results as blue links with site, date and snippet, above an expanded web_fetch card." caption="macOS, built-in demo. The brave, 5 results and 640 ms badges sit in the title row." ios={shotWebIOS} iosAlt="A web_search card on iPhone listing five results as links with site, date and snippet." iosCaption="iOS, built-in demo. Tap a title to open the page." />
+
+Only `http` and `https` links are shown. If the gateway's result is in a shape Pincer doesn't recognize, or the chat was cached by an earlier version of Pincer without the result details, the card shows the output as plain text. **Show raw JSON** in the section's title row always shows the full result. To get the links for an old cached chat, clear the cache under **Settings → Storage** (see [Local cache](../local-cache/#clearing-the-cache)).
+
 ## MCP tools
 
 Tools that come from an MCP server show the server and the tool separately, `github · search_issues`, so you can see which server handled the call. The server is also a chip in the expanded card, followed by the tool's arguments. Choose **Open MCP Server** in the expanded card to jump to that server in [MCP Servers](../mcp-servers/). If the server isn't in your config, for example one a plugin declares, the control reads **Show MCP Servers** and opens the list.
@@ -57,18 +83,45 @@ Choose **Raw JSON** in the section's title row to see the arguments as the agent
 
 Any tool Pincer has no special layout for uses this list, with its output as plain text.
 
+## Syntax highlighting
+
+Output that is JSON, and JSON values in a call's arguments, is lightly coloured: keys, strings, numbers, and `true`, `false` and `null` each get their own colour. A file read is coloured by its file extension (Swift, JavaScript and TypeScript, Python, shell, Ruby, Go, Rust, C-family, JSON and YAML) with strings, numbers, comments and a few keywords. Markdown and unknown types stay plain. The colours meet contrast in light and dark mode, and the text itself never changes, so copying and Find work as before. Highlighting is worked out only when you expand a card.
+
+<DocScreenshot src={shotRead} alt="An expanded read card showing a Swift file with keywords, comments and numbers in different colours." caption="macOS, built-in demo. A read of a Swift file, with keywords, comments, numbers and literals coloured." narrow />
+
+## Searching within a card
+
+To look for something inside one card's output, choose the magnifier button next to **Copy** in the output's title row. It's there on search results too. A search field opens in the card. As you type, every match in the card's output and arguments is highlighted and the field shows where you are, for example "3 of 12", with previous, next and close buttons.
+
+- **Return** goes to the next match, and **Shift-Return** to the previous one. The card and chat scroll to show it.
+- On macOS, **⌘G** and **⇧⌘G** also move between matches, and **⌘F** with the cursor inside a card's output opens that card's search (and puts the cursor back in its field if it's already open). Anywhere else **⌘F** still opens [Find in Chat](../transcript/#find-in-chat).
+- **Esc**, or the magnifier again, closes the search and clears the highlights.
+
+Searching shows all of the card's lines, so a match is never hidden behind **Show all**. Only that card is redrawn as you type; the rest of the chat isn't touched.
+
+<DocScreenshot src={shotSearch} alt="An exec card with a search field under the Output title showing Era, four highlighted matches and 1 of 4." caption="macOS, built-in demo. Searching for Era in one card's output." ios={shotSearchIOS} iosAlt="The same search on iPhone, with the matches highlighted and 1 of 4 in the field." iosCaption="iOS, built-in demo." />
+ On iPhone and iPad the field works the same, with the on-screen keyboard or a hardware keyboard (Return, Shift-Return, Esc, ⌘G and ⇧⌘G).
+
 ## Finding text in tool calls
 
 With **Include Tool Output** turned on in [Find in Chat](../transcript/#find-in-chat), Find searches what the card shows: the command or headline, the argument list and the output. While a card has matches, its whole output is shown, so a match is never hidden behind **Show all**. With **Raw JSON** on, the card shows the raw arguments, and Find still searches the formatted text.
 
 ## Accessibility
 
-- The header is a button. VoiceOver reads the tool, its summary, whether it failed and whether it's expanded, for example "exec, `df -h`, failed, expanded".
+- The header is a button. VoiceOver reads the tool, its summary, whether it failed and whether it's expanded, for example "exec, `df -h`, failed, expanded". Durations are spoken in words, so a long call reads as "2 minutes 5 seconds".
 - Chips and badges are labelled: "Working directory", "Exit code 1", "Took 1.2 seconds".
 - Text follows your text size (Dynamic Type on iOS and iPadOS) and works in light and dark mode. The exit code badge is always spelled out, so colour is never the only signal.
 
 See [Accessibility](../accessibility/) for more.
 
+## Light and dark
+
+Tool cards follow the app's light or dark appearance.
+
+<DocScreenshot src={shotCommandsDark} alt="The exec and failed exec cards in dark mode." caption="macOS, dark mode." ios={shotCommandsDarkIOS} iosAlt="The expanded exec card in dark mode on iPhone." iosCaption="iOS, dark mode." />
+
+<DocScreenshot src={shotWebDark} alt="A web_search link list and a web_fetch card in dark mode." caption="macOS, dark mode." ios={shotWebDarkIOS} iosAlt="A web_search link list in dark mode on iPhone." iosCaption="iOS, dark mode." />
+
 ## Try it in the demo
 
-In the [demo](../../getting-started/try-the-demo/), open the **Check the MCP servers** chat. It has a command with multi-line output, a failed command, a file edit, an MCP tool call, a web fetch and a file read, all simulated.
+In the [demo](../../getting-started/try-the-demo/), open the **Check the MCP servers** chat. It has a command with multi-line output, a failed command, a file edit, an MCP tool call, a web fetch, a web search with a list of results, and a read of a Swift file with syntax colours, all simulated.

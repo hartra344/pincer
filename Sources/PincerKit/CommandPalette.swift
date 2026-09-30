@@ -198,7 +198,7 @@ public enum PaletteMatcher {
         query.split(whereSeparator: \.isWhitespace).map(String.init)
     }
 
-    private static func normalized(_ text: String) -> String {
+    static func normalized(_ text: String) -> String {
         text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
     }
 
@@ -314,14 +314,23 @@ public enum CommandPalette {
             shortcut: shortcut, section: .commands, action: .searchMessages(query))
     }
 
-    /// Ranked root-page results with "Search Messages for “q”" right after the last chat (first
-    /// when no chat matches), so Return on a query that names no chat searches messages.
+    /// Whether the item's title starts with the whole query (case- and diacritic-insensitive).
+    public static func titleStartsWith(_ item: PaletteItem, query: String) -> Bool {
+        let query = PaletteMatcher.normalized(query.trimmingCharacters(in: .whitespacesAndNewlines))
+        return !query.isEmpty && !item.isHeader && PaletteMatcher.normalized(item.title).hasPrefix(query)
+    }
+
+    /// Ranked root-page results with "Search Messages for “q”" after the last chat and after the last
+    /// item whose title starts with the query (first otherwise), so Return on a query that names
+    /// no chat or command searches messages.
     public static func addingSearchMessages(to ranked: [PaletteItem], query: String, gatewaySelected: Bool,
                                             shortcut: String? = "⇧⌘F") -> [PaletteItem] {
         guard gatewaySelected, let item = self.searchMessagesItem(query: query, shortcut: shortcut) else { return ranked }
         var items = ranked
-        let position = items.lastIndex { $0.section == .chats }.map { $0 + 1 } ?? 0
-        items.insert(item, at: position)
+        let afterChats = items.lastIndex { $0.section == .chats }.map { $0 + 1 } ?? 0
+        // Bookmark titles are message previews, not names: they don't outrank searching messages.
+        let afterPrefix = items.lastIndex { $0.section != .bookmarks && self.titleStartsWith($0, query: query) }.map { $0 + 1 } ?? 0
+        items.insert(item, at: max(afterChats, afterPrefix))
         return items
     }
 

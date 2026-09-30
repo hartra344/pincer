@@ -11,7 +11,11 @@ import UIKit
 enum ToolPresentationCache {
     private final class Box {
         let value: ToolCallPresentation
-        init(_ value: ToolCallPresentation) { self.value = value }
+        let highlights: ToolHighlights
+        init(_ value: ToolCallPresentation) {
+            self.value = value
+            self.highlights = ToolHighlights.make(value)
+        }
     }
 
     private static let cache: NSCache<NSString, Box> = {
@@ -21,11 +25,20 @@ enum ToolPresentationCache {
     }()
 
     static func presentation(for tool: ToolActivity) -> ToolCallPresentation {
+        self.entry(for: tool).value
+    }
+
+    /// Syntax tokens of the presentation's arguments and output, made once with it.
+    static func highlights(for tool: ToolActivity) -> ToolHighlights {
+        self.entry(for: tool).highlights
+    }
+
+    private static func entry(for tool: ToolActivity) -> Box {
         let key = "\(tool.id)|\(tool.arguments?.utf8.count ?? -1)|\(tool.result?.utf8.count ?? -1)|\(tool.isError)|\(tool.isRunning)|\(tool.details != nil)" as NSString
-        if let cached = self.cache.object(forKey: key) { return cached.value }
-        let value = ToolCallPresentation.make(tool, limit: TranscriptMetrics.toolOutputLimit)
-        self.cache.setObject(Box(value), forKey: key)
-        return value
+        if let cached = self.cache.object(forKey: key) { return cached }
+        let box = Box(ToolCallPresentation.make(tool, limit: TranscriptMetrics.toolOutputLimit))
+        self.cache.setObject(box, forKey: key)
+        return box
     }
 }
 
@@ -77,7 +90,7 @@ extension TranscriptPart.Tool.Tone {
     }
 }
 
-private struct ToolCardBuild {
+struct ToolCardBuild {
     var y: CGFloat
     let x: CGFloat = 10
     let inner: CGFloat
@@ -86,6 +99,8 @@ private struct ToolCardBuild {
     var controls: [TranscriptPart.Tool.Control] = []
     var notes: [TranscriptPart.Tool.Note] = []
     var matchY: CGFloat?
+    /// Matches of the card's own search while it is open.
+    var search: ToolSearchMatches?
     var placedAny = false
 
     /// Space before the next block, except above the first.
@@ -116,6 +131,7 @@ extension TranscriptLayoutBuilder {
         var decor: [TranscriptPart.Tool.Decor] = []
         var controls: [TranscriptPart.Tool.Control] = []
         var notes: [TranscriptPart.Tool.Note] = []
+        var search: TranscriptPart.Tool.Search?
         var height = headerHeight
         if expanded, let edit {
             var y = headerHeight + 1 + 10
@@ -163,10 +179,14 @@ extension TranscriptLayoutBuilder {
             notes = card.notes
             toolMatchY = card.matchY
             height = card.y + 10
+            search = card.search.flatMap {
+                $0.frame == .zero ? nil : .init(frame: $0.frame, query: $0.query, total: $0.total, current: $0.current)
+            }
         }
-        let part = TranscriptPart.Tool(tool: tool, key: key, isExpanded: expanded, run: run, headerHeight: headerHeight,
+        var part = TranscriptPart.Tool(tool: tool, key: key, isExpanded: expanded, run: run, headerHeight: headerHeight,
                                        sections: sections, runningY: runningY, edit: edit, diff: diff,
                                        decor: decor, controls: controls, notes: notes)
+        part.search = search
         stack.add(.tool(part), height: height, width: width, spacing: first ? TranscriptMetrics.blockSpacing : TranscriptMetrics.toolSpacing)
         if let toolMatchY, let frame = stack.parts.last?.frame { layout.matchY = frame.minY + toolMatchY }
     }
@@ -175,7 +195,15 @@ extension TranscriptLayoutBuilder {
     private func toolCard(_ tool: ToolActivity, row: String, into card: inout ToolCardBuild) -> CGFloat? {
         let presentation = ToolPresentationCache.presentation(for: tool)
         // Find counts the formatted text, so while it has matches in this row nothing is raw or cut short.
-        let finding = self.highlight.isActive && self.highlight.options.includeTools && self.highlight.rows.contains(row)
+        let searchKey = ToolCardSearchStore.key(tool.id)
+        let searching = self.context.disclosure.isExpanded(searchKey, default: false)
+        if searching {
+            let state = self.context.disclosure.toolSearch.state(for: tool.id)
+            card.search = ToolSearchMatches(query: state.query, current: state.current, presentation: presentation)
+        }
+        // The card's own search works the same way: it counts the formatted text, in full.
+        let finding = searching
+            || (self.highlight.isActive && self.highlight.options.includeTools && self.highlight.rows.contains(row))
         let hasRaw = presentation.rawArguments != nil
             || presentation.rawResult.map { $0 != presentation.output?.text && !$0.isEmpty } ?? false
         let rawKey = "raw:\(tool.id)"
@@ -238,7 +266,8 @@ extension TranscriptLayoutBuilder {
         if let argumentsText = presentation.argumentsText, !argumentsText.isEmpty {
             card.gap(8)
             self.inputTitle(into: &card)
-            let body = self.keyValueText(presentation.arguments, text: argumentsText, inner: card.inner)
+            let body = TranscriptSyntaxColors.apply(ToolPresentationCache.highlights(for: tool).arguments,
+                                                    to: self.keyValueText(presentation.arguments, text: argumentsText, inner: card.inner))
             card.y += self.textSection("\(tool.id):arguments", body, tool: tool, x: card.x, width: card.inner,
                                        maxHeight: TranscriptMetrics.toolOutputMaxHeight, into: &card)
         } else if presentation.rawArguments == nil, let plain = tool.arguments, !plain.isEmpty {
@@ -249,6 +278,11 @@ extension TranscriptLayoutBuilder {
             card.y += self.textSection("\(tool.id):arguments", TranscriptText.plain(text, font: self.style.captionMono, color: TranscriptColors.label),
                                        tool: tool, x: card.x, width: card.inner, maxHeight: TranscriptMetrics.toolOutputMaxHeight,
                                        searchable: false, into: &card)
+        }
+        if let web = presentation.web, web.isListable, let output = presentation.output {
+            card.gap(8)
+            self.webSearch(web, durationMs: output.durationMs, tool: tool, into: &card)
+            return nil
         }
         if let output = presentation.output {
             card.gap(8)
@@ -288,22 +322,29 @@ extension TranscriptLayoutBuilder {
         }
     }
 
-    private func textSection(_ id: String, _ string: NSAttributedString, tool: ToolActivity, x: CGFloat, width: CGFloat,
+    func textSection(_ id: String, _ string: NSAttributedString, tool: ToolActivity, x: CGFloat, width: CGFloat,
                              maxHeight: CGFloat, searchable: Bool = true, into card: inout ToolCardBuild) -> CGFloat
     {
-        let (text, match) = searchable ? self.marks.mark(string, .tool(tool.id)) : (string, nil)
+        var (text, match) = searchable ? self.marks.mark(string, .tool(tool.id)) : (string, nil)
+        var searchMatch: NSRange?
+        if searchable, card.search != nil { (text, searchMatch) = card.search!.mark(text) }
         let contentHeight = TranscriptText.size(text, width: width).height
         let visible = min(contentHeight, maxHeight)
         if let match {
             card.matchY = card.y + min(self.marks.lineBottom(of: match, in: text, width: width), visible)
         }
+        var searchBottom: CGFloat?
+        if let searchMatch {
+            searchBottom = self.marks.lineBottom(of: searchMatch, in: text, width: width)
+            card.matchY = card.y + min(searchBottom ?? 0, visible)
+        }
         card.sections.append(.init(title: "", titleY: 0, text: text,
                                    frame: CGRect(x: x, y: card.y, width: width, height: visible),
-                                   contentHeight: contentHeight, id: id))
+                                   contentHeight: contentHeight, id: id, searchMatchBottom: searchBottom))
         return visible
     }
 
-    private var titleRowHeight: CGFloat { max(TranscriptStyle.lineHeight(self.style.captionSemibold), 16) }
+    var titleRowHeight: CGFloat { max(TranscriptStyle.lineHeight(self.style.captionSemibold), 16) }
 
     private func inputTitle(into card: inout ToolCardBuild) {
         let font = self.style.captionSemibold
@@ -438,8 +479,8 @@ extension TranscriptLayoutBuilder {
     }
 
     /// "Output" (or "Error"), badges after it and Copy at the right.
-    private func titleRow(_ title: String, failed: Bool, badges: [(String, TranscriptPart.Tool.Tone, String)], copy text: String?,
-                          into card: inout ToolCardBuild)
+    func titleRow(_ title: String, failed: Bool, badges: [(String, TranscriptPart.Tool.Tone, String)], copy text: String?,
+                          searchTool: String? = nil, into card: inout ToolCardBuild)
     {
         let style = self.style
         let copy = TranscriptLabelButton.size(title: L("Copied"))
@@ -452,7 +493,9 @@ extension TranscriptLayoutBuilder {
                                  width: titleWidth + 2, .captionSemibold, failed ? .failure : .secondary, truncation: .byClipping))
         var spoken = [title]
         var x = card.x + titleWidth + 8
-        let limit = card.x + card.inner - copy.width - 8
+        let searchIcon = TranscriptLabelButton.size(title: "")
+        let hasSearch = searchTool != nil && !(text ?? "").isEmpty
+        let limit = card.x + card.inner - copy.width - 8 - (hasSearch ? searchIcon.width + 6 : 0)
         for (text, tone, said) in badges {
             let width = singleLine(text, badgeFont, tone.color).lineWidth + 10
             guard x + width <= limit else { break }
@@ -468,6 +511,15 @@ extension TranscriptLayoutBuilder {
                                        frame: CGRect(x: card.x + card.inner - copy.width, y: card.y + (height - copy.height) / 2,
                                                      width: copy.width, height: copy.height),
                                        action: .copy(text), spoken: failed ? L("Copy error") : L("Copy output"), trailing: true))
+        }
+        if hasSearch, let searchTool {
+            let open = card.search != nil
+            card.controls.append(.init(id: "search-output", title: "", symbol: open ? "magnifyingglass.circle.fill" : "magnifyingglass",
+                                       frame: CGRect(x: card.x + card.inner - copy.width - 6 - searchIcon.width,
+                                                     y: card.y + (height - searchIcon.height) / 2,
+                                                     width: searchIcon.width, height: searchIcon.height),
+                                       action: .toggle(key: ToolCardSearchStore.key(searchTool), to: !open),
+                                       spoken: open ? L("Close search") : L("Search in output"), trailing: true, iconOnly: true))
         }
         card.notes.append(.init(frame: CGRect(x: card.x, y: card.y, width: card.inner, height: height),
                                 text: spoken.joined(separator: ", ")))
@@ -494,11 +546,17 @@ extension TranscriptLayoutBuilder {
             }
         }
         if let ms = output.durationMs {
-            let (text, spoken) = Self.duration(ms)
+            let (text, spoken) = ToolDuration.format(ms)
             badges.append((text, .strongFill, spoken))
         }
         if output.lineCount > 1 { badges.append((L("\(output.lineCount) lines"), .strongFill, L("\(output.lineCount) lines"))) }
-        self.titleRow(failed ? L("Error") : L("Output"), failed: failed, badges: badges, copy: output.text, into: &card)
+        self.titleRow(failed ? L("Error") : L("Output"), failed: failed, badges: badges, copy: output.text,
+                      searchTool: tool.id, into: &card)
+        if card.search != nil {
+            card.y += 6
+            card.search?.frame = CGRect(x: card.x, y: card.y, width: card.inner, height: 26)
+            card.y += 26
+        }
         let lineHeight = TranscriptStyle.lineHeight(style.captionMono)
         if output.text.isEmpty, output.imageCount == 0 {
             card.y += 4
@@ -516,7 +574,9 @@ extension TranscriptLayoutBuilder {
             // Fully shown output takes its whole height; only the collapsed preview is capped.
             let maxHeight = showsAll && output.lineCount > toolOutputPreviewLines
                 ? CGFloat.greatestFiniteMagnitude : TranscriptMetrics.toolOutputMaxHeight
-            let attributed = TranscriptText.plain(shown, font: style.captionMono, color: failed ? TranscriptColors.failure : TranscriptColors.label)
+            let attributed = TranscriptSyntaxColors.apply(
+                ToolPresentationCache.highlights(for: tool).output,
+                to: TranscriptText.plain(shown, font: style.captionMono, color: failed ? TranscriptColors.failure : TranscriptColors.label))
             if isExec {
                 let padX: CGFloat = 10
                 let padY: CGFloat = 8
@@ -581,19 +641,6 @@ extension TranscriptLayoutBuilder {
             if status.hasPrefix("signal ") { return L("signal \(String(status.dropFirst(7)))") }
             return status
         }
-    }
-
-    /// "340 ms", "1.2 s", "2 m 05 s", with how VoiceOver says it.
-    private static func duration(_ ms: Int) -> (String, String) {
-        if ms < 1000 { return ("\(ms) ms", L("Took \(ms) milliseconds")) }
-        if ms < 60_000 {
-            var number = String(format: "%.1f", Double(ms) / 1000)
-            if number.hasSuffix(".0") { number.removeLast(2) }
-            return ("\(number) s", L("Took \(number) seconds"))
-        }
-        let seconds = ms / 1000
-        let text = String(format: "%d m %02d s", seconds / 60, seconds % 60)
-        return (text, L("Took \(text)"))
     }
 
     private static func firstLines(_ text: String, _ count: Int) -> String {

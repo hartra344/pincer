@@ -268,7 +268,17 @@ public struct ToolFileEdit: Hashable, Sendable {
     /// "+3", "+3+" (at least 3), or nil when there's nothing or nothing known to show.
     public var additionsLabel: String? { Self.countLabel("+", self.additions, self.additionsBound) }
     /// "−1", "−12+" (at least 12), or nil.
-    public var deletionsLabel: String? { Self.countLabel("−", self.deletions, self.deletionsBound) }
+    /// A patch that only deletes files and lists no removed lines reads "1 file deleted" instead.
+    public var deletionsLabel: String? {
+        if let label = Self.countLabel("−", self.deletions, self.deletionsBound) { return label }
+        let deleted = self.headerOnlyDeletedFileCount
+        guard deleted > 0 else { return nil }
+        return deleted == 1 ? L("1 file deleted") : L("\(deleted) files deleted")
+    }
+
+    private var headerOnlyDeletedFileCount: Int {
+        self.deletions == 0 ? self.files.count { $0.operation == .delete } : 0
+    }
 
     private static func countLabel(_ sign: String, _ count: Int, _ bound: StatBound) -> String? {
         guard count > 0, bound != .unknown else { return nil }
@@ -296,6 +306,7 @@ public struct ToolFileEdit: Hashable, Sendable {
         if self.deletions > 0, self.deletionsBound != .unknown {
             counts.append(self.deletionsBound == .atLeast ? L("at least \(self.deletions) removed") : L("\(self.deletions) removed"))
         }
+        if counts.isEmpty, self.headerOnlyDeletedFileCount > 0, let label = self.deletionsLabel { counts.append(label) }
         return ([action] + counts).joined(separator: ", ")
     }
 

@@ -67,6 +67,17 @@ enum TranscriptPart {
             let contentHeight: CGFloat
             /// Identifies the text view's content when the title is empty.
             var id: String?
+            /// Bottom of the line holding the current card-search match, from the top of the text.
+            var searchMatchBottom: CGFloat?
+        }
+
+        /// The search field of a card whose output search is open, in card coordinates.
+        struct Search: Equatable {
+            let frame: CGRect
+            let query: String
+            let total: Int
+            /// Index of the current match among `total`.
+            let current: Int
         }
 
         enum Tone { case label, secondary, tertiary, ok, failure, fill, strongFill, terminal }
@@ -137,6 +148,7 @@ enum TranscriptPart {
         var controls: [Control] = []
         /// What VoiceOver reads for the chips, badges and captions drawn in the body.
         var notes: [Note] = []
+        var search: Search?
     }
 
     /// The line under a message: a Copy button and details such as when it was sent.

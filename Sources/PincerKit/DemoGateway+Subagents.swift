@@ -108,9 +108,12 @@ extension DemoGateway {
         func call(_ id: String, _ name: String, _ args: JSONValue) -> JSONValue {
             ["type": "toolCall", "id": .string(id), "name": .string(name), "arguments": args]
         }
-        func result(_ id: String, _ name: String, _ output: String, minutesAgo: Double, isError: Bool = false) -> JSONValue {
-            message("toolResult", [text(output)], minutesAgo: minutesAgo,
-                    extra: ["toolCallId": .string(id), "toolName": .string(name), "isError": .bool(isError)])
+        func result(_ id: String, _ name: String, _ output: String, minutesAgo: Double, isError: Bool = false,
+                    details: JSONValue? = nil) -> JSONValue
+        {
+            var extra: [String: JSONValue] = ["toolCallId": .string(id), "toolName": .string(name), "isError": .bool(isError)]
+            if let details { extra["details"] = details }
+            return message("toolResult", [text(output)], minutesAgo: minutesAgo, extra: extra)
         }
         func receipt(_ id: String, _ key: String, _ runId: String, minutesAgo: Double) -> JSONValue {
             result(id, "sessions_spawn", #"{"status":"accepted","childSessionKey":"\#(key)","runId":"\#(runId)"}"#,
@@ -123,7 +126,7 @@ extension DemoGateway {
                 thinking("Gather context first, then split the work into three helpers."),
                 call("call_lp_search", "web_search", ["query": "operator app launch checklist"]),
             ], minutesAgo: 31.8),
-            result("call_lp_search", "web_search", "8 results", minutesAgo: 31.2),
+            result("call_lp_search", "web_search", Self.subagentSearches["call_lp_search"]!.text, minutesAgo: 31.2, details: Self.subagentSearches["call_lp_search"]!.details),
             message("assistant", [call("call_lp_fetch", "web_fetch", ["url": "https://example.com/launch-guide"])], minutesAgo: 31.1),
             result("call_lp_fetch", "web_fetch", "Launch guide (4,210 words)", minutesAgo: 30.6),
             message("assistant", [call("call_lp_read", "read", ["path": "notes/roadmap.md"])], minutesAgo: 30.5),
@@ -174,14 +177,14 @@ extension DemoGateway {
                                   call("call_tl_cal", "read", ["path": "notes/release-calendar.md"])], minutesAgo: 5.5),
             result("call_tl_cal", "read", "# Release calendar\n…", minutesAgo: 5.2),
             message("assistant", [call("call_tl_search", "web_search", ["query": "app store review times"])], minutesAgo: 4),
-            result("call_tl_search", "web_search", "6 results", minutesAgo: 3.4),
+            result("call_tl_search", "web_search", Self.subagentSearches["call_tl_search"]!.text, minutesAgo: 3.4, details: Self.subagentSearches["call_tl_search"]!.details),
             message("assistant", [call("call_tl_draft", "write", ["path": "plans/launch-timeline.md"])], minutesAgo: 1),
         ]
         transcripts[kids.failed] = [
             message("user", [text("Check that the name is free to trademark.")], minutesAgo: 29.4),
             message("assistant", [thinking("Search the trademark database for the name."),
                                   call("call_tm_search", "web_search", ["query": "Pincer trademark"])], minutesAgo: 29.2),
-            result("call_tm_search", "web_search", "4 results", minutesAgo: 28.8),
+            result("call_tm_search", "web_search", Self.subagentSearches["call_tm_search"]!.text, minutesAgo: 28.8, details: Self.subagentSearches["call_tm_search"]!.details),
             message("assistant", [call("call_tm_fetch", "web_fetch", ["url": "https://tmsearch.uspto.gov/search?q=pincer"])],
                     minutesAgo: 28.7),
             result("call_tm_fetch", "web_fetch", "503 Service Unavailable", minutesAgo: 26.5, isError: true),
@@ -242,7 +245,7 @@ extension DemoGateway {
         run(Self.seededParentRunId, Self.subagentParentKey, spawnedBy: nil, [
             start(32), thinking(31.9, "Gather context first, then split the work into three helpers."),
             tool(31.8, "call_lp_search", "web_search", ["query": "operator app launch checklist"]),
-            toolResult(31.2, "call_lp_search", "web_search", "8 results"),
+            toolResult(31.2, "call_lp_search", "web_search", Self.subagentSearches["call_lp_search"]!.text),
             tool(31.1, "call_lp_fetch", "web_fetch", ["url": "https://example.com/launch-guide"]),
             toolResult(30.6, "call_lp_fetch", "web_fetch", "Launch guide (4,210 words)"),
             tool(30.5, "call_lp_read", "read", ["path": "notes/roadmap.md"]),
@@ -284,7 +287,7 @@ extension DemoGateway {
             toolResult(5.2, "call_tl_cal", "read", "# Release calendar"),
             thinking(4.5, "Check how long app review takes."),
             tool(4, "call_tl_search", "web_search", ["query": "app store review times"]),
-            toolResult(3.4, "call_tl_search", "web_search", "6 results"),
+            toolResult(3.4, "call_tl_search", "web_search", Self.subagentSearches["call_tl_search"]!.text),
             thinking(2, "Draft the plan week by week."),
             writing(1.5, "Week 1: beta."),
             tool(1, "call_tl_draft", "write", ["path": "plans/launch-timeline.md"]),
@@ -292,7 +295,7 @@ extension DemoGateway {
         run("run_seed_trademark", kids.failed, spawnedBy: Self.subagentParentKey, [
             start(29.4), thinking(29.3, "Search the trademark database for the name."),
             tool(29.2, "call_tm_search", "web_search", ["query": "Pincer trademark"]),
-            toolResult(28.8, "call_tm_search", "web_search", "4 results"),
+            toolResult(28.8, "call_tm_search", "web_search", Self.subagentSearches["call_tm_search"]!.text),
             tool(28.7, "call_tm_fetch", "web_fetch", ["url": "https://tmsearch.uspto.gov/search?q=pincer"]),
             toolResult(26.5, "call_tm_fetch", "web_fetch", "503 Service Unavailable\nRetry-After: 120", isError: true),
             (26, "lifecycle", ["phase": "error", "error": "web_fetch failed: 503 Service Unavailable from tmsearch.uspto.gov",
@@ -340,4 +343,36 @@ extension DemoGateway {
             (row["spawnedBy"]?.string ?? row["parentSessionKey"]?.string) == parentKey && row["status"]?.string == "running"
         }
     }
+}
+
+extension DemoGateway {
+    /// Upstream-shaped `web_search` results for the subagent demo's calls, keyed by tool call id.
+    static let subagentSearches: [String: (text: String, details: JSONValue)] = [
+        "call_lp_search": webSearchResult(query: "operator app launch checklist", tookMs: 512, results: [
+            WebSearchSeed(title: "The ultimate app launch checklist", url: "https://example.com/launch-checklist",
+                          snippet: "Thirty things to finish before you submit: screenshots, privacy labels, review notes, a support URL.",
+                          published: "2026-04-02", siteName: "example.com"),
+            WebSearchSeed(title: "Launching a desktop app: what we learned", url: "https://blog.example.dev/launching-desktop-apps",
+                          snippet: "Notarization, auto-update and a staged rollout mattered more than the marketing site.",
+                          published: "2026-01-19", siteName: "blog.example.dev"),
+            WebSearchSeed(title: "Release checklist template", url: "https://github.com/example/release-checklist",
+                          snippet: nil, published: nil, siteName: "github.com"),
+        ]),
+        "call_tl_search": webSearchResult(query: "app store review times", tookMs: 388, results: [
+            WebSearchSeed(title: "App Review: average review times", url: "https://developer.apple.com/distribute/app-review/",
+                          snippet: "90% of submissions are reviewed in less than 24 hours.",
+                          published: "2026-08-14", siteName: "developer.apple.com"),
+            WebSearchSeed(title: "How long does App Store review take in 2026?", url: "https://appreviewtimes.example.com/",
+                          snippet: "Current average: 1.1 days for new apps, 18 hours for updates.",
+                          published: "2026-09-25", siteName: "appreviewtimes.example.com"),
+        ]),
+        "call_tm_search": webSearchResult(query: "Pincer trademark", tookMs: 455, results: [
+            WebSearchSeed(title: "Trademark Electronic Search System", url: "https://tmsearch.uspto.gov/",
+                          snippet: "Search the USPTO database for federally registered and pending marks.",
+                          published: nil, siteName: "tmsearch.uspto.gov"),
+            WebSearchSeed(title: "Pincer — software company", url: "https://pincer.example.org/",
+                          snippet: "Pincer makes a native client for operator agents.",
+                          published: "2026-06-30", siteName: "pincer.example.org"),
+        ]),
+    ]
 }

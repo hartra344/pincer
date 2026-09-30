@@ -10,11 +10,13 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
     public var arguments: String? { didSet { self.derive() } }
     public var result: String? { didSet { self.derive() } }
     /// `details` of the result, trimmed to what a file-edit diff reads. See `ToolFileEdit.parse`.
-    public var details: JSONValue?
+    public var details: JSONValue? { didSet { self.durationMs = Self.duration(details) } }
     public var isError: Bool
     public var isRunning: Bool
     /// One-line hint (command, path, query) for the collapsed card. Derived once, not per render.
     public private(set) var summary: String?
+    /// How long the call took, from `details` (`durationMs` for exec, `tookMs` for web tools). Derived when details are set.
+    public private(set) var durationMs: Int?
     /// Subagent session this call started, when the call names one.
     public private(set) var spawnedSessionKey: String?
     /// `label` argument of a spawn call, for matching the run when no key is echoed back.
@@ -28,6 +30,7 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
         self.arguments = arguments
         self.result = result
         self.details = details
+        self.durationMs = Self.duration(details)
         self.isError = isError
         self.isRunning = isRunning
         self.derive()
@@ -38,12 +41,19 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
                                                        "failureKind", "tookMs", "finalUrl", "contentType", "title"]
 
     /// Keeps only the `details` keys the cards read (a file edit's diff; exec and web_fetch status
-    /// scalars), so bulky details such as exec's `aggregated` output aren't held.
+    /// scalars; a web_search's trimmed results), so bulky details such as exec's `aggregated` output aren't held.
     public static func fileEditDetails(_ details: JSONValue?) -> JSONValue? {
         guard let object = details?.object else { return nil }
-        let kept = object.filter { ["diff", "changed", "created"].contains($0.key)
+        var kept = object.filter { ["diff", "changed", "created"].contains($0.key)
             || Self.statusDetailKeys.contains($0.key) && $0.value.object == nil && $0.value.array == nil }
+        // web_search's results (≤ 10 rows, each ~500 B) for its link list.
+        if WebSearch.isPayload(object) { kept.merge(WebSearch.trimmed(object)) { _, new in new } }
         return kept.isEmpty ? nil : .object(kept)
+    }
+
+    private static func duration(_ details: JSONValue?) -> Int? {
+        guard let details else { return nil }
+        return details["durationMs"]?.int ?? details["tookMs"]?.int
     }
 
     private mutating func derive() {

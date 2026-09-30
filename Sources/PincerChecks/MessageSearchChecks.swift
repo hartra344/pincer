@@ -136,6 +136,7 @@ func checkMessageSearchLogic() {
             .replacingOccurrences(of: "\u{202F}", with: " ")
     }
     check(label(1_790_413_500) == "9:05 AM", "today: the time (\(label(1_790_413_500)))")
+    check(label(1_790_434_800 - 86400) == "Yesterday", "yesterday (\(label(1_790_434_800 - 86400)))")
     check(label(1_790_434_800 - 2 * 86400) == "Thursday", "this week: the weekday (\(label(1_790_434_800 - 2 * 86400)))")
     check(label(1_790_434_800 - 7 * 86400) == "Sep 19", "a week ago: the date (\(label(1_790_434_800 - 7 * 86400)))")
     check(label(1_772_632_800) == "Mar 4", "this year: month and day (\(label(1_772_632_800)))")

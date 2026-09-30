@@ -17,7 +17,7 @@ Paste it anywhere you keep notes: a reminder, a note, a Shortcuts action or a me
 
 Right-click a message on the Mac, or touch and hold it on iPhone and iPad, and choose **Copy Link**. Pincer copies the link and shows "Link copied". VoiceOver users find **Copy Link** in the message's actions.
 
-Opening the link opens the chat and scrolls to the message. Pincer loads older history if it needs to, then briefly highlights the message. A forwarded message links to its copy in this chat, not to the original.
+Opening the link opens the chat and scrolls to the message. On the Mac it opens in your existing main window rather than a new one. Pincer loads older history if it needs to, then briefly highlights the message. A forwarded message links to its copy in this chat, not to the original.
 
 ## Link format
 
@@ -70,7 +70,7 @@ Links to [demo](../../getting-started/try-the-demo/) chats use `gateway=demo`, b
 
 ## One route for everything
 
-Links, notifications, the **Open Chat** Shortcuts action, the [menu bar](../menu-bar/), [message search](../search/) results and Handoff all open chats the same way. They all behave the same way when a gateway or chat is missing.
+Links, notifications, the **Open Chat** Shortcuts action, the [menu bar](../menu-bar/), [message search](../search/) results, [Spotlight](../search/#spotlight) results and Handoff all open chats the same way. They all behave the same way when a gateway or chat is missing.
 
 ## Handoff
 
