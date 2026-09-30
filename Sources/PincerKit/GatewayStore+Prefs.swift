@@ -288,16 +288,22 @@ extension GatewayStore {
     /// list arrived (a failed request, a page cap or a Gateway that can't say whether more follow),
     /// so nothing is ever forgotten from a partial list.
     func completeSessionKeys() async -> Set<String>? {
-        let limit = 300
+        let connection = self.connection
+        return await Self.completeSessionKeys(maxPages: Self.maxListPages) { params in
+            guard self.state.isConnected else { throw CancellationError() }
+            return try await connection.request("sessions.list", params, timeout: 30)
+        }
+    }
+
+    /// The paging itself: `request` runs `sessions.list` with the given params.
+    static func completeSessionKeys(maxPages: Int, limit: Int = 300,
+                                    request: (JSONValue) async throws -> JSONValue) async -> Set<String>? {
         var keys = Set<String>()
         var offset = 0
-        for _ in 0..<Self.maxListPages {
-            guard self.state.isConnected else { return nil }
+        for _ in 0..<maxPages {
             var params: [String: JSONValue] = ["limit": JSONValue(limit), "archived": "all"]
             if offset > 0 { params["offset"] = JSONValue(offset) }
-            guard let list = try? await self.connection.request("sessions.list", .object(params), timeout: 30),
-                  let rows = list["sessions"]?.array
-            else { return nil }
+            guard let list = try? await request(.object(params)), let rows = list["sessions"]?.array else { return nil }
             keys.formUnion(rows.compactMap(SessionRow.init).map(\.key))
             if let hasMore = list["hasMore"]?.bool {
                 guard hasMore else { return keys }

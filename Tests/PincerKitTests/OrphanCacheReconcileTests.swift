@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import PincerKit
 
@@ -91,5 +92,61 @@ struct OrphanCacheReconcileTests {
         await TranscriptCache.shutdown(root: self.temp.url)
         self.temp.remove()
         self.scratch.remove()
+    }
+}
+
+/// The paging behind the reconcile: a partial list must never count as complete.
+@Suite("Complete session list")
+struct CompleteSessionKeysTests {
+    struct Failure: Error {}
+
+    func page(_ keys: [String], hasMore: Bool? = nil, next: Int? = nil) -> JSONValue {
+        var object: [String: JSONValue] = ["sessions": .array(keys.map { .object(["key": .string($0)]) })]
+        if let hasMore { object["hasMore"] = .bool(hasMore) }
+        if let next { object["nextOffset"] = JSONValue(next) }
+        return .object(object)
+    }
+
+    /// Serves `pages` in order, recording each request's params.
+    func run(_ pages: [JSONValue], maxPages: Int = 40, limit: Int = 300) async -> (keys: Set<String>?, params: [JSONValue]) {
+        let served = Mutex(0)
+        let seen = Mutex<[JSONValue]>([])
+        let keys = await GatewayStore.completeSessionKeys(maxPages: maxPages, limit: limit) { params in
+            seen.withLock { $0.append(params) }
+            let index = served.withLock { value in defer { value += 1 }; return value }
+            guard index < pages.count else { throw Failure() }
+            return pages[index]
+        }
+        return (keys, seen.withLock { $0 })
+    }
+
+    @Test func twoPagesUnionViaNextOffset() async {
+        let result = await self.run([self.page(["a", "b"], hasMore: true, next: 2), self.page(["c"], hasMore: false)])
+        #expect(result.keys == ["a", "b", "c"])
+        #expect(result.params.count == 2)
+        #expect(result.params[0]["offset"] == nil && result.params[0]["archived"]?.string == "all")
+        #expect(result.params[1]["offset"]?.int == 2)
+    }
+
+    @Test func hasMoreOnTheLastAllowedPageIsPartial() async {
+        let pages = [self.page(["a"], hasMore: true, next: 1), self.page(["b"], hasMore: true, next: 2)]
+        #expect(await self.run(pages, maxPages: 2).keys == nil)
+        #expect(await self.run(pages + [self.page(["c"], hasMore: false)], maxPages: 3).keys == ["a", "b", "c"])
+    }
+
+    @Test func withoutHasMoreAFullPageIsPartialAndAShortOneComplete() async {
+        #expect(await self.run([self.page(["a", "b"])], limit: 2).keys == nil)
+        #expect(await self.run([self.page(["a"])], limit: 2).keys == ["a"])
+    }
+
+    @Test func aFailedRequestIsPartial() async {
+        #expect(await self.run([]).keys == nil)
+        #expect(await self.run([self.page(["a"], hasMore: true, next: 1)]).keys == nil)
+    }
+
+    @Test func anUnexpectedNextOffsetIsPartial() async {
+        #expect(await self.run([self.page(["a"], hasMore: true)]).keys == nil)
+        #expect(await self.run([self.page(["a"], hasMore: true, next: 0)]).keys == nil)
+        #expect(await self.run([self.page(["a"], hasMore: true, next: 1), self.page(["b"], hasMore: true, next: 1)]).keys == nil)
     }
 }
