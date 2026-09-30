@@ -687,6 +687,17 @@ public actor MessageIndex {
     }
 
     /// Whether the chat has been indexed.
+    /// Every chat with rows in the index.
+    public func indexedSessionKeys() -> [String] {
+        self.withRecovery { db in
+            let statement = try self.prepare(db, "SELECT session_key FROM chats")
+            defer { sqlite3_finalize(statement) }
+            var keys: [String] = []
+            while sqlite3_step(statement) == SQLITE_ROW { if let key = Self.text(statement, 0) { keys.append(key) } }
+            return keys
+        } ?? []
+    }
+
     public func isIndexed(sessionKey: String) -> Bool {
         self.withRecovery { db in try self.chatRow(sessionKey, db: db) != nil } ?? false
     }
