@@ -206,7 +206,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .editLastMessage: L("Edit Last Message")
         case .regenerateLastReply: L("Regenerate Last Reply")
         case .readAloud: L("Read Last Reply Aloud")
-        case .toggleDictation: L("Start or Stop Dictation")
+        case .toggleDictation: L("Dictate Message")
         case .toggleSplitView: L("Split Right")
         case .swapSplitChats: L("Swap Chats")
         case .nextUnreadChat: L("Next Unread Chat")

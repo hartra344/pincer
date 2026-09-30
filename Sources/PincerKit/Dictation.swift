@@ -9,6 +9,8 @@ import Observation
 public struct DictationSplice: Sendable, Equatable {
     public let before: String
     public let after: String
+    /// Text the dictation will replace (a non-empty selection); kept until words arrive.
+    public let selected: String
 
     /// `insertionOffset` counts characters from the start of `draft`; nil (or past the end) means the end.
     public init(draft: String, insertionOffset: Int?) {
@@ -16,6 +18,7 @@ public struct DictationSplice: Sendable, Equatable {
         let index = draft.index(draft.startIndex, offsetBy: offset)
         self.before = String(draft[..<index])
         self.after = String(draft[index...])
+        self.selected = ""
     }
 
     /// `selection` is in UTF-16 units of `draft` (an NSRange from a text view); nil means the end. It is clamped to the
@@ -26,6 +29,7 @@ public struct DictationSplice: Sendable, Equatable {
         guard let selection, selection.location != NSNotFound else {
             self.before = draft
             self.after = ""
+            self.selected = ""
             return
         }
         let start = min(max(selection.location, 0), length)
@@ -41,6 +45,7 @@ public struct DictationSplice: Sendable, Equatable {
         }
         self.before = ns.substring(to: lower)
         self.after = ns.substring(from: max(upper, lower))
+        self.selected = ns.substring(with: NSRange(location: lower, length: max(upper, lower) - lower))
     }
 
     /// UTF-16 offset in `applying(partial)` just after the inserted text (before any separator space that
@@ -56,7 +61,7 @@ public struct DictationSplice: Sendable, Equatable {
     /// The draft with `partial` inserted, spaced from its neighbours. An empty partial gives the original draft.
     public func applying(_ partial: String) -> String {
         let partial = partial.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !partial.isEmpty else { return self.before + self.after }
+        guard !partial.isEmpty else { return self.before + self.selected + self.after }
         var result = self.before
         if let last = self.before.last, !last.isWhitespace { result += " " }
         result += partial
@@ -124,6 +129,8 @@ public protocol DictationEngine: AnyObject {
 public final class DictationModel {
     public private(set) var phase: DictationPhase = .idle
     public var issue: DictationIssue?
+    /// True when the last dictation was ended by `finishForSend`; reset when dictation starts again.
+    public private(set) var endedForSend = false
 
     public var isActive: Bool { self.phase != .idle }
     public var isListening: Bool { self.phase == .listening }
@@ -160,10 +167,13 @@ public final class DictationModel {
     public func finishForSend(timeout: Duration = .milliseconds(500)) async {
         switch self.phase {
         case .idle: return
-        case .requestingPermission, .starting: return self.cancel()
+        case .requestingPermission, .starting:
+            self.endedForSend = true
+            return self.cancel()
         case .listening: self.finish()
         case .finishing: break
         }
+        self.endedForSend = true
         let generation = self.generation
         let timer = Task { [weak self] in
             try? await Task.sleep(for: timeout)
@@ -179,6 +189,7 @@ public final class DictationModel {
     private func begin(splice: DictationSplice, draft: String, apply: @escaping @MainActor (String, Int) -> Void) {
         guard self.phase == .idle else { return self.finish() }
         self.issue = nil
+        self.endedForSend = false
         self.generation += 1
         let generation = self.generation
         self.splice = splice
