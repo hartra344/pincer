@@ -22,6 +22,8 @@ final class FakePrefsGateway: @unchecked Sendable {
     /// Whether an accepted set also sends `users.prefs.changed`, like the real Gateway.
     private var echoes = true
     private var echoCount = 0
+    private var subscriptionCalls: [(method: String, params: JSONValue)] = []
+    private var rejectsSubscriptionId = false
     private let queue = DispatchQueue(label: "FakePrefsGateway")
     private(set) var port: UInt16 = 0
 
@@ -68,6 +70,15 @@ final class FakePrefsGateway: @unchecked Sendable {
     /// The `users.prefs.set` params received, oldest first (answered or not).
     var sets: [JSONValue] { self.locked { self.setParams } }
     var gets: Int { self.locked { self.getCount } }
+    /// Whether message subscriptions with a `subscriptionId` are refused, like a Gateway before 2026.9.7.
+    var rejectsSubscriptionIds: Bool {
+        get { self.locked { self.rejectsSubscriptionId } }
+        set { self.locked { self.rejectsSubscriptionId = newValue } }
+    }
+
+    /// `sessions.messages.subscribe` / `unsubscribe` requests received, oldest first (including refused ones).
+    var subscriptions: [(method: String, params: JSONValue)] { self.locked { self.subscriptionCalls } }
+
     /// `users.prefs.changed` events sent for accepted sets.
     var echoesSent: Int { self.locked { self.echoCount } }
 
@@ -129,6 +140,16 @@ final class FakePrefsGateway: @unchecked Sendable {
             self.respond(id, ["status": "ok", "entries": .object(entries)], on: connection)
         case "users.prefs.set":
             self.handleSet(id, params, on: connection)
+        case "sessions.messages.subscribe", "sessions.messages.unsubscribe":
+            let refuse = self.locked { () -> Bool in
+                self.subscriptionCalls.append((method, params))
+                return self.rejectsSubscriptionId && params["subscriptionId"] != nil
+            }
+            if refuse {
+                self.respond(id, error: "INVALID_REQUEST", message: "invalid \(method) params: unexpected property 'subscriptionId'", on: connection)
+            } else {
+                self.respond(id, ["ok": true], on: connection)
+            }
         default:
             self.respond(id, [:], on: connection)
         }
@@ -176,9 +197,9 @@ final class FakePrefsGateway: @unchecked Sendable {
         self.write(["type": "res", "id": .string(id), "ok": true, "payload": payload], on: connection)
     }
 
-    private func respond(_ id: String, error code: String, on connection: NWConnection) {
+    private func respond(_ id: String, error code: String, message: String = "rejected", on connection: NWConnection) {
         self.write(["type": "res", "id": .string(id), "ok": false,
-                    "error": ["code": .string(code), "message": "rejected"]], on: connection)
+                    "error": ["code": .string(code), "message": .string(message)]], on: connection)
     }
 
     private func send(event: String, _ payload: JSONValue, on connection: NWConnection) {
