@@ -7,6 +7,8 @@ public enum DemoOutbox {
     public static let sessionKey = "agent:main:dashboard:dinner"
     /// The seeded failed message's idempotency key.
     public static let failedId = "demo-outbox-failed-shopping-list"
+    /// The seeded queued message with the seating-plan image, behind the failed one.
+    public static let queuedAttachmentId = "demo-outbox-queued-seating-plan"
     static let title = "Dinner party"
     static let preview = "Pinot Noir suits both Wellingtons."
 }
