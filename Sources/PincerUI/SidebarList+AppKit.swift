@@ -756,10 +756,8 @@ private final class SidebarHeaderCell: NSTableCellView {
         self.onAdd = header.addAction(actions)
         self.add.toolTip = header.addAccessibilityLabel
         self.add.setAccessibilityLabel(header.addAccessibilityLabel)
-        self.setAccessibilityRole(.group)
         self.setAccessibilityLabel(header.isSubsection ? header.subsectionAccessibilityLabel
             : header.agentAccessibilityLabel ?? section.title)
-        self.setAccessibilityValue(header.accessibilityValue)
         self.setAccessibilityHelp(header.accessibilityHint)
         self.isExpanded = !header.isCollapsed
         let label = AccessibilityText.sectionToggle(title: section.title, isCollapsed: header.isCollapsed)
