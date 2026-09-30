@@ -165,3 +165,20 @@ struct VoiceScopedMessage: View {
         }
     }
 }
+
+/// A label with a value: beside each other on macOS, the value under the label on iOS where it has room to wrap.
+struct VoiceStackedRow<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(self.title)
+            self.content.multilineTextAlignment(.leading).font(.callout)
+        }
+        #else
+        LabeledContent(self.title) { self.content.multilineTextAlignment(.trailing) }
+        #endif
+    }
+}

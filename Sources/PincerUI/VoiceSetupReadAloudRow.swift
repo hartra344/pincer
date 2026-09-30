@@ -38,8 +38,8 @@ struct ReadAloudGatewayVoiceRows: View {
                 let voice = model.map { "\(provider) (\($0))" } ?? provider
                 Text(String(format: L("%@ via %@"), voice, name.isEmpty ? gateway.profile.name : name)).foregroundStyle(.secondary)
             case let .gatewayFallback(selected, reason, using):
-                let tail = using.map { String(format: L("Gateway uses %@."), $0) } ?? L("Using this device's voice.")
-                Label(String(format: L("%@ can't be used (%@). %@"), selected, reason.message(provider: selected), tail), systemImage: "exclamationmark.triangle.fill")
+                let tail = using.map { String(format: L("Using %@."), $0) } ?? L("Using this device's voice.")
+                Label(String(format: L("%@ can't be used: %@. %@"), selected, Self.shortReason(reason), tail), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             case .fallback(.notConfigured):
                 Text("Not set up. Using this device's voice.", bundle: .module).foregroundStyle(.secondary)
@@ -49,6 +49,18 @@ struct ReadAloudGatewayVoiceRows: View {
             }
         } else {
             Text("Gateway not connected. Using this device's voice.", bundle: .module).foregroundStyle(.secondary)
+        }
+    }
+
+    /// The reason as a clause without a trailing full stop or the provider's name.
+    static func shortReason(_ reason: TTSFallbackReason) -> String {
+        switch reason {
+        case .keyNotResolving: return L("the Gateway can't read its key")
+        case .notConfigured: return L("it isn't set up on the Gateway yet")
+        case .modelRejected: return L("it rejected the model or voice")
+        default:
+            let text = reason.message.trimmingCharacters(in: .whitespaces)
+            return text.hasSuffix(".") ? String(text.dropLast()) : text
         }
     }
 

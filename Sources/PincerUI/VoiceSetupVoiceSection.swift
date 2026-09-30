@@ -35,6 +35,9 @@ struct VoiceSetupVoiceSection: View {
         Section {
             if self.showsCurrentRow { LabeledContent(L("Voice")) { self.currentVoice } }
             if self.isElevenLabs { self.browser }
+            #if os(iOS)
+            Text("Voice ID", bundle: .module).font(.subheadline).foregroundStyle(.secondary)
+            #endif
             HStack {
                 TextField(L("Voice ID"), text: self.$voiceId, prompt: Text("Paste a voice ID", bundle: .module))
                     .autocorrectionDisabled()

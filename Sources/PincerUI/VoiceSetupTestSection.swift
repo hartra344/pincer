@@ -76,19 +76,27 @@ struct VoiceSetupTestSection: View {
 struct VoiceSetupEffectiveSection: View {
     let model: GatewayVoiceModel
 
+    static var detailAlignment: HorizontalAlignment {
+        #if os(iOS)
+        .leading
+        #else
+        .trailing
+        #endif
+    }
+
     var body: some View {
         let rows = self.model.effectiveConfig
         if !rows.isEmpty {
             Section {
                 ForEach(rows) { row in
-                    LabeledContent(row.label) {
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(row.value).multilineTextAlignment(.trailing)
+                    VoiceStackedRow(title: row.label) {
+                        VStack(alignment: Self.detailAlignment, spacing: 2) {
+                            Text(row.value)
                             if let note = row.overrideNote {
                                 Label(note, systemImage: "exclamationmark.triangle.fill")
                                     .font(.caption).foregroundStyle(.orange)
                             }
-                            Text(self.caption(row)).font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+                            Text(self.caption(row)).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     .accessibilityElement(children: .combine)

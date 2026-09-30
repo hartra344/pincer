@@ -28,10 +28,9 @@ struct VoiceSetupKeySection: View {
             if self.keys.apiKey == nil {
                 Text("No key needed", bundle: .module).foregroundStyle(.secondary)
             } else {
-                LabeledContent(L("Current key")) {
+                VoiceStackedRow(title: L("Current key")) {
                     Text(self.sourceText)
                         .foregroundStyle(self.notResolving ? Color.red : Color.secondary)
-                        .multilineTextAlignment(.trailing)
                 }
                 if self.editable { self.entry }
                 self.checkLine
