@@ -21,6 +21,7 @@ struct ToolHeaderTooltipTests {
         let renderer = TranscriptRenderer(context: context)
         var turn = AssistantTurn(id: "turn-1", timestamp: Date(timeIntervalSince1970: 1))
         turn.tools = [tool]
+        turn.isStreaming = true // a live turn lays its tool cards out in the open
         let layout = renderer.layout(for: .entry(.assistant(turn)), width: 700)
         let view = TranscriptRowView(frame: CGRect(x: 0, y: 0, width: 700, height: layout.height))
         view.apply(layout, actions: renderer)
@@ -36,7 +37,7 @@ struct ToolHeaderTooltipTests {
         let tool = ToolActivity(id: "e1", name: "edit", arguments: args, result: "ok", isError: false, isRunning: false)
         let (view, scratch) = self.rowView(for: tool)
         defer { scratch.remove() }
-        let card = try #require(self.find(TranscriptToolView.self, in: view).first)
+        let card = try #require(self.find(TranscriptToolView.self, in: view).first, "\(view.subviews.map { String(describing: type(of: $0)) }) parts \(view.layout?.parts.map(\.part.kind) ?? [])")
         let header = try #require(self.find(TranscriptToolHeaderView.self, in: card).first)
         #expect(header.toolTip == "Sources/App/Deep/Feature.swift")
         #expect(card.toolTip == nil, "the tooltip is on the header only")
