@@ -19,10 +19,9 @@ struct TranscriptList: NSViewRepresentable {
     var highlight = TranscriptHighlight()
     /// A message to scroll to and flash, e.g. from a `pincer://` link.
     var jump: TranscriptJump?
-    /// Told how far the reader is from the latest message; runs the scroll-to-bottom button's scroll.
-    var scrollToBottom: ScrollToBottomModel?
-    /// Told (on a later main-queue turn) whenever the list starts or stops following the bottom.
-    var bottomAnchorChanged: ((Bool) -> Void)?
+    /// Told how far the reader is from the latest message and whether the list follows the bottom;
+    /// runs the scroll-to-bottom button's scroll (#439).
+    var bottomState: TranscriptBottomState?
 
     func makeCoordinator() -> Coordinator { Coordinator(context: self.context) }
 
@@ -31,8 +30,7 @@ struct TranscriptList: NSViewRepresentable {
     }
 
     func updateNSView(_ view: NSScrollView, context: Context) {
-        context.coordinator.attach(self.scrollToBottom)
-        context.coordinator.bottomAnchorChanged = self.bottomAnchorChanged
+        context.coordinator.attach(self.bottomState)
         context.coordinator.update(rows: self.rows, context: self.context, insets: (self.topInset, self.bottomInset))
         context.coordinator.apply(self.highlight)
         context.coordinator.apply(self.jump)
@@ -47,12 +45,6 @@ struct TranscriptList: NSViewRepresentable {
         private var anchor: TranscriptAnchor {
             get { self.controller.anchor }
             set { self.controller.anchor = newValue }
-        }
-
-        /// Told (on a later main-queue turn) whenever the list starts or stops following the bottom.
-        var bottomAnchorChanged: ((Bool) -> Void)? {
-            get { self.controller.bottomAnchorChanged }
-            set { self.controller.bottomAnchorChanged = newValue }
         }
 
         /// Whether the list is following the bottom (#335: the open chat may be trimmed then).
@@ -442,19 +434,16 @@ struct TranscriptList: NSViewRepresentable {
 
         // MARK: Scroll to bottom
 
-        private weak var scrollToBottomModel: ScrollToBottomModel?
         /// The scroll-to-bottom animation is running; its frames don't move the anchor.
         private var isScrollingToBottom = false
         private var scrollToBottomToken = 0
 
-        func attach(_ model: ScrollToBottomModel?) {
-            guard model !== self.scrollToBottomModel else { return }
-            self.scrollToBottomModel = model
-            model?.perform = { [weak self] in self?.scrollToBottom() }
+        func attach(_ state: TranscriptBottomState?) {
+            self.controller.attach(state) { [weak self] in self?.scrollToBottom() }
         }
 
         private func reportPosition() {
-            guard let model = self.scrollToBottomModel, let scroll = self.scrollView else { return }
+            guard let model = self.controller.bottom, let scroll = self.scrollView else { return }
             let clip = scroll.contentView
             let distance = self.rows.isEmpty ? 0 : self.offsetRange().upperBound - clip.bounds.minY
             model.report(distance: distance,

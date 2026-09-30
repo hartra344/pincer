@@ -244,7 +244,9 @@ struct TranscriptListControllerTests {
         defer { scratch.remove() }
         let (controller, _, _) = self.make(scratch)
         var reports: [Bool] = []
-        controller.bottomAnchorChanged = { reports.append($0) }
+        let bottom = TranscriptBottomState()
+        bottom.onAnchorChange = { reports.append($0) }
+        controller.attach(bottom) {}
         controller.anchor = .row("u-u1", 0)
         controller.anchor = .row("u-u2", 0)
         #expect(reports.isEmpty)
@@ -254,6 +256,7 @@ struct TranscriptListControllerTests {
         await Self.mainQueueHop()
         #expect(reports == [false, true])
         #expect(controller.isAnchoredAtBottom)
+        #expect(bottom.isAnchoredAtBottom)
     }
 
     @Test func restoreTargetReanchorsWhenTheRowIsGone() {

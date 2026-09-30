@@ -1,18 +1,29 @@
 import PincerKit
 import SwiftUI
 
-/// Connects the transcript list to the scroll-to-bottom button without `ChatView` observing
-/// the scroll position: the list reports where it is and registers how to scroll to the end,
-/// and only the button reads `isVisible` and `hasNewMessages`.
+/// The transcript list's one bottom-state hook (#439), read by the scroll-to-bottom button and
+/// Find's trim without `ChatView` observing the scroll position. The list reports where it is and
+/// whether it follows the bottom, and registers how to scroll to the end. Only the button reads
+/// `isVisible` and `hasNewMessages`; Find's trim listens through `onAnchorChange`.
 @MainActor
 @Observable
-final class ScrollToBottomModel {
+final class TranscriptBottomState {
     private(set) var isVisible = false
     private(set) var hasNewMessages = false
     @ObservationIgnored private var state = ScrollToBottomState()
     @ObservationIgnored private var publishScheduled = false
+    /// Whether the list follows the bottom, as last reported. Only meaningful while a list is attached.
+    @ObservationIgnored private(set) var isAnchoredAtBottom = true
+    /// Told whenever the list starts or stops following the bottom (#335: Find's trim waits for it).
+    @ObservationIgnored var onAnchorChange: ((Bool) -> Void)?
     /// Set by the transcript list: scrolls to the latest message and follows it again.
     @ObservationIgnored var perform: (() -> Void)?
+
+    /// Called by the transcript list, on a later main-queue turn, when it starts or stops following the bottom.
+    func anchorChanged(atBottom: Bool) {
+        self.isAnchoredAtBottom = atBottom
+        self.onAnchorChange?(atBottom)
+    }
 
     /// Called by the transcript list on every scroll and update; cheap when nothing changes.
     func report(distance: CGFloat, viewport: CGFloat, lastRowId: String?) {
@@ -39,6 +50,7 @@ final class ScrollToBottomModel {
 
     /// Hides the button while there's no transcript to scroll (loading, or an empty chat).
     func reset() {
+        self.isAnchoredAtBottom = true
         self.report(distance: 0, viewport: 0, lastRowId: nil)
     }
 }
@@ -47,7 +59,7 @@ final class ScrollToBottomModel {
 /// messages that arrived below since. Hidden while the slash-command menu, which grows upward
 /// over the same corner, may be open.
 struct ScrollToBottomButton: View {
-    let model: ScrollToBottomModel
+    let model: TranscriptBottomState
     let chat: ChatStore
     @Environment(\.appTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion

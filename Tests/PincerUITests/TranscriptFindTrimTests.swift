@@ -91,7 +91,9 @@ struct TranscriptFindTrimTests {
         let rows = TranscriptPrefetchProbe.rows(count: 4_000)
         let coordinator = TranscriptList.Coordinator(context: context)
         var reports: [Bool] = []
-        coordinator.bottomAnchorChanged = { reports.append($0) }
+        let bottom = TranscriptBottomState()
+        bottom.onAnchorChange = { reports.append($0) }
+        coordinator.attach(bottom)
         let scroll = coordinator.makeScrollView()
         let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 700, height: 900),
                               styleMask: [.titled, .resizable], backing: .buffered, defer: false)
