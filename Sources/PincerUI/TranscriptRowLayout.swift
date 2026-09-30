@@ -155,12 +155,16 @@ enum TranscriptPart {
 
     /// Where an unsent message is: queued, or failed with Retry and Delete.
     struct SendStatus: Equatable {
+        enum Kind: Equatable { case queued, held, sending, failed }
+        var kind: Kind = .queued
         /// The outbox entry (the message's idempotency key).
         let id: String
         let text: String
         let isFailed: Bool
         let canRetry: Bool
         let canDelete: Bool
+        /// A large upload held for Wi‑Fi can be sent over this network anyway.
+        var canSendNow = false
         /// Full reason, for the tooltip.
         var detail: String?
         /// For VoiceOver: "Not sent yet, queued.", "Sending." or "Failed to send: reason."
@@ -560,14 +564,22 @@ struct TranscriptLayoutBuilder {
         guard item.isPending, let state = item.outboxState, let id = item.idempotencyKey else { return nil }
         switch state {
         case .queued:
-            return .init(id: id, text: L("Queued"), isFailed: false, canRetry: false, canDelete: true, spoken: L("Not sent yet, queued."))
+            if let hold = item.outboxHold {
+                let constrained = hold == .constrained
+                return .init(kind: .held, id: id, text: constrained ? L("Waiting — Low Data Mode") : L("Waiting for Wi‑Fi"),
+                             isFailed: false, canRetry: false, canDelete: true, canSendNow: true,
+                             detail: L("Large uploads wait for Wi‑Fi. Send Now uploads it anyway."),
+                             spoken: constrained ? L("Not sent yet. It’s a large upload, waiting while Low Data Mode is on.")
+                                 : L("Not sent yet. It’s a large upload, waiting for Wi‑Fi."))
+            }
+            return .init(kind: .queued, id: id, text: L("Queued"), isFailed: false, canRetry: false, canDelete: true, spoken: L("Not sent yet, queued."))
         case .sending:
-            return .init(id: id, text: L("Sending…"), isFailed: false, canRetry: false, canDelete: false, spoken: L("Sending."))
+            return .init(kind: .sending, id: id, text: L("Sending…"), isFailed: false, canRetry: false, canDelete: false, spoken: L("Sending."))
         case let .failed(failure):
             let prefix = "Couldn’t send: "
             let reason = failure.message.hasPrefix(prefix) ? String(failure.message.dropFirst(prefix.count)) : failure.message
             let sentence = reason.hasSuffix(".") ? reason : reason + "."
-            return .init(id: id, text: reason.isEmpty ? L("Failed") : L("Failed — \(reason)"), isFailed: true,
+            return .init(kind: .failed, id: id, text: reason.isEmpty ? L("Failed") : L("Failed — \(reason)"), isFailed: true,
                          canRetry: failure.retryable, canDelete: true, detail: failure.message,
                          spoken: reason.isEmpty ? L("Failed to send.") : L("Failed to send: \(sentence)"))
         }
