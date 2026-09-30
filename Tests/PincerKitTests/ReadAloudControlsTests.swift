@@ -22,8 +22,10 @@ struct ReadAloudControlsTests {
         #expect(store.validate(combo, for: .readAloud) == .ok)
     }
 
-    @Test func settingsSearchFindsReadAloudAndVoice() {
-        // A Read Aloud / Voice destination (#409) must be findable from Gateway Settings search.
-        #expect(SettingsCatalog.destinations(matching: "voice").isEmpty == false || SettingsCatalog.page("voice") != nil)
+    @Test func gatewaySettingsSearchFindsVoiceForReadAloudQueries() {
+        for query in ["voice", "read aloud", "tts", "elevenlabs", "listen"] {
+            #expect(SettingsCatalog.destinations(matching: query).map(\.destination).contains(.voice), "\(query)")
+        }
+        #expect(SettingsCatalog.destinations(matching: "read aloud").first { $0.destination == .voice }?.title == "Voice")
     }
 }

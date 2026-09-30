@@ -651,3 +651,49 @@ struct GatewayVoiceAutoModeAndRemoveKeyTests {
         #expect(g.calls("tts.status").count > before)
     }
 }
+
+@Suite("Gateway voice effective config (#475)")
+@MainActor
+struct GatewayVoiceEffectiveConfigTests {
+    @Test func ignoredModelKeyIsFlaggedAndModelIdWins() async {
+        let g = FakeGateway()
+        g.tts["elevenlabs"] = ["model": "eleven_turbo_v2_5"]
+        g.provider = "elevenlabs"
+        g.configured["elevenlabs"] = true
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.setups["elevenlabs"]?.ignoredModel == "eleven_turbo_v2_5" && model.setups["elevenlabs"]?.model == nil)
+        let row = model.effectiveConfig.first { $0.label == "Model" }
+        #expect(row?.overrideNote?.contains("ignores") == true && row?.source == "Default")
+
+        g.tts["elevenlabs"] = ["model": "eleven_turbo_v2_5", "modelId": "eleven_v3"]
+        await model.refresh()
+        #expect(model.setups["elevenlabs"]?.model == "eleven_v3" && model.setups["elevenlabs"]?.ignoredModel == nil)
+    }
+
+    @Test func speakerVoiceIdBeatsVoiceIdInTheVoiceRow() async {
+        let g = FakeGateway()
+        g.tts["elevenlabs"] = ["voiceId": "old", "speakerVoiceId": "new"]
+        g.provider = "elevenlabs"
+        g.configured["elevenlabs"] = true
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.setups["elevenlabs"]?.voice == "new" && model.setups["elevenlabs"]?.hasLegacyVoiceKey == true)
+        #expect(model.effectiveConfig.first { $0.label == "Voice" }?.keyPath?.hasSuffix("speakerVoiceId") == true)
+    }
+
+    @Test func personaProvidedProviderIsLabelledAsPersona() async {
+        let model = GatewayVoiceModel(methods: { nil }, scopes: { ["operator.admin"] }, request: { method, _ in
+            switch method {
+            case "tts.status":
+                return Fixtures.json(#"{"enabled":false,"auto":"off","provider":"elevenlabs","persona":"narrator","personas":[{"id":"narrator","label":"Narrator","provider":"elevenlabs"}],"providerStates":[{"id":"elevenlabs","label":"ElevenLabs","configured":true}]}"#)
+            case "config.get":
+                return ["hash": "h", "config": ["tts": ["provider": "openai", "providers": [:]]]]
+            default: return [:]
+            }
+        })
+        await model.refresh()
+        let row = model.effectiveConfig.first { $0.label == "Provider" }
+        #expect(row?.source == "Persona \"narrator\"" && row?.overrideNote != nil, "\(String(describing: row))")
+    }
+}
