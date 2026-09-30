@@ -27,7 +27,7 @@ struct DemoMCPState {
         let expiresAt: Double
     }
 
-    var config: JSONValue = DemoMCPState.seedConfig
+    var config: JSONValue = DemoMCPState.merge(DemoMCPState.seedConfig, DemoVoiceState.seedTTSConfig) ?? DemoMCPState.seedConfig
     var revision = 1
     var runtime: [String: Runtime] = [:]
     var attempts: [String: Attempt] = [:]
@@ -161,7 +161,7 @@ struct DemoMCPState {
             return .object(object.reduce(into: [:]) { $0[$1.key] = redact($1.value, path: path + [$1.key]) })
         case .string:
             let secret = path.count == 5 && path[0] == "mcp" && path[1] == "servers" && (path[3] == "env" || path[3] == "headers")
-            return secret ? .string(redacted) : value
+            return secret || DemoVoiceState.isAPIKeyPath(path) ? .string(redacted) : value
         default:
             return value
         }
