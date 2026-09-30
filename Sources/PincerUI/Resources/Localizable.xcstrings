@@ -51,12 +51,12 @@
         }
       }
     },
-    "%@ can't be used (%@). %@": {
+    "%@ can't be used: %@. %@": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ can't be used (%2$@). %3$@"
+            "value": "%1$@ can't be used: %2$@. %3$@"
           }
         }
       }
@@ -467,16 +467,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ — too large to preview"
-          }
-        }
-      }
-    },
-    "%@'s key is set, but the Gateway can't read it.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@'s key is set, but the Gateway can't read it."
           }
         }
       }
@@ -6099,16 +6089,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gateway token"
-          }
-        }
-      }
-    },
-    "Gateway uses %@.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gateway uses %@."
           }
         }
       }
@@ -13883,6 +13863,16 @@
         }
       }
     },
+    "The %@ key is set, but the Gateway can't read it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ key is set, but the Gateway can't read it."
+          }
+        }
+      }
+    },
     "The Gateway audio couldn't be played.": {
       "localizations": {
         "en": {
@@ -15723,6 +15713,16 @@
         }
       }
     },
+    "Using %@.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Using %@."
+          }
+        }
+      }
+    },
     "Using this device's voice.": {
       "localizations": {
         "en": {
@@ -16653,6 +16653,26 @@
         }
       }
     },
+    "it isn't set up on the Gateway yet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "it isn't set up on the Gateway yet"
+          }
+        }
+      }
+    },
+    "it rejected the model or voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "it rejected the model or voice"
+          }
+        }
+      }
+    },
     "its credentials aren't available": {
       "localizations": {
         "en": {
@@ -16829,6 +16849,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "stop"
+          }
+        }
+      }
+    },
+    "the Gateway can't read its key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "the Gateway can't read its key"
           }
         }
       }
