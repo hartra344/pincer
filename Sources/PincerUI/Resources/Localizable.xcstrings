@@ -7693,6 +7693,16 @@
         }
       }
     },
+    "Next Message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Message"
+          }
+        }
+      }
+    },
     "Next Tip": {
       "localizations": {
         "en": {
@@ -9533,6 +9543,16 @@
         }
       }
     },
+    "Previous Message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Message"
+          }
+        }
+      }
+    },
     "Print": {
       "localizations": {
         "en": {
@@ -10449,6 +10469,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Replaces the installed copy with ClawHub's latest version."
+          }
+        }
+      }
+    },
+    "Replies": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replies"
           }
         }
       }
@@ -14213,6 +14243,16 @@
         }
       }
     },
+    "Tool Calls": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool Calls"
+          }
+        }
+      }
+    },
     "Tool result": {
       "localizations": {
         "en": {
@@ -15299,6 +15339,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Your edits are kept."
+          }
+        }
+      }
+    },
+    "Your Messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Messages"
           }
         }
       }
