@@ -147,20 +147,7 @@ public final class BookmarkStore {
         self.bookmarks.insert(bookmark, at: 0)
         self.index.insert(bookmark.id)
         self.droppedCount = 0
-        let shard = Bookmark.shard(ofKey: bookmark.id)
-        let oldest: (Bookmark, Bookmark) -> Bool = { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
-        var dropped: [Bookmark] = []
-        while self.bookmarks.count > Self.limit, let victim = self.bookmarks.min(by: oldest) {
-            dropped.append(victim)
-            self.remove(victim)
-        }
-        while self.bookmarks.filter({ Bookmark.shard(ofKey: $0.id) == shard }).count > 1,
-              Self.syncedSize(self.syncedEntries(shard: shard)) > Self.syncedByteBudget,
-              let victim = self.bookmarks.filter({ Bookmark.shard(ofKey: $0.id) == shard }).min(by: oldest)
-        {
-            dropped.append(victim)
-            self.remove(victim)
-        }
+        let dropped = self.trim(shard: Bookmark.shard(ofKey: bookmark.id))
         self.droppedCount = dropped.count
         for victim in dropped { changes[victim.id] = .some(nil) }
         self.save()
@@ -203,6 +190,35 @@ public final class BookmarkStore {
         self.onChange?(Dictionary(uniqueKeysWithValues: removed.map { ($0.id, String?.none) }))
     }
 
+    /// Drops the oldest bookmarks over the cap, then the oldest in `shard` until its synced map fits.
+    private func trim(shard: Int) -> [Bookmark] {
+        let oldest: (Bookmark, Bookmark) -> Bool = { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
+        var dropped: [Bookmark] = []
+        while self.bookmarks.count > Self.limit, let victim = self.bookmarks.min(by: oldest) {
+            dropped.append(victim)
+            self.remove(victim)
+        }
+        while self.bookmarks.filter({ Bookmark.shard(ofKey: $0.id) == shard }).count > 1,
+              Self.syncedSize(self.syncedEntries(shard: shard)) > Self.syncedByteBudget,
+              let victim = self.bookmarks.filter({ Bookmark.shard(ofKey: $0.id) == shard }).min(by: oldest)
+        {
+            dropped.append(victim)
+            self.remove(victim)
+        }
+        return dropped
+    }
+
+    /// Applies the cap and shard budgets to bookmarks saved before they existed, without pushing,
+    /// so their first sync can be written.
+    func enforceLimits() {
+        var dropped = false
+        for shard in 0..<Bookmark.shardCount where !self.trim(shard: shard).isEmpty { dropped = true }
+        if dropped {
+            self.index = Set(self.bookmarks.map(\.id))
+            self.save()
+        }
+    }
+
     private func remove(_ bookmark: Bookmark) {
         self.bookmarks.removeAll { $0.id == bookmark.id }
         self.index.remove(bookmark.id)
@@ -230,7 +246,7 @@ public final class BookmarkStore {
     }
 
     /// The encoded size of a shard's synced map, which is one gateway pref value.
-    private static func syncedSize(_ entries: [String: String]) -> Int {
+    static func syncedSize(_ entries: [String: String]) -> Int {
         (try? JSONEncoder().encode(entries).count) ?? 0
     }
 

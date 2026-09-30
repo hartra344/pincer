@@ -141,6 +141,7 @@ extension GatewayStore {
             // First sync from this device: keep values already set here, remote wins on conflicts.
             var merged = self[keyPath: map.local]
             merged.merge(fetched ?? [:]) { _, remote in remote }
+            merged = Self.fittingBookmarkShard(merged, pref: map.pref)
             if merged != (fetched ?? [:]) {
                 guard await self.writeRemoteMap(map.pref, merged, expected: fetched) == .ok else { return }
             }
@@ -399,8 +400,9 @@ extension GatewayStore {
         Task { await self.push(self.syncedMap(Self.healthDismissalsPref), effective) }
     }
 
-    /// Forgets this device's copy of the dismissals when the gateway is removed. The gateway's
-    /// user prefs keep them for other devices, and re-adding the gateway pulls them back.
+    /// Forgets this device's copy of the dismissals, and any unsent pref changes and queued avatar
+    /// choices, when the gateway is removed. The gateway's user prefs keep the synced values for
+    /// other devices, and re-adding the gateway pulls them back.
     func forgetLocalHealthDismissals() {
         self.defaults.removeObject(forKey: "pincer.healthDismissals.\(self.id.uuidString)")
         self.defaults.removeObject(forKey: "pincer.healthDismissalsSynced.\(self.id.uuidString)")
