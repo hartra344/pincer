@@ -170,7 +170,7 @@ private struct EntryRow: View {
             Spacer()
             if issues > 0 {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
-                    .accessibilityLabel(L("\(issues) problems"))
+                    .accessibilityLabel(issues == 1 ? L("1 problem") : L("\(issues) problems"))
             } else if changes > 0 {
                 Text("Edited", bundle: .module).font(.caption).foregroundStyle(.tint)
             }
