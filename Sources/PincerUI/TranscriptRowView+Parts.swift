@@ -1376,6 +1376,8 @@ final class TranscriptToolView: TranscriptBaseView {
             self.actions?.setExpanded(key, value, row: rowId)
         case let .openMCPServer(name):
             self.actions?.openMCPServer(name)
+        case let .openURL(url):
+            self.actions?.open(url)
         }
     }
 

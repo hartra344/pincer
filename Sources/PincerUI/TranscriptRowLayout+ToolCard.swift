@@ -90,7 +90,7 @@ extension TranscriptPart.Tool.Tone {
     }
 }
 
-private struct ToolCardBuild {
+struct ToolCardBuild {
     var y: CGFloat
     let x: CGFloat = 10
     let inner: CGFloat
@@ -264,6 +264,11 @@ extension TranscriptLayoutBuilder {
                                        tool: tool, x: card.x, width: card.inner, maxHeight: TranscriptMetrics.toolOutputMaxHeight,
                                        searchable: false, into: &card)
         }
+        if let web = presentation.web, web.isListable, let output = presentation.output {
+            card.gap(8)
+            self.webSearch(web, durationMs: output.durationMs, tool: tool, into: &card)
+            return nil
+        }
         if let output = presentation.output {
             card.gap(8)
             self.output(output, kind: presentation.kind, finding: finding, tool: tool, into: &card)
@@ -302,7 +307,7 @@ extension TranscriptLayoutBuilder {
         }
     }
 
-    private func textSection(_ id: String, _ string: NSAttributedString, tool: ToolActivity, x: CGFloat, width: CGFloat,
+    func textSection(_ id: String, _ string: NSAttributedString, tool: ToolActivity, x: CGFloat, width: CGFloat,
                              maxHeight: CGFloat, searchable: Bool = true, into card: inout ToolCardBuild) -> CGFloat
     {
         let (text, match) = searchable ? self.marks.mark(string, .tool(tool.id)) : (string, nil)
@@ -317,7 +322,7 @@ extension TranscriptLayoutBuilder {
         return visible
     }
 
-    private var titleRowHeight: CGFloat { max(TranscriptStyle.lineHeight(self.style.captionSemibold), 16) }
+    var titleRowHeight: CGFloat { max(TranscriptStyle.lineHeight(self.style.captionSemibold), 16) }
 
     private func inputTitle(into card: inout ToolCardBuild) {
         let font = self.style.captionSemibold
@@ -452,7 +457,7 @@ extension TranscriptLayoutBuilder {
     }
 
     /// "Output" (or "Error"), badges after it and Copy at the right.
-    private func titleRow(_ title: String, failed: Bool, badges: [(String, TranscriptPart.Tool.Tone, String)], copy text: String?,
+    func titleRow(_ title: String, failed: Bool, badges: [(String, TranscriptPart.Tool.Tone, String)], copy text: String?,
                           into card: inout ToolCardBuild)
     {
         let style = self.style

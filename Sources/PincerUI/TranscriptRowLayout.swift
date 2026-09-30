@@ -104,6 +104,7 @@ enum TranscriptPart {
             /// Pinned to the frame's trailing edge (the button's width can differ from the reserved one).
             var trailing = false
             var iconOnly = false
+                case openURL(URL)
         }
 
         struct Run: Equatable {

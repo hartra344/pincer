@@ -60,13 +60,19 @@ public struct ToolCallPresentation: Hashable, Sendable {
     public let rawArguments: String?
     public let output: Output?
     public let rawResult: String?
+    /// The link list of a web_search result; nil for other tools and for older results without `details`.
+    public let web: WebSearch?
 
     /// Exactly the searchable strings the formatted card draws, in draw order.
     public var searchTexts: [String] {
         var texts: [String] = []
         if let headline, !headline.isEmpty { texts.append(headline) }
         if let argumentsText, !argumentsText.isEmpty { texts.append(argumentsText) }
-        if let text = self.output?.text, !text.isEmpty { texts.append(text) }
+        if let web, web.isListable {
+            texts += web.searchTexts
+        } else if let text = self.output?.text, !text.isEmpty {
+            texts.append(text)
+        }
         return texts
     }
 
@@ -175,7 +181,7 @@ public struct ToolCallPresentation: Hashable, Sendable {
         return ToolCallPresentation(
             kind: kind, displayName: display, mcpServer: server, headline: headline, chips: chips,
             arguments: arguments, rawArguments: parsedArgs == nil ? nil : tool.arguments,
-            output: output, rawResult: tool.result)
+            output: output, rawResult: tool.result, web: kind == .webSearch ? WebSearch.parse(details) : nil)
     }
 
     private static func classify(name: String, hasCommand: Bool) -> (Kind, String?, String) {

@@ -41,11 +41,13 @@ public struct ToolActivity: Identifiable, Hashable, Sendable {
                                                        "failureKind", "tookMs", "finalUrl", "contentType", "title"]
 
     /// Keeps only the `details` keys the cards read (a file edit's diff; exec and web_fetch status
-    /// scalars), so bulky details such as exec's `aggregated` output aren't held.
+    /// scalars; a web_search's trimmed results), so bulky details such as exec's `aggregated` output aren't held.
     public static func fileEditDetails(_ details: JSONValue?) -> JSONValue? {
         guard let object = details?.object else { return nil }
-        let kept = object.filter { ["diff", "changed", "created"].contains($0.key)
+        var kept = object.filter { ["diff", "changed", "created"].contains($0.key)
             || Self.statusDetailKeys.contains($0.key) && $0.value.object == nil && $0.value.array == nil }
+        // web_search's results (≤ 10 rows, each ~500 B) for its link list.
+        if WebSearch.isPayload(object) { kept.merge(WebSearch.trimmed(object)) { _, new in new } }
         return kept.isEmpty ? nil : .object(kept)
     }
 
