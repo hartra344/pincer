@@ -292,6 +292,9 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     /// Transcript id of the message this user turn replies to (`__openclaw.replyToId`).
     public var replyToId: String?
     public var replyToPreview: ReplyPreview?
+    /// The agent answers the message this turn responds to (`openclawDelivery.replyToCurrent`
+    /// or `[[reply_to_current]]`), assistant messages only.
+    public var replyToCurrent: Bool = false
     /// The bridged channel's own id for this message (`__openclaw.transport.messageId`), e.g. a
     /// Discord snowflake. Agent `message` tool reactions name it.
     public var channelMessageId: String?
@@ -407,12 +410,37 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
             }.filter { if case let .text(text) = $0 { !text.isEmpty } else { true } }
         }
         self.blocks += Self.mediaFactBlocks(meta?["media"], existing: self.blocks)
+        if self.role == .assistant, self.sender == nil { self.readReplyTarget(json) }
         if self.blocks.isEmpty, self.role == .assistant, let errorMessage {
             self.blocks = [.text(errorMessage)]
             self.isError = true
         }
         if self.blocks.isEmpty, self.role != .marker, self.role != .toolResult {
             return nil
+        }
+    }
+
+    /// An assistant message's reply target: the structured `__openclaw.replyToId` first, then
+    /// `openclawDelivery`, then a `[[reply_to…]]` directive in the text (which never shows).
+    private mutating func readReplyTarget(_ json: JSONValue) {
+        let delivery = json["openclawDelivery"]
+        if self.replyToId == nil, let id = delivery?["replyToId"]?.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !id.isEmpty
+        {
+            self.replyToId = id
+        }
+        if delivery?["replyToCurrent"]?.bool == true { self.replyToCurrent = true }
+        var directive: ReplyDirective?
+        self.blocks = self.blocks.compactMap { block in
+            guard case let .text(text) = block, text.contains("[[") else { return block }
+            let parsed = Replies.extractDirective(text)
+            if directive == nil { directive = parsed.target }
+            return parsed.text.isEmpty && parsed.target != nil ? nil : .text(parsed.text)
+        }
+        switch directive {
+        case let .id(id)? where self.replyToId == nil: self.replyToId = id
+        case .current? where self.replyToId == nil: self.replyToCurrent = true
+        default: break
         }
     }
 

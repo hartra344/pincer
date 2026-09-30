@@ -18,7 +18,7 @@ public enum TranscriptCache {
         /// as complete as it will get even though `complete` is false.
         public var retained: Bool
 
-        public static let currentVersion = 8
+        public static let currentVersion = 9
 
         public init(version: Int = Self.currentVersion, items: [ChatItem], complete: Bool, activityMs: Double? = nil,
                     retained: Bool = false)
@@ -137,6 +137,11 @@ public enum TranscriptCache {
     //    existing ones byte-identical and a save writes only what changed. `migrations[7]` does
     //    nothing; the v7 single file is decoded, then saved back as a manifest and segments.
 
+    //  - v9 (#110, agent reply targets) added `ChatItem.replyToCurrent` and reads assistant reply
+    //    targets (`openclawDelivery`, `[[reply_to…]]`) into `replyToId`, stripping the directives from
+    //    the text. Cached assistant messages lack both, and older history is never refetched, so
+    //    v8 and older are discarded and refetched (`oldestMigratableVersion` is 9).
+
     /// Upgrades a snapshot's JSON object from the version it's keyed by to the next one.
     typealias Migration = @Sendable (inout [String: Any]) throws -> Void
 
@@ -188,7 +193,7 @@ public enum TranscriptCache {
     }
 
     /// Older transcripts are discarded rather than migrated.
-    static let oldestMigratableVersion = 5
+    static let oldestMigratableVersion = 9
 
     struct MigrationError: Error, CustomStringConvertible {
         var description: String

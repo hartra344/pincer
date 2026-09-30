@@ -25,9 +25,14 @@ extension ChatStore {
         }?.transcriptId
     }
 
-    /// The quote card for a user turn that replies to another message.
+    /// The quote card for a turn that replies to another message: yours by `replyToId`, the agent's by its
+    /// delivery target (a transcript id, or a bridged channel's message id).
     public func quote(for item: ChatItem) -> ReplyQuote? {
-        guard let targetId = item.replyToId else { return nil }
+        guard var targetId = item.replyToId else { return nil }
+        if item.role == .assistant {
+            guard let resolved = self.resolveAgentReplyTarget(targetId, for: item) else { return nil }
+            targetId = resolved
+        }
         if let target = self.message(withId: targetId) {
             let line = Replies.previewLine(MediaDirectives.extract(from: target.plainText).text)
             let sender: ReplyQuote.Sender = if let from = target.sender {
@@ -45,11 +50,36 @@ extension ChatStore {
         return ReplyQuote(targetId: targetId, sender: nil, text: nil)
     }
 
+    /// The transcript id an assistant message's reply target names, or the raw id when its message isn't loaded.
+    /// Nil when it's the user message the reply directly follows: nothing to point at.
+    private func resolveAgentReplyTarget(_ id: String, for item: ChatItem) -> String? {
+        var targetId = id
+        if self.message(withId: id) == nil,
+           let match = self.items.first(where: { $0.role == .user && $0.channelMessageId == id }),
+           let matchId = match.transcriptId
+        {
+            targetId = matchId
+        }
+        if let index = self.items.firstIndex(where: { $0.id == item.id }),
+           let answered = self.items[..<index].last(where: { $0.role == .user && $0.isReplyable }),
+           answered.transcriptId == targetId
+        {
+            return nil
+        }
+        return targetId
+    }
+
     /// Loads older history (the cache first) until the message is loaded (at most 40 pages). Returns whether it is;
     /// when history runs out or the page cap is hit, says so in `notice`. One lookup at a time.
     @discardableResult
     public func locate(_ id: String) async -> Bool {
         if self.message(withId: id) != nil { return true }
+        // A bare number is a bridged channel's message id (an agent reply to a message that isn't
+        // in this transcript), never a transcript id: paging through history for it would find nothing.
+        if id.allSatisfy(\.isNumber) {
+            self.notice = "The original message isn't in this chat's history anymore."
+            return false
+        }
         guard self.locatingReplyId == nil else { return false }
         self.locatingReplyId = id
         defer { self.locatingReplyId = nil }
