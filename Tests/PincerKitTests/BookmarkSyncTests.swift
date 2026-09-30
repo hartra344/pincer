@@ -228,6 +228,35 @@ struct BookmarkSyncStoreTests {
         BookmarkStore(gatewayId: gateway, defaults: defaults).add(bookmark("a"))
         #expect(BookmarkStore(gatewayId: gateway, defaults: defaults).bookmarks.count == 1)
     }
+
+    @Test func shardOfKnownKeysIsFNV1aAndNeverChanges() {
+        func fnv(_ key: String) -> Int {
+            var hash: UInt32 = 2_166_136_261
+            for byte in key.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
+            return Int(hash % 8)
+        }
+        for key in ["", "a", "agent:main:main\u{1F}m-1", "s\u{1F}é"] { #expect(Bookmark.shard(ofKey: key) == fnv(key)) }
+        // 32-bit FNV-1a of "a" is 0xE40C292C.
+        #expect(Bookmark.shard(ofKey: "a") == Int(0xE40C292C % 8))
+    }
+
+    @Test func aShardStaysWithinTheSyncedByteBudget() throws {
+        let store = self.store()
+        defer { self.defaults.removePersistentDomain(forName: self.suite) }
+        let shard = 0
+        var index = 0
+        var added = 0
+        while added < 120 {
+            let item = bookmark("m\(index)", at: TimeInterval(index), preview: String(repeating: "é", count: 150))
+            index += 1
+            guard Bookmark.shard(ofKey: item.id) == shard else { continue }
+            store.add(item)
+            added += 1
+            let size = try JSONEncoder().encode(store.syncedEntries(shard: shard)).count
+            #expect(size <= BookmarkStore.syncedByteBudget || store.syncedEntries(shard: shard).count == 1)
+        }
+        #expect(store.bookmarks.count < 120, "the shard dropped its oldest to fit")
+    }
 }
 
 /// Bookmarks through a real `GatewayStore` and a loopback Gateway.
