@@ -49,6 +49,7 @@ struct DemoMCPState {
         "postgres": ["command": "uvx", "args": ["mcp-server-postgres", "--dsn", "******db.local/app"],
                      "env": ["PGPASSWORD": "mock-pg-password"]],
         "sentry": ["url": "https://mcp.sentry.dev/sse", "transport": "sse", "enabled": false],
+        "acme.docs": ["url": "https://mcp.acme.example/docs", "transport": "streamable-http"],
     ]]]
 
     static let seedTools: [String: [String]] = [
@@ -56,6 +57,7 @@ struct DemoMCPState {
         "home-assistant": ["get_state", "call_service"],
         "github": ["get_issue", "list_issues", "create_issue", "search_code", "get_pull_request", "list_pull_requests"],
     ]
+    static let acmeTools = ["search", "get_page"]
     static let linearTools = ["list_issues", "get_issue", "create_issue", "update_issue", "search_documentation"]
     static let genericTools = ["echo", "ping", "time"]
     static let toolDescriptions = [
@@ -94,7 +96,7 @@ struct DemoMCPState {
         } else if name == "linear" {
             (rt.state, rt.tools) = ("connected", Self.linearTools)
         } else {
-            (rt.state, rt.tools) = ("connected", Self.seedTools[name] ?? Self.genericTools)
+            (rt.state, rt.tools) = ("connected", Self.seedTools[name] ?? (name == "acme.docs" ? Self.acmeTools : Self.genericTools))
         }
         self.runtime[name] = rt
     }
@@ -206,11 +208,11 @@ struct DemoMCPState {
 extension DemoGateway {
     static let mcpMethods = [
         "config.get", "config.schema", "config.patch", "config.apply",
-        "mcp.status", "mcp.reconnect", "mcp.oauth.status", "mcp.oauth.start", "mcp.oauth.complete", "mcp.oauth.cancel", "mcp.oauth.logout",
+        "mcp.status", "mcp.reconnect", "mcp.probe", "plugins.list", "plugins.inspect", "mcp.oauth.status", "mcp.oauth.start", "mcp.oauth.complete", "mcp.oauth.cancel", "mcp.oauth.logout",
     ]
     static let demoOAuthScheme = "pincer-demo-oauth"
 
-    func handleMCP(_ method: String, _ params: JSONValue) throws -> JSONValue? {
+    func handleMCP(_ method: String, _ params: JSONValue) async throws -> JSONValue? {
         guard Self.mcpMethods.contains(method) else { return nil }
         self.mcp.seedIfNeeded()
         switch method {
@@ -221,6 +223,9 @@ extension DemoGateway {
             let names = self.mcpNames(params["serverNames"])
             return ["generatedAt": .number((Date().timeIntervalSince1970 * 1000).rounded()),
                     "servers": .array(names.compactMap { self.mcp.statusEntry($0) })]
+        case "mcp.probe": return try await self.mcpProbe(params)
+        case "plugins.list": return Self.demoPluginList
+        case "plugins.inspect": return try self.demoPluginInspect(params)
         case "mcp.oauth.status":
             let names = self.mcpNames(params["serverNames"]).filter { self.mcp.runtime[$0]?.auth != nil }
             return ["servers": .array(names.compactMap { name in
@@ -315,6 +320,109 @@ extension DemoGateway {
         }
     }
 
+    // MARK: probe and plugins
+
+    /// One-off connection test of a saved server or an unsaved draft; the status table is untouched. A draft may
+    /// carry redacted sentinels, which are restored from the saved entry. By server name (mirrors `mock-gateway/mcp.mjs`):
+    /// `postgres` fails with three diagnostics, `home-assistant` succeeds after ~2 s, OAuth servers that aren't signed in
+    /// (`linear`, `notion`) need authorization, `github` succeeds with 6 tools, 3 resources and 2 prompts,
+    /// `filesystem` with 4 tools, 1 resource, 0 prompts, and anything else with the generic tools.
+    /// A command containing "nonexistent" or "missing", a non-http(s) URL or no transport also fails.
+    private func mcpProbe(_ params: JSONValue) async throws -> JSONValue {
+        let name = params["serverName"]?.string ?? ""
+        let saved = self.mcp.servers[name]
+        var candidate = saved
+        if let draft = params["server"], draft.object != nil {
+            candidate = DemoMCPState.restoring(draft, from: saved)
+        }
+        guard let server = candidate else { throw Self.mcpInvalid("unknown MCP server: \(name)") }
+        func failure(_ messages: [String], auth: JSONValue? = nil) -> JSONValue {
+            var result: [String: JSONValue] = ["ok": false, "tools": [], "resources": 0, "prompts": 0,
+                                               "diagnostics": .array(messages.map { ["message": .string($0)] })]
+            result["auth"] = auth
+            return .object(result)
+        }
+        guard DemoMCPState.transport(server) != nil else { return failure(["Server needs a command or a url."]) }
+        if let command = server["command"]?.string, command.contains("nonexistent") || command.contains("missing") {
+            return failure(["spawn \(command) ENOENT", "Check that \(command) is installed and on the Gateway's PATH."])
+        }
+        if let url = server["url"]?.string, !(url.hasPrefix("http://") || url.hasPrefix("https://")) {
+            return failure(["Invalid url: \(url)"])
+        }
+        if server["auth"]?.string == "oauth" {
+            let auth = (server == saved ? self.mcp.runtime[name]?.auth : nil)
+                ?? DemoMCPState.Auth(mode: DemoMCPState.authMode(server) ?? "oauth-shared")
+            if auth.state != "authorized" { return failure(["Authorization required."], auth: .object(DemoMCPState.authObject(auth))) }
+        }
+        if name == "postgres" {
+            return failure(["spawn uvx ENOENT", "uvx was not found on the Gateway's PATH.", "Install uv (https://docs.astral.sh/uv/) on the Gateway host."])
+        }
+        let slow = name == "home-assistant"
+        let limit = params["timeoutMs"]?.int ?? 15_000
+        if slow {
+            if limit < 2000 {
+                try? await Task.sleep(for: .milliseconds(max(0, limit)))
+                return failure(["Timed out after \(limit) ms waiting for the server to initialize."])
+            }
+            try? await Task.sleep(for: .seconds(2))
+        }
+        var tools = name == "linear" ? DemoMCPState.linearTools
+            : (DemoMCPState.seedTools[name] ?? (name == "acme.docs" ? DemoMCPState.acmeTools : DemoMCPState.genericTools))
+        let include = server["toolFilter"]?["include"]?.array?.compactMap(\.string) ?? []
+        let exclude = server["toolFilter"]?["exclude"]?.array?.compactMap(\.string) ?? []
+        // Like the Gateway: `*` is the only wildcard; include applies first, then exclude.
+        func matches(_ tool: String, _ patterns: [String]) -> Bool {
+            patterns.contains { pattern in
+                let regex = "^" + pattern.split(separator: "*", omittingEmptySubsequences: false)
+                    .map { NSRegularExpression.escapedPattern(for: String($0)) }.joined(separator: ".*") + "$"
+                return tool.range(of: regex, options: .regularExpression) != nil
+            }
+        }
+        tools = tools.filter { (include.isEmpty || matches($0, include)) && !matches($0, exclude) }
+        let counts = ["github": (3, 2), "filesystem": (1, 0), "linear": (2, 1)][name] ?? (0, 0)
+        return ["ok": true, "tools": JSONValue(tools), "resources": .number(Double(counts.0)), "prompts": .number(Double(counts.1)),
+                "diagnostics": []]
+    }
+
+    private typealias DemoPlugin = (id: String, name: String, description: String, servers: [String], unavailable: [String])
+
+    private static let demoPlugins: [DemoPlugin] = [
+        ("linear", "Linear", "Linear issues through its hosted MCP server.", ["linear"], []),
+        ("asana", "Asana", "Asana tasks through its hosted MCP server.", ["asana", "asana-beta"], ["asana-beta"]),
+    ]
+
+    private static func demoPluginEntry(_ plugin: DemoPlugin) -> JSONValue {
+        ["id": .string(plugin.id), "name": .string(plugin.name), "description": .string(plugin.description), "version": "1.0.0",
+         "origin": "clawhub", "installed": true, "enabled": true, "state": "enabled", "runtime": ["state": "active"],
+         "removable": true, "kind": ["tool"]]
+    }
+
+    private static var demoPluginList: JSONValue {
+        ["plugins": .array(demoPlugins.map(demoPluginEntry)), "diagnostics": [], "mutationAllowed": false]
+    }
+
+    private func demoPluginInspect(_ params: JSONValue) throws -> JSONValue {
+        guard let plugin = Self.demoPlugins.first(where: { $0.id == params["pluginId"]?.string }) else {
+            throw Self.mcpInvalid("unknown plugin: \(params["pluginId"]?.string ?? "")")
+        }
+        self.mcp.seedIfNeeded()
+        var result: JSONValue = ["ok": true, "plugin": Self.demoPluginEntry(plugin), "credentials": [],
+                "declared": ["mcpServers": JSONValue(plugin.servers)],
+                "components": ["mcpServers": JSONValue(plugin.servers.filter { !plugin.unavailable.contains($0) }),
+                               "unavailable": ["mcpServers": JSONValue(plugin.unavailable)]],
+                "grants": [:]]
+        // Like upstream, `mcpAuth` only covers servers with a matching configured OAuth entry, and follows its sign-in.
+        let auth: [JSONValue] = plugin.servers.compactMap { name in
+            guard self.mcp.servers[name]?["auth"]?.string == "oauth", let state = self.mcp.runtime[name]?.auth?.state else { return nil }
+            return ["serverName": .string(name), "state": .string(state)]
+        }
+        if !auth.isEmpty, case var .object(object) = result {
+            object["mcpAuth"] = .array(auth)
+            result = .object(object)
+        }
+        return result
+    }
+
     // MARK: config
 
     private func mcpConfigSnapshot() -> JSONValue {
@@ -375,7 +483,7 @@ extension DemoGateway {
             let tools: [JSONValue] = connected.map { server, tool in
                 let description = DemoMCPState.toolDescriptions[tool] ?? "\(tool) (\(server))"
                 var entry: [String: JSONValue] = [
-                    "id": .string("\(server)__\(tool)"), "label": .string(tool), "description": .string(description),
+                    "id": .string("\(MCPToolName.safeServerName(server))__\(tool)"), "label": .string(tool), "description": .string(description),
                     "rawDescription": .string(description), "source": "mcp", "mcpServer": .string(server), "mcpToolName": .string(tool),
                 ]
                 if tool == "call_service" { entry["risk"] = "medium" }

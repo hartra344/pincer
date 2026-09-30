@@ -54,6 +54,16 @@ extension DemoGateway {
       {"number": 301, "title": "Failed tool calls need a clearer error state", "state": "open", "labels": ["ui"], "author": "sam"}
     ]
     """
+    static let toolCardsCreatedIssueJSON = """
+    {"id": "PIN-412", "title": "Era: MCP sign-in needs a browser", "state": "Backlog", "priority": 2, "url": "https://linear.app/pincer/issue/PIN-412"}
+    """
+    static let toolCardsTeamsJSON = """
+    [{"id": "PIN", "name": "Pincer"}, {"id": "GW", "name": "Gateway"}]
+    """
+    /// From the configured server `acme.docs`; the transcript uses the sanitized name `acme-docs`.
+    static let toolCardsDocsSearchJSON = """
+    {"results": [{"title": "Rate limits", "url": "https://docs.acme.example/rate-limits"}, {"title": "Quotas", "url": "https://docs.acme.example/quotas"}]}
+    """
     static let toolCardsConfigPath = "src/mcp/servers.json"
     static let toolCardsConfigOld = """
         "url": "https://mcp.era.example/v1",
@@ -140,7 +150,7 @@ extension DemoGateway {
             Self.message("assistant", [
                 Self.text("Config updated. Checking for known issues with OAuth servers."),
                 Self.toolCall(Self.toolCardsMCPCall, "github__search_issues", [
-                    "query": "MCP OAuth authorization required", "repo": "hartra344/pincer", "state": "open",
+                    "query": "MCP server configuration", "repo": "hartra344/pincer", "state": "open",
                 ]),
             ], ago: start - 170),
             result(Self.toolCardsMCPCall, "github__search_issues", Self.toolCardsIssuesJSON, ago: start - 172),
@@ -153,6 +163,28 @@ extension DemoGateway {
                 "length": .number(Double(Self.toolCardsFetchText.count)), "rawLength": 18_204,
                 "extractMode": "markdown", "extractor": "readability", "fetchedAt": "2026-09-29T14:40:00.000Z",
             ]),
+            Self.message("assistant", [
+                Self.text("Looking at how MCP tools show up in the transcript."),
+                Self.toolCall("call_demo_mcp_create", "linear__create_issue", [
+                    "title": "Era: MCP sign-in needs a browser", "team": "PIN", "priority": 2,
+                    "description": "Era reports 401 until it is signed in. Sign in from Settings → MCP Servers.",
+                ]),
+            ], ago: start - 210),
+            result("call_demo_mcp_create", "linear__create_issue", Self.toolCardsCreatedIssueJSON, ago: start - 212),
+            Self.message("assistant", [Self.toolCall("call_demo_mcp_teams", "linear__list_teams", [:])], ago: start - 215),
+            result("call_demo_mcp_teams", "linear__list_teams", Self.toolCardsTeamsJSON, ago: start - 216),
+            Self.message("assistant", [Self.toolCall("call_demo_mcp_failed", "linear__update_issue", [
+                "id": "PIN-999", "state": "Done",
+            ])], ago: start - 220),
+            result("call_demo_mcp_failed", "linear__update_issue", "Issue PIN-999 not found.", ago: start - 221, isError: true),
+            Self.message("assistant", [Self.toolCall("call_demo_mcp_legacy", "mcp__filesystem__read_file", [
+                "path": "/Users/demo/Projects/pincer/README.md",
+            ])], ago: start - 225),
+            result("call_demo_mcp_legacy", "mcp__filesystem__read_file", "# Pincer\n\nA native client for the OpenClaw Gateway.", ago: start - 226),
+            Self.message("assistant", [Self.toolCall("call_demo_mcp_sanitized", "acme-docs__search", [
+                "query": "rate limits", "limit": 3,
+            ])], ago: start - 230),
+            result("call_demo_mcp_sanitized", "acme-docs__search", Self.toolCardsDocsSearchJSON, ago: start - 231),
             Self.message("assistant", [Self.text("""
             \(Self.toolCardsPreview) Run `openclaw mcp auth Era` on a machine with a browser to finish the sign-in.
             """)], id: DemoBookmarks.toolsSummaryMessageId, ago: start - 240),

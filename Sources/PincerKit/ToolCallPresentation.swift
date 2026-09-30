@@ -180,12 +180,8 @@ public struct ToolCallPresentation: Hashable, Sendable {
 
     private static func classify(name: String, hasCommand: Bool) -> (Kind, String?, String) {
         if name.contains("__") {
-            var parts = name.components(separatedBy: "__")
-            if parts.first == "mcp" { parts.removeFirst() }
-            if parts.count >= 2 {
-                return (.mcp, parts[0].isEmpty ? nil : parts[0], parts.dropFirst().joined(separator: "__"))
-            }
-            return (.mcp, nil, parts.first ?? name)
+            let split = MCPToolName.split(name)
+            return (.mcp, split.server, split.tool)
         }
         let lower = name.lowercased()
         let execNames: Set<String> = ["exec", "bash", "shell", "sh", "run_command", "run_shell_command",
@@ -236,5 +232,34 @@ public struct ToolCallPresentation: Hashable, Sendable {
         default:
             return nil
         }
+    }
+}
+
+/// Splits an MCP tool name (`server__tool`, optionally `mcp__server__tool`) into its server and tool.
+/// The server is everything before the FIRST `__` (after an optional `mcp__` prefix), so tool names
+/// may contain `__`. Names without a usable split have no server and keep `tool == name` unless
+/// only the prefix was there.
+public enum MCPToolName {
+    /// The server fragment of a transcript tool name for a configured server name: characters outside
+    /// `[A-Za-z0-9_-]` become `-`, a fragment not starting with a letter gets `mcp-`, at most 30 characters.
+    /// (The gateway also suffixes `-2`, `-3` on collisions, which this doesn't know about.)
+    public static func safeServerName(_ configName: String) -> String {
+        var safe = String(configName.trimmingCharacters(in: .whitespacesAndNewlines).unicodeScalars.map { scalar -> Character in
+            let ok = scalar.isASCII && (scalar.properties.isAlphabetic || ("0"..."9").contains(Character(scalar))
+                || scalar == "_" || scalar == "-")
+            return ok ? Character(scalar) : "-"
+        })
+        if safe.isEmpty { safe = "mcp" }
+        if !(safe.first.map { $0.isASCII && $0.isLetter } ?? false) { safe = "mcp-" + safe }
+        return String(safe.prefix(30))
+    }
+
+    public static func split(_ name: String) -> (server: String?, tool: String) {
+        var rest = Substring(name)
+        if rest.hasPrefix("mcp__") { rest = rest.dropFirst(5) }
+        if let range = rest.range(of: "__"), range.lowerBound > rest.startIndex, range.upperBound < rest.endIndex {
+            return (String(rest[..<range.lowerBound]), String(rest[range.upperBound...]))
+        }
+        return (nil, rest.isEmpty ? name : String(rest))
     }
 }

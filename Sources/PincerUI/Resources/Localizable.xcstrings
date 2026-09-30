@@ -9273,6 +9273,26 @@
         }
       }
     },
+    "Show MCP Servers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show MCP Servers"
+          }
+        }
+      }
+    },
+    "Open MCP Server": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open MCP Server"
+          }
+        }
+      }
+    },
     "Open Chat in New Window": {
       "localizations": {
         "en": {
@@ -17479,6 +17499,556 @@
           "stringUnit": {
             "state": "translated",
             "value": "↩ Send · ⌘↩ Send & Open · esc Close"
+          }
+        }
+      }
+    },
+    "Only allow tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only allow tools"
+          }
+        }
+      }
+    },
+    "Hide tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide tools"
+          }
+        }
+      }
+    },
+    "* matches any characters. Include is applied first, then exclude.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "* matches any characters. Include is applied first, then exclude."
+          }
+        }
+      }
+    },
+    "Pattern": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pattern"
+          }
+        }
+      }
+    },
+    "Remove pattern": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove pattern"
+          }
+        }
+      }
+    },
+    "Add Pattern": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Pattern"
+          }
+        }
+      }
+    },
+    "Verify TLS certificate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verify TLS certificate"
+          }
+        }
+      }
+    },
+    "Client certificate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Client certificate"
+          }
+        }
+      }
+    },
+    "Client key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Client key"
+          }
+        }
+      }
+    },
+    "Sign-in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign-in"
+          }
+        }
+      }
+    },
+    "Default (shared)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default (shared)"
+          }
+        }
+      }
+    },
+    "Shared by everyone": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared by everyone"
+          }
+        }
+      }
+    },
+    "Each person signs in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each person signs in"
+          }
+        }
+      }
+    },
+    "Scope": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scope"
+          }
+        }
+      }
+    },
+    "Auth profile": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auth profile"
+          }
+        }
+      }
+    },
+    "Test Connection": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Test Connection"
+          }
+        }
+      }
+    },
+    "Couldn't connect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't connect"
+          }
+        }
+      }
+    },
+    "%@ plugin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ plugin"
+          }
+        }
+      }
+    },
+    "Unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unavailable"
+          }
+        }
+      }
+    },
+    "From Plugins": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From Plugins"
+          }
+        }
+      }
+    },
+    "Connection timeout": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection timeout"
+          }
+        }
+      }
+    },
+    "Request timeout": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Request timeout"
+          }
+        }
+      }
+    },
+    "ms": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ms"
+          }
+        }
+      }
+    },
+    "Default (30 s)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default (30 s)"
+          }
+        }
+      }
+    },
+    "Default (60 s)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default (60 s)"
+          }
+        }
+      }
+    },
+    "create_*": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "create_*"
+          }
+        }
+      }
+    },
+    "Paths on the Gateway host.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paths on the Gateway host."
+          }
+        }
+      }
+    },
+    "Pincer can't check this server's identity.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer can't check this server's identity."
+          }
+        }
+      }
+    },
+    "Fix the errors above first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fix the errors above first."
+          }
+        }
+      }
+    },
+    "Tests these settings from the Gateway without saving.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tests these settings from the Gateway without saving."
+          }
+        }
+      }
+    },
+    "Settings changed since the test.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings changed since the test."
+          }
+        }
+      }
+    },
+    "testing MCP connections": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "testing MCP connections"
+          }
+        }
+      }
+    },
+    "OAuth options": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OAuth options"
+          }
+        }
+      }
+    },
+    "TLS settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TLS settings"
+          }
+        }
+      }
+    },
+    "Choose shared or per-requester.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose shared or per-requester."
+          }
+        }
+      }
+    },
+    "Per-person sign-in can't use an auth profile.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Per-person sign-in can't use an auth profile."
+          }
+        }
+      }
+    },
+    "Enter a whole number of milliseconds.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a whole number of milliseconds."
+          }
+        }
+      }
+    },
+    "Needs sign-in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs sign-in"
+          }
+        }
+      }
+    },
+    "Use Sign In on this page, then test again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Sign In on this page, then test again."
+          }
+        }
+      }
+    },
+    "Shared (one sign-in for everyone)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shared (one sign-in for everyone)"
+          }
+        }
+      }
+    },
+    "Per person (each person signs in)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Per person (each person signs in)"
+          }
+        }
+      }
+    },
+    "Save, then sign in from the server's page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save, then sign in from the server's page."
+          }
+        }
+      }
+    },
+    "Copy Details": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Details"
+          }
+        }
+      }
+    },
+    "1 tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 tool"
+          }
+        }
+      }
+    },
+    "%lld tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld tools"
+          }
+        }
+      }
+    },
+    "1 resource": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 resource"
+          }
+        }
+      }
+    },
+    "%lld resources": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld resources"
+          }
+        }
+      }
+    },
+    "1 prompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 prompt"
+          }
+        }
+      }
+    },
+    "%lld prompts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld prompts"
+          }
+        }
+      }
+    },
+    "Connected · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected · %@"
+          }
+        }
+      }
+    },
+    "Advanced · %lld set": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advanced · %lld set"
+          }
+        }
+      }
+    },
+    "Opens the %@ plugin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens the %@ plugin"
+          }
+        }
+      }
+    },
+    "Open Plugin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Plugin"
+          }
+        }
+      }
+    },
+    "No servers configured on this Gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No servers configured on this Gateway."
+          }
+        }
+      }
+    },
+    "Managed by plugins. Change them in each plugin's settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Managed by plugins. Change them in each plugin's settings."
           }
         }
       }

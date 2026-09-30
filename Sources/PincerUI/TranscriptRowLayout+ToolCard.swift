@@ -29,22 +29,15 @@ enum ToolPresentationCache {
     }
 }
 
-/// Header text of a tool card, split cheaply from the name (no parsing): an MCP tool is
-/// `server__tool` or `mcp__server__tool`.
+/// Header text of a tool card, split cheaply from the name (no parsing) by `MCPToolName`.
 struct ToolCardName {
     let server: String?
     let tool: String
 
     init(_ name: String) {
-        var rest = Substring(name)
-        if rest.hasPrefix("mcp__") { rest = rest.dropFirst(5) }
-        if let range = rest.range(of: "__", options: .backwards), range.lowerBound > rest.startIndex, range.upperBound < rest.endIndex {
-            self.server = String(rest[..<range.lowerBound])
-            self.tool = String(rest[range.upperBound...])
-        } else {
-            self.server = nil
-            self.tool = name
-        }
+        let split = MCPToolName.split(name)
+        self.server = split.server
+        self.tool = split.server == nil ? name : split.tool
     }
 }
 
@@ -193,17 +186,40 @@ extension TranscriptLayoutBuilder {
         } else {
             runningY = self.formattedBody(presentation, tool: tool, finding: finding, into: &card)
         }
+        // Offered for every MCP call, whatever its arguments or outcome; beside "Show raw JSON" when it fits.
+        let openServer = presentation.kind == .mcp && self.settings.supportsMCPServers ? presentation.mcpServer : nil
+        var openPlaced = false
+        func placeOpenServer(_ server: String, ownRow: Bool, into card: inout ToolCardBuild) {
+            // A server that isn't configured (e.g. declared by a plugin) can only be found in the list.
+            let known = self.settings.mcpServerNames.map { $0.contains(server) } ?? true
+            let title = known ? L("Open MCP Server") : L("Show MCP Servers")
+            let size = TranscriptLabelButton.size(title: title)
+            if ownRow { card.gap(8) }
+            card.controls.append(.init(id: "open-mcp-server", title: title, symbol: "point.3.connected.trianglepath.dotted",
+                                       frame: CGRect(x: card.x, y: card.y, width: size.width, height: size.height),
+                                       action: .openMCPServer(server), spoken: title))
+            if ownRow { card.y += size.height }
+        }
         if hasRaw, !finding {
             card.gap()
             let title = showsRaw ? L("Show formatted") : L("Show raw JSON")
             let size = TranscriptLabelButton.size(title: title)
             let width = max(size.width, TranscriptLabelButton.size(title: L("Show raw JSON")).width,
                             TranscriptLabelButton.size(title: L("Show formatted")).width)
+            if let openServer {
+                let open = max(TranscriptLabelButton.size(title: L("Open MCP Server")).width,
+                               TranscriptLabelButton.size(title: L("Show MCP Servers")).width)
+                if open + 12 + width <= card.inner {
+                    placeOpenServer(openServer, ownRow: false, into: &card)
+                    openPlaced = true
+                }
+            }
             card.controls.append(.init(id: "raw", title: title, symbol: showsRaw ? "text.alignleft" : "curlybraces",
                                        frame: CGRect(x: card.x + card.inner - width, y: card.y, width: width, height: size.height),
                                        action: .toggle(key: rawKey, to: !showsRaw), spoken: title, trailing: true))
             card.y += size.height
         }
+        if let openServer, !openPlaced { placeOpenServer(openServer, ownRow: true, into: &card) }
         return runningY
     }
 

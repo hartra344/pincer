@@ -92,6 +92,7 @@ enum TranscriptPart {
             enum Action {
                 case copy(String)
                 case toggle(key: String, to: Bool)
+                case openMCPServer(String)
             }
 
             let id: String
@@ -369,6 +370,10 @@ struct TranscriptSettings: Equatable {
     var avatarStyle: AvatarStyle?
     /// Every agent's companion by id, for messages other agents sent here.
     var agentStyles: [String: AvatarStyle] = [:]
+    /// MCP tool cards offer "Open MCP Server", so their layouts depend on it.
+    var supportsMCPServers = false
+    /// Names (and their transcript spellings) of the configured MCP servers; nil until the config has loaded.
+    var mcpServerNames: Set<String>?
 
     @MainActor static func current(for context: TranscriptContext) -> TranscriptSettings {
         let animated = AvatarSettings.isEnabled
@@ -381,7 +386,11 @@ struct TranscriptSettings: Equatable {
             avatarStyle: animated ? AvatarSettings.style(for: context.agent, in: context.gateway) : nil,
             agentStyles: animated
                 ? Dictionary(context.gateway.agents.map { ($0.id, AvatarSettings.style(for: $0, in: context.gateway)) }) { first, _ in first }
-                : [:])
+                : [:],
+            supportsMCPServers: context.gateway.canOpenMCPServers,
+            mcpServerNames: context.gateway.settings.hasLoaded ? Set(context.gateway.mcp.servers.flatMap {
+                [$0.name, MCPToolName.safeServerName($0.name)]
+            }) : nil)
     }
 }
 

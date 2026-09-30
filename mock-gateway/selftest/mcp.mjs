@@ -16,6 +16,7 @@ export async function run() {
 
     for (const [method, params] of [
       ['mcp.reconnect', {}],
+      ['mcp.probe', { serverName: 'github' }],
       ['mcp.oauth.start', { serverName: 'linear', redirect: 'gateway' }],
       ['mcp.oauth.complete', { attemptId: 'x', code: 'y' }],
       ['mcp.oauth.cancel', { attemptId: 'x' }],
@@ -29,7 +30,7 @@ export async function run() {
     // config.get: seeded servers, secrets redacted, args left alone.
     const snapshot = await reader.send('config.get', {});
     const servers = snapshot.config.mcp.servers;
-    assert.deepEqual(Object.keys(servers).sort(), ['filesystem', 'github', 'home-assistant', 'linear', 'notion', 'postgres', 'sentry']);
+    assert.deepEqual(Object.keys(servers).sort(), ['acme.docs', 'filesystem', 'github', 'home-assistant', 'linear', 'notion', 'postgres', 'sentry']);
     assert.equal(servers['home-assistant'].env.HA_TOKEN, '__OPENCLAW_REDACTED__');
     assert.equal(servers.github.headers.Authorization, '__OPENCLAW_REDACTED__');
     assert.equal(servers.filesystem.env.LOG_LEVEL, '__OPENCLAW_REDACTED__');
@@ -39,7 +40,7 @@ export async function run() {
     const status = await reader.send('mcp.status', {});
     assert.equal(typeof status.generatedAt, 'number');
     const by = Object.fromEntries(status.servers.map((s) => [s.name, s]));
-    assert.equal(status.servers.length, 7);
+    assert.equal(status.servers.length, 8);
     assert.deepEqual([by.filesystem.state, by.filesystem.toolCount, by.filesystem.transport], ['connected', 4, 'stdio']);
     assert.deepEqual(by['home-assistant'].tools, ['get_state', 'call_service']);
     assert.equal(by.github.toolCount, 6);
@@ -52,6 +53,36 @@ export async function run() {
     assert.deepEqual([by.sentry.state, by.sentry.enabled, by.sentry.transport], ['disabled', false, 'sse']);
     assert.deepEqual((await reader.send('mcp.status', { serverNames: ['github'] })).servers.map((s) => s.name), ['github']);
     assert.deepEqual((await reader.send('mcp.oauth.status', {})).servers.map((s) => s.name), ['linear', 'notion']);
+
+    // mcp.probe: saved servers and unsaved drafts; nothing changes in the status table.
+    const probeOk = await admin.send('mcp.probe', { serverName: 'github' });
+    assert.equal(probeOk.ok, true);
+    assert.equal(probeOk.tools.length, 6);
+    const filtered = await admin.send('mcp.probe', { serverName: 'github', server: { url: 'https://x.test/mcp', transport: 'streamable-http', toolFilter: { include: ['get_issue'] } } });
+    assert.deepEqual(filtered.tools, ['get_issue']);
+    const unsignedIn = await admin.send('mcp.probe', { serverName: 'linear' });
+    assert.equal(unsignedIn.ok, false);
+    assert.equal(unsignedIn.auth.state, 'requires-authorization');
+    const broken = await admin.send('mcp.probe', { serverName: 'new', server: { command: 'nonexistent-cmd' } });
+    assert.deepEqual([broken.ok, broken.diagnostics[0].message], [false, 'spawn nonexistent-cmd ENOENT']);
+    const pg = await admin.send('mcp.probe', { serverName: 'postgres' });
+    assert.equal(pg.diagnostics.length, 3);
+    const probeStart = Date.now();
+    const slowProbe = await admin.send('mcp.probe', { serverName: 'home-assistant', timeoutMs: 15000 });
+    assert.ok(slowProbe.ok && Date.now() - probeStart >= 1800);
+    assert.equal((await admin.send('mcp.probe', { serverName: 'home-assistant', timeoutMs: 500 })).ok, false);
+    const restored = await admin.send('mcp.probe', { serverName: 'github', server: { url: 'https://api.githubcopilot.com/mcp/', transport: 'streamable-http', headers: { Authorization: '__OPENCLAW_REDACTED__' } } });
+    assert.deepEqual([restored.ok, restored.resources, restored.prompts], [true, 3, 2]);
+    assert.equal((await admin.call('mcp.probe', { serverName: 'nope' })).error.code, 'INVALID_REQUEST');
+    assert.equal((await reader.send('mcp.status', { serverNames: ['linear'] })).servers[0].state, 'idle');
+
+    // plugins.inspect: plugin-declared MCP servers and their auth.
+    const linearPlugin = await reader.send('plugins.inspect', { pluginId: 'linear' });
+    assert.deepEqual(linearPlugin.declared.mcpServers, ['linear']);
+    assert.deepEqual(linearPlugin.mcpAuth, [{ serverName: 'linear', state: 'requires-authorization' }]);
+    const asanaPlugin = await reader.send('plugins.inspect', { pluginId: 'asana' });
+    assert.deepEqual(asanaPlugin.components.unavailable.mcpServers, ['asana-beta']);
+    assert.equal(asanaPlugin.mcpAuth, undefined);
 
     // tools.effective: tools of connected servers plus a diagnostic for the failing one.
     const eff = await reader.send('tools.effective', { sessionKey: 'agent:main:main' });

@@ -297,6 +297,8 @@ extension GatewayStore {
     public var supportsSkills: Bool { self.advertises(Skills.statusMethod) }
     /// The MCP Servers page: the config is readable (`config.get`).
     public var supportsMCPServers: Bool { self.settings.hasLoaded && self.settings.configSupported }
+    /// Whether a link to the MCP Servers page can be offered before the config has loaded (`config.get` is advertised).
+    public var canOpenMCPServers: Bool { self.advertises("config.get") && self.settings.configSupported }
     /// The chat's Tools & Policy inspector: `tools.effective` is advertised.
     public var supportsToolsEffective: Bool { self.advertises(ToolsPolicy.effectiveMethod) }
     /// An agent's Tools inspector: `tools.catalog` is advertised.

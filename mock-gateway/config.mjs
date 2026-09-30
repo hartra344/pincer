@@ -2,7 +2,7 @@
 // config.get / config.schema / config.patch / config.apply and plugins.list / inspect /
 // setEnabled / install / uninstall. Writes need operator.admin, like the real Gateway.
 import crypto from 'node:crypto';
-import { seedMcpServers, syncMcpFromConfig } from './mcp.mjs';
+import { pluginMcpInspect, seedMcpServers, syncMcpFromConfig } from './mcp.mjs';
 import { isTtsApiKeyPath, seedTtsConfig, ttsSchemaProperties } from './tts.mjs';
 
 export const REDACTED = '__OPENCLAW_REDACTED__';
@@ -39,6 +39,8 @@ export function createConfigState() {
           weather: { enabled: true, config: { units: 'metric' } },
           'memory-lancedb': { enabled: false, config: {} },
           browser: { enabled: false },
+          linear: { enabled: true, config: {} },
+          asana: { enabled: true, config: {} },
         },
       },
     },
@@ -46,6 +48,8 @@ export function createConfigState() {
       ['weather', { id: 'weather', name: 'Weather', description: 'Forecasts and current conditions.', version: '1.2.0', origin: 'clawhub', packageName: '@openclaw/weather', removable: true, kind: ['tool'] }],
       ['memory-lancedb', { id: 'memory-lancedb', name: 'LanceDB Memory', description: 'Long-term memory backed by LanceDB.', version: '2026.9.0', origin: 'bundled', removable: false, kind: ['memory'] }],
       ['browser', { id: 'browser', name: 'Browser', description: 'Lets agents drive a headless browser.', version: '2026.9.0', origin: 'bundled', removable: false, kind: ['tool'], needsConsent: true }],
+      ['linear', { id: 'linear', name: 'Linear', description: 'Linear issues through its hosted MCP server.', version: '1.0.0', origin: 'clawhub', packageName: '@openclaw/linear', removable: true, kind: ['tool'] }],
+      ['asana', { id: 'asana', name: 'Asana', description: 'Asana tasks through its hosted MCP server.', version: '0.4.0', origin: 'clawhub', packageName: '@openclaw/asana', removable: true, kind: ['tool'] }],
     ]),
     generation: 1,
   };
@@ -387,8 +391,7 @@ export function handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadc
         credentials: plugin.id === 'weather'
           ? [{ path: ['plugins', 'entries', 'weather', 'config', 'apiKey'], label: 'Weather API key', envVars: ['WEATHER_API_KEY'], signupUrl: 'https://example.com/weather/signup', requiresCredential: true }]
           : [],
-        declared: {},
-        components: {},
+        ...pluginMcpInspect(state, plugin.id),
         reviewToken: `review_${plugin.id}`,
         grants: {},
       });
