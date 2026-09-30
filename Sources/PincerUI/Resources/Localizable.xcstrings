@@ -11,6 +11,16 @@
         }
       }
     },
+    "%@ (Default)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (Default)"
+          }
+        }
+      }
+    },
     "%@ + %lld more": {
       "localizations": {
         "en": {
@@ -67,6 +77,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ character"
+          }
+        }
+      }
+    },
+    "%@ couldn't speak: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ couldn't speak: %2$@"
           }
         }
       }
@@ -221,6 +241,16 @@
         }
       }
     },
+    "%@ needs a key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ needs a key"
+          }
+        }
+      }
+    },
     "%@ of %@ lines": {
       "localizations": {
         "en": {
@@ -247,6 +277,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ on %@"
+          }
+        }
+      }
+    },
+    "%@ rejected the key: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ rejected the key: %2$@"
           }
         }
       }
@@ -361,6 +401,16 @@
         }
       }
     },
+    "%@ via %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ via %2$@"
+          }
+        }
+      }
+    },
     "%@ wants to run a command": {
       "localizations": {
         "en": {
@@ -471,12 +521,32 @@
         }
       }
     },
+    "%@: key isn't working": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@: key isn't working"
+          }
+        }
+      }
+    },
     "%@: reply failed": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "%@: reply failed"
+          }
+        }
+      }
+    },
+    "%d percent": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d percent"
           }
         }
       }
@@ -2143,6 +2213,16 @@
         }
       }
     },
+    "Browse Voices": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browse Voices"
+          }
+        }
+      }
+    },
     "By agent": {
       "localizations": {
         "en": {
@@ -2473,6 +2553,16 @@
         }
       }
     },
+    "Check the key below, then run Test Voice.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check the key below, then run Test Voice."
+          }
+        }
+      }
+    },
     "Checked %@ ago": {
       "localizations": {
         "en": {
@@ -2489,6 +2579,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Checking every few seconds…"
+          }
+        }
+      }
+    },
+    "Checking key…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checking key…"
           }
         }
       }
@@ -2569,6 +2669,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Choose a provider to set it up below. A provider needs an API key before it can be used."
+          }
+        }
+      }
+    },
+    "Choose a provider to set it up below. Providers that need a key show Needs Key until you add one.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a provider to set it up below. Providers that need a key show Needs Key until you add one."
           }
         }
       }
@@ -3823,6 +3933,26 @@
         }
       }
     },
+    "Couldn't load voices: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't load voices: %@"
+          }
+        }
+      }
+    },
+    "Couldn't load voices: ElevenLabs says the key is invalid.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't load voices: ElevenLabs says the key is invalid."
+          }
+        }
+      }
+    },
     "Couldn't open the sign-in page.": {
       "localizations": {
         "en": {
@@ -3969,6 +4099,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Custom"
+          }
+        }
+      }
+    },
+    "Custom: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom: %@"
           }
         }
       }
@@ -5753,6 +5893,16 @@
         }
       }
     },
+    "Gateway Voice: Not set up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway Voice: Not set up"
+          }
+        }
+      }
+    },
     "Gateway address": {
       "localizations": {
         "en": {
@@ -5779,6 +5929,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gateway logs are redacted by the Gateway, but they can still contain hostnames, file paths and message content. Review them before sharing."
+          }
+        }
+      }
+    },
+    "Gateway not connected. Using this device's voice.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway not connected. Using this device's voice."
           }
         }
       }
@@ -6033,6 +6193,16 @@
         }
       }
     },
+    "Hi, this is your Gateway voice.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hi, this is your Gateway voice."
+          }
+        }
+      }
+    },
     "Hide": {
       "localizations": {
         "en": {
@@ -6199,6 +6369,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "In %@"
+          }
+        }
+      }
+    },
+    "In Use": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Use"
           }
         }
       }
@@ -6563,6 +6743,36 @@
         }
       }
     },
+    "Key saved": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key saved"
+          }
+        }
+      }
+    },
+    "Key saved and working": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key saved and working"
+          }
+        }
+      }
+    },
+    "Key saved. Run Test Voice to check it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key saved. Run Test Voice to check it."
+          }
+        }
+      }
+    },
     "Keyboard Shortcuts": {
       "localizations": {
         "en": {
@@ -6639,6 +6849,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Last message %@ ago"
+          }
+        }
+      }
+    },
+    "Last reply used this device's voice: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last reply used this device's voice: %@"
           }
         }
       }
@@ -7503,6 +7723,16 @@
         }
       }
     },
+    "Needs Key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Needs Key"
+          }
+        }
+      }
+    },
     "Needs Sign-In": {
       "localizations": {
         "en": {
@@ -7983,6 +8213,16 @@
         }
       }
     },
+    "No key needed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No key needed"
+          }
+        }
+      }
+    },
     "No lines match": {
       "localizations": {
         "en": {
@@ -8313,6 +8553,16 @@
         }
       }
     },
+    "Not Working": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Working"
+          }
+        }
+      }
+    },
     "Not a current agent": {
       "localizations": {
         "en": {
@@ -8413,12 +8663,32 @@
         }
       }
     },
+    "Not set up. Using this device's voice.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not set up. Using this device's voice."
+          }
+        }
+      }
+    },
     "Not signed in.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Not signed in."
+          }
+        }
+      }
+    },
+    "Not used (This Device Only)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not used (This Device Only)"
           }
         }
       }
@@ -8689,6 +8959,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Gateway Voice Settings"
+          }
+        }
+      }
+    },
+    "Open Gateway Voice Settings…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Gateway Voice Settings…"
           }
         }
       }
@@ -9093,6 +9373,16 @@
         }
       }
     },
+    "Paste API key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste API key"
+          }
+        }
+      }
+    },
     "Paste Code or URL": {
       "localizations": {
         "en": {
@@ -9149,6 +9439,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Paste your API key"
+          }
+        }
+      }
+    },
+    "Paste your API key above to browse your voices.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paste your API key above to browse your voices."
           }
         }
       }
@@ -9889,6 +10189,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Read Aloud"
+          }
+        }
+      }
+    },
+    "Read Aloud uses this device's voice until a provider is ready.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read Aloud uses this device's voice until a provider is ready."
           }
         }
       }
@@ -12563,6 +12873,16 @@
         }
       }
     },
+    "Similarity Boost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Similarity Boost"
+          }
+        }
+      }
+    },
     "Similarity boost": {
       "localizations": {
         "en": {
@@ -12723,6 +13043,16 @@
         }
       }
     },
+    "Speaker Boost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speaker Boost"
+          }
+        }
+      }
+    },
     "Speaker boost": {
       "localizations": {
         "en": {
@@ -12809,6 +13139,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Split view chat"
+          }
+        }
+      }
+    },
+    "Spoke with %@ instead of %@: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spoke with %1$@ instead of %2$@: %3$@"
+          }
+        }
+      }
+    },
+    "Spoke with %@ instead: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spoke with %1$@ instead: %2$@"
           }
         }
       }
@@ -12939,6 +13289,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop"
+          }
+        }
+      }
+    },
+    "Stop Preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop Preview"
           }
         }
       }
@@ -13229,6 +13589,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Test Voice"
+          }
+        }
+      }
+    },
+    "Testing needs write access.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Testing needs write access."
           }
         }
       }
@@ -13539,6 +13909,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The folder on the Gateway host with this agent's files."
+          }
+        }
+      }
+    },
+    "The key is saved on the Gateway, not in Pincer. Pincer keeps it in memory only while this page is open, to list your voices.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The key is saved on the Gateway, not in Pincer. Pincer keeps it in memory only while this page is open, to list your voices."
           }
         }
       }
@@ -14913,6 +15293,16 @@
         }
       }
     },
+    "Use %@ for Gateway Voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use %@ for Gateway Voice"
+          }
+        }
+      }
+    },
     "Use %@ for “%@”?": {
       "localizations": {
         "en": {
@@ -15199,6 +15589,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "What should the agent do?"
+          }
+        }
+      }
+    },
+    "What the Gateway Will Use": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What the Gateway Will Use"
           }
         }
       }

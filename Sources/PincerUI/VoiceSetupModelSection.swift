@@ -13,18 +13,22 @@ struct VoiceSetupModelSection: View {
     private static let customTag = "\u{0}custom"
 
     private var options: [TTSModelOption] { self.model.modelOptions(for: self.provider) }
-    private var current: String? { self.model.setups[self.provider]?.model }
+    private var current: String? { self.model.setups[self.provider]?.model.flatMap { $0.isEmpty ? nil : $0 } }
+    /// What the Gateway uses when none is set.
+    private var defaultId: String? { self.provider == "elevenlabs" ? "eleven_multilingual_v2" : nil }
+    private var isCustom: Bool {
+        self.choosingCustom || (self.current.map { id in !self.options.contains { $0.id == id } } ?? false)
+    }
 
     private var selection: Binding<String> {
         Binding {
-            if self.choosingCustom { return Self.customTag }
-            guard let current = self.current, !current.isEmpty else { return "" }
-            return self.options.contains { $0.id == current } ? current : Self.customTag
+            if self.isCustom { return Self.customTag }
+            return self.current ?? self.defaultId ?? ""
         } set: { value in
             if value == Self.customTag {
                 self.choosingCustom = true
                 self.custom = self.current ?? ""
-            } else if !value.isEmpty {
+            } else if !value.isEmpty, value != self.current {
                 self.choosingCustom = false
                 Task { await self.setup.run { try await self.model.saveModel(value, provider: self.provider) } }
             }
@@ -34,32 +38,39 @@ struct VoiceSetupModelSection: View {
     var body: some View {
         Section {
             Picker(L("Model"), selection: self.selection) {
-                if self.current == nil { Text("Provider default", bundle: .module).tag("") }
-                ForEach(self.options) { Text($0.name).tag($0.id) }
-                Text("Custom…", bundle: .module).tag(Self.customTag)
+                if self.defaultId == nil, self.current == nil { Text("Default", bundle: .module).tag("") }
+                ForEach(self.options) { option in
+                    Text(option.id == self.defaultId ? String(format: L("%@ (Default)"), option.name) : option.name).tag(option.id)
+                }
+                if self.isCustom, let current = self.current, !self.choosingCustom {
+                    Text(String(format: L("Custom: %@"), current)).tag(Self.customTag)
+                } else {
+                    Text("Custom…", bundle: .module).tag(Self.customTag)
+                }
             }
             .disabled(!self.editable)
-            if self.selection.wrappedValue == Self.customTag {
+            if self.isCustom {
                 TextField(L("Model ID"), text: self.$custom, prompt: Text("e.g. eleven_v4_turbo"))
                     .autocorrectionDisabled()
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif
                     .disabled(!self.editable)
+                    .onSubmit(self.saveCustom)
+                    .task(id: self.current) { if !self.choosingCustom { self.custom = self.current ?? "" } }
                 if self.editable {
-                    Button(L("Save Model")) {
-                        let id = self.custom.trimmingCharacters(in: .whitespacesAndNewlines)
-                        Task { if await self.setup.run({ try await self.model.saveModel(id, provider: self.provider) }) { self.choosingCustom = false } }
-                    }
-                    .disabled(self.custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || self.custom == self.current)
+                    Button(L("Save Model"), action: self.saveCustom)
+                        .disabled(self.custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || self.custom == self.current)
                 }
             }
         } header: {
             Text("Model", bundle: .module)
-        } footer: {
-            if let field = TTSProviderKeys.forProvider(self.provider).model {
-                Text("Saved as `\(field)` in the Gateway's voice config.")
-            }
         }
+    }
+
+    private func saveCustom() {
+        let id = self.custom.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, id != self.current else { return }
+        Task { if await self.setup.run({ try await self.model.saveModel(id, provider: self.provider) }) { self.choosingCustom = false } }
     }
 }

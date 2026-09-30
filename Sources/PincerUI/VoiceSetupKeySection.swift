@@ -8,48 +8,97 @@ struct VoiceSetupKeySection: View {
     let provider: String
     let editable: Bool
     @State private var key = ""
+    @State private var checking = false
+    @State private var check: KeyCheck?
+
+    private enum KeyCheck: Equatable {
+        case working
+        case failed(String)
+        case saved
+    }
 
     private var keys: TTSProviderKeys { TTSProviderKeys.forProvider(self.provider) }
-
-    private var sourceText: String {
-        switch self.model.setups[self.provider]?.keySource ?? .none {
-        case .none:
-            self.model.badge(for: self.provider) == .needsKey ? L("Not set") : L("Provided by the Gateway's environment")
-        case .inline: L("Saved in the Gateway's config")
-        case .redacted: L("Saved on the Gateway")
-        case let .secretRef(source, _, id):
-            switch source {
-            case "store": String(format: L("Stored in Gateway secrets as %@"), id)
-            case "env": String(format: L("From environment variable %@"), id)
-            default: String(format: L("From %@ %@"), source, id)
-            }
-        }
-    }
+    private var name: String { self.model.displayName(for: self.provider) }
+    private var notResolving: Bool { self.model.keyIsNotResolving(self.provider) }
+    private var sourceText: String { self.model.keySourceText(for: self.provider) }
 
     var body: some View {
         Section {
-            LabeledContent(L("Current key")) {
-                Text(self.sourceText).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
-            }
-            if self.editable {
-                SecureField(L("API key"), text: self.$key, prompt: Text("Paste your API key", bundle: .module))
-                    .textContentType(.password)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                Button(L("Save Key")) {
-                    let value = self.key
-                    Task { if await self.setup.run({ try await self.model.saveKey(value, provider: self.provider) }) { self.key = "" } }
+            if self.keys.apiKey == nil {
+                Text("No key needed", bundle: .module).foregroundStyle(.secondary)
+            } else {
+                LabeledContent(L("Current key")) {
+                    Text(self.sourceText)
+                        .foregroundStyle(self.notResolving ? Color.red : Color.secondary)
+                        .multilineTextAlignment(.trailing)
                 }
-                .disabled(self.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if self.editable { self.entry }
+                self.checkLine
+                VoiceUseProviderButton(model: self.model, setup: self.setup, provider: self.provider, prominent: true)
             }
         } header: {
             Text("API Key", bundle: .module)
         } footer: {
-            if self.editable {
-                Text("Sent to the Gateway over your connection and stored there. Pincer doesn't keep it.", bundle: .module)
+            if self.keys.apiKey != nil {
+                Text("The key is saved on the Gateway, not in Pincer. Pincer keeps it in memory only while this page is open, to list your voices.", bundle: .module)
             }
+        }
+    }
+
+    @ViewBuilder private var entry: some View {
+        SecureField(L("API key"), text: self.$key, prompt: Text("Paste API key", bundle: .module))
+            .autocorrectionDisabled()
+            #if os(iOS)
+            .textInputAutocapitalization(.never)
+            #endif
+            .onSubmit(self.save)
+        Button(L("Save Key"), action: self.save)
+            .disabled(self.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || self.checking)
+    }
+
+    @ViewBuilder private var checkLine: some View {
+        if self.checking {
+            HStack { ProgressView().controlSize(.small); Text("Checking key…", bundle: .module).foregroundStyle(.secondary) }
+        } else if let check = self.check {
+            switch check {
+            case .working:
+                Label(L("Key saved and working"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            case .saved:
+                Label(L("Key saved. Run Test Voice to check it."), systemImage: "checkmark.circle").foregroundStyle(.secondary)
+            case let .failed(message):
+                Label(String(format: L("%@ rejected the key: %@"), self.name, message), systemImage: "xmark.octagon.fill").foregroundStyle(.red)
+            }
+        }
+    }
+
+    private func save() {
+        let value = self.key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, !self.checking else { return }
+        self.key = ""
+        self.check = nil
+        Task {
+            guard await self.setup.run({ try await self.model.saveKey(value, provider: self.provider) }) else { return }
+            self.checking = true
+            self.check = await self.verify()
+            self.checking = false
+            if let check = self.check {
+                let text: String
+                switch check {
+                case .working: text = L("Key saved and working")
+                case .saved: text = L("Key saved")
+                case let .failed(message): text = message
+                }
+                AccessibilityNotification.Announcement(text).post()
+            }
+        }
+    }
+
+    /// `tts.convert` with the explicit provider, so a working fallback can't hide a bad key.
+    private func verify() async -> KeyCheck {
+        switch await self.model.checkProvider(self.provider) {
+        case .working: .working
+        case let .rejected(message): .failed(message)
+        case .unavailable: .saved
         }
     }
 }

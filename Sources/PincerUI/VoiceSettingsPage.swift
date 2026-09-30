@@ -5,6 +5,7 @@ import SwiftUI
 /// it speaks every channel reply. Read Aloud in Pincer uses `tts.speak` and needs none of these.
 struct VoiceSettingsPage: View {
     @Environment(GatewayStore.self) private var gateway
+    @Environment(SettingsNavigator.self) private var navigator
     @State private var setup = VoiceSetupController()
 
     private var model: GatewayVoiceModel { self.gateway.voice }
@@ -43,17 +44,13 @@ struct VoiceSettingsPage: View {
         let provider = self.setup.selectedProvider ?? status.provider
         let keys = TTSProviderKeys.forProvider(provider)
         let editable = model.canConfigure
-        if let reason = model.configureBlockedReason, !editable {
-            Section {
-                Label(L("Read-only"), systemImage: "lock.fill").font(.callout.weight(.semibold))
-                Text(reason).font(.callout).foregroundStyle(.secondary)
-            }
+        VoiceSetupStatusSection(model: model, status: status)
+        VoiceSetupProviderSection(model: model, setup: self.setup, status: status, selected: provider)
+        if !editable {
+            Section { FullManagementBadge { self.navigator.destination = .connection } }
         }
-        VoiceSetupProviderSection(model: model, setup: self.setup, status: status)
         if !provider.isEmpty {
-            if keys.apiKey != nil {
-                VoiceSetupKeySection(model: model, setup: self.setup, provider: provider, editable: editable)
-            }
+            VoiceSetupKeySection(model: model, setup: self.setup, provider: provider, editable: editable)
             if keys.model != nil {
                 VoiceSetupModelSection(model: model, setup: self.setup, provider: provider, editable: editable)
             }

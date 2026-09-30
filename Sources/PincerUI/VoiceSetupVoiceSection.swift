@@ -14,8 +14,10 @@ struct VoiceSetupVoiceSection: View {
     @State private var needsKey = false
     @State private var loading = false
 
+    static let defaultVoiceId = "pMsXgVXv3BLzUgSXRplE"
+
     private var isElevenLabs: Bool { self.provider == "elevenlabs" }
-    private var current: String? { self.model.setups[self.provider]?.voice }
+    private var current: String? { self.model.setups[self.provider]?.voice.flatMap { $0.isEmpty ? nil : $0 } }
 
     private var shown: [ElevenLabsVoice] {
         let query = self.search.trimmingCharacters(in: .whitespaces)
@@ -25,6 +27,7 @@ struct VoiceSetupVoiceSection: View {
 
     var body: some View {
         Section {
+            LabeledContent(L("Voice")) { self.currentVoice }
             if self.isElevenLabs { self.browser }
             HStack {
                 TextField(L("Voice ID"), text: self.$voiceId, prompt: Text("Paste a voice ID", bundle: .module))
@@ -33,27 +36,31 @@ struct VoiceSetupVoiceSection: View {
                     .textInputAutocapitalization(.never)
                     #endif
                     .disabled(!self.editable)
+                    .onSubmit { self.save(self.voiceId) }
                 if self.editable {
-                    Button(L("Use")) { self.save(self.voiceId.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                    Button(L("Use")) { self.save(self.voiceId) }
                         .disabled(self.voiceId.trimmingCharacters(in: .whitespaces).isEmpty || self.voiceId == self.current)
                 }
             }
         } header: {
             Text("Voice", bundle: .module)
-        } footer: {
-            if let field = TTSProviderKeys.forProvider(self.provider).voice {
-                Text("Saved as `\(field)` in the Gateway's voice config.")
-            }
         }
-        .task(id: self.current) {
-            self.voiceId = self.current ?? ""
-        }
+        .task(id: self.current) { self.voiceId = self.current ?? "" }
         .task(id: self.provider) { if self.isElevenLabs { await self.load(key: nil) } }
+    }
+
+    @ViewBuilder private var currentVoice: some View {
+        let text = self.model.voiceDisplay(self.current, provider: self.provider)
+        if let current = self.current, text == current {
+            Text(current).font(.callout.monospaced()).textSelection(.enabled)
+        } else {
+            Text(text)
+        }
     }
 
     @ViewBuilder private var browser: some View {
         if self.needsKey {
-            Text("Paste your API key to browse voices, or paste a voice ID below.", bundle: .module)
+            Text("Paste your API key above to browse your voices.", bundle: .module)
                 .font(.callout).foregroundStyle(.secondary)
             SecureField(L("API key (only used to list voices)"), text: self.$pastedKey)
                 .autocorrectionDisabled()
@@ -66,39 +73,30 @@ struct VoiceSetupVoiceSection: View {
             Label(loadError, systemImage: "xmark.octagon.fill").foregroundStyle(.red).font(.callout)
         }
         if !self.model.voices.isEmpty {
-            TextField(L("Search voices"), text: self.$search)
-                .autocorrectionDisabled()
-            ForEach(self.shown) { voice in self.row(voice) }
-        }
-    }
-
-    private func row(_ voice: ElevenLabsVoice) -> some View {
-        let selected = voice.id == self.current
-        return HStack {
-            Button { self.setup.playPreview(voice) } label: {
-                Image(systemName: self.setup.playingId == voice.id ? "stop.circle.fill" : "play.circle")
-                    .imageScale(.large)
-            }
-            .buttonStyle(.borderless)
-            .disabled(voice.previewURL == nil)
-            .accessibilityLabel(self.setup.playingId == voice.id ? L("Stop preview") : String(format: L("Preview %@"), voice.name))
-            Button { if self.editable { self.save(voice.id) } } label: {
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(voice.name).foregroundStyle(.primary)
-                        if let category = voice.category { Text(category).font(.caption).foregroundStyle(.secondary) }
+            #if os(macOS)
+            TextField(L("Search voices"), text: self.$search).autocorrectionDisabled()
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(self.shown) { voice in
+                        VoiceListRow(voice: voice, current: self.current, setup: self.setup, editable: self.editable, choose: self.save)
+                            .padding(.vertical, 4)
+                        Divider()
                     }
-                    Spacer()
-                    if selected { Image(systemName: "checkmark").foregroundStyle(Color.accentColor).accessibilityHidden(true) }
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(selected ? .isSelected : [])
+            .frame(height: 220)
+            #else
+            NavigationLink {
+                VoiceBrowserPage(voices: self.model.voices, current: self.current, setup: self.setup, editable: self.editable, choose: self.save)
+            } label: {
+                Text("Browse Voices", bundle: .module)
+            }
+            #endif
         }
     }
 
-    private func save(_ id: String) {
+    private func save(_ raw: String) {
+        let id = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !id.isEmpty else { return }
         Task { await self.setup.run { try await self.model.saveVoice(id, provider: self.provider) } }
     }
@@ -113,9 +111,71 @@ struct VoiceSetupVoiceSection: View {
             self.pastedKey = ""
         } catch TTSSetupError.needsKey {
             self.needsKey = true
+        } catch TTSSetupError.invalidKey {
+            self.needsKey = true
+            self.loadError = L("Couldn't load voices: ElevenLabs says the key is invalid.")
         } catch {
-            self.needsKey = key != nil || self.needsKey
-            self.loadError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            self.loadError = String(format: L("Couldn't load voices: %@"), (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
+    }
+}
+
+/// One ElevenLabs voice: a ▶ preview (one plays at a time) and a tap target that chooses it.
+struct VoiceListRow: View {
+    let voice: ElevenLabsVoice
+    let current: String?
+    let setup: VoiceSetupController
+    let editable: Bool
+    let choose: (String) -> Void
+
+    var body: some View {
+        let selected = self.voice.id == self.current
+        let playing = self.setup.playingId == self.voice.id
+        HStack {
+            Button { self.setup.playPreview(self.voice) } label: {
+                Image(systemName: playing ? "stop.circle.fill" : "play.circle").imageScale(.large)
+            }
+            .buttonStyle(.borderless)
+            .disabled(self.voice.previewURL == nil)
+            .accessibilityLabel(playing ? L("Stop Preview") : String(format: L("Preview %@"), self.voice.name))
+            Button { if self.editable { self.choose(self.voice.id) } } label: {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(self.voice.name).foregroundStyle(.primary)
+                        if let category = self.voice.category { Text(category).font(.caption).foregroundStyle(.secondary) }
+                    }
+                    Spacer()
+                    if selected { Image(systemName: "checkmark").foregroundStyle(Color.accentColor).accessibilityHidden(true) }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+        }
+    }
+}
+
+/// iOS: the searchable voice list, pushed from the Voice section.
+struct VoiceBrowserPage: View {
+    let voices: [ElevenLabsVoice]
+    let current: String?
+    let setup: VoiceSetupController
+    let editable: Bool
+    let choose: (String) -> Void
+    @State private var search = ""
+
+    private var shown: [ElevenLabsVoice] {
+        let query = self.search.trimmingCharacters(in: .whitespaces)
+        guard !query.isEmpty else { return self.voices }
+        return self.voices.filter { $0.name.localizedCaseInsensitiveContains(query) || ($0.category ?? "").localizedCaseInsensitiveContains(query) }
+    }
+
+    var body: some View {
+        List(self.shown) { voice in
+            VoiceListRow(voice: voice, current: self.current, setup: self.setup, editable: self.editable, choose: self.choose)
+        }
+        .searchable(text: self.$search)
+        .navigationTitle(L("Voice"))
+        .onDisappear { self.setup.stop() }
     }
 }

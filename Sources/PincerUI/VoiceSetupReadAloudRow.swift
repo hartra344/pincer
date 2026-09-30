@@ -12,30 +12,39 @@ struct ReadAloudGatewayVoiceRows: View {
     @Environment(\.dismiss) private var dismiss
     #endif
 
+    @AppStorage(ReadAloudSettings.sourceKey) private var source = ReadAloudSettings.sourceAutomatic
+
     private var gateway: GatewayStore? { self.app.selectedGateway ?? self.app.gateways.first }
 
     var body: some View {
-        if let gateway = self.gateway {
-            LabeledContent(L("Gateway voice")) {
-                Text(self.summary(gateway))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
-            }
-            if let reason = ReadAloudController.shared.lastFallback {
-                Label(reason.message, systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Button(L("Open Gateway Voice Settings")) { self.open(gateway) }
+        LabeledContent(L("Gateway Voice")) {
+            self.summary
+                .multilineTextAlignment(.trailing)
         }
+        if let reason = ReadAloudController.shared.lastFallback {
+            Text(String(format: L("Last reply used this device's voice: %@"), reason.message))
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        Button(L("Open Gateway Voice Settings…")) { if let gateway = self.gateway { self.open(gateway) } }
+            .disabled(self.gateway == nil)
     }
 
-    private func summary(_ gateway: GatewayStore) -> String {
-        switch gateway.voice.readAloudSummary {
-        case let .automatic(provider, model, name):
-            let voice = model.map { "\(provider) (\($0))" } ?? provider
-            return String(format: L("Automatic: %@ via %@"), voice, name.isEmpty ? gateway.profile.name : name)
-        case let .fallback(reason):
-            return String(format: L("Using this device's voice: %@"), reason.message)
+    @ViewBuilder private var summary: some View {
+        if self.source == ReadAloudSettings.sourceDevice {
+            Text("Not used (This Device Only)", bundle: .module).foregroundStyle(.secondary)
+        } else if let gateway = self.gateway, gateway.state.isConnected {
+            switch gateway.voice.readAloudSummary {
+            case let .automatic(provider, model, name):
+                let voice = model.map { "\(provider) (\($0))" } ?? provider
+                Text(String(format: L("%@ via %@"), voice, name.isEmpty ? gateway.profile.name : name)).foregroundStyle(.secondary)
+            case .fallback(.notConfigured):
+                Text("Not set up. Using this device's voice.", bundle: .module).foregroundStyle(.secondary)
+            case let .fallback(reason):
+                Label(String(format: L("Using this device's voice: %@"), reason.message), systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            }
+        } else {
+            Text("Gateway not connected. Using this device's voice.", bundle: .module).foregroundStyle(.secondary)
         }
     }
 
