@@ -3,6 +3,14 @@
 // server-methods/tts.ts. tts.speak returns a short valid WAV (base64) so clients can play it.
 // State (provider, persona, enabled) is mutable per mock server.
 // MOCK_NO_TTS=1 makes the mock look like a Gateway without these methods.
+//
+// ElevenLabs setup: its API key lives in the config at <TTS_CONFIG_ROOT>.providers.elevenlabs.apiKey, either a
+// literal (config.get redacts it) or a SecretRef ({source:"store", provider:"default", id:"ELEVENLABS_API_KEY"})
+// that resolves through secrets.mjs. The provider is "configured" once the key resolves. A key starting with
+// "bad" or equal to "sk_invalid" resolves but tts.speak fails with ElevenLabs' 401; a modelId that is not an
+// `eleven_*` id (or is eleven_bogus) fails with a 400. tts.speak falls back to openai when the active provider is
+// not configured; tts.convert with an explicit provider never falls back.
+import { resolveSecretRef } from './secrets.mjs';
 
 export const TTS_METHODS = [
   'tts.status', 'tts.providers', 'tts.personas', 'tts.enable', 'tts.disable',
@@ -10,6 +18,38 @@ export const TTS_METHODS = [
 ];
 
 export const TTS_MAX_TEXT_LENGTH = 4096;
+// Where the TTS section lives in the config. Single source of truth for the mock.
+export const TTS_CONFIG_ROOT = ['messages', 'tts'];
+export const ELEVENLABS_INVALID_KEY_MESSAGE = 'ElevenLabs API error (401): invalid_api_key: Invalid API key';
+
+export function seedTtsConfig() {
+  return TTS_CONFIG_ROOT.reduceRight((inner, key) => ({ [key]: inner }), {
+    providers: { openai: { model: 'gpt-4o-mini-tts', voice: 'alloy' } },
+  });
+}
+
+// Schema node for the config root property that holds the TTS section.
+export function ttsSchemaProperties() {
+  const section = { type: 'object', properties: { providers: { type: 'object', additionalProperties: { type: 'object' } } } };
+  const [head, ...rest] = TTS_CONFIG_ROOT;
+  return { [head]: rest.reduceRight((inner, key) => ({ type: 'object', properties: { [key]: inner } }), section) };
+}
+
+// True for <root>.providers.<id>.apiKey, whose literal string values config.get redacts.
+export function isTtsApiKeyPath(path) {
+  const n = TTS_CONFIG_ROOT.length;
+  return path.length === n + 3 && TTS_CONFIG_ROOT.every((k, i) => path[i] === k) && path[n] === 'providers' && path[n + 2] === 'apiKey';
+}
+
+function providerConfig(state, providerId) {
+  let node = state.configState?.config;
+  for (const key of [...TTS_CONFIG_ROOT, 'providers', providerId]) node = node?.[key];
+  return node ?? {};
+}
+
+const isBadElevenLabsKey = (key) => key.startsWith('bad') || key === 'sk_invalid';
+const isConfigured = (state, providerId) => providerId === 'openai' || resolveSecretRef(state, providerConfig(state, providerId).apiKey) !== undefined;
+
 
 export function ttsDisabled() {
   return process.env.MOCK_NO_TTS === '1';
@@ -17,7 +57,7 @@ export function ttsDisabled() {
 
 const PROVIDERS = [
   { id: 'openai', name: 'OpenAI', configured: true, models: ['gpt-4o-mini-tts', 'tts-1'], voices: ['alloy', 'verse'] },
-  { id: 'elevenlabs', name: 'ElevenLabs', configured: false, models: ['eleven_multilingual_v2'], voices: [] },
+  { id: 'elevenlabs', name: 'ElevenLabs', configured: false, models: ['eleven_v3', 'eleven_multilingual_v2', 'eleven_flash_v2_5', 'eleven_flash_v2', 'eleven_turbo_v2_5', 'eleven_monolingual_v1'], voices: ['pMsXgVXv3BLzUgSXRplE'] },
 ];
 
 const PERSONAS = [
@@ -51,11 +91,32 @@ export function tinyWavBase64() {
   return buf.toString('base64');
 }
 
+// The provider that speaks. Falls back to openai when `fallback` and the requested one is not configured;
+// throws the provider's error for a rejected key or model.
+function synthesize(state, requested, { modelId, fallback }) {
+  let provider = requested;
+  if (!isConfigured(state, provider)) {
+    if (!fallback) throw new Error(`${provider}: no API key configured`);
+    provider = 'openai';
+  }
+  if (provider === 'elevenlabs') {
+    const key = resolveSecretRef(state, providerConfig(state, provider).apiKey);
+    if (isBadElevenLabsKey(key)) throw new Error(ELEVENLABS_INVALID_KEY_MESSAGE);
+    const model = modelId ?? providerConfig(state, provider).modelId ?? 'eleven_multilingual_v2';
+    if (!/^eleven_/.test(model) || model === 'eleven_bogus') {
+      throw new Error(`ElevenLabs API error (400): model_id_does_not_exist: Model with ID ${model} does not exist`);
+    }
+  }
+  return provider;
+}
+
 export function handleTtsRequest(state, conn, msg, { sendRes, sendErr }) {
   const { id, method } = msg;
   if (!TTS_METHODS.includes(method) || ttsDisabled()) return false;
   const params = msg.params && typeof msg.params === 'object' && !Array.isArray(msg.params) ? msg.params : {};
   const tts = ttsState(state);
+  const providers = PROVIDERS.map((p) => ({ ...p, configured: isConfigured(state, p.id) }));
+  const unavailable = (message) => sendErr(conn, id, 'UNAVAILABLE', message);
   const text = (value) => (typeof value === 'string' && value.trim() ? value.trim() : '');
   const invalid = (message) => sendErr(conn, id, 'INVALID_REQUEST', message);
 
@@ -67,14 +128,14 @@ export function handleTtsRequest(state, conn, msg, { sendRes, sendErr }) {
         provider: tts.provider,
         persona: tts.persona,
         personas: PERSONAS.map(({ id: pid, label, description, provider }) => ({ id: pid, label, description, provider })),
-        fallbackProvider: PROVIDERS.find((p) => p.id !== tts.provider && p.configured)?.id ?? null,
-        fallbackProviders: PROVIDERS.filter((p) => p.id !== tts.provider && p.configured).map((p) => p.id),
+        fallbackProvider: providers.find((p) => p.id !== tts.provider && p.configured)?.id ?? null,
+        fallbackProviders: providers.filter((p) => p.id !== tts.provider && p.configured).map((p) => p.id),
         prefsPath: '/home/mock/.openclaw/settings/tts.json',
-        providerStates: PROVIDERS.map((p) => ({ id: p.id, label: p.name, configured: p.configured })),
+        providerStates: providers.map((p) => ({ id: p.id, label: p.name, configured: p.configured })),
       });
       return true;
     case 'tts.providers':
-      sendRes(conn, id, { providers: PROVIDERS.map((p) => ({ ...p })), active: tts.provider });
+      sendRes(conn, id, { providers: providers.map((p) => ({ ...p })), active: tts.provider });
       return true;
     case 'tts.personas':
       sendRes(conn, id, { active: tts.persona, personas: PERSONAS.map((p) => ({ ...p })) });
@@ -115,7 +176,13 @@ export function handleTtsRequest(state, conn, msg, { sendRes, sendErr }) {
         invalid('tts.convert requires text');
         return true;
       }
-      sendRes(conn, id, { audioPath: '/tmp/openclaw/tts/mock-voice.wav', provider: tts.provider, outputFormat: 'wav', voiceCompatible: false });
+      try {
+        const explicit = text(params.provider).toLowerCase();
+        const provider = synthesize(state, explicit || tts.provider, { modelId: text(params.modelId) || undefined, fallback: !explicit });
+        sendRes(conn, id, { audioPath: '/tmp/openclaw/tts/mock-voice.wav', provider, outputFormat: 'wav', voiceCompatible: false });
+      } catch (err) {
+        unavailable(err.message);
+      }
       return true;
     case 'tts.speak': {
       const spoken = text(params.text);
@@ -127,9 +194,16 @@ export function handleTtsRequest(state, conn, msg, { sendRes, sendErr }) {
         invalid(`tts.speak text too long (${spoken.length} chars, max ${TTS_MAX_TEXT_LENGTH})`);
         return true;
       }
+      let provider;
+      try {
+        provider = synthesize(state, tts.provider, { fallback: true });
+      } catch (err) {
+        unavailable(err.message);
+        return true;
+      }
       sendRes(conn, id, {
         audioBase64: tinyWavBase64(),
-        provider: tts.provider,
+        provider,
         outputFormat: 'wav',
         mimeType: 'audio/wav',
         fileExtension: 'wav',
