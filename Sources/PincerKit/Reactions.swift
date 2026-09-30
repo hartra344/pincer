@@ -24,7 +24,7 @@ public struct ReplyQuote: Hashable, Sendable {
     public enum Sender: Hashable, Sendable {
         case you
         case agent
-        /// The Gateway's `senderLabel`, when the original isn't loaded.
+        /// A name: another agent, a bridged channel sender, or the Gateway's `senderLabel` when the original isn't loaded.
         case label(String)
     }
 

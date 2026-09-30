@@ -137,7 +137,7 @@ public enum TranscriptCache {
     //    existing ones byte-identical and a save writes only what changed. `migrations[7]` does
     //    nothing; the v7 single file is decoded, then saved back as a manifest and segments.
 
-    //  - #110 (agent reply targets, v9) added `ChatItem.replyToCurrent`, stored as an optional, so older
+    //  - #110 (agent reply targets, v9) added `ChatItem.replyToCurrent` and `channelSenderName`, stored as optionals, so older
     //    files decode and `migrations[8]` does nothing. Assistant messages cached earlier have no reply target
     //    (the newest page is refetched on open).
 

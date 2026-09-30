@@ -171,9 +171,10 @@ public struct MessageSender: Hashable, Codable, Sendable {
 }
 
 extension ChatItem {
-    /// Who wrote this message, by name: you, this chat's agent, or the forwarded sender.
+    /// Who wrote this message, by name: you, this chat's agent, the forwarded sender, or a bridged channel's sender.
     public func senderName(you: String, agent: String, agents: [AgentSummary]) -> String {
         if let sender { return sender.displayName(agents: agents) }
+        if let channelSenderName { return channelSenderName }
         return self.role == .user ? you : agent
     }
 }

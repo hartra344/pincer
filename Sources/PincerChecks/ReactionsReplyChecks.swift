@@ -641,8 +641,8 @@ private func checkTelegramReplyShapes(_ chat: ChatStore, idPrefix: String, label
     let pickup = chat.items.first { $0.role == .assistant && $0.plainText.contains("Friday pickup") }
     check(clinic?.replyToId == "\(idPrefix)-clinic" && clinic?.replyToCurrent == false, "\(label): delivery replyToId parsed (\(clinic?.replyToId ?? "nil"))")
     if let clinic, let quote = chat.quote(for: clinic) {
-        check(quote.targetId == "\(idPrefix)-clinic" && quote.sender == .you && quote.text?.hasPrefix("Can you find") == true,
-              "\(label): the answer to the earlier message shows a quote card (\(quote.text ?? "nil"))")
+        check(quote.targetId == "\(idPrefix)-clinic" && quote.sender == .label("Maya") && quote.text?.hasPrefix("Can you find") == true,
+              "\(label): the answer to the earlier message shows a quote card naming Maya (\(quote.sender), \(quote.text ?? "nil"))")
     } else {
         check(false, "\(label): quote card on the seeded assistant reply")
     }

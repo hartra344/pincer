@@ -194,6 +194,21 @@ struct ReplyTargetTests {
         #expect(quote.targetId == "u1" && quote.text == "first")
     }
 
+    @Test func bridgedSenderNamesTheQuote() throws {
+        let maya = Self.item(#"{"role":"user","content":[{"type":"text","text":"first"}],"senderLabel":"Maya (0b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0)","__openclaw":{"id":"u1","senderName":"Maya B"}}"#)
+        let store = self.chat([maya, Self.user("u2", "second"), Self.assistant("a1", delivery: #"{"replyToId":"u1"}"#)])
+        let quote = try #require(store.quote(for: store.items[2]))
+        #expect(quote.sender == .label("Maya"))
+        #expect(maya.senderName(you: "You", agent: "Lumi", agents: []) == "Maya")
+    }
+
+    @Test func bridgedSenderFallsBackToOpenclawNameThenUsername() {
+        let named = Self.item(#"{"role":"user","content":[{"type":"text","text":"a"}],"__openclaw":{"id":"u1","senderName":" Maya ","senderUsername":"maya_b"}}"#)
+        let username = Self.item(#"{"role":"user","content":[{"type":"text","text":"b"}],"__openclaw":{"id":"u2","senderUsername":"maya_b"}}"#)
+        #expect(named.channelSenderName == "Maya" && username.channelSenderName == "maya_b")
+        #expect(Self.user("u3").channelSenderName == nil && Self.assistant("a1").channelSenderName == nil)
+    }
+
     @Test func unresolvedIdStillQuotes() throws {
         let store = self.chat([Self.user("u1"), Self.assistant("a1", delivery: #"{"replyToId":"gone-42"}"#)])
         let quote = try #require(store.quote(for: store.items[1]))

@@ -311,6 +311,9 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     /// Set when another agent, an automation or a helper wrote this message (it's shown as
     /// theirs, not as yours or this chat's agent's).
     public var sender: MessageSender?
+    /// Who sent a bridged channel's user message (the entry's `senderLabel`, else
+    /// `__openclaw.senderName`/`senderUsername`), e.g. a Telegram contact. Nil for your own turns.
+    public var channelSenderName: String?
 
     /// An optimistic send on its way: in flight, or accepted and waiting for the transcript. Not
     /// a queued or failed one.
@@ -350,6 +353,20 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         self.isError = false
         self.idempotencyKey = idempotencyKey
         self.isPending = isPending
+    }
+
+    /// A bridged user message's sender name, as upstream `resolveMessageSenderLabel` reads it:
+    /// `senderLabel` without a trailing ` (<uuid>)`, else `__openclaw.senderName`, else `senderUsername`.
+    static func channelSenderName(_ json: JSONValue) -> String? {
+        if let raw = json["senderLabel"]?.text?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty {
+            let label = raw.replacing(/\s+\([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\)$/, with: "")
+            return label.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let meta = json["__openclaw"]
+        for key in ["senderName", "senderUsername"] {
+            if let name = meta?[key]?.text?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return name }
+        }
+        return nil
     }
 
     /// The Gateway stores a sent user turn under `<clientKey>:user` (upstream `buildRunUserTurnIdempotencyKey`),
@@ -399,6 +416,7 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
         self.channelMessageId = transport?["messageId"]?.text
         self.transportChannel = transport?["channel"]?.text
         self.conversationRef = transport?["conversationRef"]?.text
+        if self.role == .user, self.sender == nil { self.channelSenderName = Self.channelSenderName(json) }
         // Only the Gateway marker proves a cap; the sentinel text alone could be literal.
         let recoverable = self.role == .assistant || self.transcriptId?.hasPrefix(Self.pendingInputPrefix) == true
         self.isCapped = recoverable && meta?["truncated"]?.bool == true

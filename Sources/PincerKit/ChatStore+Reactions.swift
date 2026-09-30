@@ -37,6 +37,8 @@ extension ChatStore {
             let line = Replies.previewLine(MediaDirectives.extract(from: target.plainText).text)
             let sender: ReplyQuote.Sender = if let from = target.sender {
                 .label(from.displayName(agents: self.gateway?.agents ?? []))
+            } else if let name = target.channelSenderName {
+                .label(name)
             } else {
                 target.role == .user ? .you : .agent
             }
