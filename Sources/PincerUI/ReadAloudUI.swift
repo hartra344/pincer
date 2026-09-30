@@ -39,7 +39,7 @@ extension FocusedValues {
 }
 
 enum ReadAloudSupport {
-    static var isVoiceOverRunning: Bool {
+    @MainActor static var isVoiceOverRunning: Bool {
         #if os(iOS)
         UIAccessibility.isVoiceOverRunning
         #else

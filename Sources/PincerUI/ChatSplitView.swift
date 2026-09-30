@@ -51,7 +51,7 @@ struct ChatSplitHost: ViewModifier {
 
     private var splitKey: String? { self.showsSplit ? self.gateway.visibleSplitKey : nil }
 
-    static let minWidth: CGFloat = 320
+    nonisolated static let minWidth: CGFloat = 320
 
     private func clampedFraction(_ width: CGFloat) -> CGFloat {
         guard width > Self.minWidth * 2 else { return 0.5 }
