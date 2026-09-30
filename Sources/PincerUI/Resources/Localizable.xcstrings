@@ -13653,6 +13653,16 @@
         }
       }
     },
+    "The Gateway config has model \"%@\", which is ignored. Choose a model here to replace it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway config has model \"%@\", which is ignored. Choose a model here to replace it."
+          }
+        }
+      }
+    },
     "The Gateway couldn't finish removing the agent's data. Deleting again retries it.": {
       "localizations": {
         "en": {

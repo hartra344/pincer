@@ -63,6 +63,10 @@ struct VoiceSetupModelSection: View {
                         .disabled(self.custom.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || self.custom == self.current)
                 }
             }
+            if let ignored = self.model.setups[self.provider]?.ignoredModel, self.current == nil {
+                Label(String(format: L("The Gateway config has model \"%@\", which is ignored. Choose a model here to replace it."), ignored), systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
+            }
         } header: {
             Text("Model", bundle: .module)
         }
