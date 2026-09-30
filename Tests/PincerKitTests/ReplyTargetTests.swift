@@ -219,6 +219,30 @@ struct ReplyTargetTests {
         #expect(quote.targetId == "a1" && quote.text == "Disk status" && quote.sender == .agent)
     }
 
+    static func webchatUser(_ id: String, _ text: String, key: String) -> ChatItem {
+        Self.item(#"{"role":"user","content":[{"type":"text","text":"\#(text)"}],"__openclaw":{"id":"\#(id)","idempotencyKey":"\#(key)"}}"#)
+    }
+
+    @Test func targetResolvesByUserIdempotencyKey() throws {
+        // Webchat: the model types the run's client id; the user entry is stored as "<runId>:user".
+        let store = self.chat([Self.webchatUser("u1", "disk?", key: "run-1:user"), Self.webchatUser("u2", "memory?", key: "run-2:user"),
+                               Self.assistant("a1", "late", delivery: #"{"replyToId":"run-1"}"#)])
+        let quote = try #require(store.quote(for: store.items[2]))
+        #expect(quote.targetId == "u1" && quote.text == "disk?" && quote.sender == .you)
+    }
+
+    @Test func idempotencyKeyOfTheAnsweredMessageRendersNoQuote() {
+        let store = self.chat([Self.webchatUser("u1", "disk?", key: "run-1:user"), Self.assistant("a1", delivery: #"{"replyToId":"run-1"}"#)])
+        #expect(store.quote(for: store.items[1]) == nil)
+    }
+
+    @Test func transcriptIdWinsOverIdempotencyKey() throws {
+        let store = self.chat([Self.webchatUser("u1", "first", key: "shared:user"), Self.user("shared", "second"), Self.user("u3"),
+                               Self.assistant("a1", delivery: #"{"replyToId":"shared"}"#)])
+        let quote = try #require(store.quote(for: store.items[3]))
+        #expect(quote.targetId == "shared" && quote.text == "second")
+    }
+
     // MARK: Transcript cache
 
     @Test func cacheRoundTripsReplyTargets() async throws {
