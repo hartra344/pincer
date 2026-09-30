@@ -23,8 +23,16 @@ public struct TTSProviderSetup: Equatable, Sendable {
     public var model: String?
     public var voice: String?
     public var voiceSettings: TTSVoiceSettings?
+    /// A `model` value the provider doesn't read (ElevenLabs reads `modelId`); it is silently ignored.
+    public var ignoredModel: String?
+    /// The legacy voice key (e.g. `voiceId`) is also present in config, so writes must update it too.
+    public var hasLegacyVoiceKey: Bool
 
-    public init(keySource: KeySource = .none, model: String? = nil, voice: String? = nil, voiceSettings: TTSVoiceSettings? = nil) {
+    public init(keySource: KeySource = .none, model: String? = nil, voice: String? = nil, voiceSettings: TTSVoiceSettings? = nil,
+                ignoredModel: String? = nil, hasLegacyVoiceKey: Bool = false)
+    {
+        self.ignoredModel = ignoredModel
+        self.hasLegacyVoiceKey = hasLegacyVoiceKey
         self.keySource = keySource
         self.model = model
         self.voice = voice
@@ -217,23 +225,37 @@ extension GatewayVoiceModel {
             setups[id] = Self.parseSetup(value, keys: TTSProviderKeys.forProvider(id))
         }
         self.setups = setups
+        await self.loadSecretNames()
+    }
+
+    /// Names in the secrets store (admin only); confirms the id `config.get` redacts.
+    private func loadSecretNames() async {
+        guard self.canConfigure, self.supports("secrets.store.list"),
+              let result = try? await self.call("secrets.store.list") else { return }
+        self.secretNames = Set((result["entries"]?.array ?? []).compactMap { $0["name"]?.text ?? $0.text })
     }
 
     static func parseSetup(_ json: JSONValue, keys: TTSProviderKeys) -> TTSProviderSetup {
         var setup = TTSProviderSetup()
         if let keyName = keys.apiKey, let key = json[keyName] {
             if case .object = key, let source = key["source"]?.text, let id = key["id"]?.text {
-                // config.get redacts the ref's id; the name Pincer writes is the only one it could be.
-                let shown = id.uppercased().contains("REDACTED") ? (keys.envVar ?? id) : id
-                setup.keySource = .secretRef(source: source, provider: key["provider"]?.text ?? "", id: shown)
+                setup.keySource = .secretRef(source: source, provider: key["provider"]?.text ?? "", id: id)
             } else if let text = key.text, !text.isEmpty {
                 setup.keySource = text.uppercased().contains("REDACTED") ? .redacted : .inline
             }
         }
-        if let name = keys.model, let value = json[name]?.text, !value.isEmpty { setup.model = value }
+        if let name = keys.model {
+            if let value = json[name]?.text, !value.isEmpty {
+                setup.model = value
+            } else if name == "modelId", let value = json["model"]?.text, !value.isEmpty {
+                setup.ignoredModel = value
+            }
+        }
+        // The speaker* name wins at runtime when both are present.
         for name in [keys.voiceAlias, keys.voice].compactMap({ $0 }) {
             if let value = json[name]?.text, !value.isEmpty { setup.voice = value; break }
         }
+        if let legacy = keys.voice, keys.voiceAlias != nil, json[legacy] != nil { setup.hasLegacyVoiceKey = true }
         if let name = keys.voiceSettings, let value = json[name], case .object = value { setup.voiceSettings = TTSVoiceSettings(json: value) }
         return setup
     }
@@ -314,8 +336,9 @@ extension GatewayVoiceModel {
     public func saveVoice(_ id: String, provider: String) async throws -> ConfigApplyOutcome {
         let keys = try self.requireKeyField(provider)
         guard let field = keys.voice else { throw ConfigWriteError.other(L("That provider has no voice setting.")) }
-        var fields: [String: JSONValue] = [field: .string(id)]
-        if let alias = keys.voiceAlias { fields[alias] = .string(id) }
+        // speaker* wins at runtime, so write it; keep a legacy key in sync only when the config already has one.
+        var fields: [String: JSONValue] = [(keys.voiceAlias ?? field): .string(id)]
+        if keys.voiceAlias == nil || self.setups[provider]?.hasLegacyVoiceKey == true { fields[field] = .string(id) }
         let outcome = try await self.writeConfig(self.providerPatch(provider, fields), note: "Pincer: Gateway voice")
         self.lastTestError[provider] = nil
         return outcome
@@ -463,7 +486,7 @@ extension GatewayVoiceModel {
             providerSource = gatewayConfig
             if configured != provider {
                 providerSource = prefs
-                override = L("Overridden by local /tts preferences")
+                override = L("Overridden by local /tts prefs or persona")
             }
         }
         var rows = [TTSEffectiveRow(label: L("Provider"), value: self.displayName(for: provider), source: providerSource,
@@ -475,12 +498,13 @@ extension GatewayVoiceModel {
         if let field = keys.model {
             let model = setup?.model
             rows.append(TTSEffectiveRow(label: L("Model"), value: self.modelDisplay(model, provider: provider), source: model == nil ? L("Default") : gatewayConfig,
-                                        keyPath: "\(base).\(field)"))
+                                        keyPath: "\(base).\(field)",
+                                        overrideNote: setup?.ignoredModel.map { String(format: L("The config sets model \"%@\", which %@ ignores. Choose a model above to set %@."), $0, self.displayName(for: provider), field) }))
         }
         if let field = keys.voice {
             let voice = setup?.voice
             rows.append(TTSEffectiveRow(label: L("Voice"), value: self.voiceDisplay(voice, provider: provider), source: voice == nil ? L("Default") : gatewayConfig,
-                                        keyPath: "\(base).\(field)"))
+                                        keyPath: "\(base).\(keys.voiceAlias ?? field)"))
         }
         if let field = keys.voiceSettings {
             let settings = setup?.voiceSettings
@@ -525,7 +549,16 @@ extension GatewayVoiceModel {
         let env = keys.envVar ?? ""
         switch self.setups[provider]?.keySource ?? .none {
         case let .secretRef(source, _, id):
-            let name = id.isEmpty ? env : id
+            let redacted = id.uppercased().contains("REDACTED")
+            let known = source == "store" && self.secretNames.contains(env)
+            if redacted, !known {
+                switch source {
+                case "store": return self.isConfigured(provider) == false ? L("Set in the Gateway's secrets, but the Gateway can't read it") : L("Stored in the Gateway's secrets")
+                case "env": return self.isConfigured(provider) == false ? L("Set to an environment variable, but the Gateway can't read it") : L("From an environment variable on the Gateway")
+                default: return L("Set to a secret reference")
+                }
+            }
+            let name = redacted ? env : id
             if self.isConfigured(provider) == false {
                 return String(format: L("Set to %@ (%@), but the Gateway can't read it"), name, source)
             }
