@@ -18,6 +18,41 @@ public struct DictationSplice: Sendable, Equatable {
         self.after = String(draft[index...])
     }
 
+    /// `selection` is in UTF-16 units of `draft` (an NSRange from a text view); nil means the end. It is clamped to the
+    /// draft and snapped outward to character boundaries, and a non-empty selection is replaced by the dictation.
+    public init(draft: String, selection: NSRange?) {
+        let ns = draft as NSString
+        let length = ns.length
+        guard let selection, selection.location != NSNotFound else {
+            self.before = draft
+            self.after = ""
+            return
+        }
+        let start = min(max(selection.location, 0), length)
+        let end = min(max(selection.location &+ max(selection.length, 0), start), length)
+        var lower = start
+        var upper = end
+        if lower < length { lower = ns.rangeOfComposedCharacterSequence(at: lower).location }
+        if upper > lower, upper < length {
+            let r = ns.rangeOfComposedCharacterSequence(at: upper)
+            if r.location < upper { upper = r.location + r.length }
+        } else if upper < length {
+            upper = lower
+        }
+        self.before = ns.substring(to: lower)
+        self.after = ns.substring(from: max(upper, lower))
+    }
+
+    /// UTF-16 offset in `applying(partial)` just after the inserted text (before any separator space that
+    /// follows it). With an empty partial: where the selection started.
+    public func caret(after partial: String) -> Int {
+        let partial = partial.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !partial.isEmpty else { return self.before.utf16.count }
+        var count = self.before.utf16.count
+        if let last = self.before.last, !last.isWhitespace { count += 1 }
+        return count + partial.utf16.count
+    }
+
     /// The draft with `partial` inserted, spaced from its neighbours. An empty partial gives the original draft.
     public func applying(_ partial: String) -> String {
         let partial = partial.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -43,6 +78,8 @@ public enum DictationIssue: Equatable, Error, Sendable {
     /// The person just declined the permission prompt; nothing to explain.
     case declined
     case failed(String)
+    /// "On-device only" is on, but the recognizer for `language` (a localized language name) can't run on-device.
+    case onDeviceUnavailable(language: String)
 
     public var message: String {
         switch self {
@@ -50,6 +87,8 @@ public enum DictationIssue: Equatable, Error, Sendable {
         case .speechRestricted: L("Speech recognition is restricted on this device.")
         case .micDenied: L("Microphone access is off for Pincer. Turn it on in Settings to dictate.")
         case .unavailable: L("Dictation isn't available for your language right now.")
+        case let .onDeviceUnavailable(language):
+            L("On-device dictation isn't available for \(language). Turn off “On-device only” in Settings to use Apple’s servers.")
         case .declined: ""
         case let .failed(reason): reason
         }
@@ -57,6 +96,14 @@ public enum DictationIssue: Equatable, Error, Sendable {
 
     /// Whether the system Settings can fix it.
     public var canOpenSettings: Bool { self == .speechDenied || self == .micDenied }
+}
+
+public enum DictationPreferences {
+    public static let onDeviceOnlyKey = "pincer.dictation.onDeviceOnly"
+    public static let onDeviceOnlyDefault = false
+    public static var onDeviceOnly: Bool {
+        UserDefaults.standard.object(forKey: self.onDeviceOnlyKey) as? Bool ?? self.onDeviceOnlyDefault
+    }
 }
 
 @MainActor
@@ -87,7 +134,8 @@ public final class DictationModel {
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var splice = DictationSplice(draft: "", insertionOffset: nil)
     @ObservationIgnored private var lastApplied = ""
-    @ObservationIgnored private var apply: (@MainActor (String) -> Void)?
+    @ObservationIgnored private var apply: (@MainActor (String, Int) -> Void)?
+    @ObservationIgnored private var finishWaiters: [CheckedContinuation<Void, Never>] = []
     @ObservationIgnored private var graceTask: Task<Void, Never>?
 
     public init(engine: DictationEngine, finishGrace: Duration = .seconds(1.5)) {
@@ -98,11 +146,42 @@ public final class DictationModel {
     /// Starts dictating into `draft` at `caret` (nil = the end), or finishes if already dictating.
     /// `apply` receives the whole new draft each time the transcript changes.
     public func toggle(draft: String, caret: Int?, apply: @escaping @MainActor (String) -> Void) {
+        self.begin(splice: DictationSplice(draft: draft, insertionOffset: caret), draft: draft) { text, _ in apply(text) }
+    }
+
+    /// Starts dictating into `draft` over `selection` (UTF-16, nil = the end), or finishes if already dictating.
+    /// `apply` receives the whole new draft and the UTF-16 caret just after the dictated text.
+    public func toggle(draft: String, selection: NSRange?, apply: @escaping @MainActor (String, _ caret: Int) -> Void) {
+        self.begin(splice: DictationSplice(draft: draft, selection: selection), draft: draft, apply: apply)
+    }
+
+    /// For Send: returns once dictation is idle and every word recognised so far is in the draft. Waits for the
+    /// final result, an error or `timeout`, whichever comes first. Never shows an error.
+    public func finishForSend(timeout: Duration = .milliseconds(500)) async {
+        switch self.phase {
+        case .idle: return
+        case .requestingPermission, .starting: return self.cancel()
+        case .listening: self.finish()
+        case .finishing: break
+        }
+        let generation = self.generation
+        let timer = Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard let self, !Task.isCancelled, generation == self.generation else { return }
+            self.cancel()
+        }
+        await withCheckedContinuation { continuation in
+            self.finishWaiters.append(continuation)
+        }
+        timer.cancel()
+    }
+
+    private func begin(splice: DictationSplice, draft: String, apply: @escaping @MainActor (String, Int) -> Void) {
         guard self.phase == .idle else { return self.finish() }
         self.issue = nil
         self.generation += 1
         let generation = self.generation
-        self.splice = DictationSplice(draft: draft, insertionOffset: caret)
+        self.splice = splice
         self.lastApplied = draft
         self.apply = apply
         let controller = ReadAloudController.shared
@@ -163,7 +242,7 @@ public final class DictationModel {
         let next = self.splice.applying(text)
         if next != self.lastApplied {
             self.lastApplied = next
-            self.apply?(next)
+            self.apply?(next, self.splice.caret(after: text))
         }
         if self.phase == .starting { self.phase = .listening }
         if isFinal {
@@ -191,5 +270,8 @@ public final class DictationModel {
         self.graceTask = nil
         self.apply = nil
         self.phase = .idle
+        let waiters = self.finishWaiters
+        self.finishWaiters = []
+        for waiter in waiters { waiter.resume() }
     }
 }
