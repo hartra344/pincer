@@ -70,6 +70,18 @@ func checkOutboxLogic() {
           && SendFailure.classify(GatewayError.rpc(code: "NOT_PAIRED", message: "no", details: nil)) == .authRevoked
           && SendFailure.classify(GatewayError.closed("mock drop")) == .transient,
           "send failures classify as rejected / transient / auth revoked")
+
+    // Queued attachments (#215): kept entries behave like text; memory-only ones stay launch-only.
+    let ref = OutboxAttachmentRef(id: UUID(), fileName: "a.png", mimeType: "image/png", byteCount: 10)
+    var kept = Outbox()
+    kept.enqueue(OutboxEntry(id: "k", sessionKey: "a", text: "k", createdAt: now, attachments: [ref]))
+    kept.enqueue(OutboxEntry(id: "m", sessionKey: "b", text: "m", createdAt: now, hasAttachments: true))
+    check(kept.persistable.entries.map(\.id) == ["k"], "only attachment entries with files on disk persist")
+    check(kept.nextToSend()?.id == "k", "an entry with saved attachments auto-sends; a memory-only one never does")
+    kept.recoverAfterLaunch()
+    check(kept.entries.map(\.id) == ["k"], "a relaunch keeps saved attachments and drops memory-only ones")
+    let json = (try? JSONEncoder().encode(kept)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+    check(json.contains("a.png") && !json.contains("base64"), "the outbox JSON holds attachment refs, not bytes")
 }
 
 // MARK: Demo
