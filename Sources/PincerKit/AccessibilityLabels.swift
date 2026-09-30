@@ -25,6 +25,70 @@ public enum AccessibilityText {
         isCollapsed ? L("Expand \(title)") : L("Collapse \(title)")
     }
 
+    /// Spoken value of a collapsible section header.
+    public static func sectionState(isCollapsed: Bool) -> String {
+        isCollapsed ? L("Collapsed") : L("Expanded")
+    }
+
+    /// Spoken hint of a collapsible section header: what activating it will do.
+    public static func sectionHint(isCollapsed: Bool) -> String {
+        isCollapsed ? L("Expands the section") : L("Collapses the section")
+    }
+
+    /// Label for an agent header's "+" button: `New chat with Moki`.
+    public static func newChatWith(agent: String) -> String {
+        L("New chat with \(agent)")
+    }
+
+    /// Session Manager run status: `Running`, `Done`, `Failed`, `Interrupted`.
+    public static func runStatusLabel(_ status: String) -> String {
+        switch status.lowercased() {
+        case "running": L("Running")
+        case "done": L("Done")
+        case "failed": L("Failed")
+        case "interrupted": L("Interrupted")
+        default: status
+        }
+    }
+
+    /// One Session Manager row, e.g. `Research, Claude, Interrupted, 2 min 5 s, updated 3:04 PM`.
+    /// `runStatus` is one of `running`, `done`, `failed`, `interrupted` (localized here).
+    public static func sessionManagerRow(
+        title: String,
+        agentName: String?,
+        runStatus: String?,
+        duration: String?,
+        updated: String?,
+        extra: [String?] = []) -> String
+    {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self.join([
+            trimmed.isEmpty ? L("Untitled session") : trimmed,
+            agentName,
+            runStatus.map(Self.runStatusLabel),
+            duration,
+            updated.map { L("updated \($0)") },
+        ] + extra)
+    }
+
+    /// Label for a streaming reply: the START of the reply (stable while tokens arrive). Only the
+    /// first `limit * 4` UTF-8 bytes are ever read, so the cost doesn't grow with reply length.
+    public static func streamingExcerpt(_ body: String, limit: Int = AccessibilityText.defaultSummaryLimit) -> String {
+        let cap = max(limit, 1) * 4
+        let bytes = body.utf8.prefix(cap)
+        // A cut through a multi-byte character decodes to a replacement char; drop it.
+        var head = String(decoding: bytes, as: UTF8.self)
+        if head.hasSuffix("\u{FFFD}") { head.removeLast() }
+        let cutShort = !body.utf8.dropFirst(cap).isEmpty
+        let text = Self.summary(head, limit: limit)
+        return cutShort && !text.hasSuffix("…") ? text + "…" : text
+    }
+
+    /// Per-message action name on a multi-message row: `Reply, part 1 of 3`; unchanged for one part.
+    public static func messagePartAction(_ action: String, part: Int, of total: Int) -> String {
+        total <= 1 ? action : L("\(action), part \(part) of \(total)")
+    }
+
     /// `1 tool call`, `3 tool calls`. Returns nil for zero so it drops out of a `join`.
     public static func count(_ value: Int, singular: String, plural: String) -> String? {
         guard value > 0 else { return nil }

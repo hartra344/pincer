@@ -451,6 +451,16 @@
         }
       }
     },
+    "%@, part %lld of %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, part %lld of %lld"
+          }
+        }
+      }
+    },
     "%@: %lld helper runs working": {
       "localizations": {
         "en": {
@@ -2749,6 +2759,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Collapses the entry"
+          }
+        }
+      }
+    },
+    "Collapses the section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapses the section"
           }
         }
       }
@@ -5113,6 +5133,16 @@
         }
       }
     },
+    "Expands the section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expands the section"
+          }
+        }
+      }
+    },
     "Expires": {
       "localizations": {
         "en": {
@@ -6329,6 +6359,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Instructions (optional)"
+          }
+        }
+      }
+    },
+    "Interrupted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrupted"
           }
         }
       }
@@ -7599,6 +7639,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "New chat in %1$@ with %2$@"
+          }
+        }
+      }
+    },
+    "New chat with %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New chat with %@"
           }
         }
       }
@@ -11029,6 +11079,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Run this on the Gateway host to see it:"
+          }
+        }
+      }
+    },
+    "Running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running"
           }
         }
       }
@@ -15859,6 +15919,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "to"
+          }
+        }
+      }
+    },
+    "updated %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "updated %@"
           }
         }
       }
