@@ -52,6 +52,20 @@ struct ChatStoreLoadConcurrencyTests {
         self.finish(gateway)
     }
 
+    @Test func aWaiterLoadsItselfWhenTheStarterIsCancelled() async {
+        let gateway = await self.connected()
+        let chat = gateway.chat(for: Self.key)
+        let starter = Task { await chat.load() }
+        for _ in 0..<2000 where !chat.loadInFlight && chat.loadCount == 0 { await Task.yield() }
+        let waiter = Task { await chat.load() }
+        for _ in 0..<20 { await Task.yield() }
+        starter.cancel()
+        await waiter.value
+        #expect(chat.hasLoaded && !chat.items.isEmpty, "the waiter isn't left with empty items")
+        await starter.value
+        self.finish(gateway)
+    }
+
     @Test func forcedLoadStillFetches() async {
         let gateway = await self.connected()
         let chat = gateway.chat(for: Self.key)

@@ -31,6 +31,8 @@ extension ChatStore {
         if self.hasLoaded, !force, !self.stale { return }
         if !force, let running = self.loadTask {
             await running.value
+            // The caller that started it went away mid-fetch; this one still wants the history.
+            if running.isCancelled, !Task.isCancelled { await self.load() }
             return
         }
         self.loadGeneration += 1
