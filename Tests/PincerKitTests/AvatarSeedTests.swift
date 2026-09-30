@@ -83,14 +83,29 @@ struct AvatarSeedStoreTests {
         #expect(store.avatarSeed(for: agent) == AvatarStyle.identitySeed(name: "Claw", agentId: "main"))
     }
 
+    /// After this device's first sync, a new agent's seed waits for the connection's prefs pull.
     @Test func waitsForThePrefsPull() async {
         defer { self.scratch.remove() }
         let store = self.store()
+        self.scratch.defaults.set(true, forKey: store.syncedMap(AvatarPreferences.prefKey).syncedDefaultsKey)
         store.applyAgents(Self.agentsResult([("main", "Claw")]))
         #expect(store.avatarChoices[AvatarPreferences.seedEntry(for: "main")] == nil)
         await store.pullBootstrapPrefs(epoch: store.connectionEpoch)
         #expect(store.avatarChoices[AvatarPreferences.seedEntry(for: "main")]
             == AvatarStyle.identitySeed(name: "Claw", agentId: "main"))
+    }
+
+    /// Before the first sync, seeds are kept here for the first sync's merge to write (the
+    /// Gateway's older seeds win there), so first launch writes `pincer.avatars` once.
+    @Test func beforeFirstSyncSeedsAreKeptForTheMerge() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        store.avatarChoices[AvatarPreferences.seedEntry(for: "coder")] = "Older|coder"
+        store.applyAgents(Self.agentsResult([("main", "Claw"), ("coder", "Forge")]))
+        #expect(store.avatarChoices[AvatarPreferences.seedEntry(for: "main")]
+            == AvatarStyle.identitySeed(name: "Claw", agentId: "main"))
+        #expect(store.avatarChoices[AvatarPreferences.seedEntry(for: "coder")] == "Older|coder")
+        #expect(store.pendingPrefChanges[AvatarPreferences.prefKey] == nil)
     }
 
     @Test func recordsEveryNewAgentAndNeverOverwrites() async {

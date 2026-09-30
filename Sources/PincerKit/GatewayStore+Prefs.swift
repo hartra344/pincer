@@ -366,10 +366,13 @@ extension GatewayStore {
             ?? AvatarStyle.identitySeed(name: agent.name, agentId: agent.id)
     }
 
-    /// Records the seed of every agent without one, in one push. Never overwrites a seed, and waits
-    /// for this connection's prefs pull so another device's older seed wins.
+    /// Records the seed of every agent without one, in one push. Never overwrites a seed. Before this
+    /// device's first sync they're only kept here: the first sync's merge writes them in its one
+    /// write, with the Gateway's older seeds winning. After that it waits for this connection's
+    /// prefs pull, so another device's older seed wins.
     func recordAvatarSeeds() {
-        guard self.avatarPrefsPulledEpoch == self.connectionEpoch else { return }
+        let firstSyncPending = !self.defaults.bool(forKey: self.syncedMap(AvatarPreferences.prefKey).syncedDefaultsKey)
+        guard firstSyncPending || self.avatarPrefsPulledEpoch == self.connectionEpoch else { return }
         var added: [String: String?] = [:]
         for agent in self.agents {
             let entry = AvatarPreferences.seedEntry(for: agent.id)
@@ -379,6 +382,7 @@ extension GatewayStore {
         }
         guard !added.isEmpty else { return }
         for (entry, value) in added { self.avatarChoices[entry] = value }
+        guard !firstSyncPending else { return }
         let map = self.syncedMap(AvatarPreferences.prefKey)
         Task { await self.push(map, added) }
     }
