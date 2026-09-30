@@ -186,17 +186,37 @@ extension TranscriptLayoutBuilder {
         } else {
             runningY = self.formattedBody(presentation, tool: tool, finding: finding, into: &card)
         }
+        // Offered for every MCP call, whatever its arguments or outcome; beside "Show raw JSON" when it fits.
+        let openServer = presentation.kind == .mcp && self.settings.supportsMCPServers ? presentation.mcpServer : nil
+        var openPlaced = false
+        func placeOpenServer(_ server: String, ownRow: Bool, into card: inout ToolCardBuild) {
+            let title = L("Open MCP Server")
+            let size = TranscriptLabelButton.size(title: title)
+            if ownRow { card.gap(8) }
+            card.controls.append(.init(id: "open-mcp-server", title: title, symbol: "point.3.connected.trianglepath.dotted",
+                                       frame: CGRect(x: card.x, y: card.y, width: size.width, height: size.height),
+                                       action: .openMCPServer(server), spoken: title))
+            if ownRow { card.y += size.height }
+        }
         if hasRaw, !finding {
             card.gap()
             let title = showsRaw ? L("Show formatted") : L("Show raw JSON")
             let size = TranscriptLabelButton.size(title: title)
             let width = max(size.width, TranscriptLabelButton.size(title: L("Show raw JSON")).width,
                             TranscriptLabelButton.size(title: L("Show formatted")).width)
+            if let openServer {
+                let open = TranscriptLabelButton.size(title: L("Open MCP Server")).width
+                if open + 12 + width <= card.inner {
+                    placeOpenServer(openServer, ownRow: false, into: &card)
+                    openPlaced = true
+                }
+            }
             card.controls.append(.init(id: "raw", title: title, symbol: showsRaw ? "text.alignleft" : "curlybraces",
                                        frame: CGRect(x: card.x + card.inner - width, y: card.y, width: width, height: size.height),
                                        action: .toggle(key: rawKey, to: !showsRaw), spoken: title, trailing: true))
             card.y += size.height
         }
+        if let openServer, !openPlaced { placeOpenServer(openServer, ownRow: true, into: &card) }
         return runningY
     }
 
@@ -211,15 +231,6 @@ extension TranscriptLayoutBuilder {
         if !chips.isEmpty {
             card.gap(6)
             self.chips(chips, into: &card)
-        }
-        if presentation.kind == .mcp, let server = presentation.mcpServer, self.settings.supportsMCPServers {
-            card.gap(6)
-            let title = L("Open MCP Server")
-            let size = TranscriptLabelButton.size(title: title)
-            card.controls.append(.init(id: "open-mcp-server", title: title, symbol: "point.3.connected.trianglepath.dotted",
-                                       frame: CGRect(x: card.x, y: card.y, width: size.width, height: size.height),
-                                       action: .openMCPServer(server), spoken: title))
-            card.y += size.height
         }
         if let argumentsText = presentation.argumentsText, !argumentsText.isEmpty {
             card.gap(8)

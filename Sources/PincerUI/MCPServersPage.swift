@@ -250,6 +250,14 @@ struct MCPServersPage: View {
                     }
                 }
             }
+            if rows.isEmpty, !model.pluginServers.isEmpty {
+                Section {
+                    Text("No servers configured on this Gateway.", bundle: .module).foregroundStyle(.secondary)
+                    if model.canEdit {
+                        Button(L("Add Server")) { self.editor = MCPEditorTarget(draft: MCPServerDraft()) }
+                    }
+                }
+            }
             if rows.isEmpty, model.pluginServers.isEmpty {
                 Section {
                     ContentUnavailableView {
@@ -293,7 +301,7 @@ struct MCPServersPage: View {
             } header: {
                 Text("From Plugins", bundle: .module)
             } footer: {
-                Text("Managed by plugins. Change them in the plugin's settings.", bundle: .module)
+                Text("Managed by plugins. Change them in each plugin's settings.", bundle: .module)
             }
         }
     }
@@ -410,12 +418,19 @@ private struct MCPPluginServerRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
+        .accessibilityHint(L("Opens the \(self.pluginTitle) plugin"))
+        .contextMenu {
+            Button(L("Open Plugin"), systemImage: "puzzlepiece.extension", action: self.open)
+            Button(L("Copy Name"), systemImage: "doc.on.doc") { Clipboard.copy(self.server.name) }
+        }
     }
+
+    private var pluginTitle: String { self.server.pluginName ?? self.server.pluginId }
 
     private var details: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
             Text(self.server.name)
-            Text(self.server.pluginName.map { L("\($0) plugin") } ?? L("\(self.server.pluginId) plugin"))
+            Text(L("\(self.pluginTitle) plugin"))
                 .font(.caption).foregroundStyle(.secondary)
             if !self.server.isAvailable {
                 Text("Unavailable", bundle: .module).font(.caption).foregroundStyle(.orange)
@@ -431,7 +446,7 @@ private struct MCPPluginServerRow: View {
     }
 }
 
-/// "Signed in" / "Sign-in required" for a plugin server's auth.
+/// "Signed in" / "Needs Sign-In" for a plugin server's auth.
 struct MCPAuthBadge: View {
     let auth: MCPAuthStatus
 
@@ -446,7 +461,7 @@ struct MCPAuthBadge: View {
         switch self.auth.state {
         case .authorized: L("Signed in")
         case .pendingAuthorization: L("Waiting for Sign-In…")
-        default: self.auth.isExpired ? L("Sign-In Expired") : L("Sign-in required")
+        default: self.auth.isExpired ? L("Sign-In Expired") : L("Needs Sign-In")
         }
     }
 }
@@ -705,14 +720,9 @@ struct MCPServerPage: View {
     }
 
     @ViewBuilder private func testRows(_ server: MCPServer, model: MCPServersModel, block: String?) -> some View {
-        HStack {
-            Button(L("Test Connection"), systemImage: "bolt.horizontal") {
-                self.probe = MCPProbeState(running: true, result: nil)
-                Task { self.probe = MCPProbeState(running: false, result: await model.probe(name: server.name, draft: nil)) }
-            }
-            .disabled(self.probe.running || block != nil)
-            if self.probe.running { ProgressView().controlSize(.small) }
+        MCPTestConnectionRows(state: self.probe, disabledReason: block) {
+            self.probe = MCPProbeState(running: true)
+            Task { self.probe = MCPProbeState(result: await model.probe(name: server.name, timeoutMs: 15000)) }
         }
-        if let result = self.probe.result { MCPProbeResultView(result: result) }
     }
 }

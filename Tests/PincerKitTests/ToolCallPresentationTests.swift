@@ -171,6 +171,28 @@ struct ToolCallPresentationTests {
         }
     }
 
+    @Test func safeServerNameSanitizes() {
+        #expect(MCPToolName.safeServerName("github") == "github")
+        #expect(MCPToolName.safeServerName("my.server") == "my-server")
+        #expect(MCPToolName.safeServerName("home-assistant_2") == "home-assistant_2")
+        #expect(MCPToolName.safeServerName("a b/c") == "a-b-c")
+        #expect(MCPToolName.safeServerName("1password") == "mcp-1password")
+        #expect(MCPToolName.safeServerName(" x ") == "x")
+        #expect(MCPToolName.safeServerName("") == "mcp" && MCPToolName.safeServerName("   ") == "mcp")
+        #expect(MCPToolName.safeServerName("_a") == "mcp-_a")
+        // The prefix counts toward the 30-character limit.
+        #expect(MCPToolName.safeServerName("9" + String(repeating: "b", count: 40)) == "mcp-9" + String(repeating: "b", count: 25))
+        #expect(MCPToolName.safeServerName("0abc") == "mcp-0abc")
+        #expect(MCPToolName.safeServerName("-x") == "mcp--x")
+        #expect(MCPToolName.safeServerName("émoji") == "mcp--moji")
+        #expect(MCPToolName.safeServerName(String(repeating: "a", count: 40)).count == 30)
+        // The sanitised fragment survives a split, so a card's server resolves back to its config name.
+        let split = MCPToolName.split("\(MCPToolName.safeServerName("my.server"))__do_it")
+        #expect(split.server == MCPToolName.safeServerName("my.server") && split.tool == "do_it")
+        // Sanitised names never contain the separator's first `__` unless the config name does.
+        #expect(!MCPToolName.safeServerName("a.b").contains("__"))
+    }
+
     @Test func presentationAgreesWithSplit() {
         for name in ["github__search_issues", "mcp__github__search_issues", "fs__read__file", "mcp__a-b.c__x",
                      "__tool", "server__", "mcp__", "a__b__c__d"]

@@ -230,7 +230,7 @@ actor DemoGateway {
         if let result = try self.handleAgents(method, params) { return result }
         if let result = try await self.handleChannelLifecycle(method, params) { return result }
         if let result = try self.handleDevices(method, params) { return result }
-        if let result = try self.handleMCP(method, params) { return result }
+        if let result = try await self.handleMCP(method, params) { return result }
         if let result = try self.handleSkills(method, params) { return result }
         if let result = try self.handleSessionManager(method, params) { return result }
         if let result = try self.handleVoice(method, params) { return result }

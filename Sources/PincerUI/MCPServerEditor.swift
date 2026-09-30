@@ -15,21 +15,14 @@ struct MCPServerEditor: View {
     @State private var draft: MCPServerDraft
     @State private var showProblems = false
     @State private var revealed: Set<Int> = []
-    @State private var advancedOpen: Bool
+    @State private var advancedOpen = false
     @State private var probe = MCPProbeState()
     private let initial: MCPServerDraft
 
     init(draft: MCPServerDraft) {
         self._draft = State(initialValue: draft)
         self.initial = draft
-        self._advancedOpen = State(initialValue: Self.hasAdvanced(draft))
-    }
-
-    /// Open the Advanced group up front when the server already uses any of it.
-    private static func hasAdvanced(_ draft: MCPServerDraft) -> Bool {
-        let text = [draft.connectionTimeoutMs, draft.requestTimeoutMs, draft.clientCert, draft.clientKey,
-                    draft.oauthScope, draft.oauthAuthProfileId, draft.oauthIdentity]
-        return text.contains { !$0.isEmpty } || !draft.toolInclude.isEmpty || !draft.toolExclude.isEmpty || !draft.sslVerify
+        self._advancedOpen = State(initialValue: draft.advancedCount > 0)
     }
 
     private var isNew: Bool { self.initial.originalName == nil }
@@ -69,7 +62,7 @@ struct MCPServerEditor: View {
                 }
                 self.advancedSection(shown)
                 if self.gateway.mcp.supportsProbe {
-                    self.testSection(problems.isEmpty)
+                    self.testSection(valid: problems.isEmpty)
                 }
                 Section {
                     EmptyView()
@@ -187,6 +180,9 @@ struct MCPServerEditor: View {
             }
             self.problem(problems["url"])
             Toggle(L("Requires OAuth sign-in"), isOn: self.$draft.usesOAuth)
+            if self.draft.usesOAuth {
+                self.field(L("Scope"), text: self.$draft.oauthScope, prompt: "Optional")
+            }
         } footer: {
             if self.draft.usesOAuth {
                 Text("After saving, sign in from the server's page.", bundle: .module)
@@ -237,10 +233,24 @@ struct MCPServerEditor: View {
 
 // MARK: Advanced
 
+extension MCPServerDraft {
+    /// How many Advanced settings differ from their defaults.
+    fileprivate var advancedCount: Int {
+        let texts = [self.connectionTimeoutMs, self.requestTimeoutMs, self.clientCert, self.clientKey,
+                     self.oauthIdentity, self.oauthAuthProfileId]
+        let filters = [self.toolInclude, self.toolExclude].filter { !$0.isEmpty }.count
+        return texts.filter { !$0.isEmpty }.count + filters + (self.sslVerify ? 0 : 1)
+    }
+}
+
 extension MCPServerEditor {
+    private static let advancedProblemKeys = ["connectionTimeoutMs", "requestTimeoutMs", "oauthIdentity", "oauthAuthProfileId"]
+
     fileprivate func advancedSection(_ problems: [String: String]) -> some View {
-        Section {
-            DisclosureGroup(isExpanded: self.$advancedOpen) {
+        let forced = Self.advancedProblemKeys.contains { problems[$0] != nil }
+        let open = Binding(get: { self.advancedOpen || forced }, set: { self.advancedOpen = $0 })
+        return Section {
+            DisclosureGroup(isExpanded: open) {
                 self.timeoutRows(problems)
                 self.toolFilterRows()
                 if self.draft.transport.isRemote {
@@ -248,17 +258,40 @@ extension MCPServerEditor {
                     if self.draft.usesOAuth { self.oauthRows(problems) }
                 }
             } label: {
-                Text("Advanced", bundle: .module)
+                self.advancedLabel(open: open.wrappedValue)
             }
+        }
+    }
+
+    @ViewBuilder private func advancedLabel(open: Bool) -> some View {
+        let count = self.draft.advancedCount
+        if !open, count > 0 {
+            Text("Advanced · \(count) set", bundle: .module)
+        } else {
+            Text("Advanced", bundle: .module)
         }
     }
 
     private func timeoutRows(_ problems: [String: String]) -> some View {
         Group {
-            self.field(L("Connection timeout (ms)"), text: self.$draft.connectionTimeoutMs, prompt: "30000", number: true)
+            self.millisecondsField(L("Connection timeout"), text: self.$draft.connectionTimeoutMs, prompt: "Default (30 s)")
             self.problem(problems["connectionTimeoutMs"])
-            self.field(L("Request timeout (ms)"), text: self.$draft.requestTimeoutMs, prompt: "60000", number: true)
+            self.millisecondsField(L("Request timeout"), text: self.$draft.requestTimeoutMs, prompt: "Default (60 s)")
             self.problem(problems["requestTimeoutMs"])
+        }
+    }
+
+    private func millisecondsField(_ title: String, text: Binding<String>, prompt: LocalizedStringKey) -> some View {
+        LabeledContent(title) {
+            HStack(spacing: Theme.Spacing.xs) {
+                TextField(title, text: text, prompt: Text(prompt, bundle: .module))
+                    .labelsHidden()
+                    .multilineTextAlignment(.trailing)
+                    #if os(iOS)
+                    .keyboardType(.numberPad)
+                    #endif
+                Text("ms", bundle: .module).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -276,7 +309,7 @@ extension MCPServerEditor {
             Text(title).font(.subheadline)
             ForEach(rows.wrappedValue.indices, id: \.self) { index in
                 HStack {
-                    TextField(L("Pattern"), text: Self.patternBinding(rows, index), prompt: Text("search_*", bundle: .module))
+                    TextField(L("Pattern"), text: Self.patternBinding(rows, index), prompt: Text("create_*", bundle: .module))
                         .autocorrectionDisabled()
                         #if os(iOS)
                         .textInputAutocapitalization(.never)
@@ -300,11 +333,12 @@ extension MCPServerEditor {
         Group {
             Toggle(L("Verify TLS certificate"), isOn: self.$draft.sslVerify)
             if !self.draft.sslVerify {
-                Label(L("Turning this off makes the connection easy to intercept."), systemImage: "exclamationmark.shield")
+                Label(L("Pincer can't check this server's identity."), systemImage: "exclamationmark.shield")
                     .font(.caption).foregroundStyle(.orange)
             }
-            self.field(L("Client certificate"), text: self.$draft.clientCert, prompt: "Path on the Gateway host", url: false)
-            self.field(L("Client key"), text: self.$draft.clientKey, prompt: "Path on the Gateway host", url: false)
+            self.field(L("Client certificate"), text: self.$draft.clientCert, prompt: "Optional")
+            self.field(L("Client key"), text: self.$draft.clientKey, prompt: "Optional")
+            Text("Paths on the Gateway host.", bundle: .module).font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -316,7 +350,6 @@ extension MCPServerEditor {
                 Text("Each person signs in", bundle: .module).tag("per-requester")
             }
             self.problem(problems["oauthIdentity"])
-            self.field(L("Scope"), text: self.$draft.oauthScope, prompt: "Default")
             self.field(L("Auth profile"), text: self.$draft.oauthAuthProfileId, prompt: "Optional")
             self.problem(problems["oauthAuthProfileId"])
         }
@@ -325,59 +358,118 @@ extension MCPServerEditor {
 
 // MARK: Test connection
 
-/// The state of one Test Connection run in the editor.
+/// The state of one Test Connection run. `tested` is the draft that was sent, to spot stale results.
 struct MCPProbeState {
     var running = false
     var result: MCPProbeResult?
+    var tested: MCPServerDraft?
 }
 
 extension MCPServerEditor {
-    fileprivate func testSection(_ valid: Bool) -> some View {
+    fileprivate func testSection(valid: Bool) -> some View {
         Section {
-            HStack {
-                Button(L("Test Connection"), systemImage: "bolt.horizontal") { self.runProbe() }
-                    .disabled(!valid || self.probe.running)
-                if self.probe.running { ProgressView().controlSize(.small) }
-            }
-            if let result = self.probe.result { MCPProbeResultView(result: result) }
+            let stale = self.probe.tested.map { $0 != self.draft } ?? false
+            MCPTestConnectionRows(state: self.probe, stale: stale, disabledReason: valid ? nil : L("Fix the errors above first."),
+                                  run: self.runProbe)
         } footer: {
-            Text("Tests the settings above without saving them.", bundle: .module)
+            Text("Tests these settings from the Gateway without saving.", bundle: .module)
         }
     }
 
     private func runProbe() {
         let draft = self.draft
-        self.probe.running = true
-        self.probe.result = nil
+        self.probe = MCPProbeState(running: true, result: nil, tested: draft)
         Task {
-            let result = await self.gateway.mcp.probe(name: draft.name, draft: draft)
-            self.probe = MCPProbeState(running: false, result: result)
+            let timeout = Int(draft.connectionTimeoutMs) ?? 15000
+            let result = await self.gateway.mcp.probe(name: draft.name, draft: draft, timeoutMs: timeout)
+            self.probe = MCPProbeState(running: false, result: result, tested: draft)
         }
     }
 }
 
-/// Inline outcome of a probe: "Connected · 12 tools" or the failure diagnostics.
+/// The Test Connection button, its reason when disabled, and the inline result.
+struct MCPTestConnectionRows: View {
+    let state: MCPProbeState
+    var stale = false
+    var disabledReason: String?
+    let run: () -> Void
+
+    var body: some View {
+        HStack {
+            Button(L("Test Connection"), systemImage: "bolt.horizontal", action: self.run)
+                .disabled(self.disabledReason != nil || self.state.running)
+            if self.state.running {
+                ProgressView().controlSize(.small)
+                Text("Testing…", bundle: .module).foregroundStyle(.secondary)
+            }
+        }
+        if let reason = self.disabledReason {
+            Text(reason).font(.caption).foregroundStyle(.secondary)
+        }
+        if let result = self.state.result, !self.state.running {
+            MCPProbeResultView(result: result, stale: self.stale)
+        }
+    }
+}
+
+/// Inline outcome of a probe.
 struct MCPProbeResultView: View {
     let result: MCPProbeResult
+    var stale = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            if self.result.ok {
-                Label(self.summary, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-            } else {
-                Label(L("Couldn't connect"), systemImage: "xmark.octagon.fill").foregroundStyle(.red)
-            }
-            ForEach(Array(self.result.diagnostics.enumerated()), id: \.offset) { _, message in
-                Text(message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            self.headline
+            self.diagnostics
+            if self.stale {
+                Text("Settings changed since the test.", bundle: .module).font(.caption).foregroundStyle(.orange)
             }
         }
-        .accessibilityElement(children: .combine)
+        .opacity(self.stale ? 0.55 : 1)
+    }
+
+    private var needsSignIn: Bool {
+        guard let auth = self.result.auth else { return false }
+        return auth.state != .authorized
+    }
+
+    @ViewBuilder private var headline: some View {
+        if !self.result.ok {
+            Label(L("Couldn't connect"), systemImage: "xmark.octagon.fill").foregroundStyle(.red)
+        } else if self.needsSignIn {
+            Label(L("Connected. Needs sign-in."), systemImage: "person.badge.key").foregroundStyle(.orange)
+            Text("Save, then sign in from the server's page.", bundle: .module).font(.caption).foregroundStyle(.secondary)
+        } else {
+            Label(self.summary, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+        }
+    }
+
+    @ViewBuilder private var diagnostics: some View {
+        let all = self.result.diagnostics
+        ForEach(Array(all.prefix(3).enumerated()), id: \.offset) { _, message in
+            Text(message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+        }
+        if all.count > 3 {
+            Text("+\(all.count - 3) more", bundle: .module).font(.caption).foregroundStyle(.secondary)
+        }
+        if !self.result.ok, !all.isEmpty {
+            Button(L("Copy Details"), systemImage: "doc.on.doc") { Clipboard.copy(all.joined(separator: "\n")) }
+                .buttonStyle(.borderless)
+        }
     }
 
     private var summary: String {
-        switch self.result.tools.count {
-        case 1: L("Connected · 1 tool")
-        case let count: L("Connected · \(count) tools")
+        var parts = [self.count(self.result.tools.count, one: L("1 tool"), many: { L("\($0) tools") })]
+        if let resources = self.result.resources, resources > 0 {
+            parts.append(self.count(resources, one: L("1 resource"), many: { L("\($0) resources") }))
         }
+        if let prompts = self.result.prompts, prompts > 0 {
+            parts.append(self.count(prompts, one: L("1 prompt"), many: { L("\($0) prompts") }))
+        }
+        return L("Connected · \(parts.joined(separator: ", "))")
+    }
+
+    private func count(_ value: Int, one: String, many: (Int) -> String) -> String {
+        value == 1 ? one : many(value)
     }
 }

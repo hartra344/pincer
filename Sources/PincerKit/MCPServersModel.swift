@@ -396,16 +396,25 @@ public final class MCPServersModel {
 
     // MARK: Test connection
 
-    /// Tests a connection with `mcp.probe`. With `draft`, probes that unsaved definition; otherwise the saved
-    /// server `name`. Never throws: failures come back as `MCPProbeResult.failure`.
+    /// Default `timeoutMs` for a probe.
+    public static let defaultProbeTimeoutMs = 15_000
+
+    /// Tests a connection with `mcp.probe`. With `draft`, probes that unsaved definition (redacted values stay as
+    /// the sentinel; the Gateway restores them from the saved entry); a draft identical to the saved server sends
+    /// only `serverName`. `timeoutMs` defaults to the draft's `connectionTimeoutMs`, else 15 s. Never throws:
+    /// failures come back as `MCPProbeResult.failure`.
     public func probe(name: String, draft: MCPServerDraft? = nil, timeoutMs: Int? = nil) async -> MCPProbeResult {
         guard self.supportsProbe else { return .failure(L("This Gateway doesn't support that yet.")) }
         guard self.hasAdmin else { return .failure(ConfigWriteError.adminRequired.message) }
         var params: [String: JSONValue] = ["serverName": .string(name)]
+        var timeout = timeoutMs
         if let draft {
-            params["server"] = draft.json(original: draft.originalName.flatMap { self.savedServer($0) })
+            let saved = draft.originalName.flatMap { self.savedServer($0) }
+            let json = draft.json(original: saved)
+            if saved == nil || json != saved?.raw || draft.originalName != name { params["server"] = json }
+            if timeout == nil, let custom = json["connectionTimeoutMs"]?.int { timeout = custom }
         }
-        if let timeoutMs { params["timeoutMs"] = .number(Double(timeoutMs)) }
+        params["timeoutMs"] = .number(Double(timeout ?? Self.defaultProbeTimeoutMs))
         do {
             return MCPProbeResult(json: try await self.request(MCPServers.probeMethod, .object(params)))
         } catch {

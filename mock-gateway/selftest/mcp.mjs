@@ -30,7 +30,7 @@ export async function run() {
     // config.get: seeded servers, secrets redacted, args left alone.
     const snapshot = await reader.send('config.get', {});
     const servers = snapshot.config.mcp.servers;
-    assert.deepEqual(Object.keys(servers).sort(), ['filesystem', 'github', 'home-assistant', 'linear', 'notion', 'postgres', 'sentry']);
+    assert.deepEqual(Object.keys(servers).sort(), ['acme.docs', 'filesystem', 'github', 'home-assistant', 'linear', 'notion', 'postgres', 'sentry']);
     assert.equal(servers['home-assistant'].env.HA_TOKEN, '__OPENCLAW_REDACTED__');
     assert.equal(servers.github.headers.Authorization, '__OPENCLAW_REDACTED__');
     assert.equal(servers.filesystem.env.LOG_LEVEL, '__OPENCLAW_REDACTED__');
@@ -40,7 +40,7 @@ export async function run() {
     const status = await reader.send('mcp.status', {});
     assert.equal(typeof status.generatedAt, 'number');
     const by = Object.fromEntries(status.servers.map((s) => [s.name, s]));
-    assert.equal(status.servers.length, 7);
+    assert.equal(status.servers.length, 8);
     assert.deepEqual([by.filesystem.state, by.filesystem.toolCount, by.filesystem.transport], ['connected', 4, 'stdio']);
     assert.deepEqual(by['home-assistant'].tools, ['get_state', 'call_service']);
     assert.equal(by.github.toolCount, 6);
@@ -65,6 +65,14 @@ export async function run() {
     assert.equal(unsignedIn.auth.state, 'requires-authorization');
     const broken = await admin.send('mcp.probe', { serverName: 'new', server: { command: 'nonexistent-cmd' } });
     assert.deepEqual([broken.ok, broken.diagnostics[0].message], [false, 'spawn nonexistent-cmd ENOENT']);
+    const pg = await admin.send('mcp.probe', { serverName: 'postgres' });
+    assert.equal(pg.diagnostics.length, 3);
+    const probeStart = Date.now();
+    const slowProbe = await admin.send('mcp.probe', { serverName: 'home-assistant', timeoutMs: 15000 });
+    assert.ok(slowProbe.ok && Date.now() - probeStart >= 1800);
+    assert.equal((await admin.send('mcp.probe', { serverName: 'home-assistant', timeoutMs: 500 })).ok, false);
+    const restored = await admin.send('mcp.probe', { serverName: 'github', server: { url: 'https://api.githubcopilot.com/mcp/', transport: 'streamable-http', headers: { Authorization: '__OPENCLAW_REDACTED__' } } });
+    assert.deepEqual([restored.ok, restored.resources, restored.prompts], [true, 3, 2]);
     assert.equal((await admin.call('mcp.probe', { serverName: 'nope' })).error.code, 'INVALID_REQUEST');
     assert.equal((await reader.send('mcp.status', { serverNames: ['linear'] })).servers[0].state, 'idle');
 

@@ -17313,26 +17313,6 @@
         }
       }
     },
-    "Connection timeout (ms)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connection timeout (ms)"
-          }
-        }
-      }
-    },
-    "Request timeout (ms)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Request timeout (ms)"
-          }
-        }
-      }
-    },
     "Only allow tools": {
       "localizations": {
         "en": {
@@ -17373,16 +17353,6 @@
         }
       }
     },
-    "search_*": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "search_*"
-          }
-        }
-      }
-    },
     "Remove pattern": {
       "localizations": {
         "en": {
@@ -17409,16 +17379,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verify TLS certificate"
-          }
-        }
-      }
-    },
-    "Turning this off makes the connection easy to intercept.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Turning this off makes the connection easy to intercept."
           }
         }
       }
@@ -17513,16 +17473,6 @@
         }
       }
     },
-    "Tests the settings above without saving them.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tests the settings above without saving them."
-          }
-        }
-      }
-    },
     "Couldn't connect": {
       "localizations": {
         "en": {
@@ -17539,16 +17489,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ plugin"
-          }
-        }
-      }
-    },
-    "Sign-in required": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sign-in required"
           }
         }
       }
@@ -17573,42 +17513,262 @@
         }
       }
     },
-    "Managed by plugins. Change them in the plugin's settings.": {
+    "Connection timeout": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Managed by plugins. Change them in the plugin's settings."
+            "value": "Connection timeout"
           }
         }
       }
     },
-    "30000": {
+    "Request timeout": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "30000"
+            "value": "Request timeout"
           }
         }
       }
     },
-    "60000": {
+    "ms": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "60000"
+            "value": "ms"
           }
         }
       }
     },
-    "Path on the Gateway host": {
+    "Default (30 s)": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Path on the Gateway host"
+            "value": "Default (30 s)"
+          }
+        }
+      }
+    },
+    "Default (60 s)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default (60 s)"
+          }
+        }
+      }
+    },
+    "create_*": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "create_*"
+          }
+        }
+      }
+    },
+    "Paths on the Gateway host.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paths on the Gateway host."
+          }
+        }
+      }
+    },
+    "Pincer can't check this server's identity.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer can't check this server's identity."
+          }
+        }
+      }
+    },
+    "Fix the errors above first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fix the errors above first."
+          }
+        }
+      }
+    },
+    "Tests these settings from the Gateway without saving.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tests these settings from the Gateway without saving."
+          }
+        }
+      }
+    },
+    "Settings changed since the test.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings changed since the test."
+          }
+        }
+      }
+    },
+    "Connected. Needs sign-in.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected. Needs sign-in."
+          }
+        }
+      }
+    },
+    "Save, then sign in from the server's page.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save, then sign in from the server's page."
+          }
+        }
+      }
+    },
+    "Copy Details": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Details"
+          }
+        }
+      }
+    },
+    "1 tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 tool"
+          }
+        }
+      }
+    },
+    "%lld tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld tools"
+          }
+        }
+      }
+    },
+    "1 resource": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 resource"
+          }
+        }
+      }
+    },
+    "%lld resources": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld resources"
+          }
+        }
+      }
+    },
+    "1 prompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 prompt"
+          }
+        }
+      }
+    },
+    "%lld prompts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld prompts"
+          }
+        }
+      }
+    },
+    "Connected · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected · %@"
+          }
+        }
+      }
+    },
+    "Advanced · %lld set": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advanced · %lld set"
+          }
+        }
+      }
+    },
+    "Opens the %@ plugin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens the %@ plugin"
+          }
+        }
+      }
+    },
+    "Open Plugin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Plugin"
+          }
+        }
+      }
+    },
+    "No servers configured on this Gateway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No servers configured on this Gateway."
+          }
+        }
+      }
+    },
+    "Managed by plugins. Change them in each plugin's settings.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Managed by plugins. Change them in each plugin's settings."
           }
         }
       }

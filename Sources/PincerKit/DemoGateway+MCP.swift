@@ -49,6 +49,7 @@ struct DemoMCPState {
         "postgres": ["command": "uvx", "args": ["mcp-server-postgres", "--dsn", "******db.local/app"],
                      "env": ["PGPASSWORD": "mock-pg-password"]],
         "sentry": ["url": "https://mcp.sentry.dev/sse", "transport": "sse", "enabled": false],
+        "acme.docs": ["url": "https://mcp.acme.example/docs", "transport": "streamable-http"],
     ]]]
 
     static let seedTools: [String: [String]] = [
@@ -56,6 +57,7 @@ struct DemoMCPState {
         "home-assistant": ["get_state", "call_service"],
         "github": ["get_issue", "list_issues", "create_issue", "search_code", "get_pull_request", "list_pull_requests"],
     ]
+    static let acmeTools = ["search", "get_page"]
     static let linearTools = ["list_issues", "get_issue", "create_issue", "update_issue", "search_documentation"]
     static let genericTools = ["echo", "ping", "time"]
     static let toolDescriptions = [
@@ -94,7 +96,7 @@ struct DemoMCPState {
         } else if name == "linear" {
             (rt.state, rt.tools) = ("connected", Self.linearTools)
         } else {
-            (rt.state, rt.tools) = ("connected", Self.seedTools[name] ?? Self.genericTools)
+            (rt.state, rt.tools) = ("connected", Self.seedTools[name] ?? (name == "acme.docs" ? Self.acmeTools : Self.genericTools))
         }
         self.runtime[name] = rt
     }
@@ -210,7 +212,7 @@ extension DemoGateway {
     ]
     static let demoOAuthScheme = "pincer-demo-oauth"
 
-    func handleMCP(_ method: String, _ params: JSONValue) throws -> JSONValue? {
+    func handleMCP(_ method: String, _ params: JSONValue) async throws -> JSONValue? {
         guard Self.mcpMethods.contains(method) else { return nil }
         self.mcp.seedIfNeeded()
         switch method {
@@ -221,7 +223,7 @@ extension DemoGateway {
             let names = self.mcpNames(params["serverNames"])
             return ["generatedAt": .number((Date().timeIntervalSince1970 * 1000).rounded()),
                     "servers": .array(names.compactMap { self.mcp.statusEntry($0) })]
-        case "mcp.probe": return try self.mcpProbe(params)
+        case "mcp.probe": return try await self.mcpProbe(params)
         case "plugins.list": return Self.demoPluginList
         case "plugins.inspect": return try Self.demoPluginInspect(params)
         case "mcp.oauth.status":
@@ -320,34 +322,57 @@ extension DemoGateway {
 
     // MARK: probe and plugins
 
-    /// One-off connection test of a saved server or an unsaved draft; the status table is untouched.
-    private func mcpProbe(_ params: JSONValue) throws -> JSONValue {
+    /// One-off connection test of a saved server or an unsaved draft; the status table is untouched. A draft may
+    /// carry redacted sentinels, which are restored from the saved entry. By server name (mirrors `mock-gateway/mcp.mjs`):
+    /// `postgres` fails with three diagnostics, `home-assistant` succeeds after ~2 s, OAuth servers that aren't signed in
+    /// (`linear`, `notion`) need authorization, `github` succeeds with 6 tools, 3 resources and 2 prompts,
+    /// `filesystem` with 4 tools, 1 resource, 0 prompts, and anything else with the generic tools.
+    /// A command containing "nonexistent" or "missing", a non-http(s) URL or no transport also fails.
+    private func mcpProbe(_ params: JSONValue) async throws -> JSONValue {
         let name = params["serverName"]?.string ?? ""
         let saved = self.mcp.servers[name]
-        guard let server = params["server"].flatMap({ $0.object == nil ? nil : $0 }) ?? saved else {
-            throw Self.mcpInvalid("unknown MCP server: \(name)")
+        var candidate = saved
+        if let draft = params["server"], draft.object != nil {
+            candidate = DemoMCPState.restoring(draft, from: saved)
         }
-        func failure(_ message: String, auth: JSONValue? = nil) -> JSONValue {
-            var result: [String: JSONValue] = ["ok": false, "tools": [], "resources": 0, "prompts": 0, "diagnostics": [["message": .string(message)]]]
+        guard let server = candidate else { throw Self.mcpInvalid("unknown MCP server: \(name)") }
+        func failure(_ messages: [String], auth: JSONValue? = nil) -> JSONValue {
+            var result: [String: JSONValue] = ["ok": false, "tools": [], "resources": 0, "prompts": 0,
+                                               "diagnostics": .array(messages.map { ["message": .string($0)] })]
             result["auth"] = auth
             return .object(result)
         }
-        guard DemoMCPState.transport(server) != nil else { return failure("server needs a command or a url") }
+        guard DemoMCPState.transport(server) != nil else { return failure(["Server needs a command or a url."]) }
         if let command = server["command"]?.string, command.contains("nonexistent") || command.contains("missing") {
-            return failure("spawn \(command) ENOENT")
+            return failure(["spawn \(command) ENOENT", "Check that \(command) is installed and on the Gateway's PATH."])
         }
-        if let url = server["url"]?.string, !(url.hasPrefix("http://") || url.hasPrefix("https://")) { return failure("invalid url: \(url)") }
+        if let url = server["url"]?.string, !(url.hasPrefix("http://") || url.hasPrefix("https://")) {
+            return failure(["Invalid url: \(url)"])
+        }
         if server["auth"]?.string == "oauth" {
             let auth = (server == saved ? self.mcp.runtime[name]?.auth : nil)
                 ?? DemoMCPState.Auth(mode: DemoMCPState.authMode(server) ?? "oauth-shared")
-            if auth.state != "authorized" { return failure("authorization required", auth: .object(DemoMCPState.authObject(auth))) }
+            if auth.state != "authorized" { return failure(["Authorization required."], auth: .object(DemoMCPState.authObject(auth))) }
         }
-        if name == "postgres" { return failure("spawn uvx ENOENT") }
+        if name == "postgres" {
+            return failure(["spawn uvx ENOENT", "uvx was not found on the Gateway's PATH.", "Install uv (https://docs.astral.sh/uv/) on the Gateway host."])
+        }
+        let slow = name == "home-assistant"
+        let limit = params["timeoutMs"]?.int ?? 15_000
+        if slow {
+            if limit < 2000 {
+                try? await Task.sleep(for: .milliseconds(max(0, limit)))
+                return failure(["Timed out after \(limit) ms waiting for the server to initialize."])
+            }
+            try? await Task.sleep(for: .seconds(2))
+        }
         var tools = name == "linear" ? DemoMCPState.linearTools : (DemoMCPState.seedTools[name] ?? DemoMCPState.genericTools)
         let include = server["toolFilter"]?["include"]?.array?.compactMap(\.string) ?? []
         let exclude = server["toolFilter"]?["exclude"]?.array?.compactMap(\.string) ?? []
         tools = tools.filter { (include.isEmpty || include.contains($0)) && !exclude.contains($0) }
-        return ["ok": true, "tools": JSONValue(tools), "resources": .number(name == "filesystem" ? 1 : 0), "prompts": 0, "diagnostics": []]
+        let counts = ["github": (3, 2), "filesystem": (1, 0), "linear": (2, 1)][name] ?? (0, 0)
+        return ["ok": true, "tools": JSONValue(tools), "resources": .number(Double(counts.0)), "prompts": .number(Double(counts.1)),
+                "diagnostics": []]
     }
 
     private typealias DemoPlugin = (id: String, name: String, description: String, servers: [String], unavailable: [String], auth: JSONValue)
@@ -440,7 +465,7 @@ extension DemoGateway {
             let tools: [JSONValue] = connected.map { server, tool in
                 let description = DemoMCPState.toolDescriptions[tool] ?? "\(tool) (\(server))"
                 var entry: [String: JSONValue] = [
-                    "id": .string("\(server)__\(tool)"), "label": .string(tool), "description": .string(description),
+                    "id": .string("\(MCPToolName.safeServerName(server))__\(tool)"), "label": .string(tool), "description": .string(description),
                     "rawDescription": .string(description), "source": "mcp", "mcpServer": .string(server), "mcpToolName": .string(tool),
                 ]
                 if tool == "call_service" { entry["risk"] = "medium" }

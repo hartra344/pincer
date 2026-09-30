@@ -326,9 +326,8 @@ public struct MCPServerDraft: Hashable, Sendable {
         var remote: [String] = []
         if server.url != nil { remote.append(L("URL")) }
         if !server.headers.isEmpty { remote.append(L("Headers")) }
-        if server.usesOAuth { remote.append(L("OAuth sign-in")) }
-        if server.sslVerify != nil { remote.append(L("TLS verification")) }
-        if server.clientCert != nil || server.clientKey != nil { remote.append(L("Client certificate")) }
+        if server.usesOAuth { remote.append(L("OAuth options")) }
+        if server.sslVerify != nil || server.clientCert != nil || server.clientKey != nil { remote.append(L("TLS settings")) }
         self.savedFields = [.stdio: local, .streamableHTTP: remote, .sse: remote]
     }
 
