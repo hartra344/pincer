@@ -267,7 +267,8 @@ struct Composer: View {
             placeholder: self.placeholder,
             text: self.$chat.draft.text,
             menuActive: !self.suggestions.isEmpty,
-            escapeActive: self.chat.replyTarget != nil || self.chat.editTarget != nil || self.dictation.isActive,
+            escapeActive: self.chat.replyTarget != nil || self.chat.editTarget != nil || self.dictation.isActive
+                || ReadAloudController.shared.isActive,
             focusRequest: self.focusRequest,
             onSubmit: self.submit,
             onMedia: self.ingest,
@@ -387,16 +388,16 @@ struct Composer: View {
         let suggestions = self.suggestions
         guard !suggestions.isEmpty else {
             guard key == .escape else { return false }
-            if self.dictation.isActive {
-                self.dictation.finish()
-                return true
+            let action = ComposerEscapeAction.resolve(
+                menuOpen: false, dictating: self.dictation.isActive, editing: self.chat.editTarget != nil,
+                replying: self.chat.replyTarget != nil, readingAloud: ReadAloudController.shared.isActive)
+            switch action {
+            case .finishDictation: self.dictation.finish()
+            case .cancelEdit: self.chat.cancelEdit()
+            case .cancelReply: self.chat.replyTarget = nil
+            case .stopReadAloud: ReadAloudController.shared.stop()
+            case .dismissMenu, nil: return false
             }
-            if self.chat.editTarget != nil {
-                self.chat.cancelEdit()
-                return true
-            }
-            guard self.chat.replyTarget != nil else { return false }
-            self.chat.replyTarget = nil
             return true
         }
         switch key {

@@ -475,6 +475,7 @@ private struct SearchResults: View {
             .filter { $0.destination != .skills || self.gateway.supportsSkills }
             .filter { $0.destination != .sessions || self.gateway.supportsSessionManager }
             .filter { $0.destination != .mcpServers || self.gateway.supportsMCPServers }
+            .filter { $0.destination != .voice || self.gateway.voice.supportsStatus }
         if results.isEmpty, pages.isEmpty {
             Text("No settings match “\(self.query)”.", bundle: .module).foregroundStyle(.secondary)
         }

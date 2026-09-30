@@ -13,6 +13,7 @@ struct CommandPaletteView: View {
     #if os(macOS)
     @Environment(\.openSettings) private var openSettings
     #endif
+    @FocusedValue(\.readAloud) private var readAloud
     @AppStorage(ThinkingDisplay.storageKey) private var thinkingDisplay = ThinkingDisplay.defaultValue
     @State private var query: String
     @State private var page: Page
@@ -57,7 +58,7 @@ struct CommandPaletteView: View {
 
     private enum Command: String {
         case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, skills, mcpServers, usage, sessionUsage,
-             gatewayLogs, devices, setupGateway, sessions, manageSession, addGateway, toggleDictation
+             gatewayLogs, devices, setupGateway, sessions, manageSession, addGateway, toggleDictation, readAloud, readAloudSettings, voiceSettings
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -399,6 +400,7 @@ struct CommandPaletteView: View {
             items.append(item(.toggleDictation, listening ? L("Stop Dictation") : L("Dictate Message"), listening ? "mic.fill" : "mic",
                               keywords: ["dictate", "voice", "speech", "microphone"], shortcut: ShortcutCommand.toggleDictation.displayShortcut))
         }
+        items += self.readAloudItems
         let showsThinking = self.thinkingDisplay != .none
         items += [
             item(.toggleThinking, showsThinking ? L("Hide Thinking Steps") : L("Show Thinking Steps"), "brain.head.profile",
@@ -410,9 +412,15 @@ struct CommandPaletteView: View {
             item(.nextUnread, L("Next Unread Chat"), "circle.badge", keywords: ["unread"], shortcut: ShortcutCommand.nextUnreadChat.displayShortcut,
                  enabled: self.app.totalUnread > 0),
             item(.appSettings, L("Open Settings…"), "gearshape", keywords: ["preferences"], shortcut: "⌘,"),
+            item(.readAloudSettings, L("Read Aloud Settings…"), "speaker.wave.2",
+                 keywords: ["read aloud", "listen", "speech", "voice", "tts", "speak", "settings"]),
             item(.addGateway, L("Add Gateway…"), "plus.circle", keywords: ["connect", "new", "server", "setup", "wizard"]),
         ]
         if let setup = CommandPalette.setupGatewayItem(gateway: self.gateway) { items.append(setup) }
+        if self.gateway?.voice.supportsStatus == true {
+            items.append(item(.voiceSettings, L("Gateway Voice Settings…"), "speaker.wave.2",
+                              keywords: ["gateway voice", "tts", "text to speech", "read aloud", "elevenlabs", "openai", "persona", "provider"]))
+        }
         if self.gateway != nil {
             items += [
                 item(.gatewaySettings, L("Gateway Settings…"), "server.rack", keywords: ["config"], shortcut: ShortcutCommand.gatewaySettings.displayShortcut),
@@ -449,6 +457,17 @@ struct CommandPaletteView: View {
             }
         }
         return items
+    }
+
+    private var readAloudItems: [PaletteItem] {
+        guard let state = self.readAloud else { return [] }
+        let speaking = ReadAloudController.shared.isActive
+        return [PaletteItem(id: "command:\(Command.readAloud.rawValue)",
+                            title: speaking ? L("Stop Reading Aloud") : L("Read Last Reply Aloud"),
+                            symbol: speaking ? "stop.fill" : "speaker.wave.2",
+                            keywords: ["listen", "speak", "speech", "tts", "voice"],
+                            shortcut: ShortcutCommand.readAloud.displayShortcut, section: .commands,
+                            action: .command(Command.readAloud.rawValue), isEnabled: state.isEnabled)]
     }
 
     // MARK: Keyboard
@@ -611,6 +630,16 @@ struct CommandPaletteView: View {
             if let gateway, let row { self.openGatewaySettings(gateway, at: .sessions, routes: [.sessionDetail(row.key)]) }
         case .setupGateway:
             gateway?.setup.present()
+        case .readAloud:
+            self.readAloud?.toggleLastReply()
+        case .readAloudSettings:
+            #if os(macOS)
+            self.openSettings()
+            #else
+            self.openAppSettings()
+            #endif
+        case .voiceSettings:
+            if let gateway { self.openGatewaySettings(gateway, at: .voice) }
         case .toggleDictation:
             guard let row else { return }
             self.app.dictationToggleRequest = DictationToggleRequest(

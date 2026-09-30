@@ -474,3 +474,16 @@ public final class ShortcutStore {
         self.defaults.set(stored, forKey: Self.overridesKey)
     }
 }
+
+/// What Esc does in the composer, most specific first: menus, dictation, the reply/edit chip, then Read Aloud.
+public enum ComposerEscapeAction: Equatable, Sendable {
+    case dismissMenu, finishDictation, cancelEdit, cancelReply, stopReadAloud
+
+    public static func resolve(menuOpen: Bool, dictating: Bool, editing: Bool, replying: Bool, readingAloud: Bool) -> Self? {
+        if menuOpen { return .dismissMenu }
+        if dictating { return .finishDictation }
+        if editing { return .cancelEdit }
+        if replying { return .cancelReply }
+        return readingAloud ? .stopReadAloud : nil
+    }
+}

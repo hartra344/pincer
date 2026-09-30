@@ -191,6 +191,7 @@ extension GatewayVoiceModel {
     public static let configGetMethod = "config.get"
     public static let configPatchMethod = "config.patch"
     public static let secretsSetMethod = "secrets.store.set"
+    public static let secretsDeleteMethod = "secrets.store.delete"
     public static let convertMethod = "tts.convert"
 
     // MARK: Permissions
@@ -360,6 +361,48 @@ extension GatewayVoiceModel {
         self.wroteKey.insert(provider)
         self.lastTestError[provider] = nil
         return outcome
+    }
+
+    /// Whether a key can be removed: the provider takes one, one is set, and this connection may write config.
+    public func canRemoveKey(_ provider: String) -> Bool {
+        guard self.canConfigure, self.supports(Self.configPatchMethod),
+              TTSProviderKeys.forProvider(provider).apiKey != nil else { return false }
+        switch self.setups[provider]?.keySource ?? .none {
+        case .none: return false
+        case .secretRef, .inline, .redacted: return true
+        }
+    }
+
+    /// Clears the provider's `apiKey` (merge-patch `null`). A store ref also deletes the secret afterwards; an env ref
+    /// also nulls its `env.vars` entry in the same patch. The key can't be recovered, so callers confirm first.
+    public func removeKey(provider: String) async throws -> ConfigApplyOutcome {
+        let keys = try self.requireKeyField(provider)
+        guard let field = keys.apiKey else { throw ConfigWriteError.other(L("That provider doesn't take an API key.")) }
+        var patch = self.providerPatch(provider, [field: .null])
+        var secretName: String?
+        if case let .secretRef(source, _, id) = self.setups[provider]?.keySource {
+            let name = id ?? self.knownKeyName(for: provider) ?? keys.envVar
+            if source == "env", let name {
+                patch = Self.merged(patch, Self.nested(TTSProviderKeys.envVarsPath, [name: .null]))
+            } else if source == "store" { secretName = name }
+        }
+        let outcome = try await self.writeConfig(patch, note: "Pincer: remove Gateway voice key")
+        if let secretName, self.supports(Self.secretsDeleteMethod) {
+            do { _ = try await self.call(Self.secretsDeleteMethod, ["name": .string(secretName)]) } catch {
+                if !Self.isNotFound(error) { throw ConfigWriteError(error) }
+            }
+            self.secretNames.remove(secretName)
+        }
+        self.sessionKeys[provider] = nil
+        self.wroteKey.remove(provider)
+        self.lastTestError[provider] = nil
+        await self.refresh()
+        return outcome
+    }
+
+    private static func isNotFound(_ error: Error) -> Bool {
+        guard case let GatewayError.rpc(code, message, _) = error else { return false }
+        return code == "NOT_FOUND" || message.lowercased().contains("not found")
     }
 
     public func saveModel(_ id: String, provider: String) async throws -> ConfigApplyOutcome {
@@ -586,12 +629,16 @@ extension GatewayVoiceModel {
         }
         let autoText = status.auto == "off" || !status.enabled
             ? L("Off. Replies aren't spoken on channels automatically. Read Aloud and Test Voice still work.")
-            : status.auto
+            : Self.autoModeText(status)
         rows.append(TTSEffectiveRow(label: L("Auto-Speak on Channels"), value: autoText, source: prefs))
         return rows
     }
 
     // MARK: Display text (never blank)
+
+    static func autoModeText(_ status: TTSStatus) -> String {
+        status.autoMode?.displayName ?? String(format: L("Unknown (%@)"), status.auto)
+    }
 
     /// The model name to show: the selected one, else the provider's actual default with "(Default)".
     public func modelDisplay(_ id: String?, provider: String) -> String {
