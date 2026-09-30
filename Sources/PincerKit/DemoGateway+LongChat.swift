@@ -8,15 +8,15 @@ extension DemoGateway {
     static let longChatPreview = "Cutover plan is ready for Saturday."
     static let longChatToolCall = "call_demo_long_zpool"
 
-    static let longChatZpoolCommand = "zpool status tank"
+    static let longChatZpoolCommand = "zpool status vault"
     static let longChatZpoolOutput = """
-      pool: tank
+      pool: vault
      state: ONLINE
-      scan: scrub repaired 0B in 03:41:12 with 0 errors on Sun Sep 20 04:05:12 2026
+      scan: none requested
     config:
 
     	NAME        STATE     READ WRITE CKSUM
-    	tank        ONLINE       0     0     0
+    	vault       ONLINE       0     0     0
     	  mirror-0  ONLINE       0     0     0
     	    sda     ONLINE       0     0     0
     	    sdb     ONLINE       0     0     0
@@ -28,12 +28,12 @@ extension DemoGateway {
     #!/usr/bin/env bash
     set -euo pipefail
 
-    # Replicate every dataset to the new box, then verify the snapshot lists match.
+    # Replicate every dataset to the NAS, then verify the snapshot lists match.
     SNAP="migrate-$(date +%F)"
     zfs snapshot -r tank@"$SNAP"
-    zfs send -R tank@"$SNAP" | ssh pve2 zfs receive -F backup/tank
+    zfs send -R tank@"$SNAP" | ssh nas zfs receive -F vault/tank
     diff <(zfs list -H -t snapshot -o name tank | sed 's/^tank//') \\
-         <(ssh pve2 zfs list -H -t snapshot -o name backup/tank | sed 's/^backup\\/tank//')
+         <(ssh nas zfs list -H -t snapshot -o name vault/tank | sed 's/^vault\\/tank//')
     """
 
     /// The early turns; the last one ends in the tool call.
@@ -42,15 +42,15 @@ extension DemoGateway {
          """
          Start with an inventory, because the migration order depends on what actually runs there.
 
-         From what you've told me before, the Dell hosts the NAS shares, Home Assistant, Pi-hole, Grafana and a few Docker stacks. I'd group them by how painful downtime is: DNS and Home Assistant are the ones the household notices, everything else can go dark for an evening.
+         From what you've told me before, the Dell runs Home Assistant, Pi-hole, Grafana and a few Docker stacks, and it also serves the photo and media shares from its own disks. The NAS is a separate box. I'd group them by how painful downtime is: DNS and Home Assistant are the ones the household notices, everything else can go dark for an evening.
          """),
         ("OK. List what's on it.", "Seven Docker stacks, two VMs (Home Assistant OS and a Debian utility box) and three NFS/SMB shares. Want sizes?"),
-        ("Yes please.", "The photo library is 1.4 TB, backups are 900 GB, media is 3.2 TB, and the VMs together take about 120 GB."),
+        ("Yes please.", "The photo library is 1.4 TB, archives are 900 GB, media is 3.2 TB, and the VMs together take about 120 GB."),
         ("That's a lot of data to move. How long will it take over gigabit?",
          """
          Roughly 5.5 TB at about 110 MB/s is 14 hours of pure transfer, so plan for a full weekend with headroom for retries.
 
-         Two ways to shorten the cutover itself: replicate most of the data ahead of time while the old server keeps running, then do a small final incremental sync on the day. That turns a 14-hour outage into under an hour.
+         One way to shorten the cutover itself: replicate most of the data ahead of time while the old server keeps running, then do a small final incremental sync on the day. That turns a 14-hour outage into under an hour.
          """),
         ("Do that then.", "Agreed. I'll plan it as seed now, delta on cutover day."),
         ("Which hypervisor should the mini PCs run?",
@@ -62,11 +62,11 @@ extension DemoGateway {
         ("I have two Pis already.", "Then one of them can be the quorum device. It needs almost no resources."),
         ("What about storage? The mini PCs only have one NVMe slot each.",
          """
-         Keep bulk storage on the existing NAS and use each NVMe only for VM disks and container volumes. That's about 120 GB now, so a 1 TB drive each leaves plenty of room.
+         Keep bulk data on the NAS rather than the mini PCs, and use each NVMe only for VM disks and container volumes. That's about 120 GB now, so a 1 TB drive each leaves plenty of room.
 
-         For the NAS itself, a mirror is worth it. You mentioned two spare 8 TB disks, and a ZFS mirror of those gives you 8 TB usable with one disk of redundancy.
+         For the data's new home, a mirror is worth it. You mentioned two spare 8 TB disks: put them in the NAS as a ZFS mirror pool called `vault`. That gives you 8 TB usable, enough for the 5.5 TB with room to grow, and survives one disk failing.
          """),
-        ("Yes, I have two 8 TB drives. Can you check their health before I trust them?", "Sure, let me look at the pool on the current NAS first."),
+        ("Yes, I have two 8 TB drives. Can you check their health before I trust them?", "Sure, let me look at the new `vault` pool on the NAS first."),
     ]
 
     /// Later turns, after the tool call.
@@ -88,14 +88,14 @@ extension DemoGateway {
          """
          Not as written. For a resumable transfer, receive with `-s` and restart with the resume token:
 
-         `zfs send -t "$(ssh pve2 zfs get -H -o value receive_resume_token backup/tank)" | ssh pve2 zfs receive -s backup/tank`
+         `zfs send -t "$(ssh nas zfs get -H -o value receive_resume_token vault/tank)" | ssh nas zfs receive -s vault/tank`
 
          I'd wrap that in a loop so a flaky Wi-Fi link can't stall the seed.
          """),
         ("The transfer goes over the wired network, so should be fine.", "Then keep it simple, but I'd still add `-s` so you can recover from a reboot."),
         ("How do I avoid DNS downtime when Pi-hole moves?",
          """
-         Run two Pi-hole instances for a day. Point half the DHCP leases at the new one first, watch the query log for a few hours, then switch the rest.
+         Run two Pi-hole instances for a day. Advertise both resolvers through DHCP so clients can use either, watch the new one's query log for a few hours, then drop the old resolver from the DHCP options.
 
          Keep the old one answering until the last lease expires. Since lease time is 24 hours, nobody is ever left without a resolver.
          """),
@@ -109,7 +109,7 @@ extension DemoGateway {
          - **Clock drift:** a restored VM can wake up with a stale clock and confuse time-based automations. Sync it before starting Home Assistant.
          """),
         ("Good list. I'll pass the stick by ID.", "That's the right call."),
-        ("How should I back up the new cluster?", "Use Proxmox Backup Server on the NAS, with nightly incremental backups and weekly verification. Deduplication keeps the repository small."),
+        ("How should I protect the new cluster's VMs?", "Use Proxmox's PBS on the NAS, with nightly incremental snapshots and weekly verification. Deduplication keeps the repository small."),
         ("How much space will that need?", "With 120 GB of VM disks and a 30-day retention, expect roughly 200 to 300 GB thanks to dedup."),
         ("Can I keep offsite copies too?", "Yes. PBS can sync a namespace to a remote repository. A cheap storage box works well, and everything is encrypted client-side."),
         ("OK, add that to the list for later.", "Noted as a follow-up, after the cutover."),
@@ -117,10 +117,10 @@ extension DemoGateway {
          """
          The Dell idles at about 95 W. Two mini PCs idle at roughly 10 to 15 W each, plus the NAS disks at 12 W.
 
-         That's around 40 W total, so you'd save about 55 W, or roughly 480 kWh a year. At your electricity price that pays for the hardware in under two years.
+         That's around 40 W total, so you'd save about 55 W, or roughly 480 kWh a year. At your electricity price the hardware pays for itself in roughly four years.
          """),
         ("That's a solid argument for my partner.", "I can put the numbers in a one-page summary if that helps."),
-        ("Yes, do it.", "Drafted: 55 W saved, about 480 kWh per year, payback under two years. I added a note about the quieter fans."),
+        ("Yes, do it.", "Drafted: 55 W saved, about 480 kWh per year, payback in roughly four years. I added a note about the quieter fans."),
         ("Let's talk about the network. Should the cluster get its own VLAN?",
          """
          A separate management VLAN is worth it: Proxmox's web UI and the cluster traffic shouldn't sit on the same network as guests' phones.
@@ -132,14 +132,14 @@ extension DemoGateway {
          """
          I'd rehearse three things:
 
-         - **Restore:** restore a PBS backup of a VM onto the other node and boot it.
-         - **Failover:** pull the power on one node and confirm Pi-hole comes back via HA within a minute or two.
-         - **Shares:** mount the new SMB shares from a laptop and a phone, and check the photo app's backup job.
+         - **Restore:** restore a PBS snapshot of a VM onto the other node and boot it.
+         - **Failover:** pull the power on one node and confirm Pi-hole comes back via Proxmox HA within a minute or two.
+         - **Shares:** mount the new SMB shares from a laptop and a phone, and check the photo app's upload job.
          """),
-        ("Can HA restart Home Assistant automatically?", "Yes, if the VM disk is on replicated storage. With local NVMe you'd use ZFS replication every few minutes, so a failover loses at most that much state."),
+        ("Can Proxmox HA restart Home Assistant automatically?", "Yes, if the VM disk is on replicated storage. With local NVMe you'd use ZFS replication every few minutes, so a failover loses at most that much state."),
         ("Is that too much for a home setup?", "It's a modest amount of extra work, and it means a dead node doesn't turn off your lights. I'd enable it after the main cutover, not during."),
         ("Fair. What's the plan for the Dell afterwards?", "Keep it off but intact for two weeks, then wipe the disks and either sell it or use it as a cold spare."),
-        ("What if something breaks after two weeks?", "By then the PBS backups and the offsite copy cover you. The Dell is only for the scary first fortnight."),
+        ("What if something breaks after two weeks?", "By then the PBS snapshots and the offsite copy cover you. The Dell is only for the scary first fortnight."),
         ("Write the cutover checklist so I can follow it on the day.",
          """
          **Saturday cutover checklist**
@@ -148,7 +148,7 @@ extension DemoGateway {
          2. Stop the Docker stacks on the Dell, take a last snapshot and sync again.
          3. Start the new containers, then the Home Assistant VM.
          4. Switch DHCP's DNS option to the new Pi-hole.
-         5. Re-point SMB/NFS mounts and check the backup jobs.
+         5. Re-point SMB/NFS mounts and check the nightly jobs.
          6. Shut down the Dell. Don't wipe it.
          """),
         ("That looks right. Anything I'm forgetting?", "Two things: tell the household the lights might blink around noon, and export a copy of the Home Assistant config to your laptop before you start."),
@@ -158,13 +158,13 @@ extension DemoGateway {
 
     static func seedLongChatTranscript() -> [JSONValue] {
         var messages: [JSONValue] = []
-        // The chat spans the last 3 days (oldest first), one message every ~20 minutes of a planning session.
+        // The chat is one planning session about 3 days ago, a message every 20 minutes, oldest first.
         let total = Double(self.longChatTurns.count + self.longChatMoreTurns.count) * 2 + 2
         let day = 86400.0
         var index = 0.0
         func ago() -> Double {
             defer { index += 1 }
-            return 3 * day + 60 - (total - index) * 1200
+            return 3 * day + 60 + (total - index) * 1200
         }
         func pair(_ turn: (user: String, assistant: String), code: String? = nil) {
             messages.append(Self.message("user", [Self.text(turn.user)], ago: ago()))
