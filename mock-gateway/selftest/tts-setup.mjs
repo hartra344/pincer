@@ -47,10 +47,10 @@ export async function run() {
       const snap = await admin.send('config.get');
       return admin.call('config.patch', { raw: JSON.stringify(value), baseHash: snap.hash });
     };
-    let res = await patch({ messages: { tts: { providers: { elevenlabs: { apiKey: ref, modelId: 'eleven_v3', voiceId: 'pMsXgVXv3BLzUgSXRplE' } } } } });
+    let res = await patch({ tts: { providers: { elevenlabs: { apiKey: ref, modelId: 'eleven_v3', speakerVoiceId: 'pMsXgVXv3BLzUgSXRplE' } } } });
     assert.equal(res.ok, true, JSON.stringify(res));
-    const tts = (await admin.send('config.get')).config.messages.tts.providers;
-    assert.deepEqual(tts.elevenlabs.apiKey, ref, 'a SecretRef is shown as is');
+    const tts = (await admin.send('config.get')).config.tts.providers;
+    assert.deepEqual(tts.elevenlabs.apiKey, { ...ref, id: REDACTED }, 'a SecretRef keeps source and provider; the id is redacted');
     assert.equal(tts.elevenlabs.modelId, 'eleven_v3');
     assert.equal(tts.openai.model, 'gpt-4o-mini-tts', 'the patch merged');
     assert.equal((await providers()).configured, true);
@@ -60,14 +60,14 @@ export async function run() {
     assert.equal(clip.mimeType, 'audio/wav');
 
     // A rejected model fails; a custom eleven_* id passes.
-    res = await patch({ messages: { tts: { providers: { elevenlabs: { modelId: 'eleven_bogus' } } } } });
+    res = await patch({ tts: { providers: { elevenlabs: { modelId: 'eleven_bogus' } } } });
     assert.equal(res.ok, true);
     let failed = await admin.call('tts.speak', { text: 'Hi' });
     assert.equal(failed.error.code, 'UNAVAILABLE');
     assert.match(failed.error.message, /^ElevenLabs API error \(400\): model_id_does_not_exist: .*eleven_bogus/);
-    await patch({ messages: { tts: { providers: { elevenlabs: { modelId: 'gpt-4o' } } } } });
+    await patch({ tts: { providers: { elevenlabs: { modelId: 'gpt-4o' } } } });
     assert.match((await admin.call('tts.speak', { text: 'Hi' })).error.message, /^ElevenLabs API error \(400\)/);
-    await patch({ messages: { tts: { providers: { elevenlabs: { modelId: 'eleven_v4_turbo' } } } } });
+    await patch({ tts: { providers: { elevenlabs: { modelId: 'eleven_v4_turbo' } } } });
     assert.equal((await admin.send('tts.speak', { text: 'Hi' })).provider, 'elevenlabs');
 
     // A bad key resolves (Ready) but ElevenLabs answers 401; the explicit convert reports the same.
@@ -81,20 +81,25 @@ export async function run() {
     }
 
     // A literal key is redacted by config.get and still configures the provider; the redacted echo keeps it.
-    await patch({ messages: { tts: { providers: { elevenlabs: { apiKey: 'sk_literal_key' } } } } });
-    const shown = (await admin.send('config.get')).config.messages.tts.providers.elevenlabs.apiKey;
+    await patch({ tts: { providers: { elevenlabs: { apiKey: 'sk_literal_key' } } } });
+    const shown = (await admin.send('config.get')).config.tts.providers.elevenlabs.apiKey;
     assert.equal(shown, REDACTED);
     assert.equal((await admin.send('tts.speak', { text: 'Hi' })).provider, 'elevenlabs');
-    res = await patch({ messages: { tts: { providers: { elevenlabs: { apiKey: REDACTED } } } } });
+    res = await patch({ tts: { providers: { elevenlabs: { apiKey: REDACTED } } } });
     assert.equal(res.ok, true);
 
     // Deleting the stored key un-configures a store-backed provider again.
-    await patch({ messages: { tts: { providers: { elevenlabs: { apiKey: ref } } } } });
+    await patch({ tts: { providers: { elevenlabs: { apiKey: ref } } } });
     assert.equal((await providers()).configured, true);
     assert.deepEqual(await admin.send('secrets.store.delete', { name: 'ELEVENLABS_API_KEY' }), { ok: true, reloaded: true });
     assert.deepEqual((await admin.send('secrets.store.list', {})).entries, []);
     assert.equal((await providers()).configured, false);
     assert.equal((await admin.send('tts.speak', { text: 'Hi' })).provider, 'openai');
+
+    // Env fallback: env.vars holds the key (redacted), an env SecretRef resolves it.
+    await patch({ env: { vars: { ELEVENLABS_API_KEY: 'sk_env_key' } }, tts: { providers: { elevenlabs: { apiKey: { source: 'env', provider: 'default', id: 'ELEVENLABS_API_KEY' } } } } });
+    assert.equal((await providers()).configured, true);
+    assert.equal((await admin.send('config.get')).config.env.vars.ELEVENLABS_API_KEY, REDACTED);
 
     // env-kind entries list their value.
     await admin.send('secrets.store.set', { name: 'XI_API_KEY', value: 'plain', kind: 'env' });

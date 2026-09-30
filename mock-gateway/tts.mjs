@@ -19,7 +19,7 @@ export const TTS_METHODS = [
 
 export const TTS_MAX_TEXT_LENGTH = 4096;
 // Where the TTS section lives in the config. Single source of truth for the mock.
-export const TTS_CONFIG_ROOT = ['messages', 'tts'];
+export const TTS_CONFIG_ROOT = ['tts'];
 export const ELEVENLABS_INVALID_KEY_MESSAGE = 'ElevenLabs API error (401): invalid_api_key: Invalid API key';
 
 export function seedTtsConfig() {
@@ -32,13 +32,19 @@ export function seedTtsConfig() {
 export function ttsSchemaProperties() {
   const section = { type: 'object', properties: { providers: { type: 'object', additionalProperties: { type: 'object' } } } };
   const [head, ...rest] = TTS_CONFIG_ROOT;
-  return { [head]: rest.reduceRight((inner, key) => ({ type: 'object', properties: { [key]: inner } }), section) };
+  return {
+    [head]: rest.reduceRight((inner, key) => ({ type: 'object', properties: { [key]: inner } }), section),
+    env: { type: 'object', properties: { vars: { type: 'object', additionalProperties: { type: 'string' } } } },
+  };
 }
 
-// True for <root>.providers.<id>.apiKey, whose literal string values config.get redacts.
+// Paths config.get redacts: an inline apiKey, a SecretRef's id and env.vars.*_API_KEY.
 export function isTtsApiKeyPath(path) {
+  if (path.length === 3 && path[0] === 'env' && path[1] === 'vars' && path[2].endsWith('_API_KEY')) return true;
   const n = TTS_CONFIG_ROOT.length;
-  return path.length === n + 3 && TTS_CONFIG_ROOT.every((k, i) => path[i] === k) && path[n] === 'providers' && path[n + 2] === 'apiKey';
+  if (path.length < n + 3 || !TTS_CONFIG_ROOT.every((k, i) => path[i] === k) || path[n] !== 'providers') return false;
+  const rest = path.slice(n + 2).join('.');
+  return rest === 'apiKey' || rest === 'apiKey.id';
 }
 
 function providerConfig(state, providerId) {

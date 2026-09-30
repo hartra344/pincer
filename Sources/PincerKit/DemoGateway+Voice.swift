@@ -24,12 +24,16 @@ struct DemoVoiceState {
         return TTSProviderKeys.configRoot.reversed().reduce(section) { [$1: $0] }
     }
 
-    /// True for `<tts root>.providers.<id>.apiKey`, whose literal string values `config.get` redacts.
+    /// Paths `config.get` redacts: an inline `apiKey`, a SecretRef's `id` and `env.vars.*_API_KEY`.
     static func isAPIKeyPath(_ path: [String]) -> Bool {
+        if path.count == 3, path[0] == "env", path[1] == "vars", path[2].hasSuffix("_API_KEY") { return true }
         let root = TTSProviderKeys.configRoot
-        return path.count == root.count + 3 && Array(path.prefix(root.count)) == root
-            && path[root.count] == TTSProviderKeys.providersKey && path.last == "apiKey"
+        guard path.count >= root.count + 3, Array(path.prefix(root.count)) == root,
+              path[root.count] == TTSProviderKeys.providersKey else { return false }
+        let rest = path.dropFirst(root.count + 2)
+        return rest.elementsEqual(["apiKey"]) || rest.elementsEqual(["apiKey", "id"])
     }
+}
 }
 
 extension DemoGateway {
