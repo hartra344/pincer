@@ -34,6 +34,18 @@ final class SpeechDictationEngine: NSObject, DictationEngine, SFSpeechRecognizer
         return Locale.preferredLanguages.first.flatMap { SFSpeechRecognizer(locale: Locale(identifier: $0)) }
     }
 
+    /// Whether the recognizer for the current language can run on-device, and that language's name; nil when
+    /// there is no recognizer at all.
+    static func onDeviceSupport() -> (language: String, supported: Bool)? {
+        guard let recognizer = makeRecognizer() else { return nil }
+        return (Self.languageName(recognizer), recognizer.supportsOnDeviceRecognition)
+    }
+
+    private static func languageName(_ recognizer: SFSpeechRecognizer) -> String {
+        let identifier = recognizer.locale.identifier
+        return Locale.current.localizedString(forIdentifier: identifier) ?? identifier
+    }
+
     nonisolated func speechRecognizer(_ speechRecognizer: SFSpeechRecognizer, availabilityDidChange available: Bool) {
         Task { @MainActor in self.recognizerAvailable = available }
     }
@@ -75,10 +87,15 @@ final class SpeechDictationEngine: NSObject, DictationEngine, SFSpeechRecognizer
         // Only one thing speaks or listens at a time.
         ReadAloudController.shared.stop()
         if self.recognizer == nil { self.recognizer = Self.makeRecognizer() }
-        guard let recognizer = self.recognizer, recognizer.isAvailable else { throw DictationIssue.unavailable }
+        guard let recognizer = self.recognizer else { throw DictationIssue.unavailable }
+        let onDeviceOnly = DictationPreferences.onDeviceOnly
+        let onDevice = recognizer.supportsOnDeviceRecognition
+        if onDeviceOnly, !onDevice { throw DictationIssue.onDeviceUnavailable(language: Self.languageName(recognizer)) }
+        // `isAvailable` also reflects the network, which an on-device model doesn't need.
+        guard recognizer.isAvailable || (onDeviceOnly && onDevice) else { throw DictationIssue.unavailable }
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        request.requiresOnDeviceRecognition = recognizer.supportsOnDeviceRecognition
+        request.requiresOnDeviceRecognition = onDeviceOnly || onDevice
         request.addsPunctuation = true
         request.taskHint = .dictation
         #if os(iOS)
