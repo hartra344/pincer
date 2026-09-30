@@ -67,6 +67,13 @@ private func voiceChecks(_ gateway: GatewayStore, label: String, seededAuto: TTS
               "\(label): tts.speak returns a WAV (\(bytes.count) bytes)")
     } catch { check(false, "\(label): tts.speak threw \(error)") }
     do {
+        let long = (1 ... 80).map { "Sentence \($0) of a long demo reply." }.joined(separator: " ")
+        let chunks = SpeechChunker.chunks(long)
+        var ok = chunks.count > 2
+        for chunk in chunks where try await voice.speak(chunk).isHeaderless { ok = false }
+        check(ok, "\(label): long text speaks in \(chunks.count) chunks (#562)")
+    } catch { check(false, "\(label): chunked tts.speak threw \(error)") }
+    do {
         _ = try await voice.speak("   ")
         check(false, "\(label): empty text is rejected")
     } catch { check(true, "\(label): empty text is rejected") }
