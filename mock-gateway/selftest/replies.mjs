@@ -46,4 +46,15 @@ export async function run(ctx) {
     delete process.env.MOCK_NO_REPLY_TO;
   }
 
+  // Agent reply targets: `openclawDelivery` on assistant messages of the seeded Telegram chat.
+  const tg = (await client.send('chat.history', { sessionKey: 'agent:main:telegram:home:direct:5550142' })).messages;
+  const tgUsers = tg.filter((m) => m.role === 'user');
+  assert.equal(tgUsers[0].__openclaw.id, 'mock-tg-clinic');
+  assert.equal(tgUsers[0].__openclaw.transport.messageId, '9101');
+  const tgAssistants = tg.filter((m) => m.role === 'assistant');
+  assert.equal(tgAssistants[0].openclawDelivery.replyToId, 'mock-tg-clinic', 'answers an earlier message');
+  assert.ok(tg.some((m) => m.__openclaw?.id === tgAssistants[0].openclawDelivery.replyToId));
+  assert.equal(tgAssistants[1].openclawDelivery.replyToCurrent, true);
+  assert.match(tgAssistants[2].content[0].text, /^\[\[reply_to_current\]\] /, 'a leaked directive stays in the text');
+
 }

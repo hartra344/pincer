@@ -236,7 +236,7 @@ export function channelsStatus(state, { probe = false, channel } = {}) {
     }
     const { accountId: _accountId, name: _name, ...summary } = account;
     channels[id] = summary;
-    channelAccounts[id] = [account];
+    channelAccounts[id] = id === 'telegram' ? [account, { ...account, accountId: 'home', name: 'Home bot' }] : [account];
     channelDefaultAccountId[id] = 'default';
   }
   const statusIssues = [];
