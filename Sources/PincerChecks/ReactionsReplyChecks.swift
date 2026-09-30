@@ -451,12 +451,11 @@ func runDemoReactionsReply() async {
 /// users.prefs, with message.action forwarding for bridged messages.
 @MainActor
 func runDemoPrefsReactions() async {
-    guard let gateway = await connectDemo(.demo(), "demo for prefs reactions") else { return }
+    guard let gateway = await connectDemo(.demo(hasSessionReactions: false), "demo without session.reactions") else { return }
     defer {
         gateway.stop()
         forgetLocalPrefs(gateway)
     }
-    gateway.sessionReactionsOff = true
     let main = "agent:main:main"
     let lab = "agent:main:discord:channel:123"
     let agentName = gateway.agents.first { $0.id == "main" }?.name ?? "Claw"
