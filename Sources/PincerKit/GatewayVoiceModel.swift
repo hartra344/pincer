@@ -33,6 +33,8 @@ public final class GatewayVoiceModel {
     /// `tts.provider` from config (nil when unset); differs from `status.provider` when prefs or a persona override it.
     public internal(set) var configuredProvider: String?
     /// Names in the Gateway secrets store (admin only).
+    /// Whether `tts.setProvider` succeeded this session (the provider then comes from local prefs).
+    public internal(set) var providerSetThisSession = false
     public internal(set) var secretNames: Set<String> = []
     /// The last Test voice failure or fallback per provider id, for the provider badge.
     public internal(set) var lastTestError: [String: String] = [:]
@@ -172,6 +174,7 @@ public final class GatewayVoiceModel {
         }
         let result = try await self.call(Self.setProviderMethod, ["provider": .string(id)])
         let provider = result["provider"]?.text ?? id
+        self.providerSetThisSession = true
         if var status = self.status {
             status.provider = provider
             self.status = status
@@ -211,6 +214,7 @@ public final class GatewayVoiceModel {
         self.setups = [:]
         self.configuredProvider = nil
         self.secretNames = []
+        self.providerSetThisSession = false
         self.lastTestError = [:]
     }
 

@@ -54,7 +54,7 @@ public enum TTSFallbackReason: Equatable, Sendable {
         switch self {
         case .noWritePermission: L("This device can't use the Gateway voice (no write access), so it used this device's voice.")
         case let .notConfigured(provider): String(format: L("%@ isn't set up on the Gateway yet."), provider)
-        case .keyNotResolving: L("The Gateway can't read the API key.")
+        case .keyNotResolving: L("The key is set, but the Gateway can't read it.")
         case let .modelRejected(detail): String(format: L("The provider rejected the model or voice: %@"), detail)
         case .gatewayUnsupported: L("This Gateway can't speak replies. Update it to use a Gateway voice.")
         case .deviceOnlySetting: L("Read Aloud is set to This Device Only.")
@@ -65,7 +65,7 @@ public enum TTSFallbackReason: Equatable, Sendable {
     /// The message naming `provider` where the case doesn't carry it.
     public func message(provider: String) -> String {
         switch self {
-        case .keyNotResolving: String(format: L("The Gateway can't read the %@ API key."), provider)
+        case .keyNotResolving: String(format: L("%@'s key is set, but the Gateway can't read it."), provider)
         case let .modelRejected(detail): String(format: L("%@ rejected the model or voice: %@"), provider, detail)
         default: self.message
         }
@@ -100,7 +100,8 @@ public struct TTSTestResult: Equatable, Sendable {
         switch self.outcome {
         case let .failed(message): return message
         case .success, .fellBack:
-            let parts = [self.provider, self.model, self.voiceName].compactMap { $0 }.filter { !$0.isEmpty }
+            let voice = self.voiceName.flatMap { $0.isEmpty ? nil : $0 } ?? (self.outcome == .success ? L("Default voice") : nil)
+            let parts = [self.provider, self.model, voice].compactMap { $0 }.filter { !$0.isEmpty }
             return (parts + ["\(self.durationMs) ms"]).joined(separator: " · ")
         }
     }
@@ -129,6 +130,33 @@ public struct TTSEffectiveRow: Equatable, Sendable, Identifiable {
 public enum ReadAloudGatewaySummary: Equatable, Sendable {
     case automatic(provider: String, model: String?, gateway: String)
     case fallback(TTSFallbackReason)
+    /// The active provider can't be used but the Gateway still speaks, with `using` (a display name, if known).
+    case gatewayFallback(selected: String, reason: TTSFallbackReason, using: String?)
+}
+
+/// What is wrong with a provider, so a header can be reason-neutral and advise per cause.
+public struct TTSProviderProblem: Equatable, Sendable {
+    public enum Cause: Equatable, Sendable {
+        case key, model, voice
+        case other(String)
+    }
+
+    public let cause: Cause
+    public let message: String
+
+    public init(cause: Cause, message: String) {
+        self.cause = cause
+        self.message = message
+    }
+
+    /// Best guess from a provider error text.
+    static func classify(_ message: String) -> Cause {
+        let m = message.lowercased()
+        if m.contains("model") { return .model }
+        if m.contains("voice") { return .voice }
+        if ["401", "unauthorized", "api key", "api-key", "apikey", "invalid key", "invalid_api_key", "key isn't", "key is", "credential", "authenticat"].contains(where: m.contains) { return .key }
+        return .other(message)
+    }
 }
 
 public struct ElevenLabsVoice: Identifiable, Equatable, Sendable {
@@ -407,7 +435,7 @@ extension GatewayVoiceModel {
         let selectedName = selected.isEmpty ? nil : self.displayName(for: selected)
         let setup = self.setups[selected]
         let model = self.modelName(setup?.model, provider: selected)
-        let voiceName = setup?.voice.map { id in self.voices.first { $0.id == id }?.name ?? id }
+        let voiceName = self.voiceDisplay(setup?.voice, provider: selected)
         let start = ContinuousClock.now
         func elapsed() -> Int {
             let d = ContinuousClock.now - start
@@ -422,7 +450,7 @@ extension GatewayVoiceModel {
                                      model: model, voiceName: voiceName, durationMs: ms, clip: clip)
             }
             let reason = await self.fallbackReason(selected: selected, setup: setup)
-            self.lastTestError[selected] = reason.message
+            self.lastTestError[selected] = reason.message(provider: self.displayName(for: selected))
             return TTSTestResult(outcome: .fellBack(to: self.displayName(for: used), reason: reason), provider: self.displayName(for: used),
                                  model: nil, voiceName: nil, durationMs: ms, clip: clip)
         } catch {
@@ -441,8 +469,7 @@ extension GatewayVoiceModel {
 
     /// Synchronous best guess for a read where another provider answered.
     func fallbackReasonForRead(selected: String) -> TTSFallbackReason {
-        if self.isConfigured(selected) == false { return .notConfigured(provider: self.displayName(for: selected)) }
-        if case .secretRef = self.setups[selected]?.keySource { return .keyNotResolving }
+        if self.isConfigured(selected) == false { return self.unusableReason(selected) }
         return .other(L("The selected voice failed, so the Gateway used another provider."))
     }
 
@@ -456,7 +483,7 @@ extension GatewayVoiceModel {
     /// fallback, so its error is the provider's real one.
     private func fallbackReason(selected: String, setup: TTSProviderSetup?) async -> TTSFallbackReason {
         let name = self.displayName(for: selected)
-        if self.isConfigured(selected) == false { return .notConfigured(provider: name) }
+        if self.isConfigured(selected) == false { return self.unusableReason(selected) }
         if self.supports(Self.convertMethod) {
             var params: [String: JSONValue] = ["text": "Test", "provider": .string(selected)]
             if let model = setup?.model { params["modelId"] = .string(model) }
@@ -465,11 +492,32 @@ extension GatewayVoiceModel {
                 _ = try await self.call(Self.convertMethod, .object(params))
             } catch {
                 let message = Self.message(error)
-                return setup?.model != nil || setup?.voice != nil ? .modelRejected(message) : .other(message)
+                switch TTSProviderProblem.classify(message) {
+                case .key: return .other(String(format: L("%@ rejected the key: %@"), name, message))
+                case .model, .voice: return .modelRejected(message)
+                case .other: return .other(message)
+                }
             }
         }
-        if case .secretRef = setup?.keySource { return .keyNotResolving }
         return .other(L("The selected voice failed, so the Gateway used another provider."))
+    }
+
+    /// Not configured because no key is set, or the key is set but the Gateway can't read it.
+    func unusableReason(_ provider: String) -> TTSFallbackReason {
+        let keys = TTSProviderKeys.forProvider(provider)
+        switch self.setups[provider]?.keySource ?? .none {
+        case .none: return .notConfigured(provider: self.displayName(for: provider))
+        default: return keys.apiKey == nil ? .notConfigured(provider: self.displayName(for: provider)) : .keyNotResolving
+        }
+    }
+
+    /// Why a provider isn't working, from the last test or check, or an unreadable key.
+    public func providerProblem(for provider: String) -> TTSProviderProblem? {
+        if self.keyIsNotResolving(provider) {
+            return TTSProviderProblem(cause: .key, message: TTSFallbackReason.keyNotResolving.message(provider: self.displayName(for: provider)))
+        }
+        guard let message = self.lastTestError[provider] else { return nil }
+        return TTSProviderProblem(cause: TTSProviderProblem.classify(message), message: message)
     }
 
     // MARK: Effective config
@@ -485,12 +533,15 @@ extension GatewayVoiceModel {
         // tts.status doesn't say where the provider came from: a different one in config means prefs or a persona won.
         var providerSource = L("Default")
         var override: String?
+        let personaProvider = status.persona.flatMap { id in status.personas.first { $0.id == id }?.provider }
         if let configured = self.configuredProvider {
             providerSource = gatewayConfig
             if configured != provider {
-                providerSource = prefs
+                providerSource = personaProvider == provider ? String(format: L("Persona \"%@\""), status.persona ?? "") : prefs
                 override = L("Overridden by local /tts prefs or persona")
             }
+        } else if self.providerSetThisSession {
+            providerSource = prefs
         }
         var rows = [TTSEffectiveRow(label: L("Provider"), value: self.displayName(for: provider), source: providerSource,
                                     keyPath: (TTSProviderKeys.configRoot + ["provider"]).joined(separator: "."), overrideNote: override)]
@@ -625,7 +676,10 @@ extension GatewayVoiceModel {
                 return .fallback(.notConfigured(provider: self.displayName(for: status.provider)))
             }
             if !status.provider.isEmpty, self.isConfigured(status.provider) == false {
-                return .fallback(.notConfigured(provider: self.displayName(for: status.provider)))
+                let candidates = status.fallbackProviders + status.providerStates.map(\.id)
+                let using = candidates.first { $0 != status.provider && self.isConfigured($0) == true }
+                return .gatewayFallback(selected: self.displayName(for: status.provider), reason: self.unusableReason(status.provider),
+                                        using: using.map(self.displayName(for:)))
             }
         }
         let provider = self.status?.provider ?? ""
