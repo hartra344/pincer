@@ -343,3 +343,29 @@ struct MenuBarInboxTests {
         #expect(!MenuBarSettings(defaults: scratch.defaults).isEnabled)
     }
 }
+
+@Suite("Menu bar inbox avatars")
+struct MenuBarInboxAvatarTests {
+    typealias T = MenuBarInboxTests
+
+    @Test func needsYouItemsCarryTheAgentAndAPose() {
+        let inbox = T.build(T.gateway(
+            sessions: [T.row("agent:coder:main")],
+            approvals: [T.approval("a1", session: "agent:coder:main")],
+            questions: [T.question("q1", session: "agent:main:main")]))
+        #expect(inbox.needsYou.map(\.kind) == [.approval, .question])
+        #expect(inbox.needsYou.map(\.agentId) == ["coder", "main"])
+        #expect(inbox.needsYou.map(\.pose) == [.awaitingApproval, .tool(.question)])
+    }
+
+    @Test func runningAndUnreadItemsCarryTheAgentAndAPose() {
+        let inbox = T.build(T.gateway(sessions: [
+            T.row("agent:main:run", #""hasActiveRun":true"#),
+            T.row("agent:coder:unread", #""unread":true"#, age: 10),
+        ]))
+        #expect(inbox.running.map(\.agentId) == ["main"])
+        #expect(inbox.unread.map(\.agentId) == ["coder"])
+        #expect(inbox.running.map(\.pose).allSatisfy { $0 == .thinking || { if case .tool = $0 { true } else { false } }($0) })
+        #expect(inbox.unread.map(\.pose) == [.idle])
+    }
+}
