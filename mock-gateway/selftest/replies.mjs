@@ -54,7 +54,12 @@ export async function run(ctx) {
   const tgAssistants = tg.filter((m) => m.role === 'assistant');
   assert.equal(tgAssistants[0].openclawDelivery.replyToId, 'mock-tg-clinic', 'answers an earlier message');
   assert.ok(tg.some((m) => m.__openclaw?.id === tgAssistants[0].openclawDelivery.replyToId));
-  assert.equal(tgAssistants[1].openclawDelivery.replyToCurrent, true);
-  assert.match(tgAssistants[2].content[0].text, /^\[\[reply_to_current\]\] /, 'a leaked directive stays in the text');
+  assert.equal(tgUsers[0].__openclaw.senderName, 'Maya');
+  assert.equal(tgUsers[0].senderLabel, 'Maya');
+  const byChannelId = tgAssistants.find((m) => m.openclawDelivery?.replyToId === '9104');
+  assert.ok(tgUsers.some((m) => m.__openclaw.transport.messageId === '9104'), 'a channel-native id names a user message');
+  assert.ok(byChannelId);
+  assert.equal(tgAssistants.find((m) => m.openclawDelivery?.replyToCurrent === true).openclawDelivery.replyToCurrent, true);
+  assert.match(tgAssistants[tgAssistants.length - 1].content[0].text, /^\[\[reply_to_current\]\] /, 'a leaked directive stays in the text');
 
 }

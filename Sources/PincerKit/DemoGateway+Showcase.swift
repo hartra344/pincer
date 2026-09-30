@@ -420,8 +420,9 @@ extension DemoGateway {
         func tgUser(_ id: String, _ messageId: String, _ text: String, ago: Double) -> JSONValue {
             Self.message("user", [Self.text(text)], id: id,
                          openclaw: ["transport": ["channel": "telegram", "messageId": .string(messageId),
-                                                  "conversationRef": "5550142"]],
-                         ago: ago, extra: telegram)
+                                                  "conversationRef": "5550142"],
+                                    "senderId": "5550142", "senderName": "Maya"],
+                         ago: ago, extra: telegram.merging(["senderLabel": "Maya"]) { _, new in new })
         }
         func tgReply(_ text: String, delivery: JSONValue, ago: Double) -> JSONValue {
             Self.message("assistant", [Self.text(text)], ago: ago, extra: ["openclawDelivery": delivery])
@@ -436,6 +437,11 @@ extension DemoGateway {
                         delivery: ["replyToId": "demo-tg-clinic"], ago: 38 * minute),
                 tgReply("Your dentist appointment is Thursday at 10:30 with Dr. Kim.",
                         delivery: ["replyToCurrent": true], ago: 37 * minute + 30),
+                tgUser("demo-tg-pharmacy", "9104", "Did the pharmacy call back about the refill?", ago: 20 * minute),
+                tgUser("demo-tg-bus", "9105", "Is the 7:40 bus running today?", ago: 19 * minute),
+                // The agent names the pharmacy message by Telegram's own message id, not a transcript id.
+                tgReply("The pharmacy called at 9:05: the refill is ready for pickup until 6 pm.",
+                        delivery: ["replyToId": "9104"], ago: 18 * minute),
                 tgUser("demo-tg-pickup", "9103", "And what time is school pickup on Friday?", ago: 5 * minute),
                 tgReply("[[reply_to_current]] Friday pickup is at 3:15, half an hour earlier than usual.",
                         delivery: ["replyToCurrent": true], ago: 4 * minute),
