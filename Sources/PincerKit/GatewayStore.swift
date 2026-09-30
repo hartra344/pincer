@@ -1359,6 +1359,10 @@ public final class GatewayStore: Identifiable {
     /// The latest write per pref, which the next one waits for.
     @ObservationIgnored var prefPushes: [String: Task<Void, Never>] = [:]
 
+    /// Prefs the gateway refused as invalid (value too large, key limit), with its reason. Their
+    /// changes stay pending but only retry on the next push or connect.
+    public internal(set) var rejectedPrefs: [String: String] = [:]
+
     /// `users.prefs.set` writes per pref whose `users.prefs.changed` echo hasn't arrived, so
     /// that echo needs no read back. Reset on each connection, which pulls everything.
     @ObservationIgnored var expectedPrefEchoes: [String: Int] = [:]

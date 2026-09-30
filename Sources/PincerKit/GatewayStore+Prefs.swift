@@ -201,12 +201,13 @@ extension GatewayStore {
             for (id, value) in changes { next[id] = value }
             let outcome = await self.writeRemoteMap(map.pref, next, expected: current)
             if outcome == .ok {
+                self.rejectedPrefs.removeValue(forKey: map.pref)
                 self.remotePrefMaps[map.pref] = next
                 written = true
                 break
             }
             self.remotePrefMaps[map.pref] = nil
-            if outcome == .failed { break }
+            if outcome == .failed || outcome == .rejected { break }
             conflicted = true
         }
         if conflicted { await self.pull(map) }
@@ -221,7 +222,7 @@ extension GatewayStore {
         return true
     }
 
-    enum PrefWriteOutcome { case ok, conflict, failed }
+    enum PrefWriteOutcome { case ok, conflict, failed, rejected }
 
     private func writeRemoteMap(_ key: String, _ names: [String: String], expected: [String: String]?) async -> PrefWriteOutcome {
         self.expectedPrefEchoes[key, default: 0] += 1
@@ -246,6 +247,10 @@ extension GatewayStore {
             } catch let GatewayError.rpc(_, message, _) where message.contains("expectedEntries") {
                 // Older gateways don't accept compare-and-set; fall back to last write wins.
                 self.prefsSupportsExpected = false
+            } catch let GatewayError.rpc(code, message, _) where code == "INVALID_REQUEST" {
+                // Too large or too many keys: retrying can't succeed, so say why instead.
+                self.rejectedPrefs[key] = message
+                return .rejected
             } catch {
                 return .failed
             }
