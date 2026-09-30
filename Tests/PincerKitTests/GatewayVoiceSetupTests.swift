@@ -12,6 +12,7 @@ private final class FakeGateway {
     var tts: [String: JSONValue] = [:]
     var speakProvider = "openai"
     var convertError: GatewayError?
+    var storedSecrets: [String] = []
     var methods: [String] { calls.map(\.method) }
 
     func request(_ method: String, _ params: JSONValue) async throws -> JSONValue {
@@ -28,6 +29,8 @@ private final class FakeGateway {
             for key in TTSProviderKeys.configRoot.reversed() { node = .object([key: node]) }
             guard case let .object(config) = node else { return [:] }
             return ["hash": "h1", "config": .object(config)]
+        case "secrets.store.list":
+            return ["entries": .array(storedSecrets.map { ["name": .string($0), "kind": "secret"] })]
         case "tts.speak":
             return Fixtures.json("{\"audioBase64\":\"AAEC\",\"provider\":\"\(speakProvider)\",\"mimeType\":\"audio/mpeg\",\"fileExtension\":\"mp3\"}")
         case "tts.convert":
@@ -48,7 +51,7 @@ private final class FakeGateway {
 }
 
 private let allMethods: Set<String> = ["tts.status", "tts.providers", "tts.personas", "tts.speak", "tts.convert", "tts.setProvider",
-                                       "config.get", "config.patch", "secrets.store.set"]
+                                       "config.get", "config.patch", "secrets.store.set", "secrets.store.list"]
 
 @MainActor
 private func makeModel(_ g: FakeGateway, methods: Set<String>? = allMethods, scopes: [String] = ["operator.admin"],
@@ -243,6 +246,46 @@ struct GatewayVoiceSetupTests {
         #expect(e?.model == "eleven_v4_turbo" && e?.voice == "abc")
         #expect(e?.voiceSettings == TTSVoiceSettings(stability: 0.4, similarityBoost: 0.6, style: 0.1, useSpeakerBoost: false, speed: 1.1))
         #expect(model.setups["openai"]?.keySource == .redacted && model.setups["openai"]?.model == "gpt-4o-mini-tts")
+    }
+
+    private func redactedStoreRef(_ g: FakeGateway) {
+        g.tts["elevenlabs"] = Fixtures.json(#"{"apiKey":{"source":"store","provider":"default","id":"__OPENCLAW_REDACTED__"}}"#)
+    }
+
+    @Test func redactedKeyNameIsUnknownByDefault() async {
+        let g = FakeGateway()
+        redactedStoreRef(g)
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.knownKeyName(for: "elevenlabs") == nil)
+        #expect(!model.keySourceText(for: "elevenlabs").contains("ELEVENLABS_API_KEY"))
+    }
+
+    @Test func redactedKeyNameIsKnownFromSecretsList() async {
+        let g = FakeGateway()
+        redactedStoreRef(g)
+        g.storedSecrets = ["ELEVENLABS_API_KEY"]
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.knownKeyName(for: "elevenlabs") == "ELEVENLABS_API_KEY")
+        #expect(model.keySourceText(for: "elevenlabs").contains("ELEVENLABS_API_KEY"))
+    }
+
+    @Test func listedNameOfAnotherSecretDoesNotCount() async {
+        let g = FakeGateway()
+        redactedStoreRef(g)
+        g.storedSecrets = ["OPENAI_API_KEY"]
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.knownKeyName(for: "elevenlabs") == nil)
+    }
+
+    @Test func redactedKeyNameIsKnownWhenThisSessionWroteIt() async throws {
+        let g = FakeGateway()
+        redactedStoreRef(g)
+        let model = makeModel(g)
+        _ = try await model.saveKey("xi-key", provider: "elevenlabs")
+        #expect(model.knownKeyName(for: "elevenlabs") == "ELEVENLABS_API_KEY")
     }
 
     @Test func badgeFollowsConfiguredState() async {
