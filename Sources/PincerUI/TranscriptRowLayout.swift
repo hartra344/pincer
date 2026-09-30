@@ -594,7 +594,9 @@ struct TranscriptLayoutBuilder {
             toolCount: turn.tools.count, attachmentCount: turn.images.count + turn.files.count,
             isStreaming: turn.isStreaming, isError: turn.isError, isBookmarked: !layout.decoration.bookmarks.isEmpty,
             summaryLimit: 0)
-        if let quote = turn.textIds.indices.lazy.compactMap({ self.agentQuote(turn, $0, layout: layout) }).first {
+        var firstQuote: TranscriptPart.ReplyQuote?
+        for index in turn.textIds.indices where firstQuote == nil { firstQuote = self.agentQuote(turn, index, layout: layout) }
+        if let quote = firstQuote {
             layout.accessibilityLabel = L("In reply to \(quote.sender ?? L("a message")): \(quote.preview.string). ") + layout.accessibilityLabel
         }
         let reasoning = self.settings.reasoningOff ? "" : thinking
