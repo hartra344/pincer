@@ -694,6 +694,7 @@ struct GoCommands: Commands {
     let app: AppModel
     @FocusedValue(\.commandPalette) private var palette
     @FocusedValue(\.searchMessages) private var searchMessages
+    @FocusedValue(\.transcriptNavigator) private var navigator
     #if os(macOS)
     /// Commands live in the app's scenes, so this can open a main window even when none has
     /// existed since launch; Quick Capture uses it for Send & Open and Open in Pincer.
@@ -723,6 +724,13 @@ struct GoCommands: Commands {
             Button(L("Forward")) { self.app.goForward() }
                 .shortcut(.goForward)
                 .disabled(!self.app.canGoForward)
+            Divider()
+            Button(L("Previous Message")) { self.navigator?.move?(false) }
+                .shortcut(.previousMessage)
+                .disabled(self.navigator == nil)
+            Button(L("Next Message")) { self.navigator?.move?(true) }
+                .shortcut(.nextMessage)
+                .disabled(self.navigator == nil)
             let pinned = self.app.selectedGateway?.pinnedChats.prefix(9) ?? []
             if !pinned.isEmpty {
                 Divider()

@@ -582,6 +582,36 @@ final class TranscriptListController {
         self.host?.reveal(id)
     }
 
+    // MARK: Message navigation (#195)
+
+    /// The message keyboard and VoiceOver navigation is on, by id so it survives rows shifting.
+    var navigationRowId: String?
+
+    /// The row `forward` from the current message, or from the edge of the screen when there's
+    /// none (or it has left the list). The current message moves to it.
+    func moveNavigation(forward: Bool, kind: TranscriptNavKind = .message) -> Int? {
+        let current = self.navigationRowId.flatMap { self.index[$0] }
+        var from = current
+        if from == nil, let visible = self.visibleRange {
+            from = forward ? visible.lowerBound - 1 : visible.upperBound + 1
+        }
+        // At either end the current message stays.
+        guard let target = self.adjacentRow(from: from, forward: forward, kind: kind) ?? current else { return nil }
+        self.navigationRowId = self.rows[target].id
+        return target
+    }
+
+    /// Scrolls so the top of `row` is on screen, leaving the list where it is when it already is.
+    func scrollIntoView(_ row: Int) {
+        guard let host, self.rows.indices.contains(row) else { return }
+        if let viewport = host.viewport, let top = host.rowTop(row) {
+            let bottom = top + self.height(at: row, width: host.layoutWidth)
+            let shown = min(bottom, top + viewport.height * 0.5)
+            if top >= viewport.offset, shown <= viewport.offset + viewport.height { return }
+        }
+        host.reveal(self.rows[row].id)
+    }
+
     // MARK: Visible rows
 
     func visibleRowIds() -> Set<String> {
@@ -629,4 +659,10 @@ enum TranscriptNavKind {
         default: return false
         }
     }
+}
+
+/// Lets Go ▸ Previous/Next Message reach the focused pane's list (#195). The list installs `move`.
+@MainActor
+final class TranscriptNavigator {
+    var move: ((_ forward: Bool) -> Void)?
 }
