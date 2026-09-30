@@ -25,6 +25,17 @@ struct ScrollToBottomTests {
         }
     }
 
+    /// Waits for the scroll-to-bottom animation to report back (its completion or the 1 s fallback).
+    static func waitForScrollToBottomEnd(_ host: PanelSlideProbe.Host) async {
+        let ended = await eventually(timeout: .seconds(30)) { !host.coordinator.isScrollingToBottom }
+        #expect(ended, "the scroll-to-bottom animation finished")
+        await Self.spin(0.1)
+    }
+
+    static func isAtBottom(_ host: PanelSlideProbe.Host) -> Bool {
+        abs(host.clip.bounds.minY - Self.bottomOffset(host)) <= 1
+    }
+
     static func makeHost(rows: [TranscriptRow]) async -> (host: PanelSlideProbe.Host, context: TranscriptContext) {
         let scratch = ScratchDefaults()
         let profile = GatewayProfile(name: "Probe", url: "ws://127.0.0.1:1", authMode: .none)
@@ -74,25 +85,23 @@ struct ScrollToBottomTests {
         host.coordinator.attach(model)
         // Force a fresh report now that the model is attached.
         host.coordinator.update(rows: rows, context: context, insets: (0, 0))
-        await Self.spin(0.3)
+        await Self.spin(0.1)
         #expect(model.isVisible == false, "starts at the bottom; the button stays hidden")
 
         // Scroll far up: well past both the stick distance and half the viewport.
         Self.scroll(host, to: host.table.rect(ofRow: 20).minY)
-        await Self.spin(0.3)
-        #expect(model.isVisible == true, "far from the end; the button shows")
+        #expect(await eventually(timeout: .seconds(30)) { model.isVisible }, "far from the end; the button shows")
 
         model.scrollToBottom()
-        await Self.spin(1.5)
-        let bottom = Self.bottomOffset(host)
-        #expect(abs(host.clip.bounds.minY - bottom) <= 1, "scrollToBottom() lands exactly at the end")
-        #expect(model.isVisible == false, "back at the bottom; the button hides")
+        await Self.waitForScrollToBottomEnd(host)
+        #expect(await eventually(timeout: .seconds(30)) { Self.isAtBottom(host) }, "scrollToBottom() lands exactly at the end")
+        #expect(await eventually(timeout: .seconds(30)) { !model.isVisible }, "back at the bottom; the button hides")
 
         // Appending while stuck at the bottom keeps the reader stuck at the (new) bottom.
         host.coordinator.update(rows: rows + [Self.newUserRow(id: "new-\(rows.count)")], context: context, insets: (0, 0))
-        await Self.spin(0.3)
-        let bottomAfterAppend = Self.bottomOffset(host)
-        #expect(abs(host.clip.bounds.minY - bottomAfterAppend) <= 1, "stayed stuck to the (new) bottom")
+        #expect(await eventually(timeout: .seconds(30)) { Self.isAtBottom(host) }, "stayed stuck to the (new) bottom")
+        await Self.spin(0.1)
+        #expect(Self.isAtBottom(host), "and stays there once deferred layout work has run")
         #expect(model.isVisible == false, "still at the bottom; the button stays hidden")
     }
 
@@ -105,14 +114,12 @@ struct ScrollToBottomTests {
         await Self.spin(0.3)
 
         Self.scroll(host, to: host.table.rect(ofRow: 20).minY)
-        await Self.spin(0.3)
-        #expect(model.isVisible == true)
+        #expect(await eventually(timeout: .seconds(30)) { model.isVisible })
         #expect(model.hasNewMessages == false, "no new message has arrived yet")
 
         host.coordinator.update(rows: rows + [Self.newUserRow(id: "new-\(rows.count)")], context: context, insets: (0, 0))
-        await Self.spin(0.3)
+        #expect(await eventually(timeout: .seconds(30)) { model.hasNewMessages }, "a new last row arrived while scrolled up")
         #expect(model.isVisible == true, "still far from the end after the append")
-        #expect(model.hasNewMessages == true, "a new last row arrived while scrolled up")
     }
 }
 #endif

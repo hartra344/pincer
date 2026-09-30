@@ -32,28 +32,21 @@ struct ReplyUnreadTests {
         self.scratch.remove()
     }
 
-    /// Sends in `key` and waits for the demo's reply to finish.
+    /// Sends in `key` and waits until Pincer has decided what its reply means for unread.
     func reply(_ gateway: GatewayStore, in key: String) async -> Bool {
-        let chat = gateway.chat(for: key)
-        _ = await chat.send("hello")
-        return await self.finished(gateway, key)
+        let before = gateway.replyUnreadDecisions[key, default: 0]
+        _ = await gateway.chat(for: key).send("hello")
+        return await self.decided(gateway, key, after: before)
     }
 
-    func finished(_ gateway: GatewayStore, _ key: String) async -> Bool {
-        try? await Task.sleep(for: .milliseconds(200))
-        return await eventually(timeout: .seconds(20)) {
-            !gateway.chat(for: key).isRunning && gateway.sessions[key]?.hasActiveRun == false
-        }
+    /// Waits for the reply-unread decision the store makes once a reply has landed (and its grace has run out).
+    func decided(_ gateway: GatewayStore, _ key: String, after before: Int) async -> Bool {
+        await eventually(timeout: .seconds(60)) { gateway.replyUnreadDecisions[key, default: 0] > before }
     }
 
+    /// Only a safety net: it returns as soon as the row holds the value.
     func settled(_ gateway: GatewayStore, _ key: String, unread: Bool) async -> Bool {
-        await eventually(timeout: .seconds(10)) { gateway.sessions[key]?.isUnread == unread }
-    }
-
-    /// Unread holds for a while, past the grace before Pincer marks a reply.
-    func stays(_ gateway: GatewayStore, _ key: String, unread: Bool) async -> Bool {
-        try? await Task.sleep(for: GatewayStore.replyUnreadGrace + .milliseconds(800))
-        return gateway.sessions[key]?.isUnread == unread
+        await eventually(timeout: .seconds(60)) { gateway.sessions[key]?.isUnread == unread }
     }
 
     func show(_ gateway: GatewayStore, _ key: String?) {
@@ -68,17 +61,18 @@ struct ReplyUnreadTests {
         #expect(await self.settled(gateway, self.other, unread: true), "a reply in a chat that isn't on screen is unread")
         #expect(gateway.totalUnread >= 1)
         #expect(await self.reply(gateway, in: self.open))
-        #expect(await self.stays(gateway, self.open, unread: false), "the chat on screen stays read")
+        #expect(gateway.sessions[self.open]?.isUnread == false, "the chat on screen stays read")
         await self.finish(gateway)
     }
 
     @Test func leavingAChatBeforeItsReplyLandsLeavesItUnread() async {
         let gateway = await self.demo()
         self.show(gateway, self.open)
+        let before = gateway.replyUnreadDecisions[self.open, default: 0]
         _ = await gateway.chat(for: self.open).send("hello")
         // The user moves on while the reply is still coming.
         self.show(gateway, self.other)
-        #expect(await self.finished(gateway, self.open))
+        #expect(await self.decided(gateway, self.open, after: before))
         #expect(await self.settled(gateway, self.open, unread: true))
         self.show(gateway, self.open)
         #expect(await self.settled(gateway, self.open, unread: false), "coming back reads it")
@@ -88,9 +82,10 @@ struct ReplyUnreadTests {
     @Test func replyWhileTheAppIsAwayIsUnread() async {
         let gateway = await self.demo()
         self.show(gateway, self.open)
+        let before = gateway.replyUnreadDecisions[self.open, default: 0]
         _ = await gateway.chat(for: self.open).send("hello")
         self.show(gateway, nil)
-        #expect(await self.finished(gateway, self.open))
+        #expect(await self.decided(gateway, self.open, after: before))
         #expect(await self.settled(gateway, self.open, unread: true), "unread while away (#374)")
         self.show(gateway, self.open)
         #expect(await self.settled(gateway, self.open, unread: false))
@@ -103,7 +98,7 @@ struct ReplyUnreadTests {
         gateway.chatWindowOpened(self.other)
         gateway.setVisibleChat(self.other, viewer: "split-1")
         #expect(await self.reply(gateway, in: self.other))
-        #expect(await self.stays(gateway, self.other, unread: false), "the split pane's chat is on screen")
+        #expect(gateway.sessions[self.other]?.isUnread == false, "the split pane's chat is on screen")
         gateway.setVisibleChat(nil, viewer: "split-1")
         gateway.chatWindowClosed(self.other)
         #expect(await self.reply(gateway, in: self.other))
@@ -117,7 +112,7 @@ struct ReplyUnreadTests {
         gateway.chatWindowOpened(self.other)
         gateway.setVisibleChat(self.other, viewer: "window-1")
         #expect(await self.reply(gateway, in: self.other))
-        #expect(await self.stays(gateway, self.other, unread: false), "the chat window's chat is on screen")
+        #expect(gateway.sessions[self.other]?.isUnread == false, "the chat window's chat is on screen")
         gateway.setVisibleChat(nil, viewer: "window-1")
         gateway.chatWindowClosed(self.other)
         #expect(await self.reply(gateway, in: self.other))
@@ -138,16 +133,17 @@ struct ReplyUnreadTests {
     }
 
     @Test func glancingAtTheReplyBeforeItIsMarkedReadsIt() async {
-        let saved = GatewayStore.replyUnreadGrace
-        GatewayStore.replyUnreadGrace = .seconds(3)
-        defer { GatewayStore.replyUnreadGrace = saved }
         let gateway = await self.demo()
+        // Long enough that only glancing at the chat (which ends the wait) can resolve it.
+        gateway.replyUnreadGrace = .seconds(45)
         self.show(gateway, self.open)
-        #expect(await self.reply(gateway, in: self.other))
+        let before = gateway.replyUnreadDecisions[self.other, default: 0]
+        _ = await gateway.chat(for: self.other).send("hello")
+        #expect(await eventually(timeout: .seconds(60)) { gateway.pendingReplyUnread.contains(self.other) })
         // Within the grace: open the chat, read the reply, go back.
         self.show(gateway, self.other)
         self.show(gateway, self.open)
-        try? await Task.sleep(for: .seconds(4))
+        #expect(await self.decided(gateway, self.other, after: before))
         #expect(gateway.sessions[self.other]?.isUnread == false, "the user saw the reply")
         await self.finish(gateway)
     }

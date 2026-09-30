@@ -87,6 +87,9 @@ public actor MessageIndex {
         /// Cache folders being deleted (`whileDeleting`), per root, so deleting one root doesn't
         /// stall indexes under another.
         var deleting: [String?: Int] = [:]
+        /// A single Gateway's folder being deleted (`whileDeleting(gatewayId:)`): only its own
+        /// index is held back, not the other Gateways' under the same root (#458).
+        var deletingGateway: [Key: Int] = [:]
         /// Closes started by `discard` and not finished yet, per root.
         var closing: [UUID: (root: String?, task: Task<Void, Never>)] = [:]
     }
@@ -107,7 +110,7 @@ public actor MessageIndex {
             if let index = registry.indexes[key] { return index }
             // A file opened now would be deleted under its connection, leaving search broken
             // until relaunch. Until the deletion is done, hand out an inert index instead.
-            if registry.deleting[key.root, default: 0] > 0 { return MessageIndex(gatewayId: gatewayId, root: root, removed: true) }
+            if registry.deleting[key.root, default: 0] > 0 || registry.deletingGateway[key, default: 0] > 0 { return MessageIndex(gatewayId: gatewayId, root: root, removed: true) }
             let index = MessageIndex(gatewayId: gatewayId, root: root, removed: registry.removed.contains(gatewayId))
             registry.indexes[key] = index
             return index
@@ -145,14 +148,24 @@ public actor MessageIndex {
 
     /// Runs `body`, which discards indexes and deletes their folders under `root`, without
     /// creating an index there meanwhile. Writes in that window are dropped, like the
-    /// transcripts they index.
-    static func whileDeleting(root: URL? = TranscriptCache.root, _ body: () -> Void) {
+    /// transcripts they index. With `gatewayId`, `body` deletes only that Gateway's folder, so
+    /// only its index is held back: another Gateway's save in the window is indexed, its
+    /// transcript being untouched (#458).
+    static func whileDeleting(root: URL? = TranscriptCache.root, gatewayId: UUID? = nil, _ body: () -> Void) {
         let key = self.rootKey(root)
-        self.registry.withLock { $0.deleting[key, default: 0] += 1 }
+        let gatewayKey = gatewayId.map { Key(root: key, gatewayId: $0) }
+        self.registry.withLock { registry in
+            if let gatewayKey { registry.deletingGateway[gatewayKey, default: 0] += 1 } else { registry.deleting[key, default: 0] += 1 }
+        }
         defer {
             self.registry.withLock { registry in
-                registry.deleting[key, default: 1] -= 1
-                if registry.deleting[key] == 0 { registry.deleting.removeValue(forKey: key) }
+                if let gatewayKey {
+                    registry.deletingGateway[gatewayKey, default: 1] -= 1
+                    if registry.deletingGateway[gatewayKey] == 0 { registry.deletingGateway.removeValue(forKey: gatewayKey) }
+                } else {
+                    registry.deleting[key, default: 1] -= 1
+                    if registry.deleting[key] == 0 { registry.deleting.removeValue(forKey: key) }
+                }
             }
         }
         body()

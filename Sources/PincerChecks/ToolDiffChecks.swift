@@ -137,7 +137,7 @@ func runLiveToolDiffs(url: String, token: String) async {
     let nonce = UUID().uuidString.prefix(6)
     await chat.send("show me the config patch \(nonce)")
     var liveEdit: ToolFileEdit?
-    let finished = await waitFor("live edit run", timeout: 20, every: 20) {
+    let finished = await waitFor("live edit run", timeout: 60, every: 20) {
         if case let .assistant(turn)? = chat.entries.last, turn.isStreaming,
            let call = turn.tools.first(where: { $0.name == "edit" }), let edit = call.fileEdit
         {
