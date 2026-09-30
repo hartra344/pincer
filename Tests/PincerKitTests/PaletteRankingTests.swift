@@ -39,4 +39,10 @@ struct PaletteRankingTests {
         let ids = CommandPalette.addingSearchMessages(to: ranked, query: "dict", gatewaySelected: true).map(\.id)
         #expect(ids == ["command:searchMessages", "loose"])
     }
+
+    @Test func bookmarkStartingWithTheQueryDoesNotOutrankSearch() {
+        let ranked = [row("loose", "Toggle dictation", .commands), row("mark", "Dictate this note tomorrow", .bookmarks)]
+        let ids = CommandPalette.addingSearchMessages(to: ranked, query: "dict", gatewaySelected: true).map(\.id)
+        #expect(ids == ["command:searchMessages", "loose", "mark"])
+    }
 }

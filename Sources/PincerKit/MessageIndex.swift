@@ -686,7 +686,6 @@ public actor MessageIndex {
         }
     }
 
-    /// Whether the chat has been indexed.
     /// Every chat with rows in the index.
     public func indexedSessionKeys() -> [String] {
         self.withRecovery { db in
@@ -698,6 +697,7 @@ public actor MessageIndex {
         } ?? []
     }
 
+    /// Whether the chat has been indexed.
     public func isIndexed(sessionKey: String) -> Bool {
         self.withRecovery { db in try self.chatRow(sessionKey, db: db) != nil } ?? false
     }

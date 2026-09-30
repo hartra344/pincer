@@ -328,7 +328,8 @@ public enum CommandPalette {
         guard gatewaySelected, let item = self.searchMessagesItem(query: query, shortcut: shortcut) else { return ranked }
         var items = ranked
         let afterChats = items.lastIndex { $0.section == .chats }.map { $0 + 1 } ?? 0
-        let afterPrefix = items.lastIndex { self.titleStartsWith($0, query: query) }.map { $0 + 1 } ?? 0
+        // Bookmark titles are message previews, not names: they don't outrank searching messages.
+        let afterPrefix = items.lastIndex { $0.section != .bookmarks && self.titleStartsWith($0, query: query) }.map { $0 + 1 } ?? 0
         items.insert(item, at: max(afterChats, afterPrefix))
         return items
     }

@@ -13243,6 +13243,16 @@
         }
       }
     },
+    "Yesterday %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yesterday %@"
+          }
+        }
+      }
+    },
     "Show Chats in Spotlight": {
       "localizations": {
         "en": {
@@ -13263,12 +13273,12 @@
         }
       }
     },
-    "Spotlight always shows chat titles. Message text is the last few cached messages and stays on this device.": {
+    "Chat titles appear in Spotlight. Message text comes from the last few cached messages and never leaves this device.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Spotlight always shows chat titles. Message text is the last few cached messages and stays on this device."
+            "value": "Chat titles appear in Spotlight. Message text comes from the last few cached messages and never leaves this device."
           }
         }
       }

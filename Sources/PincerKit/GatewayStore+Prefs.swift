@@ -307,7 +307,8 @@ extension GatewayStore {
             keys.formUnion(rows.compactMap(SessionRow.init).map(\.key))
             if let hasMore = list["hasMore"]?.bool {
                 guard hasMore else { return keys }
-                guard let next = list["nextOffset"]?.int, next > offset else { return nil }
+                let next = list["nextOffset"]?.int ?? offset + rows.count
+                guard next > offset else { return nil }
                 offset = next
             } else {
                 return rows.count < limit ? keys : nil

@@ -145,7 +145,8 @@ struct CompleteSessionKeysTests {
     }
 
     @Test func anUnexpectedNextOffsetIsPartial() async {
-        #expect(await self.run([self.page(["a"], hasMore: true)]).keys == nil)
+        #expect(await self.run([self.page(["a"], hasMore: true), self.page(["b"], hasMore: false)]).keys == ["a", "b"])
+        #expect(await self.run([self.page([], hasMore: true)]).keys == nil)
         #expect(await self.run([self.page(["a"], hasMore: true, next: 0)]).keys == nil)
         #expect(await self.run([self.page(["a"], hasMore: true, next: 1), self.page(["b"], hasMore: true, next: 1)]).keys == nil)
     }
