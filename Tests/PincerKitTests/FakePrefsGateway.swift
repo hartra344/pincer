@@ -146,8 +146,21 @@ final class FakePrefsGateway: @unchecked Sendable {
             self.respond(id, ["status": "conflict"], on: connection)
         case .ok:
             let entries = params["entries"]?.object ?? [:]
-            self.locked {
+            // Compare-and-set, like the Gateway's `expectedEntries`.
+            let conflicted: Bool = self.locked {
+                // An unset map and an empty one count as the same.
+                func normal(_ value: JSONValue?) -> JSONValue {
+                    value == nil || value == .object([:]) ? .null : value!
+                }
+                for (key, expected) in params["expectedEntries"]?.object ?? [:] where normal(self.prefValues[key]) != normal(expected) {
+                    return true
+                }
                 for (key, value) in entries { self.prefValues[key] = value.isNull ? nil : value }
+                return false
+            }
+            if conflicted {
+                self.respond(id, ["status": "conflict"], on: connection)
+                return
             }
             // Like the Gateway: the ok response first, then the changed event on the same socket.
             self.respond(id, ["status": "ok"], on: connection)

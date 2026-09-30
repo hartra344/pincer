@@ -12,15 +12,20 @@ struct PrefsHarness {
 
     static let pref = GatewayStore.serverNamesPref
 
-    init(seed: [String: [String: String]] = [:]) async throws {
-        self.gateway = try FakePrefsGateway()
+    private let ownsGateway: Bool
+
+    init(seed: [String: [String: String]] = [:], sharing shared: FakePrefsGateway? = nil) async throws {
+        self.ownsGateway = shared == nil
+        self.gateway = try shared ?? FakePrefsGateway()
         for (pref, entries) in seed { self.gateway.seed(pref, entries) }
         self.profile = GatewayProfile(name: "Prefs", url: self.gateway.url, authMode: .none)
         self.store = Self.makeStore(self.profile, self.scratch.defaults)
         self.store.start()
-        let key = self.store.syncedMap(Self.pref).syncedDefaultsKey
+        let keys = self.store.syncedMaps.map(\.syncedDefaultsKey)
         let defaults = self.scratch.defaults
-        let synced = await eventually(timeout: .seconds(10)) { self.store.state.isConnected && defaults.bool(forKey: key) }
+        let synced = await eventually(timeout: .seconds(10)) {
+            self.store.state.isConnected && keys.allSatisfy { defaults.bool(forKey: $0) }
+        }
         try #require(synced, "the store connects and first-syncs users.prefs")
     }
 
@@ -32,7 +37,7 @@ struct PrefsHarness {
 
     func finish() {
         self.store.stop()
-        self.gateway.stop()
+        if self.ownsGateway { self.gateway.stop() }
         self.scratch.remove()
     }
 

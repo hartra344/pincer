@@ -45,7 +45,7 @@ struct PrefsEchoTests {
             pushes.append(Task { await h.store.push(h.map, "k\(index)", "v") })
         }
         for push in pushes { await push.value }
-        let echoed = await eventually { h.gateway.echoesSent == 3 }
+        let echoed = await eventually { h.gateway.echoesSent >= 1 && h.gateway.echoesSent == h.gateway.sets.count }
         #expect(echoed)
         await h.settle()
         #expect(h.gateway.gets == before)

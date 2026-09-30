@@ -1,0 +1,337 @@
+import Foundation
+import Testing
+@testable import PincerKit
+
+/// #382: bookmarks sync through `users.prefs`, sharded over `Bookmark.shardCount` prefs.
+@MainActor
+@Suite("Bookmark sync store")
+struct BookmarkSyncStoreTests {
+    let suite = "pincer.tests.bookmarksync.\(UUID().uuidString)"
+    var defaults: UserDefaults { UserDefaults(suiteName: self.suite)! }
+
+    func store() -> BookmarkStore { BookmarkStore(gatewayId: UUID(), defaults: self.defaults) }
+
+    func bookmark(_ id: String, session: String = "main", at seconds: TimeInterval = 0, preview: String? = nil) -> Bookmark {
+        Bookmark(sessionKey: session, messageId: id, preview: preview ?? "Message \(id)",
+                 createdAt: Date(timeIntervalSince1970: seconds))
+    }
+
+    /// Records `onChange` calls.
+    final class Changes {
+        var calls: [[String: String?]] = []
+        var all: [String: String?] { self.calls.reduce(into: [:]) { $0.merge($1) { _, new in new } } }
+    }
+
+    func observe(_ store: BookmarkStore) -> Changes {
+        let changes = Changes()
+        store.onChange = { changes.calls.append($0) }
+        return changes
+    }
+
+    // MARK: Encoding
+
+    @Test func entriesRoundTripThroughTheirSyncedValue() throws {
+        let original = Bookmark(sessionKey: "agent:main:main", messageId: "m-1", preview: "Hello there", role: "user",
+                                messageDate: Date(timeIntervalSince1970: 1_700_000_000.123),
+                                createdAt: Date(timeIntervalSince1970: 1_700_000_100.5))
+        let decoded = try #require(Bookmark(syncedKey: original.id, value: original.syncedValue))
+        #expect(decoded == original)
+        #expect(decoded.id == "agent:main:main\u{1F}m-1")
+    }
+
+    @Test func syncedValueIsCompactJSONWithTheSpecKeys() throws {
+        let bookmark = Bookmark(sessionKey: "s", messageId: "m", preview: "Hi", role: "assistant",
+                                messageDate: Date(timeIntervalSince1970: 10), createdAt: Date(timeIntervalSince1970: 20))
+        let json = try #require(try JSONSerialization.jsonObject(with: Data(bookmark.syncedValue.utf8)) as? [String: Any])
+        #expect(Set(json.keys) == ["p", "r", "m", "c"])
+        #expect(json["p"] as? String == "Hi")
+        #expect(json["r"] as? String == "assistant")
+        #expect(json["m"] as? Int == 10_000)
+        #expect(json["c"] as? Int == 20_000)
+        #expect(!bookmark.syncedValue.contains(" "))
+    }
+
+    @Test func missingMessageDateIsOmittedAndDecodesToNil() throws {
+        let bookmark = bookmark("a", at: 5)
+        let json = try #require(try JSONSerialization.jsonObject(with: Data(bookmark.syncedValue.utf8)) as? [String: Any])
+        #expect(json["m"] == nil)
+        #expect(Bookmark(syncedKey: bookmark.id, value: bookmark.syncedValue)?.messageDate == nil)
+    }
+
+    @Test func syncedPreviewStaysShort() {
+        let long = String(repeating: "x", count: Bookmark.previewLength)
+        let value = bookmark("a", preview: long).syncedValue
+        let decoded = Bookmark(syncedKey: bookmark("a").id, value: value)
+        #expect(decoded != nil)
+        #expect((decoded?.preview.count ?? .max) <= Bookmark.previewLength)
+        #expect(value.utf8.count < 400)
+    }
+
+    @Test func undecodableEntriesDecodeToNil() {
+        let id = bookmark("a").id
+        #expect(Bookmark(syncedKey: id, value: "not json") == nil)
+        #expect(Bookmark(syncedKey: id, value: "{}") == nil)
+        #expect(Bookmark(syncedKey: id, value: #"{"p":"x"}"#) == nil)
+        #expect(Bookmark(syncedKey: "no-separator", value: bookmark("a").syncedValue) == nil)
+        #expect(Bookmark(syncedKey: "\u{1F}only-message", value: bookmark("a").syncedValue) == nil)
+    }
+
+    @Test func shardsAreStableAndInRange() {
+        for index in 0..<200 {
+            let key = bookmark("m\(index)").id
+            #expect((0..<Bookmark.shardCount).contains(Bookmark.shard(ofKey: key)))
+            #expect(Bookmark.shard(ofKey: key) == Bookmark.shard(ofKey: key))
+        }
+        #expect(Set((0..<200).map { Bookmark.shard(ofKey: "s\u{1F}m\($0)") }).count > 1)
+        #expect(Bookmark.prefKey(shard: 3) == "pincer.bookmarks.3")
+    }
+
+    // MARK: apply
+
+    @Test func applyReplacesTheShardAndSortsNewestFirstWithoutFiringOnChange() {
+        let store = self.store()
+        defer { self.defaults.removePersistentDomain(forName: self.suite) }
+        let changes = self.observe(store)
+        let all = (0..<40).map { bookmark("m\($0)", at: TimeInterval($0)) }
+        let shard = Bookmark.shard(ofKey: all[0].id)
+        let inShard = all.filter { Bookmark.shard(ofKey: $0.id) == shard }
+        #expect(inShard.count >= 2)
+        store.apply(synced: Dictionary(uniqueKeysWithValues: inShard.map { ($0.id, $0.syncedValue) }), shard: shard)
+        #expect(store.bookmarks.map(\.id) == inShard.sorted { $0.createdAt > $1.createdAt }.map(\.id))
+        #expect(changes.calls.isEmpty, "a pull is not a local edit")
+        // A second pull replaces: the dropped entries are gone.
+        let kept = inShard[0]
+        store.apply(synced: [kept.id: kept.syncedValue], shard: shard)
+        #expect(store.bookmarks.map(\.id) == [kept.id])
+        #expect(store.isBookmarked(sessionKey: kept.sessionKey, messageId: kept.messageId))
+        #expect(changes.calls.isEmpty)
+    }
+
+    @Test func applyLeavesOtherShardsAlone() {
+        let store = self.store()
+        defer { self.defaults.removePersistentDomain(forName: self.suite) }
+        let all = (0..<40).map { bookmark("m\($0)", at: TimeInterval($0)) }
+        let shardA = Bookmark.shard(ofKey: all[0].id)
+        let other = all.first { Bookmark.shard(ofKey: $0.id) != shardA }!
+        store.add(other)
+        store.apply(synced: [:], shard: shardA)
+        #expect(store.bookmarks.map(\.id) == [other.id])
+    }
+
+    @Test func applyIgnoresUndecodableValuesAndForeignShards() {
+        let store = self.store()
+        defer { self.defaults.removePersistentDomain(forName: self.suite) }
+        let good = bookmark("good", at: 1)
+        let shard = Bookmark.shard(ofKey: good.id)
+        let foreign = (0..<100).map { bookmark("f\($0)") }.first { Bookmark.shard(ofKey: $0.id) != shard }!
+        store.apply(synced: [good.id: good.syncedValue, "x\u{1F}broken": "garbage", foreign.id: foreign.syncedValue], shard: shard)
+        #expect(store.bookmarks.map(\.id) == [good.id])
+    }
+
+    @Test func appliedBookmarksPersistLikeLocalOnes() {
+        let gateway = UUID()
+        let defaults = self.defaults
+        defer { defaults.removePersistentDomain(forName: self.suite) }
+        let store = BookmarkStore(gatewayId: gateway, defaults: defaults)
+        let remote = bookmark("a", at: 9)
+        store.apply(synced: [remote.id: remote.syncedValue], shard: Bookmark.shard(ofKey: remote.id))
+        #expect(BookmarkStore(gatewayId: gateway, defaults: defaults).bookmarks.map(\.id) == [remote.id])
+    }
+
+    @Test func syncedEntriesListOneShard() {
+        let store = self.store()
+        defer { self.defaults.removePersistentDomain(forName: self.suite) }
+        let all = (0..<30).map { bookmark("m\($0)", at: TimeInterval($0)) }
+        for item in all { store.add(item) }
+        for shard in 0..<Bookmark.shardCount {
+            let expected = all.filter { Bookmark.shard(ofKey: $0.id) == shard }
+            #expect(Set(store.syncedEntries(shard: shard).keys) == Set(expected.map(\.id)))
+        }
+    }
+
+    // MARK: onChange
+
+    @Test func addAndRemoveFireOnChangeWithTheEntryChanges() throws {
+        let store = self.store()
+        defer { self.defaults.removePersistentDomain(forName: self.suite) }
+        let changes = self.observe(store)
+        let item = bookmark("a", at: 7)
+        store.add(item)
+        #expect(changes.calls.count == 1)
+        #expect(changes.calls[0][item.id] == .some(item.syncedValue))
+        #expect(changes.calls[0].count == 1)
+        store.add(item)
+        #expect(changes.calls.count == 1, "a duplicate add changes nothing")
+        store.remove(sessionKey: item.sessionKey, messageId: item.messageId)
+        #expect(changes.calls.count == 2)
+        #expect(changes.calls[1] == [item.id: nil])
+        store.remove(sessionKey: item.sessionKey, messageId: item.messageId)
+        #expect(changes.calls.count == 2, "removing what isn't there changes nothing")
+    }
+
+    @Test func toggleFiresAnUpsertThenADelete() {
+        let store = self.store()
+        defer { self.defaults.removePersistentDomain(forName: self.suite) }
+        let changes = self.observe(store)
+        let item = bookmark("a")
+        store.toggle(item)
+        store.toggle(item)
+        #expect(changes.calls.count == 2)
+        #expect(changes.calls[0][item.id] == .some(item.syncedValue))
+        #expect(changes.calls[1] == [item.id: nil])
+    }
+
+    @Test func removeAllForASessionDeletesItsEntries() {
+        let store = self.store()
+        defer { self.defaults.removePersistentDomain(forName: self.suite) }
+        let a = bookmark("a", session: "one"), b = bookmark("b", session: "one"), c = bookmark("c", session: "two")
+        for item in [a, b, c] { store.add(item) }
+        let changes = self.observe(store)
+        store.removeAll(sessionKey: "one")
+        #expect(changes.all == [a.id: nil, b.id: nil])
+        #expect(store.bookmarks.map(\.id) == [c.id])
+    }
+
+    @Test func removeAllOnGatewayRemovalDoesNotPushDeletes() {
+        let store = self.store()
+        defer { self.defaults.removePersistentDomain(forName: self.suite) }
+        store.add(bookmark("a"))
+        let changes = self.observe(store)
+        store.removeAll()
+        #expect(changes.calls.isEmpty)
+        #expect(store.bookmarks.isEmpty)
+    }
+
+    @Test func overTheLimitDropsTheOldestAndPushesItAsADelete() {
+        let store = self.store()
+        defer { self.defaults.removePersistentDomain(forName: self.suite) }
+        let limit = BookmarkStore.limit
+        for index in 0..<limit { store.add(bookmark("m\(index)", at: TimeInterval(index + 1))) }
+        #expect(store.bookmarks.count == limit)
+        let changes = self.observe(store)
+        let newest = bookmark("new", at: TimeInterval(limit + 10))
+        store.add(newest)
+        #expect(store.bookmarks.count == limit)
+        let oldest = bookmark("m0", at: 1)
+        #expect(!store.isBookmarked(sessionKey: "main", messageId: "m0"))
+        #expect(store.isBookmarked(sessionKey: "main", messageId: "new"))
+        #expect(changes.calls.count == 1)
+        #expect(changes.calls[0][newest.id] == .some(newest.syncedValue))
+        #expect(changes.calls[0][oldest.id] == .some(nil), "the dropped bookmark is deleted remotely too")
+        #expect(store.droppedCount >= 1)
+    }
+
+    @Test func persistsAcrossInstancesAsBefore() {
+        let gateway = UUID()
+        let defaults = self.defaults
+        defer { defaults.removePersistentDomain(forName: self.suite) }
+        BookmarkStore(gatewayId: gateway, defaults: defaults).add(bookmark("a"))
+        #expect(BookmarkStore(gatewayId: gateway, defaults: defaults).bookmarks.count == 1)
+    }
+}
+
+/// Bookmarks through a real `GatewayStore` and a loopback Gateway.
+@MainActor
+@Suite("Bookmark sync over users.prefs", .serialized)
+struct BookmarkGatewaySyncTests {
+    /// Bookmarks whose ids land in `shard`, oldest first.
+    func bookmarks(inShard shard: Int, count: Int, from start: Int = 0, at base: TimeInterval = 1000) -> [Bookmark] {
+        var found: [Bookmark] = []
+        var index = start
+        while found.count < count {
+            let item = Bookmark(sessionKey: "main", messageId: "m\(index)", preview: "Message \(index)",
+                                createdAt: Date(timeIntervalSince1970: base + TimeInterval(found.count)))
+            if Bookmark.shard(ofKey: item.id) == shard { found.append(item) }
+            index += 1
+        }
+        return found
+    }
+
+    func cleanUp(_ h: PrefsHarness) {
+        BookmarkStore.forget(gatewayId: h.profile.id)
+        h.finish()
+    }
+
+    @Test func everyShardIsASyncedMap() async throws {
+        let h = try await PrefsHarness()
+        defer { self.cleanUp(h) }
+        let prefs = Set(h.store.syncedMaps.map(\.pref))
+        for shard in 0..<Bookmark.shardCount { #expect(prefs.contains(Bookmark.prefKey(shard: shard))) }
+    }
+
+    @Test func addingABookmarkWritesItToItsShardAndRemovingDeletesIt() async throws {
+        let h = try await PrefsHarness()
+        defer { self.cleanUp(h) }
+        let item = bookmarks(inShard: 2, count: 1)[0]
+        let pref = Bookmark.prefKey(shard: 2)
+        h.store.bookmarkStore.add(item)
+        let written = await eventually { h.gateway.map(pref)?[item.id] == item.syncedValue }
+        #expect(written)
+        h.store.bookmarkStore.remove(sessionKey: item.sessionKey, messageId: item.messageId)
+        let removed = await eventually { h.gateway.map(pref)?[item.id] == nil && h.store.pendingPrefChanges.isEmpty }
+        #expect(removed)
+    }
+
+    @Test func aBookmarkAnotherDeviceAddedArrivesOnPull() async throws {
+        let h = try await PrefsHarness()
+        defer { self.cleanUp(h) }
+        let item = bookmarks(inShard: 5, count: 1)[0]
+        h.gateway.externalChange(Bookmark.prefKey(shard: 5), [item.id: item.syncedValue])
+        let arrived = await eventually { h.store.bookmarkStore.isBookmarked(sessionKey: "main", messageId: item.messageId) }
+        #expect(arrived)
+        #expect(h.gateway.sets.isEmpty, "applying a pull pushes nothing back")
+    }
+
+    @Test func firstSyncMergesLocalBookmarksIntoTheGateway() async throws {
+        let scratch = ScratchDefaults()
+        let gateway = try FakePrefsGateway()
+        defer { gateway.stop(); scratch.remove() }
+        let profile = GatewayProfile(name: "Migrate", url: gateway.url, authMode: .none)
+        let local = bookmarks(inShard: 1, count: 2)
+        let remote = bookmarks(inShard: 1, count: 1, from: 500, at: 5000)[0]
+        gateway.seed(Bookmark.prefKey(shard: 1), [remote.id: remote.syncedValue])
+        let store = PrefsHarness.makeStore(profile, scratch.defaults)
+        for item in local { store.bookmarkStore.add(item) }
+        defer { BookmarkStore.forget(gatewayId: profile.id); store.stop() }
+        store.start()
+        let expected = Set(local.map(\.id) + [remote.id])
+        let merged = await eventually(timeout: .seconds(10)) {
+            Set(gateway.map(Bookmark.prefKey(shard: 1))?.keys.map { $0 } ?? []) == expected
+        }
+        #expect(merged, "local bookmarks join what the gateway had")
+        let shown = await eventually { Set(store.bookmarkStore.bookmarks.map(\.id)) == expected }
+        #expect(shown)
+    }
+
+    @Test func concurrentAddsOnTwoDevicesBothSurvive() async throws {
+        let first = try await PrefsHarness()
+        let second = try await PrefsHarness(sharing: first.gateway)
+        defer { self.cleanUp(second); self.cleanUp(first) }
+        let shard = 4
+        let pref = Bookmark.prefKey(shard: shard)
+        let pair = bookmarks(inShard: shard, count: 2)
+        // Neither device hears the other's echo, so the second write's compare-and-set is stale.
+        first.gateway.sendsEchoes = false
+        first.store.bookmarkStore.add(pair[0])
+        let firstLanded = await eventually { first.gateway.map(pref)?[pair[0].id] != nil }
+        #expect(firstLanded)
+        second.store.bookmarkStore.add(pair[1])
+        let both = await eventually { Set(first.gateway.map(pref)?.keys.map { $0 } ?? []) == Set(pair.map(\.id)) }
+        #expect(both, "the conflicted write re-reads and retries, keeping the other device's bookmark")
+        #expect(second.store.pendingPrefChanges.isEmpty)
+    }
+
+    @Test func removingGatewayLocalBookmarksPushesNothing() async throws {
+        let h = try await PrefsHarness()
+        defer { self.cleanUp(h) }
+        let item = bookmarks(inShard: 0, count: 1)[0]
+        h.store.bookmarkStore.add(item)
+        let written = await eventually { h.gateway.map(Bookmark.prefKey(shard: 0))?[item.id] != nil }
+        #expect(written)
+        let before = h.gateway.sets.count
+        h.store.forgetLocalBookmarks()
+        await h.settle()
+        #expect(h.gateway.sets.count == before)
+        #expect(h.gateway.map(Bookmark.prefKey(shard: 0))?[item.id] != nil, "the gateway keeps them for other devices")
+    }
+}
