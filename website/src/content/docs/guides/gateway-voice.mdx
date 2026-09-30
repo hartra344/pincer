@@ -33,9 +33,9 @@ Choose **Use for Gateway voice** to make a Ready provider the active one. You ca
 
 ## Where the key is stored
 
-When your gateway supports it (OpenClaw 2026.8 or later), the key is saved in the gateway's **secrets store** under the name `ELEVENLABS_API_KEY`. The gateway's config then holds only a reference to it (a SecretRef), never the key itself. On older gateways, Pincer stores the key in the gateway's environment settings and points the config at that instead.
+When your gateway supports it (OpenClaw 2026.8 or later), the key is saved in the gateway's **secrets store** under the name `ELEVENLABS_API_KEY`. The gateway's config then holds only a reference to it (a SecretRef), never the key itself. On older gateways, Pincer saves the key as an environment setting in the gateway's config (`env.vars.ELEVENLABS_API_KEY`) and points the voice config at that variable. If the gateway process already has that variable set, the existing one wins.
 
-Pincer never saves the key on your Mac, iPhone or iPad, and never writes it into the config. Page status reads "Stored in Gateway secrets as ELEVENLABS_API_KEY", "From environment" or "Not set" so you can see where it came from.
+Pincer never saves the key on your Mac, iPhone or iPad, and never writes it into the config. The page shows where the key comes from: "Stored in Gateway secrets", "From environment variable", "Saved in config file" or "Not set". The gateway hides key values and secret names when it sends its config, so the name `ELEVENLABS_API_KEY` is only shown when Pincer can confirm it with Full Management access.
 
 ## Permissions
 
@@ -73,6 +73,8 @@ The gateway config can be overridden by:
 - **Personas**, which can pin their own provider and voice.
 - **Agent-level overrides** in the gateway config.
 
+The provider is chosen in this order: local `/tts` preferences, then the active persona's provider, then the gateway config's `tts.provider`. When the provider in use isn't the one in the config, the page says "Overridden by local /tts prefs or persona".
+
 If a value here doesn't match what you saved, check the **Source** column to find what's overriding it.
 
 ## Why `/tts status` says "disabled"
@@ -81,7 +83,7 @@ That's about **auto-speak on channels**, which is the **Speak Replies on Channel
 
 ## Editing the config by hand
 
-If you edit the gateway's `openclaw.json` yourself, the ElevenLabs keys are `modelId` and `voiceId`. They live under `tts.providers.elevenlabs`:
+If you edit the gateway's `openclaw.json` yourself, the ElevenLabs settings live under `tts.providers.elevenlabs`. The model key is `modelId` and the voice key is `speakerVoiceId`. The older `voiceId` still works, but `speakerVoiceId` wins if both are set:
 
 ```json
 {
@@ -91,7 +93,7 @@ If you edit the gateway's `openclaw.json` yourself, the ElevenLabs keys are `mod
       "elevenlabs": {
         "apiKey": { "source": "store", "provider": "default", "id": "ELEVENLABS_API_KEY" },
         "modelId": "eleven_v4_turbo",
-        "voiceId": "pMsXgVXv3BLzUgSXRplE",
+        "speakerVoiceId": "pMsXgVXv3BLzUgSXRplE",
         "voiceSettings": {
           "stability": 0.5,
           "similarityBoost": 0.75,
@@ -106,7 +108,7 @@ If you edit the gateway's `openclaw.json` yourself, the ElevenLabs keys are `mod
 ```
 
 :::caution
-Some gateway examples write the ElevenLabs model as `model`. The ElevenLabs provider reads `modelId`, so a `model` key can leave the default (Multilingual v2) in use without any error. If your model change doesn't take effect, check the key name. Pincer always writes `modelId`.
+Some gateway examples write the ElevenLabs model as `model`. The ElevenLabs provider only reads `modelId`, and the gateway accepts unknown keys without complaint, so a `model` key is silently ignored and the default (Multilingual v2) stays in use. If your model change doesn't take effect, check the key name. Pincer always writes `modelId`, and its effective config marks a `model` key that's being ignored.
 :::
 
 ## Try it in the demo
