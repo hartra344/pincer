@@ -137,10 +137,9 @@ public enum TranscriptCache {
     //    existing ones byte-identical and a save writes only what changed. `migrations[7]` does
     //    nothing; the v7 single file is decoded, then saved back as a manifest and segments.
 
-    //  - v9 (#110, agent reply targets) added `ChatItem.replyToCurrent` and reads assistant reply
-    //    targets (`openclawDelivery`, `[[reply_to…]]`) into `replyToId`, stripping the directives from
-    //    the text. Cached assistant messages lack both, and older history is never refetched, so
-    //    v8 and older are discarded and refetched (`oldestMigratableVersion` is 9).
+    //  - #110 (agent reply targets, v9) added `ChatItem.replyToCurrent`, stored as an optional, so older
+    //    files decode and `migrations[8]` does nothing. Assistant messages cached earlier have no reply target
+    //    (the newest page is refetched on open).
 
     /// Upgrades a snapshot's JSON object from the version it's keyed by to the next one.
     typealias Migration = @Sendable (inout [String: Any]) throws -> Void
@@ -165,6 +164,7 @@ public enum TranscriptCache {
         },
         6: forwardedSenderMigration,
         7: { _ in },
+        8: { _ in },
     ]
 
     /// v6 → v7 (#207): cached inter-session turns become the sending agent's.
@@ -193,7 +193,7 @@ public enum TranscriptCache {
     }
 
     /// Older transcripts are discarded rather than migrated.
-    static let oldestMigratableVersion = 9
+    static let oldestMigratableVersion = 5
 
     struct MigrationError: Error, CustomStringConvertible {
         var description: String

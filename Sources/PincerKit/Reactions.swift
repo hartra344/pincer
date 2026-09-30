@@ -152,9 +152,8 @@ public enum Replies {
         after = after.dropFirst()
         guard let close = after.range(of: "]]") else { return nil }
         let value = after[after.startIndex..<close.lowerBound]
-        guard !value.contains("\n") else { return nil }
-        let id = value.trimmingCharacters(in: .whitespaces)
-        guard !id.isEmpty else { return nil }
+        let id = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, !id.contains("\n") else { return nil }
         return (.id(id), close.upperBound)
     }
 

@@ -294,7 +294,13 @@ public struct ChatItem: Identifiable, Hashable, Codable, Sendable {
     public var replyToPreview: ReplyPreview?
     /// The agent answers the message this turn responds to (`openclawDelivery.replyToCurrent`
     /// or `[[reply_to_current]]`), assistant messages only.
-    public var replyToCurrent: Bool = false
+    public var replyToCurrent: Bool {
+        get { self.storedReplyToCurrent ?? false }
+        set { self.storedReplyToCurrent = newValue ? true : nil }
+    }
+
+    /// Optional so transcripts cached before it existed still decode.
+    private var storedReplyToCurrent: Bool?
     /// The bridged channel's own id for this message (`__openclaw.transport.messageId`), e.g. a
     /// Discord snowflake. Agent `message` tool reactions name it.
     public var channelMessageId: String?
