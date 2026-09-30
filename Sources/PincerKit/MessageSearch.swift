@@ -305,15 +305,16 @@ public enum MessageSearch {
         return Snippet(text: result, highlights: TranscriptSearch.ranges(of: query, in: result))
     }
 
-    /// Today: the time. The past 6 days: the weekday. This year: "Mar 4". Older: "Mar 4, 2025".
+    /// Today: the time. Yesterday. The past 6 days: the weekday. This year: "Mar 4". Older: "Mar 4, 2025".
     public static func dateLabel(_ date: Date, now: Date = Date(), calendar: Calendar = .current,
                                  locale: Locale = .current) -> String
     {
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date),
                                            to: calendar.startOfDay(for: now)).day ?? 0
+        if days == 1 { return L("Yesterday") }
         let template = if days == 0 {
             "jmm"
-        } else if days > 0, days <= 6 {
+        } else if days > 1, days <= 6 {
             "EEEE"
         } else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
             "MMMd"
