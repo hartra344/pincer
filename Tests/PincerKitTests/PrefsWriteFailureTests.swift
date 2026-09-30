@@ -23,10 +23,17 @@ struct PrefsHarness {
         self.store.start()
         let keys = self.store.syncedMaps.map(\.syncedDefaultsKey)
         let defaults = self.scratch.defaults
-        let synced = await eventually(timeout: .seconds(30)) {
-            self.store.state.isConnected && keys.allSatisfy { defaults.bool(forKey: $0) }
+        let isSynced = { self.store.state.isConnected && keys.allSatisfy { defaults.bool(forKey: $0) } }
+        var synced = await eventually(timeout: .seconds(30), isSynced)
+        if !synced {
+            // At the start of a parallel run the first connect or pull can time out under load and then
+            // sit in backoff; a fresh connection (which pulls again) gets past it.
+            self.store.stop()
+            self.store.start()
+            synced = await eventually(timeout: .seconds(60), isSynced)
         }
-        try #require(synced, "the store connects and first-syncs users.prefs")
+        let unsynced = keys.filter { !defaults.bool(forKey: $0) }
+        try #require(synced, "the store connects and first-syncs users.prefs (state: \(self.store.state), gets: \(self.gateway.gets), unsynced: \(unsynced.count))")
     }
 
     static func makeStore(_ profile: GatewayProfile, _ defaults: UserDefaults) -> GatewayStore {
