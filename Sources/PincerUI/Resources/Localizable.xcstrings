@@ -4313,6 +4313,96 @@
         }
       }
     },
+    "Dictate": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictate"
+          }
+        }
+      }
+    },
+    "Dictate a message with your voice": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictate a message with your voice"
+          }
+        }
+      }
+    },
+    "Dictation Is Off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictation Is Off"
+          }
+        }
+      }
+    },
+    "Dictation Isn't Available": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictation Isn't Available"
+          }
+        }
+      }
+    },
+    "Dictation Stopped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictation Stopped"
+          }
+        }
+      }
+    },
+    "Dictation couldn't use the microphone.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictation couldn't use the microphone."
+          }
+        }
+      }
+    },
+    "Dictation isn't available for your language right now.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictation isn't available for your language right now."
+          }
+        }
+      }
+    },
+    "Dictation stopped": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictation stopped"
+          }
+        }
+      }
+    },
+    "Dictation stopped unexpectedly. Try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictation stopped unexpectedly. Try again."
+          }
+        }
+      }
+    },
     "Didn't work?": {
       "localizations": {
         "en": {
@@ -6683,6 +6773,16 @@
         }
       }
     },
+    "Listening": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening"
+          }
+        }
+      }
+    },
     "Load More": {
       "localizations": {
         "en": {
@@ -7119,6 +7219,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Metric"
+          }
+        }
+      }
+    },
+    "Microphone access is off for Pincer. Turn it on in Settings to dictate.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone access is off for Pincer. Turn it on in Settings to dictate."
           }
         }
       }
@@ -7853,6 +7963,16 @@
         }
       }
     },
+    "No microphone is available.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No microphone is available."
+          }
+        }
+      }
+    },
     "No models available": {
       "localizations": {
         "en": {
@@ -8539,6 +8659,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Pinned Chat %lld"
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Settings"
           }
         }
       }
@@ -12413,6 +12543,26 @@
         }
       }
     },
+    "Speech recognition is off for Pincer. Turn it on in Settings to dictate.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speech recognition is off for Pincer. Turn it on in Settings to dictate."
+          }
+        }
+      }
+    },
+    "Speech recognition is restricted on this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speech recognition is restricted on this device."
+          }
+        }
+      }
+    },
     "Split Right": {
       "localizations": {
         "en": {
@@ -12549,6 +12699,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stop"
+          }
+        }
+      }
+    },
+    "Stop Dictation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop Dictation"
           }
         }
       }
