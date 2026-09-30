@@ -160,7 +160,9 @@ final class FakePrefsGateway: @unchecked Sendable {
             self.setParams.append(params)
             return (self.reply, self.echoes)
         }
-        switch reply {
+        // Like the Gateway: one pref value is at most 4 KiB.
+        let tooLarge = (params["entries"]?.object ?? [:]).values.contains { ((try? $0.encoded().count) ?? 0) > 4 * 1024 }
+        switch tooLarge ? .error : reply {
         case .error:
             self.respond(id, error: "INVALID_REQUEST", on: connection)
         case .conflict:

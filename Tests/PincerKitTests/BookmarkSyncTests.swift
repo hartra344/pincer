@@ -378,4 +378,70 @@ struct BookmarkGatewaySyncTests {
         #expect(h.gateway.map(pref)?["x\u{1F}y"] == "garbage", "undecodable values are kept remotely")
         #expect(h.store.bookmarkStore.bookmarks.count == 1)
     }
+
+    @Test func starMadeBeforeTheFirstConnectionReachesTheGateway() async throws {
+        let scratch = ScratchDefaults()
+        let gateway = try FakePrefsGateway()
+        defer { gateway.stop(); scratch.remove() }
+        let profile = GatewayProfile(name: "Offline star", url: gateway.url, authMode: .none)
+        let store = PrefsHarness.makeStore(profile, scratch.defaults)
+        defer { BookmarkStore.forget(gatewayId: profile.id); store.stop() }
+        let item = bookmarks(inShard: 3, count: 1)[0]
+        // Through the shared store, as the UI does, without touching the gateway store's own accessor.
+        BookmarkStore.shared(gatewayId: profile.id).add(item)
+        store.start()
+        let landed = await eventually(timeout: .seconds(10)) { gateway.map(Bookmark.prefKey(shard: 3))?[item.id] != nil }
+        #expect(landed)
+        #expect(store.bookmarkStore.isBookmarked(sessionKey: item.sessionKey, messageId: item.messageId), "a pull doesn't revert it")
+    }
+
+    @Test func editsAfterTheGatewayStoreIsReplacedStillPush() async throws {
+        let h = try await PrefsHarness()
+        defer { self.cleanUp(h) }
+        // AppModel.update() replaces the store with a new one for the same profile and defaults.
+        h.store.stop()
+        let replacement = PrefsHarness.makeStore(h.profile, h.scratch.defaults)
+        defer { replacement.stop() }
+        replacement.start()
+        let keys = replacement.syncedMaps.map(\.syncedDefaultsKey)
+        let defaults = h.scratch.defaults
+        let up = await eventually(timeout: .seconds(10)) { replacement.state.isConnected && keys.allSatisfy { defaults.bool(forKey: $0) } }
+        #expect(up)
+        let item = bookmarks(inShard: 7, count: 1)[0]
+        BookmarkStore.shared(gatewayId: h.profile.id).add(item)
+        let landed = await eventually { h.gateway.map(Bookmark.prefKey(shard: 7))?[item.id] != nil }
+        #expect(landed, "the replaced store's wiring is gone; the new one's is used")
+        // And it isn't reverted by the next pull.
+        await replacement.pull(replacement.syncedMap(Bookmark.prefKey(shard: 7)))
+        #expect(replacement.bookmarkStore.isBookmarked(sessionKey: item.sessionKey, messageId: item.messageId))
+    }
+
+    @Test func legacyDeviceWithManyBookmarksStillFirstSyncs() async throws {
+        let scratch = ScratchDefaults()
+        let gateway = try FakePrefsGateway()
+        defer { gateway.stop(); scratch.remove() }
+        let profile = GatewayProfile(name: "Legacy", url: gateway.url, authMode: .none)
+        let legacy = (0..<300).map {
+            Bookmark(sessionKey: "agent:main:main", messageId: "legacy-\($0)", preview: String(repeating: "p", count: 150),
+                     createdAt: Date(timeIntervalSince1970: TimeInterval(1000 + $0)))
+        }
+        // The shared bookmark store reads the standard defaults; forget() removes the key again.
+        UserDefaults.standard.set(try JSONEncoder().encode(legacy), forKey: "pincer.bookmarks.\(profile.id.uuidString)")
+        let store = PrefsHarness.makeStore(profile, scratch.defaults)
+        defer { BookmarkStore.forget(gatewayId: profile.id); store.stop() }
+        store.start()
+        let keys = (0..<Bookmark.shardCount).map { store.syncedMap(Bookmark.prefKey(shard: $0)).syncedDefaultsKey }
+        let synced = await eventually(timeout: .seconds(15)) { keys.allSatisfy { scratch.defaults.bool(forKey: $0) } }
+        #expect(synced, "every shard first-syncs despite the legacy bookmarks not fitting")
+        var total = 0
+        for shard in 0..<Bookmark.shardCount {
+            let map = gateway.map(Bookmark.prefKey(shard: shard)) ?? [:]
+            total += map.count
+            #expect(((try? JSONEncoder().encode(map).count) ?? 0) <= 4 * 1024)
+        }
+        #expect(total > 0 && total <= BookmarkStore.limit)
+        #expect(store.rejectedPrefs.isEmpty)
+        // The newest survive.
+        #expect(store.bookmarkStore.isBookmarked(sessionKey: "agent:main:main", messageId: "legacy-299"))
+    }
 }
