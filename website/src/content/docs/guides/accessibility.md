@@ -35,6 +35,7 @@ Each chat reads its title, then whether it's pinned or unread, then its preview.
 ### Composer
 
 - The attach button reads as **Attach files**, and on iOS the photo button reads as **Attach photos**.
+- The [microphone](../composer/#dictation) button reads as **Dictate**, or **Stop Dictation** while it's listening. VoiceOver says "Listening" when dictation starts.
 - Send reads as **Send**, or **Queue a follow-up** while a run is going, and **Stop** stops it.
 - The [context meter](../composer/) reads as "Context window" with how full it is. Activate it for the details and **Compact Now**.
 - The model picker reads as "Model" with the current model.

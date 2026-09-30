@@ -41,10 +41,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSApplicationCategoryType</key><string>public.app-category.social-networking</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSMicrophoneUsageDescription</key><string>Dictate messages to your agents.</string>
+  <key>NSSpeechRecognitionUsageDescription</key><string>Turn what you say into text in the message box. Pincer never sends it on its own.</string>
 </dict>
 </plist>
 PLIST
-# Signed with only the network-client entitlement (no sandbox so local runs work).
+# Signed with the network-client and microphone (Dictation) entitlements (no sandbox so local runs work).
 # Prefers an Apple Development identity: a stable signature keeps Keychain access across rebuilds,
 # whereas ad-hoc signatures change every build and re-prompt for the Keychain.
 IDENTITY="${PINCER_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/ {print $2; exit}')}"
@@ -52,7 +54,7 @@ IDENTITY="${IDENTITY:--}"
 cat > build/dev.entitlements <<ENT
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>com.apple.security.network.client</key><true/></dict></plist>
+<plist version="1.0"><dict><key>com.apple.security.network.client</key><true/><key>com.apple.security.device.audio-input</key><true/></dict></plist>
 ENT
 codesign --force --sign "$IDENTITY" --entitlements build/dev.entitlements --options runtime "$APP"
 echo "Built $APP (signed: ${IDENTITY/#-/ad-hoc})"

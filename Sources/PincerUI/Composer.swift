@@ -20,6 +20,8 @@ struct Composer: View {
     @State private var dismissedMenuText: String?
     @State private var caretAtEnd = true
     @State private var focusRequest = 0
+    @State private var dictationHolder = DictationHolder()
+    private var dictation: DictationModel { self.dictationHolder.model }
     @ScaledMetric(relativeTo: .body) private var attachIconSize: CGFloat = 14
 
     private static let corner: CGFloat = 22
@@ -67,7 +69,7 @@ struct Composer: View {
                     placeholder: self.placeholder,
                     text: self.$chat.draft.text,
                     menuActive: !self.suggestions.isEmpty,
-                    escapeActive: self.chat.replyTarget != nil || self.chat.editTarget != nil,
+                    escapeActive: self.chat.replyTarget != nil || self.chat.editTarget != nil || self.dictation.isActive,
                     focusRequest: self.focusRequest,
                     onSubmit: self.submit,
                     onMedia: self.ingest,
@@ -79,6 +81,7 @@ struct Composer: View {
                     })
                     .padding(.vertical, 11)
                     .frame(minHeight: Self.controlHeight)
+                DictationButton(model: self.dictation, draft: self.$chat.draft.text)
                 ContextMeter(chat: self.chat)
                 if self.chat.isRunning {
                     Button {
@@ -146,6 +149,7 @@ struct Composer: View {
             guard case let .success(urls) = result else { return }
             self.ingest(urls.map(PastedMedia.file))
         }
+        .dictationLifecycle(self.dictation, draft: self.chat.draft.text, chatKey: self.chat.sessionKey)
         .task(id: self.isTypingCommand ? self.chat.sessionKey : nil) {
             guard self.isTypingCommand else { return }
             await self.gateway.loadCommands(sessionKey: self.chat.sessionKey, agentId: self.agentId)
@@ -261,6 +265,7 @@ struct Composer: View {
     }
 
     private func submit() {
+        self.dictation.finish()
         let suggestions = self.suggestions
         if suggestions.indices.contains(self.menuSelection), !suggestions[self.menuSelection].isComplete(for: self.text) {
             self.accept(suggestions[self.menuSelection])
@@ -334,6 +339,10 @@ struct Composer: View {
         let suggestions = self.suggestions
         guard !suggestions.isEmpty else {
             guard key == .escape else { return false }
+            if self.dictation.isActive {
+                self.dictation.finish()
+                return true
+            }
             if self.chat.editTarget != nil {
                 self.chat.cancelEdit()
                 return true

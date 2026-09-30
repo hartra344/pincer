@@ -36,20 +36,17 @@ struct SidebarList: NSViewRepresentable {
     final class Coordinator: NSObject, NSOutlineViewDataSource, NSOutlineViewDelegate, NSMenuDelegate {
         private let gateway: GatewayStore
         private var actions: SidebarActions
-        private var model = SidebarModel()
-        private var hasLoaded = false
+        private let controller = SidebarController()
         private var nodes: [String: Node] = [:]
-        private var headers: [String: SidebarModel.Header] = [:]
-        private var entries: [String: SidebarModel.Entry] = [:]
         private var children: [String: [Node]] = [:]
         private var roots: [Node] = []
-        private var selectedKey: String?
-        private var isProgrammatic = false
         /// NSOutlineView won't expand or collapse a row without an outline cell, so headers
         /// report one only while we change their expansion.
         private var allowsHeaderOutlineCell = false
         private var theme = AppTheme()
         private var timer: Timer?
+        private var headers: [String: SidebarModel.Header] { self.controller.headers }
+        private var entries: [String: SidebarModel.Entry] { self.controller.entries }
         private weak var outline: NSOutlineView?
 
         private static let dragType = NSPasteboard.PasteboardType(SidebarDrag.typeIdentifier)
@@ -116,22 +113,20 @@ struct SidebarList: NSViewRepresentable {
 
         func update(model: SidebarModel, selectedKey: String?, actions: SidebarActions, theme: AppTheme) {
             self.actions = actions
-            self.selectedKey = selectedKey
+            self.controller.selectedKey = selectedKey
             if theme != self.theme {
                 self.theme = theme
                 self.themeChanged()
             }
             guard let outline else { return }
-            if model != self.model || !self.hasLoaded {
-                let old = self.model
-                self.model = model
+            if let update = self.controller.accept(model: model) {
                 self.rebuildIndex()
                 self.programmatic {
-                    if !self.hasLoaded || SidebarModel.structureChanged(old: old, new: model) {
-                        self.hasLoaded = true
+                    if update.isInitial || SidebarModel.structureChanged(old: update.old, new: model) {
+                        self.controller.markLoaded()
                         outline.reloadData()
                     } else {
-                        self.reconfigure(changedFrom: old)
+                        self.reconfigure(changedFrom: update.old)
                     }
                     self.applyExpansion()
                 }
@@ -146,23 +141,15 @@ struct SidebarList: NSViewRepresentable {
                 nodes[id] = node
                 return node
             }
-            self.headers = [:]
-            self.entries = [:]
             self.children = [:]
             func index(_ group: SidebarModel.Group) -> Node {
                 let header = node(group.header.id)
-                self.headers[group.header.id] = group.header
-                func entryNodes(_ list: [SidebarModel.Entry]) -> [Node] {
-                    list.map { entry in
-                        self.entries[entry.id] = entry
-                        return node(entry.id)
-                    }
-                }
+                func entryNodes(_ list: [SidebarModel.Entry]) -> [Node] { list.map { node($0.id) } }
                 self.children[group.header.id] = entryNodes(group.leadingEntries) + group.subgroups.map(index)
                     + entryNodes(group.entries)
                 return header
             }
-            self.roots = self.model.groups.map(index)
+            self.roots = self.controller.model.groups.map(index)
             self.nodes = nodes
         }
 
@@ -171,7 +158,7 @@ struct SidebarList: NSViewRepresentable {
             guard let outline else { return }
             let oldEntries = Dictionary(old.groups.flatMap(\.allEntries).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
             var resized = IndexSet()
-            for id in SidebarModel.changedRowKeys(old: old, new: self.model) {
+            for id in SidebarModel.changedRowKeys(old: old, new: self.controller.model) {
                 guard let node = self.nodes[id] else { continue }
                 let row = outline.row(forItem: node)
                 guard row >= 0 else { continue }
@@ -227,7 +214,7 @@ struct SidebarList: NSViewRepresentable {
 
         private func syncSelection() {
             guard let outline else { return }
-            let row = self.selectedKey.flatMap { self.nodes[SidebarModel.entryId($0)] }.map { outline.row(forItem: $0) } ?? -1
+            let row = self.controller.selectionTarget().flatMap { self.nodes[$0] }.map { outline.row(forItem: $0) } ?? -1
             guard row != outline.selectedRow else { return }
             self.programmatic {
                 if row >= 0 {
@@ -239,12 +226,7 @@ struct SidebarList: NSViewRepresentable {
             }
         }
 
-        private func programmatic(_ body: () -> Void) {
-            let was = self.isProgrammatic
-            self.isProgrammatic = true
-            body()
-            self.isProgrammatic = was
-        }
+        private func programmatic(_ body: () -> Void) { self.controller.programmatic(body) }
 
         // MARK: Data source
 
@@ -324,16 +306,14 @@ struct SidebarList: NSViewRepresentable {
         }
 
         func outlineViewSelectionDidChange(_ notification: Notification) {
-            guard !self.isProgrammatic, let outline else { return }
-            guard outline.selectedRow >= 0, let node = outline.item(atRow: outline.selectedRow) as? Node,
-                  let entry = self.entries[node.id]
-            else {
+            guard !self.controller.isProgrammatic, let outline else { return }
+            let node = outline.selectedRow >= 0 ? outline.item(atRow: outline.selectedRow) as? Node : nil
+            guard let key = self.controller.userSelected(node.flatMap { self.entries[$0.id] }) else {
                 // Clicking empty space doesn't close the open chat.
                 self.syncSelection()
                 return
             }
-            self.selectedKey = entry.row.key
-            self.actions.select(entry.row.key)
+            self.actions.select(key)
         }
 
         func outlineViewItemDidExpand(_ notification: Notification) {
@@ -351,9 +331,9 @@ struct SidebarList: NSViewRepresentable {
         }
 
         private func expansionChanged(_ notification: Notification, collapsed: Bool) {
-            guard !self.isProgrammatic, let node = notification.userInfo?["NSObject"] as? Node,
-                  let header = self.headers[node.id] else { return }
-            self.actions.setCollapsed(header.section.id, collapsed)
+            guard let node = notification.userInfo?["NSObject"] as? Node,
+                  let section = self.controller.sectionToggled(headerId: node.id) else { return }
+            self.actions.setCollapsed(section, collapsed)
             // The selected chat may have just come back into view.
             self.syncSelection()
         }
@@ -362,15 +342,9 @@ struct SidebarList: NSViewRepresentable {
 
         func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> NSPasteboardWriting? {
             guard let node = item as? Node else { return nil }
-            if let header = self.headers[node.id] {
-                guard case let .group(name) = header.section.kind else { return nil }
-                let pasteboardItem = NSPasteboardItem()
-                pasteboardItem.setString(name, forType: Self.groupDragType)
-                return pasteboardItem
-            }
-            guard let entry = self.entries[node.id], !entry.isThread, !entry.row.isSubagent else { return nil }
+            guard let payload = self.controller.dragPayload(forId: node.id) else { return nil }
             let pasteboardItem = NSPasteboardItem()
-            pasteboardItem.setString(entry.row.key, forType: Self.dragType)
+            pasteboardItem.setString(payload.value, forType: NSPasteboard.PasteboardType(payload.typeIdentifier))
             return pasteboardItem
         }
 
@@ -399,9 +373,7 @@ struct SidebarList: NSViewRepresentable {
                 return .chatInGroup(key, header: above, group: group, childIndex: self.children[above.id]?.count ?? 0)
             }
             guard let target = self.headerNode(for: item), let header = self.headers[target.id] else { return nil }
-            if let group = header.section.groupName, !header.isCollapsed,
-               header.section.agentId == nil || header.section.agentId == row.agentId
-            {
+            if let group = SidebarController.groupAccepting(row, in: header) {
                 if let node = item as? Node, node !== target {
                     // Dropped on a chat: go in front of it, or after it when moving down its own group.
                     guard var childIndex = self.children[target.id]?.firstIndex(where: { $0 === node }) else { return nil }
@@ -413,36 +385,21 @@ struct SidebarList: NSViewRepresentable {
                     return .chatInGroup(key, header: target, group: group, childIndex: index)
                 }
             }
-            guard self.gateway.groupDropValue(for: key, onto: header.section) != nil else { return nil }
+            guard case .chatOnSection = SidebarController.dropOnSection(key, header.section, gateway: self.gateway) else { return nil }
             return .chatOnSection(key, header: target, header.section)
         }
 
         private func groupDrop(_ name: String, item: Any?, index: Int) -> Drop? {
-            let groupIndices = self.roots.indices.filter { index in
-                if case .group = self.headers[self.roots[index].id]?.section.kind { return true }
-                return false
+            let roots = self.roots.compactMap { self.headers[$0.id] }
+            guard roots.count == self.roots.count else { return nil }
+            let target = self.headerNode(for: item)
+            let reorder = SidebarController.groupReorder(name, among: roots) { source in
+                guard item != nil else { return index >= 0 ? index : nil }
+                guard let target, let targetIndex = self.roots.firstIndex(where: { $0 === target }) else { return nil }
+                return targetIndex > source ? targetIndex + 1 : targetIndex
             }
-            guard let first = groupIndices.first, let last = groupIndices.last,
-                  let source = self.roots.firstIndex(where: {
-                      if case let .group(group) = self.headers[$0.id]?.section.kind { return group == name }
-                      return false
-                  })
-            else { return nil }
-            var rootIndex: Int
-            if item == nil {
-                guard index >= 0 else { return nil }
-                rootIndex = index
-            } else {
-                guard let target = self.headerNode(for: item), let targetIndex = self.roots.firstIndex(where: { $0 === target })
-                else { return nil }
-                rootIndex = targetIndex > source ? targetIndex + 1 : targetIndex
-            }
-            rootIndex = min(max(rootIndex, first), last + 1)
-            var before: String?
-            if let node = self.roots[safe: rootIndex], case let .group(group) = self.headers[node.id]?.section.kind {
-                before = group
-            }
-            return .group(name, before: before, rootIndex: rootIndex)
+            guard let reorder, case let .group(_, before) = reorder.drop else { return nil }
+            return .group(name, before: before, rootIndex: reorder.rootIndex)
         }
 
         func outlineView(_ outlineView: NSOutlineView, validateDrop info: NSDraggingInfo,
@@ -465,13 +422,13 @@ struct SidebarList: NSViewRepresentable {
         func outlineView(_ outlineView: NSOutlineView, acceptDrop info: NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
             switch self.drop(info, item: item, index: index) {
             case let .group(name, before, _):
-                Task { await self.gateway.moveGroup(name, before: before) }
+                SidebarController.perform(.group(name, before: before), gateway: self.gateway)
             case let .chatInGroup(key, header, group, childIndex):
                 let entries = (self.children[header.id] ?? []).compactMap { self.entries[$0.id] }
                 let before = SidebarModel.chat(atOrAfter: childIndex, in: entries, excluding: key)
-                Task { await self.gateway.moveChat(key, toGroup: group, before: before) }
+                SidebarController.perform(.chatInGroup(key, group: group, before: before), gateway: self.gateway)
             case let .chatOnSection(key, _, section):
-                Task { await self.gateway.moveToGroup(key, droppedOn: section) }
+                SidebarController.perform(.chatOnSection(key, section), gateway: self.gateway)
             case nil:
                 return false
             }
