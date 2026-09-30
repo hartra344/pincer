@@ -212,6 +212,22 @@ struct ToolFileEditTests {
         #expect(move.statusLabel == "Moved" && move.title == "Old.swift → New.swift" && move.directory == nil)
     }
 
+    /// #159: a header-only delete lists no removed lines, so the label says the file was deleted.
+    @Test func headerOnlyDeleteLabelsDeletedFiles() throws {
+        let one = try #require(Self.parse("apply_patch", ["input": "*** Begin Patch\n*** Delete File: a.txt\n*** End Patch"]))
+        #expect(one.deletionsLabel == "1 file deleted", "\(one.deletionsLabel ?? "nil")")
+        #expect(one.accessibilitySummary.contains("1 file deleted"), Comment(rawValue: one.accessibilitySummary))
+        let two = try #require(Self.parse("apply_patch", ["input": "*** Begin Patch\n*** Delete File: a.txt\n*** Delete File: b.txt\n*** End Patch"]))
+        #expect(two.deletionsLabel == "2 files deleted", "\(two.deletionsLabel ?? "nil")")
+    }
+
+    @Test func deleteWithListedLinesKeepsCountLabel() throws {
+        let patch = "*** Begin Patch\n*** Delete File: a.txt\n-one\n-two\n*** End Patch"
+        if let edit = Self.parse("apply_patch", ["input": patch]), edit.deletions > 0 {
+            #expect(edit.deletionsLabel == "−\(edit.deletions)")
+        }
+    }
+
     @Test func plainUnifiedDiffPatch() throws {
         let diff = """
         diff --git a/Sources/A.swift b/Sources/A.swift
