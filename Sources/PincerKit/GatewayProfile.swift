@@ -97,11 +97,14 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
     }
 
     /// The built-in demo, which runs a simulated Gateway on the device.
-    public var isDemo: Bool { self.url == DemoGateway.url || self.url == DemoGateway.noReplyToURL }
+    public var isDemo: Bool { self.url == DemoGateway.url || self.url == DemoGateway.noReplyToURL
+            || self.url == DemoGateway.noSessionReactionsURL
+    }
 
     /// `acceptsReplyTo: false` simulates an older Gateway that rejects `chat.send`'s `replyToId`.
-    public static func demo(acceptsReplyTo: Bool = true) -> GatewayProfile {
-        GatewayProfile(name: "Demo", url: acceptsReplyTo ? DemoGateway.url : DemoGateway.noReplyToURL, authMode: .none)
+    public static func demo(acceptsReplyTo: Bool = true, hasSessionReactions: Bool = true) -> GatewayProfile {
+        let url = !hasSessionReactions ? DemoGateway.noSessionReactionsURL : (acceptsReplyTo ? DemoGateway.url : DemoGateway.noReplyToURL)
+        return GatewayProfile(name: "Demo", url: url, authMode: .none)
     }
 
     public var initials: String {

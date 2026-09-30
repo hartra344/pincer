@@ -10,6 +10,8 @@ actor DemoGateway {
     static let url = "demo://pincer"
     /// The demo as an older Gateway that rejects `chat.send`'s `replyToId`, for checks.
     static let noReplyToURL = "demo://pincer?replyTo=off"
+    /// The demo as an older Gateway without `session.reactions.*`, for checks of the `users.prefs` fallback.
+    static let noSessionReactionsURL = "demo://pincer?sessionReactions=off"
 
     typealias Row = [String: JSONValue]
 
