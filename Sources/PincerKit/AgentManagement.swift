@@ -451,10 +451,13 @@ public final class AgentManagementModel {
     @ObservationIgnored private let scopes: @MainActor () -> [String]
     @ObservationIgnored private let allowsWritesWithoutAdmin: Bool
     @ObservationIgnored private let onAgentsChanged: @MainActor () async -> Void
+    @ObservationIgnored private var onAgentDeleted: @MainActor (String) -> Void = { _ in }
 
     init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?,
-         allowsWritesWithoutAdmin: Bool, onAgentsChanged: @escaping @MainActor () async -> Void)
+         allowsWritesWithoutAdmin: Bool, onAgentsChanged: @escaping @MainActor () async -> Void,
+         onAgentDeleted: @escaping @MainActor (String) -> Void = { _ in })
     {
+        self.onAgentDeleted = onAgentDeleted
         self.request = { method, params in try await connection.request(method, params, timeout: 30) }
         self.methods = { hello()?.methods }
         self.scopes = { hello()?.scopes ?? [] }
@@ -583,6 +586,7 @@ public final class AgentManagementModel {
         let result = try await self.call(AgentManagement.deleteMethod,
                                          ["agentId": .string(agentId), "deleteFiles": .bool(deleteFiles)])
         self.forget(agentId: agentId)
+        self.onAgentDeleted(agentId)
         await self.onAgentsChanged()
         return AgentDeleteResult(result, agentId: agentId)
     }

@@ -2013,12 +2013,22 @@
         }
       }
     },
-    "Auto picks a character from the agent's identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still.": {
+    "Auto keeps the character the agent first got from its identity. This only changes how Pincer shows the agent.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Auto picks a character from the agent's identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still."
+            "value": "Auto keeps the character the agent first got from its identity. This only changes how Pincer shows the agent."
+          }
+        }
+      }
+    },
+    "Auto keeps the character the agent first got from its identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto keeps the character the agent first got from its identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still."
           }
         }
       }
@@ -9899,6 +9909,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Persona & Channels"
+          }
+        }
+      }
+    },
+    "Pet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pet"
           }
         }
       }

@@ -29,7 +29,7 @@ These are Pincer extras that OpenClaw's session data can't hold:
 | `pincer.groups` | Groups, on gateways without the group catalog |
 | `pincer.reactions` | Your [reactions](../../guides/transcript/#reactions), keyed by `<session key>\|<message id>`, with that message's emoji in the order you added them, separated by spaces |
 | `pincer.healthDismissals` | Gateway Health issues you dismissed or always ignore |
-| `pincer.avatars` | [Avatar](../../guides/agent-avatars/#settings) characters picked for each agent, keyed by agent id, and the **Style** (Pixel or Plush) under `@style` |
+| `pincer.avatars` | [Avatar](../../guides/agent-avatars/#settings) characters picked for each agent, keyed by agent id, the **Style** (`pixel` or `plush`) under `@style`, and under `seed@<agentId>` the identity the agent's pet was first picked from, so a rename keeps the pet |
 
 :::note
 If the gateway has no durable identity for your connection, these preferences stay on the current device instead of syncing.

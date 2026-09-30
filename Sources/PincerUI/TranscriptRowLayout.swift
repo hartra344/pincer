@@ -378,9 +378,9 @@ struct TranscriptSettings: Equatable {
             reasoningOff: context.gateway.sessions[context.sessionKey]?.reasoningLevel == "off",
             theme: AppTheme.current,
             dark: RichBlock.isDark,
-            avatarStyle: animated ? AvatarSettings.style(for: context.agent) : nil,
+            avatarStyle: animated ? AvatarSettings.style(for: context.agent, in: context.gateway) : nil,
             agentStyles: animated
-                ? Dictionary(context.gateway.agents.map { ($0.id, AvatarSettings.style(for: $0)) }) { first, _ in first }
+                ? Dictionary(context.gateway.agents.map { ($0.id, AvatarSettings.style(for: $0, in: context.gateway)) }) { first, _ in first }
                 : [:])
     }
 }

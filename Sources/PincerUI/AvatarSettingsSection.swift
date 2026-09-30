@@ -28,7 +28,7 @@ struct AvatarSettingsSection: View {
                 }
                 .pickerStyle(.segmented)
                 ForEach(self.agents) { agent in
-                    AvatarCharacterRow(agent: agent, renderStyle: self.renderStyle,
+                    AvatarCharacterRow(agent: agent,
                                        gateways: self.app.gateways.filter { $0.agents.contains { $0.id == agent.id } })
                 }
             }
@@ -36,7 +36,7 @@ struct AvatarSettingsSection: View {
             Text("Avatars", bundle: .module)
         } footer: {
             if self.enabled {
-                Text("Auto picks a character from the agent's identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still.", bundle: .module)
+                Text("Auto keeps the character the agent first got from its identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still.", bundle: .module)
             }
         }
     }
@@ -48,35 +48,46 @@ struct AvatarSettingsSection: View {
     }
 }
 
-private struct AvatarCharacterRow: View {
+/// One agent's still preview and Character picker; used in Settings and on the agent's page.
+struct AvatarCharacterRow: View {
     let agent: AgentSummary
-    let renderStyle: String
     /// Gateways that have this agent, which sync its character.
     let gateways: [GatewayStore]
+    var previewSize: CGFloat = 28
+    @AppStorage(AvatarSettings.renderStyleKey) private var renderStyle = AvatarRenderStyle.pixel.rawValue
     @AppStorage private var creature: String
 
-    init(agent: AgentSummary, renderStyle: String, gateways: [GatewayStore]) {
+    init(agent: AgentSummary, gateways: [GatewayStore], previewSize: CGFloat = 28) {
         self.agent = agent
-        self.renderStyle = renderStyle
         self.gateways = gateways
+        self.previewSize = previewSize
         self._creature = AppStorage(wrappedValue: "", AvatarSettings.creatureKey(for: agent.id))
     }
 
+    private var style: AvatarStyle {
+        let seed = self.gateways.first?.avatarSeed(for: self.agent)
+            ?? AvatarStyle.identitySeed(name: self.agent.name, agentId: self.agent.id)
+        return AvatarSettings.style(for: self.agent, seed: seed, creature: self.creature, renderStyle: self.renderStyle)
+    }
+
     var body: some View {
-        let style = AvatarSettings.style(for: self.agent, creature: self.creature, renderStyle: self.renderStyle)
         Picker(selection: Binding(get: { self.creature }, set: { self.setCreature($0) })) {
             Text("Auto", bundle: .module).tag("")
             ForEach(AvatarCreature.allCases, id: \.self) { creature in
                 Text(creature.rawValue.capitalized).tag(creature.rawValue)
             }
         } label: {
-            HStack(spacing: Theme.Spacing.md) {
-                AgentAvatarView(state: .idle, style: style, size: 28, seed: self.agent.id)
-                    .accessibilityHidden(true)
-                Text(self.agent.name)
-            }
+            self.label
         }
         .accessibilityLabel(L("\(self.agent.name) character"))
+    }
+
+    private var label: some View {
+        HStack(spacing: Theme.Spacing.md) {
+            AgentAvatarView(state: .idle, style: self.style, size: self.previewSize, seed: self.agent.id)
+                .accessibilityHidden(true)
+            Text(self.agent.name)
+        }
     }
 
     private func setCreature(_ value: String) {

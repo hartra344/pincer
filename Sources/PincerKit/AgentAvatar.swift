@@ -283,6 +283,16 @@ public enum AvatarPreferences {
     public static let animatedKey = "pincer.animatedAvatars"
     public static let renderStyleKey = "pincer.avatarRenderStyle"
     static let creaturePrefix = "pincer.avatarCreature."
+    /// Entries `seed@<agentId>` hold the identity seed an agent had when its Gateway first saw it,
+    /// so a rename keeps its pet. Per Gateway: they never reach this device's defaults.
+    public static let seedEntryPrefix = "seed@"
+
+    public static func seedEntry(for agentId: String) -> String { self.seedEntryPrefix + agentId }
+
+    /// The agent id a seed entry belongs to, or nil for any other entry.
+    public static func agentId(fromSeedEntry entry: String) -> String? {
+        entry.hasPrefix(self.seedEntryPrefix) ? String(entry.dropFirst(self.seedEntryPrefix.count)) : nil
+    }
 
     /// Per-agent creature override on this device; missing means seeded from the agent.
     public static func creatureKey(for agentId: String) -> String { self.creaturePrefix + agentId }
@@ -291,6 +301,7 @@ public enum AvatarPreferences {
     static func local(in defaults: UserDefaults) -> [String: String] {
         var map: [String: String] = [:]
         for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix(self.creaturePrefix) {
+            if key.hasPrefix(self.creaturePrefix + self.seedEntryPrefix) { continue }
             if let name = value as? String, !name.isEmpty { map[String(key.dropFirst(self.creaturePrefix.count))] = name }
         }
         if let style = defaults.string(forKey: self.renderStyleKey), !style.isEmpty { map[self.renderStyleEntry] = style }
@@ -302,6 +313,7 @@ public enum AvatarPreferences {
     /// Gateway's newer choice isn't undone.
     static func apply(_ map: [String: String], previous: [String: String], to defaults: UserDefaults) {
         for entry in Set(map.keys).union(previous.keys) where map[entry] != previous[entry] {
+            if entry.hasPrefix(self.seedEntryPrefix) { continue }
             let key = entry == self.renderStyleEntry ? self.renderStyleKey : self.creatureKey(for: entry)
             if let value = map[entry] {
                 if defaults.string(forKey: key) != value { defaults.set(value, forKey: key) }

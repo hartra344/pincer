@@ -86,18 +86,36 @@ public struct MenuBarInbox: Equatable, Sendable {
     public struct Item: Identifiable, Hashable, Sendable {
         public enum Kind: Sendable {
             case approval, question, running, unread
+
+            /// Approval waits, a question asks, a run thinks, unread rests.
+            public var pose: AvatarState {
+                switch self {
+                case .approval: .awaitingApproval
+                case .question: .tool(.question)
+                case .running: .thinking
+                case .unread: .idle
+                }
+            }
         }
 
         public let id: String
         public let kind: Kind
         public let title: String
         public let target: Notifier.Target
+        /// The agent behind the row, for its pet; nil when the Gateway didn't say.
+        public let agentId: String?
+        /// The still pose the row's pet shows.
+        public let pose: AvatarState
 
-        public init(id: String, kind: Kind, title: String, target: Notifier.Target) {
+        public init(id: String, kind: Kind, title: String, target: Notifier.Target,
+                    agentId: String? = nil, pose: AvatarState? = nil)
+        {
             self.id = id
             self.kind = kind
             self.title = title
             self.target = target
+            self.agentId = agentId
+            self.pose = pose ?? kind.pose
         }
     }
 
@@ -223,12 +241,15 @@ public struct MenuBarInbox: Equatable, Sendable {
             return input.sessions.first { $0.key == key }
                 ?? input.sessions.first { $0.key.caseInsensitiveCompare(key) == .orderedSame }
         }
-        func needsYouItem(_ input: GatewayInput, id: String, kind: Item.Kind, text: String, sessionKey: String?) -> (Item, Key) {
+        func needsYouItem(_ input: GatewayInput, id: String, kind: Item.Kind, text: String, sessionKey: String?,
+                          agentId: String?) -> (Item, Key)
+        {
             let row = lookup(input, sessionKey)
             let chat = row.map { " — \(Self.chatLabel(row: $0, agent: input.agent($0.agentId)))" } ?? ""
             let key = row?.key ?? sessionKey ?? ""
             let target = Notifier.Target(gatewayId: input.id, sessionKey: key)
-            return (Item(id: "\(kind):\(input.id.uuidString):\(id)", kind: kind, title: text + chat + suffix(input), target: target),
+            return (Item(id: "\(kind):\(input.id.uuidString):\(id)", kind: kind, title: text + chat + suffix(input), target: target,
+                         agentId: row?.agentId ?? agentId ?? sessionKey.flatMap(SessionKey.agentId(from:))),
                     Key(gatewayId: input.id, sessionKey: key))
         }
 
@@ -237,7 +258,7 @@ public struct MenuBarInbox: Equatable, Sendable {
         for input in connected {
             for approval in input.approvals where !approval.isExpired(at: now) {
                 let (item, key) = needsYouItem(input, id: approval.id, kind: .approval,
-                                               text: "Approve: \(Self.truncated(approval.command))", sessionKey: approval.sessionKey)
+                                               text: "Approve: \(Self.truncated(approval.command))", sessionKey: approval.sessionKey, agentId: approval.agentId)
                 needsYou.append(item)
                 claimed.insert(key)
             }
@@ -247,7 +268,7 @@ public struct MenuBarInbox: Equatable, Sendable {
                 let first = prompt.questions.first
                 let text = first.map { $0.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? $0.header : $0.question } ?? ""
                 let (item, key) = needsYouItem(input, id: prompt.id, kind: .question,
-                                               text: "Question: \(Self.truncated(text))", sessionKey: prompt.sessionKey)
+                                               text: "Question: \(Self.truncated(text))", sessionKey: prompt.sessionKey, agentId: prompt.agentId)
                 needsYou.append(item)
                 claimed.insert(key)
             }
@@ -270,7 +291,8 @@ public struct MenuBarInbox: Equatable, Sendable {
         func chatItem(_ chat: Chat, kind: Item.Kind) -> Item {
             Item(id: "\(kind):\(chat.input.id.uuidString):\(chat.row.key)", kind: kind,
                  title: Self.chatLabel(row: chat.row, agent: chat.input.agent(chat.row.agentId)) + suffix(chat.input),
-                 target: Notifier.Target(gatewayId: chat.input.id, sessionKey: chat.row.key))
+                 target: Notifier.Target(gatewayId: chat.input.id, sessionKey: chat.row.key),
+                 agentId: chat.row.agentId)
         }
         func key(_ chat: Chat) -> Key { Key(gatewayId: chat.input.id, sessionKey: chat.row.key) }
 
