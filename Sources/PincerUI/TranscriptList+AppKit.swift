@@ -634,7 +634,12 @@ private final class TranscriptListTableView: NSTableView {
     var onKeyDown: ((NSEvent) -> Bool)?
     var onFocusChange: (() -> Void)?
 
-    override var acceptsFirstResponder: Bool { true }
+    /// Only Tab, Go ▸ Next/Previous Message and VoiceOver focus the list; a click must leave the
+    /// keyboard with the composer.
+    override var acceptsFirstResponder: Bool {
+        guard let type = NSApp.currentEvent?.type else { return true }
+        return ![.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(type)
+    }
 
     override func becomeFirstResponder() -> Bool {
         let accepted = super.becomeFirstResponder()
