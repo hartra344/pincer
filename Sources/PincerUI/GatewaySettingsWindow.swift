@@ -18,6 +18,38 @@ struct GatewaySettingsOpener {
         gateway.usage.prepareSession(key, agentId: agentId)
         self(gateway, at: .usage, routes: [.sessionUsage(key: key, agentId: agentId)])
     }
+
+    /// MCP Servers, on the server's page when `name` is a configured server, else on the list. When the
+    /// config hasn't loaded yet it's loaded first (up to a second) so the name can be resolved.
+    @MainActor
+    func mcpServer(_ gateway: GatewayStore, name: String) {
+        guard gateway.settings.hasLoaded else {
+            Task { @MainActor in
+                var finished = false
+                let load = Task { @MainActor in
+                    await gateway.settings.load()
+                    finished = true
+                }
+                for _ in 0..<20 where !finished {
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+                _ = load
+                self.openResolved(gateway, name: name)
+            }
+            return
+        }
+        self.openResolved(gateway, name: name)
+    }
+
+    @MainActor
+    private func openResolved(_ gateway: GatewayStore, name: String) {
+        guard gateway.settings.hasLoaded else { return self(gateway, at: .mcpServers) }
+        let servers = gateway.mcp.servers
+        // Transcript names carry a sanitised server name, so fall back to matching that.
+        let match = servers.first { $0.name == name }
+            ?? servers.first { MCPToolName.safeServerName($0.name) == name }
+        self(gateway, at: .mcpServers, routes: match.map { [.mcpServer($0.name)] } ?? [])
+    }
 }
 
 extension EnvironmentValues {

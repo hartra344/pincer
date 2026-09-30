@@ -118,6 +118,11 @@ extension MCPServersModel {
         return nil
     }
 
+    /// Why Test Connection can't run yet: it tests the saved server, so unsaved edits don't count.
+    func probeBlock(_ name: String) -> String? {
+        self.isNew(name) || self.isChanged(name) ? L("Save your changes first.") : nil
+    }
+
     /// Servers removed in the draft but still saved on the Gateway.
     func removedServers(in settings: GatewaySettingsModel) -> [MCPServer] {
         (settings.savedValue(at: MCPServers.path)?.object ?? [:]).keys
@@ -250,7 +255,15 @@ struct MCPServersPage: View {
                     }
                 }
             }
-            if rows.isEmpty {
+            if rows.isEmpty, !model.pluginServers.isEmpty {
+                Section {
+                    Text("No servers configured on this Gateway.", bundle: .module).foregroundStyle(.secondary)
+                    if model.canEdit {
+                        Button(L("Add Server")) { self.editor = MCPEditorTarget(draft: MCPServerDraft()) }
+                    }
+                }
+            }
+            if rows.isEmpty, model.pluginServers.isEmpty {
                 Section {
                     ContentUnavailableView {
                         Label(L("No MCP Servers"), systemImage: "point.3.connected.trianglepath.dotted")
@@ -262,7 +275,7 @@ struct MCPServersPage: View {
                         }
                     }
                 }
-            } else {
+            } else if !rows.isEmpty {
                 Section {
                     ForEach(rows) { server in
                         if model.isRemoved(server.name) {
@@ -277,6 +290,23 @@ struct MCPServersPage: View {
                 } footer: {
                     self.footer(model, rows: rows)
                 }
+            }
+            self.pluginSection(model)
+        }
+    }
+
+    @ViewBuilder private func pluginSection(_ model: MCPServersModel) -> some View {
+        if !model.pluginServers.isEmpty {
+            Section {
+                ForEach(model.pluginServers) { server in
+                    MCPPluginServerRow(server: server, status: model.status(for: server)) {
+                        self.navigator.go(to: SettingsLocation(destination: .plugins, routes: [.plugin(server.pluginId)]))
+                    }
+                }
+            } header: {
+                Text("From Plugins", bundle: .module)
+            } footer: {
+                Text("Managed by plugins. Change them in each plugin's settings.", bundle: .module)
             }
         }
     }
@@ -375,6 +405,74 @@ extension View {
     }
 }
 
+/// A read-only row for a server a plugin declares. Tapping opens the plugin.
+private struct MCPPluginServerRow: View {
+    let server: PluginMCPServer
+    let status: MCPServerStatus?
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: self.open) {
+            HStack {
+                self.details
+                Spacer()
+                self.badges
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(L("Opens the \(self.pluginTitle) plugin"))
+        .contextMenu {
+            Button(L("Open Plugin"), systemImage: "puzzlepiece.extension", action: self.open)
+            Button(L("Copy Name"), systemImage: "doc.on.doc") { Clipboard.copy(self.server.name) }
+        }
+    }
+
+    private var pluginTitle: String { self.server.pluginName ?? self.server.pluginId }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+            Text(self.server.name)
+            Text(L("\(self.pluginTitle) plugin"))
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var badges: some View {
+        VStack(alignment: .trailing, spacing: Theme.Spacing.xxs) {
+            if !self.server.isAvailable {
+                Text("Unavailable", bundle: .module).font(.caption).foregroundStyle(.orange)
+            } else if let status = self.status, status.state != .unknown {
+                MCPStatusLabel(status: status)
+            } else if let auth = self.server.auth {
+                MCPAuthBadge(auth: auth)
+            }
+        }
+    }
+}
+
+/// "Signed in" / "Needs Sign-In" for a plugin server's auth.
+struct MCPAuthBadge: View {
+    let auth: MCPAuthStatus
+
+    var body: some View {
+        let signedIn = self.auth.state == .authorized
+        Label(self.title, systemImage: signedIn ? "checkmark.seal.fill" : "person.badge.key")
+            .font(.caption)
+            .foregroundStyle(signedIn ? .green : .orange)
+    }
+
+    private var title: String {
+        switch self.auth.state {
+        case .authorized: L("Signed in")
+        case .pendingAuthorization: L("Waiting for Sign-In…")
+        default: self.auth.isExpired ? L("Sign-In Expired") : L("Needs Sign-In")
+        }
+    }
+}
+
 // MARK: Detail page
 
 struct MCPServerPage: View {
@@ -387,6 +485,7 @@ struct MCPServerPage: View {
     @State private var signingOut: String?
     @State private var pasting = false
     @State private var flow = MCPSignInFlow()
+    @State private var probe = MCPProbeState()
 
     var body: some View {
         let model = self.gateway.mcp
@@ -403,6 +502,7 @@ struct MCPServerPage: View {
         } else if let server = model.server(self.name) {
             let status = model.status(for: server.name)
             let operation = model.operation(for: server.name)
+            ScrollViewReader { proxy in
             GatewaySettingsForm {
                 if !model.canEdit {
                     Section { FullManagementBadge { self.navigator.destination = .connection } }
@@ -412,6 +512,14 @@ struct MCPServerPage: View {
                 self.toolsSection(server, status: status, model: model)
                 self.configSection(server)
                 self.actionsSection(server, status: status, model: model, operation: operation)
+            }
+            .onChange(of: self.probe.result) { _, result in
+                guard result != nil else { return }
+                Task {
+                    await Task.yield()
+                    withAnimation { proxy.scrollTo(MCPScrollTarget.resultID, anchor: .bottom) }
+                }
+            }
             }
             .navigationTitle(server.name)
             .sheet(item: self.$editor) { target in
@@ -618,11 +726,21 @@ struct MCPServerPage: View {
                 Button(L("Reconnect"), systemImage: "arrow.clockwise") { Task { await model.reconnect(server.name) } }
                     .disabled(operation.isRunning || block != nil || !model.canEdit)
             }
+            if model.supportsProbe { self.testRows(server, model: model, block: model.probeBlock(server.name)) }
             if model.canEdit {
                 Button(L("Remove Server…"), role: .destructive) { self.confirmRemove = true }
             }
         } footer: {
-            if model.supportsReconnect, let block { Text(block) }
+            if model.supportsReconnect, let block, !(model.supportsProbe && block == model.probeBlock(server.name)) {
+                Text(block)
+            }
+        }
+    }
+
+    @ViewBuilder private func testRows(_ server: MCPServer, model: MCPServersModel, block: String?) -> some View {
+        MCPTestConnectionRows(state: self.probe, disabledReason: block, signInHint: L("Use Sign In on this page, then test again.")) {
+            self.probe = MCPProbeState(running: true)
+            Task { self.probe = MCPProbeState(result: await model.probe(name: server.name, timeoutMs: 15000)) }
         }
     }
 }

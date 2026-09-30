@@ -1210,6 +1210,9 @@ final class TranscriptToolView: TranscriptBaseView {
         self.header.configure(tool, trailing: tool.run == nil ? 10 : 6)
         self.header.onTap = { [weak actions] in actions?.setExpanded(tool.key, !tool.isExpanded, row: rowId) }
         if let edit = tool.edit {
+            #if os(macOS)
+            self.header.toolTip = nil
+            #endif
             self.header.accessibilityText = AccessibilityText.join([
                 edit.accessibilitySummary(isRunning: tool.tool.isRunning),
                 tool.tool.isRunning ? L("running") : nil, tool.tool.isError ? L("failed") : nil,
@@ -1217,6 +1220,9 @@ final class TranscriptToolView: TranscriptBaseView {
             ])
         } else {
             let parts = ToolCardName(tool.tool.name)
+            #if os(macOS)
+            self.header.toolTip = parts.server.map { L("\(parts.tool) on \($0)") }
+            #endif
             self.header.accessibilityText = AccessibilityText.join(
                 [parts.server.map { L("\(parts.tool) on \($0)") } ?? tool.tool.name, tool.tool.summary]
                     + [tool.tool.isRunning ? L("running") : nil, tool.tool.isError ? L("failed") : nil,
@@ -1326,6 +1332,8 @@ final class TranscriptToolView: TranscriptBaseView {
         case let .toggle(key, value):
             guard let rowId else { return }
             self.actions?.setExpanded(key, value, row: rowId)
+        case let .openMCPServer(name):
+            self.actions?.openMCPServer(name)
         }
     }
 
@@ -1513,14 +1521,21 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         }
         let parts = ToolCardName(part.tool.name)
         var nameWidth: CGFloat = 0
-        if let server = parts.server {
-            let serverText = singleLine("\(server) ›", nameFont, TranscriptColors.secondary, truncation: .byTruncatingTail)
-            let serverWidth = min(serverText.lineWidth, max((right - nameX) / 3, 0))
-            serverText.drawLine(at: CGPoint(x: nameX, y: nameY), width: serverWidth, font: nameFont)
-            nameWidth = serverWidth + 5
-        }
         let name = singleLine(parts.tool, nameFont, TranscriptColors.label)
-        let toolWidth = min(name.lineWidth, max(right - nameX - nameWidth, 0))
+        let available = max(right - nameX, 0)
+        // The tool keeps its natural width; the server gets what's left, at most 40%, and is dropped
+        // (with its separator) when that would be too narrow to read.
+        let toolWidth = min(name.lineWidth, available)
+        if let server = parts.server {
+            let separator = singleLine(" · ", nameFont, TranscriptColors.tertiary)
+            let serverText = singleLine(server, nameFont, TranscriptColors.secondary, truncation: .byTruncatingTail)
+            let serverWidth = min(serverText.lineWidth, available * 0.4, available - separator.lineWidth - toolWidth)
+            if serverWidth >= 28 {
+                serverText.drawLine(at: CGPoint(x: nameX, y: nameY), width: serverWidth, font: nameFont)
+                separator.drawLine(at: CGPoint(x: nameX + serverWidth, y: nameY), width: separator.lineWidth, font: nameFont)
+                nameWidth = serverWidth + separator.lineWidth
+            }
+        }
         name.drawLine(at: CGPoint(x: nameX + nameWidth, y: nameY), width: toolWidth, font: nameFont)
         nameWidth += toolWidth
         if let summary = part.tool.summary {

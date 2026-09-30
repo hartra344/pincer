@@ -144,6 +144,71 @@ struct ToolCallPresentationTests {
         #expect(b.displayName == "search_issues")
     }
 
+    @Test func mcpToolNameSplitRule() {
+        typealias Case = (name: String, server: String?, tool: String)
+        let cases: [Case] = [
+            ("github__search_issues", "github", "search_issues"),
+            ("mcp__github__search_issues", "github", "search_issues"),
+            ("home-assistant__turn_on", "home-assistant", "turn_on"),
+            ("my.server_2__do-it", "my.server_2", "do-it"),
+            ("mcp__my.server__a.b", "my.server", "a.b"),
+            // The server ends at the first `__`, so tool names may contain `__`.
+            ("fs__read__file", "fs", "read__file"),
+            ("mcp__fs__read__file", "fs", "read__file"),
+            ("mcp__mcp__x", "mcp", "x"),
+            // No usable split.
+            ("exec", nil, "exec"),
+            ("web_fetch", nil, "web_fetch"),
+            ("__tool", nil, "__tool"),
+            ("server__", nil, "server__"),
+            ("mcp__", nil, "mcp__"),
+            ("", nil, ""),
+        ]
+        for c in cases {
+            let split = MCPToolName.split(c.name)
+            #expect(split.server == c.server, "server of \(c.name)")
+            if c.server != nil { #expect(split.tool == c.tool, "tool of \(c.name)") }
+        }
+    }
+
+    @Test func safeServerNameSanitizes() {
+        #expect(MCPToolName.safeServerName("github") == "github")
+        #expect(MCPToolName.safeServerName("my.server") == "my-server")
+        #expect(MCPToolName.safeServerName("home-assistant_2") == "home-assistant_2")
+        #expect(MCPToolName.safeServerName("a b/c") == "a-b-c")
+        #expect(MCPToolName.safeServerName("1password") == "mcp-1password")
+        #expect(MCPToolName.safeServerName(" x ") == "x")
+        #expect(MCPToolName.safeServerName("") == "mcp" && MCPToolName.safeServerName("   ") == "mcp")
+        #expect(MCPToolName.safeServerName("_a") == "mcp-_a")
+        // The prefix counts toward the 30-character limit.
+        #expect(MCPToolName.safeServerName("9" + String(repeating: "b", count: 40)) == "mcp-9" + String(repeating: "b", count: 25))
+        #expect(MCPToolName.safeServerName("0abc") == "mcp-0abc")
+        #expect(MCPToolName.safeServerName("-x") == "mcp--x")
+        #expect(MCPToolName.safeServerName("émoji") == "mcp--moji")
+        #expect(MCPToolName.safeServerName(String(repeating: "a", count: 40)).count == 30)
+        // The sanitised fragment survives a split, so a card's server resolves back to its config name.
+        let split = MCPToolName.split("\(MCPToolName.safeServerName("my.server"))__do_it")
+        #expect(split.server == MCPToolName.safeServerName("my.server") && split.tool == "do_it")
+        // Sanitised names never contain the separator's first `__` unless the config name does.
+        #expect(!MCPToolName.safeServerName("a.b").contains("__"))
+    }
+
+    @Test func presentationAgreesWithSplit() {
+        for name in ["github__search_issues", "mcp__github__search_issues", "fs__read__file", "mcp__a-b.c__x",
+                     "__tool", "server__", "mcp__", "a__b__c__d"]
+        {
+            let split = MCPToolName.split(name)
+            let p = ToolCallPresentation.make(tool(name))
+            #expect(p.kind == .mcp, "\(name)")
+            #expect(p.mcpServer == split.server, "server of \(name)")
+            if split.server != nil { #expect(p.displayName == split.tool, "tool of \(name)") }
+        }
+        // Names without `__` are not MCP.
+        #expect(ToolCallPresentation.make(tool("exec")).kind != .mcp)
+        #expect(ToolCallPresentation.make(tool("web_search")).mcpServer == nil)
+        #expect(ToolCallPresentation.make(tool("a_b")).kind != .mcp)
+    }
+
     @Test func genericKeepsKeyOrderAndNested() {
         let args = #"{"zeta":"z","alpha":{"b":1,"a":[1,2]},"n":2.5,"flag":true,"m":"l1\nl2"}"#
         let p = ToolCallPresentation.make(tool("custom", args: args))

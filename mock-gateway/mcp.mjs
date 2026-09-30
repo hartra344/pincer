@@ -2,10 +2,12 @@
 // table served by the proposed mcp.status / mcp.reconnect / mcp.oauth.* RPCs (#327-#329), plus a
 // tiny HTTP OAuth consent flow (/mcp-oauth/authorize and /mcp-oauth/callback).
 import crypto from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
 export const MCP_METHODS = [
   'mcp.status',
   'mcp.reconnect',
+  'mcp.probe',
   'mcp.oauth.status',
   'mcp.oauth.start',
   'mcp.oauth.complete',
@@ -14,9 +16,10 @@ export const MCP_METHODS = [
 ];
 export const MCP_EVENTS = ['mcp.oauth.changed', 'mcp.status.changed'];
 
+const REDACTED = '__OPENCLAW_REDACTED__';
 const ADMIN_SCOPE = 'operator.admin';
 const READ_SCOPE = 'operator.read';
-const ADMIN_METHODS = new Set(['mcp.reconnect', 'mcp.oauth.start', 'mcp.oauth.complete', 'mcp.oauth.cancel', 'mcp.oauth.logout']);
+const ADMIN_METHODS = new Set(['mcp.reconnect', 'mcp.probe', 'mcp.oauth.start', 'mcp.oauth.complete', 'mcp.oauth.cancel', 'mcp.oauth.logout']);
 const ATTEMPT_TTL_MS = 10 * 60 * 1000;
 const CONNECT_DELAY_MS = 800;
 const DEMO_ACCOUNT = 'demo@pincer.app';
@@ -24,6 +27,32 @@ const GENERIC_TOOLS = ['echo', 'ping', 'time'];
 
 export function mcpDisabled() {
   return process.env.MOCK_NO_MCP === '1';
+}
+
+/** Seeded plugin-declared MCP servers: names and unavailable names, as `plugins.inspect` reports them. */
+const PLUGIN_MCP = {
+  linear: { servers: ['linear'], unavailable: [] },
+  asana: { servers: ['asana', 'asana-beta'], unavailable: ['asana-beta'] },
+};
+
+/**
+ * The MCP parts of a `plugins.inspect` result. Like upstream, `mcpAuth` only has entries for servers that match a
+ * configured OAuth `mcp.servers` entry (here by name), and carries that server's live sign-in state, so plugin
+ * `linear` follows the configured `linear` server; `asana` has no configured entry and so no `mcpAuth`.
+ */
+export function pluginMcpInspect(state, pluginId) {
+  const mcp = PLUGIN_MCP[pluginId];
+  if (!mcp) return { declared: {}, components: {} };
+  const runtime = mcpState(state).runtime;
+  const servers = configServers(state);
+  const auth = mcp.servers
+    .filter((name) => servers[name]?.auth === 'oauth' && runtime.get(name)?.auth)
+    .map((name) => ({ serverName: name, state: runtime.get(name).auth.state }));
+  return {
+    declared: { mcpServers: [...mcp.servers] },
+    components: { mcpServers: mcp.servers.filter((name) => !mcp.unavailable.includes(name)), unavailable: { mcpServers: [...mcp.unavailable] } },
+    ...(auth.length ? { mcpAuth: auth } : {}),
+  };
 }
 
 /** Seeded `mcp.servers` config; the demo gateway mirrors it. */
@@ -45,6 +74,7 @@ export function seedMcpServers() {
       headers: { Authorization: 'Bearer ghp_mocktoken123' },
     },
     linear: { url: 'https://mcp.linear.app/mcp', transport: 'streamable-http', auth: 'oauth' },
+    'acme.docs': { url: 'https://mcp.acme.example/docs', transport: 'streamable-http' },
     notion: { url: 'https://mcp.notion.com/mcp', transport: 'streamable-http', auth: 'oauth' },
     postgres: {
       command: 'uvx',
@@ -62,6 +92,7 @@ const TOOL_DESCRIPTIONS = {
 const SEED_TOOLS = {
   filesystem: ['read_file', 'write_file', 'list_directory', 'search_files'],
   'home-assistant': ['get_state', 'call_service'],
+  'acme.docs': ['search', 'get_page'],
   github: ['get_issue', 'list_issues', 'create_issue', 'search_code', 'get_pull_request', 'list_pull_requests'],
 };
 const LINEAR_TOOLS = ['list_issues', 'get_issue', 'create_issue', 'update_issue', 'search_documentation'];
@@ -238,6 +269,53 @@ export function mcpNotices(state) {
   return notices;
 }
 
+/** Replaces redacted sentinels in a probed draft with the saved entry's values. */
+function restoreRedacted(value, saved) {
+  if (value === REDACTED) return saved;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, restoreRedacted(item, saved?.[key])]));
+  }
+  return value;
+}
+
+const PROBE_COUNTS = { github: [3, 2], filesystem: [1, 0], linear: [2, 1] };
+
+/**
+ * One-off connection test: never touches the status table. Results by server name:
+ * `postgres` fails with three diagnostics; `home-assistant` succeeds after ~2 s (or times out when timeoutMs < 2000);
+ * OAuth servers that aren't signed in (`linear`, `notion`) need authorization; `github` succeeds with 6 tools, 3
+ * resources and 2 prompts, `filesystem` with 4 tools and 1 resource; anything else succeeds with its tools. A
+ * command containing "nonexistent"/"missing", a non-http(s) URL or no transport fails.
+ */
+function probeResult(state, name, server, isSaved, timeoutMs) {
+  const transport = transportOf(server);
+  const failure = (...messages) => ({ ok: false, tools: [], resources: 0, prompts: 0, diagnostics: messages.map((message) => ({ message })) });
+  if (!transport) return { result: failure('Server needs a command or a url.') };
+  if (server.command && /nonexistent|missing/.test(server.command)) {
+    return { result: failure(`spawn ${server.command} ENOENT`, `Check that ${server.command} is installed and on the Gateway's PATH.`) };
+  }
+  if (server.url && !/^https?:\/\//.test(server.url)) return { result: failure(`Invalid url: ${server.url}`) };
+  if (server.auth === 'oauth') {
+    const rt = isSaved ? mcpState(state).runtime.get(name) : undefined;
+    const auth = rt?.auth ?? { mode: authModeOf(server), state: 'requires-authorization' };
+    if (auth.state !== 'authorized') return { result: { ...failure('Authorization required.'), auth: { mode: auth.mode, state: auth.state } } };
+  }
+  if (name === 'postgres') {
+    return { result: failure('spawn uvx ENOENT', "uvx was not found on the Gateway's PATH.", 'Install uv (https://docs.astral.sh/uv/) on the Gateway host.') };
+  }
+  const limit = Number.isFinite(timeoutMs) ? timeoutMs : 15_000;
+  let delay = 0;
+  if (name === 'home-assistant') {
+    if (limit < 2000) return { delay: limit, result: failure(`Timed out after ${limit} ms waiting for the server to initialize.`) };
+    delay = 2000;
+  }
+  const filter = server.toolFilter ?? {};
+  const kept = toolsFor(name, mcpState(state).runtime.get(name) ?? {})
+    .filter((tool) => (!filter.include?.length || matchesToolPattern(tool, filter.include)) && !matchesToolPattern(tool, filter.exclude ?? []));
+  const [resources, prompts] = PROBE_COUNTS[name] ?? [0, 0];
+  return { delay, result: { ok: true, tools: kept, resources, prompts, diagnostics: [] } };
+}
+
 function authorizeAttempt(state, broadcast, attempt, { account = DEMO_ACCOUNT } = {}) {
   const mcp = mcpState(state);
   const rt = mcp.runtime.get(attempt.server);
@@ -344,6 +422,16 @@ export function handleMcpRequest(state, conn, msg, { sendRes, sendErr, broadcast
     case 'mcp.status':
       sendRes(conn, id, { generatedAt: Date.now(), servers: names(state, params.serverNames).map((name) => statusEntry(state, name)) });
       break;
+    case 'mcp.probe': {
+      const saved = servers[params.serverName];
+      const draft = params.server && typeof params.server === 'object' ? restoreRedacted(params.server, saved) : undefined;
+      const candidate = draft ?? saved;
+      if (!candidate) return invalid(`unknown MCP server: ${params.serverName}`);
+      const { delay = 0, result } = probeResult(state, params.serverName, candidate, !draft || isDeepStrictEqual(draft, saved), params.timeoutMs);
+      if (delay) later(mcp, delay, () => sendRes(conn, id, result));
+      else sendRes(conn, id, result);
+      break;
+    }
     case 'mcp.oauth.status':
       sendRes(conn, id, {
         servers: names(state, params.serverNames)
@@ -426,4 +514,9 @@ export function handleMcpRequest(state, conn, msg, { sendRes, sendErr, broadcast
       return false;
   }
   return true;
+}
+
+// Like the Gateway: `*` is the only wildcard; include applies first, then exclude.
+function matchesToolPattern(tool, patterns) {
+  return patterns.some((pattern) => new RegExp(`^${pattern.split('*').map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`).test(tool));
 }

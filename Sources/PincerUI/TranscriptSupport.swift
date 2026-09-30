@@ -75,6 +75,8 @@ struct TranscriptContext {
     var previewHTML: (String) -> Void = { _ in }
     /// Shows a downloaded attachment in Quick Look. Provided by `ChatView`, which owns the preview.
     var quickLook: (URL) -> Void = { _ in }
+    /// Opens an MCP server in Gateway Settings. Provided by `ChatView`.
+    var openMCPServer: (String) -> Void = { _ in }
 
     func differs(from other: TranscriptContext) -> Bool {
         self.agent != other.agent || self.sessionKey != other.sessionKey || self.disclosure !== other.disclosure
@@ -103,6 +105,8 @@ protocol TranscriptRowActions: AnyObject {
     func openRun(_ sessionKey: String)
     /// Opens another chat, e.g. the one a forwarded message came from.
     func openChat(_ sessionKey: String)
+    /// Opens the MCP server a tool card called in Gateway Settings.
+    func openMCPServer(_ name: String)
     func preview(_ ref: ImageRef)
     /// Shows an ```html fence as a page in the sandboxed preview.
     func previewHTML(_ html: String)
@@ -623,6 +627,10 @@ final class TranscriptRenderer: TranscriptRowActions {
     func openChat(_ sessionKey: String) {
         let gateway = self.context.gateway
         gateway.selectedKey = gateway.resolveSessionKey(sessionKey)
+    }
+
+    func openMCPServer(_ name: String) {
+        self.context.openMCPServer(name)
     }
 
     func preview(_ ref: ImageRef) {

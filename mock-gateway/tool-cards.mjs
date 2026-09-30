@@ -99,7 +99,7 @@ export function seededToolCards({ makeMessage, textBlock, toolCallBlock }) {
     }),
     makeMessage('assistant', [
       textBlock('Config updated. Checking for known issues with OAuth servers.'),
-      toolCallBlock('call_seed_mcp_issues', 'github__search_issues', { query: 'MCP OAuth authorization required', repo: 'hartra344/pincer', state: 'open' }),
+      toolCallBlock('call_seed_mcp_issues', 'github__search_issues', { query: 'MCP server configuration', repo: 'hartra344/pincer', state: 'open' }),
     ]),
     result('call_seed_mcp_issues', 'github__search_issues', JSON.stringify(ISSUES, null, 2)),
     makeMessage('assistant', [toolCallBlock('call_seed_web_fetch', 'web_fetch', { url: FETCH_URL, extractMode: 'markdown' })]),
@@ -110,6 +110,23 @@ export function seededToolCards({ makeMessage, textBlock, toolCallBlock }) {
         extractor: 'readability', fetchedAt: '2026-09-29T14:40:00.000Z',
       },
     }),
+    makeMessage('assistant', [
+      textBlock('Looking at how MCP tools show up in the transcript.'),
+      toolCallBlock('call_seed_mcp_create', 'linear__create_issue', {
+        title: 'Era: MCP sign-in needs a browser', team: 'PIN', priority: 2,
+        description: 'Era reports 401 until it is signed in. Sign in from Settings → MCP Servers.',
+      }),
+    ]),
+    result('call_seed_mcp_create', 'linear__create_issue', JSON.stringify({ id: 'PIN-412', title: 'Era: MCP sign-in needs a browser', state: 'Backlog', priority: 2, url: 'https://linear.app/pincer/issue/PIN-412' })),
+    makeMessage('assistant', [toolCallBlock('call_seed_mcp_teams', 'linear__list_teams', {})]),
+    result('call_seed_mcp_teams', 'linear__list_teams', JSON.stringify([{ id: 'PIN', name: 'Pincer' }, { id: 'GW', name: 'Gateway' }])),
+    makeMessage('assistant', [toolCallBlock('call_seed_mcp_failed', 'linear__update_issue', { id: 'PIN-999', state: 'Done' })]),
+    result('call_seed_mcp_failed', 'linear__update_issue', 'Issue PIN-999 not found.', { isError: true }),
+    makeMessage('assistant', [toolCallBlock('call_seed_mcp_legacy', 'mcp__filesystem__read_file', { path: '/Users/demo/Projects/pincer/README.md' })]),
+    result('call_seed_mcp_legacy', 'mcp__filesystem__read_file', '# Pincer\n\nA native client for the OpenClaw Gateway.'),
+    // Configured server `acme.docs`; the transcript uses the sanitized name `acme-docs`.
+    makeMessage('assistant', [toolCallBlock('call_seed_mcp_sanitized', 'acme-docs__search', { query: 'rate limits', limit: 3 })]),
+    result('call_seed_mcp_sanitized', 'acme-docs__search', JSON.stringify({ results: [{ title: 'Rate limits', url: 'https://docs.acme.example/rate-limits' }, { title: 'Quotas', url: 'https://docs.acme.example/quotas' }] })),
     makeMessage('assistant', [textBlock(`${TOOL_CARDS_PREVIEW} Run \`openclaw mcp auth Era\` on a machine with a browser to finish the sign-in.`)]),
   ];
 }

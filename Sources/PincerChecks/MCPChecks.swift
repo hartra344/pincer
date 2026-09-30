@@ -4,7 +4,7 @@ import PincerKit
 // MCP Servers (#323): the model against the built-in demo, then against a (fresh) mock Gateway, including
 // the real HTTP OAuth round trip and redacted secrets surviving an unrelated edit.
 
-private let seedNames = ["filesystem", "github", "home-assistant", "linear", "notion", "postgres", "sentry"]
+private let seedNames = ["acme.docs", "filesystem", "github", "home-assistant", "linear", "notion", "postgres", "sentry"]
 
 @MainActor
 private func mcpConnect(_ profile: GatewayProfile, _ label: String) async -> GatewayStore? {
@@ -18,7 +18,7 @@ private func mcpConnect(_ profile: GatewayProfile, _ label: String) async -> Gat
 
 @MainActor
 private func mcpSeedChecks(_ mcp: MCPServersModel, label: String) {
-    check(mcp.servers.map(\.name) == seedNames, "\(label): lists the 7 seed servers (\(mcp.servers.map(\.name)))")
+    check(mcp.servers.map(\.name) == seedNames, "\(label): lists the 8 seed servers (\(mcp.servers.map(\.name)))")
     func state(_ name: String) -> MCPServerState { mcp.status(for: name).state }
     check(state("filesystem") == .connected && mcp.status(for: "filesystem").toolCount == 4, "\(label): filesystem connected, 4 tools")
     check(state("home-assistant") == .connected && mcp.status(for: "home-assistant").toolCount == 2, "\(label): home-assistant connected, 2 tools")
@@ -56,6 +56,89 @@ private func mcpDemoSignIn(_ mcp: MCPServersModel) async {
     if let second = await mcp.startSignIn("linear") {
         await mcp.cancelSignIn(second)
         check(mcp.status(for: "linear").needsSignIn, "demo: cancelled sign-in stays signed out")
+    }
+}
+
+/// Plugin-declared servers (#357) and Test Connection (#358), in the shape both gateways share.
+@MainActor
+private func mcpPluginAndProbeChecks(_ gateway: GatewayStore, label: String) async {
+    let mcp = gateway.mcp
+    check(mcp.supportsPluginServers && mcp.supportsProbe, "\(label): advertises plugins.inspect and mcp.probe")
+    let byName = Dictionary(mcp.pluginServers.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+    check(Set(byName.keys).isSuperset(of: ["linear", "asana"]), "\(label): plugin-declared servers include linear and asana (\(mcp.pluginServers.map(\.name)))")
+    let linear = byName["linear"], asana = byName["asana"]
+    check(linear?.pluginId == "linear" && linear?.pluginName == "Linear" && linear?.isAvailable == true,
+          "\(label): linear plugin server (\(String(describing: linear?.pluginName)) available \(String(describing: linear?.isAvailable)))")
+    // `mcpAuth` only covers servers matching a configured OAuth server, so linear follows the configured `linear`.
+    check(linear?.auth?.state != nil && linear?.auth?.state == mcp.status(for: "linear").auth?.state,
+          "\(label): plugin linear auth follows the configured linear server (\(String(describing: linear?.auth?.state)))")
+    check(asana?.isAvailable == true && (asana?.auth == nil || asana?.auth?.state == .requiresAuthorization), "\(label): plugin asana is available and not signed in")
+    if let beta = byName["asana-beta"] {
+        check(!beta.isAvailable && beta.auth == nil && beta.pluginId == "asana", "\(label): asana-beta is listed as unavailable")
+    }
+    check(mcp.servers.map(\.name) == seedNames, "\(label): plugin servers are not in the configured list")
+    check(!mcp.servers.map(\.name).contains("asana"), "\(label): plugin server is not editable config")
+
+    let saved = await mcp.probe(name: "filesystem")
+    check(saved.ok && saved.toolCount == 4 && saved.diagnostics.isEmpty, "\(label): probe filesystem ok with 4 tools (\(saved.ok) \(saved.toolCount) \(saved.diagnostics))")
+    let broken = await mcp.probe(name: "postgres")
+    check(!broken.ok && broken.diagnostics.contains { $0.contains("ENOENT") }, "\(label): probe postgres fails with ENOENT (\(broken.diagnostics))")
+    check(broken.diagnostics.count == 3, "\(label): probe postgres reports 3 diagnostics (\(broken.diagnostics.count))")
+    let github = await mcp.probe(name: "github")
+    check(github.ok && github.toolCount == 6 && github.resources == 3 && github.prompts == 2,
+          "\(label): probe github: 6 tools, 3 resources, 2 prompts (\(github.toolCount) \(String(describing: github.resources)) \(String(describing: github.prompts)))")
+    let tooSlow = await mcp.probe(name: "home-assistant", timeoutMs: 500)
+    check(!tooSlow.ok && !tooSlow.diagnostics.isEmpty, "\(label): probe home-assistant times out under 2 s (\(tooSlow.diagnostics))")
+    let slow = await mcp.probe(name: "home-assistant")
+    check(slow.ok && slow.toolCount == 2, "\(label): probe home-assistant succeeds with the default timeout (\(slow.ok) \(slow.diagnostics))")
+    let notion = await mcp.probe(name: "notion")
+    check(!notion.ok && notion.auth != nil && notion.auth?.state != .authorized, "\(label): probe notion needs authorization")
+    let disabled = await mcp.probe(name: "sentry")
+    check(mcp.server("sentry")?.enabled == false && disabled.ok, "\(label): a disabled server can still be probed (\(disabled.diagnostics))")
+    let acme = await mcp.probe(name: "acme.docs")
+    check(acme.ok && acme.toolCount == 2, "\(label): probe acme.docs ok with 2 tools (\(acme.toolCount))")
+    let oauth = await mcp.probe(name: "linear")
+    check(!oauth.ok && oauth.auth?.state == .requiresAuthorization, "\(label): probe of signed-out linear reports requires-authorization (\(oauth.diagnostics))")
+    let unknown = await mcp.probe(name: "no-such-server")
+    check(!unknown.ok && !unknown.diagnostics.isEmpty, "\(label): probe of an unknown server fails with a message")
+
+    var draft = MCPServerDraft()
+    draft.name = "probe-draft"
+    draft.command = "nonexistent-binary"
+    let missing = await mcp.probe(name: draft.name, draft: draft)
+    check(!missing.ok && missing.diagnostics.contains { $0.contains("ENOENT") }, "\(label): probe of a draft with a missing command fails (\(missing.diagnostics))")
+    check(mcp.server("probe-draft") == nil && !mcp.isNew("probe-draft"), "\(label): probing a draft doesn't add it to the config")
+    draft.command = "node"
+    let fine = await mcp.probe(name: draft.name, draft: draft)
+    check(fine.ok && fine.toolCount > 0, "\(label): probe of a draft with a working command connects (\(fine.diagnostics))")
+
+    // An unchanged draft probes the saved entry by name only; an edited one sends its definition.
+    if let filesystem = mcp.savedServer("filesystem") {
+        var sent: [JSONValue] = []
+        let recorder = MCPServersModel(settings: gateway.settings, methods: { gateway.hello?.methods }, request: { _, params in
+            sent.append(params)
+            return ["ok": true]
+        })
+        let same = MCPServerDraft(server: filesystem)
+        _ = await recorder.probe(name: "filesystem", draft: same)
+        var edited = MCPServerDraft(server: filesystem)
+        edited.connectionTimeoutMs = "1234"
+        _ = await recorder.probe(name: "filesystem", draft: edited)
+        check(sent.count == 2 && sent[0]["server"] == nil && sent[0]["timeoutMs"]?.int == MCPServersModel.defaultProbeTimeoutMs,
+              "\(label): unchanged draft sends only the name and the default timeout")
+        check(sent.count == 2 && sent[1]["server"]?["connectionTimeoutMs"]?.int == 1234 && sent[1]["timeoutMs"]?.int == 1234,
+              "\(label): edited draft sends its definition and its connection timeout")
+    }
+
+    if let filesystem = mcp.server("filesystem"), let first = saved.tools.first {
+        var filtered = MCPServerDraft(server: filesystem)
+        filtered.toolInclude = [first]
+        let result = await mcp.probe(name: "filesystem", draft: filtered)
+        check(result.ok && result.tools == [first], "\(label): probe honours the draft's tool filter (\(result.tools))")
+        var excluded = MCPServerDraft(server: filesystem)
+        excluded.toolExclude = [first]
+        let rest = await mcp.probe(name: "filesystem", draft: excluded)
+        check(rest.ok && rest.toolCount == saved.toolCount - 1 && !rest.tools.contains(first), "\(label): probe honours the draft's tool exclude (\(rest.toolCount))")
     }
 }
 
@@ -119,7 +202,7 @@ private func mcpLifecycle(_ gateway: GatewayStore, label: String, settleTimeout:
     check(mcp.server("scratch-renamed") == nil, "\(label): remove drops it from the draft")
     let ok64427 = await settings.save()
     check(ok64427, "\(label): save remove")
-    check(mcp.savedServer("scratch-renamed") == nil && mcp.servers.map(\.name) == seedNames, "\(label): back to the 7 seed servers (\(mcp.servers.map(\.name)))")
+    check(mcp.savedServer("scratch-renamed") == nil && mcp.servers.map(\.name) == seedNames, "\(label): back to the 8 seed servers (\(mcp.servers.map(\.name)))")
 }
 
 @MainActor
@@ -132,6 +215,7 @@ func runDemoMCP() async {
     check(mcp.supportsLiveStatus && mcp.supportsReconnect && mcp.supportsOAuth, "demo advertises mcp.status, mcp.reconnect and mcp.oauth.*")
     await mcp.load()
     mcpSeedChecks(mcp, label: "demo")
+    await mcpPluginAndProbeChecks(gateway, label: "demo")
     await mcpDemoSignIn(mcp)
     await mcp.reconnect("github")
     check(mcp.status(for: "github").state == .connected, "demo: reconnect github stays connected")
@@ -182,6 +266,7 @@ func runLiveMCP(url: String, token: String) async {
     let ok29241 = await waitFor("mock statuses settle", timeout: 10) { mcp.status(for: "filesystem").state == .connected }
     check(ok29241, "mock: filesystem connects")
     mcpSeedChecks(mcp, label: "mock")
+    await mcpPluginAndProbeChecks(gateway, label: "mock")
 
     // Secrets stay redacted in config.get, and an unrelated edit doesn't clobber them.
     let sentinel = "__OPENCLAW_REDACTED__"

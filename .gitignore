@@ -8,3 +8,4 @@ node_modules/
 mock-gateway/.state.json
 push-relay/.env
 *.p8
+.mockpid

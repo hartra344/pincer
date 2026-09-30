@@ -22,6 +22,11 @@ public final class MCPServersModel {
     public private(set) var loadState = OperationState.idle
     /// Live or derived state by server name, from the last `load()`.
     public private(set) var statuses: [String: MCPServerStatus] = [:]
+    /// Servers declared by installed plugins (`plugins.inspect`), from the last `load()`. Read-only.
+    public private(set) var pluginServers: [PluginMCPServer] = []
+    /// Live state of plugin-declared servers that `mcp.status` reports with `source: "plugin"` and a `pluginId`,
+    /// by `PluginMCPServer.id` ("pluginId/name").
+    public private(set) var pluginStatuses: [String: MCPServerStatus] = [:]
     /// Actions in flight or failed, by server name.
     public private(set) var operations: [String: OperationState] = [:]
 
@@ -70,6 +75,10 @@ public final class MCPServersModel {
     public var canEdit: Bool { self.allowsWritesWithoutAdmin || self.settings.canEdit }
     public var supportsLiveStatus: Bool { self.advertises(MCPServers.statusMethod) }
     public var supportsReconnect: Bool { self.advertises(MCPServers.reconnectMethod) }
+    /// Whether the Gateway can test a connection (`mcp.probe`).
+    public var supportsProbe: Bool { self.advertises(MCPServers.probeMethod) }
+    /// Whether plugin-declared servers can be read (`plugins.list` + `plugins.inspect`).
+    public var supportsPluginServers: Bool { self.advertises("plugins.list") && self.advertises("plugins.inspect") }
     public var supportsOAuth: Bool { self.advertises(MCPServers.oauthStartMethod) }
 
     public var statusSource: StatusSource {
@@ -142,6 +151,11 @@ public final class MCPServersModel {
 
     // MARK: Loading
 
+    /// The live state of a plugin-declared server, when `mcp.status` reports it.
+    public func status(for pluginServer: PluginMCPServer) -> MCPServerStatus? {
+        self.pluginStatuses[pluginServer.id]
+    }
+
     public func load() async {
         self.observeSaves()
         if let running = self.loadTask {
@@ -154,7 +168,9 @@ public final class MCPServersModel {
         let task = Task { @MainActor in
             repeat {
                 self.reloadQueued = false
+                async let plugins: Void = self.fetchPluginServers()
                 await self.fetchStatuses()
+                await plugins
             } while self.reloadQueued
             // Cleared with no suspension after the last check, so no caller can wait on a finished load.
             self.loadTask = nil
@@ -179,6 +195,13 @@ public final class MCPServersModel {
                         fresh[name] = status.with(auth: merged)
                     }
                 }
+                self.pluginStatuses = Dictionary(
+                    (result["servers"]?.array ?? []).compactMap { entry in
+                        guard entry["source"]?.text == "plugin", let pluginId = entry["pluginId"]?.text, !pluginId.isEmpty else { return nil }
+                        let status = MCPServerStatus(json: entry)
+                        return status.name.isEmpty ? nil : ("\(pluginId)/\(status.name)", status)
+                    },
+                    uniquingKeysWith: { _, new in new })
                 self.statuses = fresh
             } catch {
                 self.loadState = .failed(GatewayError.message(for: error))
@@ -194,6 +217,29 @@ public final class MCPServersModel {
             }
         case .none:
             self.statuses = [:]
+        }
+        if self.statusSource != .live { self.pluginStatuses = [:] }
+    }
+
+    private func fetchPluginServers() async {
+        guard self.supportsPluginServers else {
+            self.pluginServers = []
+            return
+        }
+        guard let list = try? await self.request("plugins.list", .object([:])) else { return }
+        let ids = (list["plugins"]?.array ?? []).compactMap(PluginInfo.init).filter { $0.installed && $0.enabled }.map(\.id)
+        var found: [PluginMCPServer] = []
+        // At most four inspects in flight.
+        for batch in stride(from: 0, to: ids.count, by: 4) {
+            let tasks = ids[batch..<min(batch + 4, ids.count)].map { id in
+                Task { @MainActor in
+                    (try? await self.request("plugins.inspect", ["pluginId": .string(id)])).map(PluginMCPServer.servers(inspect:)) ?? []
+                }
+            }
+            for task in tasks { found += await task.value }
+        }
+        self.pluginServers = found.sorted {
+            ($0.pluginId, $0.name.lowercased()) < ($1.pluginId, $1.name.lowercased())
         }
     }
 
@@ -350,6 +396,41 @@ public final class MCPServersModel {
             self.operations[name] = .failed(self.message(for: error, unavailable: L("MCP sign-in")))
         }
         await self.load()
+    }
+
+    // MARK: Test connection
+
+    /// Default `timeoutMs` for a probe.
+    public static let defaultProbeTimeoutMs = 15_000
+
+    /// Tests a connection with `mcp.probe`. With `draft`, probes that unsaved definition (redacted values stay as
+    /// the sentinel; the Gateway restores them from the saved entry); a draft identical to the saved server sends
+    /// only `serverName`. `timeoutMs` defaults to the draft's `connectionTimeoutMs`, else 15 s. Never throws:
+    /// failures come back as `MCPProbeResult.failure`.
+    public func probe(name: String, draft: MCPServerDraft? = nil, timeoutMs: Int? = nil) async -> MCPProbeResult {
+        guard self.supportsProbe else { return .failure(L("This Gateway doesn't support that yet.")) }
+        guard self.hasAdmin else { return .failure(ConfigWriteError.adminRequired.message) }
+        var params: [String: JSONValue] = ["serverName": .string(name)]
+        var timeout = timeoutMs
+        if let draft {
+            let saved = draft.originalName.flatMap { self.savedServer($0) }
+            // A disabled saved server can still be tested, so `enabled` isn't part of the comparison or the payload.
+            let json = Self.withoutEnabled(draft.json(original: saved))
+            if saved == nil || json != saved.map({ Self.withoutEnabled($0.raw) }) || draft.originalName != name { params["server"] = json }
+            if timeout == nil, let custom = json["connectionTimeoutMs"]?.int { timeout = custom }
+        }
+        params["timeoutMs"] = .number(Double(timeout ?? Self.defaultProbeTimeoutMs))
+        do {
+            return MCPProbeResult(json: try await self.request(MCPServers.probeMethod, .object(params)))
+        } catch {
+            return .failure(GatewayError.message(for: error, scope: ConfigWriteError.adminRequired.message, unavailable: L("testing MCP connections")))
+        }
+    }
+
+    private static func withoutEnabled(_ json: JSONValue) -> JSONValue {
+        guard case var .object(object) = json else { return json }
+        object["enabled"] = nil
+        return .object(object)
     }
 
     private func canRun(_ name: String, method: String) -> Bool {

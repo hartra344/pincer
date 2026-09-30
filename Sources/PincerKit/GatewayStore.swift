@@ -216,7 +216,8 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored public private(set) lazy var agentManagement = AgentManagementModel(
         connection: self.connection, hello: { [weak self] in self?.hello },
         allowsWritesWithoutAdmin: self.profile.isDemo,
-        onAgentsChanged: { [weak self] in await self?.agentsDidChange() })
+        onAgentsChanged: { [weak self] in await self?.agentsDidChange() },
+        onAgentDeleted: { [weak self] in self?.clearAvatarChoices(for: $0) })
     /// Skills (`skills.*`): the per-agent list, ClawHub search, installs and config. The demo may
     /// write without `operator.admin`.
     @ObservationIgnored public private(set) lazy var skills = SkillsModel(
@@ -820,6 +821,7 @@ public final class GatewayStore: Identifiable {
         var next = self.sessions
         self.addAgentHomes(to: &next)
         if next != self.sessions { self.sessions = next }
+        self.recordAvatarSeeds()
         Self.agentsDidLoad?()
     }
 
@@ -1395,6 +1397,10 @@ public final class GatewayStore: Identifiable {
     /// Choices made while this Gateway was unreachable. Its map is left alone until it reconnects,
     /// so pulling its older map can't undo them on this device; they're pushed after that pull.
     var queuedAvatarChoices: [String: String?] = [:]
+
+    /// The connection epoch whose bootstrap prefs pull has finished; seeds are only recorded after
+    /// it, so a device that hasn't read the Gateway's map can't overwrite an older seed.
+    @ObservationIgnored var avatarPrefsPulledEpoch: Int?
 
     /// Custom SF Symbol names by session key, synced through `users.prefs` (`pincer.chatIcons`).
     public var chatIcons: [String: String] {

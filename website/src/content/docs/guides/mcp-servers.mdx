@@ -38,6 +38,10 @@ Each row shows the server's name, how it starts (its command, or its URL) and a 
 
 An OAuth server that's signed in says **Signed in as** *account*, or **Signed in**. Choose a row to open the server.
 
+### From Plugins
+
+Plugins can declare MCP servers of their own. They appear in a **From Plugins** section below your servers, with the server's name and the plugin it belongs to. Each row shows one status: **Unavailable** if your Gateway can't run the server, otherwise its live status when the Gateway reports one, otherwise its sign-in badge (**Signed in**, **Sign-in required**, **Waiting for Sign-In…**). These are read-only: you can't edit, disable or remove them here. Choose one to open its plugin, and change it in the plugin's settings.
+
 ## Adding and editing
 
 Choose **+** to add a server, or open a server and choose **Edit**. Pick how it connects:
@@ -47,6 +51,17 @@ Choose **+** to add a server, or open a server and choose **Edit**. Pick how it 
 - **SSE** is the older remote transport. Use it only if the server doesn't offer Streamable HTTP.
 
 Names can use letters, numbers, `.`, `_` and `-`, and must start with a letter or number.
+
+### Advanced
+
+Open **Advanced** in the editor for optional settings. Leave a field empty and it isn't written to the config.
+
+- **Timeouts**: **Connection timeout** and **Request timeout**, in milliseconds. Whole numbers only. When empty, the Gateway uses 30 seconds to connect and 60 seconds per request.
+- **Tool filter**: **Only allow tools** and **Hide tools** take tool name patterns, one per row. `*` matches any characters and is the only wildcard. The Gateway applies the allow list first, then hides anything that matches the hide list.
+- **TLS** (remote servers): **Verify TLS certificate** is on by default. Turn it off only for a server you trust, such as one with a self-signed certificate. **Client certificate** and **Client key** are file paths on the Gateway host, for servers that need mutual TLS.
+- **OAuth** (remote servers that use OAuth sign-in): turn on **Requires OAuth sign-in** and set an optional **Scope** right under it. In **Advanced**, **Sign-in** is **Shared (one sign-in for everyone)** or **Per person (each person signs in)**, and **Auth profile** picks a saved auth profile. Per-person sign-in can't use an auth profile.
+
+Switching a server to **stdio** removes the remote-only settings (TLS and OAuth), and the editor tells you which ones before you save.
 
 ### Secrets
 
@@ -65,6 +80,16 @@ Use the **Enabled** switch to turn a server off without losing its settings. Cho
 ## Review & Save
 
 Changes stay in a draft until you choose **Review & Save**, the same as the other Gateway Settings pages. You see what will change first, then save. The Gateway applies MCP changes live, so **no Gateway restart is needed**, and the list refreshes when it does. **Revert** throws the draft away.
+
+## Test Connection
+
+Choose **Test Connection** to try a server and see the result on the spot. In the editor it tests the settings you've typed, without saving. On the server's page it tests the saved server, so save your changes first. The result is one of:
+
+- **Connected · 12 tools**, which can also count resources and prompts.
+- **Needs sign-in.** The server uses OAuth and nobody has signed in yet. In the editor, save first, then sign in from the server's page. On the server's page, use Sign In, then test again.
+- **Couldn't connect**, with the reasons below it and **Copy Details**.
+
+If you change the settings after a test, the result is dimmed and marked **Settings changed since the test.** The button only appears when your Gateway supports it.
 
 ## Reconnect
 
@@ -87,13 +112,11 @@ Choose **Tools** on a server to open the [Tools inspector](../skills-and-tools/#
 ## What your Gateway needs
 
 - **Editing** works on any Gateway that offers `config.get` and `config.patch`: add, edit, remove, enable and disable.
-- **Live status, Reconnect and in-app sign-in** need Gateway support that is proposed upstream in OpenClaw: [mcp.status](https://github.com/hartra344/pincer/issues/327), [mcp.reconnect](https://github.com/hartra344/pincer/issues/328) and [mcp.oauth](https://github.com/hartra344/pincer/issues/329). Pincer only shows these controls when your Gateway advertises them.
+- **From Plugins** works on Gateways that can inspect plugins.
+- **Test Connection, live status, Reconnect and in-app sign-in** only appear when your Gateway supports them. Current OpenClaw releases don't, so for OAuth servers Pincer shows the commands to run on the Gateway host instead, with a **Copy** button: `openclaw mcp login <name>` to sign in and `openclaw mcp logout <name>` to sign out. The proposals are [mcp.status](https://github.com/hartra344/pincer/issues/327), [mcp.reconnect](https://github.com/hartra344/pincer/issues/328) and [mcp.oauth](https://github.com/hartra344/pincer/issues/329).
 
-Until then:
-
-- Status comes from the Tools inspector when it's available, so it may read **Status Unknown** for servers that haven't connected yet.
-- For OAuth servers, Pincer shows the commands to run on the Gateway host, with a **Copy** button: `openclaw mcp login <name>` to sign in and `openclaw mcp logout <name>` to sign out.
+Until then, status comes from the Tools inspector when it's available, so it may read **Status Unknown** for servers that haven't connected yet.
 
 ## Try it in the demo
 
-Everything here works in [Try the Demo](../../getting-started/try-the-demo/), with sample servers in each state: **linear** needs sign-in, **notion**'s sign-in has expired, **postgres** has an error, **sentry** is disabled, and **filesystem**, **home-assistant** and **github** are connected. Nothing touches a real Gateway.
+Everything here works in [Try the Demo](../../getting-started/try-the-demo/), with sample servers in each state: **linear** needs sign-in, **notion**'s sign-in has expired, **postgres** has an error, **sentry** is disabled, and **filesystem**, **home-assistant** and **github** are connected. Under **From Plugins**, a **linear** server is signed in and another needs sign-in. Nothing touches a real Gateway.

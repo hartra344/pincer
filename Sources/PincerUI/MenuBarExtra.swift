@@ -47,6 +47,7 @@ struct MenuBarContent: View {
     var clock = MenuBarClock.shared
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
+    @AppStorage(AvatarSettings.animatedKey) private var petsOn = true
 
     var body: some View {
         let inbox = MenuBarInbox(app: self.app, now: self.clock.now)
@@ -100,13 +101,41 @@ struct MenuBarContent: View {
         if !items.isEmpty {
             Section(title) {
                 ForEach(items) { item in
-                    Button(item.title) { self.open(item.target) }
+                    Button { self.open(item.target) } label: { self.rowLabel(item) }
                 }
                 if overflow > 0 {
                     Button(L("\(overflow) more…")) { self.showMainWindow() }
                 }
             }
         }
+    }
+
+    private static let petSide: CGFloat = 16
+
+    /// Text-only unless pets are on and the row's agent is known; a still pose, never animated.
+    @ViewBuilder private func rowLabel(_ item: MenuBarInbox.Item) -> some View {
+        if let image = self.petImage(for: item) {
+            Label { Text(item.title) } icon: { Image(nsImage: image) }
+        } else {
+            Text(item.title)
+        }
+    }
+
+    private func petImage(for item: MenuBarInbox.Item) -> NSImage? {
+        guard self.petsOn, let agentId = item.agentId,
+              let gateway = self.app.gateways.first(where: { $0.id == item.target.gatewayId })
+        else { return nil }
+        let agent = gateway.agents.first { $0.id == agentId } ?? AgentSummary(id: agentId, name: agentId.capitalized)
+        let style = AvatarSettings.style(for: agent, in: gateway)
+        let side = Self.petSide
+        var image: NSImage?
+        NSApp.effectiveAppearance.performAsCurrentDrawingAppearance {
+            let dark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            let scale = NSScreen.main?.backingScaleFactor ?? 2
+            image = AvatarArt.still(style, state: item.pose, dark: dark, accent: TranscriptColors.tint.cgColor, side: side, scale: scale)
+                .map { NSImage(cgImage: $0, size: NSSize(width: side, height: side)) }
+        }
+        return image
     }
 
     /// Selects the chat first, so a window created by `showMainWindow` starts on it.

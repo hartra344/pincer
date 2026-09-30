@@ -195,7 +195,7 @@ struct SidebarModel: Equatable {
             }
             let avatar = indicator ?? SidebarWorkingIndicator.resolveUnread(
                 isUnread: row.isUnread, isSubagent: row.isSubagent, agent: agent, companionsEnabled: avatarsOn)
-            return (indicator, avatar, avatar != nil && avatarsOn ? AvatarSettings.style(for: agent) : nil)
+            return (indicator, avatar, avatar != nil && avatarsOn ? AvatarSettings.style(for: agent, in: gateway) : nil)
         }
         func entries(_ channels: [SidebarChannel], depth: Int, groupName: String? = nil) -> [Entry] {
             var entries: [Entry] = []
@@ -252,7 +252,7 @@ struct SidebarModel: Equatable {
             let nestedName: String? = depth > 0 ? section.title : nil
             if depth > 0 { header.chatCount = section.channels.count }
             if avatarsOn, case let .agent(agentId) = section.kind {
-                header.avatar = AvatarSettings.style(for: gateway.agent(agentId))
+                header.avatar = AvatarSettings.style(for: gateway.agent(agentId), in: gateway)
                 let rows = section.allChannels.flatMap { [$0.row] + $0.threads }
                 if rows.contains(where: { approvalKeys.contains($0.key) }) {
                     header.avatarState = .awaitingApproval

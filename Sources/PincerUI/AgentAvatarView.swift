@@ -158,6 +158,7 @@ struct ChatAgentAvatar: View {
     @AppStorage(AvatarSettings.renderStyleKey) private var renderStyle = AvatarRenderStyle.pixel.rawValue
     @AppStorage private var creature: String
     @Environment(\.appTheme) private var theme
+    @Environment(GatewayStore.self) private var gateway: GatewayStore?
 
     init(chat: ChatStore, agent: AgentSummary, size: CGFloat = 28, announces: Bool = false) {
         self.chat = chat
@@ -173,7 +174,10 @@ struct ChatAgentAvatar: View {
             // only updates when the signals themselves change.
             ChatAgentAvatarContent(
                 signals: self.chat.avatarSignals, agent: self.agent,
-                style: AvatarSettings.style(for: self.agent, creature: self.creature, renderStyle: self.renderStyle),
+                style: AvatarSettings.style(
+                    for: self.agent, seed: self.gateway?.avatarSeed(for: self.agent)
+                        ?? AvatarStyle.identitySeed(name: self.agent.name, agentId: self.agent.id),
+                    creature: self.creature, renderStyle: self.renderStyle),
                 size: self.size, announces: self.announces)
                 .equatable()
         } else {
@@ -254,16 +258,23 @@ enum AvatarSettings {
 
     static var isEnabled: Bool { UserDefaults.standard.object(forKey: self.animatedKey) as? Bool ?? true }
 
-    /// Seeded from the agent's identity name; the creature override is still keyed by its id.
-    static func style(for agent: AgentSummary, creature: String, renderStyle: String) -> AvatarStyle {
-        let seed = AvatarStyle.identitySeed(name: agent.name, agentId: agent.id)
+    /// Seeded from the Gateway's recorded identity seed, so a rename keeps the pet; the creature
+    /// override is keyed by the agent id.
+    static func style(for agent: AgentSummary, seed: String, creature: String, renderStyle: String) -> AvatarStyle {
         let seeded = AvatarStyle.seeded(from: seed, renderStyle: AvatarRenderStyle(rawValue: renderStyle) ?? .pixel)
         return AvatarCreature(rawValue: creature).map(seeded.with(creature:)) ?? seeded
     }
 
-    /// The agent's style as currently set in defaults.
-    static func style(for agent: AgentSummary, defaults: UserDefaults = .standard) -> AvatarStyle {
-        self.style(for: agent, creature: defaults.string(forKey: self.creatureKey(for: agent.id)) ?? "",
+    /// Kept until `AvatarCharacterRow` passes the Gateway's seed.
+    static func style(for agent: AgentSummary, creature: String, renderStyle: String) -> AvatarStyle {
+        self.style(for: agent, seed: AvatarStyle.identitySeed(name: agent.name, agentId: agent.id),
+                   creature: creature, renderStyle: renderStyle)
+    }
+
+    /// The agent's style as currently set in defaults, seeded by the Gateway when given.
+    @MainActor static func style(for agent: AgentSummary, in gateway: GatewayStore?, defaults: UserDefaults = .standard) -> AvatarStyle {
+        self.style(for: agent, seed: gateway?.avatarSeed(for: agent) ?? AvatarStyle.identitySeed(name: agent.name, agentId: agent.id),
+                   creature: defaults.string(forKey: self.creatureKey(for: agent.id)) ?? "",
                    renderStyle: defaults.string(forKey: self.renderStyleKey) ?? "")
     }
 }

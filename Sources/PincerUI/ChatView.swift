@@ -405,6 +405,7 @@ private struct TranscriptPane: View {
     let reasoningOff: Bool
     @Environment(GatewayStore.self) private var gateway
     @Environment(AppModel.self) private var app
+    @Environment(\.openGatewaySettings) private var openGatewaySettings
     /// Not observed: only the list's bottom state and Find's toggle drive it.
     @State private var findTrim = TranscriptFindTrim()
 
@@ -484,7 +485,10 @@ private struct TranscriptPane: View {
                         BookmarkStore.shared(gatewayId: id).isBookmarked(sessionKey: key, messageId: $0)
                     },
                     previewHTML: { [$previewingHTML] in $previewingHTML.wrappedValue = HTMLPreviewItem(html: $0) },
-                    quickLook: { [$quickLookURL] in $quickLookURL.wrappedValue = $0 }),
+                    quickLook: { [$quickLookURL] in $quickLookURL.wrappedValue = $0 },
+                    openMCPServer: { [opener = self.openGatewaySettings, gateway = self.gateway] in
+                        opener.mcpServer(gateway, name: $0)
+                    }),
                 bottomInset: self.bottomInset,
                 topInset: self.topInset,
                 highlight: self.find.highlight,

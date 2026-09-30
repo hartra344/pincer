@@ -102,6 +102,9 @@ extension GatewayStore {
         let queued = self.queuedAvatarChoices
         self.queuedAvatarChoices = [:]
         for (entry, value) in queued { self.setAvatarChoice(value, for: entry) }
+        guard self.isCurrent(epoch) else { return }
+        self.avatarPrefsPulledEpoch = epoch
+        self.recordAvatarSeeds()
     }
 
     func pullServerNames() async { await self.pull(self.syncedMap(Self.serverNamesPref)) }
@@ -294,6 +297,8 @@ extension GatewayStore {
     public var supportsSkills: Bool { self.advertises(Skills.statusMethod) }
     /// The MCP Servers page: the config is readable (`config.get`).
     public var supportsMCPServers: Bool { self.settings.hasLoaded && self.settings.configSupported }
+    /// Whether a link to the MCP Servers page can be offered before the config has loaded (`config.get` is advertised).
+    public var canOpenMCPServers: Bool { self.advertises("config.get") && self.settings.configSupported }
     /// The chat's Tools & Policy inspector: `tools.effective` is advertised.
     public var supportsToolsEffective: Bool { self.advertises(ToolsPolicy.effectiveMethod) }
     /// An agent's Tools inspector: `tools.catalog` is advertised.
@@ -355,6 +360,46 @@ extension GatewayStore {
     /// Sets Pixel or Plush on every device.
     public func setAvatarRenderStyle(_ style: AvatarRenderStyle) {
         self.setAvatarChoice(style.rawValue, for: AvatarPreferences.renderStyleEntry)
+    }
+
+    /// The identity seed this Gateway first saw for the agent, so renaming it keeps its pet.
+    public func avatarSeed(for agent: AgentSummary) -> String {
+        self.avatarChoices[AvatarPreferences.seedEntry(for: agent.id)]
+            ?? AvatarStyle.identitySeed(name: agent.name, agentId: agent.id)
+    }
+
+    /// Records the seed of every agent without one, in one push. Never overwrites a seed. Before this
+    /// device's first sync they're only kept here: the first sync's merge writes them in its one
+    /// write, with the Gateway's older seeds winning. After that it waits for this connection's
+    /// prefs pull, so another device's older seed wins.
+    func recordAvatarSeeds() {
+        let firstSyncPending = !self.defaults.bool(forKey: self.syncedMap(AvatarPreferences.prefKey).syncedDefaultsKey)
+        guard firstSyncPending || self.avatarPrefsPulledEpoch == self.connectionEpoch else { return }
+        var added: [String: String?] = [:]
+        for agent in self.agents {
+            let entry = AvatarPreferences.seedEntry(for: agent.id)
+            if self.avatarChoices[entry] == nil {
+                added[entry] = AvatarStyle.identitySeed(name: agent.name, agentId: agent.id)
+            }
+        }
+        guard !added.isEmpty else { return }
+        for (entry, value) in added { self.avatarChoices[entry] = value }
+        guard !firstSyncPending else { return }
+        let map = self.syncedMap(AvatarPreferences.prefKey)
+        Task { await self.push(map, added) }
+    }
+
+    /// Drops a deleted agent's seed and character here and on the Gateway.
+    func clearAvatarChoices(for agentId: String) {
+        self.queuedAvatarChoices.removeValue(forKey: agentId)
+        var removed: [String: String?] = [:]
+        for entry in [AvatarPreferences.seedEntry(for: agentId), agentId] where self.avatarChoices[entry] != nil {
+            self.avatarChoices[entry] = nil
+            removed[entry] = .some(nil)
+        }
+        guard !removed.isEmpty else { return }
+        let map = self.syncedMap(AvatarPreferences.prefKey)
+        Task { await self.push(map, removed) }
     }
 
     private func setAvatarChoice(_ value: String?, for entry: String) {
