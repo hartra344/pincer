@@ -132,6 +132,22 @@ struct PrefsWriteFailureTests {
         #expect(last?["b"]?.string == "2")
     }
 
+    @Test func rejectedSetIsRecordedStaysPendingAndClearsOnSuccess() async throws {
+        let h = try await PrefsHarness()
+        defer { h.finish() }
+        h.gateway.setReply = .error
+        await h.store.push(h.map, "k", "v")
+        #expect(h.store.rejectedPrefs[PrefsHarness.pref] != nil)
+        #expect(h.store.pendingPrefChanges[PrefsHarness.pref]?["k"] == .some("v"))
+        let sent = h.gateway.sets.count
+        await h.settle()
+        #expect(h.gateway.sets.count == sent, "a rejected write isn't looped")
+        h.gateway.setReply = .ok
+        await h.store.push(h.map, "k2", "v2")
+        #expect(h.store.rejectedPrefs[PrefsHarness.pref] == nil)
+        #expect(h.store.pendingPrefChanges[PrefsHarness.pref] == nil)
+    }
+
     // MARK: Persistence
 
     @Test func pendingSurvivesANewStoreWithTheSameIdAndDefaults() async throws {
@@ -163,11 +179,9 @@ struct PrefsWriteFailureTests {
         store.setAvatarCreature(.cat, for: "main")
         store.setAvatarRenderStyle(.plush)
         let reborn = PrefsHarness.makeStore(profile, scratch.defaults)
-        // Either persisted as queued choices or as generic pending entries: the choices must still be owed.
-        let owed = reborn.queuedAvatarChoices.merging(
-            reborn.pendingPrefChanges[AvatarPreferences.prefKey] ?? [:]) { $1 }
-        #expect(owed["main"] == .some("cat"))
-        #expect(owed[AvatarPreferences.renderStyleEntry] == .some("plush"))
+        // Offline choices stay queued, not applied, until the Gateway is reached.
+        #expect(reborn.queuedAvatarChoices["main"] == .some("cat"))
+        #expect(reborn.queuedAvatarChoices[AvatarPreferences.renderStyleEntry] == .some("plush"))
     }
 
     @Test func queuedAvatarChoicesReachTheGatewayAfterARelaunch() async throws {
