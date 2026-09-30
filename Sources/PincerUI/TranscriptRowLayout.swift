@@ -104,7 +104,6 @@ enum TranscriptPart {
                 case copy(String)
                 case toggle(key: String, to: Bool)
                 case openMCPServer(String)
-                case openURL(URL)
             }
 
             let id: String

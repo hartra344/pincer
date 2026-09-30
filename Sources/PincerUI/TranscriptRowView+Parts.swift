@@ -1379,8 +1379,6 @@ final class TranscriptToolView: TranscriptBaseView {
             self.actions?.setExpanded(key, value, row: rowId)
         case let .openMCPServer(name):
             self.actions?.openMCPServer(name)
-        case let .openURL(url):
-            self.actions?.open(url)
         }
     }
 
@@ -1535,7 +1533,7 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         let iconRect = CGRect(x: 10, y: (bounds.height - 16) / 2, width: 16, height: 16)
         if !part.tool.isRunning {
             if part.tool.isError {
-                TranscriptSymbols.draw("xmark.octagon", in: iconRect, size: style.callout.pointSize, color: TranscriptColors.red)
+                TranscriptSymbols.draw("xmark.octagon", in: iconRect, size: style.callout.pointSize, color: TranscriptColors.failure)
             } else {
                 let symbol = part.edit.map(TranscriptDiffText.symbol(for:)) ?? ToolSymbols.symbol(for: part.tool.name)
                 TranscriptSymbols.draw(symbol, in: iconRect, size: style.callout.pointSize, color: TranscriptColors.secondary)
@@ -1552,21 +1550,39 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         let nameFont = style.calloutMonoMedium
         let nameX: CGFloat = 34
         let nameY = (bounds.height - TranscriptStyle.lineHeight(nameFont)) / 2
-        var right = self.drawDuration(part, nameX: nameX, right: chevronX - 8)
-        if part.tool.isError {
-            let badgeFont = style.caption2Medium
-            let badge = singleLine(L("Failed"), badgeFont, TranscriptColors.failure)
-            let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
-            let badgeWidth = badge.lineWidth + 10
-            if right - badgeWidth > nameX + 40 {
-                let rect = CGRect(x: right - badgeWidth, y: (bounds.height - badgeHeight) / 2, width: badgeWidth, height: badgeHeight)
-                TranscriptColors.failure.withAlphaComponent(0.14).setFill()
-                PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
-                badge.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: badge.lineWidth, font: badgeFont)
-                right = rect.minX - 8
-            }
+        let duration = self.durationLine(part)
+        let badgeFont = style.caption2Medium
+        let failed = part.tool.isError ? singleLine(L("Failed"), badgeFont, TranscriptColors.failure) : nil
+        let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
+        // Left edge of the Failed badge (or the chevron's) for a given reserve; nil when the badge doesn't fit.
+        func badgeRect(reserve: CGFloat) -> CGRect? {
+            guard let failed else { return nil }
+            let width = failed.lineWidth + 10
+            let right = chevronX - 8 - reserve
+            guard right - width > nameX + 40 else { return nil }
+            return CGRect(x: right - width, y: (bounds.height - badgeHeight) / 2, width: width, height: badgeHeight)
         }
+        func rightEdge(reserve: CGFloat) -> CGFloat { badgeRect(reserve: reserve).map { $0.minX - 8 } ?? chevronX - 8 - reserve }
         let parts = ToolCardName(part.tool.name)
+        let nameWidthNatural = singleLine(parts.tool, nameFont, TranscriptColors.label).lineWidth
+        var reserve: CGFloat = 0
+        if let duration {
+            let candidate = duration.lineWidth + 8
+            let unchanged = (badgeRect(reserve: 0) != nil) == (badgeRect(reserve: candidate) != nil)
+            let room = rightEdge(reserve: candidate) - (nameX + nameWidthNatural)
+            // The summary keeps at least 60pt after the name, or the name keeps 40pt when there's no summary.
+            if unchanged, room >= (part.tool.summary == nil ? 40 : 68) { reserve = candidate }
+        }
+        if let duration, reserve > 0 {
+            self.draw(duration, right: chevronX - 8, nameFont: nameFont)
+        }
+        var right = chevronX - 8 - reserve
+        if let failed, let rect = badgeRect(reserve: reserve) {
+            TranscriptColors.failure.withAlphaComponent(0.14).setFill()
+            PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
+            failed.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: failed.lineWidth, font: badgeFont)
+            right = rect.minX - 8
+        }
         var nameWidth: CGFloat = 0
         let name = singleLine(parts.tool, nameFont, TranscriptColors.label)
         let available = max(right - nameX, 0)
@@ -1599,18 +1615,18 @@ final class TranscriptToolHeaderView: TranscriptTapView {
 }
 
 extension TranscriptToolHeaderView {
-    /// Right-aligned run time before the chevron, dropped when the name and summary would get under 40pt.
-    /// Returns the new right edge.
-    fileprivate func drawDuration(_ part: TranscriptPart.Tool, nameX: CGFloat, right: CGFloat) -> CGFloat {
-        guard !part.tool.isRunning, let ms = part.tool.durationMs else { return right }
+    /// The run time as drawn, nil while running or when the call reported none.
+    fileprivate func durationLine(_ part: TranscriptPart.Tool) -> NSAttributedString? {
+        guard !part.tool.isRunning, let ms = part.tool.durationMs else { return nil }
+        return singleLine(ToolDuration.format(ms).text, TranscriptStyle.shared.captionMono, TranscriptColors.secondary)
+    }
+
+    /// Draws `line` with its right edge at `right`, on the name's baseline.
+    fileprivate func draw(_ line: NSAttributedString, right: CGFloat, nameFont: PFont) {
         let font = TranscriptStyle.shared.captionMono
-        let text = singleLine(ToolDuration.format(ms).text, font, TranscriptColors.secondary)
-        guard right - text.lineWidth > nameX + 40 else { return right }
-        let nameFont = TranscriptStyle.shared.calloutMonoMedium
         let nameY = (self.bounds.height - TranscriptStyle.lineHeight(nameFont)) / 2
-        text.drawLine(at: CGPoint(x: right - text.lineWidth, y: nameY + nameFont.ascender - font.ascender),
-                      width: text.lineWidth, font: font)
-        return right - text.lineWidth - 8
+        line.drawLine(at: CGPoint(x: right - line.lineWidth, y: nameY + nameFont.ascender - font.ascender),
+                      width: line.lineWidth, font: font)
     }
 
     /// File name (directory dimmer), then the +/− counts and a status badge before the chevron.
@@ -1620,35 +1636,56 @@ extension TranscriptToolHeaderView {
         let nameFont = style.calloutMonoMedium
         let nameX: CGFloat = 34
         let nameY = (bounds.height - TranscriptStyle.lineHeight(nameFont)) / 2
-        var right = self.drawDuration(part, nameX: nameX, right: chevronX - 8)
-
         let badgeFont = style.caption2Medium
         let badgeText = part.tool.isError ? L("Failed") : edit.statusLabel(isRunning: part.tool.isRunning)
         let badgeColor = part.tool.isError ? TranscriptColors.failure : TranscriptColors.secondary
         let badge = singleLine(badgeText, badgeFont, badgeColor)
         let badgeHeight = TranscriptStyle.lineHeight(badgeFont) + 2
         let badgeWidth = badge.lineWidth + 10
-        if right - badgeWidth > nameX + 40 {
-            let rect = CGRect(x: right - badgeWidth, y: (bounds.height - badgeHeight) / 2, width: badgeWidth, height: badgeHeight)
-            (part.tool.isError ? TranscriptColors.failure.withAlphaComponent(0.14) : TranscriptColors.strongFill).setFill()
-            PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
-            badge.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: badge.lineWidth, font: badgeFont)
-            right = rect.minX - 8
-        }
-
         let countFont = style.captionMono
         let countY = nameY + nameFont.ascender - countFont.ascender
         let counts = [(edit.deletionsLabel, TranscriptDiffText.deletion), (edit.additionsLabel, TranscriptDiffText.addition)]
-            .compactMap { label, color in label.map { ($0, color) } }
-        for (text, color) in counts {
-            let count = singleLine(text, countFont, color)
-            guard right - count.lineWidth > nameX + 40 else { break }
-            count.drawLine(at: CGPoint(x: right - count.lineWidth, y: countY), width: count.lineWidth, font: countFont)
-            right -= count.lineWidth + 6
-        }
-        if !counts.isEmpty { right -= 2 }
-
+            .compactMap { label, color in label.map { (singleLine($0, countFont, color)) } }
         let name = singleLine(edit.title, nameFont, TranscriptColors.label, truncation: .byTruncatingMiddle)
+
+        // What fits left of the chevron after `reserve`: the status badge, then the counts.
+        func place(reserve: CGFloat) -> (badge: CGRect?, counts: [(NSAttributedString, CGFloat)], right: CGFloat) {
+            var right = chevronX - 8 - reserve
+            var badgeRect: CGRect?
+            if right - badgeWidth > nameX + 40 {
+                badgeRect = CGRect(x: right - badgeWidth, y: (bounds.height - badgeHeight) / 2, width: badgeWidth, height: badgeHeight)
+                right -= badgeWidth + 8
+            }
+            var placed: [(NSAttributedString, CGFloat)] = []
+            for count in counts {
+                guard right - count.lineWidth > nameX + 40 else { break }
+                placed.append((count, right - count.lineWidth))
+                right -= count.lineWidth + 6
+            }
+            if !counts.isEmpty { right -= 2 }
+            return (badgeRect, placed, right)
+        }
+        var layout = place(reserve: 0)
+        if let duration = self.durationLine(part) {
+            let candidate = duration.lineWidth + 8
+            let shifted = place(reserve: candidate)
+            // Badge and counts keep their place; the name (and directory) must still read.
+            let room = shifted.right - (nameX + min(name.lineWidth, 160))
+            if (shifted.badge != nil) == (layout.badge != nil), shifted.counts.count == layout.counts.count, room >= 40 {
+                layout = shifted
+                self.draw(duration, right: chevronX - 8, nameFont: nameFont)
+            }
+        }
+        if let rect = layout.badge {
+            (part.tool.isError ? TranscriptColors.failure.withAlphaComponent(0.14) : TranscriptColors.strongFill).setFill()
+            PBezierPath.rounded(rect, radius: badgeHeight / 2).fill()
+            badge.drawLine(at: CGPoint(x: rect.minX + 5, y: rect.minY + 1), width: badge.lineWidth, font: badgeFont)
+        }
+        for (count, x) in layout.counts {
+            count.drawLine(at: CGPoint(x: x, y: countY), width: count.lineWidth, font: countFont)
+        }
+        let right = layout.right
+
         let nameWidth = min(name.lineWidth, max(right - nameX, 0))
         name.drawLine(at: CGPoint(x: nameX, y: nameY), width: nameWidth, font: nameFont)
         if let directory = edit.directory {
