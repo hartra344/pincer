@@ -8,6 +8,7 @@ import UIKit
 
 /// Quick-react bar (recent emoji first) over a fixed grid of common emoji. Picking one closes it.
 struct ReactionPicker: View {
+    var hint: String?
     let onPick: (String) -> Void
 
     private let quick = Reactions.quickBar(recent: Reactions.recent)
@@ -25,6 +26,12 @@ struct ReactionPicker: View {
                 ForEach(Reactions.catalog, id: \.self) { emoji in
                     self.button(emoji, size: 20)
                 }
+            }
+            if let hint = self.hint {
+                Text(hint)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: 8 * 36, alignment: .leading)
             }
         }
         .padding(Theme.Spacing.xl)
@@ -47,12 +54,12 @@ struct ReactionPicker: View {
 
     /// Shows the picker anchored to `rect` in `view`, as a popover (on a phone, a small sheet).
     @MainActor
-    static func present(from view: PView, rect: CGRect, onPick: @escaping (String) -> Void) {
+    static func present(from view: PView, rect: CGRect, hint: String? = nil, onPick: @escaping (String) -> Void) {
         #if os(macOS)
         let popover = NSPopover()
         popover.behavior = .transient
         popover.animates = true
-        popover.contentViewController = NSHostingController(rootView: ReactionPicker { [weak popover] emoji in
+        popover.contentViewController = NSHostingController(rootView: ReactionPicker(hint: hint) { [weak popover] emoji in
             popover?.performClose(nil)
             onPick(emoji)
         })
@@ -61,7 +68,7 @@ struct ReactionPicker: View {
         guard var presenter = view.window?.rootViewController else { return }
         while let presented = presenter.presentedViewController, !presented.isBeingDismissed { presenter = presented }
         weak var host: UIHostingController<ReactionPicker>?
-        let controller = UIHostingController(rootView: ReactionPicker { emoji in
+        let controller = UIHostingController(rootView: ReactionPicker(hint: hint) { emoji in
             host?.dismiss(animated: true)
             onPick(emoji)
         })

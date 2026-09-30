@@ -1,5 +1,5 @@
 import Foundation
-import PincerKit
+@testable import PincerKit
 
 // Replies (#45) and reactions (#74): parsing, derivation, codecs and the send fallback offline,
 // then against the built-in demo and the mock Gateway.
@@ -296,7 +296,7 @@ func runDemoReactionsReply() async {
 
     // Seeded agent reactions (AC-36, AC-38).
     check(chat.agentReactions["demo-main-ask"] == ["✅"]
-          && chat.reactionGroups(for: "demo-main-ask", agentName: agentName) == [ReactionGroup(emoji: "✅", actors: [.agent(agentName)])],
+          && chat.reactionGroups(for: "demo-main-ask", agentName: agentName).first == ReactionGroup(emoji: "✅", actors: [.agent(agentName)]),
           "✅ from \(agentName) on the disk question (\(chat.agentReactions))")
     let labChat = gateway.chat(for: lab)
     await labChat.load()
@@ -304,13 +304,21 @@ func runDemoReactionsReply() async {
           && labChat.message(withId: "demo-lab-sensor")?.conversationRef == "channel:123", "home-lab sensor message carries its Discord id")
     check(labChat.agentReactions == ["demo-lab-sensor": ["👀"]], "👀 from \(agentName) on the sensor message (\(labChat.agentReactions))")
 
-    // Seeded user reactions arrive through users.prefs (AC-39).
-    let seeded = await waitFor("seeded reactions") {
-        gateway.myReactions(sessionKey: main, messageId: "demo-main-status") == ["👍"]
-            && gateway.myReactions(sessionKey: main, messageId: "demo-main-gauge") == ["🎉"]
-    }
-    check(seeded, "👍 and 🎉 pre-seeded in pincer.reactions (\(gateway.reactions))")
-    check(chat.reactionGroups(for: "demo-main-status", agentName: agentName).contains { $0.emoji == "👍" && $0.includesYou }, "seeded 👍 is yours")
+    // Seeded shared reactions arrive through session.reactions.list, and the legacy prefs move over (#120).
+    let listed = await waitFor("seeded shared reactions") { chat.usesGatewayReactions && chat.sharedReactions["demo-main-status"] != nil }
+    check(listed && chat.reactionSelfId == "demo-owner", "listed through session.reactions.list as \(chat.reactionSelfId ?? "nobody")")
+    let statusGroups = chat.reactionGroups(for: "demo-main-status", agentName: agentName)
+    check(statusGroups == [ReactionGroup(emoji: "👍", actors: [.you, .person("Sam")]), ReactionGroup(emoji: "🔥", actors: [.person("Riley")])],
+          "seeded 👍 is yours next to Sam's; 🔥 is Riley's (\(statusGroups))")
+    check(chat.reactionGroups(for: "demo-main-ask", agentName: agentName)
+          == [ReactionGroup(emoji: "✅", actors: [.agent(agentName)]), ReactionGroup(emoji: "🙏", actors: [.person("Sam")])],
+          "the agent's inferred ✅ merges with Sam's 🙏")
+    let migrated = await waitFor("legacy prefs migrated") { chat.reactionSync.migratedEpoch == gateway.connectionEpoch && gateway.reactions.isEmpty }
+    check(migrated, "the seeded pincer.reactions entries were pushed and deleted (\(gateway.reactions))")
+    check(Reactions.mine(in: chat.sharedReactions["demo-main-gauge"] ?? [], selfId: "demo-owner") == ["🎉"],
+          "the legacy 🎉 on the gauge moved over as yours")
+    check(chat.reactionGroups(for: "demo-main-gauge", agentName: agentName) == [ReactionGroup(emoji: "🎉", actors: [.person("Sam"), .person("Riley"), .you])],
+          "…next to Sam's and Riley's")
 
     // Seeded quoted reply (AC-37).
     let ask = chat.message(withId: "demo-main-gauge-ask")
@@ -355,6 +363,115 @@ func runDemoReactionsReply() async {
     check(sent.count == 1 && sent[0].replyToId == "demo-main-status" && sent[0].replyToPreview?.senderLabel == agentName
           && sent[0].replyToPreview?.text.contains("Disk status") == true && !sent[0].plainText.hasPrefix(">"),
           "replyToId + replyToPreview persist after reload, text unquoted (\(sent.map { "\($0.replyToId ?? "nil") \($0.replyToPreview.map { "\($0.senderLabel ?? "nil"): \($0.text.prefix(30))" } ?? "nil")" }))")
+
+    // Toggling goes through session.reactions.set (AC-29): optimistic, the round trip shows the other people's too.
+    let actionsBefore = await gateway.demoRecordedActions().count
+    chat.toggleReaction("✅", on: "demo-main-ask")
+    let both = chat.reactionGroups(for: "demo-main-ask", agentName: agentName)
+    check(both.first?.emoji == "✅" && both[0].count == 2 && both[0].includesYou && both[0].reactorsText == "You and \(agentName)", "your ✅ joins \(agentName)'s at once (\(both.first?.reactorsText ?? ""))")
+    check(Reactions.recent.contains("✅"), "adding records a recent emoji")
+    let confirmed = await waitFor("set round trip") { Reactions.mine(in: chat.sharedReactions["demo-main-ask"] ?? [], selfId: "demo-owner") == ["✅"] }
+    check(confirmed && chat.sharedReactions["demo-main-ask"]?.first { $0.emoji == "🙏" }?.identities.map(\.label) == ["Sam"],
+          "the Gateway's reply keeps Sam's 🙏 (\(chat.sharedReactions["demo-main-ask"] ?? []))")
+    chat.toggleReaction("🔥", on: "demo-main-ask")
+    chat.toggleReaction("✅", on: "demo-main-ask")
+    chat.toggleReaction("🔥", on: "demo-main-ask")
+    let cleared = await waitFor("toggle off") { Reactions.mine(in: chat.sharedReactions["demo-main-ask"] ?? [], selfId: "demo-owner").isEmpty }
+    check(cleared && chat.reactionGroups(for: "demo-main-ask", agentName: agentName)
+          == [ReactionGroup(emoji: "✅", actors: [.agent(agentName)]), ReactionGroup(emoji: "🙏", actors: [.person("Sam")])],
+          "toggling off leaves the agent's ✅ and Sam's 🙏 alone")
+    chat.toggleReaction("👍", on: "not-loaded")
+    check(chat.sharedReactions["not-loaded"] == nil && chat.notice == nil, "unknown messages can't be reacted to")
+    // Removing your seeded 👍 keeps Sam's.
+    chat.toggleReaction("👍", on: "demo-main-status")
+    check(chat.reactionGroups(for: "demo-main-status", agentName: agentName).first == ReactionGroup(emoji: "👍", actors: [.person("Sam")]),
+          "removing your 👍 leaves Sam's")
+    chat.toggleReaction("👍", on: "demo-main-status")
+    _ = await waitFor("👍 back") { Reactions.mine(in: chat.sharedReactions["demo-main-status"] ?? [], selfId: "demo-owner") == ["👍"] }
+
+    // The Gateway mirrors to the channel: no message.action from Pincer, bridged or not (AC-30, AC-31).
+    labChat.toggleReaction("👍", on: "demo-lab-sensor")
+    let sensorMine = await waitFor("sensor reaction") { Reactions.mine(in: labChat.sharedReactions["demo-lab-sensor"] ?? [], selfId: "demo-owner") == ["👍"] }
+    labChat.toggleReaction("👍", on: "demo-lab-sensor")
+    await pause(0.5)
+    let actions = await gateway.demoRecordedActions().count
+    check(sensorMine && actions == actionsBefore, "no message.action on the Gateway path (\(actions - actionsBefore) sent)")
+    check(labChat.notice == nil && chat.notice == nil && gateway.reactions.isEmpty, "no notice, and users.prefs stays empty")
+
+    // A failed set rolls back and says so; an unknown message isn't a reason to leave the Gateway path.
+    var phantom = ChatItem(role: .assistant, blocks: [.text("phantom")])
+    phantom.transcriptId = "phantom-message"
+    chat.items.append(phantom)
+    chat.toggleReaction("🎯", on: "phantom-message")
+    check(chat.sharedReactions["phantom-message"] != nil, "optimistic before the failure")
+    let rolledBack = await waitFor("rollback") { chat.sharedReactions["phantom-message"] == nil && chat.notice != nil }
+    check(rolledBack && chat.notice == "Couldn't save the reaction." && chat.usesGatewayReactions && !gateway.sessionReactionsOff,
+          "rolled back with a notice, still on the Gateway path (\(chat.notice ?? "no notice"))")
+    chat.items.removeAll { $0.transcriptId == "phantom-message" }
+    chat.notice = nil
+
+    // An unavailable Gateway path (FORBIDDEN, unknown method, no identified author) falls back to users.prefs, once.
+    gateway.sessionReactionsOff = true
+    check(!chat.usesGatewayReactions, "Gateway reactions off → the chat is back on users.prefs")
+
+    // An older Gateway: quote in the text instead (AC-15).
+    guard let old = await connectDemo(.demo(acceptsReplyTo: false), "demo without replyToId") else { return }
+    defer {
+        old.stop()
+        forgetLocalPrefs(old)
+    }
+    let oldChat = old.chat(for: main)
+    await oldChat.load()
+    _ = await waitFor("older demo history") { oldChat.message(withId: "demo-main-status") != nil }
+    guard let oldTarget = oldChat.replyTarget(for: "demo-main-status", you: "You", agent: agentName) else {
+        check(false, "reply target on the older demo")
+        return
+    }
+    check(!old.replyToUnsupported, "replyToId assumed until rejected")
+    oldChat.replyTarget = oldTarget
+    let oldNonce = UUID().uuidString.prefix(6)
+    let runId = await oldChat.send("quoted \(oldNonce)", replyTo: oldTarget)
+    check(runId != nil && oldChat.errorMessage == nil && old.replyToUnsupported && oldChat.replyTarget == nil,
+          "rejected replyToId → resent once without it, no error (\(oldChat.errorMessage ?? "ok"))")
+    _ = await waitFor("older demo reply", timeout: 20) { !oldChat.isRunning && userItem(oldChat, containing: "quoted \(oldNonce)").first?.isPending == false }
+    await oldChat.load(force: true)
+    let quotedSent = userItem(oldChat, containing: "quoted \(oldNonce)")
+    check(quotedSent.count == 1 && quotedSent[0].plainText.hasPrefix("> **\(agentName):** ") && quotedSent[0].replyToId == nil
+          && quotedSent[0].plainText.hasSuffix("\n\nquoted \(oldNonce)"), "one message, text starts with the blockquote (\(quotedSent.first?.plainText.prefix(40) ?? "none"))")
+    let secondNonce = UUID().uuidString.prefix(6)
+    await oldChat.send("again \(secondNonce)", replyTo: oldTarget)
+    _ = await waitFor("second older demo reply", timeout: 20) { !oldChat.isRunning && userItem(oldChat, containing: "again \(secondNonce)").first?.isPending == false }
+    await oldChat.load(force: true)
+    let again = userItem(oldChat, containing: "again \(secondNonce)")
+    check(again.count == 1 && again[0].plainText.hasPrefix("> **") && oldChat.errorMessage == nil,
+          "later sends skip replyToId and quote straight away")
+}
+
+/// Reactions when the Gateway path is off for the connection (an older Gateway, FORBIDDEN or no identified author):
+/// users.prefs, with message.action forwarding for bridged messages.
+@MainActor
+func runDemoPrefsReactions() async {
+    guard let gateway = await connectDemo(.demo(hasSessionReactions: false), "demo without session.reactions") else { return }
+    defer {
+        gateway.stop()
+        forgetLocalPrefs(gateway)
+    }
+    let main = "agent:main:main"
+    let lab = "agent:main:discord:channel:123"
+    let agentName = gateway.agents.first { $0.id == "main" }?.name ?? "Claw"
+    let chat = gateway.chat(for: main)
+    await chat.load()
+    _ = await waitFor("demo main history") { chat.message(withId: "demo-main-status") != nil }
+    let labChat = gateway.chat(for: lab)
+    await labChat.load()
+    check(!gateway.supportsSessionReactions && !chat.usesGatewayReactions && chat.sharedReactions.isEmpty, "the Gateway path is off")
+    // Seeded user reactions arrive through users.prefs (AC-39).
+    let seeded = await waitFor("seeded reactions") {
+        gateway.myReactions(sessionKey: main, messageId: "demo-main-status") == ["👍"]
+            && gateway.myReactions(sessionKey: main, messageId: "demo-main-gauge") == ["🎉"]
+    }
+    check(seeded, "👍 and 🎉 pre-seeded in pincer.reactions (\(gateway.reactions))")
+    check(chat.reactionGroups(for: "demo-main-status", agentName: agentName).contains { $0.emoji == "👍" && $0.includesYou }, "seeded 👍 is yours")
 
     // Toggling your reactions updates pincer.reactions (AC-29).
     let prefKey = Reactions.prefEntryKey(sessionKey: main, messageId: "demo-main-ask")
@@ -404,37 +521,6 @@ func runDemoReactionsReply() async {
         check(total == actionsBefore + 2, "assistant messages in bridged chats are Pincer-only")
     }
 
-    // An older Gateway: quote in the text instead (AC-15).
-    guard let old = await connectDemo(.demo(acceptsReplyTo: false), "demo without replyToId") else { return }
-    defer {
-        old.stop()
-        forgetLocalPrefs(old)
-    }
-    let oldChat = old.chat(for: main)
-    await oldChat.load()
-    _ = await waitFor("older demo history") { oldChat.message(withId: "demo-main-status") != nil }
-    guard let oldTarget = oldChat.replyTarget(for: "demo-main-status", you: "You", agent: agentName) else {
-        check(false, "reply target on the older demo")
-        return
-    }
-    check(!old.replyToUnsupported, "replyToId assumed until rejected")
-    oldChat.replyTarget = oldTarget
-    let oldNonce = UUID().uuidString.prefix(6)
-    let runId = await oldChat.send("quoted \(oldNonce)", replyTo: oldTarget)
-    check(runId != nil && oldChat.errorMessage == nil && old.replyToUnsupported && oldChat.replyTarget == nil,
-          "rejected replyToId → resent once without it, no error (\(oldChat.errorMessage ?? "ok"))")
-    _ = await waitFor("older demo reply", timeout: 20) { !oldChat.isRunning && userItem(oldChat, containing: "quoted \(oldNonce)").first?.isPending == false }
-    await oldChat.load(force: true)
-    let quotedSent = userItem(oldChat, containing: "quoted \(oldNonce)")
-    check(quotedSent.count == 1 && quotedSent[0].plainText.hasPrefix("> **\(agentName):** ") && quotedSent[0].replyToId == nil
-          && quotedSent[0].plainText.hasSuffix("\n\nquoted \(oldNonce)"), "one message, text starts with the blockquote (\(quotedSent.first?.plainText.prefix(40) ?? "none"))")
-    let secondNonce = UUID().uuidString.prefix(6)
-    await oldChat.send("again \(secondNonce)", replyTo: oldTarget)
-    _ = await waitFor("second older demo reply", timeout: 20) { !oldChat.isRunning && userItem(oldChat, containing: "again \(secondNonce)").first?.isPending == false }
-    await oldChat.load(force: true)
-    let again = userItem(oldChat, containing: "again \(secondNonce)")
-    check(again.count == 1 && again[0].plainText.hasPrefix("> **") && oldChat.errorMessage == nil,
-          "later sends skip replyToId and quote straight away")
 }
 
 // MARK: Live
@@ -531,31 +617,6 @@ func runLiveReactionsReply(url: String, token: String) async {
     }
     check(sensor.role == .user && sensor.transportChannel == "discord" && sensor.conversationRef == "channel:123", "transport facts from history")
     check(labChat.agentReactions[sensorId] == ["👀"], "seeded 👀 derives onto the Discord message (\(labChat.agentReactions))")
-
-    // pincer.reactions round-trips through users.prefs, and bridged reactions forward (AC-29, AC-30).
-    guard let other = await connectLive("Mock reactions 2", url: url, token: token) else { return }
-    defer {
-        other.stop()
-        forgetLocalPrefs(other)
-    }
-    labChat.toggleReaction("👍", on: sensorId)
-    let synced = await waitFor("reaction sync") { other.myReactions(sessionKey: lab, messageId: sensorId) == ["👍"] }
-    check(synced, "your reaction syncs through users.prefs to another device")
-    await pause(1)
-    check(labChat.notice == nil, "message.action react on the Discord session succeeded (no notice)")
-    let otherLab = other.chat(for: lab)
-    await otherLab.load()
-    otherLab.toggleReaction("👍", on: sensorId)
-    let cleared = await waitFor("reaction removal sync") { gateway.myReactions(sessionKey: lab, messageId: sensorId).isEmpty }
-    check(cleared && gateway.reactions[Reactions.prefEntryKey(sessionKey: lab, messageId: sensorId)] == nil,
-          "removing on the other device deletes the pref key everywhere")
-    await pause(1)
-    check(otherLab.notice == nil, "message.action remove on the Discord session succeeded")
-    chat.toggleReaction("🎉", on: targetId)
-    let nativeSynced = await waitFor("native reaction sync") { other.myReactions(sessionKey: main, messageId: targetId) == ["🎉"] }
-    check(nativeSynced && chat.notice == nil, "native chat reactions are Pincer-only and still sync")
-    chat.toggleReaction("🎉", on: targetId)
-    _ = await waitFor("native removal") { other.myReactions(sessionKey: main, messageId: targetId).isEmpty }
 }
 
 /// Against a Gateway from before replies (mock with MOCK_NO_REPLY_TO=1): replies quote instead.

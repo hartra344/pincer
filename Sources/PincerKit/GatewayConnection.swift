@@ -149,7 +149,9 @@ public actor GatewayConnection {
     public init(profile: GatewayProfile, identity: DeviceIdentity = .loadOrCreate()) {
         self.profile = profile
         self.identity = identity
-        self.demo = profile.isDemo ? DemoGateway(acceptsReplyTo: profile.url != DemoGateway.noReplyToURL) : nil
+        self.demo = profile.isDemo ? DemoGateway(
+            acceptsReplyTo: profile.url != DemoGateway.noReplyToURL,
+            hasSessionReactions: profile.url != DemoGateway.noSessionReactionsURL) : nil
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 30

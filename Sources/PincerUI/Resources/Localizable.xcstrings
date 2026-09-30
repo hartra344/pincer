@@ -1343,6 +1343,16 @@
         }
       }
     },
+    "The agent sees your reactions on its next turn.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent sees your reactions on its next turn."
+          }
+        }
+      }
+    },
     "Add Reaction": {
       "localizations": {
         "en": {

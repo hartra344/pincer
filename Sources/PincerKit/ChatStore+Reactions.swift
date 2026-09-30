@@ -123,6 +123,10 @@ extension ChatStore {
 
     /// Emoji reactions on one message: the agent's first, then yours.
     public func reactionGroups(for messageId: String, agentName: String) -> [ReactionGroup] {
+        if self.usesGatewayReactions {
+            return Reactions.groups(agent: self.agentReactions[messageId] ?? [], agentName: agentName,
+                                    shared: self.sharedReactions[messageId] ?? [], selfId: self.reactionSelfId)
+        }
         let mine = self.gateway?.myReactions(sessionKey: self.sessionKey, messageId: messageId) ?? []
         return Reactions.groups(agent: self.agentReactions[messageId] ?? [], agentName: agentName, mine: mine)
     }
@@ -133,9 +137,19 @@ extension ChatStore {
                             agentReactions: self.agentReactions)
     }
 
-    /// Adds `emoji` to the message, or removes it when it's already yours. Syncs through
-    /// `users.prefs`, and mirrors it to the bridged channel's message when the Gateway can.
+    /// Adds `emoji` to the message, or removes it when it's already yours. Through the Gateway's shared
+    /// reactions when it has them (it mirrors to the bridged channel and tells the agent); otherwise syncs
+    /// through `users.prefs` and mirrors to the channel's message itself when the Gateway can.
     public func toggleReaction(_ emoji: String, on messageId: String) {
+        guard self.message(withId: messageId) != nil else { return }
+        if self.usesGatewayReactions, let selfId = self.reactionSelfId {
+            self.toggleGatewayReaction(emoji, on: messageId, selfId: selfId)
+        } else {
+            self.toggleReactionViaPrefs(emoji, on: messageId)
+        }
+    }
+
+    func toggleReactionViaPrefs(_ emoji: String, on messageId: String) {
         guard let gateway, let item = self.message(withId: messageId) else { return }
         let mine = gateway.myReactions(sessionKey: self.sessionKey, messageId: messageId)
         let removing = mine.contains(emoji)

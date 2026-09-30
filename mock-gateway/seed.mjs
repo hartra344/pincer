@@ -17,6 +17,7 @@ import { createDevicePairingState } from './devices.mjs';
 import { seededFileEditCalls } from './file-edits.mjs';
 import { seededToolCards, TOOL_CARDS_KEY, TOOL_CARDS_PREVIEW, TOOL_CARDS_TITLE } from './tool-cards.mjs';
 import { seedForwardedMessages } from './forwarded.mjs';
+import { seedReactions } from './reactions.mjs';
 import { DEFAULT_MODEL, imageBlock, makeMessage, nowMs, textBlock, thinkingBlock, toolCallBlock } from './util.mjs';
 
 export const CRC_TABLE = (() => {
@@ -406,5 +407,6 @@ export function createSeedState() {
     channelsState: createChannelsState(),
   };
   seedRunningSubagentRun(state);
+  seedReactions(state);
   return state;
 }
