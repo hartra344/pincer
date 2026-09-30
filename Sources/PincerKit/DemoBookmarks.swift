@@ -23,11 +23,11 @@ public enum DemoBookmarks {
         ]
     }
 
-    static let prefKey = "pincer.bookmarks"
-
-    /// The seeds as `pincer.bookmarks` entries, so the demo gateway starts with them on every launch.
-    static func prefEntries() -> JSONValue {
-        .object(Dictionary(uniqueKeysWithValues: self.seeds().map { ($0.id, JSONValue.string($0.syncedValue)) }))
+    /// The seeds as `pincer.bookmarks.<shard>` entries, so the demo gateway starts with them on every launch.
+    static func prefEntries() -> [String: JSONValue] {
+        var shards: [Int: [String: JSONValue]] = [:]
+        for bookmark in self.seeds() { shards[Bookmark.shard(ofKey: bookmark.id), default: [:]][bookmark.id] = .string(bookmark.syncedValue) }
+        return Dictionary(uniqueKeysWithValues: shards.map { (Bookmark.prefKey(shard: $0.key), JSONValue.object($0.value)) })
     }
 
     /// Adds the starter bookmarks when the store has none.

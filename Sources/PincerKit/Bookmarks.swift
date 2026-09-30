@@ -59,8 +59,21 @@ extension Bookmark {
                   messageDate: wire.m.map(Self.date), createdAt: Self.date(wire.c))
     }
 
-    /// The gateway caps each pref value at 4 KiB, so synced previews are short.
-    static let syncedPreviewLength = 40
+    /// Bookmarks sync in this many `users.prefs` values (`pincer.bookmarks.0`…), since the gateway caps each at 4 KiB.
+    public static let shardCount = 8
+
+    /// The pref key for `shard`.
+    public static func prefKey(shard: Int) -> String { "pincer.bookmarks.\(shard)" }
+
+    /// The shard of an entry key: FNV-1a (32-bit) over its UTF-8 bytes, which is stable across launches and devices.
+    public static func shard(ofKey key: String) -> Int {
+        var hash: UInt32 = 2_166_136_261
+        for byte in key.utf8 { hash = (hash ^ UInt32(byte)) &* 16_777_619 }
+        return Int(hash % UInt32(Self.shardCount))
+    }
+
+    /// Synced previews are short.
+    static let syncedPreviewLength = 60
 
     private static func syncedPreview(_ preview: String) -> String {
         preview.count > Self.syncedPreviewLength ? String(preview.prefix(Self.syncedPreviewLength - 1)) + "…" : preview
@@ -80,9 +93,9 @@ public final class BookmarkStore {
     @ObservationIgnored private var index: Set<String> = []
 
     /// Most bookmarks kept per gateway; adding beyond drops the oldest.
-    public static let limit = 500
-    /// Byte budget for the synced map: the gateway rejects a pref value over 4 KiB.
-    static let syncedByteBudget = 3800
+    public static let limit = 150
+    /// Byte budget for one shard's synced map: the gateway rejects a pref value over 4 KiB.
+    public static let syncedByteBudget = 3800
     /// How many bookmarks the last `add` dropped to stay within the limits.
     public private(set) var droppedCount = 0
     /// Called with the synced entry changes (`nil` = delete) after a local edit, never for `apply(synced:)`
@@ -134,16 +147,22 @@ public final class BookmarkStore {
         self.bookmarks.insert(bookmark, at: 0)
         self.index.insert(bookmark.id)
         self.droppedCount = 0
-        let oldestFirst = self.bookmarks.sorted { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
-        var kept = oldestFirst.count
-        while kept > 1, kept > Self.limit || Self.syncedSize(oldestFirst.suffix(kept)) > Self.syncedByteBudget { kept -= 1 }
-        if kept < oldestFirst.count {
-            let ids = Set(oldestFirst.prefix(oldestFirst.count - kept).map(\.id))
-            self.bookmarks.removeAll { ids.contains($0.id) }
-            self.index.subtract(ids)
-            self.droppedCount = ids.count
-            for id in ids { changes[id] = .some(nil) }
+        let shard = Bookmark.shard(ofKey: bookmark.id)
+        let oldest: (Bookmark, Bookmark) -> Bool = { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
+        var dropped: [Bookmark] = []
+        while self.bookmarks.count > Self.limit, let victim = self.bookmarks.min(by: oldest) {
+            dropped.append(victim)
+            self.remove(victim)
         }
+        while self.bookmarks.filter({ Bookmark.shard(ofKey: $0.id) == shard }).count > 1,
+              Self.syncedSize(self.syncedEntries(shard: shard)) > Self.syncedByteBudget,
+              let victim = self.bookmarks.filter({ Bookmark.shard(ofKey: $0.id) == shard }).min(by: oldest)
+        {
+            dropped.append(victim)
+            self.remove(victim)
+        }
+        self.droppedCount = dropped.count
+        for victim in dropped { changes[victim.id] = .some(nil) }
         self.save()
         self.onChange?(changes)
     }
@@ -184,34 +203,41 @@ public final class BookmarkStore {
         self.onChange?(Dictionary(uniqueKeysWithValues: removed.map { ($0.id, String?.none) }))
     }
 
-    /// Replaces the bookmarks with the pulled entries (newest first), skipping undecodable ones.
-    /// Doesn't fire `onChange`.
-    func apply(synced: [String: String]) {
+    private func remove(_ bookmark: Bookmark) {
+        self.bookmarks.removeAll { $0.id == bookmark.id }
+        self.index.remove(bookmark.id)
+    }
+
+    /// Replaces the bookmarks in `shard` with the pulled entries (newest first), skipping undecodable
+    /// ones and leaving other shards alone. Doesn't fire `onChange`.
+    func apply(synced: [String: String], shard: Int) {
         let local = Dictionary(self.bookmarks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         // Synced previews are shortened; keep the full one when this device has it.
         let decoded = synced.compactMap { Bookmark(syncedKey: $0.key, value: $0.value) }
+            .filter { Bookmark.shard(ofKey: $0.id) == shard }
             .map { remote -> Bookmark in
                 guard let known = local[remote.id] else { return remote }
                 var merged = remote
                 merged.preview = known.preview
                 return merged
             }
+        let next = (self.bookmarks.filter { Bookmark.shard(ofKey: $0.id) != shard } + decoded)
             .sorted { ($0.createdAt, $0.id) > ($1.createdAt, $1.id) }
-        guard decoded != self.bookmarks else { return }
-        self.bookmarks = decoded
-        self.index = Set(decoded.map(\.id))
+        guard next != self.bookmarks else { return }
+        self.bookmarks = next
+        self.index = Set(next.map(\.id))
         self.save()
     }
 
-    /// The encoded size of `bookmarks` as a synced map, which is one gateway pref value.
-    private static func syncedSize(_ bookmarks: some Sequence<Bookmark>) -> Int {
-        let entries = Dictionary(bookmarks.map { ($0.id, $0.syncedValue) }, uniquingKeysWith: { first, _ in first })
-        return (try? JSONEncoder().encode(entries).count) ?? 0
+    /// The encoded size of a shard's synced map, which is one gateway pref value.
+    private static func syncedSize(_ entries: [String: String]) -> Int {
+        (try? JSONEncoder().encode(entries).count) ?? 0
     }
 
-    /// The bookmarks as synced entries.
-    var syncedEntries: [String: String] {
-        Dictionary(self.bookmarks.map { ($0.id, $0.syncedValue) }, uniquingKeysWith: { first, _ in first })
+    /// The synced entries in `shard`.
+    func syncedEntries(shard: Int) -> [String: String] {
+        Dictionary(self.bookmarks.filter { Bookmark.shard(ofKey: $0.id) == shard }.map { ($0.id, $0.syncedValue) },
+                   uniquingKeysWith: { first, _ in first })
     }
 
     public func removeAll() {

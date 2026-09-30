@@ -30,7 +30,11 @@ extension GatewayStore {
     }
 
     var syncedMaps: [SyncedMap] {
-        [
+        let bookmarkShards = (0..<Self.bookmarkShardCount).map { shard in
+            SyncedMap(pref: Self.bookmarksPref(shard: shard), local: \GatewayStore.[bookmarkShard: shard],
+                      syncedDefaultsKey: Self.bookmarksSyncedKey(shard, self.id))
+        }
+        return [
             SyncedMap(pref: Self.serverNamesPref, local: \.serverNameOverrides,
                       syncedDefaultsKey: "pincer.serverNamesSynced.\(self.id.uuidString)"),
             SyncedMap(pref: Self.chatIconsPref, local: \.chatIcons,
@@ -49,9 +53,7 @@ extension GatewayStore {
                       syncedDefaultsKey: "pincer.healthDismissalsSynced.\(self.id.uuidString)"),
             SyncedMap(pref: AvatarPreferences.prefKey, local: \.avatarChoices,
                       syncedDefaultsKey: "pincer.avatarsSynced.\(self.id.uuidString)"),
-            SyncedMap(pref: Self.bookmarksPref, local: \.bookmarkPrefEntries,
-                      syncedDefaultsKey: "pincer.bookmarksSynced.\(self.id.uuidString)"),
-        ]
+        ] + bookmarkShards
     }
 
     static func pendingPrefsKey(_ id: UUID) -> String { "pincer.prefsPending.\(id.uuidString)" }
@@ -109,10 +111,10 @@ extension GatewayStore {
 
     /// Everything synced through `users.prefs`, except the group maps `loadGroups` owns, in one read.
     func pullBootstrapPrefs(epoch: Int) async {
-        let prefs: Set<String> = [
+        let prefs = Set([
             Self.serverNamesPref, Self.chatIconsPref, Self.chatColorsPref, Self.chatOrderPref,
-            Self.groupIconsPref, Reactions.prefKey, Self.healthDismissalsPref, AvatarPreferences.prefKey, Self.bookmarksPref,
-        ]
+            Self.groupIconsPref, Reactions.prefKey, Self.healthDismissalsPref, AvatarPreferences.prefKey,
+        ]).union((0..<Self.bookmarkShardCount).map { Self.bookmarksPref(shard: $0) })
         let maps = self.syncedMaps.filter { prefs.contains($0.pref) }
         await self.pullMaps(maps, epoch: epoch)
         if self.isCurrent(epoch) { await self.retryPendingPrefs(maps) }
