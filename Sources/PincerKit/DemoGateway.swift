@@ -105,7 +105,8 @@ actor DemoGateway {
     /// The last `agent` seq the seeded running helper sent; it keeps streaming tool calls until stopped.
     var seededRunningSeq = DemoGateway.seededRunningLastSeq
     var seededStreamTask: Task<Void, Never>?
-    var messageSubscriptions: Set<String> = []
+    /// Observer ids by session key; "" is the slot used when `subscriptionId` is omitted.
+    var messageSubscriptions: [String: Set<String>] = [:]
     var eventSeq = 0
     var sink: (@Sendable (GatewayEvent) -> Void)?
     /// When the simulated Gateway process started; reset by a restart.

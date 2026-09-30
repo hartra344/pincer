@@ -479,6 +479,7 @@ public final class GatewayStore: Identifiable {
         self.health.connectionChanged(state, hello: hello)
         self.connectionEpoch += 1
         self.expectedPrefEchoes = [:]
+        self.messageSubscriptionIdUnsupported = false
         self.replyToUnsupported = false
         self.reactionForwardingOff = []
         self.reactionNoticeShown = []
@@ -1358,6 +1359,9 @@ public final class GatewayStore: Identifiable {
     }
     /// The latest write per pref, which the next one waits for.
     @ObservationIgnored var prefPushes: [String: Task<Void, Never>] = [:]
+
+    /// This connection's Gateway (before 2026.9.7) rejected `subscriptionId` on message subscriptions.
+    @ObservationIgnored var messageSubscriptionIdUnsupported = false
 
     /// Prefs the gateway refused as invalid (value too large, key limit), with its reason. Their
     /// changes stay pending but only retry on the next push or connect.

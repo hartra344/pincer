@@ -19,10 +19,13 @@ extension DemoGateway {
             return self.sessionList(params)
         case "sessions.messages.subscribe":
             let key = try self.knownSession(params["key"])
-            self.messageSubscriptions.insert(key)
+            self.messageSubscriptions[key, default: []].insert(params["subscriptionId"]?.string ?? "")
             return ["subscribed": true, "key": .string(key)]
         case "sessions.messages.unsubscribe":
-            if let key = params["key"]?.string { self.messageSubscriptions.remove(key) }
+            if let key = params["key"]?.string {
+                self.messageSubscriptions[key]?.remove(params["subscriptionId"]?.string ?? "")
+                if self.messageSubscriptions[key]?.isEmpty == true { self.messageSubscriptions[key] = nil }
+            }
             return ["ok": true, "key": params["key"] ?? .null]
         case "chat.history":
             return try self.history(params)
