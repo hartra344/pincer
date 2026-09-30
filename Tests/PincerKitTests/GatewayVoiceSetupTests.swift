@@ -183,8 +183,27 @@ struct GatewayVoiceSetupTests {
     @Test func saveVoiceWritesVoiceId() async throws {
         let g = FakeGateway()
         _ = try await makeModel(g).saveVoice("21m00Tcm4TlvDq8ikWAM", provider: "elevenlabs")
-        #expect(providerNode(g.patch(), "elevenlabs")?["voiceId"]?.text == "21m00Tcm4TlvDq8ikWAM")
+        let node = providerNode(g.patch(), "elevenlabs")
+        #expect(node?["speakerVoiceId"]?.text == "21m00Tcm4TlvDq8ikWAM" && node?["voiceId"] == nil, "canonical key wins upstream")
         #expect(g.calls("secrets.store.set").isEmpty)
+    }
+
+    @Test func saveVoiceKeepsLegacyVoiceIdInSync() async throws {
+        let g = FakeGateway()
+        g.tts["elevenlabs"] = ["voiceId": "old"]
+        let model = makeModel(g)
+        await model.refresh()
+        _ = try await model.saveVoice("new", provider: "elevenlabs")
+        let node = providerNode(g.patch(), "elevenlabs")
+        #expect(node?["speakerVoiceId"]?.text == "new" && node?["voiceId"]?.text == "new")
+    }
+
+    @Test func speakerVoiceIdWinsWhenReading() async {
+        let g = FakeGateway()
+        g.tts["elevenlabs"] = ["voiceId": "old", "speakerVoiceId": "new"]
+        let model = makeModel(g)
+        await model.refresh()
+        #expect(model.setups["elevenlabs"]?.voice == "new")
     }
 
     @Test func saveVoiceSettingsWritesAllFiveValues() async throws {
@@ -220,7 +239,7 @@ struct GatewayVoiceSetupTests {
         let model = makeModel(g)
         await model.refresh()
         let e = model.setups["elevenlabs"]
-        #expect(e?.keySource == .secretRef(source: "store", provider: "default", id: "ELEVENLABS_API_KEY"))
+        #expect(e?.keySource == .secretRef(source: "store", provider: "default", id: nil))
         #expect(e?.model == "eleven_v4_turbo" && e?.voice == "abc")
         #expect(e?.voiceSettings == TTSVoiceSettings(stability: 0.4, similarityBoost: 0.6, style: 0.1, useSpeakerBoost: false, speed: 1.1))
         #expect(model.setups["openai"]?.keySource == .redacted && model.setups["openai"]?.model == "gpt-4o-mini-tts")
@@ -323,7 +342,8 @@ struct GatewayVoiceSetupTests {
         g.provider = "elevenlabs"
         let unconfigured = makeModel(g)
         await unconfigured.refresh()
-        #expect(unconfigured.readAloudSummary == .fallback(.notConfigured(provider: "ElevenLabs")))
+        guard case let .gatewayFallback(selected, _, using) = unconfigured.readAloudSummary else { Issue.record("expected gatewayFallback"); return }
+        #expect(selected == "ElevenLabs" && using == "OpenAI")
         #expect(makeModel(g, scopes: ["operator.read"]).readAloudSummary == .fallback(.noWritePermission))
         #expect(makeModel(g, methods: ["tts.status"]).readAloudSummary == .fallback(.gatewayUnsupported))
     }
@@ -338,7 +358,7 @@ struct GatewayVoiceSetupTests {
         #expect(rows["Provider"]?.value == "ElevenLabs")
         #expect(rows["Model"]?.value == "Eleven v4 Turbo" && rows["Model"]?.source == "Gateway config")
         #expect(rows["Voice"]?.source == "Default")
-        #expect(rows["Speed"]?.value == "1.50×")
+        #expect(rows["Speed"]?.value == "1.5×")
     }
 
     @Test func fallbackReasonMessagesAreNonEmpty() {

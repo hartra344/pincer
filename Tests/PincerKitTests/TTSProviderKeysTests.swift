@@ -10,7 +10,7 @@ struct TTSProviderKeysTests {
     @Test func elevenLabsUsesTheKeysTheProviderReads() {
         let keys = TTSProviderKeys.forProvider("elevenlabs")
         #expect(keys.provider == "elevenlabs" && keys.apiKey == "apiKey" && keys.model == "modelId" && keys.voice == "voiceId"
-                && keys.voiceSettings == "voiceSettings" && keys.envVar == "ELEVENLABS_API_KEY")
+                && keys.voiceAlias == "speakerVoiceId" && keys.voiceSettings == "voiceSettings" && keys.envVar == "ELEVENLABS_API_KEY")
     }
 
     @Test func lookupIsCaseInsensitive() {
@@ -21,6 +21,21 @@ struct TTSProviderKeysTests {
         let keys = TTSProviderKeys.forProvider("openai")
         #expect(keys.apiKey == "apiKey" && keys.model == "model" && keys.voice == "voice" && keys.voiceSettings == nil
                 && keys.envVar == "OPENAI_API_KEY")
+    }
+
+    @Test func perProviderTable() {
+        let table: [(String, String?, String?, String?)] = [
+            ("google", "model", "voiceName", "GEMINI_API_KEY"), ("minimax", "model", "voiceId", "MINIMAX_API_KEY"),
+            ("azure-speech", nil, "voice", "AZURE_SPEECH_KEY"), ("xai", nil, "voiceId", "XAI_API_KEY"),
+            ("inworld", "modelId", "voiceId", "INWORLD_API_KEY"), ("gradium", nil, "voiceId", "GRADIUM_API_KEY"),
+            ("openrouter", "model", "voice", "OPENROUTER_API_KEY"), ("volcengine", nil, "voice", "VOLCENGINE_TTS_API_KEY"),
+            ("xiaomi", "model", "voice", "XIAOMI_API_KEY"),
+        ]
+        for (id, model, voice, env) in table {
+            let k = TTSProviderKeys.forProvider(id)
+            #expect(k.model == model && k.voice == voice && k.envVar == env, "\(id)")
+        }
+        #expect(TTSProviderKeys.forProvider("azure").provider == "azure-speech")
     }
 
     @Test func microsoftHasNoKey() {
