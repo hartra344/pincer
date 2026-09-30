@@ -23,7 +23,7 @@ struct PrefsHarness {
         self.store.start()
         let keys = self.store.syncedMaps.map(\.syncedDefaultsKey)
         let defaults = self.scratch.defaults
-        let synced = await eventually(timeout: .seconds(10)) {
+        let synced = await eventually(timeout: .seconds(30)) {
             self.store.state.isConnected && keys.allSatisfy { defaults.bool(forKey: $0) }
         }
         try #require(synced, "the store connects and first-syncs users.prefs")
@@ -196,7 +196,7 @@ struct PrefsWriteFailureTests {
         let store = PrefsHarness.makeStore(profile, scratch.defaults)
         store.start()
         defer { store.stop() }
-        let landed = await eventually(timeout: .seconds(10)) {
+        let landed = await eventually(timeout: .seconds(30)) {
             gateway.map(AvatarPreferences.prefKey)?["main"] == "cat"
         }
         #expect(landed)

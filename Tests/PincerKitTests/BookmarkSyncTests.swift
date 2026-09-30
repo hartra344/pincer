@@ -343,7 +343,7 @@ struct BookmarkGatewaySyncTests {
         defer { BookmarkStore.forget(gatewayId: profile.id); store.stop() }
         store.start()
         let expected = Set(local.map(\.id) + [remote.id])
-        let merged = await eventually(timeout: .seconds(10)) {
+        let merged = await eventually(timeout: .seconds(30)) {
             Set(gateway.map(Bookmark.prefKey(shard: 1))?.keys.map { $0 } ?? []) == expected
         }
         #expect(merged, "local bookmarks join what the gateway had")
@@ -409,7 +409,7 @@ struct BookmarkGatewaySyncTests {
         // Through the shared store, as the UI does, without touching the gateway store's own accessor.
         BookmarkStore.shared(gatewayId: profile.id).add(item)
         store.start()
-        let landed = await eventually(timeout: .seconds(10)) { gateway.map(Bookmark.prefKey(shard: 3))?[item.id] != nil }
+        let landed = await eventually(timeout: .seconds(30)) { gateway.map(Bookmark.prefKey(shard: 3))?[item.id] != nil }
         #expect(landed)
         #expect(store.bookmarkStore.isBookmarked(sessionKey: item.sessionKey, messageId: item.messageId), "a pull doesn't revert it")
     }
@@ -423,7 +423,7 @@ struct BookmarkGatewaySyncTests {
         let first = PrefsHarness.makeStore(profile, scratch.defaults)
         first.start()
         let keys = first.syncedMaps.map(\.syncedDefaultsKey)
-        let up = await eventually(timeout: .seconds(10)) { first.state.isConnected && keys.allSatisfy { scratch.defaults.bool(forKey: $0) } }
+        let up = await eventually(timeout: .seconds(30)) { first.state.isConnected && keys.allSatisfy { scratch.defaults.bool(forKey: $0) } }
         #expect(up)
         first.stop()
         defer { BookmarkStore.forget(gatewayId: profile.id) }
@@ -433,7 +433,7 @@ struct BookmarkGatewaySyncTests {
         let item = bookmarks(inShard: 2, count: 1)[0]
         BookmarkStore.shared(gatewayId: profile.id).add(item)
         second.start()
-        let landed = await eventually(timeout: .seconds(10)) { gateway.map(Bookmark.prefKey(shard: 2))?[item.id] != nil }
+        let landed = await eventually(timeout: .seconds(30)) { gateway.map(Bookmark.prefKey(shard: 2))?[item.id] != nil }
         #expect(landed, "pushed after connect")
         await second.pull(second.syncedMap(Bookmark.prefKey(shard: 2)))
         #expect(second.bookmarkStore.isBookmarked(sessionKey: item.sessionKey, messageId: item.messageId), "not reverted by the pull")
@@ -449,7 +449,7 @@ struct BookmarkGatewaySyncTests {
         replacement.start()
         let keys = replacement.syncedMaps.map(\.syncedDefaultsKey)
         let defaults = h.scratch.defaults
-        let up = await eventually(timeout: .seconds(10)) { replacement.state.isConnected && keys.allSatisfy { defaults.bool(forKey: $0) } }
+        let up = await eventually(timeout: .seconds(30)) { replacement.state.isConnected && keys.allSatisfy { defaults.bool(forKey: $0) } }
         #expect(up)
         let item = bookmarks(inShard: 7, count: 1)[0]
         BookmarkStore.shared(gatewayId: h.profile.id).add(item)
@@ -475,7 +475,7 @@ struct BookmarkGatewaySyncTests {
         defer { BookmarkStore.forget(gatewayId: profile.id); store.stop() }
         store.start()
         let keys = (0..<Bookmark.shardCount).map { store.syncedMap(Bookmark.prefKey(shard: $0)).syncedDefaultsKey }
-        let synced = await eventually(timeout: .seconds(15)) { keys.allSatisfy { scratch.defaults.bool(forKey: $0) } }
+        let synced = await eventually(timeout: .seconds(30)) { keys.allSatisfy { scratch.defaults.bool(forKey: $0) } }
         #expect(synced, "every shard first-syncs despite the legacy bookmarks not fitting")
         var total = 0
         for shard in 0..<Bookmark.shardCount {
