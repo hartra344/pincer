@@ -23,7 +23,7 @@ Attachments queue with their message. Pincer saves a copy of each file in the ou
 
 Some things need a connection:
 
-- **Attachments that don't fit in the outbox.** If a message's attachments would take the outbox over its [size limit](#attachments-in-the-outbox), or the outbox is kept in memory only, the composer says **Attachments need a connection** and keeps the message in your [draft](../composer/#drafts) until you're back online.
+- **Attachments that don't fit in the outbox.** If a message's attachments would take the outbox over its [size limit](#attachments-in-the-outbox), the composer says **Too large to queue offline — sends when you’re connected**. If the outbox is kept in memory only, it says **Attachments need a connection**. Either way it keeps the message in your [draft](../composer/#drafts) until you're back online.
 - **Slash commands.** Typing `/` while offline shows **Connect to run commands**, and Send stays unavailable.
 - **[Quick Capture](../quick-capture/)** and the setup wizard's test message aren't queued. If you're offline they show an error and keep what you typed.
 
@@ -77,7 +77,7 @@ If a queued message's saved attachments are missing when Pincer starts (for exam
 
 Each gateway has its own outbox. Messages queued for one gateway are sent only when Pincer is connected to that gateway, so switching gateways never sends a message to the wrong one.
 
-When a chat is deleted on the gateway, its unsent messages and their attachments are deleted with it. If you delete a chat from the [Sessions page](../sessions/#archiving-and-deleting) while it has unsent messages, the confirmation says so, for example *Its 2 unsent messages will be discarded too.* Removing a gateway deletes its outbox.
+When a chat is deleted on the gateway, its unsent messages and their attachments are deleted with it. If you delete a chat from the [Sessions page](../sessions/#archiving-and-deleting) while it has unsent messages, the confirmation says so, for example *The 2 unsent messages in this chat will be discarded too.* Removing a gateway deletes its outbox.
 
 ## Where the outbox is stored
 
