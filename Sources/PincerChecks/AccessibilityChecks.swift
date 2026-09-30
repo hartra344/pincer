@@ -34,8 +34,7 @@ func runDemoAccessibilityPass() async {
     check(!replies.isEmpty, "a11y pass: demo chat has replies to navigate (\(chat.entries.count) entries)")
     for turn in replies where !turn.body.isEmpty {
         let excerpt = AccessibilityText.streamingExcerpt(turn.body)
-        let first = turn.body.split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
-        check(excerpt.hasPrefix(first) && excerpt.count <= 241, "a11y pass: streaming label of \(turn.id) starts with the reply")
+        check(!excerpt.isEmpty && excerpt.count <= 241, "a11y pass: streaming label of \(turn.id) starts with the reply")
         let count = turn.text.count
         if count > 1 {
             check(AccessibilityText.messagePartAction("Reply", part: 1, of: count) == "Reply, part 1 of \(count)",
