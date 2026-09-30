@@ -11,7 +11,11 @@ import UIKit
 enum ToolPresentationCache {
     private final class Box {
         let value: ToolCallPresentation
-        init(_ value: ToolCallPresentation) { self.value = value }
+        let highlights: ToolHighlights
+        init(_ value: ToolCallPresentation) {
+            self.value = value
+            self.highlights = ToolHighlights.make(value)
+        }
     }
 
     private static let cache: NSCache<NSString, Box> = {
@@ -21,11 +25,20 @@ enum ToolPresentationCache {
     }()
 
     static func presentation(for tool: ToolActivity) -> ToolCallPresentation {
+        self.entry(for: tool).value
+    }
+
+    /// Syntax tokens of the presentation's arguments and output, made once with it.
+    static func highlights(for tool: ToolActivity) -> ToolHighlights {
+        self.entry(for: tool).highlights
+    }
+
+    private static func entry(for tool: ToolActivity) -> Box {
         let key = "\(tool.id)|\(tool.arguments?.utf8.count ?? -1)|\(tool.result?.utf8.count ?? -1)|\(tool.isError)|\(tool.isRunning)|\(tool.details != nil)" as NSString
-        if let cached = self.cache.object(forKey: key) { return cached.value }
-        let value = ToolCallPresentation.make(tool, limit: TranscriptMetrics.toolOutputLimit)
-        self.cache.setObject(Box(value), forKey: key)
-        return value
+        if let cached = self.cache.object(forKey: key) { return cached }
+        let box = Box(ToolCallPresentation.make(tool, limit: TranscriptMetrics.toolOutputLimit))
+        self.cache.setObject(box, forKey: key)
+        return box
     }
 }
 
@@ -238,7 +251,8 @@ extension TranscriptLayoutBuilder {
         if let argumentsText = presentation.argumentsText, !argumentsText.isEmpty {
             card.gap(8)
             self.inputTitle(into: &card)
-            let body = self.keyValueText(presentation.arguments, text: argumentsText, inner: card.inner)
+            let body = TranscriptSyntaxColors.apply(ToolPresentationCache.highlights(for: tool).arguments,
+                                                    to: self.keyValueText(presentation.arguments, text: argumentsText, inner: card.inner))
             card.y += self.textSection("\(tool.id):arguments", body, tool: tool, x: card.x, width: card.inner,
                                        maxHeight: TranscriptMetrics.toolOutputMaxHeight, into: &card)
         } else if presentation.rawArguments == nil, let plain = tool.arguments, !plain.isEmpty {
@@ -516,7 +530,9 @@ extension TranscriptLayoutBuilder {
             // Fully shown output takes its whole height; only the collapsed preview is capped.
             let maxHeight = showsAll && output.lineCount > toolOutputPreviewLines
                 ? CGFloat.greatestFiniteMagnitude : TranscriptMetrics.toolOutputMaxHeight
-            let attributed = TranscriptText.plain(shown, font: style.captionMono, color: failed ? TranscriptColors.failure : TranscriptColors.label)
+            let attributed = TranscriptSyntaxColors.apply(
+                ToolPresentationCache.highlights(for: tool).output,
+                to: TranscriptText.plain(shown, font: style.captionMono, color: failed ? TranscriptColors.failure : TranscriptColors.label))
             if isExec {
                 let padX: CGFloat = 10
                 let padY: CGFloat = 8
