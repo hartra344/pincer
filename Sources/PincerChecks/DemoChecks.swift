@@ -56,6 +56,19 @@ func runDemo() async {
     await trip.loadOlder()
     await trip.loadOlder()
     check(!trip.hasMoreHistory && trip.items.count == 302, "trip paged to start (\(trip.items.count))")
+
+    // The long chat (#469): tall enough to scroll, with a code block and a tool call.
+    let longKey = "agent:main:dashboard:lab-migration"
+    check(gateway.sessions[longKey] != nil, "demo has the long chat")
+    let long = gateway.chat(for: longKey)
+    await long.load()
+    var turns: [AssistantTurn] = []
+    for entry in long.entries { if case let .assistant(turn) = entry { turns.append(turn) } }
+    let longMessages = long.items.count
+    check(longMessages >= 60 && !long.hasMoreHistory, "long chat has >= 60 messages (\(longMessages))")
+    check(turns.contains { $0.body.contains("```") }, "long chat has a fenced code block")
+    check(turns.contains { $0.tools.contains { $0.name == "exec" && $0.result?.contains("ONLINE") == true } },
+          "long chat has a tool call with a result")
     await checkDemoMessageSearch(gateway, trip: trip)
     await checkDemoSeededSearchTerms(gateway, trip: trip)
     await checkExportAndBookmarks(gateway)

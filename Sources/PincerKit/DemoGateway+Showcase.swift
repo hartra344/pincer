@@ -465,6 +465,8 @@ extension DemoGateway {
             messages: Self.seedFileEditsTranscript())
         add(Self.richRenderingKey, agent: "main", title: Self.richRenderingTitle, preview: Self.richRenderingPreview,
             age: 8 * 60_000, messages: Self.seedRichRenderingTranscript())
+        add(Self.longChatKey, agent: "main", title: Self.longChatTitle, preview: Self.longChatPreview,
+            age: 3 * 86_400_000, messages: Self.seedLongChatTranscript())
         add(Self.toolCardsKey, agent: "main", title: Self.toolCardsTitle, preview: Self.toolCardsPreview, age: 3 * 60_000,
             messages: Self.seedToolCardsTranscript())
         add("agent:coder:main", agent: "coder", title: "Main", preview: "Waiting for approval to push the fix.", age: 45_000,
