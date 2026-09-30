@@ -897,7 +897,8 @@ struct TranscriptLayoutBuilder {
         y += titleRow + 4
         let (text, match) = self.marks.mark(TranscriptDiffText.text(rows), .tool(tool.id))
         let contentHeight = TranscriptText.size(text, width: inner).height
-        let visible = min(contentHeight, TranscriptMetrics.diffMaxHeight)
+        // Fully shown diffs take their whole height so nothing scrolls inside the transcript's own scroll.
+        let visible = hidden == 0 ? contentHeight : min(contentHeight, TranscriptMetrics.diffMaxHeight)
         let section = TranscriptPart.Tool.Section(title: L("Changes"), titleY: titleY, text: text,
                                                   frame: CGRect(x: 10, y: y, width: inner, height: visible), contentHeight: contentHeight)
         y += visible

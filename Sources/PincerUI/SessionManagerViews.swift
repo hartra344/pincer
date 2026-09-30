@@ -73,7 +73,8 @@ struct SessionsPage: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(SessionManager.deleteMessage)
+            Text(SessionManager.deleteMessage(unsentCount: self.unsentCount(model.deletePlan(self.selection).deletable),
+                                                 sessionCount: self.selection.count))
         }
         .onAppear { model.clearMessages() }
         .onChange(of: rows.map(\.key)) { _, keys in
@@ -84,6 +85,10 @@ struct SessionsPage: View {
             guard connected else { return }
             await model.loadIfNeeded(filter: self.filter)
         }
+    }
+
+    private func unsentCount(_ keys: [String]) -> Int {
+        keys.reduce(0) { $0 + self.gateway.outbox.entries(for: $1).count }
     }
 
     @ViewBuilder private func header(_ model: SessionManagerModel, connected: Bool) -> some View {
@@ -499,7 +504,7 @@ struct SessionDetailPage: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(SessionManager.deleteMessage)
+            Text(SessionManager.deleteMessage(unsentCount: self.gateway.outbox.entries(for: self.sessionKey).count))
         }
         .confirmationDialog(SessionManager.switchTitle(self.pendingBranch?.title ?? ""),
                             isPresented: Self.presence(self.$pendingBranch), titleVisibility: .visible,

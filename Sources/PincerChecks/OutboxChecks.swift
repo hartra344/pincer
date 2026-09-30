@@ -70,6 +70,18 @@ func checkOutboxLogic() {
           && SendFailure.classify(GatewayError.rpc(code: "NOT_PAIRED", message: "no", details: nil)) == .authRevoked
           && SendFailure.classify(GatewayError.closed("mock drop")) == .transient,
           "send failures classify as rejected / transient / auth revoked")
+
+    // Queued attachments (#215): kept entries behave like text; memory-only ones stay launch-only.
+    let ref = OutboxAttachmentRef(id: UUID(), fileName: "a.png", mimeType: "image/png", byteCount: 10)
+    var kept = Outbox()
+    kept.enqueue(OutboxEntry(id: "k", sessionKey: "a", text: "k", createdAt: now, attachments: [ref]))
+    kept.enqueue(OutboxEntry(id: "m", sessionKey: "b", text: "m", createdAt: now, hasAttachments: true))
+    check(kept.persistable.entries.map(\.id) == ["k"], "only attachment entries with files on disk persist")
+    check(kept.nextToSend()?.id == "k", "an entry with saved attachments auto-sends; a memory-only one never does")
+    kept.recoverAfterLaunch()
+    check(kept.entries.map(\.id) == ["k"], "a relaunch keeps saved attachments and drops memory-only ones")
+    let json = (try? JSONEncoder().encode(kept)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+    check(json.contains("a.png") && !json.contains("base64"), "the outbox JSON holds attachment refs, not bytes")
 }
 
 // MARK: Demo
@@ -252,6 +264,7 @@ func runLiveOutbox(url: String, token: String) async {
     await gateway.stopAndFlushCache()
 
     await runLiveOutboxRelaunch(url: url, token: token, key: key)
+    await runLiveOutboxAttachments(url: url, token: token, key: key)
 }
 
 /// Queued while the Gateway is unreachable, the app quits; the next launch sends it once.
@@ -291,4 +304,83 @@ private func runLiveOutboxRelaunch(url: String, token: String, key: String) asyn
         OutboxStore.file(gatewayId: profile.id).map { !FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? true
     }
     check(cleared, "an empty outbox leaves no file")
+}
+
+/// #215: an attachment queued while the Gateway is unreachable is kept on disk, survives the app
+/// quitting, and goes out on the next launch with its original key and bytes; then its files go.
+@MainActor
+private func runLiveOutboxAttachments(url: String, token: String, key: String) async {
+    let root = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-outbox-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let previous = ProcessInfo.processInfo.environment["PINCER_OUTBOX_DIR"]
+    setenv("PINCER_OUTBOX_DIR", root.path(percentEncoded: false), 1)
+    defer {
+        if let previous { setenv("PINCER_OUTBOX_DIR", previous, 1) } else { unsetenv("PINCER_OUTBOX_DIR") }
+        try? FileManager.default.removeItem(at: root)
+    }
+    let profile = GatewayProfile(name: "Mock outbox attachments", url: url, authMode: .token)
+    profile.secret = token
+    guard let first = await connectForOutbox(profile, "outbox attachments (first launch)") else { return }
+    let chat = first.chat(for: key)
+    await chat.load()
+    _ = await waitFor("attachment chat loaded") { chat.hasLoaded }
+    let trigger = "outbox attachment trigger \(UUID().uuidString.prefix(6)) [mock:drop-once]"
+    let triggerSend = Task { await chat.sendMessage(trigger) }
+    _ = await waitFor("attachment drop", timeout: 10, every: 10) { !first.state.isConnected }
+    let bytes = Data((0..<4096).map { UInt8(($0 * 7) % 256) })
+    let text = "outbox attachment \(UUID().uuidString.prefix(6))"
+    let outcome = await chat.sendMessage(text, attachments: [OutgoingAttachment(fileName: "queued.png", mimeType: "image/png", data: bytes)])
+    check(outcome == .queued, "an attachment composed while disconnected queues (\(outcome))")
+    let entry = first.outbox.entries.first { $0.text == text }
+    check(entry?.attachments.count == 1, "it keeps its attachment on disk (\(entry?.attachments.count ?? -1) ref(s))")
+    first.stop()
+    _ = await triggerSend.value
+    guard let entry else { return }
+    let file = OutboxAttachmentStore.fileURL(gatewayId: profile.id, entryId: entry.id, attachmentId: entry.attachments.first?.id ?? UUID())
+    let saved = await OutboxStore.load(gatewayId: profile.id).outbox?.entries.first { $0.id == entry.id }
+    check(saved?.attachments == entry.attachments, "the saved outbox keeps the attachment ref")
+    check(file.flatMap { try? Data(contentsOf: $0) } == bytes, "the attachment's bytes are on disk")
+
+    let second = GatewayStore(profile: profile)
+    second.start()
+    defer { second.stop() }
+    let sent = await waitFor("attachment relaunch flush", timeout: 30) {
+        second.state.isConnected && !second.sessions.isEmpty && second.unsentCount == 0
+    }
+    check(sent, "the next launch sends it (\(second.unsentCount) left)")
+    let secondChat = second.chat(for: key)
+    _ = await waitFor("attachment runs settle", timeout: 30) { !secondChat.isRunning }
+
+    // What the Gateway received: the same key, and the image's bytes.
+    let reader = MockControl(profile: profile)
+    guard await reader.start() else { return check(false, "connected a reader to the mock") }
+    defer { Task { await reader.stop() } }
+    let history = await reader.request("chat.history", ["sessionKey": .string(key), "limit": .number(200)])
+    let messages = history?["messages"]
+    var found: JSONValue?
+    var index = 0
+    while let message = messages?[index] {
+        if message["__openclaw"]?["idempotencyKey"] == .string("\(entry.id):user") { found = message }
+        index += 1
+    }
+    check(found != nil, "the Gateway recorded the message under the original idempotency key")
+    var artifactId: String?
+    var blockIndex = 0
+    while let block = found?["content"]?[blockIndex] {
+        if case let .string(id)? = block["artifactId"] { artifactId = id }
+        blockIndex += 1
+    }
+    check(artifactId != nil, "the message carries the image")
+    if let artifactId {
+        let download = await reader.request("artifacts.download", ["artifactId": .string(artifactId)])
+        if case let .string(encoded)? = download?["data"] {
+            check(Data(base64Encoded: encoded) == bytes, "the Gateway received the original bytes")
+        } else {
+            check(false, "the uploaded image downloads")
+        }
+    }
+    let attachmentsDirectory = OutboxAttachmentStore.directory(gatewayId: profile.id, entryId: entry.id)
+    let cleaned = await waitFor("attachment files removed", timeout: 10) {
+        attachmentsDirectory.map { !FileManager.default.fileExists(atPath: $0.path(percentEncoded: false)) } ?? true
+    }
+    check(cleaned, "the attachment files are gone once it's sent")
 }

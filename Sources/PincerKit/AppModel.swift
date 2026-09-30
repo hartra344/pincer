@@ -329,6 +329,7 @@ public final class AppModel {
         store.retireOutbox(save: false)
         store.outbox = Outbox()
         OutboxStore.remove(gatewayId: id, root: store.outboxRoot)
+        OutboxAttachmentStore.removeAll(gatewayId: id, root: store.outboxRoot)
         store.forgetLocalHealthDismissals()
         store.forgetGatewayHost()
         self.persist()
@@ -345,6 +346,9 @@ public final class AppModel {
 
     /// Unsent messages (queued or failed) across every Gateway.
     public var unsentCount: Int { self.gateways.reduce(0) { $0 + $1.unsentCount } }
+
+    /// Attachment bytes kept on disk for unsent messages, across every Gateway.
+    public var outboxAttachmentBytes: Int { self.gateways.reduce(0) { $0 + $1.outboxAttachmentBytes } }
 
     /// Discards every Gateway's unsent messages (Settings → Storage).
     public func discardUnsentMessages() {

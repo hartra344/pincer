@@ -13,19 +13,21 @@ You can keep writing when your connection drops. Messages you send while offline
 
 ## Sending while offline
 
-When Pincer isn't connected to the gateway, the composer still works for text messages and [replies](../composer/#replying-to-a-message):
+When Pincer isn't connected to the gateway, the composer still works for text messages, [replies](../composer/#replying-to-a-message) and attachments:
 
 - A line above the composer says **Offline — messages send when you reconnect**, with how many of this chat's messages are waiting, for example **2 messages queued · Offline — messages send when you reconnect**.
 - The Send button stays where it is, and <kbd>Return</kbd> still sends. Its tooltip and VoiceOver label read **Queue Message**.
 - Your message appears in the chat straight away, marked **Queued**, and the composer clears as usual.
 
+Attachments queue with their message. Pincer saves a copy of each file in the outbox, so a queued photo or document goes out with its message when you reconnect, even after quitting Pincer. See [Attachments in the outbox](#attachments-in-the-outbox).
+
 Some things need a connection:
 
-- **Attachments.** While you're offline, the attach buttons are unavailable and the composer says **Attachments need a connection**. Anything already attached stays in your [draft](../composer/#drafts) until you're back online.
+- **Attachments that don't fit in the outbox.** If a message's attachments would take the outbox over its [size limit](#attachments-in-the-outbox), the composer says **Too large to queue offline — sends when you’re connected**. If the outbox is kept in memory only, the **+** button is unavailable while you're offline (**Attachments need a connection**). Either way the composer keeps the message in your [draft](../composer/#drafts) until you're back online.
 - **Slash commands.** Typing `/` while offline shows **Connect to run commands**, and Send stays unavailable.
 - **[Quick Capture](../quick-capture/)** and the setup wizard's test message aren't queued. If you're offline they show an error and keep what you typed.
 
-While you're connected, a new message also waits, marked **Queued**, if an earlier message in the same chat hasn't gone out yet. A message with attachments can't wait like that: the composer keeps it and says **Couldn’t send: an earlier message in this chat hasn’t gone out yet.**
+While you're connected, a new message also waits, marked **Queued**, if an earlier message in the same chat hasn't gone out yet. That includes messages with attachments. Only a message whose attachments don't fit in the outbox can't wait: the composer keeps it and says **Couldn’t send: an earlier message in this chat hasn’t gone out yet.**
 
 ## Message states
 
@@ -55,7 +57,7 @@ Retry sends the message again as soon as Pincer is connected, reconnecting first
 
 Messages in a chat are always sent in the order you wrote them. If one fails, the messages after it in that chat wait, marked **Queued**, until you retry or delete the failed one. That way the agent never gets your messages out of order. Other chats aren't affected.
 
-Each message is sent with the same idempotency key every time it's tried, including retries and after relaunching, so the gateway ignores copies it has already received. If Pincer quits while a message is being sent, it checks the chat's history on the next launch: if the message arrived, it's removed from the outbox; otherwise it's queued again.
+Each message is sent with the same idempotency key every time it's tried, including retries and after relaunching, and with the same attachments, so the gateway ignores copies it has already received. If Pincer quits while a message is being sent, it checks the chat's history on the next launch: if the message arrived, it's removed from the outbox; otherwise it's queued again.
 
 ## Why a message fails
 
@@ -67,13 +69,15 @@ Each message is sent with the same idempotency key every time it's tried, includ
 | This device lost access (unpaired, or missing a permission) | Marks it **Failed — Sign-in required**. Reconnect or pair again, then choose **Retry**. It's never sent automatically. |
 | The chat no longer exists on the gateway | Marks it **Failed — Session no longer exists**, with **Delete** only. |
 
-A message with attachments is never sent automatically. If it fails, including when the connection drops, it's marked **Failed** and can be retried until you quit Pincer. Attachments aren't saved in the outbox, so after a relaunch it's gone. Until then, its text is still in the chat, so you can copy it.
+Messages with attachments are handled the same way: they're sent automatically when you reconnect, and survive quitting Pincer. The exception is a message whose attachments didn't fit in the outbox. It's never sent automatically: if it fails, including when the connection drops, it's marked **Failed** and can be retried until you quit Pincer, and after a relaunch it's gone. Until then, its text is still in the chat, so you can copy it.
+
+If a queued message's saved attachments are missing when Pincer starts (for example, the files were deleted by hand), the message is marked **Failed** saying its attachments are no longer available, with **Delete** only. Its text stays in the chat so you can copy it.
 
 ## Several gateways
 
 Each gateway has its own outbox. Messages queued for one gateway are sent only when Pincer is connected to that gateway, so switching gateways never sends a message to the wrong one.
 
-When a chat is deleted on the gateway, its unsent messages are deleted with it. Removing a gateway deletes its outbox.
+When a chat is deleted on the gateway, its unsent messages and their attachments are deleted with it. If you delete a chat from the [Sessions page](../sessions/#archiving-and-deleting) while it has unsent messages, the confirmation says so, for example *The 2 unsent messages in this chat will be discarded too.* Removing a gateway deletes its outbox.
 
 ## Where the outbox is stored
 
@@ -86,12 +90,19 @@ The outbox is saved on your device, so queued and failed messages survive quitti
 
 Each file records its format version. A file that's damaged, or that was written by a newer Pincer (for example after going back to an earlier build), is set aside next to it (`<gateway>.corrupt.json` or `<gateway>.v<version>.json`) instead of being overwritten, and logged under subsystem `chat.pincer`, category `Outbox`, without any message content.
 
-To keep the outbox in memory only, so it lasts until you quit Pincer, set `PINCER_OUTBOX_DIR=off`. To use another folder, set it to a path.
+To keep the outbox in memory only, so it lasts until you quit Pincer, set `PINCER_OUTBOX_DIR=off`. Messages with attachments then need a connection again. To use another folder, set it to a path.
+
+### Attachments in the outbox
+
+Attachments of queued and failed messages are saved as ordinary files next to the outbox, in `Outbox/Attachments/<gateway>/`, one folder per message. The outbox file only lists them; it doesn't contain the file data. On iPhone and iPad they can't be read until you first unlock the device after it restarts.
+
+- **Size limit.** Each gateway's outbox keeps up to 200 MB of attachments. A message that would go over that isn't saved: it needs a connection, as before.
+- **Cleanup.** A message's files are deleted as soon as it's sent, or when you delete it, clear the outbox, delete its chat or remove its gateway. When Pincer starts, it also deletes any leftover attachment files that no message refers to.
 
 To see or empty it, open **Settings** (**General** tab on macOS) and find **Storage**:
 
-- **Outbox** shows how many messages are unsent, across all gateways.
-- **Clear Outbox…** asks **Clear the outbox?** and, when you confirm with **Clear Outbox**, deletes every queued and failed message without sending it. A message being sent at that moment isn't affected. Your chats and cached transcripts aren't affected either.
+- **Outbox** shows how many messages are unsent, across all gateways, and how much space their attachments take, for example **2 messages · 4.2 MB**.
+- **Clear Outbox…** asks **Clear the outbox?** and, when you confirm with **Clear Outbox**, deletes every queued and failed message and its attachments without sending it. A message being sent at that moment isn't affected. Your chats and cached transcripts aren't affected either.
 
 ## Trying it out
 

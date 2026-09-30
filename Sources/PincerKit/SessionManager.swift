@@ -35,6 +35,19 @@ public enum SessionManager {
     public static var unsupportedMessage: String { L("Session Management Isn't Available. Update OpenClaw to manage sessions here.") }
     public static var branchesUnsupportedMessage: String { L("Branches need a newer Gateway.") }
     public static var deleteMessage: String { L("This permanently deletes the transcript on the Gateway and can't be undone.") }
+    public static func deleteMessage(unsentCount: Int, sessionCount: Int = 1) -> String {
+        guard unsentCount > 0 else { return self.deleteMessage }
+        let count = unsentCount.formatted()
+        let extra: String
+        switch (sessionCount > 1, unsentCount == 1) {
+        case (false, true): extra = L("The 1 unsent message in this chat will be discarded too.")
+        case (false, false): extra = L("The \(count) unsent messages in this chat will be discarded too.")
+        case (true, true): extra = L("1 unsent message in these chats will be discarded too.")
+        case (true, false): extra = L("\(count) unsent messages in these chats will be discarded too.")
+        }
+        return self.deleteMessage + " " + extra
+    }
+
     public static var mixedDeleteMessage: String { L("Only archived sessions can be deleted without Full Management.") }
 
     public static func deleteTitle(count: Int) -> String {

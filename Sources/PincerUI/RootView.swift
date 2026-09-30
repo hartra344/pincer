@@ -624,7 +624,7 @@ private struct TranscriptCacheSettingsSection: View {
                     Text("Chats are downloaded again from your Gateways when you open them, and message search is rebuilt. Nothing on your Gateways is deleted.", bundle: .module)
                 }
             LabeledContent(L("Outbox")) {
-                Text(self.app.unsentCount == 1 ? "1 message" : "\(self.app.unsentCount.formatted()) messages")
+                Text(self.outboxSummary)
                     .monospacedDigit()
             }
             Button(L("Clear Outbox…"), role: .destructive) { self.confirmingUnsent = true }
@@ -632,14 +632,22 @@ private struct TranscriptCacheSettingsSection: View {
                 .confirmationDialog(L("Clear the outbox?"), isPresented: self.$confirmingUnsent, titleVisibility: .visible) {
                     Button(L("Clear Outbox"), role: .destructive) { self.app.discardUnsentMessages() }
                 } message: {
-                    Text("Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected.", bundle: .module)
+                    Text("Queued and failed messages, and their attachments, are deleted from this device without being sent. Chats and cached transcripts aren’t affected.", bundle: .module)
                 }
         } header: {
             Text("Storage", bundle: .module)
         } footer: {
-            Text("Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send.", bundle: .module)
+            Text("Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline, with their attachments, wait here until they send.", bundle: .module)
         }
         .task { await self.measure() }
+    }
+
+    private var outboxSummary: String {
+        let count = self.app.unsentCount
+        let messages = count == 1 ? L("1 message") : L("\(count.formatted()) messages")
+        let bytes = self.app.outboxAttachmentBytes
+        guard bytes > 0 else { return messages }
+        return "\(messages) · \(bytes.formatted(.byteCount(style: .file)))"
     }
 
     private func measure() async {
