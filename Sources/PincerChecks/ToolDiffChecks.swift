@@ -42,6 +42,11 @@ func checkToolDiffs() {
     """]))
     check(patch?.files.count == 2 && patch?.files.first?.hunks.count == 2 && patch?.additions == 3 && patch?.deletions == 2,
           "multi-hunk, multi-file apply_patch")
+    let deleteOne = ToolFileEdit.parse(toolName: "apply_patch", arguments: toolArgs(["input": "*** Begin Patch\n*** Delete File: old.txt\n*** End Patch"]))
+    let deleteTwo = ToolFileEdit.parse(toolName: "apply_patch", arguments: toolArgs(["input": "*** Begin Patch\n*** Delete File: a.txt\n*** Delete File: b.txt\n*** End Patch"]))
+    check(deleteOne?.deletionsLabel == "1 file deleted" && deleteTwo?.deletionsLabel == "2 files deleted"
+          && deleteOne?.accessibilitySummary.contains("1 file deleted") == true,
+          "header-only delete reads \"N files deleted\" (\(deleteOne?.deletionsLabel ?? "nil"), \(deleteTwo?.deletionsLabel ?? "nil"))")
     check(ToolFileEdit.parse(toolName: "edit", arguments: "{\"path\":") == nil
           && ToolFileEdit.parse(toolName: "exec", arguments: toolArgs(["command": "ls"])) == nil
           && ToolFileEdit.parse(toolName: "edit", arguments: toolArgs(["path": "a", "oldText": "x", "newText": "y"]), isError: true) == nil,

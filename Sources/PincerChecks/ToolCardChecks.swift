@@ -2,7 +2,7 @@ import Foundation
 import PincerKit
 
 // The "Check the MCP servers" chat (issue #324): upstream-shaped exec, failed exec, edit, bundle-MCP,
-// web_fetch and read calls, from the built-in demo and from the mock Gateway.
+// web_fetch, web_search and read calls, from the built-in demo and from the mock Gateway.
 
 private let toolCardsKey = "agent:main:dashboard:tool-cards"
 
@@ -19,13 +19,13 @@ private func checkToolCardsChat(_ gateway: GatewayStore, label: String) async {
     check(gateway.sessions[toolCardsKey] != nil, "\(label): has the Check the MCP servers chat")
     let chat = gateway.chat(for: toolCardsKey)
     await chat.load()
-    let loaded = await waitFor("\(label) tool-cards history") { cardTools(chat).count >= 11 }
+    let loaded = await waitFor("\(label) tool-cards history") { cardTools(chat).count >= 13 }
     let calls = cardTools(chat)
     check(loaded && calls.map(\.name) == ["exec", "exec", "read", "edit", "github__search_issues", "web_fetch", "linear__create_issue", "linear__list_teams",
-                           "linear__update_issue", "mcp__filesystem__read_file", "acme-docs__search"],
+                           "linear__update_issue", "mcp__filesystem__read_file", "acme-docs__search", "web_search", "read"],
           "\(label): tool calls in order (\(calls.map(\.name)))")
-    guard calls.count >= 11 else { return }
-    check(calls.map(\.isError) == [false, true, false, false, false, false, false, false, true, false, false] && calls.allSatisfy { !$0.isRunning },
+    guard calls.count >= 13 else { return }
+    check(calls.map(\.isError) == [false, true, false, false, false, false, false, false, true, false, false, false, false] && calls.allSatisfy { !$0.isRunning },
           "\(label): only the second exec failed (\(calls.map(\.isError)))")
     check(calls[0].arguments?.contains("openclaw mcp status --verbose") == true
           && calls[0].arguments?.contains("workdir") == true, "\(label): exec arguments carry command and workdir")
@@ -87,6 +87,20 @@ private func checkToolCardPresentations(_ calls: [ToolActivity], label: String) 
     let configured = ["acme.docs", "filesystem", "linear"]
     let resolved = configured.first { $0 == "acme-docs" } ?? configured.first { MCPToolName.safeServerName($0) == "acme-docs" }
     check(resolved == "acme.docs", "\(label): acme-docs resolves to config acme.docs (\(resolved ?? "nil"))")
+    checkWebSearchCard(calls[11], label: label)
+    let swiftRead = ToolCallPresentation.make(calls[12])
+    let swiftText = swiftRead.output?.text ?? ""
+    check(swiftRead.kind == .read && swiftRead.headline?.hasSuffix(".swift") == true
+          && ToolSyntax.language(forPath: swiftRead.headline ?? "") == .swift
+          && ToolSyntax.tokens(in: swiftText, language: .swift).contains { $0.kind == .keyword }
+          && ToolSyntax.tokens(in: swiftText, language: .swift).contains { $0.kind == .comment },
+          "\(label): read of a .swift file tokenizes keywords and comments")
+    let issues = ToolCallPresentation.make(calls[4]).output?.text ?? ""
+    check(ToolSyntax.looksLikeJSON(issues) && ToolSyntax.tokens(in: issues, language: .json).contains { $0.kind == .key },
+          "\(label): MCP JSON result tokenizes as JSON")
+    check(calls.prefix(2).allSatisfy { $0.durationMs != nil } && calls[0].durationMs == 1240 && calls[5].durationMs == 412
+          && calls[11].durationMs == 640 && calls[4].durationMs == nil,
+          "\(label): header duration derives from durationMs / tookMs (\(calls.map { $0.durationMs ?? -1 }))")
     let fetch = ToolCallPresentation.make(calls[5])
     check(fetch.kind == .webFetch && fetch.output?.status == "200", "\(label): web_fetch status is 200 (\(fetch.output?.status ?? "nil"))")
 
@@ -97,6 +111,27 @@ private func checkToolCardPresentations(_ calls: [ToolActivity], label: String) 
     """
     let unwrapped = ToolCallPresentation.make(live).output
     check(unwrapped?.text == "line one\nline two" && unwrapped?.exitCode == 0, "\(label): envelope result is unwrapped (\(unwrapped?.text ?? "nil"))")
+}
+
+@MainActor
+private func checkWebSearchCard(_ call: ToolActivity, label: String) {
+    let p = ToolCallPresentation.make(call)
+    guard let web = p.web else {
+        check(false, "\(label): web_search has a link list (details: \(call.details.map { "\($0)" } ?? "nil"))")
+        return
+    }
+    check(p.kind == .webSearch && web.kind == .results && web.provider == "brave" && web.results.count == 5 && web.isListable,
+          "\(label): web_search lists 5 brave results (\(web.results.count))")
+    check(web.results.allSatisfy { ["http", "https"].contains($0.url.scheme ?? "") && !$0.title.contains("<<<")
+        && !($0.snippet ?? "").contains("<<<") && !($0.siteName ?? "").contains("<<<") },
+          "\(label): web_search titles, snippets and sites are unwrapped http(s) links")
+    check(web.results.contains { $0.snippet == nil } && web.results.contains { $0.published != nil } && web.results.contains { $0.siteName != nil },
+          "\(label): web_search rows vary: no snippet, dated, site name")
+    check(Array(p.searchTexts.suffix(web.results.count)) == web.results.map(\.text) && !p.searchTexts.contains { $0.contains("\"kind\"") },
+          "\(label): web_search Find strings are the drawn rows")
+    check(p.output?.durationMs == 640 && call.result?.contains("<<<EXTERNAL_UNTRUSTED_CONTENT") == true,
+          "\(label): web_search keeps tookMs and the upstream envelope in the raw result")
+    check(web.copyText.split(separator: "\n").count == web.results.count * 2, "\(label): web_search Copy is title/url lines")
 }
 
 @MainActor
