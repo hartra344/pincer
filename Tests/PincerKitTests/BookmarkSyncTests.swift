@@ -334,4 +334,19 @@ struct BookmarkGatewaySyncTests {
         #expect(h.gateway.sets.count == before)
         #expect(h.gateway.map(Bookmark.prefKey(shard: 0))?[item.id] != nil, "the gateway keeps them for other devices")
     }
+
+    @Test func undecodableRemoteValuesStayRemoteAndPullsPushNothing() async throws {
+        let h = try await PrefsHarness()
+        defer { self.cleanUp(h) }
+        let item = bookmarks(inShard: 6, count: 1)[0]
+        let pref = Bookmark.prefKey(shard: 6)
+        h.gateway.externalChange(pref, [item.id: item.syncedValue, "x\u{1F}y": "garbage"])
+        let arrived = await eventually { h.store.bookmarkStore.isBookmarked(sessionKey: "main", messageId: item.messageId) }
+        #expect(arrived)
+        await h.store.pull(h.store.syncedMap(pref))
+        await h.settle()
+        #expect(h.gateway.sets.isEmpty, "pulling never pushes")
+        #expect(h.gateway.map(pref)?["x\u{1F}y"] == "garbage", "undecodable values are kept remotely")
+        #expect(h.store.bookmarkStore.bookmarks.count == 1)
+    }
 }
