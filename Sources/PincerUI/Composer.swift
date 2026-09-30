@@ -252,7 +252,9 @@ struct Composer: View {
         let queued = self.chat.unsentEntries.filter { $0.state == .queued }.count
         let waiting = queued == 0 ? nil : L("\(queued) messages queued")
         if !self.attachments.isEmpty, !self.attachmentsFitOffline {
-            return [waiting, L("Too large to queue offline — sends when you’re connected")].compactMap(\.self).joined(separator: " · ")
+            let reason = self.gateway.canPersistAttachments(bytes: 0)
+                ? L("Too large to queue offline — sends when you’re connected") : Self.attachmentsNeedConnection
+            return [waiting, reason].compactMap(\.self).joined(separator: " · ")
         }
         if self.isTypingCommand {
             return [waiting, L("Connect to run commands")].compactMap(\.self).joined(separator: " · ")
