@@ -50,9 +50,9 @@ A fetch shows the URL, and a search shows the query, each in a chip with an icon
 
 A `web_search` result appears as a list of links instead of JSON. The section is titled **Results**, and its badges show the search provider (for example `brave`), the number of results, how long the search took, and **cached** when the gateway served a saved answer.
 
-Each result has its title as a link, a dimmed line with the site name and host, and up to two lines of the snippet. Click or tap a title to open the page in your browser. On macOS, hovering a title shows the full URL. **Copy** copies one `title` and `url` pair per result.
+Each result is a title link, a dimmed line with the site name and host, and the snippet. The titles are ordinary links inside the card's selectable text, so click or tap one to open the page, and use the VoiceOver links rotor to move between them. On macOS, hovering a title shows the full URL. **Copy** copies one `title` and `url` pair per result.
 
-Some providers answer the question instead of listing pages. Then the card shows the answer as the output, followed by a **Sources** list of links. If the search failed, the card shows the error like any other tool.
+Some providers answer the question instead of listing pages. Then the section is titled **Answer**, the card shows the answer text, and a **Sources** list of links follows. If the search failed, the card shows the error like any other tool.
 
 Only `http` and `https` links are shown. If the gateway's result is in a shape Pincer doesn't recognize, or the chat was cached by an earlier version of Pincer without the result details, the card shows the output as plain text. **Show raw JSON** in the section's title row always shows the full result. To get the links for an old cached chat, clear the cache under **Settings → Storage** (see [Local cache](../local-cache/#clearing-the-cache)).
 
@@ -96,4 +96,4 @@ See [Accessibility](../accessibility/) for more.
 
 ## Try it in the demo
 
-In the [demo](../../getting-started/try-the-demo/), open the **Check the MCP servers** chat. It has a command with multi-line output, a failed command, a file edit, an MCP tool call, a web fetch, a web search with a list of results and a file read, all simulated.
+In the [demo](../../getting-started/try-the-demo/), open the **Check the MCP servers** chat. It has a command with multi-line output, a failed command, a file edit, an MCP tool call, a web fetch, a web search with a list of results, and a read of a Swift file with syntax colours, all simulated.
