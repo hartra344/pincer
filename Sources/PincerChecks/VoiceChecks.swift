@@ -230,6 +230,29 @@ private func voiceFollowUpChecks(profile: GatewayProfile, label: String) async {
         if case let .fellBack(_, reason) = bad.outcome {
             check(reason.message.contains("bogus-voice"), "\(label): without speakerVoiceId the voiceId is used (\(reason.message))")
         } else { check(false, "\(label): without speakerVoiceId the bad voiceId is used (\(bad.outcome))") }
+        // `model` is never read (a bogus one still converts); `modelId` is (a bogus one is rejected).
+        try await patch(["voiceId": "21m00Tcm4TlvDq8ikWAM", "model": "eleven_bogus"])
+        let ignored = await voice.test(sample: "Hello from Pincer.")
+        check(ignored.outcome == .success, "\(label): a bogus `model` key is ignored by the provider (\(ignored.summary))")
+        try await patch(["model": .null, "modelId": "eleven_bogus"])
+        let rejected = await voice.test(sample: "Hello from Pincer.")
+        if case let .fellBack(_, reason) = rejected.outcome { check(reason.message.contains("eleven_bogus"), "\(label): a bogus `modelId` is rejected (\(reason.message))") }
+        else { check(false, "\(label): a bogus `modelId` is rejected (\(rejected.outcome))") }
+        try await patch(["voiceId": .null, "model": .null, "modelId": .null])
+
+        // Prefs set with tts.setProvider beat a persona's provider (the RPCs can't clear them, so the persona label is a unit test).
+        _ = try await connection.request("tts.setProvider", ["provider": "openai"])
+        var personaPatch: JSONValue = ["raw": .string(JSONValue.object(["tts": ["personas": ["studio": ["label": "Studio", "provider": "elevenlabs", "providers": ["elevenlabs": [:]]]]]]).compactString()), "note": "Pincer checks"]
+        if let hash = try? await connection.request("config.get", [:])["hash"]?.text, case var .object(o) = personaPatch { o["baseHash"] = .string(hash); personaPatch = .object(o) }
+        _ = try await connection.request("config.patch", personaPatch)
+        await voice.refresh()
+        check(voice.personas.contains { $0.id == "studio" && $0.provider == "elevenlabs" }, "\(label): a config persona is listed")
+        try await voice.setPersona("studio")
+        await voice.refresh()
+        check(voice.activePersona == "studio", "\(label): the persona activates")
+        try await voice.setProvider("openai")
+        check(voice.status?.provider == "openai", "\(label): prefs beat the persona's provider")
+        try await voice.setPersona(nil)
         try await patch(["voiceId": .null, "model": .null])
 
         // Remove Key: config cleared, the secret deleted, the provider unconfigured.
