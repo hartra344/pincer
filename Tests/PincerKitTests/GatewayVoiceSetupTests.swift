@@ -429,8 +429,8 @@ struct GatewayVoiceSetupTests {
         await model.refresh()
         let problem = model.providerProblem(for: "elevenlabs")
         #expect(problem?.cause == .key)
-        #expect(problem?.message == "ElevenLabs's key is set, but the Gateway can't read it.")
-        #expect(TTSFallbackReason.keyNotResolving.message(provider: "ElevenLabs") == "ElevenLabs's key is set, but the Gateway can't read it.")
+        #expect(problem?.message == "The ElevenLabs key is set, but the Gateway can't read it.")
+        #expect(TTSFallbackReason.keyNotResolving.message(provider: "ElevenLabs") == "The ElevenLabs key is set, but the Gateway can't read it.")
     }
 
     @Test func problemCauseIsClassified() async {

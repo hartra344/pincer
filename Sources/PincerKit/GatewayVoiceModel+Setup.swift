@@ -65,7 +65,7 @@ public enum TTSFallbackReason: Equatable, Sendable {
     /// The message naming `provider` where the case doesn't carry it.
     public func message(provider: String) -> String {
         switch self {
-        case .keyNotResolving: String(format: L("%@'s key is set, but the Gateway can't read it."), provider)
+        case .keyNotResolving: String(format: L("The %@ key is set, but the Gateway can't read it."), provider)
         case let .modelRejected(detail): String(format: L("%@ rejected the model or voice: %@"), provider, detail)
         default: self.message
         }
@@ -221,7 +221,13 @@ extension GatewayVoiceModel {
 
     public func badge(for providerId: String) -> TTSProviderBadge {
         if let error = self.lastTestError[providerId] { return .error(error) }
-        return self.isConfigured(providerId) == false ? .needsKey : .ready
+        if self.isConfigured(providerId) == false {
+            if self.keyIsNotResolving(providerId) {
+                return .error(TTSFallbackReason.keyNotResolving.message(provider: self.displayName(for: providerId)))
+            }
+            return .needsKey
+        }
+        return .ready
     }
 
     /// Known models plus any the Gateway advertises for `providerId`.
@@ -393,11 +399,17 @@ extension GatewayVoiceModel {
     public func listElevenLabsVoices(apiKey: String?) async throws -> [ElevenLabsVoice] {
         let key = apiKey.flatMap { $0.isEmpty ? nil : $0 } ?? self.sessionKeys["elevenlabs"]
         let voices: [ElevenLabsVoice]
-        if let lister = self.voiceLister {
-            voices = try await lister(key)
-        } else {
-            guard let key else { throw TTSSetupError.needsKey }
-            voices = try await Self.fetchElevenLabsVoices(apiKey: key)
+        do {
+            if let lister = self.voiceLister {
+                voices = try await lister(key)
+            } else {
+                guard let key else { throw TTSSetupError.needsKey }
+                voices = try await Self.fetchElevenLabsVoices(apiKey: key)
+            }
+        } catch let error as TTSSetupError {
+            throw error
+        } catch let error where error is GatewayError {
+            throw TTSSetupError.failed(Self.message(error))
         }
         if let key { self.sessionKeys["elevenlabs"] = key }
         self.voices = voices
