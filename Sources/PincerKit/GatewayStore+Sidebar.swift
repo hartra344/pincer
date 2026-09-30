@@ -454,7 +454,9 @@ extension GatewayStore {
                 return
             }
         }
-        await self.pull(self.syncedMap(Self.groupsPref))
+        let groups = self.syncedMap(Self.groupsPref)
+        await self.pull(groups)
+        await self.retryPendingPrefs([groups])
         // Chats already in a group keep it listed once they leave it.
         self.registerGroups(Set(self.sessions.values.compactMap(\.category)))
     }

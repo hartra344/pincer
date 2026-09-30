@@ -49,7 +49,22 @@ extension GatewayStore {
                       syncedDefaultsKey: "pincer.healthDismissalsSynced.\(self.id.uuidString)"),
             SyncedMap(pref: AvatarPreferences.prefKey, local: \.avatarChoices,
                       syncedDefaultsKey: "pincer.avatarsSynced.\(self.id.uuidString)"),
+            SyncedMap(pref: Self.bookmarksPref, local: \.bookmarkPrefEntries,
+                      syncedDefaultsKey: "pincer.bookmarksSynced.\(self.id.uuidString)"),
         ]
+    }
+
+    static func pendingPrefsKey(_ id: UUID) -> String { "pincer.prefsPending.\(id.uuidString)" }
+    static func queuedAvatarsKey(_ id: UUID) -> String { "pincer.avatarsQueued.\(id.uuidString)" }
+
+    static func loadPending<T: Codable>(_ type: T.Type, _ key: String, _ defaults: UserDefaults) -> T? {
+        defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(T.self, from: $0) }
+    }
+
+    /// Stores the value as JSON, or removes the key when it's empty.
+    func savePending<T: Codable>(_ value: T, isEmpty: Bool, key: String) {
+        if isEmpty { self.defaults.removeObject(forKey: key) }
+        else if let data = try? JSONEncoder().encode(value) { self.defaults.set(data, forKey: key) }
     }
 
     func syncedMap(_ pref: String) -> SyncedMap { self.syncedMaps.first { $0.pref == pref }! }
@@ -96,9 +111,11 @@ extension GatewayStore {
     func pullBootstrapPrefs(epoch: Int) async {
         let prefs: Set<String> = [
             Self.serverNamesPref, Self.chatIconsPref, Self.chatColorsPref, Self.chatOrderPref,
-            Self.groupIconsPref, Reactions.prefKey, Self.healthDismissalsPref, AvatarPreferences.prefKey,
+            Self.groupIconsPref, Reactions.prefKey, Self.healthDismissalsPref, AvatarPreferences.prefKey, Self.bookmarksPref,
         ]
-        await self.pullMaps(self.syncedMaps.filter { prefs.contains($0.pref) }, epoch: epoch)
+        let maps = self.syncedMaps.filter { prefs.contains($0.pref) }
+        await self.pullMaps(maps, epoch: epoch)
+        if self.isCurrent(epoch) { await self.retryPendingPrefs(maps) }
         let queued = self.queuedAvatarChoices
         self.queuedAvatarChoices = [:]
         for (entry, value) in queued { self.setAvatarChoice(value, for: entry) }
@@ -123,7 +140,7 @@ extension GatewayStore {
             var merged = self[keyPath: map.local]
             merged.merge(fetched ?? [:]) { _, remote in remote }
             if merged != (fetched ?? [:]) {
-                guard await self.writeRemoteMap(map.pref, merged, expected: fetched) else { return }
+                guard await self.writeRemoteMap(map.pref, merged, expected: fetched) == .ok else { return }
             }
             defaults.set(true, forKey: map.syncedDefaultsKey)
             self.remotePrefMaps[map.pref] = merged
@@ -144,65 +161,97 @@ extension GatewayStore {
     /// Writes one after another per pref, so quick successive changes (toggling reactions) don't
     /// conflict with each other, and a pull in between keeps them.
     func push(_ map: SyncedMap, _ changes: [String: String?]) async {
-        guard !changes.isEmpty, self.defaults.bool(forKey: map.syncedDefaultsKey) else { return }
+        guard self.defaults.bool(forKey: map.syncedDefaultsKey) else { return }
         var pending = self.pendingPrefChanges[map.pref] ?? [:]
+        guard !changes.isEmpty || !pending.isEmpty else { return }
         for (id, value) in changes { pending.updateValue(value, forKey: id) }
         self.pendingPrefChanges[map.pref] = pending
         let previous = self.prefPushes[map.pref]
         let task = Task {
             await previous?.value
-            await self.write(map, changes)
-            for (id, value) in changes where self.pendingPrefChanges[map.pref]?[id] == .some(value) {
+            // Everything still pending goes out, so a later change retries an earlier failure.
+            let batch = self.pendingPrefChanges[map.pref] ?? [:]
+            guard !batch.isEmpty else { return }
+            guard await self.write(map, batch) else { return }
+            for (id, value) in batch where self.pendingPrefChanges[map.pref]?[id] == .some(value) {
                 self.pendingPrefChanges[map.pref]?.removeValue(forKey: id)
             }
+            if self.pendingPrefChanges[map.pref]?.isEmpty == true { self.pendingPrefChanges.removeValue(forKey: map.pref) }
         }
         self.prefPushes[map.pref] = task
         await task.value
     }
 
-    private func write(_ map: SyncedMap, _ changes: [String: String?]) async {
-        // Optimistic write; on a conflict (another device changed it at the same time) re-read and retry.
-        for _ in 0..<3 {
-            let cached = self.remotePrefMaps[map.pref]
-            guard let current = cached == nil ? await self.fetchRemoteMap(map.pref) : .some(cached) else { return }
-            var next = current ?? [:]
-            for (id, value) in changes { next[id] = value }
-            if await self.writeRemoteMap(map.pref, next, expected: current) {
-                self.remotePrefMaps[map.pref] = next
-                return
-            }
-            self.remotePrefMaps[map.pref] = nil
+    /// Writes changes that failed earlier, after a pull has put the gateway's map in place.
+    func retryPendingPrefs(_ maps: [SyncedMap]) async {
+        for map in maps where !(self.pendingPrefChanges[map.pref]?.isEmpty ?? true) {
+            await self.push(map, [:])
         }
     }
 
-    func consumeOwnWrite(_ pref: String) -> Bool {
-        guard let at = self.ownPrefWrites.removeValue(forKey: pref) else { return false }
-        return ContinuousClock.now - at < .seconds(3)
+    /// True only when the gateway accepted the write. A conflict (another device changed the map
+    /// meanwhile) is followed by a pull, since its changed event may have been taken for our echo.
+    private func write(_ map: SyncedMap, _ changes: [String: String?]) async -> Bool {
+        var conflicted = false
+        var written = false
+        for _ in 0..<3 {
+            let cached = self.remotePrefMaps[map.pref]
+            guard let current = cached == nil ? await self.fetchRemoteMap(map.pref) : .some(cached) else { break }
+            var next = current ?? [:]
+            for (id, value) in changes { next[id] = value }
+            let outcome = await self.writeRemoteMap(map.pref, next, expected: current)
+            if outcome == .ok {
+                self.remotePrefMaps[map.pref] = next
+                written = true
+                break
+            }
+            self.remotePrefMaps[map.pref] = nil
+            if outcome == .failed { break }
+            conflicted = true
+        }
+        if conflicted { await self.pull(map) }
+        return written
     }
 
-    private func writeRemoteMap(_ key: String, _ names: [String: String], expected: [String: String]?) async -> Bool {
-        self.ownPrefWrites[key] = .now
-        let ok = await self.sendRemoteMap(key, names, expected: expected)
-        if !ok { self.ownPrefWrites.removeValue(forKey: key) }
-        return ok
+    /// Takes one expected echo of our own `users.prefs.set` for the pref; false when the change is
+    /// someone else's and needs a read.
+    func consumeExpectedEcho(_ pref: String) -> Bool {
+        guard let count = self.expectedPrefEchoes[pref], count > 0 else { return false }
+        self.expectedPrefEchoes[pref] = count - 1
+        return true
     }
 
-    private func sendRemoteMap(_ key: String, _ names: [String: String], expected: [String: String]?) async -> Bool {
+    enum PrefWriteOutcome { case ok, conflict, failed }
+
+    private func writeRemoteMap(_ key: String, _ names: [String: String], expected: [String: String]?) async -> PrefWriteOutcome {
+        self.expectedPrefEchoes[key, default: 0] += 1
+        let outcome = await self.sendRemoteMap(key, names, expected: expected)
+        if outcome != .ok { self.expectedPrefEchoes[key] = max(0, (self.expectedPrefEchoes[key] ?? 0) - 1) }
+        return outcome
+    }
+
+    private func sendRemoteMap(_ key: String, _ names: [String: String], expected: [String: String]?) async -> PrefWriteOutcome {
         let entries: JSONValue = .object([key: names.isEmpty ? .null : Self.json(names)])
+        func outcome(_ result: JSONValue) -> PrefWriteOutcome {
+            switch result["status"]?.string {
+            case "ok": .ok
+            case "conflict": .conflict
+            default: .failed
+            }
+        }
         if self.prefsSupportsExpected {
             let params: JSONValue = ["entries": entries, "expectedEntries": .object([key: expected.map(Self.json) ?? .null])]
             do {
-                let result = try await self.connection.request("users.prefs.set", params, timeout: 15)
-                return result["status"]?.string == "ok"
+                return outcome(try await self.connection.request("users.prefs.set", params, timeout: 15))
             } catch let GatewayError.rpc(_, message, _) where message.contains("expectedEntries") {
                 // Older gateways don't accept compare-and-set; fall back to last write wins.
                 self.prefsSupportsExpected = false
             } catch {
-                return false
+                return .failed
             }
         }
-        guard let result = try? await self.connection.request("users.prefs.set", ["entries": entries], timeout: 15) else { return false }
-        return result["status"]?.string == "ok"
+        guard let result = try? await self.connection.request("users.prefs.set", ["entries": entries], timeout: 15) else { return .failed }
+        return outcome(result)
     }
 
     // MARK: Reactions
@@ -348,6 +397,8 @@ extension GatewayStore {
     func forgetLocalHealthDismissals() {
         self.defaults.removeObject(forKey: "pincer.healthDismissals.\(self.id.uuidString)")
         self.defaults.removeObject(forKey: "pincer.healthDismissalsSynced.\(self.id.uuidString)")
+        self.pendingPrefChanges = [:]
+        self.queuedAvatarChoices = [:]
     }
 
     // MARK: Avatars
