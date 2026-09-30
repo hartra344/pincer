@@ -2,7 +2,7 @@
 // config.get / config.schema / config.patch / config.apply and plugins.list / inspect /
 // setEnabled / install / uninstall. Writes need operator.admin, like the real Gateway.
 import crypto from 'node:crypto';
-import { pluginMcpDeclared, seedMcpServers, syncMcpFromConfig } from './mcp.mjs';
+import { pluginMcpInspect, seedMcpServers, syncMcpFromConfig } from './mcp.mjs';
 import { isTtsApiKeyPath, seedTtsConfig, ttsSchemaProperties } from './tts.mjs';
 
 export const REDACTED = '__OPENCLAW_REDACTED__';
@@ -391,8 +391,7 @@ export function handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadc
         credentials: plugin.id === 'weather'
           ? [{ path: ['plugins', 'entries', 'weather', 'config', 'apiKey'], label: 'Weather API key', envVars: ['WEATHER_API_KEY'], signupUrl: 'https://example.com/weather/signup', requiresCredential: true }]
           : [],
-        declared: pluginMcpDeclared(plugin.id),
-        components: {},
+        ...pluginMcpInspect(plugin.id),
         reviewToken: `review_${plugin.id}`,
         grants: {},
       });

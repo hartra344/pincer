@@ -351,7 +351,7 @@ public struct MCPServerDraft: Hashable, Sendable {
 
     private static var resecret: String { L("Re-enter this value; saved secrets can't move to a new name.") }
 
-    /// Problems by field: `name`, `command`, `url`, `env.<key>`, `headers.<key>`, `connectionTimeoutMs`, `requestTimeoutMs`, `oauthIdentity`.
+    /// Problems by field: `name`, `command`, `url`, `env.<key>`, `headers.<key>`, `connectionTimeoutMs`, `requestTimeoutMs`, `oauthIdentity`, `oauthAuthProfileId`.
     public func problems(existingNames: Set<String>) -> [String: String] {
         var problems: [String: String] = [:]
         let name = self.trimmedName
@@ -376,8 +376,12 @@ public struct MCPServerDraft: Hashable, Sendable {
                 problems["url"] = L("Enter a full http:// or https:// URL.")
             }
             self.checkRows(self.headers, saved: self.savedHeaderKeys, prefix: "headers", into: &problems)
-            if self.usesOAuth, !self.oauthIdentity.isEmpty, !Self.oauthIdentities.contains(self.oauthIdentity) {
-                problems["oauthIdentity"] = L("Choose shared or per-requester.")
+            if self.usesOAuth {
+                if !self.oauthIdentity.isEmpty, !Self.oauthIdentities.contains(self.oauthIdentity) {
+                    problems["oauthIdentity"] = L("Choose shared or per-requester.")
+                } else if self.oauthIdentity == "per-requester", !self.oauthAuthProfileId.trimmingCharacters(in: .whitespaces).isEmpty {
+                    problems["oauthAuthProfileId"] = L("Per-person sign-in can't use an auth profile.")
+                }
             }
         } else {
             if self.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { problems["command"] = L("Enter the command to run.") }
@@ -391,7 +395,7 @@ public struct MCPServerDraft: Hashable, Sendable {
     }
 
     private static func isPositiveInteger(_ text: String) -> Bool {
-        text.allSatisfy(\.isASCII) && text.allSatisfy(\.isNumber) && (Int(text) ?? 0) > 0
+        text.allSatisfy(\.isASCII) && text.allSatisfy(\.isNumber) && (1...2_147_000_000).contains(Int(text) ?? 0)
     }
 
     private func checkRows(_ rows: [MCPKeyValue], saved: Set<String>, prefix: String, into problems: inout [String: String]) {
@@ -643,49 +647,38 @@ public struct MCPProbeResult: Hashable, Sendable {
 
 // MARK: Plugin-declared servers
 
-/// An MCP server a plugin declares (`plugins.inspect` → `declared.mcpServers`), read-only.
+/// An MCP server a plugin declares (`plugins.inspect` → `declared.mcpServers`, names only), read-only.
 public struct PluginMCPServer: Identifiable, Hashable, Sendable {
     public var id: String { "\(self.pluginId)/\(self.name)" }
     public let name: String
     public let pluginId: String
     public let pluginName: String?
-    public let transport: MCPTransport?
-    public let launchSummary: String
+    /// False when the Gateway lists the server under `components.unavailable.mcpServers`.
+    public let isAvailable: Bool
+    /// Sign-in state from `mcpAuth`, present only when the Gateway has a matching OAuth server in `mcp.servers`.
     public let auth: MCPAuthStatus?
 
-    public init(name: String, pluginId: String, pluginName: String? = nil, transport: MCPTransport? = nil, launchSummary: String = "",
-                auth: MCPAuthStatus? = nil)
-    {
+    public init(name: String, pluginId: String, pluginName: String? = nil, isAvailable: Bool = true, auth: MCPAuthStatus? = nil) {
         self.name = name
         self.pluginId = pluginId
         self.pluginName = pluginName
-        self.transport = transport
-        self.launchSummary = launchSummary
+        self.isAvailable = isAvailable
         self.auth = auth
-    }
-
-    /// One declared entry: an object (with `name`, or keyed by name) shaped like a config server.
-    init?(name: String?, json: JSONValue, pluginId: String, pluginName: String?, auth: JSONValue?) {
-        guard let name = name ?? json["name"]?.text ?? json["id"]?.text else { return nil }
-        let server = json.object == nil ? nil : MCPServer(name: name, json: json)
-        var launch = server?.launchSummary ?? ""
-        if launch.isEmpty { launch = json["launchSummary"]?.text ?? json["summary"]?.text ?? "" }
-        let transport = server?.transport ?? json["transport"]?.text.flatMap(MCPTransport.init(configValue:))
-        self.init(name: name, pluginId: pluginId, pluginName: pluginName, transport: transport, launchSummary: launch,
-                  auth: (auth?[name] ?? json["auth"]).flatMap { $0.object == nil ? nil : MCPAuthStatus(json: $0) })
     }
 
     /// Servers declared in a `plugins.inspect` result.
     static func servers(inspect result: JSONValue) -> [PluginMCPServer] {
         guard let pluginId = result["plugin"]?["id"]?.text else { return [] }
         let pluginName = result["plugin"]?["name"]?.text
-        let declared = result["declared"]?["mcpServers"]
-        let auth = result["declared"]?["mcpAuth"] ?? result["mcpAuth"]
-        if let list = declared?.array {
-            return list.compactMap { PluginMCPServer(name: $0.string, json: $0, pluginId: pluginId, pluginName: pluginName, auth: auth) }
+        let unavailable = Set(result["components"]?["unavailable"]?["mcpServers"]?.array?.compactMap(\.text) ?? [])
+        var auth: [String: MCPAuthStatus] = [:]
+        for entry in result["mcpAuth"]?.array ?? [] {
+            guard let name = entry["serverName"]?.text, let state = entry["state"]?.text.flatMap(MCPAuthState.init(rawValue:)) else { continue }
+            auth[name] = MCPAuthStatus(mode: "oauth-shared", state: state)
         }
-        return (declared?.object ?? [:]).sorted { $0.key < $1.key }.compactMap {
-            PluginMCPServer(name: $0.key, json: $0.value, pluginId: pluginId, pluginName: pluginName, auth: auth)
+        var seen: Set<String> = []
+        return (result["declared"]?["mcpServers"]?.array ?? []).compactMap(\.text).filter { seen.insert($0).inserted }.map {
+            PluginMCPServer(name: $0, pluginId: pluginId, pluginName: pluginName, isAvailable: !unavailable.contains($0), auth: auth[$0])
         }
     }
 }

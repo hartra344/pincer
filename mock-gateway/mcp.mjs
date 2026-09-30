@@ -27,20 +27,21 @@ export function mcpDisabled() {
   return process.env.MOCK_NO_MCP === '1';
 }
 
-/** MCP servers declared by seeded plugins (`plugins.inspect` → `declared.mcpServers` / `mcpAuth`). */
-export const PLUGIN_MCP_SERVERS = {
-  linear: [{ name: 'linear', url: 'https://mcp.linear.app/mcp', transport: 'streamable-http', auth: 'oauth' }],
-  asana: [{ name: 'asana', url: 'https://mcp.asana.com/sse', transport: 'sse', auth: 'oauth' }],
-};
-const PLUGIN_MCP_AUTH = {
-  linear: { linear: { mode: 'oauth-shared', state: 'authorized', account: DEMO_ACCOUNT, expiresAt: Date.now() + 86_400_000 } },
-  asana: { asana: { mode: 'oauth-shared', state: 'requires-authorization' } },
+/** Seeded plugin-declared MCP servers, as `plugins.inspect` reports them: names, unavailable names and `mcpAuth`. */
+const PLUGIN_MCP = {
+  linear: { servers: ['linear'], unavailable: [], auth: [{ serverName: 'linear', state: 'authorized' }] },
+  asana: { servers: ['asana', 'asana-beta'], unavailable: ['asana-beta'], auth: [{ serverName: 'asana', state: 'requires-authorization' }] },
 };
 
-export function pluginMcpDeclared(pluginId) {
-  const servers = PLUGIN_MCP_SERVERS[pluginId];
-  if (!servers) return {};
-  return { mcpServers: servers.map((server) => ({ ...server })), mcpAuth: { ...PLUGIN_MCP_AUTH[pluginId] } };
+/** The MCP parts of a `plugins.inspect` result. */
+export function pluginMcpInspect(pluginId) {
+  const mcp = PLUGIN_MCP[pluginId];
+  if (!mcp) return { declared: {}, components: {} };
+  return {
+    declared: { mcpServers: [...mcp.servers] },
+    components: { mcpServers: mcp.servers.filter((name) => !mcp.unavailable.includes(name)), unavailable: { mcpServers: [...mcp.unavailable] } },
+    mcpAuth: mcp.auth.map((entry) => ({ ...entry })),
+  };
 }
 
 /** Seeded `mcp.servers` config; the demo gateway mirrors it. */

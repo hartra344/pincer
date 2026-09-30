@@ -22,8 +22,11 @@ struct GatewaySettingsOpener {
     /// MCP Servers, on the server's page when `name` is a configured server, else on the list.
     @MainActor
     func mcpServer(_ gateway: GatewayStore, name: String) {
-        let configured = gateway.mcp.servers.contains { $0.name == name }
-        self(gateway, at: .mcpServers, routes: configured ? [.mcpServer(name)] : [])
+        let servers = gateway.mcp.servers
+        // Transcript names carry a sanitised server name, so fall back to matching that.
+        let match = servers.first { $0.name == name }
+            ?? servers.first { MCPToolName.safeServerName($0.name) == name }
+        self(gateway, at: .mcpServers, routes: match.map { [.mcpServer($0.name)] } ?? [])
     }
 }
 

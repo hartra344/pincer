@@ -245,7 +245,7 @@ extension MCPServerEditor {
                 self.toolFilterRows()
                 if self.draft.transport.isRemote {
                     self.tlsRows()
-                    if self.draft.usesOAuth { self.oauthRows() }
+                    if self.draft.usesOAuth { self.oauthRows(problems) }
                 }
             } label: {
                 Text("Advanced", bundle: .module)
@@ -255,9 +255,9 @@ extension MCPServerEditor {
 
     private func timeoutRows(_ problems: [String: String]) -> some View {
         Group {
-            self.field(L("Connection timeout (ms)"), text: self.$draft.connectionTimeoutMs, prompt: "Default", number: true)
+            self.field(L("Connection timeout (ms)"), text: self.$draft.connectionTimeoutMs, prompt: "30000", number: true)
             self.problem(problems["connectionTimeoutMs"])
-            self.field(L("Request timeout (ms)"), text: self.$draft.requestTimeoutMs, prompt: "Default", number: true)
+            self.field(L("Request timeout (ms)"), text: self.$draft.requestTimeoutMs, prompt: "60000", number: true)
             self.problem(problems["requestTimeoutMs"])
         }
     }
@@ -266,7 +266,7 @@ extension MCPServerEditor {
         Group {
             self.patternRows(L("Only allow tools"), rows: self.$draft.toolInclude)
             self.patternRows(L("Hide tools"), rows: self.$draft.toolExclude)
-            Text("Patterns match tool names; * matches any characters. If \"Only allow\" has entries, other tools are hidden. \"Hide\" always wins.", bundle: .module)
+            Text("* matches any characters. Include is applied first, then exclude.", bundle: .module)
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
@@ -308,14 +308,17 @@ extension MCPServerEditor {
         }
     }
 
-    private func oauthRows() -> some View {
+    private func oauthRows(_ problems: [String: String]) -> some View {
         Group {
             Picker(L("Sign-in"), selection: self.$draft.oauthIdentity) {
-                Text("Shared by everyone", bundle: .module).tag("")
+                Text("Default (shared)", bundle: .module).tag("")
+                Text("Shared by everyone", bundle: .module).tag("shared")
                 Text("Each person signs in", bundle: .module).tag("per-requester")
             }
+            self.problem(problems["oauthIdentity"])
             self.field(L("Scope"), text: self.$draft.oauthScope, prompt: "Default")
             self.field(L("Auth profile"), text: self.$draft.oauthAuthProfileId, prompt: "Optional")
+            self.problem(problems["oauthAuthProfileId"])
         }
     }
 }

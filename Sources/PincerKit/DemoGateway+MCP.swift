@@ -350,16 +350,16 @@ extension DemoGateway {
         return ["ok": true, "tools": JSONValue(tools), "resources": .number(name == "filesystem" ? 1 : 0), "prompts": 0, "diagnostics": []]
     }
 
-    private static let demoPlugins: [(id: String, name: String, description: String, server: JSONValue, auth: JSONValue)] = [
-        ("linear", "Linear", "Linear issues through its hosted MCP server.",
-         ["name": "linear", "url": "https://mcp.linear.app/mcp", "transport": "streamable-http", "auth": "oauth"],
-         ["linear": ["mode": "oauth-shared", "state": "authorized", "account": "demo@pincer.app"]]),
-        ("asana", "Asana", "Asana tasks through its hosted MCP server.",
-         ["name": "asana", "url": "https://mcp.asana.com/sse", "transport": "sse", "auth": "oauth"],
-         ["asana": ["mode": "oauth-shared", "state": "requires-authorization"]]),
+    private typealias DemoPlugin = (id: String, name: String, description: String, servers: [String], unavailable: [String], auth: JSONValue)
+
+    private static let demoPlugins: [DemoPlugin] = [
+        ("linear", "Linear", "Linear issues through its hosted MCP server.", ["linear"], [],
+         [["serverName": "linear", "state": "authorized"]]),
+        ("asana", "Asana", "Asana tasks through its hosted MCP server.", ["asana", "asana-beta"], ["asana-beta"],
+         [["serverName": "asana", "state": "requires-authorization"]]),
     ]
 
-    private static func demoPluginEntry(_ plugin: (id: String, name: String, description: String, server: JSONValue, auth: JSONValue)) -> JSONValue {
+    private static func demoPluginEntry(_ plugin: DemoPlugin) -> JSONValue {
         ["id": .string(plugin.id), "name": .string(plugin.name), "description": .string(plugin.description), "version": "1.0.0",
          "origin": "clawhub", "installed": true, "enabled": true, "state": "enabled", "runtime": ["state": "active"],
          "removable": true, "kind": ["tool"]]
@@ -374,7 +374,10 @@ extension DemoGateway {
             throw Self.mcpInvalid("unknown plugin: \(params["pluginId"]?.string ?? "")")
         }
         return ["ok": true, "plugin": demoPluginEntry(plugin), "credentials": [],
-                "declared": ["mcpServers": [plugin.server], "mcpAuth": plugin.auth], "components": [:], "grants": [:]]
+                "declared": ["mcpServers": JSONValue(plugin.servers)],
+                "components": ["mcpServers": JSONValue(plugin.servers.filter { !plugin.unavailable.contains($0) }),
+                               "unavailable": ["mcpServers": JSONValue(plugin.unavailable)]],
+                "mcpAuth": plugin.auth, "grants": [:]]
     }
 
     // MARK: config

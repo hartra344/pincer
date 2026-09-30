@@ -225,9 +225,14 @@ public final class MCPServersModel {
         guard let list = try? await self.request("plugins.list", .object([:])) else { return }
         let ids = (list["plugins"]?.array ?? []).compactMap(PluginInfo.init).filter { $0.installed && $0.enabled }.map(\.id)
         var found: [PluginMCPServer] = []
-        for id in ids {
-            guard let result = try? await self.request("plugins.inspect", ["pluginId": .string(id)]) else { continue }
-            found += PluginMCPServer.servers(inspect: result)
+        // At most four inspects in flight.
+        for batch in stride(from: 0, to: ids.count, by: 4) {
+            let tasks = ids[batch..<min(batch + 4, ids.count)].map { id in
+                Task { @MainActor in
+                    (try? await self.request("plugins.inspect", ["pluginId": .string(id)])).map(PluginMCPServer.servers(inspect:)) ?? []
+                }
+            }
+            for task in tasks { found += await task.value }
         }
         self.pluginServers = found.sorted {
             ($0.pluginId, $0.name.lowercased()) < ($1.pluginId, $1.name.lowercased())

@@ -417,13 +417,10 @@ private struct MCPPluginServerRow: View {
             Text(self.server.name)
             Text(self.server.pluginName.map { L("\($0) plugin") } ?? L("\(self.server.pluginId) plugin"))
                 .font(.caption).foregroundStyle(.secondary)
-            Text(self.launch).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            if !self.server.isAvailable {
+                Text("Unavailable", bundle: .module).font(.caption).foregroundStyle(.orange)
+            }
         }
-    }
-
-    private var launch: String {
-        let transport = self.server.transport?.title
-        return [transport, self.server.launchSummary].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private var badges: some View {

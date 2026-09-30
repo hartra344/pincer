@@ -66,11 +66,13 @@ private func mcpPluginAndProbeChecks(_ mcp: MCPServersModel, label: String) asyn
     let byName = Dictionary(mcp.pluginServers.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
     check(Set(byName.keys).isSuperset(of: ["linear", "asana"]), "\(label): plugin-declared servers include linear and asana (\(mcp.pluginServers.map(\.name)))")
     let linear = byName["linear"], asana = byName["asana"]
-    check(linear?.pluginId == "linear" && linear?.pluginName == "Linear" && linear?.transport == .streamableHTTP
-          && linear?.launchSummary.contains("mcp.linear.app") == true,
-          "\(label): linear plugin server (\(String(describing: linear?.pluginName)) \(String(describing: linear?.transport)) \(linear?.launchSummary ?? "nil"))")
-    check(linear?.auth?.state == .authorized && linear?.auth?.account == "demo@pincer.app", "\(label): plugin linear is signed in as demo@pincer.app")
-    check(asana?.transport == .sse && asana?.auth?.state == .requiresAuthorization, "\(label): plugin asana is SSE and needs sign-in")
+    check(linear?.pluginId == "linear" && linear?.pluginName == "Linear" && linear?.isAvailable == true,
+          "\(label): linear plugin server (\(String(describing: linear?.pluginName)) available \(String(describing: linear?.isAvailable)))")
+    check(linear?.auth?.state == .authorized, "\(label): plugin linear is authorized (\(String(describing: linear?.auth?.state)))")
+    check(asana?.auth?.state == .requiresAuthorization && asana?.isAvailable == true, "\(label): plugin asana needs sign-in")
+    if let beta = byName["asana-beta"] {
+        check(!beta.isAvailable && beta.auth == nil && beta.pluginId == "asana", "\(label): asana-beta is listed as unavailable")
+    }
     check(mcp.servers.map(\.name) == seedNames, "\(label): plugin servers are not in the configured list")
     check(!mcp.servers.map(\.name).contains("asana"), "\(label): plugin server is not editable config")
 

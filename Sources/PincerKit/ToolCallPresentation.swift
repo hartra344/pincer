@@ -240,6 +240,20 @@ public struct ToolCallPresentation: Hashable, Sendable {
 /// may contain `__`. Names without a usable split have no server and keep `tool == name` unless
 /// only the prefix was there.
 public enum MCPToolName {
+    /// The server fragment of a transcript tool name for a configured server name: characters outside
+    /// `[A-Za-z0-9_-]` become `-`, a fragment not starting with a letter gets `mcp-`, at most 30 characters.
+    /// (The gateway also suffixes `-2`, `-3` on collisions, which this doesn't know about.)
+    public static func safeServerName(_ configName: String) -> String {
+        var safe = String(configName.trimmingCharacters(in: .whitespacesAndNewlines).unicodeScalars.map { scalar -> Character in
+            let ok = scalar.isASCII && (scalar.properties.isAlphabetic || ("0"..."9").contains(Character(scalar))
+                || scalar == "_" || scalar == "-")
+            return ok ? Character(scalar) : "-"
+        })
+        if safe.isEmpty { safe = "mcp" }
+        if !(safe.first.map { $0.isASCII && $0.isLetter } ?? false) { safe = "mcp-" + safe }
+        return String(safe.prefix(30))
+    }
+
     public static func split(_ name: String) -> (server: String?, tool: String) {
         var rest = Substring(name)
         if rest.hasPrefix("mcp__") { rest = rest.dropFirst(5) }

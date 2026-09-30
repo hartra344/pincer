@@ -186,6 +186,31 @@ struct MCPAdvancedDraftTests {
         }
     }
 
+    @Test func perRequesterForbidsAuthProfile() {
+        var d = MCPServerDraft()
+        d.name = "n"
+        d.transport = .streamableHTTP
+        d.url = "https://x.dev/mcp"
+        d.usesOAuth = true
+        d.oauthIdentity = "per-requester"
+        d.oauthAuthProfileId = "prof"
+        #expect(d.problems(existingNames: [])["oauthAuthProfileId"] == "Per-person sign-in can't use an auth profile.")
+        d.oauthIdentity = "shared"
+        #expect(d.problems(existingNames: []).isEmpty)
+        d.oauthIdentity = "per-requester"
+        d.oauthAuthProfileId = "  "
+        #expect(d.problems(existingNames: []).isEmpty)
+    }
+
+    @Test func otherOAuthKeysArePreserved() {
+        let o = srv(#"{"url":"https://a.b/mcp","auth":"oauth","oauth":{"redirectUrl":"https://r.dev/cb","clientMetadataUrl":"https://m.dev/c.json","identity":"shared"},"supportsParallelToolCalls":true}"#)
+        var d = MCPServerDraft(server: o)
+        d.oauthScope = "read"
+        let json = d.json(original: o)
+        #expect(json["oauth"]?["redirectUrl"]?.string == "https://r.dev/cb" && json["oauth"]?["clientMetadataUrl"]?.string == "https://m.dev/c.json")
+        #expect(json["oauth"]?["scope"]?.string == "read" && json["supportsParallelToolCalls"]?.bool == true)
+    }
+
     @Test func redactedClientCertRoundTripsAndDropsOnStdio() {
         let o = srv(#"{"url":"https://a.b/mcp","clientCert":"\#(redacted)","clientKey":"\#(redacted)"}"#)
         #expect(o.clientCert == redacted)
@@ -276,29 +301,34 @@ struct MCPProbeAndPluginTests {
 
     @Test func pluginServersParsedFromInspectShape() {
         let inspect = Fixtures.json(#"""
-        {"plugin":{"id":"linear","name":"Linear"},
-         "declared":{"mcpServers":{"linear":{"url":"https://mcp.linear.app/mcp","transport":"streamable-http","auth":"oauth"},
-                                   "local":{"command":"npx","args":["-y","pkg","--token","abc"]}},
-                     "mcpAuth":{"linear":{"mode":"oauth-shared","state":"authorized","account":"a@b.c"},
-                                "local":{"mode":"oauth-shared","state":"requires-authorization"}}}}
+        {"ok":true,"plugin":{"id":"asana","name":"Asana"},
+         "declared":{"mcpServers":["asana","asana-beta","asana"]},
+         "components":{"mcpServers":["asana"],"unavailable":{"mcpServers":["asana-beta"]}},
+         "mcpAuth":[{"serverName":"asana","state":"requires-authorization"},{"serverName":"other","state":"authorized"},{"state":"authorized"},{"serverName":"x","state":"warp"}]}
         """#)
         let servers = PluginMCPServer.servers(inspect: inspect)
-        #expect(servers.map(\.name) == ["linear", "local"])
-        let linear = servers[0]
-        #expect(linear.pluginId == "linear" && linear.pluginName == "Linear" && linear.transport == .streamableHTTP)
-        #expect(linear.launchSummary.contains("mcp.linear.app/mcp") && linear.auth?.state == .authorized && linear.auth?.account == "a@b.c")
-        let local = servers[1]
-        #expect(local.transport == .stdio && local.launchSummary.contains("••••") && !local.launchSummary.contains("abc"))
-        #expect(local.auth?.state == .requiresAuthorization)
-        #expect(linear.id != local.id)
+        #expect(servers.map(\.name) == ["asana", "asana-beta"])
+        #expect(servers[0].pluginId == "asana" && servers[0].pluginName == "Asana" && servers[0].isAvailable)
+        #expect(servers[0].auth?.state == .requiresAuthorization)
+        #expect(!servers[1].isAvailable && servers[1].auth == nil)
+        #expect(servers[0].id != servers[1].id)
     }
 
-    @Test func pluginServersParsedFromArrayAndMissingData() {
-        let arrayShape = Fixtures.json(#"{"plugin":{"id":"p"},"declared":{"mcpServers":[{"name":"a","url":"https://x.dev/sse"},"b"]}}"#)
-        let servers = PluginMCPServer.servers(inspect: arrayShape)
-        #expect(servers.map(\.name).sorted() == ["a", "b"] && servers.allSatisfy { $0.pluginName == nil && $0.auth == nil })
+    @Test func authStatesMap() {
+        for (raw, state) in [("authorized", MCPAuthState.authorized), ("requires-authorization", .requiresAuthorization),
+                             ("pending-authorization", .pendingAuthorization), ("unauthenticated", .unauthenticated)]
+        {
+            let inspect = Fixtures.json(#"{"plugin":{"id":"p"},"declared":{"mcpServers":["a"]},"mcpAuth":[{"serverName":"a","state":"\#(raw)"}]}"#)
+            #expect(PluginMCPServer.servers(inspect: inspect).first?.auth?.state == state, "\(raw)")
+        }
+    }
+
+    @Test func pluginServersMissingData() {
+        let noAuth = PluginMCPServer.servers(inspect: Fixtures.json(#"{"plugin":{"id":"p"},"declared":{"mcpServers":["a","b"]}}"#))
+        #expect(noAuth.map(\.name) == ["a", "b"] && noAuth.allSatisfy { $0.pluginName == nil && $0.auth == nil && $0.isAvailable })
         #expect(PluginMCPServer.servers(inspect: Fixtures.json(#"{"plugin":{"id":"p"}}"#)).isEmpty)
-        #expect(PluginMCPServer.servers(inspect: Fixtures.json(#"{"declared":{"mcpServers":{"a":{"command":"x"}}}}"#)).isEmpty)
+        #expect(PluginMCPServer.servers(inspect: Fixtures.json(#"{"plugin":{"id":"p"},"declared":{}}"#)).isEmpty)
+        #expect(PluginMCPServer.servers(inspect: Fixtures.json(#"{"declared":{"mcpServers":["a"]}}"#)).isEmpty)
     }
 
     private func pluginRequest(_ log: @escaping @MainActor (String) -> Void) -> MCPServersModel.Request {
@@ -310,7 +340,7 @@ struct MCPProbeAndPluginTests {
             case "plugins.inspect":
                 let id = params["pluginId"]?.string ?? ""
                 log("inspect:\(id)")
-                return Fixtures.json(#"{"plugin":{"id":"\#(id)","name":"Linear"},"declared":{"mcpServers":{"linear":{"url":"https://mcp.linear.app/mcp","transport":"streamable-http"}},"mcpAuth":{"linear":{"mode":"oauth-shared","state":"requires-authorization"}}}}"#)
+                return Fixtures.json(#"{"plugin":{"id":"\#(id)","name":"Linear"},"declared":{"mcpServers":["linear"]},"mcpAuth":[{"serverName":"linear","state":"requires-authorization"}]}"#)
             case "mcp.status":
                 return Fixtures.json(#"{"servers":[{"name":"linear","source":"plugin","state":"idle","auth":{"mode":"oauth-shared","state":"authorized","account":"a@b.c"}},{"name":"cfg","state":"connected"}]}"#)
             default:

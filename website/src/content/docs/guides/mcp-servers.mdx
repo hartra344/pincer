@@ -40,7 +40,7 @@ An OAuth server that's signed in says **Signed in as** *account*, or **Signed in
 
 ### From Plugins
 
-Plugins can declare MCP servers of their own. They appear in a **From Plugins** section below your servers, with the plugin's name, how the server starts and its sign-in state, and a status when the Gateway reports one. These are read-only: you can't edit, disable or remove them here. Choose one to open its plugin, and change it in the plugin's settings.
+Plugins can declare MCP servers of their own. They appear in a **From Plugins** section below your servers, with the server's name, the plugin it belongs to, and its sign-in state (**Signed in**, **Sign-in required**, **Waiting for Sign-In…**). A server shows **Unavailable** when your Gateway can't run it. A status appears too when the Gateway reports one. These are read-only: you can't edit, disable or remove them here. Choose one to open its plugin, and change it in the plugin's settings.
 
 ## Adding and editing
 
@@ -56,10 +56,10 @@ Names can use letters, numbers, `.`, `_` and `-`, and must start with a letter o
 
 Open **Advanced** in the editor for optional settings. Leave a field empty and it isn't written to the config.
 
-- **Timeouts**: **Connection timeout** and **Request timeout**, in milliseconds. Whole numbers only.
-- **Tool Filter**: **Include** and **Exclude** lists of tool name patterns. Add one pattern per row. Include limits the server to the tools that match, and Exclude hides the ones that match.
-- **TLS** (remote servers): **Verify TLS certificate** is on by default. Turn it off only for a server you trust with a self-signed certificate. **Client certificate** and **Client key** are file paths on the Gateway host, for servers that need mutual TLS.
-- **OAuth** (remote servers that use OAuth sign-in): **Identity** chooses whose sign-in the server uses, and **Scope** and **Auth profile** set the requested scope and the saved auth profile to use.
+- **Timeouts**: **Connection timeout (ms)** and **Request timeout (ms)**. Whole numbers of milliseconds. When empty, the Gateway uses 30 seconds to connect and 60 seconds per request.
+- **Tool filter**: **Only allow tools** and **Hide tools** take tool name patterns, one per row. `*` matches any characters and is the only wildcard. The Gateway applies the allow list first, then hides anything that matches the hide list.
+- **TLS** (remote servers): **Verify TLS certificate** is on by default. Turn it off only for a server you trust, such as one with a self-signed certificate. **Client certificate** and **Client key** are file paths on the Gateway host, for servers that need mutual TLS.
+- **OAuth** (remote servers that use OAuth sign-in): **Sign-in** is **Shared by everyone** (the default) or **Each person signs in**. **Scope** sets the requested scope, and **Auth profile** picks a saved auth profile. Each-person sign-in can't use an auth profile.
 
 Switching a server to **stdio** removes the remote-only settings (TLS and OAuth), and the editor tells you which ones before you save.
 
@@ -83,7 +83,7 @@ Changes stay in a draft until you choose **Review & Save**, the same as the othe
 
 ## Test Connection
 
-Choose **Test Connection** in the editor, or on the server's page, to try the server without saving. Pincer shows the result on the spot, such as **Connected · 12 tools**, or the reasons it failed. It tests what's in the editor, so you can check changes before you choose **Review & Save**. The button only appears when your Gateway supports it.
+Choose **Test Connection** in the editor, or on the server's page, to try a server without saving. The result appears on the spot, such as **Connected · 12 tools**, or the reasons it failed. It tests the settings in the editor, so you can check changes before you choose **Review & Save**. The button only appears when your Gateway supports it.
 
 ## Reconnect
 
@@ -106,13 +106,10 @@ Choose **Tools** on a server to open the [Tools inspector](../skills-and-tools/#
 ## What your Gateway needs
 
 - **Editing** works on any Gateway that offers `config.get` and `config.patch`: add, edit, remove, enable and disable.
-- **Test Connection** appears when the Gateway offers `mcp.probe`.
-- **Live status, Reconnect and in-app sign-in** need Gateway support that is proposed upstream in OpenClaw: [mcp.status](https://github.com/hartra344/pincer/issues/327), [mcp.reconnect](https://github.com/hartra344/pincer/issues/328) and [mcp.oauth](https://github.com/hartra344/pincer/issues/329). Pincer only shows these controls when your Gateway advertises them.
+- **From Plugins** works on Gateways that can inspect plugins.
+- **Test Connection, live status, Reconnect and in-app sign-in** only appear when your Gateway supports them. Current OpenClaw releases don't, so for OAuth servers Pincer shows the commands to run on the Gateway host instead, with a **Copy** button: `openclaw mcp login <name>` to sign in and `openclaw mcp logout <name>` to sign out. The proposals are [mcp.status](https://github.com/hartra344/pincer/issues/327), [mcp.reconnect](https://github.com/hartra344/pincer/issues/328) and [mcp.oauth](https://github.com/hartra344/pincer/issues/329).
 
-Until then:
-
-- Status comes from the Tools inspector when it's available, so it may read **Status Unknown** for servers that haven't connected yet.
-- For OAuth servers, Pincer shows the commands to run on the Gateway host, with a **Copy** button: `openclaw mcp login <name>` to sign in and `openclaw mcp logout <name>` to sign out.
+Until then, status comes from the Tools inspector when it's available, so it may read **Status Unknown** for servers that haven't connected yet.
 
 ## Try it in the demo
 

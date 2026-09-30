@@ -212,7 +212,7 @@ extension TranscriptLayoutBuilder {
             card.gap(6)
             self.chips(chips, into: &card)
         }
-        if presentation.kind == .mcp, let server = presentation.mcpServer, self.context.gateway.supportsMCPServers {
+        if presentation.kind == .mcp, let server = presentation.mcpServer, self.settings.supportsMCPServers {
             card.gap(6)
             let title = L("Open MCP Server")
             let size = TranscriptLabelButton.size(title: title)
