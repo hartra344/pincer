@@ -25,7 +25,8 @@ func runDemoAccessibilityPass() async {
     check(AccessibilityText.sectionState(isCollapsed: true) == "Collapsed"
           && AccessibilityText.sectionState(isCollapsed: false) == "Expanded", "a11y pass: section state values")
 
-    let chat = gateway.chat(for: "agent:main:dashboard:trip")
+    let chat = gateway.chat(for: "agent:main:main")
+    await chat.load()
     _ = await waitFor("demo chat history") { chat.hasLoaded && !chat.entries.isEmpty }
     let replies = chat.entries.compactMap { entry -> AssistantTurn? in
         if case let .assistant(turn) = entry { turn } else { nil }

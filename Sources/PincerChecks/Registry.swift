@@ -147,6 +147,7 @@ enum Suites {
         Section("First-run wizard (demo)") { await runDemoFirstRun() },
         Section("Outbox & retry (demo)") { await runDemoOutbox() },
         Section("Accessibility labels (demo)") { await runDemoAccessibility() },
+        Section("Accessibility pass (demo)") { await runDemoAccessibilityPass() },
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
         Section("Sidebar group moves (demo, #416)") { await runDemoSidebarGroupMoves() },
