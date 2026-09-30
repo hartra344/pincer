@@ -362,6 +362,7 @@ public final class GatewayStore: Identifiable {
         }
         self.health.dismissals = self.healthDismissals
         self.health.onDismissalsChanged = { [weak self] changes in self?.applyHealthDismissals(changes) }
+        self.wireBookmarkSync()
     }
 
     public var deviceId: String { self.identity.deviceId }
