@@ -333,6 +333,16 @@ final class TranscriptListController {
         old.map { abs($0 - new) > 0.5 } ?? true
     }
 
+    /// After a width change settles: warms the rows a screen either side of the viewport at the
+    /// final width on the worker (within a short budget), so the thaw relayout finds them cached.
+    func prewarmAroundViewport() {
+        guard let host else { return }
+        let width = host.layoutWidth
+        guard width > Self.minimumWidth, let window = host.rowWindow(screens: 1, minimum: 200) else { return }
+        let indexes = window.range.sorted { abs($0 - window.center) < abs($1 - window.center) }
+        self.premeasure.prewarm(indexes, all: self.rows, width: width, renderer: self.renderer)
+    }
+
     /// Measures unmeasured rows from a screen above the viewport to a screen below it, so rows
     /// have their real height before they scroll into view. Returns the rows that changed.
     func measureAroundViewport() -> IndexSet {
