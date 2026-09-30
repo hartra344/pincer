@@ -163,7 +163,8 @@ private func voiceFallbackChecks() async {
     await voice.refresh()
     let result = await voice.test(sample: "Hi")
     check(result.outcome == .fellBack(to: "OpenAI", reason: .notConfigured(provider: "ElevenLabs")), "fallback: unconfigured provider is reported (\(result.outcome))")
-    check(voice.readAloudSummary == .fallback(.notConfigured(provider: "ElevenLabs")), "fallback: Read Aloud summary names the reason")
+    check(voice.readAloudSummary == .gatewayFallback(selected: "ElevenLabs", reason: .notConfigured(provider: "ElevenLabs"), using: "OpenAI"),
+          "fallback: Read Aloud summary names the selected provider, the reason and the one in use (\(voice.readAloudSummary))")
 }
 
 @MainActor
