@@ -4,7 +4,7 @@ import Testing
 
 /// #53: what goes into Spotlight, and when it leaves.
 @MainActor
-@Suite("Spotlight")
+@Suite("Spotlight", .serialized)
 struct SpotlightReconcileTests {
     let gatewayId = UUID()
 
@@ -113,6 +113,76 @@ struct SpotlightReconcileTests {
         gateway.setSession(Self.row("agent:main:dashboard:a", at: 1), for: "agent:main:dashboard:a")
         await gateway.reindexSpotlight()
         #expect(indexer.ids.isEmpty)
+    }
+
+    @Test func archivedChatLeavesTheIndexOnNextReindex() async {
+        let scratch = ScratchDefaults()
+        let indexer = FakeSpotlightIndexer()
+        let profile = GatewayProfile(name: "T", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = self.store(indexer, defaults: scratch.defaults, profile: profile)
+        defer { SpotlightCenter.shared.forgetGateway(gateway.id); scratch.remove() }
+        let key = "agent:main:dashboard:a"
+        gateway.setSession(Self.row(key, at: 1), for: key)
+        await gateway.reindexSpotlight()
+        #expect(indexer.ids.count == 1)
+        gateway.setSession(Self.row(key, at: 1, archived: true), for: key)
+        await gateway.reindexSpotlight()
+        #expect(indexer.ids.isEmpty)
+    }
+
+    @Test func forgetTranscriptDeletesItsSpotlightId() async {
+        let scratch = ScratchDefaults()
+        let indexer = FakeSpotlightIndexer()
+        let profile = GatewayProfile(name: "T", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = self.store(indexer, defaults: scratch.defaults, profile: profile)
+        defer { SpotlightCenter.shared.forgetGateway(gateway.id); scratch.remove() }
+        let keep = "agent:main:dashboard:keep", drop = "agent:main:dashboard:drop"
+        gateway.setSession(Self.row(keep, at: 1), for: keep)
+        gateway.setSession(Self.row(drop, at: 2), for: drop)
+        await gateway.reindexSpotlight()
+        await gateway.forgetTranscript(drop)
+        #expect(indexer.entries.map(\.sessionKey) == [keep])
+    }
+
+    @Test func messageTextComesFromTheLocalCacheOnlyWhenIncluded() async {
+        let scratch = ScratchDefaults()
+        let temp = TempDir()
+        let indexer = FakeSpotlightIndexer()
+        let profile = GatewayProfile(name: "T", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = self.store(indexer, defaults: scratch.defaults, profile: profile)
+        gateway.cacheRoot = temp.url
+        defer { SpotlightCenter.shared.forgetGateway(gateway.id); scratch.remove() }
+        let key = "agent:main:dashboard:a"
+        gateway.setSession(Self.row(key, at: 1), for: key)
+        let item = ChatItem(id: "m", role: .user, blocks: [.text("ramen plans")], timestamp: Date(timeIntervalSince1970: 1))
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [item], complete: true), gatewayId: gateway.id, sessionKey: key, root: temp.url)
+        await gateway.reindexSpotlight()
+        #expect(indexer.entries.first?.snippet == nil)
+        scratch.defaults.set(true, forKey: Spotlight.includeMessagesKey)
+        SpotlightCenter.shared.sent.removeAll()
+        await gateway.reindexSpotlight()
+        #expect(indexer.entries.first?.snippet == "ramen plans")
+        await TranscriptCache.shutdown(root: temp.url)
+        temp.remove()
+    }
+
+    @Test func turningSpotlightOffDeletesEverything() async {
+        let scratch = ScratchDefaults()
+        let center = SpotlightCenter.shared
+        let previous = center.defaultIndexer
+        let indexer = FakeSpotlightIndexer()
+        center.defaultIndexer = indexer
+        let saved = UserDefaults.standard.object(forKey: Spotlight.enabledKey)
+        defer {
+            center.defaultIndexer = previous
+            if let saved { UserDefaults.standard.set(saved, forKey: Spotlight.enabledKey) } else { UserDefaults.standard.removeObject(forKey: Spotlight.enabledKey) }
+            scratch.remove()
+        }
+        await indexer.index(self.entries([Self.row("agent:main:dashboard:a", at: 1)]))
+        UserDefaults.standard.set(false, forKey: Spotlight.enabledKey)
+        AppModel(defaults: scratch.defaults).spotlightPreferencesChanged()
+        for _ in 0..<200 where !indexer.ids.isEmpty { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(indexer.ids.isEmpty && indexer.calls.contains("all"))
     }
 
     @Test func defaultsAreOnAndMessagesOff() {
