@@ -16,16 +16,20 @@ struct TranscriptDynamicTypeParityTests {
         "| Name | Notes |\n|---|---:|\n| alpha | a fairly long note that has to wrap in a narrow column, more than once |\n| beta | short |",
     ]
 
-    /// An environment whose fonts were built at `category`. The shared style changes only inside this synchronous call
-    /// (the tests await the worker, so a longer change would leak into suites running alongside).
+    /// An environment whose fonts were built at `category`, from a private style: `TranscriptStyle.reload()` would bump
+    /// the shared generation, and suites running alongside (TranscriptPremeasure) would drop their in-flight results.
+    /// Each category gets its own negative generation, so the worker never mixes up sizes between them.
     static func environment(at category: UIContentSizeCategory) -> TextBuildEnvironment {
-        TranscriptStyle.textSizeOverride = category
-        TranscriptStyle.reload()
-        defer {
-            TranscriptStyle.textSizeOverride = nil
-            TranscriptStyle.reload()
-        }
-        return TextBuildEnvironment.current(dark: false)
+        let shared = TextBuildEnvironment.current(dark: false)
+        let generations: [UIContentSizeCategory: Int] = [.large: -1, .accessibilityLarge: -2, .accessibilityExtraExtraExtraLarge: -3]
+        return TextBuildEnvironment(fonts: TranscriptFonts(TranscriptStyle(textSize: category)), colors: shared.colors,
+                                    styleGeneration: generations[category]!, dark: false, mathScale: shared.mathScale)
+    }
+
+    @Test func buildingAnEnvironmentLeavesTheSharedStyleAlone() {
+        let generation = TranscriptStyle.generation
+        _ = Self.environment(at: .accessibilityExtraExtraExtraLarge)
+        #expect(TranscriptStyle.generation == generation)
     }
 
     private func premeasure(_ source: String, width: CGFloat, env: TextBuildEnvironment) async -> PremeasuredRow {

@@ -41,13 +41,27 @@ final class TranscriptStyle {
     let title3: PFont
     let listMarker: PFont
 
-    init() {
-        let body = Self.font(.body)
-        let callout = Self.font(.callout)
-        let caption = Self.font(.caption1)
+    #if os(iOS)
+    /// Fonts at the system text size, or at `textSize` (tests build non-default Dynamic Type sizes this way, without
+    /// touching `shared` or `generation`, which suites running alongside depend on).
+    convenience init() { self.init(textSize: nil) }
+
+    convenience init(textSize: UIContentSizeCategory?) {
+        let traits = textSize.map { UITraitCollection(preferredContentSizeCategory: $0) }
+        func font(_ style: PFont.TextStyle) -> PFont { UIFont.preferredFont(forTextStyle: style, compatibleWith: traits) }
+        self.init(font: font)
+    }
+    #else
+    convenience init() { self.init(font: Self.font) }
+    #endif
+
+    private init(font: (PFont.TextStyle) -> PFont) {
+        let body = font(.body)
+        let callout = font(.callout)
+        let caption = font(.caption1)
         self.body = body
         self.bodySemibold = Self.weighted(body, .semibold)
-        self.headline = Self.font(.headline)
+        self.headline = font(.headline)
         self.callout = callout
         self.calloutMedium = Self.weighted(callout, .medium)
         self.calloutMonoMedium = PFont.monospacedSystemFont(ofSize: callout.pointSize, weight: .medium)
@@ -55,22 +69,17 @@ final class TranscriptStyle {
         self.caption = caption
         self.captionSemibold = Self.weighted(caption, .semibold)
         self.captionMono = PFont.monospacedSystemFont(ofSize: caption.pointSize, weight: .regular)
-        self.caption2Medium = Self.weighted(Self.font(.caption2), .medium)
-        self.title2 = Self.weighted(Self.font(.title2), .bold)
-        self.title3 = Self.weighted(Self.font(.title3), .bold)
+        self.caption2Medium = Self.weighted(font(.caption2), .medium)
+        self.title2 = Self.weighted(font(.title2), .bold)
+        self.title3 = Self.weighted(font(.title3), .bold)
         self.listMarker = PFont.monospacedDigitSystemFont(ofSize: body.pointSize, weight: .regular)
     }
-
-    #if os(iOS)
-    /// Text size to build fonts at instead of the system's; set by tests to exercise non-default Dynamic Type sizes.
-    static var textSizeOverride: UIContentSizeCategory?
-    #endif
 
     static func font(_ style: PFont.TextStyle) -> PFont {
         #if os(macOS)
         NSFont.preferredFont(forTextStyle: style, options: [:])
         #else
-        UIFont.preferredFont(forTextStyle: style, compatibleWith: self.textSizeOverride.map { UITraitCollection(preferredContentSizeCategory: $0) })
+        UIFont.preferredFont(forTextStyle: style)
         #endif
     }
 
