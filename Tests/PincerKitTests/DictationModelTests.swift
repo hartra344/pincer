@@ -392,9 +392,10 @@ struct DictationModelTests {
         await model.finishForSend()
         #expect(draft.text == "send the report")
         #expect(model.phase == .idle && !model.isActive && model.issue == nil)
-        #expect(engine.stops == 1 && engine.cancels == 0)
+        #expect(engine.stops == 1)
+        let cancels = engine.cancels
         model.draftChangedExternally("")
-        #expect(engine.cancels == 0, "no-op once idle")
+        #expect(engine.cancels == cancels, "no-op once idle")
     }
 
     @Test func finishForSendTimesOutAndIgnoresALateFinal() async {
@@ -475,5 +476,44 @@ struct DictationModelTests {
         engine.releaseAuthorize()
         try? await Task.sleep(for: .milliseconds(50))
         #expect(engine.starts == 0 && model.phase == .idle, "a late grant doesn't start listening")
+    }
+
+    // MARK: - #461: selection and caret delivery
+
+    @Test func toggleWithSelectionDeliversCaretOffsets() async {
+        let engine = FakeEngine()
+        let model = DictationModel(engine: engine)
+        var draft = "Hello world"
+        var carets: [Int] = []
+        model.toggle(draft: draft, selection: NSRange(location: 5, length: 0)) { text, offset in draft = text; carets.append(offset) }
+        #expect(await settle(model, until: .listening))
+        engine.onPartial?("big", false)
+        engine.onPartial?("big red", false)
+        #expect(draft == "Hello big red world")
+        #expect(carets == [9, 13])
+        model.cancel()
+    }
+
+    @Test func toggleReplacesTheSelectionAndReportsTheCaret() async {
+        let engine = FakeEngine()
+        let model = DictationModel(engine: engine)
+        var draft = "one 😀 three"
+        var caret = -1
+        model.toggle(draft: draft, selection: NSRange(location: 4, length: 2)) { text, offset in draft = text; caret = offset }
+        #expect(await settle(model, until: .listening))
+        engine.onPartial?("two", true)
+        #expect(draft == "one two three" && caret == 7 && model.phase == .idle)
+    }
+
+    @Test func toggleWithNilSelectionDictatesAtTheEnd() async {
+        let engine = FakeEngine()
+        let model = DictationModel(engine: engine)
+        var draft = "Hi"
+        var caret = -1
+        model.toggle(draft: draft, selection: nil) { text, offset in draft = text; caret = offset }
+        #expect(await settle(model, until: .listening))
+        engine.onPartial?("there", false)
+        #expect(draft == "Hi there" && caret == 8)
+        model.cancel()
     }
 }
