@@ -1703,6 +1703,26 @@
         }
       }
     },
+    "Applies to all %@ chats": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies to all %@ chats"
+          }
+        }
+      }
+    },
+    "Applies to all chats on %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Applies to all chats on %@"
+          }
+        }
+      }
+    },
     "Applies to every agent": {
       "localizations": {
         "en": {
@@ -3899,16 +3919,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Couldn't %1$@: %2$@"
-          }
-        }
-      }
-    },
-    "Couldn't Change Reactions": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Couldn't Change Reactions"
           }
         }
       }
@@ -8403,16 +8413,6 @@
         }
       }
     },
-    "No acknowledgement reaction and no agent reactions.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "No acknowledgement reaction and no agent reactions."
-          }
-        }
-      }
-    },
     "No activity yet": {
       "localizations": {
         "en": {
@@ -9189,16 +9189,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Only archived sessions can be deleted without Full Management."
-          }
-        }
-      }
-    },
-    "Only the 👀 acknowledgement while the agent works.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Only the 👀 acknowledgement while the agent works."
           }
         }
       }
@@ -14333,6 +14323,16 @@
         }
       }
     },
+    "The agent doesn't react itself. The 👀 acknowledgement still shows if it's set up.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent doesn't react itself. The 👀 acknowledgement still shows if it's set up."
+          }
+        }
+      }
+    },
     "The agent is waiting for your answer": {
       "localizations": {
         "en": {
@@ -14343,22 +14343,42 @@
         }
       }
     },
-    "The agent reacts liberally. No acknowledgement.": {
+    "The agent never reacts.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The agent reacts liberally. No acknowledgement."
+            "value": "The agent never reacts."
           }
         }
       }
     },
-    "The agent reacts sparingly. No acknowledgement.": {
+    "The agent never reacts. Also turns off the 👀 acknowledgement.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The agent reacts sparingly. No acknowledgement."
+            "value": "The agent never reacts. Also turns off the 👀 acknowledgement."
+          }
+        }
+      }
+    },
+    "The agent reacts freely.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent reacts freely."
+          }
+        }
+      }
+    },
+    "The agent reacts now and then, when it fits.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent reacts now and then, when it fits."
           }
         }
       }
@@ -14533,12 +14553,12 @@
         }
       }
     },
-    "The stored value isn't a valid level, so the agent uses this fallback.": {
+    "The stored value isn't a valid level, so the agent uses %@.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The stored value isn't a valid level, so the agent uses this fallback."
+            "value": "The stored value isn't a valid level, so the agent uses %@."
           }
         }
       }

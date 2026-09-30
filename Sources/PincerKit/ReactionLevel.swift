@@ -18,11 +18,16 @@ public enum ReactionLevel: String, CaseIterable, Sendable, Hashable, Identifiabl
 
     public var detail: String {
         switch self {
-        case .off: "No acknowledgement reaction and no agent reactions."
-        case .ack: "Only the 👀 acknowledgement while the agent works."
-        case .minimal: "The agent reacts sparingly. No acknowledgement."
-        case .extensive: "The agent reacts liberally. No acknowledgement."
+        case .off: "The agent never reacts."
+        case .ack: "The agent doesn't react itself. The 👀 acknowledgement still shows if it's set up."
+        case .minimal: "The agent reacts now and then, when it fits."
+        case .extensive: "The agent reacts freely."
         }
+    }
+
+    /// WhatsApp and Signal also drop the 👀 acknowledgement at "Off"; Telegram's ignores this setting.
+    public func offAlsoStopsAcknowledgement(channel: String) -> Bool {
+        self == .off && ["whatsapp", "signal"].contains(channel.lowercased())
     }
 }
 
@@ -112,6 +117,13 @@ public enum ReactionLevels {
     /// The account to edit for a chat: only one the config actually lists, else the channel's own setting.
     public static func editableAccount(config: JSONValue?, channel: String, account: String?) -> String? {
         guard let account, !account.isEmpty, config?["channels"]?[channel]?["accounts"]?[account] != nil else { return nil }
+        return account
+    }
+
+    /// The chat's account when it has its own `reactionLevel`; otherwise nil, so the channel's setting is edited.
+    public static func overridingAccount(config: JSONValue?, channel: String, account: String?) -> String? {
+        guard let account = self.editableAccount(config: config, channel: channel, account: account),
+              config?["channels"]?[channel]?["accounts"]?[account]?[self.key] != nil else { return nil }
         return account
     }
 

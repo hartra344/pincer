@@ -11,12 +11,14 @@ extension ReactionLevel {
         }
     }
 
-    var localizedDetail: String {
+    func localizedDetail(channel: String) -> String {
         switch self {
-        case .off: L("No acknowledgement reaction and no agent reactions.")
-        case .ack: L("Only the 👀 acknowledgement while the agent works.")
-        case .minimal: L("The agent reacts sparingly. No acknowledgement.")
-        case .extensive: L("The agent reacts liberally. No acknowledgement.")
+        case .off:
+            offAlsoStopsAcknowledgement(channel: channel)
+                ? L("The agent never reacts. Also turns off the 👀 acknowledgement.") : L("The agent never reacts.")
+        case .ack: L("The agent doesn't react itself. The 👀 acknowledgement still shows if it's set up.")
+        case .minimal: L("The agent reacts now and then, when it fits.")
+        case .extensive: L("The agent reacts freely.")
         }
     }
 }
@@ -81,9 +83,9 @@ struct ReactionLevelSection: View {
 
     private func footer(_ effective: ReactionLevels.Effective) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
-            Text(effective.level.localizedDetail)
+            Text(effective.level.localizedDetail(channel: self.channel))
             if effective.isInvalid {
-                Text("The stored value isn't a valid level, so the agent uses this fallback.", bundle: .module)
+                Text("The stored value isn't a valid level, so the agent uses \(effective.level.localizedTitle).", bundle: .module)
                     .foregroundStyle(.orange)
             }
         }
@@ -91,43 +93,44 @@ struct ReactionLevelSection: View {
 }
 
 /// The chat ⋯ menu's shortcut: the level for this chat's channel (or account), written at once.
+/// It is channel-wide, so the menu says which chats it applies to.
 struct ReactionLevelMenu: View {
     let row: SessionRow
     @Environment(GatewayStore.self) private var gateway
-    @State private var failure: String?
 
     var body: some View {
         if let target = ReactionLevels.target(of: self.row), self.gateway.canEditReactionLevels {
             let settings = self.gateway.settings
-            let account = ReactionLevels.editableAccount(config: settings.config, channel: target.channel, account: target.account)
+            let account = ReactionLevels.overridingAccount(config: settings.config, channel: target.channel, account: target.account)
             let effective = ReactionLevels.effective(config: settings.config, channel: target.channel, account: account)
             Menu {
-                Picker(L("How freely the agent reacts"), selection: self.binding(target.channel, account, effective.level)) {
+                Section(self.scope(target.channel, account)) {
                     ForEach(ReactionLevel.allCases) { level in
-                        Text(level.localizedTitle).tag(level)
+                        Toggle(level.localizedTitle, isOn: self.isOn(target.channel, account, level, effective.level))
                     }
                 }
-                .pickerStyle(.inline)
                 Text(ReactionLevelText.summary(effective, hasAccount: account != nil))
             } label: {
                 Label(L("Reactions"), systemImage: "face.smiling")
             }
-            .alert(L("Couldn't Change Reactions"), isPresented: Binding(get: { self.failure != nil },
-                                                                        set: { if !$0 { self.failure = nil } })) {
-                Button(L("OK"), role: .cancel) {}
-            } message: {
-                Text(self.failure ?? "")
-            }
-            .task(id: self.gateway.state.isConnected) {
-                if self.gateway.state.isConnected, !settings.hasLoaded { await settings.load() }
-            }
         }
     }
 
-    private func binding(_ channel: String, _ account: String?, _ current: ReactionLevel) -> Binding<ReactionLevel> {
-        Binding(get: { current }, set: { level in
+    private func scope(_ channel: String, _ account: String?) -> String {
+        let name = channel.capitalized
+        guard let account else { return L("Applies to all \(name) chats") }
+        return L("Applies to all chats on \(account)")
+    }
+
+    private func isOn(_ channel: String, _ account: String?, _ level: ReactionLevel, _ current: ReactionLevel) -> Binding<Bool> {
+        Binding(get: { level == current }, set: { _ in
             guard level != current else { return }
-            Task { self.failure = await self.gateway.settings.saveReactionLevel(channel: channel, account: account, level: level) }
+            let chat = self.gateway.chat(for: self.row.key)
+            Task {
+                if let failure = await self.gateway.settings.saveReactionLevel(channel: channel, account: account, level: level) {
+                    chat.notice = failure
+                }
+            }
         })
     }
 }
