@@ -83,9 +83,10 @@ struct TranscriptContext {
 
     /// Whether a message has reaction chips (the agent's or yours), for height estimates.
     @MainActor func hasReactions(_ messageId: String) -> Bool {
-        ReactionFeature.isEnabled && (self.chat?.agentReactions[messageId]?.isEmpty == false
-            || !self.gateway.myReactions(sessionKey: self.sessionKey, messageId: messageId).isEmpty
-        )
+        guard ReactionFeature.isEnabled else { return false }
+        if self.chat?.agentReactions[messageId]?.isEmpty == false { return true }
+        if self.chat?.sharedReactions[messageId]?.isEmpty == false { return true }
+        return !self.gateway.myReactions(sessionKey: self.sessionKey, messageId: messageId).isEmpty
     }
 }
 
@@ -519,13 +520,16 @@ final class TranscriptRenderer: TranscriptRowActions {
         self.invalidate(stale)
     }
 
-    /// Reactions (yours and the agent's), quotes whose original loaded, and a quote's lookup.
+    /// Reactions (yours, shared and the agent's), quotes whose original loaded, and a quote's lookup.
     private func observeDecorations() {
         guard let chat = self.context.chat else { return }
         let gateway = self.context.gateway
         withObservationTracking {
             _ = chat.items
             _ = chat.agentReactions
+            _ = chat.sharedReactions
+            _ = chat.reactionSelfId
+            _ = gateway.sessionReactionsOff
             _ = chat.locatingReplyId
             _ = chat.branchAnchorId
             _ = chat.canSwitchBranches
