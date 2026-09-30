@@ -28,11 +28,16 @@ func runScopeUpgrade(url: String, token: String) async {
           "connected without operator.questions (\(gateway.hello?.withheldScopes ?? []))")
     check(gateway.hello?.scopeUpgradeRequestId?.hasPrefix("pair_") == true, "upgrade request id kept for the hint")
     // The mock approves upgrades after 3 seconds; Try Again then picks up the new scope.
-    // The mock approves the scope upgrade on a fixed 3 s timer; there is no event to await.
-    try? await Task.sleep(for: .seconds(3.5))
-    gateway.retryQuestionAccess()
-    let upgraded = await waitFor("questions scope after approval", timeout: 20) {
-        gateway.state.isConnected && gateway.canAnswerQuestions
+    // The mock approves the scope upgrade on a fixed 3 s timer; there is no event to await, so
+    // Try Again is repeated until the upgrade lands.
+    var upgraded = false
+    let upgradeDeadline = Date().addingTimeInterval(60)
+    while !upgraded, Date() < upgradeDeadline {
+        try? await Task.sleep(for: .seconds(1))
+        gateway.retryQuestionAccess()
+        upgraded = await waitFor("questions scope after approval", timeout: 5) {
+            gateway.state.isConnected && gateway.canAnswerQuestions
+        }
     }
     check(upgraded, "retry after approval gains operator.questions")
     check(gateway.hello?.withheldScopes.isEmpty == true, "nothing withheld after the upgrade")

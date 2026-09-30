@@ -24,6 +24,7 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
     if let key = userFork {
         let chat = gateway.chat(for: key)
         await chat.load()
+        _ = await waitFor("user-branch history", timeout: 60) { chat.hasLoaded && chat.items.count == 2 }
         check(chat.items.count == 2 && chat.items.last?.role == .assistant, "forked history stops before the message (\(chat.items.count) items)")
         check(chat.draft.text == lastUser.plainText, "the new composer holds the message text (\(chat.draft.text))")
     }
@@ -32,6 +33,7 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
     if let key = assistantFork {
         let chat = gateway.chat(for: key)
         await chat.load()
+        _ = await waitFor("assistant-branch history", timeout: 60) { chat.hasLoaded && chat.items.count == 2 }
         check(chat.items.count == 2 && chat.draft.text.isEmpty, "branch after an assistant message keeps it and leaves the composer empty")
     } else {
         check(false, "branch from an assistant message (\(source.errorMessage ?? ""))")
@@ -43,6 +45,11 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
     }
     let chat = gateway.chat(for: whole)
     await chat.load()
+    // `load()` returns at once when a load is already in flight (the new chat is selected, which
+    // starts one), so wait for the history itself and for the refreshed session row.
+    _ = await waitFor("forked chat history and row", timeout: 60) {
+        chat.hasLoaded && chat.items.count == 4 && gateway.sessions[whole]?.raw["forkedFromParent"] == true
+    }
     check(chat.items.count == 4 && gateway.sessions[whole]?.raw["forkedFromParent"] == true, "branch from the last message forks the whole chat")
     check(source.items.count == 4, "the parent chat is untouched")
     guard admin else {
