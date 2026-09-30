@@ -719,7 +719,8 @@ final class TranscriptRenderer: TranscriptRowActions {
     func pickReaction(for messageId: String, from view: PView, rect: CGRect) {
         guard self.settings.reactionsEnabled else { return }
         guard let chat = self.context.chat else { return }
-        ReactionPicker.present(from: view, rect: rect) { [weak self] emoji in
+        let hint: String? = chat.usesGatewayReactions ? L("The agent sees your reactions on its next turn.") : nil
+        ReactionPicker.present(from: view, rect: rect, hint: hint) { [weak self] emoji in
             guard self?.settings.reactionsEnabled == true else { return }
             chat.toggleReaction(emoji, on: messageId)
         }
