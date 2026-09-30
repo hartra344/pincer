@@ -315,6 +315,12 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     var cachedLayoutCount: Int { self.cache.count }
 
+    /// The spoken label of a row already laid out, without building anything.
+    func cachedLabel(for row: TranscriptRow) -> String? {
+        guard let entry = self.cache[row.id], entry.row == row else { return nil }
+        return entry.layout.accessibilityLabel
+    }
+
     /// The row laid out at `width`, from cache when neither has changed.
     func layout(for row: TranscriptRow, width: CGFloat) -> TranscriptRowLayout {
         self.useStamp += 1

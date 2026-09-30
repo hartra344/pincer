@@ -531,27 +531,57 @@ struct TranscriptList: NSViewRepresentable {
             ]
             self.rotorDelegates = kinds.map { TranscriptRotorDelegate(kind: $0.1, coordinator: self) }
             return zip(kinds, self.rotorDelegates).map { kind, delegate in
-                NSAccessibilityCustomRotor(label: kind.0, itemSearchDelegate: delegate)
+                let rotor = NSAccessibilityCustomRotor(label: kind.0, itemSearchDelegate: delegate)
+                rotor.itemLoadingDelegate = delegate
+                return rotor
             }
         }
 
-        /// The next or previous row of `kind` from the rotor's current item, searched in every row
-        /// (not only the ones a window has kept cells for) and scrolled into view.
-        fileprivate func rotorResult(kind: TranscriptNavKind, from current: NSAccessibilityElementProtocol?,
+        /// The next or previous row of `kind` from the rotor's current item, searched in every row.
+        /// VoiceOver enumerates the whole rotor, so a search never scrolls or builds cells: rows
+        /// without a cell come back as a token, loaded only when VoiceOver moves to one.
+        fileprivate func rotorResult(kind: TranscriptNavKind, from current: NSAccessibilityCustomRotor.ItemResult?,
                                      forward: Bool) -> NSAccessibilityCustomRotor.ItemResult? {
             guard let table else { return nil }
             var from: Int?
-            if let cell = current as? NSView {
+            if let cell = current?.targetElement as? NSView {
                 let row = table.row(for: cell)
                 if row >= 0 { from = row }
+            } else if let id = current?.itemLoadingToken as? String {
+                from = self.rows.firstIndex { $0.id == id }
             }
             guard let row = self.controller.adjacentRow(from: from, forward: forward, kind: kind) else { return nil }
-            self.controller.navigationRowId = self.rows[row].id
+            if let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? TranscriptCell {
+                let result = NSAccessibilityCustomRotor.ItemResult(targetElement: cell)
+                result.customLabel = cell.spokenLabel ?? self.cheapLabel(self.rows[row])
+                return result
+            }
+            return NSAccessibilityCustomRotor.ItemResult(itemLoadingToken: self.rows[row].id as NSString,
+                                                         customLabel: self.cheapLabel(self.rows[row]))
+        }
+
+        /// Speaker and the start of the text, with no text layout (#431).
+        private func cheapLabel(_ row: TranscriptRow) -> String {
+            if let label = self.renderer.cachedLabel(for: row), !label.isEmpty { return label }
+            guard case let .entry(entry) = row else { return "" }
+            switch entry {
+            case let .user(item):
+                return [AccessibilityText.speaker(role: .user), AccessibilityText.summary(String(item.plainText.prefix(400)), limit: 80)]
+                    .filter { !$0.isEmpty }.joined(separator: ", ")
+            case let .assistant(turn):
+                return [AccessibilityText.speaker(role: .assistant), AccessibilityText.summary(String((turn.text.first ?? "").prefix(400)), limit: 80)]
+                    .filter { !$0.isEmpty }.joined(separator: ", ")
+            case let .marker(_, label):
+                return label
+            }
+        }
+
+        /// Loads the row a token stands for: it becomes the current message, scrolled into view.
+        fileprivate func rotorElement(forToken token: Any) -> NSAccessibilityElementProtocol? {
+            guard let table, let id = token as? String, let row = self.rows.firstIndex(where: { $0.id == id }) else { return nil }
+            self.controller.navigationRowId = id
             self.controller.scrollIntoView(row)
-            guard let cell = table.view(atColumn: 0, row: row, makeIfNecessary: true) as? TranscriptCell else { return nil }
-            let result = NSAccessibilityCustomRotor.ItemResult(targetElement: cell)
-            result.customLabel = cell.spokenLabel
-            return result
+            return table.view(atColumn: 0, row: row, makeIfNecessary: true) as? TranscriptCell
         }
 
         // MARK: Scroll to bottom
@@ -653,6 +683,13 @@ private final class TranscriptListTableView: NSTableView {
         return accepted
     }
 
+    /// VoiceOver's cursor follows the row the focus ring is on.
+    override var accessibilityFocusedUIElement: Any? {
+        (0..<self.numberOfRows).lazy
+            .compactMap { self.view(atColumn: 0, row: $0, makeIfNecessary: false) as? TranscriptCell }
+            .first { $0.showsFocusRing }
+    }
+
     override func keyDown(with event: NSEvent) {
         if self.onKeyDown?(event) != true { super.keyDown(with: event) }
     }
@@ -686,6 +723,8 @@ private final class TranscriptCell: NSView {
         get { !self.ring.isHidden }
         set { if self.ring.isHidden == newValue { self.ring.isHidden = !newValue } }
     }
+
+    override func isAccessibilityFocused() -> Bool { self.showsFocusRing }
 
     var spokenLabel: String? { self.content.layout?.accessibilityLabel }
 
@@ -749,7 +788,7 @@ private final class TranscriptFocusRingView: NSView {
 
 /// Answers one rotor's searches for the table.
 @MainActor
-private final class TranscriptRotorDelegate: NSObject, @preconcurrency NSAccessibilityCustomRotorItemSearchDelegate {
+private final class TranscriptRotorDelegate: NSObject, @preconcurrency NSAccessibilityCustomRotorItemSearchDelegate, @preconcurrency NSAccessibilityElementLoading {
     let kind: TranscriptNavKind
     private weak var coordinator: TranscriptList.Coordinator?
 
@@ -760,8 +799,12 @@ private final class TranscriptRotorDelegate: NSObject, @preconcurrency NSAccessi
 
     func rotor(_ rotor: NSAccessibilityCustomRotor,
                resultFor parameters: NSAccessibilityCustomRotor.SearchParameters) -> NSAccessibilityCustomRotor.ItemResult? {
-        self.coordinator?.rotorResult(kind: self.kind, from: parameters.currentItem?.targetElement,
+        self.coordinator?.rotorResult(kind: self.kind, from: parameters.currentItem,
                                       forward: parameters.searchDirection == .next)
+    }
+
+    func accessibilityElement(withToken token: NSAccessibilityLoadingToken) -> (any NSAccessibilityElementProtocol)? {
+        self.coordinator?.rotorElement(forToken: token)
     }
 }
 
