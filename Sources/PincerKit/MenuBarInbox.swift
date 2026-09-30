@@ -249,7 +249,7 @@ public struct MenuBarInbox: Equatable, Sendable {
             let key = row?.key ?? sessionKey ?? ""
             let target = Notifier.Target(gatewayId: input.id, sessionKey: key)
             return (Item(id: "\(kind):\(input.id.uuidString):\(id)", kind: kind, title: text + chat + suffix(input), target: target,
-                         agentId: row?.agentId ?? agentId),
+                         agentId: row?.agentId ?? agentId ?? sessionKey.flatMap(SessionKey.agentId(from:))),
                     Key(gatewayId: input.id, sessionKey: key))
         }
 

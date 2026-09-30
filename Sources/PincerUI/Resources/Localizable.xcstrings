@@ -2003,6 +2003,16 @@
         }
       }
     },
+    "Auto picks a character from the agent's identity.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto picks a character from the agent's identity."
+          }
+        }
+      }
+    },
     "Auto picks a character from the agent's identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still.": {
       "localizations": {
         "en": {
@@ -9839,6 +9849,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Persona & Channels"
+          }
+        }
+      }
+    },
+    "Pet": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pet"
           }
         }
       }
