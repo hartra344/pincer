@@ -325,3 +325,57 @@ struct AccessibilityLabelTests {
         #expect(!labels[1].contains("\n"))
     }
 }
+
+/// #308/#209/#269/#349: the pure helpers behind the accessibility pass.
+@Suite("Accessibility pass labels")
+struct AccessibilityPassLabelTests {
+    @Test func sectionStateAndHint() {
+        #expect(AccessibilityText.sectionState(isCollapsed: true) == "Collapsed")
+        #expect(AccessibilityText.sectionState(isCollapsed: false) == "Expanded")
+        #expect(AccessibilityText.sectionHint(isCollapsed: true) == "Expands the section")
+        #expect(AccessibilityText.sectionHint(isCollapsed: false) == "Collapses the section")
+    }
+
+    @Test func newChatNamesTheAgent() {
+        #expect(AccessibilityText.newChatWith(agent: "Mochi") == "New chat with Mochi")
+    }
+
+    @Test func sessionManagerRowIncludesStatusAndDuration() {
+        let label = AccessibilityText.sessionManagerRow(title: "Research", agentName: "Claude", runStatus: "Interrupted",
+                                                        duration: "2 min 5 s", updated: "updated 3:04 PM")
+        #expect(label == "Research, Claude, Interrupted, 2 min 5 s, updated 3:04 PM")
+        let bare = AccessibilityText.sessionManagerRow(title: "Research", agentName: nil, runStatus: nil, duration: nil,
+                                                       updated: nil, extra: ["Pinned", nil])
+        #expect(bare == "Research, Pinned")
+        for status in ["Running", "Done", "Failed"] {
+            #expect(AccessibilityText.sessionManagerRow(title: "T", agentName: nil, runStatus: status, duration: nil,
+                                                        updated: nil).contains(status))
+        }
+    }
+
+    @Test func streamingExcerptStartsWithTheFirstWords() {
+        let body = "First words of the reply. " + String(repeating: "middle filler text ", count: 500) + "THE-TAIL-END"
+        let excerpt = AccessibilityText.streamingExcerpt(body)
+        #expect(excerpt.hasPrefix("First words of the reply."))
+        #expect(!excerpt.contains("THE-TAIL-END"))
+        #expect(excerpt.count <= 241)
+        #expect(AccessibilityText.streamingExcerpt("Short") == "Short")
+    }
+
+    @Test func streamingExcerptIsBoundedForHugeBodies() {
+        let body = "Opening words. " + String(repeating: "x ", count: 2_500_000)
+        #expect(body.utf8.count > 5_000_000)
+        let start = ContinuousClock.now
+        let excerpt = AccessibilityText.streamingExcerpt(body, limit: 100)
+        #expect(ContinuousClock.now - start < .seconds(1))
+        #expect(excerpt.hasPrefix("Opening words."))
+        #expect(excerpt.count <= 101)
+    }
+
+    @Test func messagePartActionNumbersOnlyMultipleMessages() {
+        #expect(AccessibilityText.messagePartAction("Reply", part: 1, of: 1) == "Reply")
+        #expect(AccessibilityText.messagePartAction("Reply", part: 1, of: 0) == "Reply")
+        #expect(AccessibilityText.messagePartAction("Reply", part: 1, of: 3) == "Reply, part 1 of 3")
+        #expect(AccessibilityText.messagePartAction("Copy Link", part: 3, of: 3) == "Copy Link, part 3 of 3")
+    }
+}

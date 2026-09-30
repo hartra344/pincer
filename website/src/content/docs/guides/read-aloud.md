@@ -7,11 +7,22 @@ Pincer can read an agent's reply out loud. It uses your gateway's text-to-speech
 
 ## Read a reply aloud
 
-Right-click a reply (Mac) or long-press it (iPhone and iPad) and choose **Read Aloud**. While it's speaking, a **Speaking** pill appears at the bottom of the chat. Tap it, or choose **Stop Reading Aloud** from the same menu, to stop.
+Every agent reply has a **Listen** button (a speaker icon) in the row of buttons under it, next to Copy and Reply. Choose it to hear the reply. While that reply is speaking, the button turns into **Stop**. You can also right-click a reply (Mac) or long-press it (iPhone and iPad) and choose **Read Aloud**.
 
-On a Mac, **Read Last Reply Aloud** (<kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>L</kbd>) reads the latest reply in the chat you're looking at. Press it again to stop. You can change the shortcut in [Settings → Shortcuts](../../reference/keyboard-shortcuts/#change-a-shortcut).
+While it's speaking, a **Speaking** pill appears at the bottom of the chat. Tap it, or press <kbd>Esc</kbd>, to stop. <kbd>Esc</kbd> works even while you're typing in the message box, but it first closes menus, stops dictation and cancels an edit or reply chip. Only when none of those apply does it stop the reading.
+
+Other ways to start and stop:
+
+- **Command palette.** Press <kbd>⌘</kbd> <kbd>K</kbd> and run **Read Last Reply Aloud**. While something is speaking, it says **Stop Reading Aloud** instead. **Read Aloud Settings…** opens the settings, and **Gateway Voice Settings…** opens the gateway's voice page.
+- **Keyboard.** <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>L</kbd> reads the latest reply in the chat you're looking at, on a Mac and on an iPad with a keyboard. Press it again to stop. You can change it in Settings → Keyboard Shortcuts (Shortcuts on a Mac). See [Change a shortcut](../../reference/keyboard-shortcuts/#change-a-shortcut).
 
 Only one reply speaks at a time. Starting another one stops the first.
+
+### On iPhone and iPad
+
+Speech keeps going when you switch apps or lock the screen. The Lock Screen and Control Center show what's playing, and you can stop it from there.
+
+It stops by itself when something else needs the audio: a phone or FaceTime call, an alarm or Siri, or when you unplug your headphones.
 
 ### What gets read
 

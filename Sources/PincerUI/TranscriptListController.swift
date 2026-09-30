@@ -218,6 +218,23 @@ final class TranscriptListController {
         return .rows(changed: changed, oldIds: idsChanged ? oldIds : nil)
     }
 
+    /// The next or previous row of `kind` from `row`, or nil at the ends (#195). `from == nil`
+    /// starts before the first row going forward and after the last going backward.
+    static func adjacentRow(in rows: [TranscriptRow], from row: Int?, forward: Bool,
+                            kind: TranscriptNavKind = .message) -> Int? {
+        let start = row.map { forward ? $0 + 1 : $0 - 1 } ?? (forward ? 0 : rows.count - 1)
+        var i = start
+        while rows.indices.contains(i) {
+            if kind.includes(rows[i]) { return i }
+            i += forward ? 1 : -1
+        }
+        return nil
+    }
+
+    func adjacentRow(from row: Int?, forward: Bool, kind: TranscriptNavKind = .message) -> Int? {
+        Self.adjacentRow(in: self.rows, from: row, forward: forward, kind: kind)
+    }
+
     static func uniqued(_ rows: [TranscriptRow]) -> [TranscriptRow] {
         var seen = Set<String>()
         return rows.filter { seen.insert($0.id).inserted }
@@ -565,6 +582,36 @@ final class TranscriptListController {
         self.host?.reveal(id)
     }
 
+    // MARK: Message navigation (#195)
+
+    /// The message keyboard and VoiceOver navigation is on, by id so it survives rows shifting.
+    var navigationRowId: String?
+
+    /// The row `forward` from the current message, or from the edge of the screen when there's
+    /// none (or it has left the list). The current message moves to it.
+    func moveNavigation(forward: Bool, kind: TranscriptNavKind = .message) -> Int? {
+        let current = self.navigationRowId.flatMap { self.index[$0] }
+        var from = current
+        if from == nil, let visible = self.visibleRange {
+            from = forward ? visible.lowerBound - 1 : visible.upperBound + 1
+        }
+        // At either end the current message stays.
+        guard let target = self.adjacentRow(from: from, forward: forward, kind: kind) ?? current else { return nil }
+        self.navigationRowId = self.rows[target].id
+        return target
+    }
+
+    /// Scrolls so the top of `row` is on screen, leaving the list where it is when it already is.
+    func scrollIntoView(_ row: Int) {
+        guard let host, self.rows.indices.contains(row) else { return }
+        if let viewport = host.viewport, let top = host.rowTop(row) {
+            let bottom = top + self.height(at: row, width: host.layoutWidth)
+            let shown = min(bottom, top + viewport.height * 0.5)
+            if top >= viewport.offset, shown <= viewport.offset + viewport.height { return }
+        }
+        host.reveal(self.rows[row].id)
+    }
+
     // MARK: Visible rows
 
     func visibleRowIds() -> Set<String> {
@@ -595,4 +642,27 @@ final class TranscriptListController {
         guard case .loadingOlder? = self.rows.first, let visible = self.host?.visibleRows else { return false }
         return visible.lowerBound == 0
     }
+}
+
+/// Which rows keyboard and rotor navigation stops on (#195).
+enum TranscriptNavKind {
+    case message, reply, user, tool
+
+    func includes(_ row: TranscriptRow) -> Bool {
+        guard case let .entry(entry) = row else { return false }
+        switch (self, entry) {
+        case (_, .marker): return false
+        case (.message, _): return true
+        case (.reply, .assistant): return true
+        case (.user, .user): return true
+        case let (.tool, .assistant(turn)): return !turn.tools.isEmpty
+        default: return false
+        }
+    }
+}
+
+/// Lets Go ▸ Previous/Next Message reach the focused pane's list (#195). The list installs `move`.
+@MainActor
+final class TranscriptNavigator {
+    var move: ((_ forward: Bool) -> Void)?
 }

@@ -15,6 +15,49 @@ extension GatewayStore {
         self.outbox.enqueue(entry)
     }
 
+    /// Attachment bytes this Gateway's outbox keeps on disk.
+    public var outboxAttachmentBytes: Int {
+        self.outbox.entries.reduce(0) { $0 + $1.attachments.reduce(0) { $0 + $1.byteCount } }
+    }
+
+    /// Whether `bytes` more of attachments still fit on disk (store on, not the demo, under the cap).
+    public func canPersistAttachments(bytes: Int) -> Bool {
+        !self.profile.isDemo && OutboxAttachmentStore.isAvailable(root: self.outboxRoot)
+            && self.outboxAttachmentBytes + bytes <= OutboxAttachmentStore.maxTotalBytes
+    }
+
+    /// Queues writing the attachment files (before the outbox JSON that will reference them) and
+    /// returns their refs, or nil when they can't be kept on disk.
+    func persistAttachments(_ attachments: [OutgoingAttachment], entryId: String) -> [OutboxAttachmentRef]? {
+        let bytes = attachments.reduce(0) { $0 + $1.data.count }
+        guard self.canPersistAttachments(bytes: bytes),
+              OutboxAttachmentStore.enqueueWrite(attachments, entryId: entryId, gatewayId: self.id, root: self.outboxRoot)
+        else { return nil }
+        return OutboxAttachmentStore.refs(for: attachments)
+    }
+
+    func moveOutboxAttachments(from id: String, to newId: String) {
+        guard !self.profile.isDemo else { return }
+        OutboxAttachmentStore.enqueueMove(from: id, to: newId, gatewayId: self.id, root: self.outboxRoot)
+    }
+
+    /// Reads a persisted entry's attachment bytes from disk; nil when they can't be read.
+    func readAttachments(for entry: OutboxEntry) async -> [OutgoingAttachment]? {
+        guard !self.profile.isDemo else { return nil }
+        return await OutboxAttachmentStore.read(entry: entry, gatewayId: self.id, root: self.outboxRoot)
+    }
+
+    /// The bytes of an entry's attachments (memory-only ones from memory, persisted ones read from
+    /// disk and not kept); empty when unavailable.
+    func attachmentBytes(for entry: OutboxEntry) async -> [OutgoingAttachment] {
+        if let memory = self.outboxAttachments[entry.id] { return memory }
+        return await self.readAttachments(for: entry) ?? []
+    }
+
+    func attachmentFilesExist(for entry: OutboxEntry) -> Bool {
+        OutboxAttachmentStore.filesExist(for: entry, gatewayId: self.id, root: self.outboxRoot)
+    }
+
     /// Discards every unsent message of this Gateway (Settings → Storage).
     public func discardOutbox() {
         self.outboxAttachments = [:]
@@ -42,13 +85,21 @@ extension GatewayStore {
         // Saving starts only now, so what's composed while the file is read doesn't overwrite it.
         self.outboxRestored = true
         guard var saved, !saved.isEmpty else {
+            OutboxAttachmentStore.enqueueSweep(keeping: Set(self.outbox.entries.map(\.id)), gatewayId: self.id, root: self.outboxRoot)
             if !self.outbox.persistable.isEmpty { OutboxStore.enqueueSave(self.outbox, gatewayId: self.id, root: self.outboxRoot) }
             return
         }
         saved.recoverAfterLaunch()
+        // An entry whose attachment files are gone can't be sent: it fails (non-retryable, so it
+        // stays put with Delete) instead of vanishing.
+        for entry in saved.entries where !entry.attachments.isEmpty && !OutboxAttachmentStore.filesExist(for: entry, gatewayId: self.id, root: self.outboxRoot) {
+            let message = "Couldn’t send: the attachments are no longer available. Delete this message and attach them again."
+            saved.markFailed(id: entry.id, kind: .rejected(message), message: message)
+        }
         // Anything composed while the file was being read goes after what was saved.
         for entry in self.outbox.entries where saved.entry(id: entry.id) == nil { saved.enqueue(entry) }
         self.outbox = saved
+        OutboxAttachmentStore.enqueueSweep(keeping: Set(saved.entries.map(\.id)), gatewayId: self.id, root: self.outboxRoot)
         if self.state.isConnected, self.hello != nil { await self.flushOutbox() }
     }
 
@@ -61,6 +112,12 @@ extension GatewayStore {
         }
         for id in self.outboxAttachments.keys where self.outbox.entry(id: id) == nil {
             self.outboxAttachments.removeValue(forKey: id)
+        }
+        if self.outboxRestored, !self.profile.isDemo {
+            let current = Set(self.outbox.entries.map(\.id))
+            for entry in old.entries where !entry.attachments.isEmpty && !current.contains(entry.id) {
+                OutboxAttachmentStore.enqueueRemove(entryId: entry.id, gatewayId: self.id, root: self.outboxRoot)
+            }
         }
         guard self.outboxRestored, !self.profile.isDemo, old.persistable != self.outbox.persistable else { return }
         OutboxStore.enqueueSave(self.outbox, gatewayId: self.id, root: self.outboxRoot)

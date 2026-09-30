@@ -19,7 +19,7 @@ The top of the page tells you at a glance whether the gateway voice is working:
 ## Set up ElevenLabs in under a minute
 
 1. Open **Gateway Settings → Voice** and choose **ElevenLabs** in the **Provider** list. It shows **Needs Key** until you finish step 2.
-2. Paste your key into **API key** and choose **Save Key**. Pincer saves it on the gateway, then checks it and shows **Key saved and working**. If ElevenLabs refuses it you see "ElevenLabs rejected the key: …" instead.
+2. Paste your key into **API key** and choose **Save Key**. The field is a plain key field, so iOS doesn't offer Passwords or a strong password for it. The same goes for the ElevenLabs **API key (only used to list voices)** field. Pincer saves it on the gateway, then checks it and shows **Key saved and working**. If ElevenLabs refuses it you see "ElevenLabs rejected the key: …" instead.
 3. Under **Model**, pick **Eleven v4 Turbo**. **Custom…** takes any model ID ElevenLabs accepts, with **Save Model**.
 4. Under **Voice**, choose a voice from **Browse Voices**. The play button next to each one plays a preview. You can also paste a **Voice ID** and choose **Use**.
 5. If ElevenLabs isn't the provider in use yet, choose **Use ElevenLabs for Gateway Voice**.
@@ -54,6 +54,12 @@ Pincer never saves the key on your Mac, iPhone or iPad, and never writes it into
 - "Not set"
 
 The gateway hides key values and secret names in the config it sends, so the name is only shown when Pincer can confirm it. If a key is set but the gateway can't read it, the line ends "…but the Gateway can't read it".
+
+## Remove a key
+
+To take a key off the gateway, choose **Remove Key…** under the key. Pincer asks "Remove the &lt;Provider&gt; key from the Gateway?" and explains that the gateway can't use the provider until you add a key again, and that replies fall back to the next provider or your device's voice. Choose **Remove Key** to confirm, or **Cancel**. **Key removed** appears when it's done.
+
+It clears the key from the gateway's secrets store or config, wherever it was saved, and needs **Full Management** access.
 
 ## Permissions
 
@@ -92,6 +98,19 @@ The gateway config can be overridden by:
 - **Agent-level overrides** in the gateway config.
 
 The provider is chosen in this order: local `/tts` preferences, then the active persona's provider, then the gateway config's `tts.provider`. When the provider in use isn't the one in the config, the row is marked "Overridden by local /tts prefs or persona". If you have a `model` key in the ElevenLabs config, the page warns that it's ignored (see [below](#editing-the-config-by-hand)). If a value doesn't match what you saved, check its source line.
+
+## Auto-speak on channels
+
+**Speak Replies on Channels** under **Persona & Channels** shows the gateway's auto-speak mode. OpenClaw has four:
+
+| Mode | What the gateway does |
+| --- | --- |
+| **Off** | Never adds a spoken version to replies. |
+| **Always** | Adds a spoken version to every reply. |
+| **Only After Voice Messages** (`inbound`) | Speaks a reply only after the person sent a voice message. |
+| **Only When Tagged** (`tagged`) | Speaks a reply only when it contains `[[tts:...]]` directives or a `[[tts:text]]` block. |
+
+Choose the mode from the menu next to **Speak Replies on Channels**; a checkmark marks the current one. Pincer can only switch between **Off** and **Always**, because that's all the gateway lets an app set. The other two are set in the gateway's config or its `/tts` preferences. If the gateway is on one of them and you choose **Off** or **Always**, Pincer asks "Replace &lt;mode&gt; with &lt;mode&gt;?" first. Choose **Switch to Always** or **Turn Off**, or **Cancel**. The message says "To go back to &lt;mode&gt;, edit the Gateway's config or use /tts." because Pincer can't put the old mode back. This setting doesn't affect Read Aloud in Pincer.
 
 ## Why `/tts status` says "disabled"
 

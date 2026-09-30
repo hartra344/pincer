@@ -31,7 +31,9 @@ extension ChatStore {
     /// don't take `replyToId`; an accepted or queued reply clears `replyTarget`.
     ///
     /// Text messages written offline are queued and sent in order on reconnect; a failed send
-    /// stays in the transcript with Retry. Sends with attachments need a connection. With
+    /// stays in the transcript with Retry. Attachments are kept on disk with them (up to
+    /// `OutboxAttachmentStore.maxTotalBytes` per Gateway); past that, or with the store off, a send
+    /// with attachments needs a connection and lives for this launch only. With
     /// `requiresConnection` (Quick Capture, setup's test message, commands) nothing is queued or
     /// kept: offline or failed sends come back as `.failed` with `errorMessage` set.
     @discardableResult
@@ -42,7 +44,10 @@ extension ChatStore {
         guard !trimmed.isEmpty || !attachments.isEmpty else { return .failed("Couldn’t send: the message is empty.") }
         guard let gateway else { return .failed("Couldn’t send: the Gateway is gone.") }
         let connected = gateway.state.isConnected
-        if !connected, requiresConnection || !attachments.isEmpty {
+        let attachmentBytes = attachments.reduce(0) { $0 + $1.data.count }
+        let persistsAttachments = !attachments.isEmpty && gateway.canPersistAttachments(bytes: attachmentBytes)
+        let memoryOnly = !attachments.isEmpty && !persistsAttachments
+        if !connected, requiresConnection || memoryOnly {
             let message = "Couldn’t send: \(GatewayError.notConnected.localizedDescription)"
             self.errorMessage = message
             return .failed(message)
@@ -70,11 +75,17 @@ extension ChatStore {
             entry.replyToId = replyTo.messageId
             entry.replyPreview = preview
         }
-        if !attachments.isEmpty { gateway.outboxAttachments[idempotencyKey] = attachments }
+        if !attachments.isEmpty {
+            if persistsAttachments, let refs = gateway.persistAttachments(attachments, entryId: idempotencyKey) {
+                entry.attachments = refs
+            } else {
+                gateway.outboxAttachments[idempotencyKey] = attachments
+            }
+        }
         self.items.append(pending)
         gateway.outbox.enqueue(entry)
         guard connected, gateway.outbox.isHead(id: idempotencyKey) else {
-            if requiresConnection || !attachments.isEmpty {
+            if requiresConnection || entry.isMemoryOnly {
                 // Behind an earlier message of this chat: this send can't wait in the queue.
                 self.discardUnsent(idempotencyKey)
                 let message = "Couldn’t send: an earlier message in this chat hasn’t gone out yet."
@@ -85,7 +96,7 @@ extension ChatStore {
             if connected { Task { await gateway.flushOutbox() } }
             return .queued
         }
-        let outcome = await self.deliver(entry, keepFailure: !requiresConnection)
+        let outcome = await self.deliver(entry, keepFailure: !requiresConnection, attachments: attachments)
         if case .failed = outcome { return outcome }
         if let replyTo, self.replyTarget == replyTo { self.replyTarget = nil }
         return outcome
@@ -95,10 +106,21 @@ extension ChatStore {
     /// outbox and the message waits for the transcript; on failure it's marked by kind (see
     /// `Outbox.markFailed`), or with `keepFailure` off, dropped along with its row.
     @discardableResult
-    func deliver(_ entry: OutboxEntry, keepFailure: Bool = true) async -> SendOutcome {
+    func deliver(_ entry: OutboxEntry, keepFailure: Bool = true, attachments provided: [OutgoingAttachment]? = nil) async -> SendOutcome {
         guard let gateway else { return .failed("Couldn’t send: the Gateway is gone.") }
         var key = entry.id
-        let attachments = gateway.outboxAttachments[key] ?? []
+        // Bytes of persisted attachments are read for this send only, never kept in memory.
+        var attachments = provided ?? gateway.outboxAttachments[key] ?? []
+        if entry.hasAttachments, attachments.isEmpty, !entry.attachments.isEmpty {
+            if let loaded = await gateway.readAttachments(for: entry) {
+                attachments = loaded
+            } else if gateway.attachmentFilesExist(for: entry) {
+                // The files are there but unreadable (say the device is locked): worth a Retry.
+                let message = "Couldn’t send: the attachments couldn’t be read. Try again."
+                gateway.outbox.markFailed(id: key, kind: .transient, isConnected: true, message: message)
+                return .failedInline(message)
+            }
+        }
         if entry.hasAttachments, attachments.isEmpty {
             let message = "Couldn’t send: the attachments are no longer available. Delete this message and attach them again."
             gateway.outbox.markFailed(id: key, kind: .rejected(message), message: message)
@@ -131,6 +153,7 @@ extension ChatStore {
                     self.items[index].idempotencyKey = retryKey
                 }
                 gateway.outboxAttachments[retryKey] = gateway.outboxAttachments.removeValue(forKey: key)
+                if !entry.attachments.isEmpty { gateway.moveOutboxAttachments(from: key, to: retryKey) }
                 gateway.outbox.rekey(id: key, to: retryKey)
                 key = retryKey
                 result = try await gateway.connection.request("chat.send", .object(params(replying: false)), timeout: 60)
@@ -163,10 +186,11 @@ extension ChatStore {
 
     /// Queues a failed message again; it goes out with its original idempotency key as soon as
     /// the Gateway is connected (reconnecting now if it isn't). One with attachments is sent right
-    /// away if it's first in its chat; offline, it stays failed while the Gateway reconnects.
+    /// away if it's first in its chat; offline, it stays failed while the Gateway reconnects. (Only
+    /// memory-only ones; attachments kept on disk are queued like text.)
     public func retry(outboxId: String) {
         guard let gateway, let entry = gateway.outbox.entry(id: outboxId), entry.isFailed else { return }
-        if entry.hasAttachments {
+        if entry.isMemoryOnly {
             guard gateway.state.isConnected else { return gateway.reconnectIfNeeded() }
             guard gateway.outbox.isHead(id: outboxId) else { return }
             gateway.outbox.retry(id: outboxId)
@@ -223,7 +247,8 @@ extension ChatStore {
             if items[index].outboxState != entry.state { items[index].outboxState = entry.state }
         }
         for entry in entries where !seen.contains(entry.id) {
-            var item = ChatItem(id: "outbox:\(entry.id)", role: .user, blocks: entry.text.isEmpty ? [] : [.text(entry.text)],
+            var item = ChatItem(id: "outbox:\(entry.id)", role: .user, blocks: (entry.text.isEmpty ? [] : [.text(entry.text)])
+                                + entry.attachments.map { .file(FileRef(name: $0.fileName, mimeType: $0.mimeType)) },
                                 timestamp: entry.createdAt, idempotencyKey: entry.id, isPending: true)
             item.outboxState = entry.state
             item.replyToId = entry.replyToId

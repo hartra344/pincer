@@ -72,8 +72,7 @@ struct VoiceSetupVoiceSection: View {
         if self.needsKey {
             Text("Paste your API key above to browse your voices.", bundle: .module)
                 .font(.callout).foregroundStyle(.secondary)
-            SecureField(L("API key (only used to list voices)"), text: self.$pastedKey)
-                .autocorrectionDisabled()
+            APIKeyField(title: L("API key (only used to list voices)"), prompt: L("Paste API key"), text: self.$pastedKey)
             Button(L("Load Voices")) { Task { await self.load(key: self.pastedKey) } }
                 .disabled(self.pastedKey.isEmpty || self.loading)
         } else if self.loading && self.model.voices.isEmpty {

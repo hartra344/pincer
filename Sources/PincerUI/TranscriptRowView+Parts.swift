@@ -614,6 +614,7 @@ final class TranscriptFooterView: TranscriptBaseView {
     private let copyButton = TranscriptLabelButton()
     private let replyButton = TranscriptLabelButton()
     private let reactButton = TranscriptLabelButton()
+    private let listenButton = TranscriptLabelButton()
     private let bookmarkButton = TranscriptLabelButton()
     private let previousBranchButton = TranscriptLabelButton()
     private let branchLabel = TranscriptLabelButton()
@@ -756,7 +757,7 @@ final class TranscriptFooterView: TranscriptBaseView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         self.setUpBranchControls()
-        for button in [self.copyButton, self.replyButton, self.reactButton] {
+        for button in [self.copyButton, self.replyButton, self.reactButton, self.listenButton] {
             button.isSubdued = true
             self.addSubview(button)
         }
@@ -776,6 +777,11 @@ final class TranscriptFooterView: TranscriptBaseView {
             guard let self, let id = self.footer?.messageId else { return }
             self.actions?.reply(to: id)
         }
+        self.listenButton.isHidden = true
+        self.listenButton.onTap = { [weak self] in
+            guard let self, let id = self.footer?.messageId else { return }
+            self.actions?.readAloud(id)
+        }
         self.reactButton.set(title: L("React"), symbol: "face.smiling")
         self.reactButton.accessibilityText = L("Add Reaction")
         self.reactButton.onTap = { [weak self] in
@@ -793,6 +799,7 @@ final class TranscriptFooterView: TranscriptBaseView {
         self.replyButton.isHidden = footer.messageId == nil
         self.reactButton.isHidden = footer.messageId == nil || !actions.reactionsEnabled
         self.bookmarkButton.isHidden = footer.messageId == nil || !footer.isBookmarked
+        self.updateListenButton()
         if old?.branch != footer.branch {
             let branch = footer.branch
             for button in self.branchControls { button.isHidden = branch == nil }
@@ -821,6 +828,31 @@ final class TranscriptFooterView: TranscriptBaseView {
         #endif
     }
 
+    /// Read Aloud / Stop Reading Aloud for this message; re-runs when the controller's phase changes.
+    private func updateListenButton() {
+        guard let id = footer?.messageId, let actions, actions.canReadAloud(id) else {
+            if !self.listenButton.isHidden { self.listenButton.isHidden = true; self.relayoutFooter() }
+            return
+        }
+        let reading = withObservationTracking {
+            actions.isReadingAloud(id)
+        } onChange: { [weak self] in
+            DispatchQueue.main.async { self?.updateListenButton() }
+        }
+        self.listenButton.set(title: reading ? L("Stop") : L("Listen"), symbol: reading ? "stop.fill" : "speaker.wave.2")
+        self.listenButton.accessibilityText = reading ? L("Stop Reading Aloud") : L("Read Aloud")
+        if self.listenButton.isHidden { self.listenButton.isHidden = false }
+        self.relayoutFooter()
+    }
+
+    private func relayoutFooter() {
+        #if os(macOS)
+        self.needsLayout = true
+        #else
+        self.setNeedsLayout()
+        #endif
+    }
+
     private func showCopy() {
         self.copyButton.set(title: L("Copy"), symbol: "doc.on.doc")
         self.copyButton.accessibilityText = L("Copy message")
@@ -845,7 +877,7 @@ final class TranscriptFooterView: TranscriptBaseView {
         // The chevron's glyph is narrower than its box; this lines its ink up with the icons above and below.
         var x: CGFloat = self.previousBranchButton.isHidden ? 0 : -4
         var moved = false
-        for button in self.branchControls + [self.bookmarkButton, self.copyButton, self.replyButton, self.reactButton]
+        for button in self.branchControls + [self.bookmarkButton, self.copyButton, self.replyButton, self.listenButton, self.reactButton]
         where !button.isHidden {
             let size = button.buttonSize
             let frame = CGRect(x: x, y: (self.bounds.height - size.height) / 2, width: size.width, height: size.height)

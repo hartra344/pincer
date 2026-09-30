@@ -34,7 +34,7 @@ The file path can come from `path`, `file_path` or `filePath`, and the edit text
 
 ## Long diffs
 
-File-edit cards open by default. When a diff has more than 20 lines, only the first 12 show. Choose **Show all N lines** to see the rest, and **Show fewer lines** to cut it short again. A very long diff scrolls inside the card.
+File-edit cards open by default. When a diff has more than 20 lines, only the first 12 show. Choose **Show all N lines** to see the rest, and **Show fewer lines** to cut it short again. Once it's shown in full, the whole diff is part of the card, however long it is: nothing scrolls inside the card, so the transcript simply scrolls past it. This is especially handy on iPhone and iPad, where there's no scroll-inside-a-scroll to get stuck in.
 
 Very large changes are shortened so the transcript stays responsive. Pincer compares up to 600 changed lines on each side of an edit, reads up to 120,000 characters and 8 replacements per call, shows the first 80 lines of a written file, and shows at most 400 diff lines per card. The last row, **Diff truncated**, says how many lines were left out when Pincer knows.
 

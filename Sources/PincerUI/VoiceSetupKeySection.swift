@@ -10,6 +10,7 @@ struct VoiceSetupKeySection: View {
     @State private var key = ""
     @State private var checking = false
     @State private var check: KeyCheck?
+    @State private var confirmingRemove = false
 
     private enum KeyCheck: Equatable {
         case working
@@ -33,6 +34,7 @@ struct VoiceSetupKeySection: View {
                         .foregroundStyle(self.notResolving ? Color.red : Color.secondary)
                 }
                 if self.editable { self.entry }
+                if self.editable, self.model.canRemoveKey(self.provider) { self.removeButton }
                 self.checkLine
                 VoiceScopedMessage(setup: self.setup, scope: "key")
                 if self.setup.keySavedProvider == self.provider {
@@ -49,15 +51,32 @@ struct VoiceSetupKeySection: View {
     }
 
     @ViewBuilder private var entry: some View {
-        SecureField(L("API key"), text: self.$key, prompt: Text("Paste API key", bundle: .module))
-            .autocorrectionDisabled()
-            .textContentType(nil)
-            #if os(iOS)
-            .textInputAutocapitalization(.never)
-            #endif
-            .onSubmit(self.save)
+        APIKeyField(title: L("API key"), prompt: L("Paste API key"), text: self.$key, onSubmit: self.save)
         Button(L("Save Key"), action: self.save)
             .disabled(self.key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || self.checking)
+    }
+
+    private var removeButton: some View {
+        Button(L("Remove Key…"), role: .destructive) { self.confirmingRemove = true }
+            .disabled(self.checking)
+            .confirmationDialog(String(format: L("Remove the %@ key from the Gateway?"), self.name), isPresented: self.$confirmingRemove,
+                                titleVisibility: .visible) {
+                Button(L("Remove Key"), role: .destructive, action: self.remove)
+                Button(L("Cancel"), role: .cancel) {}
+            } message: {
+                Text(String(format: L("The Gateway can't use %@ until you add a key again. Replies fall back to the next provider or this device's voice."), self.name))
+            }
+    }
+
+    private func remove() {
+        self.check = nil
+        self.setup.keySavedProvider = nil
+        Task {
+            guard await self.setup.run("key", { try await self.model.removeKey(provider: self.provider) }) else { return }
+            self.setup.notice = L("Key removed")
+            self.setup.keyGeneration += 1
+            AccessibilityNotification.Announcement(L("Key removed")).post()
+        }
     }
 
     @ViewBuilder private var checkLine: some View {

@@ -421,6 +421,16 @@
         }
       }
     },
+    "%@ unsent messages in these chats will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ unsent messages in these chats will be discarded too."
+          }
+        }
+      }
+    },
     "%@ used": {
       "localizations": {
         "en": {
@@ -577,6 +587,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@, group, 1 chat"
+          }
+        }
+      }
+    },
+    "%@, part %lld of %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, part %lld of %lld"
           }
         }
       }
@@ -1003,6 +1023,16 @@
         }
       }
     },
+    "1 problem": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 problem"
+          }
+        }
+      }
+    },
     "1 reconnect attempt": {
       "localizations": {
         "en": {
@@ -1029,6 +1059,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 tool call"
+          }
+        }
+      }
+    },
+    "1 unsent message in these chats will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 unsent message in these chats will be discarded too."
           }
         }
       }
@@ -1589,6 +1629,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Also written to the agent's IDENTITY.md."
+          }
+        }
+      }
+    },
+    "Always": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always"
           }
         }
       }
@@ -2593,12 +2643,12 @@
         }
       }
     },
-    "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send.": {
+    "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline, with their attachments, wait here until they send.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send."
+            "value": "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline, with their attachments, wait here until they send."
           }
         }
       }
@@ -3029,6 +3079,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Collapses the entry"
+          }
+        }
+      }
+    },
+    "Collapses the section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapses the section"
           }
         }
       }
@@ -5483,6 +5543,16 @@
         }
       }
     },
+    "Expands the section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expands the section"
+          }
+        }
+      }
+    },
     "Expires": {
       "localizations": {
         "en": {
@@ -6139,6 +6209,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gateway Voice"
+          }
+        }
+      }
+    },
+    "Gateway Voice Settings…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gateway Voice Settings…"
           }
         }
       }
@@ -6823,6 +6903,26 @@
         }
       }
     },
+    "Interrupted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrupted"
+          }
+        }
+      }
+    },
+    "Interrupted by a Gateway restart": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrupted by a Gateway restart"
+          }
+        }
+      }
+    },
     "Invalid Config": {
       "localizations": {
         "en": {
@@ -7009,6 +7109,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keep it running"
+          }
+        }
+      }
+    },
+    "Key removed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key removed"
           }
         }
       }
@@ -7299,6 +7409,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "List subagent runs under their chat"
+          }
+        }
+      }
+    },
+    "Listen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listen"
           }
         }
       }
@@ -8203,6 +8323,16 @@
         }
       }
     },
+    "New chat with %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New chat with %@"
+          }
+        }
+      }
+    },
     "New lines appear here as the Gateway writes them.": {
       "localizations": {
         "en": {
@@ -8239,6 +8369,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Next"
+          }
+        }
+      }
+    },
+    "Next Message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Message"
           }
         }
       }
@@ -9169,6 +9309,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Online for %@"
+          }
+        }
+      }
+    },
+    "Only After Voice Messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only After Voice Messages"
+          }
+        }
+      }
+    },
+    "Only When Tagged": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only When Tagged"
           }
         }
       }
@@ -10203,6 +10363,16 @@
         }
       }
     },
+    "Previous Message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Message"
+          }
+        }
+      }
+    },
     "Previous branch": {
       "localizations": {
         "en": {
@@ -10423,12 +10593,12 @@
         }
       }
     },
-    "Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected.": {
+    "Queued and failed messages, and their attachments, are deleted from this device without being sent. Chats and cached transcripts aren’t affected.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected."
+            "value": "Queued and failed messages, and their attachments, are deleted from this device without being sent. Chats and cached transcripts aren’t affected."
           }
         }
       }
@@ -10559,6 +10729,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Read Aloud"
+          }
+        }
+      }
+    },
+    "Read Aloud Settings…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read Aloud Settings…"
           }
         }
       }
@@ -10963,6 +11143,26 @@
         }
       }
     },
+    "Remove Key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Key"
+          }
+        }
+      }
+    },
+    "Remove Key…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Key…"
+          }
+        }
+      }
+    },
     "Remove My Reaction": {
       "localizations": {
         "en": {
@@ -11029,6 +11229,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Remove item %lld"
+          }
+        }
+      }
+    },
+    "Remove the %@ key from the Gateway?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove the %@ key from the Gateway?"
           }
         }
       }
@@ -11193,12 +11403,32 @@
         }
       }
     },
+    "Replace “%@” with “%@”?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace “%@” with “%@”?"
+          }
+        }
+      }
+    },
     "Replaces the installed copy with ClawHub's latest version.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Replaces the installed copy with ClawHub's latest version."
+          }
+        }
+      }
+    },
+    "Replies": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replies"
           }
         }
       }
@@ -11849,6 +12079,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Run this on the Gateway host to see it:"
+          }
+        }
+      }
+    },
+    "Running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running"
           }
         }
       }
@@ -13433,12 +13673,12 @@
         }
       }
     },
-    "Speak Replies on Channels is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud.": {
+    "Speak Replies on Channels is gateway-wide. It controls when the Gateway attaches spoken audio to replies on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Speak Replies on Channels is gateway-wide: the Gateway attaches spoken audio to every reply it sends on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud."
+            "value": "Speak Replies on Channels is gateway-wide. It controls when the Gateway attaches spoken audio to replies on channels like Discord or Telegram, for everyone. It doesn't affect Read Aloud in Pincer. To always use this device's own voice for Read Aloud, change the Voice option in Settings → Read Aloud."
           }
         }
       }
@@ -13479,16 +13719,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speaking…"
-          }
-        }
-      }
-    },
-    "Speaks a reply from its context menu. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Speaks a reply from its context menu. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on."
           }
         }
       }
@@ -13903,6 +14133,16 @@
         }
       }
     },
+    "Switch to Always": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switch to Always"
+          }
+        }
+      }
+    },
     "System": {
       "localizations": {
         "en": {
@@ -13949,6 +14189,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tailscale Serve uses HTTPS, so this should usually be wss://. Use ws:// only with the tailnet IP and Gateway port."
+          }
+        }
+      }
+    },
+    "Tap Listen under a reply, or use Read Last Reply Aloud (its keyboard shortcut) from the command palette. Press Esc or tap the Speaking pill to stop. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tap Listen under a reply, or use Read Last Reply Aloud (its keyboard shortcut) from the command palette. Press Esc or tap the Speaking pill to stop. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on."
           }
         }
       }
@@ -14123,12 +14373,42 @@
         }
       }
     },
+    "The %@ unsent messages in this chat will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ unsent messages in this chat will be discarded too."
+          }
+        }
+      }
+    },
+    "The 1 unsent message in this chat will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The 1 unsent message in this chat will be discarded too."
+          }
+        }
+      }
+    },
     "The Gateway audio couldn't be played.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "The Gateway audio couldn't be played."
+          }
+        }
+      }
+    },
+    "The Gateway can't use %@ until you add a key again. Replies fall back to the next provider or this device's voice.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway can't use %@ until you add a key again. Replies fall back to the next provider or this device's voice."
           }
         }
       }
@@ -15293,6 +15573,16 @@
         }
       }
     },
+    "Timed Out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timed Out"
+          }
+        }
+      }
+    },
     "Timed out waiting for %@.": {
       "localizations": {
         "en": {
@@ -15363,6 +15653,16 @@
         }
       }
     },
+    "To go back to %@, edit the Gateway's config or use /tts.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To go back to %@, edit the Gateway's config or use /tts."
+          }
+        }
+      }
+    },
     "To:": {
       "localizations": {
         "en": {
@@ -15389,6 +15689,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tokens"
+          }
+        }
+      }
+    },
+    "Too large to queue offline — sends when you’re connected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too large to queue offline — sends when you’re connected"
           }
         }
       }
@@ -15439,6 +15749,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tool %@"
+          }
+        }
+      }
+    },
+    "Tool Calls": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool Calls"
           }
         }
       }
@@ -15739,6 +16059,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unknown"
+          }
+        }
+      }
+    },
+    "Unknown (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown (%@)"
           }
         }
       }
@@ -16543,6 +16873,16 @@
         }
       }
     },
+    "Your Messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Messages"
+          }
+        }
+      }
+    },
     "Your agent didn't answer. You can try again, or skip and chat later.": {
       "localizations": {
         "en": {
@@ -17283,6 +17623,16 @@
         }
       }
     },
+    "updated %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "updated %@"
+          }
+        }
+      }
+    },
     "usage reports": {
       "localizations": {
         "en": {
@@ -17349,6 +17699,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "“%@” isn’t a valid Gateway address. Use wss://host.tailnet.ts.net or ws://100.x.y.z:18789."
+          }
+        }
+      }
+    },
+    "“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config or /tts preferences; Pincer can only switch replies Off or Always.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config or /tts preferences; Pincer can only switch replies Off or Always."
           }
         }
       }

@@ -13,6 +13,7 @@ struct CommandPaletteView: View {
     #if os(macOS)
     @Environment(\.openSettings) private var openSettings
     #endif
+    @FocusedValue(\.readAloud) private var readAloud
     @AppStorage(ThinkingDisplay.storageKey) private var thinkingDisplay = ThinkingDisplay.defaultValue
     @State private var query: String
     @State private var page: Page
@@ -57,7 +58,7 @@ struct CommandPaletteView: View {
 
     private enum Command: String {
         case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, skills, mcpServers, usage, sessionUsage,
-             gatewayLogs, devices, setupGateway, sessions, manageSession, addGateway, toggleDictation
+             gatewayLogs, devices, setupGateway, sessions, manageSession, addGateway, toggleDictation, readAloud, readAloudSettings, voiceSettings
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -399,6 +400,7 @@ struct CommandPaletteView: View {
             items.append(item(.toggleDictation, listening ? L("Stop Dictation") : L("Dictate Message"), listening ? "mic.fill" : "mic",
                               keywords: ["dictate", "voice", "speech", "microphone"], shortcut: ShortcutCommand.toggleDictation.displayShortcut))
         }
+        items += self.readAloudItems
         let showsThinking = self.thinkingDisplay != .none
         items += [
             item(.toggleThinking, showsThinking ? L("Hide Thinking Steps") : L("Show Thinking Steps"), "brain.head.profile",
@@ -410,9 +412,15 @@ struct CommandPaletteView: View {
             item(.nextUnread, L("Next Unread Chat"), "circle.badge", keywords: ["unread"], shortcut: ShortcutCommand.nextUnreadChat.displayShortcut,
                  enabled: self.app.totalUnread > 0),
             item(.appSettings, L("Open Settings…"), "gearshape", keywords: ["preferences"], shortcut: "⌘,"),
+            item(.readAloudSettings, L("Read Aloud Settings…"), "speaker.wave.2",
+                 keywords: ["read aloud", "listen", "speech", "voice", "tts", "speak", "settings"]),
             item(.addGateway, L("Add Gateway…"), "plus.circle", keywords: ["connect", "new", "server", "setup", "wizard"]),
         ]
         if let setup = CommandPalette.setupGatewayItem(gateway: self.gateway) { items.append(setup) }
+        if self.gateway?.voice.supportsStatus == true {
+            items.append(item(.voiceSettings, L("Gateway Voice Settings…"), "speaker.wave.2",
+                              keywords: ["gateway voice", "tts", "text to speech", "read aloud", "elevenlabs", "openai", "persona", "provider"]))
+        }
         if self.gateway != nil {
             items += [
                 item(.gatewaySettings, L("Gateway Settings…"), "server.rack", keywords: ["config"], shortcut: ShortcutCommand.gatewaySettings.displayShortcut),
@@ -451,6 +459,17 @@ struct CommandPaletteView: View {
         return items
     }
 
+    private var readAloudItems: [PaletteItem] {
+        guard let state = self.readAloud else { return [] }
+        let speaking = ReadAloudController.shared.isActive
+        return [PaletteItem(id: "command:\(Command.readAloud.rawValue)",
+                            title: speaking ? L("Stop Reading Aloud") : L("Read Last Reply Aloud"),
+                            symbol: speaking ? "stop.fill" : "speaker.wave.2",
+                            keywords: ["listen", "speak", "speech", "tts", "voice"],
+                            shortcut: ShortcutCommand.readAloud.displayShortcut, section: .commands,
+                            action: .command(Command.readAloud.rawValue), isEnabled: state.isEnabled)]
+    }
+
     // MARK: Keyboard
 
     private func currentSelection(in results: [PaletteItem]) -> String? {
@@ -462,7 +481,9 @@ struct CommandPaletteView: View {
         let results = results.filter { !$0.isHeader }
         guard !results.isEmpty else { return }
         let current = self.currentSelection(in: results).flatMap { id in results.firstIndex { $0.id == id } } ?? 0
-        self.selection = results[(current + offset + results.count) % results.count].id
+        let item = results[(current + offset + results.count) % results.count]
+        self.selection = item.id
+        AccessibilityAnnouncer.announce(item.title)
         #if os(macOS)
         self.keyboardMoveMouseLocation = NSEvent.mouseLocation
         #endif
@@ -609,6 +630,16 @@ struct CommandPaletteView: View {
             if let gateway, let row { self.openGatewaySettings(gateway, at: .sessions, routes: [.sessionDetail(row.key)]) }
         case .setupGateway:
             gateway?.setup.present()
+        case .readAloud:
+            self.readAloud?.toggleLastReply()
+        case .readAloudSettings:
+            #if os(macOS)
+            self.openSettings()
+            #else
+            self.openAppSettings()
+            #endif
+        case .voiceSettings:
+            if let gateway { self.openGatewaySettings(gateway, at: .voice) }
         case .toggleDictation:
             guard let row else { return }
             self.app.dictationToggleRequest = DictationToggleRequest(
@@ -683,6 +714,7 @@ struct CommandPaletteOverlay: View {
                 CommandPaletteView(isPresented: Binding(get: { self.request != nil }, set: { if !$0 { self.request = nil } }),
                                    page: request.page, query: request.query, openAppSettings: self.openAppSettings)
                     .id(request.id)
+                    .accessibilityAddTraits(.isModal)
                     .padding(.top, 72)
                     .padding(.horizontal, Theme.Spacing.xxl)
             }
@@ -703,6 +735,7 @@ struct GoCommands: Commands {
     let app: AppModel
     @FocusedValue(\.commandPalette) private var palette
     @FocusedValue(\.searchMessages) private var searchMessages
+    @FocusedValue(\.transcriptNavigator) private var navigator
     #if os(macOS)
     /// Commands live in the app's scenes, so this can open a main window even when none has
     /// existed since launch; Quick Capture uses it for Send & Open and Open in Pincer.
@@ -732,6 +765,13 @@ struct GoCommands: Commands {
             Button(L("Forward")) { self.app.goForward() }
                 .shortcut(.goForward)
                 .disabled(!self.app.canGoForward)
+            Divider()
+            Button(L("Previous Message")) { self.navigator?.move?(false) }
+                .shortcut(.previousMessage)
+                .disabled(self.navigator == nil)
+            Button(L("Next Message")) { self.navigator?.move?(true) }
+                .shortcut(.nextMessage)
+                .disabled(self.navigator == nil)
             let pinned = self.app.selectedGateway?.pinnedChats.prefix(9) ?? []
             if !pinned.isEmpty {
                 Divider()
