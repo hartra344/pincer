@@ -58,6 +58,11 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var markedReplyRuns: Set<String> = []
     /// Chats with a finished reply waiting out `replyUnreadGrace`; showing the chat meanwhile drops it.
     @ObservationIgnored var pendingReplyUnread: Set<String> = []
+    /// How long a finished reply waits before Pincer marks it unread; per store so tests can't leak it.
+    @ObservationIgnored var replyUnreadGrace: Duration = GatewayStore.defaultReplyUnreadGrace
+    @ObservationIgnored var replyUnreadTimers: [String: Task<Void, Never>] = [:]
+    /// Per chat, how many finished replies have been decided (marked or not); tests wait on it.
+    @ObservationIgnored var replyUnreadDecisions: [String: Int] = [:]
     @ObservationIgnored private var sessionStorage: [String: SessionRow] = [:]
     @ObservationIgnored var sortedRowsCache: [SessionRow]?
     /// `subagentTree(rootKey:)` per root and connection state, until the rows change.
@@ -139,6 +144,8 @@ public final class GatewayStore: Identifiable {
     /// The saved outbox has been read and merged in; changes are saved from here on.
     @ObservationIgnored var outboxRestored = false
     @ObservationIgnored var outboxFlushing = false
+    /// The task `start()` reads the saved outbox in; tests await it instead of polling `outboxRestored`.
+    @ObservationIgnored var outboxLoadTask: Task<Void, Never>?
 
     @ObservationIgnored let connection: GatewayConnection
     @ObservationIgnored internal(set) var chats: [String: ChatStore] = [:]
@@ -362,7 +369,7 @@ public final class GatewayStore: Identifiable {
 
     public func start() {
         guard self.pumpTask == nil else { return }
-        Task { await self.loadOutbox() }
+        self.outboxLoadTask = Task { await self.loadOutbox() }
         // A single ordered stream keeps chat deltas and state changes in wire order.
         let stream = CoalescingEventBuffer<Inbound> {
             if case let .event(event) = $0 { return event.coalescingKey }
