@@ -28,4 +28,18 @@ struct ReadAloudControlsTests {
         }
         #expect(SettingsCatalog.destinations(matching: "read aloud").first { $0.destination == .voice }?.title == "Voice")
     }
+
+    @Test func escapeResolvesInPriorityOrder() {
+        typealias A = ComposerEscapeAction
+        func r(_ m: Bool = false, d: Bool = false, e: Bool = false, p: Bool = false, a: Bool = false) -> A? {
+            A.resolve(menuOpen: m, dictating: d, editing: e, replying: p, readingAloud: a)
+        }
+        #expect(r() == nil)
+        #expect(r(a: true) == .stopReadAloud)
+        #expect(r(p: true, a: true) == .cancelReply)
+        #expect(r(e: true, p: true, a: true) == .cancelEdit)
+        #expect(r(d: true, e: true, p: true, a: true) == .finishDictation)
+        #expect(r(true, d: true, e: true, p: true, a: true) == .dismissMenu)
+        #expect(r(e: true) == .cancelEdit && r(p: true) == .cancelReply && r(d: true) == .finishDictation && r(true) == .dismissMenu)
+    }
 }
