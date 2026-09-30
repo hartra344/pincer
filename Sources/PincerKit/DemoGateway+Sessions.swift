@@ -411,7 +411,7 @@ extension DemoGateway {
         var result: Row = [:]
         let text = Self.plainText(active[index])
         if !text.isEmpty { result["editorText"] = .string(text) }
-        if let attachments = Self.editorAttachments(active[index]) { result["editorAttachments"] = attachments }
+        if let attachments = self.editorAttachments(active[index]) { result["editorAttachments"] = attachments }
         return .object(result)
     }
 
@@ -430,16 +430,20 @@ extension DemoGateway {
         let text = Self.plainText(active[index])
         var result: Row = ["sessionKey": .string(newKey)]
         if !text.isEmpty { result["editorText"] = .string(text) }
-        if let attachments = Self.editorAttachments(active[index]) { result["editorAttachments"] = attachments }
+        if let attachments = self.editorAttachments(active[index]) { result["editorAttachments"] = attachments }
         return .object(result)
     }
 
     /// Image blocks of a user message as upstream's `editorAttachments` ({mimeType, data}, base64).
-    private static func editorAttachments(_ message: JSONValue) -> JSONValue? {
+    /// Images sent through chat.send are stored as uploaded artifacts; those resolve back to their bytes.
+    private func editorAttachments(_ message: JSONValue) -> JSONValue? {
         let images = (message["content"]?.array ?? []).compactMap { block -> JSONValue? in
-            guard block["type"]?.string == "image", let data = block["data"]?.string, !data.isEmpty,
-                  let mime = block["mimeType"]?.string, mime.hasPrefix("image/") else { return nil }
-            return ["mimeType": .string(mime), "data": .string(data)]
+            guard block["type"]?.string == "image" else { return nil }
+            if let data = block["data"]?.string, !data.isEmpty, let mime = block["mimeType"]?.string, mime.hasPrefix("image/") {
+                return ["mimeType": .string(mime), "data": .string(data)]
+            }
+            guard let id = block["artifactId"]?.string, let artifact = self.artifacts[id], artifact.0.hasPrefix("image/") else { return nil }
+            return ["mimeType": .string(artifact.0), "data": .string(artifact.1.base64EncodedString())]
         }
         return images.isEmpty ? nil : .array(images)
     }

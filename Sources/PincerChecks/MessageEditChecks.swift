@@ -99,6 +99,7 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
     }
     check(again, "regenerate resends the same message without duplicating it (\(chat.items.map(\.plainText)))")
     check(!chat.items.contains { $0.isPending }, "no send stays pending after regenerate (#429)")
+    await chat.load(force: true)
     let regeneratedImages = chat.items.last { $0.role == .user }.map(imageCount) ?? 0
     check(regeneratedImages == 1, "regenerate resends the image (#397) (\(regeneratedImages))")
     gateway.selectedKey = garden
