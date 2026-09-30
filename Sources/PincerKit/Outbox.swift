@@ -22,6 +22,12 @@ public struct OutboxFailure: Codable, Hashable, Sendable {
     }
 }
 
+/// Why a queued message is waiting although the Gateway is connected: it's a large upload and
+/// the network is expensive (cellular, hotspot) or constrained (Low Data Mode). Constrained wins.
+public enum OutboxHold: String, Codable, Hashable, Sendable {
+    case expensive, constrained
+}
+
 /// A user message that hasn't landed in the transcript yet.
 public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
     /// The `chat.send` idempotency key; stable across retries so the Gateway dedupes resends.
@@ -40,6 +46,14 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
     public var hasAttachments: Bool
     /// Attachments kept in `OutboxAttachmentStore`, so the entry survives a relaunch.
     public var attachments: [OutboxAttachmentRef]
+    /// The user chose Send Now: a large upload goes out on any network.
+    public var sendOnAnyNetwork: Bool
+
+    /// Total attachment bytes at which an entry counts as a large upload.
+    public static let largeUploadBytes = 2 * 1024 * 1024
+
+    /// Bytes of the attachments kept on disk with this entry (memory-only ones aren't counted here).
+    public var attachmentBytes: Int { self.attachments.reduce(0) { $0 + $1.byteCount } }
 
     public var idempotencyKey: String { self.id }
 
@@ -54,7 +68,8 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
         state: OutboxState = .queued,
         attempts: Int = 0,
         hasAttachments: Bool = false,
-        attachments: [OutboxAttachmentRef] = [])
+        attachments: [OutboxAttachmentRef] = [],
+        sendOnAnyNetwork: Bool = false)
     {
         self.id = id
         self.sessionKey = sessionKey
@@ -67,10 +82,11 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
         self.attempts = attempts
         self.hasAttachments = hasAttachments || !attachments.isEmpty
         self.attachments = attachments
+        self.sendOnAnyNetwork = sendOnAnyNetwork
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, sessionKey, agentId, text, replyToId, replyPreview, createdAt, state, attempts, hasAttachments, attachments
+        case id, sessionKey, agentId, text, replyToId, replyPreview, createdAt, state, attempts, hasAttachments, attachments, sendOnAnyNetwork
     }
 
     public init(from decoder: Decoder) throws {
@@ -86,6 +102,7 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
         self.attempts = try c.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
         self.hasAttachments = try c.decodeIfPresent(Bool.self, forKey: .hasAttachments) ?? false
         self.attachments = try c.decodeIfPresent([OutboxAttachmentRef].self, forKey: .attachments) ?? []
+        self.sendOnAnyNetwork = try c.decodeIfPresent(Bool.self, forKey: .sendOnAnyNetwork) ?? false
     }
 
     /// Carries attachments whose bytes exist only in memory: never auto-sent, gone after a relaunch.
@@ -207,15 +224,22 @@ public struct Outbox: Codable, Equatable, Sendable {
     /// The oldest `.queued` entry whose session has nothing earlier sending or failed. Memory-only
     /// attachment entries are never auto-sent (only an explicit Retry sends them) and block their
     /// session until then.
-    public func nextToSend(sessionKey: String? = nil) -> OutboxEntry? {
+    /// A queued entry `holding` says to hold is skipped and blocks the later ones of its chat.
+    public func nextToSend(sessionKey: String? = nil, holding: (OutboxEntry) -> Bool = { _ in false }) -> OutboxEntry? {
         var blocked = Set<String>()
         for entry in self.entries {
             if let sessionKey, entry.sessionKey != sessionKey { continue }
             if blocked.contains(entry.sessionKey) { continue }
-            if entry.state == .queued, !entry.isMemoryOnly { return entry }
+            if entry.state == .queued, !entry.isMemoryOnly, !holding(entry) { return entry }
             blocked.insert(entry.sessionKey)
         }
         return nil
+    }
+
+    /// Lets a held large upload go out on any network (Send Now).
+    public mutating func allowAnyNetwork(id: String) {
+        guard let index = self.index(id) else { return }
+        self.entries[index].sendOnAnyNetwork = true
     }
 
     /// Whether this entry is its chat's oldest unsent message, so sending it keeps the order.

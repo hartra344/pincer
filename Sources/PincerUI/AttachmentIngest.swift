@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
 @MainActor
 struct AttachmentIngest: Sendable {
     let limits: UploadLimits
+    /// The limits come from a saved policy while offline, so a size problem says so.
+    var limitsAreLastKnown = false
     let add: @MainActor @Sendable (OutgoingAttachment) -> Void
     let report: @MainActor @Sendable (String?) -> Void
 
@@ -40,9 +42,10 @@ struct AttachmentIngest: Sendable {
             return
         }
         let maxFileBytes = self.limits.fileBytes
+        let lastKnown = self.limitsAreLastKnown
         _ = provider.loadObject(ofClass: URL.self) { url, _ in
             // Files handed over by a provider may only be readable inside this callback.
-            let result = url.map { Self.readFile($0, maxFileBytes: maxFileBytes) }
+            let result = url.map { Self.readFile($0, maxFileBytes: maxFileBytes, lastKnown: lastKnown) }
             Task { @MainActor in
                 switch result {
                 case let .success(file)?:
@@ -74,7 +77,7 @@ struct AttachmentIngest: Sendable {
     }
 
     private func addFile(_ url: URL) {
-        switch Self.readFile(url, maxFileBytes: self.limits.fileBytes) {
+        switch Self.readFile(url, maxFileBytes: self.limits.fileBytes, lastKnown: self.limitsAreLastKnown) {
         case let .success(file):
             self.addData(file.data, type: file.type, name: file.name)
         case let .failure(error):
@@ -86,7 +89,7 @@ struct AttachmentIngest: Sendable {
         if type?.conforms(to: .image) == true {
             self.addImage(data, name: name)
         } else if data.count > self.limits.fileBytes {
-            self.report("\(name) is larger than the Gateway allows (\(Self.byteString(self.limits.fileBytes))).")
+            self.report(Self.tooLarge(name, limit: self.limits.fileBytes, lastKnown: self.limitsAreLastKnown))
         } else {
             self.add(OutgoingAttachment(
                 fileName: name,
@@ -94,6 +97,13 @@ struct AttachmentIngest: Sendable {
                 data: data))
             self.report(nil)
         }
+    }
+
+    /// "x is larger than the Gateway allows (5 MB)." — "(5 MB, last known limit)" when offline with a saved policy.
+    private nonisolated static func tooLarge(_ name: String, limit: Int, lastKnown: Bool) -> String {
+        let size = self.byteString(limit)
+        return lastKnown ? L("\(name) is larger than the Gateway allows (\(size), last known limit).")
+            : L("\(name) is larger than the Gateway allows (\(size)).")
     }
 
     private struct ReadFile: Sendable {
@@ -109,7 +119,7 @@ struct AttachmentIngest: Sendable {
     /// Images may exceed the Gateway limit because they're downscaled before upload.
     private nonisolated static let maxRawImageBytes = 200_000_000
 
-    private nonisolated static func readFile(_ url: URL, maxFileBytes: Int) -> Result<ReadFile, ReadError> {
+    private nonisolated static func readFile(_ url: URL, maxFileBytes: Int, lastKnown: Bool) -> Result<ReadFile, ReadError> {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let name = url.lastPathComponent
@@ -120,7 +130,7 @@ struct AttachmentIngest: Sendable {
         let type = values?.contentType ?? UTType(filenameExtension: url.pathExtension)
         let limit = type?.conforms(to: .image) == true ? self.maxRawImageBytes : maxFileBytes
         if let size = values?.fileSize, size > limit {
-            return .failure(ReadError(message: "\(name) is larger than the Gateway allows (\(self.byteString(maxFileBytes)))."))
+            return .failure(ReadError(message: self.tooLarge(name, limit: maxFileBytes, lastKnown: lastKnown)))
         }
         guard let data = try? Data(contentsOf: url) else {
             return .failure(ReadError(message: "Couldn’t read \(name)."))

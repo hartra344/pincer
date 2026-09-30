@@ -31,6 +31,16 @@
         }
       }
     },
+    "%@ is larger than the Gateway allows (%@).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is larger than the Gateway allows (%@)."
+          }
+        }
+      }
+    },
     "%@ Secrets are write-only: Pincer shows whether they're set, never their values.": {
       "localizations": {
         "en": {
@@ -157,6 +167,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ is already used"
+          }
+        }
+      }
+    },
+    "%@ is larger than the Gateway allows (%@, last known limit).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is larger than the Gateway allows (%@, last known limit)."
           }
         }
       }
@@ -4243,6 +4263,16 @@
         }
       }
     },
+    "Couldn’t send: %@ is larger than this Gateway accepts (%@).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t send: %@ is larger than this Gateway accepts (%@)."
+          }
+        }
+      }
+    },
     "Couldn’t send: not connected to the Gateway.": {
       "localizations": {
         "en": {
@@ -7193,6 +7223,16 @@
         }
       }
     },
+    "large": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "large"
+          }
+        }
+      }
+    },
     "Last Active": {
       "localizations": {
         "en": {
@@ -9023,6 +9063,36 @@
         }
       }
     },
+    "Not sent yet. It’s a large upload, %@, waiting for Wi‑Fi.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet. It’s a large upload, %@, waiting for Wi‑Fi."
+          }
+        }
+      }
+    },
+    "Not sent yet. It’s a large upload, %@, waiting until you’re off Personal Hotspot.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet. It’s a large upload, %@, waiting until you’re off Personal Hotspot."
+          }
+        }
+      }
+    },
+    "Not sent yet. It’s a large upload, %@, waiting while Low Data Mode is on.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sent yet. It’s a large upload, %@, waiting while Low Data Mode is on."
+          }
+        }
+      }
+    },
     "Not Set": {
       "localizations": {
         "en": {
@@ -9439,6 +9509,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Open Chat"
+          }
+        }
+      }
+    },
+    "Send now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send now"
           }
         }
       }
@@ -12783,6 +12863,16 @@
         }
       }
     },
+    "Send Now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send Now"
+          }
+        }
+      }
+    },
     "Send to %@": {
       "localizations": {
         "en": {
@@ -15533,6 +15623,36 @@
         }
       }
     },
+    "This is a large upload (%@), so it’s waiting for Wi‑Fi to save cellular data. Send Now uploads it anyway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a large upload (%@), so it’s waiting for Wi‑Fi to save cellular data. Send Now uploads it anyway."
+          }
+        }
+      }
+    },
+    "This is a large upload (%@), so it’s waiting until you’re off Personal Hotspot. Send Now uploads it anyway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a large upload (%@), so it’s waiting until you’re off Personal Hotspot. Send Now uploads it anyway."
+          }
+        }
+      }
+    },
+    "This is a large upload (%@), so it’s waiting while Low Data Mode is on. Send Now uploads it anyway.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This is a large upload (%@), so it’s waiting while Low Data Mode is on. Send Now uploads it anyway."
+          }
+        }
+      }
+    },
     "This is a simulated sign-in for the demo. No account is used.": {
       "localizations": {
         "en": {
@@ -16619,6 +16739,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Waiting for approval…"
+          }
+        }
+      }
+    },
+    "Waiting for Wi‑Fi": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for Wi‑Fi"
+          }
+        }
+      }
+    },
+    "Waiting — Low Data Mode": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting — Low Data Mode"
+          }
+        }
+      }
+    },
+    "Waiting — Personal Hotspot": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting — Personal Hotspot"
           }
         }
       }

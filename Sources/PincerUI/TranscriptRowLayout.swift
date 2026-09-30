@@ -155,12 +155,16 @@ enum TranscriptPart {
 
     /// Where an unsent message is: queued, or failed with Retry and Delete.
     struct SendStatus: Equatable {
+        enum Kind: Equatable { case queued, held, sending, failed }
+        var kind: Kind = .queued
         /// The outbox entry (the message's idempotency key).
         let id: String
         let text: String
         let isFailed: Bool
         let canRetry: Bool
         let canDelete: Bool
+        /// A large upload held for Wi‑Fi can be sent over this network anyway.
+        var canSendNow = false
         /// Full reason, for the tooltip.
         var detail: String?
         /// For VoiceOver: "Not sent yet, queued.", "Sending." or "Failed to send: reason."
@@ -561,19 +565,44 @@ struct TranscriptLayoutBuilder {
         }
     }
 
+    /// A large upload waiting for a cheaper network; Send Now uploads it anyway.
+    static func heldStatus(id: String, hold: OutboxHold, bytes: Int?) -> TranscriptPart.SendStatus {
+        let size = bytes.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? L("large")
+        let text: String, detail: String, spoken: String
+        switch hold {
+        case .constrained:
+            text = L("Waiting — Low Data Mode")
+            detail = L("This is a large upload (\(size)), so it’s waiting while Low Data Mode is on. Send Now uploads it anyway.")
+            spoken = L("Not sent yet. It’s a large upload, \(size), waiting while Low Data Mode is on.")
+        case .expensive:
+            #if os(macOS)
+            text = L("Waiting — Personal Hotspot")
+            detail = L("This is a large upload (\(size)), so it’s waiting until you’re off Personal Hotspot. Send Now uploads it anyway.")
+            spoken = L("Not sent yet. It’s a large upload, \(size), waiting until you’re off Personal Hotspot.")
+            #else
+            text = L("Waiting for Wi‑Fi")
+            detail = L("This is a large upload (\(size)), so it’s waiting for Wi‑Fi to save cellular data. Send Now uploads it anyway.")
+            spoken = L("Not sent yet. It’s a large upload, \(size), waiting for Wi‑Fi.")
+            #endif
+        }
+        return .init(kind: .held, id: id, text: text, isFailed: false, canRetry: false, canDelete: true, canSendNow: true,
+                     detail: detail, spoken: spoken)
+    }
+
     /// The status line of a queued or failed message; nil while sending and once accepted.
     static func sendStatus(_ item: ChatItem) -> TranscriptPart.SendStatus? {
         guard item.isPending, let state = item.outboxState, let id = item.idempotencyKey else { return nil }
         switch state {
         case .queued:
-            return .init(id: id, text: L("Queued"), isFailed: false, canRetry: false, canDelete: true, spoken: L("Not sent yet, queued."))
+            if let hold = item.outboxHold { return Self.heldStatus(id: id, hold: hold, bytes: item.outboxUploadBytes) }
+            return .init(kind: .queued, id: id, text: L("Queued"), isFailed: false, canRetry: false, canDelete: true, spoken: L("Not sent yet, queued."))
         case .sending:
-            return .init(id: id, text: L("Sending…"), isFailed: false, canRetry: false, canDelete: false, spoken: L("Sending."))
+            return .init(kind: .sending, id: id, text: L("Sending…"), isFailed: false, canRetry: false, canDelete: false, spoken: L("Sending."))
         case let .failed(failure):
             let prefix = "Couldn’t send: "
             let reason = failure.message.hasPrefix(prefix) ? String(failure.message.dropFirst(prefix.count)) : failure.message
             let sentence = reason.hasSuffix(".") ? reason : reason + "."
-            return .init(id: id, text: reason.isEmpty ? L("Failed") : L("Failed — \(reason)"), isFailed: true,
+            return .init(kind: .failed, id: id, text: reason.isEmpty ? L("Failed") : L("Failed — \(reason)"), isFailed: true,
                          canRetry: failure.retryable, canDelete: true, detail: failure.message,
                          spoken: reason.isEmpty ? L("Failed to send.") : L("Failed to send: \(sentence)"))
         }

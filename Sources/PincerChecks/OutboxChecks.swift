@@ -82,6 +82,21 @@ func checkOutboxLogic() {
     check(kept.entries.map(\.id) == ["k"], "a relaunch keeps saved attachments and drops memory-only ones")
     let json = (try? JSONEncoder().encode(kept)).map { String(decoding: $0, as: UTF8.self) } ?? ""
     check(json.contains("a.png") && !json.contains("base64"), "the outbox JSON holds attachment refs, not bytes")
+
+    // Held large uploads (#482): a held head blocks only its own chat; Send Now lifts it.
+    let big = OutboxAttachmentRef(id: UUID(), fileName: "big.mov", mimeType: "video/quicktime", byteCount: OutboxEntry.largeUploadBytes + 1)
+    var held = Outbox()
+    held.enqueue(OutboxEntry(id: "big", sessionKey: "a", text: "big", createdAt: now, attachments: [big]))
+    held.enqueue(OutboxEntry(id: "after", sessionKey: "a", text: "after", createdAt: now))
+    held.enqueue(OutboxEntry(id: "other", sessionKey: "b", text: "other", createdAt: now))
+    let hold: (OutboxEntry) -> Bool = { $0.id == "big" }
+    check(held.nextToSend(sessionKey: "a", holding: hold) == nil, "a held upload blocks the messages behind it")
+    check(held.nextToSend(holding: hold)?.id == "other", "…but not other chats")
+    check(held.nextToSend(sessionKey: "a")?.id == "big", "no hold → in order")
+    held.allowAnyNetwork(id: "big")
+    check(held.entry(id: "big")?.sendOnAnyNetwork == true, "Send Now marks the entry")
+    let heldJSON = (try? JSONEncoder().encode(held.entry(id: "big"))).flatMap { try? JSONDecoder().decode(OutboxEntry.self, from: $0) }
+    check(heldJSON?.sendOnAnyNetwork == true, "the override survives encoding")
 }
 
 // MARK: Demo
@@ -102,9 +117,25 @@ func runDemoOutbox() async {
     check(reason == "The Gateway timed out.", "demo: it failed on a timeout, not a drop (\(reason ?? "nil"))")
     check(isFailed(item.outboxState, retryable: true) && item.isPending && item.role == .user,
           "demo: it reads Failed with Retry (\(String(describing: item.outboxState)))")
-    check(chat.items.last?.idempotencyKey == id, "demo: the failed message is the chat's latest")
+    check(chat.items.suffix(2).map(\.idempotencyKey) == [id, DemoOutbox.queuedAttachmentId],
+          "demo: the failed message and the queued attachment are the chat's latest")
     let text = item.plainText
-    check(gateway.unsentCount == 1, "demo: one unsent message (\(gateway.unsentCount))")
+    check(gateway.unsentCount == 2, "demo: the failed message and the queued attachment are unsent (\(gateway.unsentCount))")
+
+    // #483: a queued attachment waits behind the failed head, kept on disk-style (a ref), not memory-only.
+    let queuedId = DemoOutbox.queuedAttachmentId
+    let queuedRow = outboxItem(chat, queuedId)
+    check(queuedRow?.outboxState == .queued, "demo: the seating-plan message reads Queued (\(String(describing: queuedRow?.outboxState)))")
+    let entries = gateway.outbox.entries(for: DemoOutbox.sessionKey)
+    check(entries.map(\.id) == [id, queuedId], "demo: it sits behind the failed message (\(entries.map(\.id)))")
+    let queuedEntry = gateway.outbox.entry(id: queuedId)
+    check(queuedEntry?.attachments.map(\.fileName) == ["seating-plan.png"] && queuedEntry?.isMemoryOnly == false,
+          "demo: it carries seating-plan.png as a saved attachment")
+    check((queuedEntry?.attachmentBytes ?? 0) > 0 && (queuedEntry?.attachmentBytes ?? .max) < OutboxEntry.largeUploadBytes,
+          "demo: the attachment is small, so it is never held on an expensive network")
+    check(gateway.hold(for: queuedEntry ?? entries[0]) == nil, "demo: no hold on the queued attachment")
+    check(queuedRow?.blocks.contains { if case .image = $0 { true } else { false } } == true || queuedRow?.blocks.contains { if case .file = $0 { true } else { false } } == true,
+          "demo: the queued row shows its attachment")
 
     // Nothing resends it on its own; Retry sends it once with the same key.
     // Negative window: nothing may resend the failed message on its own.
@@ -116,6 +147,16 @@ func runDemoOutbox() async {
         gateway.unsentCount == 0 && outboxItem(chat, id) == nil && committedCopies(chat, text) == 1
     }
     check(delivered, "demo: Retry delivers it (\(committedCopies(chat, text)) cop(ies), \(gateway.unsentCount) unsent)")
+    let queuedSent = await waitFor("demo queued attachment delivered", timeout: 15) {
+        outboxItem(chat, queuedId) == nil && gateway.outbox.entry(id: queuedId) == nil
+    }
+    check(queuedSent, "demo: Retry then sends the queued attachment too")
+    await chat.load(force: true)
+    let hasImage = chat.items.contains { item in
+        item.role == .user && !item.isPending && item.blocks.contains { if case .image = $0 { true } else { false } }
+            && item.plainText.contains("seating plan")
+    }
+    check(hasImage, "demo: the seating-plan image appears in the transcript")
     _ = await waitFor("demo reply", timeout: 15) { !chat.isRunning }
     await chat.load(force: true)
     check(committedCopies(chat, text) == 1 && !chat.items.contains { $0.idempotencyKey == id && $0.isPending },
@@ -265,6 +306,105 @@ func runLiveOutbox(url: String, token: String) async {
 
     await runLiveOutboxRelaunch(url: url, token: token, key: key)
     await runLiveOutboxAttachments(url: url, token: token, key: key)
+    await runLiveOutboxUploadRules(url: url, token: token, key: key)
+}
+
+/// #481 / #482 against the mock: an oversize attachment fails without being sent; a large upload
+/// on an expensive network is held (and holds its chat) until Send Now.
+@MainActor
+private func runLiveOutboxUploadRules(url: String, token: String, key: String) async {
+    let profile = GatewayProfile(name: "Mock upload rules", url: url, authMode: .token)
+    profile.secret = token
+    let network = NetworkConditions()
+    let gateway = GatewayStore(profile: profile, network: network)
+    gateway.start()
+    gateway.reconnectIfNeeded()
+    guard await waitFor("upload rules connected", timeout: 25, { gateway.state.isConnected && !gateway.sessions.isEmpty }) else {
+        gateway.stop()
+        return check(false, "connected for the upload rules")
+    }
+    defer { gateway.stop() }
+    check(gateway.uploadLimitsKnown && gateway.lastUploadPolicy != nil, "the hello's limits are remembered")
+    let chat = gateway.chat(for: key)
+    await chat.load()
+    _ = await waitFor("upload rules chat loaded") { chat.hasLoaded }
+    let nonce = UUID().uuidString.prefix(6)
+
+    // Oversize: over the Gateway's image limit → Failed, not retryable, never sent.
+    let limit = gateway.uploadLimits.imageBytes
+    let oversizeText = "outbox oversize \(nonce)"
+    let oversize = OutgoingAttachment(fileName: "huge.png", mimeType: "image/png", data: Data(count: limit + 1))
+    _ = await chat.sendMessage(oversizeText, attachments: [oversize])
+    let failed = gateway.outbox.entries.first { $0.text == oversizeText }
+    check(isFailed(failed?.state, retryable: false), "oversize → Failed, not retryable (\(String(describing: failed?.state)))")
+    if case let .failed(failure)? = failed?.state {
+        check(failure.message.contains("huge.png") && failure.message.contains("larger than this Gateway accepts"),
+              "…and says why (\(failure.message))")
+    }
+    let sentCopies = await historyCopies(url: url, token: token, key: key, texts: [oversizeText])
+    check(sentCopies == [0], "the Gateway never received it (\(sentCopies ?? []))")
+    if let id = failed?.id { chat.deleteQueued(outboxId: id) }
+
+    // Held: only automatic sends wait. A deliberate send while connected goes out now, even large on
+    // an expensive network; one the flush sends later (after the message ahead of it is gone) is held.
+    network.override(expensive: true, constrained: false)
+    let heavy = OutgoingAttachment(fileName: "clip.bin", mimeType: "application/octet-stream",
+                                   data: Data(count: OutboxEntry.largeUploadBytes + 1))
+    let nowText = "outbox large now \(nonce)"
+    let nowOutcome = await chat.sendMessage(nowText, attachments: [heavy])
+    if case .sent = nowOutcome {} else { check(false, "a deliberate large send while connected goes now (\(nowOutcome))") }
+    _ = await waitFor("deliberate upload settles", timeout: 30) { !chat.isRunning }
+
+    /// Queues `heldText` and `afterText` behind a rejected head, then drops the head so the flush reaches them.
+    func queueBehindBlocker(_ heldText: String, _ afterText: String?) async -> OutboxEntry? {
+        _ = await chat.sendMessage("outbox blocker \(UUID().uuidString.prefix(6)) [mock:reject-send]")
+        let blocker = gateway.outbox.entries.last
+        let outcome = await chat.sendMessage(heldText, attachments: [heavy])
+        check(outcome == .queued, "a large upload behind a failed message queues (\(outcome))")
+        if let afterText { _ = await chat.sendMessage(afterText) }
+        let beforeHold: OutboxHold? = gateway.outbox.entries.first { $0.text == heldText }.flatMap { gateway.hold(for: $0) }
+        check(beforeHold == nil, "behind a failed message it's just queued, not held")
+        if let blocker { chat.deleteQueued(outboxId: blocker.id) }
+        await gateway.flushOutbox()
+        gateway.resyncOutboxHolds()
+        return gateway.outbox.entries.first { $0.text == heldText }
+    }
+
+    let heldText = "outbox held \(nonce)"
+    let afterText = "outbox after held \(nonce)"
+    let heldEntry = await queueBehindBlocker(heldText, afterText)
+    let hold: OutboxHold? = heldEntry.flatMap { gateway.hold(for: $0) }
+    check(hold == OutboxHold.expensive, "the flush holds it for Wi‑Fi / Personal Hotspot (\(String(describing: hold)))")
+    let rowHold: OutboxHold? = heldEntry.flatMap { outboxItem(chat, $0.id) }?.outboxHold
+    check(rowHold == OutboxHold.expensive, "the row carries the hold")
+    let rowBytes = heldEntry.flatMap { outboxItem(chat, $0.id) }?.outboxUploadBytes
+    check(rowBytes == OutboxEntry.largeUploadBytes + 1, "…and the upload size (\(rowBytes ?? -1))")
+    let afterState: OutboxState? = gateway.outbox.entries.first { $0.text == afterText }?.state
+    check(afterState == OutboxState.queued, "the message behind it waits (order kept)")
+    try? await Task.sleep(for: .milliseconds(800))
+    check(gateway.unsentCount == 2, "nothing went out while held (\(gateway.unsentCount) unsent)")
+    network.override(expensive: true, constrained: true)
+    gateway.resyncOutboxHolds()
+    let constrainedHold: OutboxHold? = heldEntry.flatMap { outboxItem(chat, $0.id) }?.outboxHold
+    check(constrainedHold == OutboxHold.constrained, "Low Data Mode wins over expensive on the row")
+    network.override(expensive: true, constrained: false)
+    guard let heldId = heldEntry?.id else { return }
+    chat.sendNow(outboxId: heldId)
+    let flushed = await waitFor("send now flushed", timeout: 30) { gateway.unsentCount == 0 }
+    check(flushed, "Send Now uploads it, then the message behind it (\(gateway.unsentCount) left)")
+    _ = await waitFor("upload rules runs settle", timeout: 30) { !chat.isRunning }
+    let copies = await historyCopiesSettled(url: url, token: token, key: key, texts: [heldText, afterText], expected: [1, 1])
+    check(copies == [1, 1], "both arrive exactly once (\(copies ?? []))")
+    let order = await historyOrder(url: url, token: token, key: key, texts: [heldText, afterText])
+    check(order == [heldText, afterText], "…in order (\(order))")
+
+    // A network that turns cheap releases a held upload by itself.
+    let waitText = "outbox wifi \(nonce)"
+    _ = await queueBehindBlocker(waitText, nil)
+    check(gateway.unsentCount == 1, "held again on the expensive network (\(gateway.unsentCount))")
+    network.override(expensive: false, constrained: false)
+    let released = await waitFor("wifi releases hold", timeout: 30) { gateway.unsentCount == 0 }
+    check(released, "joining Wi‑Fi sends it without a tap (\(gateway.unsentCount) left)")
 }
 
 /// Queued while the Gateway is unreachable, the app quits; the next launch sends it once.

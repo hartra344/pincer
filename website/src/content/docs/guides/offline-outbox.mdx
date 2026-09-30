@@ -21,6 +21,10 @@ When Pincer isn't connected to the gateway, the composer still works for text me
 
 Attachments queue with their message. Pincer saves a copy of each file in the outbox, so a queued photo or document goes out with its message when you reconnect, even after quitting Pincer. See [Attachments in the outbox](#attachments-in-the-outbox).
 
+While you're offline, Pincer checks each attachment against the upload limits your gateway reported the last time you were connected, and saved for later. A file that's too big is refused in the composer with the usual message, for example **photo.heic is larger than the Gateway allows (5 MB, last known limit).** You find out before you queue it. If Pincer has never connected to that gateway, it doesn't know the limits and accepts the file.
+
+Limits can change. If the gateway's limits have dropped since you queued a message and an attachment is now over the limit, the message isn't sent. It's marked **Failed** with the reason, for example **Failed — photo.jpg is larger than this Gateway accepts (5 MB).** Retrying can't help, so it offers **Delete** only.
+
 Some things need a connection:
 
 - **Attachments that don't fit in the outbox.** If a message's attachments would take the outbox over its [size limit](#attachments-in-the-outbox), the composer says **Too large to queue offline — sends when you’re connected**. If the outbox is kept in memory only, the **+** button is unavailable while you're offline (**Attachments need a connection**). Either way the composer keeps the message in your [draft](../composer/#drafts) until you're back online.
@@ -36,12 +40,26 @@ Messages that haven't reached the gateway yet show their state under your messag
 | State | What it means |
 | --- | --- |
 | **Queued** (clock) | Waiting for a connection, or for an earlier message in the same chat. You can delete it. |
-| **Sending…** | Pincer is sending it now. It can't be deleted until the attempt ends. |
+| **Sending…** (spinner) | Pincer is sending it now. It can't be deleted until the attempt ends. |
+| **Waiting for Wi‑Fi**, **Waiting — Personal Hotspot** or **Waiting — Low Data Mode** | A large upload is being held. See [Large uploads wait for Wi‑Fi](#large-uploads-wait-for-wi-fi). You can send it now or delete it. |
 | **Failed — *reason*** (red) | It couldn't be sent, for example **Failed — Sign-in required**. Hover over it on macOS for the full message. |
 
 Once the gateway has the message, the marker goes away and the message stays where it is. It isn't shown twice.
 
 Queued and failed messages don't count as unread, don't post notifications and don't move the chat up the sidebar. That happens when they're actually sent.
+
+## Large uploads wait for Wi‑Fi
+
+A message whose attachments add up to 2 MB or more is a large upload. So that a queued video doesn't eat your data plan, Pincer holds it when it would go out automatically, for example after you reconnect, or once the message before it has gone out. It's held while your device is on:
+
+- a cellular connection, a personal hotspot or another network the system marks as expensive. iPhone and iPad show **Waiting for Wi‑Fi**; the Mac shows **Waiting — Personal Hotspot**.
+- any network while **Low Data Mode** is on, which shows **Waiting — Low Data Mode**.
+
+The hold only shows while Pincer is connected and the message is next in its chat. While you're offline, or while an earlier message is ahead of it, it's a plain **Queued** message. It goes out by itself once you're on a regular network again. Hover over the status on macOS, or use VoiceOver, to hear the upload's size, for example *This is a large upload (4.2 MB), so it’s waiting for Wi‑Fi to save cellular data.*
+
+To upload it anyway, choose **Send Now** next to the status, or use it from the message's context menu (right-click on macOS, long-press on iOS) or VoiceOver actions. Send Now releases that message only, and it goes straight to **Sending…**. **Delete** is offered next to it. Small messages are never held.
+
+A held message keeps the order: later messages in the same chat wait behind it, marked **Queued**, while other chats keep sending. A message you send yourself while you're connected goes out right away, even if it's large.
 
 ## Retrying and deleting
 
@@ -106,4 +124,4 @@ To see or empty it, open **Settings** (**General** tab on macOS) and find **Stor
 
 ## Trying it out
 
-The built-in demo has a failed message at the end of the *Dinner party* chat. Choose **Retry** and it's sent. See [Try the demo](../../getting-started/try-the-demo/).
+The built-in demo has a failed message at the end of the *Dinner party* chat, with a queued message carrying a seating-plan photo behind it. Retry the shopping list and the queued seating plan follows it. See [Try the demo](../../getting-started/try-the-demo/).
