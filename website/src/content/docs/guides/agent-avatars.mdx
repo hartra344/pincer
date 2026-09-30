@@ -14,6 +14,7 @@ Each agent can have a small companion pet as its avatar. It reacts to what the a
 - **Chat header:** the open chat's agent. This is the one that animates.
 - **Latest reply:** the avatar next to the newest assistant message shows the same state as a still pose, with its tool badge. Older messages show the pet idle.
 - **Sidebar:** each agent's section header shows its pet, still. It raises a paw when one of the agent's chats needs an approval, and looks busy while a run is going.
+- **Menu bar (macOS):** small still pets sit beside the rows under **Needs You**, **Running** and **Unread**. See [Menu bar](../menu-bar/#needs-you-running-and-unread).
 - **Sidebar rows:** a chat with unread messages shows its agent's pet with a small badge, hopping gently now and then while the agent is idle and dancing nonstop while it's working. See [Unread chats](../organizing-chats/#unread-chats).
 
 ## Characters
@@ -40,7 +41,9 @@ There are 19 creatures:
 - **Hedgehog:** a coat of quills that bristle.
 - **Octopus:** little tentacles that curl.
 
-Each pet also gets an accessory (none, a hat, glasses, a flower clip, a bow or an antenna) and a palette (cream, apricot, moss, stone, peach, lilac, sky or lemon). All three are picked from the agent's identity name (or its id if it has no name), so different agents get different pets, and each keeps the same look on all your devices. Changing an agent's name in [Agents](../agents/#editing-an-agent) gives it a new pet unless you've picked a **Character** for it.
+Each pet also gets an accessory (none, a hat, glasses, a flower clip, a bow or an antenna) and a palette (cream, apricot, moss, stone, peach, lilac, sky or lemon). All three are picked from the agent's identity name (or its id if it has no name), so different agents get different pets, and each keeps the same look on all your devices. Pincer remembers the identity each agent first had on a Gateway, so renaming an agent in [Agents](../agents/#editing-an-agent) keeps its pet. Pincer stores this with your other avatar choices on the Gateway, so all your devices agree. Two Gateways can each have an agent with the same id and still keep different pets.
+
+To pick a different pet, pick a character for the agent (see below).
 
 ## What the poses mean
 
@@ -63,9 +66,11 @@ Open **Settings → Appearance**:
 
 - **Animated avatars** turns the pets on or off. It's on by default. When it's off, Pincer shows the usual agent avatar, and idle unread chats in the sidebar show a plain dot instead of the pet.
 - **Style** picks **Pixel** (crisp pixel art) or **Plush** (soft and rounded).
-- **Character** lets you pick a creature for each agent, or leave it on **Auto** to use the one picked from its identity.
+- **Avatars** lists each agent with a still preview of its pet and a character picker. **Auto** uses the pet picked from the agent's identity when Pincer first saw it, so it doesn't change when you rename the agent. Or pick any creature.
 
-**Style** and **Character** sync to your other devices through the Gateway, so an agent looks the same on your Mac and iPhone. **Animated avatars** is set separately on each device. See [Synced preferences](../../reference/synced-preferences/).
+The agent's own page in **Gateway Settings → Agents & Models** has a **Pet** section with a larger preview and the same picker (**Auto** plus every creature). It only appears while **Animated avatars** is on.
+
+**Style**, character choices and each agent's remembered identity sync to your other devices through the Gateway, so an agent looks the same on your Mac and iPhone. **Animated avatars** is set separately on each device. See [Synced preferences](../../reference/synced-preferences/).
 
 Whenever the agent isn't idle, a soft ring and glow in your theme's accent color appear behind the pet, and the tool badge uses the same accent. The creature's own colors stay the same in every theme. See [Appearance](../appearance/).
 

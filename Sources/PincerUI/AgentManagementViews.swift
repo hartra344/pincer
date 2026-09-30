@@ -192,6 +192,7 @@ struct AgentPage: View {
     @State private var duplicating: AgentSummary?
     @State private var deleting: AgentSummary?
     @State private var toast: UUID?
+    @AppStorage(AvatarSettings.animatedKey) private var avatarsOn = true
 
     private var model: AgentManagementModel { self.gateway.agentManagement }
     private var agent: AgentSummary? { self.gateway.agents.first { $0.id == self.agentId } }
@@ -270,6 +271,7 @@ struct AgentPage: View {
                 }
             }
             self.identity(agent)
+            self.avatarSection(agent)
             self.modelSection(edit)
             self.workspace(agent, edit: edit)
             self.bindings(agent)
@@ -332,6 +334,18 @@ struct AgentPage: View {
             Text("Also written to the agent's IDENTITY.md.", bundle: .module)
         }
         .disabled(!self.canEdit)
+    }
+
+    @ViewBuilder private func avatarSection(_ agent: AgentSummary) -> some View {
+        if self.avatarsOn {
+            Section {
+                AvatarCharacterRow(agent: agent, gateways: [self.gateway], previewSize: 44)
+            } header: {
+                Text("Pet", bundle: .module)
+            } footer: {
+                Text("Auto keeps the character the agent first got from its identity. This only changes how Pincer shows the agent.", bundle: .module)
+            }
+        }
     }
 
     private var emojiBinding: Binding<String> {

@@ -68,6 +68,59 @@ func checkAgentIdentities(profile: GatewayProfile, agents: [AgentSummary], label
     check(byDefault?["agentId"]?.string == "main", "\(label) agent.identity.get defaults to the main agent")
 }
 
+/// Renames `agentId` through `agents.update` and checks its pet (seed recorded, style unchanged) survives (#145).
+@MainActor
+private func checkRenameKeepsPet(_ gateway: GatewayStore, agentId: String, label: String) async {
+    guard let original = gateway.agents.first(where: { $0.id == agentId }) else {
+        check(false, "\(label) has agent \(agentId)")
+        return
+    }
+    let seedEntry = AvatarPreferences.seedEntry(for: agentId)
+    let recorded = await waitFor("\(label) avatar seed recorded", timeout: 15) { gateway.avatarChoices[seedEntry] != nil }
+    check(recorded && gateway.avatarChoices[seedEntry] == AvatarStyle.identitySeed(name: original.name, agentId: agentId),
+          "\(label) first sight records \(original.name)'s seed (\(gateway.avatarChoices[seedEntry] ?? "nil"))")
+    let before = AvatarStyle.seeded(from: gateway.avatarSeed(for: original))
+    guard gateway.agentManagement.canManageAgents else {
+        print("  skip \(label) rename: agent management unavailable (seed recording checked)")
+        return
+    }
+    let draft = AgentDraft(name: original.name + " Renamed")
+    let changed = try? await gateway.agentManagement.update(agentId: agentId, original: AgentDraft(name: original.name), draft: draft)
+    check(changed == true, "\(label) rename sent")
+    _ = await waitFor("\(label) rename applied", timeout: 15) { gateway.agents.first(where: { $0.id == agentId })?.name == draft.name }
+    guard let renamed = gateway.agents.first(where: { $0.id == agentId }), renamed.name == draft.name else {
+        check(false, "\(label) rename applied to agents.list")
+        return
+    }
+    check(AvatarStyle.seeded(from: gateway.avatarSeed(for: renamed)) == before, "\(label) rename keeps the pet's style")
+    check(gateway.avatarChoices[seedEntry] == AvatarStyle.identitySeed(name: original.name, agentId: agentId),
+          "\(label) rename leaves the recorded seed alone")
+}
+
+/// The seed reached the Gateway's `pincer.avatars` map, read back over a raw connection.
+@MainActor
+private func checkSeedsStored(profile: GatewayProfile, agentId: String) async {
+    let connection = GatewayConnection(profile: profile)
+    let ready = Scripted(false)
+    await connection.setHandlers(onEvent: { _ in }, onState: { state, _ in
+        if state.isConnected { Task { @MainActor in ready.value = true } }
+    })
+    await connection.start()
+    defer { Task { await connection.stop() } }
+    guard await waitFor("mock raw connection for prefs", timeout: 25, { ready.value }) else {
+        check(false, "mock raw connection for prefs")
+        return
+    }
+    let entry = AvatarPreferences.seedEntry(for: agentId)
+    var stored: JSONValue?
+    let deadline = Date().addingTimeInterval(15)
+    while stored == nil, Date() < deadline {
+        stored = (try? await connection.request("users.prefs.get", ["keys": ["pincer.avatars"]]))?["entries"]?["pincer.avatars"]?[entry]
+        if stored == nil { try? await Task.sleep(for: .milliseconds(200)) }
+    }
+    check(stored?.string?.isEmpty == false, "mock users.prefs holds \(entry) (\(stored.map { "\($0)" } ?? "nil"))")
+}
+
 @MainActor
 func runDemoAvatars() async {
     let gateway = GatewayStore(profile: .demo())
@@ -88,6 +141,8 @@ func runDemoAvatars() async {
     check(Set(styles.map(\.creature)).count > 1, "demo agents with distinct names aren't all the same creature (\(styles.map(\.creature)))")
     let idStyles = agents.map { AvatarStyle.seeded(from: $0.id) }
     check(Set(idStyles).count == agents.count, "demo agent ids seed distinct styles too")
+
+    await checkRenameKeepsPet(gateway, agentId: "research", label: "demo")
 
     // Seeded chats: Forge waits on the seeded push approval; everyone else rests.
     let forge = gateway.chat(for: "agent:coder:main")
@@ -174,6 +229,8 @@ func runLiveAvatars(url: String, token: String) async {
     defer { gateway.stop() }
 
     await checkAgentIdentities(profile: profile, agents: gateway.agents, label: "mock")
+    await checkRenameKeepsPet(gateway, agentId: "coder", label: "mock")
+    await checkSeedsStored(profile: profile, agentId: "coder")
 
     let chat = gateway.chat(for: "agent:research:main")
     await chat.load()
