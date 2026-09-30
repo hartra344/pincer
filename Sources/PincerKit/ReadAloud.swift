@@ -50,7 +50,9 @@ public final class ReadAloudController {
 
     public static let shared = ReadAloudController()
 
-    public private(set) var phase: Phase = .idle
+    public private(set) var phase: Phase = .idle {
+        didSet { if phase != oldValue { self.systemIntegration?.phaseChanged(self.phase, title: self.nowPlayingTitle) } }
+    }
     public private(set) var lastSource: Source?
     /// Why the last read used the device voice (or a different provider) instead of the selected Gateway
     /// voice; nil when the Gateway voice spoke as configured.
@@ -65,6 +67,8 @@ public final class ReadAloudController {
     @ObservationIgnored private let gatewayTimeout: Duration
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var nowPlayingTitle: String?
+    @ObservationIgnored private var systemIntegration: ReadAloudSystemIntegrating?
 
     public init(clipPlayer: ReadAloudClipPlaying? = nil, localSpeaker: ReadAloudLocalSpeaking? = nil,
                 defaults: UserDefaults = .standard, gatewayTimeout: Duration = ReadAloudSettings.gatewayTimeout)
@@ -73,7 +77,24 @@ public final class ReadAloudController {
         self.localSpeaker = localSpeaker ?? AVLocalSpeaker()
         self.defaults = defaults
         self.gatewayTimeout = gatewayTimeout
+        #if os(iOS)
+        // Only the real controller talks to the OS; tests inject fake players and drive `handle(_:)`.
+        if clipPlayer == nil, localSpeaker == nil { self.systemIntegration = ReadAloudSystemIntegration(controller: self) }
+        #endif
     }
+
+    /// Ends the read for an interruption, unplugged output, lock-screen stop or expired background time.
+    /// Never resumes on its own.
+    public func handle(_ event: ReadAloudSystemEvent) {
+        switch event {
+        case .interruptionBegan, .oldDeviceUnavailable, .remoteStop, .backgroundTimeExpired:
+            if self.isActive { self.stop() }
+        }
+    }
+
+    public func handleAudioInterruptionBegan() { self.handle(.interruptionBegan) }
+    public func handleRouteOldDeviceUnavailable() { self.handle(.oldDeviceUnavailable) }
+    public func handleRemoteStop() { self.handle(.remoteStop) }
 
     public var activeMessageId: String? {
         switch self.phase {
@@ -100,6 +121,7 @@ public final class ReadAloudController {
         self.cancelCurrent()
         self.generation += 1
         let generation = self.generation
+        self.nowPlayingTitle = Self.nowPlayingTitle(for: text)
         self.phase = .preparing(messageId)
         self.task = Task { [weak self] in
             await self?.run(messageId: messageId, text: text, gateway: gateway, generation: generation)
@@ -197,6 +219,7 @@ public final class ReadAloudController {
         self.cancelCurrent()
         self.generation += 1
         let generation = self.generation
+        self.nowPlayingTitle = Self.nowPlayingTitle(for: sample)
         self.phase = .preparing("test")
         let voice = self.defaults.string(forKey: ReadAloudSettings.deviceVoiceKey).flatMap { $0.isEmpty ? nil : $0 }
         let rate = self.deviceRate
@@ -294,6 +317,10 @@ final class AVLocalSpeaker: NSObject, ReadAloudLocalSpeaking, AVSpeechSynthesize
     override init() {
         super.init()
         self.synthesizer.delegate = self
+        // Share the app's playback session so speech keeps going with the app in the background.
+        #if os(iOS)
+        self.synthesizer.usesApplicationAudioSession = true
+        #endif
     }
 
     func speak(_ text: String, voice: String?, rate: Float) async -> Bool {
