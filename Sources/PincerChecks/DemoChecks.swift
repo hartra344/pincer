@@ -26,6 +26,7 @@ func runDemo() async {
     _ = gateway.chat(for: "agent:main:dashboard:trip")
     check(gateway.agents.count >= 3, "agents (\(gateway.agents.map(\.name)))")
     check(gateway.sessions.count >= 5, "sessions (\(gateway.sessions.count))")
+    _ = await waitFor("demo approval") { !gateway.approvals.isEmpty }
     check(gateway.approvals.map(\.id) == ["approval_demo_push"] && gateway.approvals.first?.isExpired() == false
           && gateway.approvals.first?.command == "git push origin fix/login-timeout", "demo opens with one pending approval")
     check(gateway.totalUnread >= 3, "demo opens with unread chats (\(gateway.totalUnread))")

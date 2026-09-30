@@ -87,7 +87,15 @@ actor DemoGateway {
     var questions: [String: JSONValue] = [:]
     var questionOrder: [String] = []
     /// Pending DM pairing requests (`channels.pairing.*`).
-    var pairingRequests: [JSONValue] = []
+    /// Seeded on first use, so the request about to expire (2 minutes) is timed from when pairing is first opened (#499).
+    var pairingRequests: [JSONValue] {
+        get {
+            if self.seededPairingRequests == nil { self.seededPairingRequests = Self.seedPairingRequests() }
+            return self.seededPairingRequests ?? []
+        }
+        set { self.seededPairingRequests = newValue }
+    }
+    private var seededPairingRequests: [JSONValue]?
     /// Device pairing (`device.pair.*`) and nodes (`node.*`), from the seeds in DemoGateway+Devices.swift.
     var devicePending: [JSONValue] = []
     var devicePaired: [JSONValue] = []
@@ -152,7 +160,6 @@ actor DemoGateway {
             self.approvals[id] = pending
             self.approvalOrder.append(id)
         }
-        self.pairingRequests = Self.seedPairingRequests()
         self.devicePending = Self.seedPendingDevices()
         self.devicePaired = Self.seedPairedDevices()
         self.demoNodes = Self.seedNodes()
