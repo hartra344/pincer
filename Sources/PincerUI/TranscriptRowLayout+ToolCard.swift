@@ -494,7 +494,7 @@ extension TranscriptLayoutBuilder {
             }
         }
         if let ms = output.durationMs {
-            let (text, spoken) = Self.duration(ms)
+            let (text, spoken) = ToolDuration.format(ms)
             badges.append((text, .strongFill, spoken))
         }
         if output.lineCount > 1 { badges.append((L("\(output.lineCount) lines"), .strongFill, L("\(output.lineCount) lines"))) }
@@ -581,19 +581,6 @@ extension TranscriptLayoutBuilder {
             if status.hasPrefix("signal ") { return L("signal \(String(status.dropFirst(7)))") }
             return status
         }
-    }
-
-    /// "340 ms", "1.2 s", "2 m 05 s", with how VoiceOver says it.
-    private static func duration(_ ms: Int) -> (String, String) {
-        if ms < 1000 { return ("\(ms) ms", L("Took \(ms) milliseconds")) }
-        if ms < 60_000 {
-            var number = String(format: "%.1f", Double(ms) / 1000)
-            if number.hasSuffix(".0") { number.removeLast(2) }
-            return ("\(number) s", L("Took \(number) seconds"))
-        }
-        let seconds = ms / 1000
-        let text = String(format: "%d m %02d s", seconds / 60, seconds % 60)
-        return (text, L("Took \(text)"))
     }
 
     private static func firstLines(_ text: String, _ count: Int) -> String {

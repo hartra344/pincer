@@ -1250,12 +1250,13 @@ final class TranscriptToolView: TranscriptBaseView {
         let rowId = row.id
         self.header.configure(tool, trailing: tool.run == nil ? 10 : 6)
         self.header.onTap = { [weak actions] in actions?.setExpanded(tool.key, !tool.isExpanded, row: rowId) }
+        let spokenDuration = tool.tool.isRunning ? nil : tool.tool.durationMs.map { ToolDuration.format($0).spoken }
         if let edit = tool.edit {
             #if os(macOS)
-            self.header.toolTip = nil
+            self.header.toolTip = edit.fullPaths
             #endif
             self.header.accessibilityText = AccessibilityText.join([
-                edit.accessibilitySummary(isRunning: tool.tool.isRunning),
+                edit.accessibilitySummary(isRunning: tool.tool.isRunning), spokenDuration,
                 tool.tool.isRunning ? L("running") : nil, tool.tool.isError ? L("failed") : nil,
                 tool.isExpanded ? L("expanded") : L("collapsed"),
             ])
@@ -1265,7 +1266,7 @@ final class TranscriptToolView: TranscriptBaseView {
             self.header.toolTip = parts.server.map { L("\(parts.tool) on \($0)") }
             #endif
             self.header.accessibilityText = AccessibilityText.join(
-                [parts.server.map { L("\(parts.tool) on \($0)") } ?? tool.tool.name, tool.tool.summary]
+                [parts.server.map { L("\(parts.tool) on \($0)") } ?? tool.tool.name, tool.tool.summary, spokenDuration]
                     + [tool.tool.isRunning ? L("running") : nil, tool.tool.isError ? L("failed") : nil,
                        tool.isExpanded ? L("expanded") : L("collapsed")])
         }
@@ -1529,7 +1530,7 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         let iconRect = CGRect(x: 10, y: (bounds.height - 16) / 2, width: 16, height: 16)
         if !part.tool.isRunning {
             if part.tool.isError {
-                TranscriptSymbols.draw("xmark.octagon.fill", in: iconRect, size: style.callout.pointSize, color: TranscriptColors.red)
+                TranscriptSymbols.draw("xmark.octagon", in: iconRect, size: style.callout.pointSize, color: TranscriptColors.red)
             } else {
                 let symbol = part.edit.map(TranscriptDiffText.symbol(for:)) ?? ToolSymbols.symbol(for: part.tool.name)
                 TranscriptSymbols.draw(symbol, in: iconRect, size: style.callout.pointSize, color: TranscriptColors.secondary)
@@ -1538,7 +1539,7 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         let chevronX = bounds.width - self.trailing - 10
         TranscriptSymbols.draw(part.isExpanded ? "chevron.down" : "chevron.right",
                                in: CGRect(x: chevronX, y: 0, width: 10, height: bounds.height),
-                               size: style.caption2Medium.pointSize, weight: .bold, color: TranscriptColors.tertiary)
+                               size: style.caption2Medium.pointSize, weight: .bold, color: TranscriptColors.secondary)
         if let edit = part.edit {
             self.drawEdit(edit, part: part, chevronX: chevronX)
             return
@@ -1546,7 +1547,7 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         let nameFont = style.calloutMonoMedium
         let nameX: CGFloat = 34
         let nameY = (bounds.height - TranscriptStyle.lineHeight(nameFont)) / 2
-        var right = chevronX - 8
+        var right = self.drawDuration(part, nameX: nameX, right: chevronX - 8)
         if part.tool.isError {
             let badgeFont = style.caption2Medium
             let badge = singleLine(L("Failed"), badgeFont, TranscriptColors.failure)
@@ -1593,6 +1594,20 @@ final class TranscriptToolHeaderView: TranscriptTapView {
 }
 
 extension TranscriptToolHeaderView {
+    /// Right-aligned run time before the chevron, dropped when the name and summary would get under 40pt.
+    /// Returns the new right edge.
+    fileprivate func drawDuration(_ part: TranscriptPart.Tool, nameX: CGFloat, right: CGFloat) -> CGFloat {
+        guard !part.tool.isRunning, let ms = part.tool.durationMs else { return right }
+        let font = TranscriptStyle.shared.captionMono
+        let text = singleLine(ToolDuration.format(ms).text, font, TranscriptColors.secondary)
+        guard right - text.lineWidth > nameX + 40 else { return right }
+        let nameFont = TranscriptStyle.shared.calloutMonoMedium
+        let nameY = (self.bounds.height - TranscriptStyle.lineHeight(nameFont)) / 2
+        text.drawLine(at: CGPoint(x: right - text.lineWidth, y: nameY + nameFont.ascender - font.ascender),
+                      width: text.lineWidth, font: font)
+        return right - text.lineWidth - 8
+    }
+
     /// File name (directory dimmer), then the +/− counts and a status badge before the chevron.
     fileprivate func drawEdit(_ edit: ToolFileEdit, part: TranscriptPart.Tool, chevronX: CGFloat) {
         let style = TranscriptStyle.shared
@@ -1600,7 +1615,7 @@ extension TranscriptToolHeaderView {
         let nameFont = style.calloutMonoMedium
         let nameX: CGFloat = 34
         let nameY = (bounds.height - TranscriptStyle.lineHeight(nameFont)) / 2
-        var right = chevronX - 8
+        var right = self.drawDuration(part, nameX: nameX, right: chevronX - 8)
 
         let badgeFont = style.caption2Medium
         let badgeText = part.tool.isError ? L("Failed") : edit.statusLabel(isRunning: part.tool.isRunning)
