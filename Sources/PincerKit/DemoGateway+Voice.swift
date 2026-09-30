@@ -99,24 +99,29 @@ extension DemoGateway {
         GatewayError.rpc(code: code, message: message, details: nil)
     }
 
-    /// The provider that speaks when `requested` is asked to: the Gateway falls back to OpenAI unless the
-    /// provider is explicit; an unconfigured provider or a rejected key/model fails the way ElevenLabs does.
-    private func voiceSynthesize(provider requested: String, model explicitModel: String?, fallback: Bool) throws -> String {
-        var provider = requested
-        if !self.voiceConfigured(provider) {
-            guard fallback else { throw self.voiceRPC("UNAVAILABLE", "\(provider): no API key configured") }
-            provider = "openai"
-        }
-        guard provider == "elevenlabs" else { return provider }
-        if let key = self.voiceKey(provider), Self.isBadElevenLabsKey(key) {
-            throw self.voiceRPC("UNAVAILABLE", Self.elevenLabsInvalidKeyMessage)
-        }
+    /// One provider's attempt, worded as the provider's error (`ElevenLabs API error (401): …`) or "not configured".
+    private func voiceAttempt(_ provider: String, model explicitModel: String?) -> String? {
+        guard self.voiceConfigured(provider) else { return "not configured" }
+        guard provider == "elevenlabs" else { return nil }
+        if let key = self.voiceKey(provider), Self.isBadElevenLabsKey(key) { return Self.elevenLabsInvalidKeyMessage }
         let model = explicitModel ?? self.voiceProviderConfig(provider)?["modelId"]?.string ?? "eleven_multilingual_v2"
         if !model.hasPrefix("eleven_") || model == "eleven_bogus" {
-            throw self.voiceRPC("UNAVAILABLE",
-                                "ElevenLabs API error (400): model_id_does_not_exist: Model with ID \(model) does not exist")
+            return "ElevenLabs API error (400): model_id_does_not_exist: Model with ID \(model) does not exist"
         }
-        return provider
+        return nil
+    }
+
+    /// Mirrors upstream `executeTtsProviderAttempts`: the primary provider is tried first, then (unless
+    /// `fallback` is false, as for an explicit provider/model/voice) every other provider. The provider that
+    /// succeeded is returned; when none does the errors are joined as `TTS conversion failed: p: msg; q: msg`.
+    private func voiceSynthesize(provider primary: String, model explicitModel: String?, fallback: Bool) throws -> String {
+        let order = fallback ? [primary] + Self.voiceProviders.map(\.id).filter { $0 != primary } : [primary]
+        var errors: [String] = []
+        for provider in order {
+            guard let failure = self.voiceAttempt(provider, model: provider == primary ? explicitModel : nil) else { return provider }
+            errors.append("\(provider): \(failure)")
+        }
+        throw self.voiceRPC("UNAVAILABLE", "TTS conversion failed: " + errors.joined(separator: "; "))
     }
     private static let voicePersonas: [(id: String, label: String, description: String)] = [
         ("narrator", "Narrator", "Warm and unhurried, like an audiobook."),
@@ -172,7 +177,8 @@ extension DemoGateway {
             }
             let requested = params["provider"]?.text
             let used = try self.voiceSynthesize(provider: requested ?? self.voice.provider,
-                                                model: params["modelId"]?.text, fallback: requested == nil)
+                                                model: params["modelId"]?.text,
+                                                fallback: [requested, params["modelId"]?.text, params["voiceId"]?.text].allSatisfy { $0 == nil })
             return ["audioPath": "/tmp/openclaw/tts-demo.mp3", "provider": .string(used),
                     "outputFormat": "mp3", "voiceCompatible": false]
         case "tts.speak":

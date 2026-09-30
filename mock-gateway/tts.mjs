@@ -8,8 +8,8 @@
 // literal (config.get redacts it) or a SecretRef ({source:"store", provider:"default", id:"ELEVENLABS_API_KEY"})
 // that resolves through secrets.mjs. The provider is "configured" once the key resolves. A key starting with
 // "bad" or equal to "sk_invalid" resolves but tts.speak fails with ElevenLabs' 401; a modelId that is not an
-// `eleven_*` id (or is eleven_bogus) fails with a 400. tts.speak falls back to openai when the active provider is
-// not configured; tts.convert with an explicit provider never falls back.
+// `eleven_*` id (or is eleven_bogus) fails with a 400. tts.speak walks the provider chain like upstream (see
+// synthesize); tts.convert with an explicit provider/modelId/voiceId never falls back.
 import { resolveSecretRef } from './secrets.mjs';
 
 export const TTS_METHODS = [
@@ -97,23 +97,31 @@ export function tinyWavBase64() {
   return buf.toString('base64');
 }
 
-// The provider that speaks. Falls back to openai when `fallback` and the requested one is not configured;
-// throws the provider's error for a rejected key or model.
-function synthesize(state, requested, { modelId, fallback }) {
-  let provider = requested;
-  if (!isConfigured(state, provider)) {
-    if (!fallback) throw new Error(`${provider}: no API key configured`);
-    provider = 'openai';
+// One provider's attempt: null on success, else the failure wording (a provider error or "not configured").
+function attempt(state, provider, modelId) {
+  if (!isConfigured(state, provider)) return 'not configured';
+  if (provider !== 'elevenlabs') return null;
+  const key = resolveSecretRef(state, providerConfig(state, provider).apiKey);
+  if (isBadElevenLabsKey(key)) return ELEVENLABS_INVALID_KEY_MESSAGE;
+  const model = modelId ?? providerConfig(state, provider).modelId ?? 'eleven_multilingual_v2';
+  if (!/^eleven_/.test(model) || model === 'eleven_bogus') {
+    return `ElevenLabs API error (400): model_id_does_not_exist: Model with ID ${model} does not exist`;
   }
-  if (provider === 'elevenlabs') {
-    const key = resolveSecretRef(state, providerConfig(state, provider).apiKey);
-    if (isBadElevenLabsKey(key)) throw new Error(ELEVENLABS_INVALID_KEY_MESSAGE);
-    const model = modelId ?? providerConfig(state, provider).modelId ?? 'eleven_multilingual_v2';
-    if (!/^eleven_/.test(model) || model === 'eleven_bogus') {
-      throw new Error(`ElevenLabs API error (400): model_id_does_not_exist: Model with ID ${model} does not exist`);
-    }
+  return null;
+}
+
+// Mirrors upstream executeTtsProviderAttempts: the primary provider first, then every other provider unless
+// `fallback` is false (explicit provider/modelId/voiceId). Returns the provider that spoke; when none does the
+// errors are joined as `TTS conversion failed: elevenlabs: <msg>; openai: <msg>`.
+function synthesize(state, primary, { modelId, fallback }) {
+  const order = fallback ? [primary, ...PROVIDERS.map((p) => p.id).filter((p) => p !== primary)] : [primary];
+  const errors = [];
+  for (const provider of order) {
+    const failure = attempt(state, provider, provider === primary ? modelId : undefined);
+    if (failure === null) return provider;
+    errors.push(`${provider}: ${failure}`);
   }
-  return provider;
+  throw new Error(`TTS conversion failed: ${errors.join('; ')}`);
 }
 
 export function handleTtsRequest(state, conn, msg, { sendRes, sendErr }) {
@@ -184,7 +192,7 @@ export function handleTtsRequest(state, conn, msg, { sendRes, sendErr }) {
       }
       try {
         const explicit = text(params.provider).toLowerCase();
-        const provider = synthesize(state, explicit || tts.provider, { modelId: text(params.modelId) || undefined, fallback: !explicit });
+        const provider = synthesize(state, explicit || tts.provider, { modelId: text(params.modelId) || undefined, fallback: !explicit && !text(params.modelId) && !text(params.voiceId) });
         sendRes(conn, id, { audioPath: '/tmp/openclaw/tts/mock-voice.wav', provider, outputFormat: 'wav', voiceCompatible: false });
       } catch (err) {
         unavailable(err.message);

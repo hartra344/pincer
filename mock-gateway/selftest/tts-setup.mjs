@@ -22,7 +22,7 @@ export async function run() {
     assert.equal((await admin.send('tts.speak', { text: 'Hi' })).provider, 'openai');
     const explicit = await admin.call('tts.convert', { text: 'Hi', provider: 'elevenlabs' });
     assert.equal(explicit.error.code, 'UNAVAILABLE');
-    assert.match(explicit.error.message, /no API key/);
+    assert.equal(explicit.error.message, 'TTS conversion failed: elevenlabs: not configured');
 
     // secrets.store needs operator.admin.
     const denied = await reader.call('secrets.store.list', {});
@@ -59,25 +59,34 @@ export async function run() {
     assert.equal(clip.provider, 'elevenlabs');
     assert.equal(clip.mimeType, 'audio/wav');
 
-    // A rejected model fails; a custom eleven_* id passes.
+    // A rejected model or key makes tts.speak fall back through the chain to openai (upstream executeTtsProviderAttempts);
+    // tts.convert with an explicit provider/modelId/voiceId never falls back and reports the provider's error.
+    const modelError = (id) => `TTS conversion failed: elevenlabs: ElevenLabs API error (400): model_id_does_not_exist: Model with ID ${id} does not exist`;
     res = await patch({ tts: { providers: { elevenlabs: { modelId: 'eleven_bogus' } } } });
     assert.equal(res.ok, true);
-    let failed = await admin.call('tts.speak', { text: 'Hi' });
+    assert.equal((await admin.send('tts.speak', { text: 'Hi' })).provider, 'openai');
+    assert.equal((await admin.send('tts.convert', { text: 'Hi' })).provider, 'openai');
+    let failed = await admin.call('tts.convert', { text: 'Hi', provider: 'elevenlabs' });
     assert.equal(failed.error.code, 'UNAVAILABLE');
-    assert.match(failed.error.message, /^ElevenLabs API error \(400\): model_id_does_not_exist: .*eleven_bogus/);
+    assert.equal(failed.error.message, modelError('eleven_bogus'));
     await patch({ tts: { providers: { elevenlabs: { modelId: 'gpt-4o' } } } });
-    assert.match((await admin.call('tts.speak', { text: 'Hi' })).error.message, /^ElevenLabs API error \(400\)/);
+    assert.equal((await admin.call('tts.convert', { text: 'Hi', provider: 'elevenlabs' })).error.message, modelError('gpt-4o'));
     await patch({ tts: { providers: { elevenlabs: { modelId: 'eleven_v4_turbo' } } } });
     assert.equal((await admin.send('tts.speak', { text: 'Hi' })).provider, 'elevenlabs');
+    assert.equal((await admin.send('tts.convert', { text: 'Hi', provider: 'elevenlabs', modelId: 'eleven_v3' })).provider, 'elevenlabs');
+    failed = await admin.call('tts.convert', { text: 'Hi', provider: 'elevenlabs', modelId: 'eleven_bogus' });
+    assert.equal(failed.error.message, modelError('eleven_bogus'));
+    failed = await admin.call('tts.convert', { text: 'Hi', modelId: 'eleven_bogus' });
+    assert.equal(failed.error.message, modelError('eleven_bogus'), 'an explicit modelId disables fallback');
 
-    // A bad key resolves (Ready) but ElevenLabs answers 401; the explicit convert reports the same.
+    // A bad key resolves (Ready), tts.speak falls back to openai, and an explicit convert reports the 401.
     for (const bad of ['bad-key', 'sk_invalid']) {
       await admin.send('secrets.store.set', { name: 'ELEVENLABS_API_KEY', value: bad, kind: 'secret' });
       assert.equal((await providers()).configured, true);
-      failed = await admin.call('tts.speak', { text: 'Hi' });
+      assert.equal((await admin.send('tts.speak', { text: 'Hi' })).provider, 'openai');
+      failed = await admin.call('tts.convert', { text: 'Hi', provider: 'elevenlabs' });
       assert.equal(failed.error.code, 'UNAVAILABLE');
-      assert.equal(failed.error.message, 'ElevenLabs API error (401): invalid_api_key: Invalid API key');
-      assert.equal((await admin.call('tts.convert', { text: 'Hi', provider: 'elevenlabs' })).error.message, failed.error.message);
+      assert.equal(failed.error.message, 'TTS conversion failed: elevenlabs: ElevenLabs API error (401): invalid_api_key: Invalid API key');
     }
 
     // A literal key is redacted by config.get and still configures the provider; the redacted echo keeps it.
