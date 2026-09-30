@@ -6,6 +6,10 @@ extension DemoGateway {
     static let reactionMethods = ["users.self", "session.reactions.set", "session.reactions.list"]
     static let selfProfile = (id: "demo-owner", label: "You")
 
+    var advertisedMethods: [String] {
+        self.hasSessionReactions ? Self.methods + Self.reactionMethods : Self.methods
+    }
+
     struct DemoReaction {
         var emoji: String
         var people: [(id: String, label: String)]
@@ -30,6 +34,7 @@ extension DemoGateway {
     }
 
     func handleReactions(_ method: String, _ params: JSONValue) throws -> JSONValue? {
+        guard self.hasSessionReactions, Self.reactionMethods.contains(method) else { return nil }
         switch method {
         case "users.self":
             let me = Self.selfProfile

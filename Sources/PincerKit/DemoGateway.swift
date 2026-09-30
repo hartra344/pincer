@@ -38,7 +38,7 @@ actor DemoGateway {
         "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
-    ] + DemoGateway.reactionMethods + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.channelLifecycleMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
+    ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.channelLifecycleMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
         + DemoGateway.sessionManagerMethods + DemoGateway.mcpMethods + DemoGateway.voiceMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
@@ -128,8 +128,12 @@ actor DemoGateway {
     /// MCP servers config and status (DemoGateway+MCP.swift).
     var mcp = DemoMCPState()
 
-    init(acceptsReplyTo: Bool = true) {
+    /// Whether the Gateway has `session.reactions.*` and `users.self` (an older one doesn't: the users.prefs fallback).
+    let hasSessionReactions: Bool
+
+    init(acceptsReplyTo: Bool = true, hasSessionReactions: Bool = true) {
         self.acceptsReplyTo = acceptsReplyTo
+        self.hasSessionReactions = hasSessionReactions
         self.prefs[Reactions.prefKey] = [
             "agent:main:main|demo-main-status": "👍",
             "agent:main:main|demo-main-gauge": "🎉",
@@ -212,7 +216,7 @@ actor DemoGateway {
             "type": "hello-ok",
             "protocol": .number(Double(GatewayConnection.protocolVersion)),
             "server": ["version": "demo", "connId": .string(Self.shortId("conn_"))],
-            "features": ["methods": JSONValue(Self.methods), "events": ["session.reaction"]],
+            "features": ["methods": JSONValue(self.advertisedMethods), "events": JSONValue(self.hasSessionReactions ? ["session.reaction"] : [])],
             "snapshot": [
                 "presence": .array(self.presence()),
                 "health": self.health(),
