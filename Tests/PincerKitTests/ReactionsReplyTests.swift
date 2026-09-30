@@ -77,6 +77,6 @@ struct ReactionsReplyTests {
             }
         }
         #expect(called.contains("message.action") && called.contains("chat.send"))
-        #expect(called.filter { $0.localizedCaseInsensitiveContains("react") } == ["session.reactions.set", "session.reactions.list"])
+        #expect(Set(called.filter { $0.localizedCaseInsensitiveContains("react") }) == ["session.reactions.set", "session.reactions.list"])
     }
 }

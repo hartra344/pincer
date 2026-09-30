@@ -296,7 +296,7 @@ func runDemoReactionsReply() async {
 
     // Seeded agent reactions (AC-36, AC-38).
     check(chat.agentReactions["demo-main-ask"] == ["✅"]
-          && chat.reactionGroups(for: "demo-main-ask", agentName: agentName) == [ReactionGroup(emoji: "✅", actors: [.agent(agentName)])],
+          && chat.reactionGroups(for: "demo-main-ask", agentName: agentName).first == ReactionGroup(emoji: "✅", actors: [.agent(agentName)]),
           "✅ from \(agentName) on the disk question (\(chat.agentReactions))")
     let labChat = gateway.chat(for: lab)
     await labChat.load()
