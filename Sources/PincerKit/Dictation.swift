@@ -37,11 +37,11 @@ public struct DictationSplice: Sendable, Equatable {
         var lower = start
         var upper = end
         if lower < length { lower = ns.rangeOfComposedCharacterSequence(at: lower).location }
-        if upper > lower, upper < length {
+        if end == start {
+            upper = lower
+        } else if upper < length {
             let r = ns.rangeOfComposedCharacterSequence(at: upper)
             if r.location < upper { upper = r.location + r.length }
-        } else if upper < length {
-            upper = lower
         }
         self.before = ns.substring(to: lower)
         self.after = ns.substring(from: max(upper, lower))
