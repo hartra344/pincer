@@ -26,7 +26,7 @@ extension ChatStore {
     }
 
     /// The quote card for a turn that replies to another message: yours by `replyToId`, the agent's by its
-    /// delivery target (a transcript id, or a bridged channel's message id).
+    /// delivery target (a transcript id, a bridged channel's message id, or a webchat send's idempotency key).
     public func quote(for item: ChatItem) -> ReplyQuote? {
         guard var targetId = item.replyToId else { return nil }
         if item.role == .assistant {
@@ -55,7 +55,7 @@ extension ChatStore {
     private func resolveAgentReplyTarget(_ id: String, for item: ChatItem) -> String? {
         var targetId = id
         if self.message(withId: id) == nil,
-           let match = self.items.first(where: { $0.role == .user && $0.channelMessageId == id }),
+           let match = self.items.first(where: { $0.role == .user && ($0.channelMessageId == id || $0.idempotencyKey == id) }),
            let matchId = match.transcriptId
         {
             targetId = matchId
