@@ -21,11 +21,16 @@ struct ReplyTargetTests {
         return Self.item(#"{"role":"user","content":[{"type":"text","text":"\#(text)"}],"__openclaw":{"id":"\#(id)"\#(transport)}}"#)
     }
 
-    func chat(_ items: [ChatItem]) -> ChatStore {
+    /// A chat holds its gateway weakly.
+    static var gateways: [GatewayStore] = []
+
+    func chat(_ items: [ChatItem], row: String? = nil) -> ChatStore {
         let suite = "ReplyTargetTests.\(UUID().uuidString)"
         let profile = GatewayProfile(id: UUID(), name: "T", url: "ws://127.0.0.1:1", authMode: .none)
         let gateway = GatewayStore(profile: profile, defaults: UserDefaults(suiteName: suite)!, identity: Fixtures.identity())
+        Self.gateways.append(gateway)
         let chat = ChatStore(sessionKey: "agent:main:main", agentId: nil, gateway: gateway, headless: true)
+        if let row { gateway.setSession(SessionRow(Fixtures.json(row)), for: "agent:main:main") }
         chat.items = items
         chat.rebuild(itemsChanged: true)
         return chat
@@ -241,6 +246,40 @@ struct ReplyTargetTests {
                                Self.assistant("a1", delivery: #"{"replyToId":"shared"}"#)])
         let quote = try #require(store.quote(for: store.items[3]))
         #expect(quote.targetId == "shared" && quote.text == "second")
+    }
+
+    // MARK: Shape of a transcript id, groups
+
+    @Test func transcriptIdShapes() {
+        for id in ["12345678", "0f3cA9bD", "8D0E8F2A-6B1F-4B6E-9E0C-1A2B3C4D5E6F"] { #expect(ChatStore.looksLikeTranscriptId(id), "\(id)") }
+        for id in ["7421093845", "1234567", "123456789", "abcdefgh", "9101", "", "chan-1", "run-1"] { #expect(!ChatStore.looksLikeTranscriptId(id), "\(id)") }
+    }
+
+    @Test func locatingAChannelMessageIdFailsFastWithANotice() async {
+        let store = self.chat([Self.user("u1")])
+        let found = await store.locate("7421093845")
+        #expect(!found && store.locatingReplyId == nil && store.notice == "The original message isn't in this chat's history anymore.")
+        #expect(store.items.count == 1)
+    }
+
+    @Test func locatingALoadedIdNeedsNoPaging() async {
+        let store = self.chat([Self.user("12345678")])
+        #expect(await store.locate("12345678") && store.notice == nil)
+    }
+
+    @Test func groupChatsKeepTheQuoteOfTheAnsweredMessage() throws {
+        for row in [#"{"key":"agent:main:main","chatType":"group"}"#, #"{"key":"agent:main:main","chatType":"channel"}"#] {
+            let store = self.chat([Self.user("u1", "disk?"), Self.assistant("a1", delivery: #"{"replyToId":"u1"}"#)], row: row)
+            let quote = try #require(store.quote(for: store.items[1]), Comment(rawValue: row))
+            #expect(quote.targetId == "u1" && quote.text == "disk?")
+        }
+    }
+
+    @Test func directChatsAndUnknownSessionsKeepTheNoiseRule() {
+        let direct = self.chat([Self.user("u1"), Self.assistant("a1", delivery: #"{"replyToId":"u1"}"#)], row: #"{"key":"agent:main:main","chatType":"direct"}"#)
+        #expect(direct.quote(for: direct.items[1]) == nil)
+        let unknown = self.chat([Self.user("u1"), Self.assistant("a1", delivery: #"{"replyToId":"u1"}"#)])
+        #expect(unknown.quote(for: unknown.items[1]) == nil)
     }
 
     // MARK: Transcript cache

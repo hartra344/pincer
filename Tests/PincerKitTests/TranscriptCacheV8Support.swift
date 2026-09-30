@@ -4,6 +4,9 @@ import Testing
 
 /// Fixtures and disk helpers for the v8 (segmented) transcript cache tests.
 enum V8 {
+    /// Transcript-id shaped (8 hex), so `locate` pages for it.
+    static func id(_ n: Int) -> String { String(format: "%08x", n) }
+
     /// A realistic mix: user prompts, assistant replies (some several KB) and tool results.
     static func items(_ count: Int, from start: Int = 0) -> [ChatItem] {
         (start..<(start + count)).map { n in
@@ -11,12 +14,12 @@ enum V8 {
             var item: ChatItem
             switch n % 3 {
             case 0:
-                item = ChatItem(id: "u\(n)", role: .user, blocks: [.text("question \(n): how do I tune the widget?")], timestamp: time)
+                item = ChatItem(id: Self.id(n), role: .user, blocks: [.text("question \(n): how do I tune the widget?")], timestamp: time)
             case 1:
                 let body = String(repeating: "Answer \(n) with some detail about widgets. ", count: n % 7 == 0 ? 90 : 4)
-                item = ChatItem(id: "a\(n)", role: .assistant, blocks: [.text(body)], timestamp: time)
+                item = ChatItem(id: Self.id(n), role: .assistant, blocks: [.text(body)], timestamp: time)
             default:
-                item = ChatItem(id: "t\(n)", role: .toolResult, blocks: [.text("exit 0\n" + String(repeating: "log line \(n)\n", count: 12))], timestamp: time)
+                item = ChatItem(id: Self.id(n), role: .toolResult, blocks: [.text("exit 0\n" + String(repeating: "log line \(n)\n", count: 12))], timestamp: time)
             }
             item.transcriptId = item.id
             return item
