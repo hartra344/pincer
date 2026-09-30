@@ -4143,6 +4143,16 @@
         }
       }
     },
+    "Couldn’t send: %@ is larger than this Gateway accepts (%@).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t send: %@ is larger than this Gateway accepts (%@)."
+          }
+        }
+      }
+    },
     "Couldn’t send: not connected to the Gateway.": {
       "localizations": {
         "en": {
