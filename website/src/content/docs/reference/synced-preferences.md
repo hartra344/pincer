@@ -41,7 +41,7 @@ Removing a gateway from Pincer clears this device's copy of `pincer.healthDismis
 ## How syncing works
 
 - Each entry (one chat's icon, one bookmark, one reaction) syncs on its own. If two devices change different entries at the same time, both changes are kept. If they change the same entry, the last one saved wins.
-- A change shows up on your device right away. If the gateway is offline or the save fails, Pincer keeps the change on this device, even across a restart, and saves it again when the gateway is back. It never reverts to the gateway's older value in the meantime. If the gateway refuses a change (for example because it's too large), Pincer says so instead of retrying quietly.
+- A change shows up on your device right away. If the gateway is offline or the save fails, Pincer keeps the change on this device, even across a restart, and saves it again when the gateway is back. It never reverts to the gateway's older value in the meantime. If the gateway refuses a change as too large, Pincer stops retrying it on its own; for bookmarks, the Bookmarks list says so.
 - When another device changes a preference, the gateway tells Pincer, and Pincer reads just that preference again.
 - The first time a device syncs with a gateway, what's already on the device is merged with what the gateway has. Where both have the same entry, the gateway's wins. That's how bookmarks you saved before syncing existed move to the gateway. It also means a device that hasn't synced yet can bring back a bookmark you removed on another device.
 
