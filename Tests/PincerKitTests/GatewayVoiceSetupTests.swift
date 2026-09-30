@@ -13,6 +13,7 @@ private final class FakeGateway {
     var speakProvider = "openai"
     var convertError: GatewayError?
     var storedSecrets: [String] = []
+    var configProvider: String?
     var methods: [String] { calls.map(\.method) }
 
     func request(_ method: String, _ params: JSONValue) async throws -> JSONValue {
@@ -26,6 +27,7 @@ private final class FakeGateway {
             return Fixtures.json("{\"providers\":[{\"id\":\"openai\",\"name\":\"OpenAI\",\"configured\":\(configured["openai"] ?? false),\"models\":[\"gpt-4o-mini-tts\"],\"voices\":[\"alloy\"]},{\"id\":\"elevenlabs\",\"name\":\"ElevenLabs\",\"configured\":\(configured["elevenlabs"] ?? false),\"models\":[\"eleven_v3\"],\"voices\":[]}],\"active\":\"\(provider)\"}")
         case "config.get":
             var node: JSONValue = ["providers": .object(tts)]
+            if let configProvider, case var .object(o) = node { o["provider"] = .string(configProvider); node = .object(o) }
             for key in TTSProviderKeys.configRoot.reversed() { node = .object([key: node]) }
             guard case let .object(config) = node else { return [:] }
             return ["hash": "h1", "config": .object(config)]
@@ -402,6 +404,57 @@ struct GatewayVoiceSetupTests {
         #expect(rows["Model"]?.value == "Eleven v4 Turbo" && rows["Model"]?.source == "Gateway config")
         #expect(rows["Voice"]?.source == "Default")
         #expect(rows["Speed"]?.value == "1.5×")
+    }
+
+    @Test func summaryAlwaysIncludesAVoice() {
+        #expect(TTSTestResult(outcome: .success, provider: "ElevenLabs", model: "Eleven v4 Turbo", voiceName: nil, durationMs: 5).summary
+                == "ElevenLabs · Eleven v4 Turbo · Default voice · 5 ms")
+    }
+
+    @Test func voiceNameFallsBackToId() async {
+        let g = FakeGateway()
+        elevenLabsReady(g)
+        let model = makeModel(g)
+        await model.refresh()
+        let result = await model.test(sample: "Hi")
+        #expect(result.summary.contains("rachel-id"))
+    }
+
+    @Test func keySetButUnreadableIsKeyNotResolving() async {
+        let g = FakeGateway()
+        g.provider = "elevenlabs"
+        g.configured["elevenlabs"] = false
+        g.tts["elevenlabs"] = Fixtures.json(#"{"apiKey":{"source":"store","provider":"default","id":"__OPENCLAW_REDACTED__"}}"#)
+        let model = makeModel(g)
+        await model.refresh()
+        let problem = model.providerProblem(for: "elevenlabs")
+        #expect(problem?.cause == .key)
+        #expect(problem?.message == "ElevenLabs's key is set, but the Gateway can't read it.")
+        #expect(TTSFallbackReason.keyNotResolving.message(provider: "ElevenLabs") == "ElevenLabs's key is set, but the Gateway can't read it.")
+    }
+
+    @Test func problemCauseIsClassified() async {
+        let g = FakeGateway()
+        elevenLabsReady(g)
+        g.errors["tts.speak"] = rpc("UNAVAILABLE", "ElevenLabs API error (400): model_id_does_not_exist")
+        let model = makeModel(g)
+        await model.refresh()
+        _ = await model.test(sample: "Hi")
+        #expect(model.providerProblem(for: "elevenlabs")?.cause == .model)
+    }
+
+    @Test func effectiveProviderSourceFollowsConfig() async {
+        let g = FakeGateway()
+        g.provider = "openai"
+        g.configProvider = "openai"
+        let same = makeModel(g)
+        await same.refresh()
+        #expect(same.effectiveConfig.first { $0.label == "Provider" }?.source == "Gateway config")
+
+        g.configProvider = "elevenlabs"
+        let differs = makeModel(g)
+        await differs.refresh()
+        #expect(differs.effectiveConfig.first { $0.label == "Provider" }?.source == "Local /tts preferences")
     }
 
     @Test func fallbackReasonMessagesAreNonEmpty() {
