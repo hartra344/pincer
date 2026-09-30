@@ -588,7 +588,7 @@ enum SidebarDrag {
 }
 
 /// What a sidebar drag carries (the local object of a UIKit drag).
-enum SidebarDragPayload {
+enum SidebarDragPayload: Equatable {
     case chat(String)
     case group(String)
 }

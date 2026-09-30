@@ -30,12 +30,9 @@ struct SidebarList: UIViewRepresentable {
     final class Coordinator: NSObject, UICollectionViewDelegate, UICollectionViewDragDelegate, UICollectionViewDropDelegate {
         private let gateway: GatewayStore
         private var actions: SidebarActions
-        private var model = SidebarModel()
-        private var hasLoaded = false
-        private var headers: [String: SidebarModel.Header] = [:]
-        private var entries: [String: SidebarModel.Entry] = [:]
-        private var selectedKey: String?
-        private var isProgrammatic = false
+        private let controller = SidebarController()
+        private var headers: [String: SidebarModel.Header] { self.controller.headers }
+        private var entries: [String: SidebarModel.Entry] { self.controller.entries }
         private var timer: Timer?
         private var dataSource: UICollectionViewDiffableDataSource<String, String>?
         private weak var collectionView: UICollectionView?
@@ -119,37 +116,25 @@ struct SidebarList: UIViewRepresentable {
 
         func update(model: SidebarModel, selectedKey: String?, actions: SidebarActions, theme: AppTheme) {
             self.actions = actions
-            self.selectedKey = selectedKey
+            self.controller.selectedKey = selectedKey
             if theme != self.theme {
                 self.theme = theme
                 self.themeChanged()
             }
             guard let dataSource else { return }
-            if model != self.model || !self.hasLoaded {
-                let old = self.model
-                self.model = model
-                self.rebuildIndex()
+            if let update = self.controller.accept(model: model) {
                 self.programmatic {
-                    self.apply(model, old: old, to: dataSource)
+                    self.apply(model, old: update.old, to: dataSource)
                 }
-                self.hasLoaded = true
+                self.controller.markLoaded()
             }
             self.syncSelection()
-        }
-
-        private func rebuildIndex() {
-            self.headers = [:]
-            self.entries = [:]
-            for group in self.model.groups {
-                for header in group.allHeaders { self.headers[header.id] = header }
-                for entry in group.allEntries { self.entries[entry.id] = entry }
-            }
         }
 
         private func apply(_ model: SidebarModel, old: SidebarModel,
                            to dataSource: UICollectionViewDiffableDataSource<String, String>)
         {
-            let animate = self.hasLoaded && self.collectionView?.window != nil
+            let animate = self.controller.hasLoaded && self.collectionView?.window != nil
             let sections = model.groups.map(\.header.id)
             if dataSource.snapshot().sectionIdentifiers != sections {
                 var snapshot = NSDiffableDataSourceSnapshot<String, String>()
@@ -234,7 +219,7 @@ struct SidebarList: UIViewRepresentable {
         /// list comes back with nothing selected, as in other iOS apps.
         private func syncSelection() {
             guard let view = self.collectionView, let dataSource else { return }
-            let target = self.isCompact ? nil : self.selectedKey.flatMap { dataSource.indexPath(for: SidebarModel.entryId($0)) }
+            let target = self.controller.selectionTarget(hidden: self.isCompact).flatMap { dataSource.indexPath(for: $0) }
             let current = view.indexPathsForSelectedItems ?? []
             guard current != (target.map { [$0] } ?? []) else { return }
             self.programmatic {
@@ -249,16 +234,11 @@ struct SidebarList: UIViewRepresentable {
             }
         }
 
-        private func programmatic(_ body: () -> Void) {
-            let was = self.isProgrammatic
-            self.isProgrammatic = true
-            body()
-            self.isProgrammatic = was
-        }
+        private func programmatic(_ body: () -> Void) { self.controller.programmatic(body) }
 
         private func expansionChanged(_ id: String, collapsed: Bool) {
-            guard !self.isProgrammatic, let header = self.headers[id] else { return }
-            self.actions.setCollapsed(header.section.id, collapsed)
+            guard let section = self.controller.sectionToggled(headerId: id) else { return }
+            self.actions.setCollapsed(section, collapsed)
         }
 
         private func entry(at path: IndexPath) -> SidebarModel.Entry? {
@@ -272,9 +252,8 @@ struct SidebarList: UIViewRepresentable {
         }
 
         func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-            guard !self.isProgrammatic, let entry = self.entry(at: indexPath) else { return }
-            self.selectedKey = entry.row.key
-            self.actions.select(entry.row.key)
+            guard let key = self.controller.userSelected(self.entry(at: indexPath)) else { return }
+            self.actions.select(key)
             if self.isCompact {
                 collectionView.deselectItem(at: indexPath, animated: true)
             }
@@ -350,19 +329,10 @@ struct SidebarList: UIViewRepresentable {
                             at indexPath: IndexPath) -> [UIDragItem]
         {
             guard let id = self.dataSource?.itemIdentifier(for: indexPath) else { return [] }
-            let payload: SidebarDragPayload
-            let type: String
-            let value: String
-            if let header = self.headers[id] {
-                guard case let .group(name) = header.section.kind else { return [] }
-                (payload, type, value) = (.group(name), SidebarDrag.groupTypeIdentifier, name)
-            } else if let entry = self.entries[id], !entry.isThread, !entry.row.isSubagent {
-                (payload, type, value) = (.chat(entry.row.key), SidebarDrag.typeIdentifier, entry.row.key)
-            } else {
-                return []
-            }
+            guard let payload = self.controller.dragPayload(forId: id) else { return [] }
+            let value = payload.value
             let provider = NSItemProvider()
-            provider.registerDataRepresentation(forTypeIdentifier: type, visibility: .ownProcess) { completion in
+            provider.registerDataRepresentation(forTypeIdentifier: payload.typeIdentifier, visibility: .ownProcess) { completion in
                 completion(Data(value.utf8), nil)
                 return nil
             }
@@ -373,18 +343,6 @@ struct SidebarList: UIViewRepresentable {
 
         func collectionView(_ collectionView: UICollectionView, canHandle session: UIDropSession) -> Bool {
             session.localDragSession?.items.first?.localObject is SidebarDragPayload
-        }
-
-        /// Where a drop lands.
-        private enum Drop {
-            case group(String, before: String?)
-            case chatInGroup(String, group: String, before: String?)
-            case chatOnSection(String, SidebarSection)
-
-            var isInsertion: Bool {
-                if case .chatOnSection = self { return false }
-                return true
-            }
         }
 
         func collectionView(_ collectionView: UICollectionView, dropSessionDidUpdate session: UIDropSession,
@@ -398,34 +356,25 @@ struct SidebarList: UIViewRepresentable {
         }
 
         func collectionView(_ collectionView: UICollectionView, performDropWith coordinator: UICollectionViewDropCoordinator) {
-            switch self.drop(coordinator.session, coordinator.destinationIndexPath) {
-            case let .group(name, before):
-                Task { await self.gateway.moveGroup(name, before: before) }
-            case let .chatInGroup(key, group, before):
-                Task { await self.gateway.moveChat(key, toGroup: group, before: before) }
-            case let .chatOnSection(key, section):
-                Task { await self.gateway.moveToGroup(key, droppedOn: section) }
-            case nil:
-                break
-            }
+            guard let drop = self.drop(coordinator.session, coordinator.destinationIndexPath) else { return }
+            SidebarController.perform(drop, gateway: self.gateway)
         }
 
-        private func drop(_ session: UIDropSession, _ path: IndexPath?) -> Drop? {
+        private func drop(_ session: UIDropSession, _ path: IndexPath?) -> SidebarDrop? {
             guard let payload = session.localDragSession?.items.first?.localObject as? SidebarDragPayload, let path,
-                  let group = self.model.groups[safe: path.section]
+                  let group = self.controller.model.groups[safe: path.section]
             else { return nil }
             switch payload {
             case let .group(name):
-                let names = self.model.groupNamesInOrder
-                guard let source = names.firstIndex(of: name) else { return nil }
+                let model = self.controller.model
                 // Sections before the first group land in front of it; sections after the last one, at the end.
-                let groupsBefore = self.model.groups[..<path.section].filter {
+                let groupsBefore = model.groups[..<path.section].filter {
                     if case .group = $0.header.section.kind { return true }
                     return false
                 }.count
-                var target = groupsBefore
-                if case .group = group.header.section.kind, groupsBefore > source { target += 1 }
-                return .group(name, before: names[safe: target])
+                var onGroup = false
+                if case .group = group.header.section.kind { onGroup = true }
+                return SidebarController.groupReorder(name, names: model.groupNamesInOrder, groupsBefore: groupsBefore, onGroup: onGroup)
             case let .chat(key):
                 guard let row = self.gateway.sessions[key], !row.isSubagent, let dataSource = self.dataSource else { return nil }
                 let visible = dataSource.snapshot(for: group.header.id).visibleItems
@@ -436,9 +385,7 @@ struct SidebarList: UIViewRepresentable {
                 let owner = ([group] + group.subgroups).first { owner in
                     owner.entries.contains { $0.id == anchor }
                 }
-                if let owner, let name = owner.header.section.groupName, !owner.header.isCollapsed,
-                   owner.header.section.agentId == nil || owner.header.section.agentId == row.agentId
-                {
+                if let owner, let name = SidebarController.groupAccepting(row, in: owner.header) {
                     let index = target.flatMap { id in owner.entries.firstIndex { $0.id == id } } ?? owner.entries.count
                     return .chatInGroup(key, group: name,
                                         before: SidebarModel.chat(atOrAfter: index, in: owner.entries, excluding: key))
@@ -446,8 +393,7 @@ struct SidebarList: UIViewRepresentable {
                 // A nested group header takes the chat into that group.
                 let section = target.flatMap { id in group.subgroups.first { $0.header.id == id } }?.header.section
                     ?? group.header.section
-                guard self.gateway.groupDropValue(for: key, onto: section) != nil else { return nil }
-                return .chatOnSection(key, section)
+                return SidebarController.dropOnSection(key, section, gateway: self.gateway)
             }
         }
     }
