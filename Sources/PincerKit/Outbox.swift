@@ -34,9 +34,12 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
     public var createdAt: Date
     public var state: OutboxState
     public var attempts: Int
-    /// Sends carrying attachments aren't persisted (the bytes stay in memory), so they live for
-    /// the current launch only.
+    /// The send carries attachments. With `attachments` refs they're on disk and the entry behaves
+    /// like a text one; without (over the size cap, store off), the bytes stay in memory and the
+    /// entry lives for the current launch only.
     public var hasAttachments: Bool
+    /// Attachments kept in `OutboxAttachmentStore`, so the entry survives a relaunch.
+    public var attachments: [OutboxAttachmentRef]
 
     public var idempotencyKey: String { self.id }
 
@@ -50,7 +53,8 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
         createdAt: Date,
         state: OutboxState = .queued,
         attempts: Int = 0,
-        hasAttachments: Bool = false)
+        hasAttachments: Bool = false,
+        attachments: [OutboxAttachmentRef] = [])
     {
         self.id = id
         self.sessionKey = sessionKey
@@ -61,11 +65,12 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
         self.createdAt = createdAt
         self.state = state
         self.attempts = attempts
-        self.hasAttachments = hasAttachments
+        self.hasAttachments = hasAttachments || !attachments.isEmpty
+        self.attachments = attachments
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, sessionKey, agentId, text, replyToId, replyPreview, createdAt, state, attempts, hasAttachments
+        case id, sessionKey, agentId, text, replyToId, replyPreview, createdAt, state, attempts, hasAttachments, attachments
     }
 
     public init(from decoder: Decoder) throws {
@@ -80,7 +85,11 @@ public struct OutboxEntry: Codable, Hashable, Identifiable, Sendable {
         self.state = try c.decode(OutboxState.self, forKey: .state)
         self.attempts = try c.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
         self.hasAttachments = try c.decodeIfPresent(Bool.self, forKey: .hasAttachments) ?? false
+        self.attachments = try c.decodeIfPresent([OutboxAttachmentRef].self, forKey: .attachments) ?? []
     }
+
+    /// Carries attachments whose bytes exist only in memory: never auto-sent, gone after a relaunch.
+    public var isMemoryOnly: Bool { self.hasAttachments && self.attachments.isEmpty }
 
     public var isFailed: Bool {
         if case .failed = self.state { return true }
@@ -195,15 +204,15 @@ public struct Outbox: Codable, Equatable, Sendable {
         }
     }
 
-    /// The oldest `.queued` entry whose session has nothing earlier sending or failed. Entries
-    /// with attachments are never auto-sent (only an explicit Retry sends them) and block their
+    /// The oldest `.queued` entry whose session has nothing earlier sending or failed. Memory-only
+    /// attachment entries are never auto-sent (only an explicit Retry sends them) and block their
     /// session until then.
     public func nextToSend(sessionKey: String? = nil) -> OutboxEntry? {
         var blocked = Set<String>()
         for entry in self.entries {
             if let sessionKey, entry.sessionKey != sessionKey { continue }
             if blocked.contains(entry.sessionKey) { continue }
-            if entry.state == .queued, !entry.hasAttachments { return entry }
+            if entry.state == .queued, !entry.isMemoryOnly { return entry }
             blocked.insert(entry.sessionKey)
         }
         return nil
@@ -241,7 +250,7 @@ public struct Outbox: Codable, Equatable, Sendable {
         guard let index = self.index(id) else { return }
         switch kind {
         case .transient:
-            if isConnected || self.entries[index].hasAttachments {
+            if isConnected || self.entries[index].isMemoryOnly {
                 self.entries[index].state = .failed(OutboxFailure(message: message ?? "Couldn't send.", retryable: true))
             } else {
                 self.entries[index].state = .queued
@@ -274,18 +283,18 @@ public struct Outbox: Codable, Equatable, Sendable {
     }
 
     /// The socket dropped: in-flight sends go back to the queue (the same key makes the resend
-    /// safe). Ones with attachments, which never auto-send, fail retryably instead.
+    /// safe). Memory-only attachment ones, which never auto-send, fail retryably instead.
     public mutating func connectionLost() {
-        for index in self.entries.indices where self.entries[index].state == .sending && self.entries[index].hasAttachments {
+        for index in self.entries.indices where self.entries[index].state == .sending && self.entries[index].isMemoryOnly {
             self.entries[index].state = .failed(OutboxFailure(message: "Couldn’t send: the connection was lost.", retryable: true))
         }
         self.requeueSending()
     }
 
-    /// The app was killed mid-send: anything left `.sending` goes back to the queue. Attachment
-    /// entries can't survive a relaunch, so they're dropped.
+    /// The app was killed mid-send: anything left `.sending` goes back to the queue. Memory-only
+    /// attachment entries can't survive a relaunch, so they're dropped.
     public mutating func recoverAfterLaunch() {
-        self.entries.removeAll(where: \.hasAttachments)
+        self.entries.removeAll(where: \.isMemoryOnly)
         self.requeueSending()
     }
 
@@ -300,9 +309,9 @@ public struct Outbox: Codable, Equatable, Sendable {
         self.entries.removeAll { $0.sessionKey == key }
     }
 
-    /// Entries that survive a relaunch (attachment sends are launch-only).
+    /// Entries that survive a relaunch (memory-only attachment sends are launch-only).
     public var persistable: Outbox {
-        Outbox(entries: self.entries.filter { !$0.hasAttachments })
+        Outbox(entries: self.entries.filter { !$0.isMemoryOnly })
     }
 
     private mutating func requeueSending() {

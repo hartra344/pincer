@@ -22,6 +22,8 @@ struct TranscriptList: NSViewRepresentable {
     /// Told how far the reader is from the latest message and whether the list follows the bottom;
     /// runs the scroll-to-bottom button's scroll (#439).
     var bottomState: TranscriptBottomState?
+    /// Go ▸ Previous/Next Message for this list (#195).
+    var navigator: TranscriptNavigator?
 
     func makeCoordinator() -> Coordinator { Coordinator(context: self.context) }
 
@@ -34,6 +36,7 @@ struct TranscriptList: NSViewRepresentable {
         context.coordinator.update(rows: self.rows, context: self.context, insets: (self.topInset, self.bottomInset))
         context.coordinator.apply(self.highlight)
         context.coordinator.apply(self.jump)
+        context.coordinator.install(self.navigator)
     }
 
     @MainActor
@@ -90,7 +93,8 @@ struct TranscriptList: NSViewRepresentable {
             table.intercellSpacing = NSSize(width: 0, height: TranscriptLayout.rowSpacing)
             table.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
             table.focusRingType = .none
-            table.refusesFirstResponder = true
+            table.onKeyDown = { [weak self] in self?.handleKey($0) ?? false }
+            table.onFocusChange = { [weak self] in self?.focusChanged() }
             let column = NSTableColumn(identifier: .init("row"))
             column.resizingMask = .autoresizingMask
             table.addTableColumn(column)
@@ -120,6 +124,7 @@ struct TranscriptList: NSViewRepresentable {
                                                    name: NSScrollView.didEndLiveScrollNotification, object: scroll)
             self.scrollView = scroll
             self.table = table
+            table.setAccessibilityCustomRotors(self.makeRotors())
             return scroll
         }
 
@@ -190,6 +195,7 @@ struct TranscriptList: NSViewRepresentable {
             table.layoutSubtreeIfNeeded()
             self.restore(self.anchor)
             self.refreshVisibleCells()
+            self.refreshFocusRing()
             self.controller.schedulePrefetch()
         }
 
@@ -383,6 +389,7 @@ struct TranscriptList: NSViewRepresentable {
             let layout = self.renderer.layout(for: item, width: self.layoutWidth)
             self.controller.correctHeight(item.id, width: self.layoutWidth, height: layout.height)
             cell.apply(layout, actions: self.renderer)
+            cell.showsFocusRing = self.showsFocusRing(at: row)
             return cell
         }
 
@@ -430,6 +437,151 @@ struct TranscriptList: NSViewRepresentable {
             guard abs(clip.bounds.minY - target) > 0.5 else { return }
             clip.scroll(to: NSPoint(x: clip.bounds.minX, y: target))
             scroll.reflectScrolledClipView(clip)
+        }
+
+        // MARK: Message navigation (#195)
+
+        private var rotorDelegates: [TranscriptRotorDelegate] = []
+
+        func install(_ navigator: TranscriptNavigator?) {
+            navigator?.move = { [weak self] forward in self?.navigate(forward: forward) }
+        }
+
+        /// Moves the current message, scrolls it into view, puts the focus ring on it and moves
+        /// VoiceOver there.
+        private func navigate(forward: Bool) {
+            guard let table, let row = self.controller.moveNavigation(forward: forward) else { return }
+            self.controller.scrollIntoView(row)
+            if let window = table.window, window.firstResponder !== table { window.makeFirstResponder(table) }
+            self.refreshFocusRing()
+            guard let cell = table.view(atColumn: 0, row: row, makeIfNecessary: true) as? TranscriptCell else { return }
+            NSAccessibility.post(element: cell, notification: .focusedUIElementChanged)
+        }
+
+        private func showsFocusRing(at row: Int) -> Bool {
+            guard let table, table.window?.firstResponder === table, self.rows.indices.contains(row) else { return false }
+            return self.rows[row].id == self.controller.navigationRowId
+        }
+
+        fileprivate func refreshFocusRing() {
+            guard let table, let visible = self.visibleRows else { return }
+            for row in visible {
+                (table.view(atColumn: 0, row: row, makeIfNecessary: false) as? TranscriptCell)?.showsFocusRing = self.showsFocusRing(at: row)
+            }
+        }
+
+        /// The table took or lost the keyboard. Taking it starts on the current message, or the
+        /// first one on screen.
+        private func focusChanged() {
+            if let table, table.window?.firstResponder === table {
+                let known = self.controller.navigationRowId.flatMap { id in self.rows.firstIndex { $0.id == id } }
+                if known.map({ self.visibleRows?.contains($0) ?? false }) != true {
+                    self.controller.navigationRowId = nil
+                    _ = self.controller.moveNavigation(forward: true)
+                }
+            }
+            self.refreshFocusRing()
+        }
+
+        private func handleKey(_ event: NSEvent) -> Bool {
+            guard event.modifierFlags.intersection([.command, .option, .control, .shift]).isEmpty else { return false }
+            switch event.keyCode {
+            case 126: self.navigate(forward: false)
+            case 125: self.navigate(forward: true)
+            case 36, 76, 49: self.openActions()
+            case 53: self.returnToComposer()
+            default: return false
+            }
+            return true
+        }
+
+        /// Return and Space: the current message's actions menu, as a right-click would show.
+        private func openActions() {
+            guard let table, let id = self.controller.navigationRowId, let row = self.rows.firstIndex(where: { $0.id == id }),
+                  let cell = table.view(atColumn: 0, row: row, makeIfNecessary: true) as? TranscriptCell else { return }
+            cell.popUpActions()
+        }
+
+        private func returnToComposer() {
+            guard let window = self.table?.window else { return }
+            var ancestor = self.table?.superview
+            while let view = ancestor {
+                if let composer = Self.composer(in: view) {
+                    window.makeFirstResponder(composer)
+                    return
+                }
+                ancestor = view.superview
+            }
+            window.makeFirstResponder(nil)
+        }
+
+        private static func composer(in view: NSView) -> ComposerNSTextView? {
+            for sub in view.subviews {
+                if let composer = sub as? ComposerNSTextView { return composer }
+                if let composer = self.composer(in: sub) { return composer }
+            }
+            return nil
+        }
+
+        // MARK: Rotors
+
+        private func makeRotors() -> [NSAccessibilityCustomRotor] {
+            let kinds: [(String, TranscriptNavKind)] = [
+                (L("Messages"), .message), (L("Replies"), .reply), (L("Your Messages"), .user), (L("Tool Calls"), .tool),
+            ]
+            self.rotorDelegates = kinds.map { TranscriptRotorDelegate(kind: $0.1, coordinator: self) }
+            return zip(kinds, self.rotorDelegates).map { kind, delegate in
+                let rotor = NSAccessibilityCustomRotor(label: kind.0, itemSearchDelegate: delegate)
+                rotor.itemLoadingDelegate = delegate
+                return rotor
+            }
+        }
+
+        /// The next or previous row of `kind` from the rotor's current item, searched in every row.
+        /// VoiceOver enumerates the whole rotor, so a search never scrolls or builds cells: rows
+        /// without a cell come back as a token, loaded only when VoiceOver moves to one.
+        fileprivate func rotorResult(kind: TranscriptNavKind, from current: NSAccessibilityCustomRotor.ItemResult?,
+                                     forward: Bool) -> NSAccessibilityCustomRotor.ItemResult? {
+            guard let table else { return nil }
+            var from: Int?
+            if let cell = current?.targetElement as? NSView {
+                let row = table.row(for: cell)
+                if row >= 0 { from = row }
+            } else if let id = current?.itemLoadingToken as? String {
+                from = self.controller.index[id]
+            }
+            guard let row = self.controller.adjacentRow(from: from, forward: forward, kind: kind) else { return nil }
+            if let cell = table.view(atColumn: 0, row: row, makeIfNecessary: false) as? TranscriptCell {
+                let result = NSAccessibilityCustomRotor.ItemResult(targetElement: cell)
+                result.customLabel = cell.spokenLabel ?? self.cheapLabel(self.rows[row])
+                return result
+            }
+            return NSAccessibilityCustomRotor.ItemResult(itemLoadingToken: self.rows[row].id as NSString,
+                                                         customLabel: self.cheapLabel(self.rows[row]))
+        }
+
+        /// Speaker and the start of the text, with no text layout (#431).
+        private func cheapLabel(_ row: TranscriptRow) -> String {
+            if let label = self.renderer.cachedLabel(for: row), !label.isEmpty { return label }
+            guard case let .entry(entry) = row else { return "" }
+            switch entry {
+            case let .user(item):
+                return [AccessibilityText.speaker(role: .user), AccessibilityText.summary(String(item.plainText.prefix(400)), limit: 80)]
+                    .filter { !$0.isEmpty }.joined(separator: ", ")
+            case let .assistant(turn):
+                return [AccessibilityText.speaker(role: .assistant, author: self.controller.context.agent.name), AccessibilityText.summary(String((turn.text.first ?? "").prefix(400)), limit: 80)]
+                    .filter { !$0.isEmpty }.joined(separator: ", ")
+            case let .marker(_, label):
+                return label
+            }
+        }
+
+        /// Loads the row a token stands for: it becomes the current message, scrolled into view.
+        fileprivate func rotorElement(forToken token: Any) -> NSAccessibilityElementProtocol? {
+            guard let table, let id = token as? String, let row = self.controller.index[id] else { return nil }
+            self.controller.navigationRowId = id
+            self.controller.scrollIntoView(row)
+            return table.view(atColumn: 0, row: row, makeIfNecessary: true) as? TranscriptCell
         }
 
         // MARK: Scroll to bottom
@@ -509,6 +661,39 @@ struct TranscriptList: NSViewRepresentable {
 /// Lets clicks reach the row's content (buttons, links, text selection) instead of being taken
 /// for row selection.
 private final class TranscriptListTableView: NSTableView {
+    var onKeyDown: ((NSEvent) -> Bool)?
+    var onFocusChange: (() -> Void)?
+
+    /// Only Tab, Go ▸ Next/Previous Message and VoiceOver focus the list; a click must leave the
+    /// keyboard with the composer.
+    override var acceptsFirstResponder: Bool {
+        guard let type = NSApp.currentEvent?.type else { return true }
+        return ![.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(type)
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { self.onFocusChange?() }
+        return accepted
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let accepted = super.resignFirstResponder()
+        if accepted { DispatchQueue.main.async { [weak self] in self?.onFocusChange?() } }
+        return accepted
+    }
+
+    /// VoiceOver's cursor follows the row the focus ring is on.
+    override var accessibilityFocusedUIElement: Any? {
+        (0..<self.numberOfRows).lazy
+            .compactMap { self.view(atColumn: 0, row: $0, makeIfNecessary: false) as? TranscriptCell }
+            .first { $0.showsFocusRing }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if self.onKeyDown?(event) != true { super.keyDown(with: event) }
+    }
+
     override func validateProposedFirstResponder(_ responder: NSResponder, for event: NSEvent?) -> Bool {
         true
     }
@@ -521,10 +706,38 @@ private final class TranscriptCell: NSView {
     private var serial: Int?
     private weak var actions: TranscriptRowActions?
 
+    private let ring = TranscriptFocusRingView()
+
     init() {
         super.init(frame: .zero)
         self.identifier = Self.reuseIdentifier
         self.addSubview(self.content)
+        self.ring.frame = self.bounds
+        self.ring.autoresizingMask = [.width, .height]
+        self.ring.isHidden = true
+        self.addSubview(self.ring)
+    }
+
+    /// The keyboard focus ring around the row the arrow keys are on.
+    var showsFocusRing: Bool {
+        get { !self.ring.isHidden }
+        set { if self.ring.isHidden == newValue { self.ring.isHidden = !newValue } }
+    }
+
+    override func isAccessibilityFocused() -> Bool { self.showsFocusRing }
+
+    var spokenLabel: String? { self.content.layout?.accessibilityLabel }
+
+    /// The row's actions menu at its first message, as a right-click there would open it.
+    func popUpActions() {
+        guard let window, let layout = self.content.layout else { return }
+        let point = CGPoint(x: min(24, layout.width / 2), y: (layout.messages.first?.minY ?? 0) + 4)
+        let windowPoint = self.content.convert(point, to: nil)
+        guard let event = NSEvent.mouseEvent(with: .rightMouseDown, location: windowPoint, modifierFlags: [],
+                                             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                             context: nil, eventNumber: 0, clickCount: 1, pressure: 1),
+              let menu = self.content.menu(for: event) else { NSSound.beep(); return }
+        menu.popUp(positioning: nil, at: point, in: self.content)
     }
 
     @available(*, unavailable)
@@ -557,6 +770,41 @@ private final class TranscriptCell: NSView {
                 return true
             }
         }
+    }
+}
+
+private final class TranscriptFocusRingView: NSView {
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func isAccessibilityElement() -> Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.keyboardFocusIndicatorColor.setStroke()
+        let path = NSBezierPath(roundedRect: self.bounds.insetBy(dx: 2, dy: 1), xRadius: 8, yRadius: 8)
+        path.lineWidth = 2
+        path.stroke()
+    }
+}
+
+/// Answers one rotor's searches for the table.
+@MainActor
+private final class TranscriptRotorDelegate: NSObject, @preconcurrency NSAccessibilityCustomRotorItemSearchDelegate, @preconcurrency NSAccessibilityElementLoading {
+    let kind: TranscriptNavKind
+    private weak var coordinator: TranscriptList.Coordinator?
+
+    init(kind: TranscriptNavKind, coordinator: TranscriptList.Coordinator) {
+        self.kind = kind
+        self.coordinator = coordinator
+    }
+
+    func rotor(_ rotor: NSAccessibilityCustomRotor,
+               resultFor parameters: NSAccessibilityCustomRotor.SearchParameters) -> NSAccessibilityCustomRotor.ItemResult? {
+        self.coordinator?.rotorResult(kind: self.kind, from: parameters.currentItem,
+                                      forward: parameters.searchDirection == .next)
+    }
+
+    func accessibilityElement(withToken token: NSAccessibilityLoadingToken) -> (any NSAccessibilityElementProtocol)? {
+        self.coordinator?.rotorElement(forToken: token)
     }
 }
 

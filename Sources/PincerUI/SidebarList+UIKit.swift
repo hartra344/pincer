@@ -659,6 +659,7 @@ private final class SidebarHeaderListCell: UICollectionViewListCell {
         self.accessories = accessories
         self.accessibilityLabel = header.isSubsection ? header.subsectionAccessibilityLabel : header.agentAccessibilityLabel
         self.accessibilityValue = header.accessibilityValue
+        self.accessibilityHint = header.accessibilityHint
         self.accessibilityTraits.insert(.header)
     }
 }

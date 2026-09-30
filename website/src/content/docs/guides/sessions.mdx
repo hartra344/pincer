@@ -45,7 +45,7 @@ Previews, details and branches load only when you look at a session, so the list
 To act on several sessions at once, select them: on macOS with <kbd>⌘</kbd>-click, <kbd>⇧</kbd>-click or <kbd>⌘</kbd> <kbd>A</kbd>; on iOS with **Edit**. A bar at the bottom shows how many are selected, with **Archive**, **Unarchive** and **Delete…**. The same actions are in the right-click (or long-press) menu, and on macOS <kbd>⌫</kbd> deletes.
 
 - **Archive** and **Unarchive** happen straight away, and Pincer says how many sessions changed, for example **Archived 3 sessions**. If the gateway refuses some, they're listed with its reason and stay selected. Archived sessions leave the sidebar but keep their transcripts.
-- **Delete…** always asks first, for example **Delete 3 sessions?** or, for one, **Delete “Garden planner”?**: *This permanently deletes the transcript on the gateway and can't be undone.* Pincer also drops those sessions' [locally cached transcripts](../local-cache/) and removes them from message search, and if one was open, Pincer switches to another chat.
+- **Delete…** always asks first, for example **Delete 3 sessions?** or, for one, **Delete “Garden planner”?**: *This permanently deletes the transcript on the gateway and can't be undone.* If any of them have [unsent messages](../offline-outbox/), it adds how many, for example *The 1 unsent message in this chat will be discarded too.* or *3 unsent messages in these chats will be discarded too.*, and deleting discards them along with their attachments. Pincer also drops those sessions' [locally cached transcripts](../local-cache/) and removes them from message search, and if one was open, Pincer switches to another chat.
 
 Changing the filter clears the selection.
 

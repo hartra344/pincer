@@ -100,6 +100,22 @@ struct KeyboardShortcutsTests {
         #expect(ShortcutCommand.toggleSplitView.title == "Split Right")
     }
 
+    // MARK: - Message navigation (#195)
+
+    @Test func messageNavigationCommandsAreInGoWithOptionCommandArrows() {
+        #expect(ShortcutCommand.previousMessage.category == .go)
+        #expect(ShortcutCommand.nextMessage.category == .go)
+        #expect(ShortcutCommand.previousMessage.title == "Previous Message")
+        #expect(ShortcutCommand.nextMessage.title == "Next Message")
+        #expect(ShortcutCommand.previousMessage.defaultCombo == KeyCombo(KeyCombo.Special.upArrow.rawValue, [.option, .command]))
+        #expect(ShortcutCommand.nextMessage.defaultCombo == KeyCombo(KeyCombo.Special.downArrow.rawValue, [.option, .command]))
+        #expect(ShortcutCommand.previousMessage.defaultCombo?.displayString == "⌥⌘↑")
+        #expect(ShortcutCommand.nextMessage.defaultCombo?.displayString == "⌥⌘↓")
+        let others = ShortcutCommand.allCases.filter { $0 != .previousMessage && $0 != .nextMessage }.compactMap(\.defaultCombo)
+        #expect(!others.contains(ShortcutCommand.previousMessage.defaultCombo!))
+        #expect(!others.contains(ShortcutCommand.nextMessage.defaultCombo!))
+    }
+
     // MARK: - Store persistence
 
     @MainActor

@@ -10,6 +10,9 @@ Pincer uses native controls throughout, so the system's accessibility features w
 ### Transcript
 
 - Each message reads as one item: who wrote it, then the message, for example "Nova: Here's the summary…". Replies start with the message they reply to.
+- A reply that is still streaming reads as "Nova, Responding, Here's the summary…". It always reads the start of the reply, so the label stays put while more text arrives.
+- **Grouped replies:** when an agent's reply is split into several messages, the actions rotor lists **Reply**, **Copy Link**, **Bookmark** (or **Remove Bookmark**) and **Add Reaction** once for each message, for example "Reply, part 1 of 3". **Branch**, **Edit** and **Regenerate** stay with the last message.
+- **Rotors:** the VoiceOver rotor has **Messages**, **Replies**, **Your Messages** and **Tool Calls**, so you can jump between those items even in a long chat. On macOS, press <kbd>VO</kbd> <kbd>U</kbd> to open the rotor, <kbd>←</kbd> <kbd>→</kbd> to choose one, <kbd>↑</kbd> <kbd>↓</kbd> to pick an item and <kbd>Return</kbd> to go there. On iPhone and iPad, rotate two fingers to pick the rotor, then swipe up or down to move.
 - **Actions rotor:** on a message, swipe up or down (iOS) or press <kbd>VO</kbd> <kbd>⌘</kbd> <kbd>Space</kbd> (macOS) for **Copy message**, **Reply**, **Copy Link** and **Add Reaction**. **Add Reaction** only appears when reactions are turned on. Agent replies with thinking also offer **Copy Thinking**.
 - **On iPhone and iPad**, one swipe moves one whole message. The message's other buttons, such as showing thinking or a tool call's details, opening an image or toggling a reaction, are in the same actions rotor. So are its links, as **Open** followed by the link text, for up to 10 links.
 - **On the Mac**, each message is a group. Press <kbd>VO</kbd> <kbd>⇧</kbd> <kbd>↓</kbd> to step inside it and reach its text, the **Copy**, **Reply** and **React** buttons, reaction chips, thinking and tool call headers, images and attachments.
@@ -30,6 +33,8 @@ To hear a whole reply spoken without VoiceOver, use [Read aloud](../read-aloud/)
 
 ### Sidebar
 
+Agent and group headers read whether they are **Expanded** or **Collapsed**, and activating one expands or collapses it. An agent's **+** button reads as "New chat with Nova".
+
 Each chat reads its title, then whether it's pinned or unread, then its preview. While a chat is running, it also says what the agent is doing, for example "Moki is working" or "Moki: 2 helper runs working". The subagent runs button reads as "Show 3 subagent runs" or "Hide subagent runs".
 
 ### Composer
@@ -40,6 +45,10 @@ Each chat reads its title, then whether it's pinned or unread, then its preview.
 - The [context meter](../composer/) reads as "Context window" with how full it is. Activate it for the details and **Compact Now**.
 - The model picker reads as "Model" with the current model.
 - Slash command suggestions are a list of buttons, with the highlighted one marked as selected.
+
+### Session manager
+
+Each run in the [session manager](../sessions/) reads its title, agent, the same status the screen shows (**Queued**, **Running**, **Done**, **Error**, **Stopped** or **Timed Out**, preceded by "Interrupted" after a Gateway restart), how long it ran in words, and when it was last updated, for example "Research, Claude, Interrupted, Error, 2 minutes, 5 seconds, updated 3:04 PM". On the Mac, the status icons have spoken labels too.
 
 ### Settings
 
@@ -54,16 +63,13 @@ The **Dismiss**, **Always Ignore** and **Restore** actions are in the actions ro
 On macOS, and on iPad with a keyboard, you can use Pincer without a pointer:
 
 - **Sidebar:** on macOS, <kbd>↑</kbd> <kbd>↓</kbd> move between chats. <kbd>⌥</kbd> <kbd>⇧</kbd> <kbd>↓</kbd> jumps to the next unread chat, and <kbd>⌘</kbd> <kbd>1</kbd>…<kbd>9</kbd> opens a pinned chat.
-- **Command palette:** <kbd>⌘</kbd> <kbd>K</kbd> reaches any chat, agent or setting. <kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>Return</kbd> runs, <kbd>Esc</kbd> closes.
+- **Transcript:** <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>↑</kbd> and <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>↓</kbd> (**Previous Message** and **Next Message**) move to the previous or next message in the chat you're in and scroll it into view. On macOS they also move keyboard focus into the transcript, with a focus ring on that message; with VoiceOver, VoiceOver moves to it. You can change them in Keyboard Shortcuts settings. Within the transcript, <kbd>↑</kbd> <kbd>↓</kbd> move between messages, <kbd>Return</kbd> or <kbd>Space</kbd> opens the message's actions (on the first message of a grouped reply), and <kbd>Esc</kbd> goes back to the composer.
+- **Command palette:** <kbd>⌘</kbd> <kbd>K</kbd> reaches any chat, agent or setting, and VoiceOver speaks the highlighted item as you arrow through it. <kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>Return</kbd> runs, <kbd>Esc</kbd> closes.
 - **Composer:** <kbd>Return</kbd> sends, <kbd>⇧</kbd> <kbd>Return</kbd> adds a new line, <kbd>⌘</kbd> <kbd>.</kbd> stops a run, <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>R</kbd> replies to the last message and <kbd>Esc</kbd> cancels the reply.
 - **Slash commands:** <kbd>↑</kbd> <kbd>↓</kbd> move through suggestions, <kbd>Tab</kbd> or <kbd>Return</kbd> completes, <kbd>Esc</kbd> hides them.
 - **Find in Chat:** <kbd>⌘</kbd> <kbd>F</kbd>, then <kbd>⌘</kbd> <kbd>G</kbd> and <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>G</kbd> step through matches. <kbd>Esc</kbd> closes the find bar.
 
 The full list is in [Keyboard shortcuts](../../reference/keyboard-shortcuts/).
-
-:::note
-Moving through individual messages with the arrow keys isn't supported yet. Use VoiceOver, Find in Chat or the command palette to get around a long chat.
-:::
 
 ## Text size
 

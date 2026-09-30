@@ -159,7 +159,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
     // View
     case toggleSplitView, swapSplitChats, nextUnreadChat, showRuns, reloadPincer
     // Go
-    case commandPalette, searchMessages, goBack, goForward
+    case commandPalette, searchMessages, goBack, goForward, previousMessage, nextMessage
     // Chat and Gateway
     case stopRun, gatewaySettings
 
@@ -186,7 +186,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .newChat, .openChatInNewWindow, .addGateway, .exportChat, .showBookmarks: .file
         case .findInChat, .findNext, .findPrevious, .replyToLastMessage, .editLastMessage, .regenerateLastReply, .readAloud, .toggleDictation: .edit
         case .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .reloadPincer: .view
-        case .commandPalette, .searchMessages, .goBack, .goForward: .go
+        case .commandPalette, .searchMessages, .goBack, .goForward, .previousMessage, .nextMessage: .go
         case .stopRun, .gatewaySettings: .chat
         }
     }
@@ -216,6 +216,8 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .searchMessages: L("Search Messages…")
         case .goBack: L("Back")
         case .goForward: L("Forward")
+        case .previousMessage: L("Previous Message")
+        case .nextMessage: L("Next Message")
         case .stopRun: L("Stop the Current Run")
         case .gatewaySettings: L("Gateway Settings…")
         }
@@ -243,6 +245,8 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .searchMessages: KeyCombo("f", [.shift, .command])
         case .goBack: KeyCombo("[", [.command])
         case .goForward: KeyCombo("]", [.command])
+        case .previousMessage: KeyCombo(KeyCombo.Special.upArrow.rawValue, [.option, .command])
+        case .nextMessage: KeyCombo(KeyCombo.Special.downArrow.rawValue, [.option, .command])
         case .stopRun: KeyCombo(".", [.command])
         case .gatewaySettings: KeyCombo(",", [.shift, .command])
         case .addGateway, .showBookmarks, .editLastMessage, .regenerateLastReply, .swapSplitChats: nil

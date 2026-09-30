@@ -35,7 +35,7 @@ The gateway gives the agent the message you replied to, so your text is sent as 
 
 Paste, drag in, or pick images and files with the **+** button. Images are downscaled to fit the gateway's limits before they're sent.
 
-Attachments need a connection: while you're offline the **+** button is unavailable. See [Offline sending & retry](../offline-outbox/).
+While you're offline, attachments queue with their message and go out when you reconnect, even after quitting Pincer, up to the outbox's size limit. Over the limit, the composer says **Too large to queue offline — sends when you’re connected** and keeps the message in your draft. See [Offline sending & retry](../offline-outbox/#attachments-in-the-outbox).
 
 To send something from another app, use the share sheet. See [Share to Pincer](../sharing-to-pincer/).
 

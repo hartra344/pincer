@@ -687,7 +687,7 @@ private final class SidebarHeaderCell: NSTableCellView {
         self.badge.widthAnchor.constraint(greaterThanOrEqualToConstant: 16).isActive = true
         self.add.bezelStyle = .accessoryBarAction
         self.add.isBordered = false
-        self.add.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "New chat")
+        self.add.image = NSImage(systemSymbolName: "plus", accessibilityDescription: L("New chat"))
         self.add.symbolConfiguration = .init(pointSize: 11, weight: .medium)
         self.add.contentTintColor = .secondaryLabelColor
         self.add.toolTip = L("New chat")
@@ -753,14 +753,14 @@ private final class SidebarHeaderCell: NSTableCellView {
         self.add.alphaValue = canAdd ? 1 : 0
         self.add.isEnabled = canAdd
         self.add.setAccessibilityElement(canAdd)
+        self.add.setAccessibilityRole(.button)
         self.onAdd = header.addAction(actions)
         self.add.toolTip = header.addAccessibilityLabel
         self.add.setAccessibilityLabel(header.addAccessibilityLabel)
-        if header.isSubsection {
-            self.setAccessibilityLabel(header.subsectionAccessibilityLabel)
-        } else {
-            self.setAccessibilityLabel(nil)
-        }
+        self.setAccessibilityLabel(header.isSubsection ? header.subsectionAccessibilityLabel
+            : header.agentAccessibilityLabel ?? section.title)
+        self.setAccessibilityHelp(header.accessibilityHint)
+        self.isExpanded = !header.isCollapsed
         let label = AccessibilityText.sectionToggle(title: section.title, isCollapsed: header.isCollapsed)
         self.chevron.image = NSImage(systemSymbolName: header.isCollapsed ? "chevron.right" : "chevron.down",
                                      accessibilityDescription: label)
@@ -774,6 +774,16 @@ private final class SidebarHeaderCell: NSTableCellView {
 
     @objc private func toggleSection() {
         self.onToggle?()
+    }
+
+    private var isExpanded = false
+
+    override func isAccessibilityExpanded() -> Bool { self.isExpanded }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard let onToggle else { return false }
+        onToggle()
+        return true
     }
 
     override func viewDidChangeEffectiveAppearance() {

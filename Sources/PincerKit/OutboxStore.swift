@@ -104,8 +104,22 @@ public enum OutboxStore {
     /// for when the app is about to quit and a queued write might not get to run.
     public static func saveNow(_ outbox: Outbox, gatewayId: UUID, root: URL? = Self.root) {
         guard let url = self.file(gatewayId: gatewayId, root: root) else { return }
+        OutboxAttachmentStore.drain(gatewayId: gatewayId, root: root)
         let generation = self.queue.withLock { $0.next(for: url) }
         self.write(outbox.persistable, to: url, generation: generation)
+    }
+
+    /// Runs `work` on this Gateway's write queue, after everything queued before it; `load` and
+    /// `flushWrites` wait for it.
+    static func enqueueWork(gatewayId: UUID, root: URL?, _ work: @escaping @Sendable () -> Void) {
+        guard let url = self.file(gatewayId: gatewayId, root: root) else { return }
+        self.queue.withLock { queue in
+            let previous = queue.tasks[url]
+            queue.tasks[url] = Task.detached(priority: .utility) {
+                await previous?.value
+                work()
+            }
+        }
     }
 
     /// Returns once every write queued so far for this Gateway has landed.

@@ -401,6 +401,16 @@
         }
       }
     },
+    "%@ unsent messages in these chats will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ unsent messages in these chats will be discarded too."
+          }
+        }
+      }
+    },
     "%@ used": {
       "localizations": {
         "en": {
@@ -517,6 +527,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@, group, 1 chat"
+          }
+        }
+      }
+    },
+    "%@, part %lld of %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, part %lld of %lld"
           }
         }
       }
@@ -933,6 +953,16 @@
         }
       }
     },
+    "1 problem": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 problem"
+          }
+        }
+      }
+    },
     "1 reconnect attempt": {
       "localizations": {
         "en": {
@@ -959,6 +989,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 tool call"
+          }
+        }
+      }
+    },
+    "1 unsent message in these chats will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 unsent message in these chats will be discarded too."
           }
         }
       }
@@ -2503,12 +2543,12 @@
         }
       }
     },
-    "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send.": {
+    "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline, with their attachments, wait here until they send.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline wait here until they send."
+            "value": "Chat history is kept on this device so chats open instantly, even offline, and so you can search your messages. Messages you write offline, with their attachments, wait here until they send."
           }
         }
       }
@@ -2939,6 +2979,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Collapses the entry"
+          }
+        }
+      }
+    },
+    "Collapses the section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapses the section"
           }
         }
       }
@@ -5383,6 +5433,16 @@
         }
       }
     },
+    "Expands the section": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expands the section"
+          }
+        }
+      }
+    },
     "Expires": {
       "localizations": {
         "en": {
@@ -6699,6 +6759,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Instructions (optional)"
+          }
+        }
+      }
+    },
+    "Interrupted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrupted"
+          }
+        }
+      }
+    },
+    "Interrupted by a Gateway restart": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrupted by a Gateway restart"
           }
         }
       }
@@ -8093,6 +8173,16 @@
         }
       }
     },
+    "New chat with %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New chat with %@"
+          }
+        }
+      }
+    },
     "New lines appear here as the Gateway writes them.": {
       "localizations": {
         "en": {
@@ -8129,6 +8219,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Next"
+          }
+        }
+      }
+    },
+    "Next Message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next Message"
           }
         }
       }
@@ -10093,6 +10193,16 @@
         }
       }
     },
+    "Previous Message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous Message"
+          }
+        }
+      }
+    },
     "Previous branch": {
       "localizations": {
         "en": {
@@ -10303,12 +10413,12 @@
         }
       }
     },
-    "Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected.": {
+    "Queued and failed messages, and their attachments, are deleted from this device without being sent. Chats and cached transcripts aren’t affected.": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Queued and failed messages are deleted from this device without being sent. Chats and cached transcripts aren’t affected."
+            "value": "Queued and failed messages, and their attachments, are deleted from this device without being sent. Chats and cached transcripts aren’t affected."
           }
         }
       }
@@ -11113,6 +11223,16 @@
         }
       }
     },
+    "Replies": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replies"
+          }
+        }
+      }
+    },
     "Replies and tasks that are still running are interrupted. Connected clients disconnect briefly.": {
       "localizations": {
         "en": {
@@ -11759,6 +11879,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Run this on the Gateway host to see it:"
+          }
+        }
+      }
+    },
+    "Running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running"
           }
         }
       }
@@ -14033,6 +14163,26 @@
         }
       }
     },
+    "The %@ unsent messages in this chat will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The %@ unsent messages in this chat will be discarded too."
+          }
+        }
+      }
+    },
+    "The 1 unsent message in this chat will be discarded too.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The 1 unsent message in this chat will be discarded too."
+          }
+        }
+      }
+    },
     "The Gateway audio couldn't be played.": {
       "localizations": {
         "en": {
@@ -15143,6 +15293,16 @@
         }
       }
     },
+    "Timed Out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timed Out"
+          }
+        }
+      }
+    },
     "Timed out waiting for %@.": {
       "localizations": {
         "en": {
@@ -15253,6 +15413,16 @@
         }
       }
     },
+    "Too large to queue offline — sends when you’re connected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Too large to queue offline — sends when you’re connected"
+          }
+        }
+      }
+    },
     "Took %@": {
       "localizations": {
         "en": {
@@ -15299,6 +15469,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tool %@"
+          }
+        }
+      }
+    },
+    "Tool Calls": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool Calls"
           }
         }
       }
@@ -16413,6 +16593,16 @@
         }
       }
     },
+    "Your Messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Messages"
+          }
+        }
+      }
+    },
     "Your agent didn't answer. You can try again, or skip and chat later.": {
       "localizations": {
         "en": {
@@ -17149,6 +17339,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "to"
+          }
+        }
+      }
+    },
+    "updated %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "updated %@"
           }
         }
       }
