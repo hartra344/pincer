@@ -268,6 +268,7 @@ public final class AppModel {
         let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: self.deviceIdentity())
         store.notifier = self.notifier
         store.appIsActive = self.appIsActive
+        store.wireBookmarkSync()
         self.gateways.append(store)
         self.persist()
         self.selectedGatewayId = store.id
@@ -325,6 +326,7 @@ public final class AppModel {
         TranscriptCache.removeAll(gatewayId: id, permanently: true)
         self.history.prune { $0.gatewayId != id }
         DraftStore.removeAll(gatewayId: id)
+        BookmarkStore.shared(gatewayId: id).removeAll()
         ReactionStore(gatewayId: id.uuidString, defaults: self.localDefaults).removeAll()
         store.retireOutbox(save: false)
         store.outbox = Outbox()

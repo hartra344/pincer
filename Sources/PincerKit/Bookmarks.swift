@@ -39,6 +39,30 @@ public struct Bookmark: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
+extension Bookmark {
+    /// The synced entry value: compact JSON `{"p":preview,"r":role,"m":messageDateMs?,"c":createdAtMs}`.
+    var syncedValue: String {
+        struct Wire: Encodable { let p: String; let r: String; let m: Int64?; let c: Int64 }
+        let wire = Wire(p: self.preview, r: self.role, m: self.messageDate.map(Self.ms), c: Self.ms(self.createdAt))
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return (try? encoder.encode(wire)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+    }
+
+    /// A bookmark from a synced entry, or nil when the key or value can't be decoded.
+    init?(syncedKey key: String, value: String) {
+        struct Wire: Decodable { let p: String; let r: String; let m: Int64?; let c: Int64 }
+        let parts = key.components(separatedBy: "\u{1F}")
+        guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty,
+              let wire = try? JSONDecoder().decode(Wire.self, from: Data(value.utf8)) else { return nil }
+        self.init(sessionKey: parts[0], messageId: parts[1], preview: wire.p, role: wire.r,
+                  messageDate: wire.m.map(Self.date), createdAt: Self.date(wire.c))
+    }
+
+    private static func ms(_ date: Date) -> Int64 { Int64((date.timeIntervalSince1970 * 1000).rounded()) }
+    private static func date(_ ms: Int64) -> Date { Date(timeIntervalSince1970: Double(ms) / 1000) }
+}
+
 /// One gateway's bookmarks, newest first, saved in `UserDefaults`.
 @MainActor
 @Observable
@@ -47,6 +71,12 @@ public final class BookmarkStore {
     public private(set) var bookmarks: [Bookmark] = []
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var index: Set<String> = []
+
+    /// Most bookmarks kept per gateway; adding beyond drops the oldest.
+    public static let limit = 500
+    /// Called with the synced entry changes (`nil` = delete) after a local edit, never for `apply(synced:)`
+    /// or `removeAll()`.
+    @ObservationIgnored public var onChange: (([String: String?]) -> Void)?
 
     private static var stores: [UUID: BookmarkStore] = [:]
 
@@ -81,9 +111,18 @@ public final class BookmarkStore {
 
     public func add(_ bookmark: Bookmark) {
         guard !self.index.contains(bookmark.id) else { return }
+        var changes: [String: String?] = [bookmark.id: bookmark.syncedValue]
         self.bookmarks.insert(bookmark, at: 0)
         self.index.insert(bookmark.id)
+        if self.bookmarks.count > Self.limit {
+            let dropped = self.bookmarks.sorted { $0.createdAt > $1.createdAt }.suffix(self.bookmarks.count - Self.limit)
+            let ids = Set(dropped.map(\.id))
+            self.bookmarks.removeAll { ids.contains($0.id) }
+            self.index.subtract(ids)
+            for id in ids { changes[id] = .some(nil) }
+        }
         self.save()
+        self.onChange?(changes)
     }
 
     public func remove(sessionKey: String, messageId: String) {
@@ -91,6 +130,7 @@ public final class BookmarkStore {
         guard self.index.remove(id) != nil else { return }
         self.bookmarks.removeAll { $0.id == id }
         self.save()
+        self.onChange?([id: nil])
     }
 
     /// Stars the message, or un-stars it if it's starred. Returns whether it's now bookmarked.
@@ -113,10 +153,28 @@ public final class BookmarkStore {
     }
 
     public func removeAll(sessionKey: String) {
-        guard self.bookmarks.contains(where: { $0.sessionKey == sessionKey }) else { return }
+        let removed = self.bookmarks.filter { $0.sessionKey == sessionKey }
+        guard !removed.isEmpty else { return }
         self.bookmarks.removeAll { $0.sessionKey == sessionKey }
         self.index = Set(self.bookmarks.map(\.id))
         self.save()
+        self.onChange?(Dictionary(uniqueKeysWithValues: removed.map { ($0.id, String?.none) }))
+    }
+
+    /// Replaces the bookmarks with the pulled entries (newest first), skipping undecodable ones.
+    /// Doesn't fire `onChange`.
+    func apply(synced: [String: String]) {
+        let decoded = synced.compactMap { Bookmark(syncedKey: $0.key, value: $0.value) }
+            .sorted { ($0.createdAt, $0.id) > ($1.createdAt, $1.id) }
+        guard decoded != self.bookmarks else { return }
+        self.bookmarks = decoded
+        self.index = Set(decoded.map(\.id))
+        self.save()
+    }
+
+    /// The bookmarks as synced entries.
+    var syncedEntries: [String: String] {
+        Dictionary(self.bookmarks.map { ($0.id, $0.syncedValue) }, uniquingKeysWith: { first, _ in first })
     }
 
     public func removeAll() {
