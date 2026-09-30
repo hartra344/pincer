@@ -520,11 +520,7 @@ final class TranscriptSendStatusView: TranscriptBaseView {
     private let retryButton = TranscriptLabelButton()
     private let deleteButton = TranscriptLabelButton()
     private weak var actions: TranscriptRowActions?
-    #if os(macOS)
-    private var spinner: NSProgressIndicator?
-    #else
-    private var spinner: UIActivityIndicatorView?
-    #endif
+    private var spinner: TranscriptSpinner?
     /// Where the buttons start, after the status text.
     private var textWidth: CGFloat = 0
 
@@ -580,38 +576,16 @@ final class TranscriptSendStatusView: TranscriptBaseView {
     /// A small native spinner in the icon slot while sending; created on first use.
     private func updateSpinner(visible: Bool) {
         if !visible {
-            guard let spinner else { return }
-            #if os(macOS)
-            spinner.stopAnimation(nil)
-            #else
-            spinner.stopAnimating()
-            #endif
-            spinner.isHidden = true
+            self.spinner?.setAnimating(false)
             return
         }
-        if spinner == nil {
-            #if os(macOS)
-            let view = NSProgressIndicator()
-            view.style = .spinning
-            view.controlSize = .small
-            view.isIndeterminate = true
-            view.isDisplayedWhenStopped = false
-            #else
-            let view = UIActivityIndicatorView(style: .medium)
-            view.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
-            view.isUserInteractionEnabled = false
-            #endif
+        if self.spinner == nil {
+            let view = TranscriptSpinner(size: 12)
             self.addSubview(view)
             self.spinner = view
             self.setNeedsLayoutContent()
         }
-        guard let spinner else { return }
-        spinner.isHidden = false
-        #if os(macOS)
-        spinner.startAnimation(nil)
-        #else
-        spinner.startAnimating()
-        #endif
+        self.spinner?.setAnimating(true)
     }
 
     private func setNeedsLayoutContent() {
@@ -636,15 +610,7 @@ final class TranscriptSendStatusView: TranscriptBaseView {
         let buttonsWidth = buttons.reduce(CGFloat(0)) { $0 + $1.buttonSize.width + 10 }
         let natural = Self.iconWidth + singleLine(self.status?.text ?? "", self.font, TranscriptColors.secondary).lineWidth
         let textWidth = min(natural, max(self.bounds.width - buttonsWidth - 4, 40))
-        if let spinner {
-            #if os(macOS)
-            let side: CGFloat = 12
-            #else
-            let side: CGFloat = 14
-            #endif
-            let frame = CGRect(x: 1, y: (self.bounds.height - side) / 2, width: side, height: side)
-            if spinner.frame != frame { spinner.frame = frame }
-        }
+        self.spinner?.place(center: CGPoint(x: 7, y: self.bounds.height / 2))
         var x = textWidth + 10
         for button in buttons {
             let size = button.buttonSize

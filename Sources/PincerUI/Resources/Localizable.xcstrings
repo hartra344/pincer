@@ -31,6 +31,16 @@
         }
       }
     },
+    "%@ is larger than the Gateway allows (%@).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is larger than the Gateway allows (%@)."
+          }
+        }
+      }
+    },
     "%@ Secrets are write-only: Pincer shows whether they're set, never their values.": {
       "localizations": {
         "en": {
@@ -137,6 +147,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ is already used"
+          }
+        }
+      }
+    },
+    "%@ is larger than the Gateway allows (%@, last known limit).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is larger than the Gateway allows (%@, last known limit)."
           }
         }
       }
