@@ -777,7 +777,7 @@ struct TranscriptList: NSViewRepresentable {
 
         private weak var scrollToBottomModel: ScrollToBottomModel?
         /// The scroll-to-bottom animation is running; its frames don't move the anchor.
-        private var isScrollingToBottom = false
+        private(set) var isScrollingToBottom = false
         private var scrollToBottomToken = 0
 
         func attach(_ model: ScrollToBottomModel?) {
