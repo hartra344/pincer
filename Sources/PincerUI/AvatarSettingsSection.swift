@@ -36,7 +36,7 @@ struct AvatarSettingsSection: View {
             Text("Avatars", bundle: .module)
         } footer: {
             if self.enabled {
-                Text("Auto picks a character from the agent's identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still.", bundle: .module)
+                Text("Auto keeps the character the agent first got from its identity. Style and characters sync to your other devices through the Gateway. Reduce Motion keeps them still.", bundle: .module)
             }
         }
     }

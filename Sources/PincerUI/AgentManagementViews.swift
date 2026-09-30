@@ -343,7 +343,7 @@ struct AgentPage: View {
             } header: {
                 Text("Pet", bundle: .module)
             } footer: {
-                Text("Auto picks a character from the agent's identity.", bundle: .module)
+                Text("Auto keeps the character the agent first got from its identity. This only changes how Pincer shows the agent.", bundle: .module)
             }
         }
     }
