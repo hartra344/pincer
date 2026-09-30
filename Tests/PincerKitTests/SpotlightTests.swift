@@ -2,6 +2,11 @@ import Foundation
 import Testing
 @testable import PincerKit
 
+/// Spotlight suites share `SpotlightCenter.shared` (and one mutates the default indexer and
+/// `UserDefaults.standard`), so they run one at a time.
+@Suite(.serialized) enum SpotlightSuites {}
+
+extension SpotlightSuites {
 @Suite struct SpotlightTests {
     private let gateway = UUID()
 
@@ -86,4 +91,5 @@ import Testing
         await store.reindexSpotlight()
         #expect(fake.entries.first?.snippet == "second")
     }
+}
 }

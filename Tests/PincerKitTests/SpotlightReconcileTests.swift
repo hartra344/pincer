@@ -3,6 +3,7 @@ import Testing
 @testable import PincerKit
 
 /// #53: what goes into Spotlight, and when it leaves.
+extension SpotlightSuites {
 @MainActor
 @Suite("Spotlight", .serialized)
 struct SpotlightReconcileTests {
@@ -159,7 +160,7 @@ struct SpotlightReconcileTests {
         await gateway.reindexSpotlight()
         #expect(indexer.entries.first?.snippet == nil)
         scratch.defaults.set(true, forKey: Spotlight.includeMessagesKey)
-        SpotlightCenter.shared.sent.removeAll()
+        SpotlightCenter.shared.sent.removeValue(forKey: gateway.id)
         await gateway.reindexSpotlight()
         #expect(indexer.entries.first?.snippet == "ramen plans")
         await TranscriptCache.shutdown(root: temp.url)
@@ -191,4 +192,5 @@ struct SpotlightReconcileTests {
         #expect(!Spotlight.includesMessages(scratch.defaults))
         scratch.remove()
     }
+}
 }
