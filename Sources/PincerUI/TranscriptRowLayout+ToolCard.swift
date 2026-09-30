@@ -29,22 +29,15 @@ enum ToolPresentationCache {
     }
 }
 
-/// Header text of a tool card, split cheaply from the name (no parsing): an MCP tool is
-/// `server__tool` or `mcp__server__tool`.
+/// Header text of a tool card, split cheaply from the name (no parsing) by `MCPToolName`.
 struct ToolCardName {
     let server: String?
     let tool: String
 
     init(_ name: String) {
-        var rest = Substring(name)
-        if rest.hasPrefix("mcp__") { rest = rest.dropFirst(5) }
-        if let range = rest.range(of: "__", options: .backwards), range.lowerBound > rest.startIndex, range.upperBound < rest.endIndex {
-            self.server = String(rest[..<range.lowerBound])
-            self.tool = String(rest[range.upperBound...])
-        } else {
-            self.server = nil
-            self.tool = name
-        }
+        let split = MCPToolName.split(name)
+        self.server = split.server
+        self.tool = split.server == nil ? name : split.tool
     }
 }
 
@@ -218,6 +211,15 @@ extension TranscriptLayoutBuilder {
         if !chips.isEmpty {
             card.gap(6)
             self.chips(chips, into: &card)
+        }
+        if presentation.kind == .mcp, let server = presentation.mcpServer, self.context.gateway.supportsMCPServers {
+            card.gap(6)
+            let title = L("Open MCP Server")
+            let size = TranscriptLabelButton.size(title: title)
+            card.controls.append(.init(id: "open-mcp-server", title: title, symbol: "point.3.connected.trianglepath.dotted",
+                                       frame: CGRect(x: card.x, y: card.y, width: size.width, height: size.height),
+                                       action: .openMCPServer(server), spoken: title))
+            card.y += size.height
         }
         if let argumentsText = presentation.argumentsText, !argumentsText.isEmpty {
             card.gap(8)

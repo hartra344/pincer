@@ -9183,6 +9183,16 @@
         }
       }
     },
+    "Open MCP Server": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open MCP Server"
+          }
+        }
+      }
+    },
     "Open Chat in New Window": {
       "localizations": {
         "en": {

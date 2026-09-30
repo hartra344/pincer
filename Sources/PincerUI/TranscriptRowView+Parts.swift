@@ -1294,6 +1294,8 @@ final class TranscriptToolView: TranscriptBaseView {
         case let .toggle(key, value):
             guard let rowId else { return }
             self.actions?.setExpanded(key, value, row: rowId)
+        case let .openMCPServer(name):
+            self.actions?.openMCPServer(name)
         }
     }
 
@@ -1482,7 +1484,7 @@ final class TranscriptToolHeaderView: TranscriptTapView {
         let parts = ToolCardName(part.tool.name)
         var nameWidth: CGFloat = 0
         if let server = parts.server {
-            let serverText = singleLine("\(server) ›", nameFont, TranscriptColors.secondary, truncation: .byTruncatingTail)
+            let serverText = singleLine("\(server) ·", nameFont, TranscriptColors.secondary, truncation: .byTruncatingTail)
             let serverWidth = min(serverText.lineWidth, max((right - nameX) / 3, 0))
             serverText.drawLine(at: CGPoint(x: nameX, y: nameY), width: serverWidth, font: nameFont)
             nameWidth = serverWidth + 5

@@ -15,11 +15,21 @@ struct MCPServerEditor: View {
     @State private var draft: MCPServerDraft
     @State private var showProblems = false
     @State private var revealed: Set<Int> = []
+    @State private var advancedOpen: Bool
+    @State private var probe = MCPProbeState()
     private let initial: MCPServerDraft
 
     init(draft: MCPServerDraft) {
         self._draft = State(initialValue: draft)
         self.initial = draft
+        self._advancedOpen = State(initialValue: Self.hasAdvanced(draft))
+    }
+
+    /// Open the Advanced group up front when the server already uses any of it.
+    private static func hasAdvanced(_ draft: MCPServerDraft) -> Bool {
+        let text = [draft.connectionTimeoutMs, draft.requestTimeoutMs, draft.clientCert, draft.clientKey,
+                    draft.oauthScope, draft.oauthAuthProfileId, draft.oauthIdentity]
+        return text.contains { !$0.isEmpty } || !draft.toolInclude.isEmpty || !draft.toolExclude.isEmpty || !draft.sslVerify
     }
 
     private var isNew: Bool { self.initial.originalName == nil }
@@ -57,6 +67,10 @@ struct MCPServerEditor: View {
                 } else {
                     self.stdioSections(shown)
                 }
+                self.advancedSection(shown)
+                if self.gateway.mcp.supportsProbe {
+                    self.testSection(problems.isEmpty)
+                }
                 Section {
                     EmptyView()
                 } footer: {
@@ -89,7 +103,7 @@ struct MCPServerEditor: View {
     }
 
     /// A labeled text field, so the label stays visible once there's text.
-    private func field(_ title: String, text: Binding<String>, prompt: LocalizedStringKey, url: Bool = false) -> some View {
+    private func field(_ title: String, text: Binding<String>, prompt: LocalizedStringKey, url: Bool = false, number: Bool = false) -> some View {
         LabeledContent(title) {
             TextField(title, text: text, prompt: Text(prompt, bundle: .module))
                 .labelsHidden()
@@ -97,7 +111,7 @@ struct MCPServerEditor: View {
                 .autocorrectionDisabled()
                 #if os(iOS)
                 .textInputAutocapitalization(.never)
-                .keyboardType(url ? .URL : .default)
+                .keyboardType(url ? .URL : (number ? .numberPad : .default))
                 #endif
         }
     }
@@ -217,6 +231,150 @@ struct MCPServerEditor: View {
             Text(title)
         } footer: {
             Text("Values are stored on the Gateway and hidden here once saved.", bundle: .module)
+        }
+    }
+}
+
+// MARK: Advanced
+
+extension MCPServerEditor {
+    fileprivate func advancedSection(_ problems: [String: String]) -> some View {
+        Section {
+            DisclosureGroup(isExpanded: self.$advancedOpen) {
+                self.timeoutRows(problems)
+                self.toolFilterRows()
+                if self.draft.transport.isRemote {
+                    self.tlsRows()
+                    if self.draft.usesOAuth { self.oauthRows() }
+                }
+            } label: {
+                Text("Advanced", bundle: .module)
+            }
+        }
+    }
+
+    private func timeoutRows(_ problems: [String: String]) -> some View {
+        Group {
+            self.field(L("Connection timeout (ms)"), text: self.$draft.connectionTimeoutMs, prompt: "Default", number: true)
+            self.problem(problems["connectionTimeoutMs"])
+            self.field(L("Request timeout (ms)"), text: self.$draft.requestTimeoutMs, prompt: "Default", number: true)
+            self.problem(problems["requestTimeoutMs"])
+        }
+    }
+
+    private func toolFilterRows() -> some View {
+        Group {
+            self.patternRows(L("Only allow tools"), rows: self.$draft.toolInclude)
+            self.patternRows(L("Hide tools"), rows: self.$draft.toolExclude)
+            Text("Patterns match tool names; * matches any characters. If \"Only allow\" has entries, other tools are hidden. \"Hide\" always wins.", bundle: .module)
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private func patternRows(_ title: String, rows: Binding<[String]>) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text(title).font(.subheadline)
+            ForEach(rows.wrappedValue.indices, id: \.self) { index in
+                HStack {
+                    TextField(L("Pattern"), text: Self.patternBinding(rows, index), prompt: Text("search_*", bundle: .module))
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                    Button(L("Remove pattern"), systemImage: "minus.circle") { rows.wrappedValue.remove(at: index) }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.borderless)
+                }
+            }
+            Button(L("Add Pattern"), systemImage: "plus") { rows.wrappedValue.append("") }
+                .buttonStyle(.borderless)
+        }
+    }
+
+    private static func patternBinding(_ rows: Binding<[String]>, _ index: Int) -> Binding<String> {
+        Binding(get: { rows.wrappedValue.indices.contains(index) ? rows.wrappedValue[index] : "" },
+                set: { if rows.wrappedValue.indices.contains(index) { rows.wrappedValue[index] = $0 } })
+    }
+
+    private func tlsRows() -> some View {
+        Group {
+            Toggle(L("Verify TLS certificate"), isOn: self.$draft.sslVerify)
+            if !self.draft.sslVerify {
+                Label(L("Turning this off makes the connection easy to intercept."), systemImage: "exclamationmark.shield")
+                    .font(.caption).foregroundStyle(.orange)
+            }
+            self.field(L("Client certificate"), text: self.$draft.clientCert, prompt: "Path on the Gateway host", url: false)
+            self.field(L("Client key"), text: self.$draft.clientKey, prompt: "Path on the Gateway host", url: false)
+        }
+    }
+
+    private func oauthRows() -> some View {
+        Group {
+            Picker(L("Sign-in"), selection: self.$draft.oauthIdentity) {
+                Text("Shared by everyone", bundle: .module).tag("")
+                Text("Each person signs in", bundle: .module).tag("per-requester")
+            }
+            self.field(L("Scope"), text: self.$draft.oauthScope, prompt: "Default")
+            self.field(L("Auth profile"), text: self.$draft.oauthAuthProfileId, prompt: "Optional")
+        }
+    }
+}
+
+// MARK: Test connection
+
+/// The state of one Test Connection run in the editor.
+struct MCPProbeState {
+    var running = false
+    var result: MCPProbeResult?
+}
+
+extension MCPServerEditor {
+    fileprivate func testSection(_ valid: Bool) -> some View {
+        Section {
+            HStack {
+                Button(L("Test Connection"), systemImage: "bolt.horizontal") { self.runProbe() }
+                    .disabled(!valid || self.probe.running)
+                if self.probe.running { ProgressView().controlSize(.small) }
+            }
+            if let result = self.probe.result { MCPProbeResultView(result: result) }
+        } footer: {
+            Text("Tests the settings above without saving them.", bundle: .module)
+        }
+    }
+
+    private func runProbe() {
+        let draft = self.draft
+        self.probe.running = true
+        self.probe.result = nil
+        Task {
+            let result = await self.gateway.mcp.probe(name: draft.name, draft: draft)
+            self.probe = MCPProbeState(running: false, result: result)
+        }
+    }
+}
+
+/// Inline outcome of a probe: "Connected · 12 tools" or the failure diagnostics.
+struct MCPProbeResultView: View {
+    let result: MCPProbeResult
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            if self.result.ok {
+                Label(self.summary, systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            } else {
+                Label(L("Couldn't connect"), systemImage: "xmark.octagon.fill").foregroundStyle(.red)
+            }
+            ForEach(Array(self.result.diagnostics.enumerated()), id: \.offset) { _, message in
+                Text(message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var summary: String {
+        switch self.result.tools.count {
+        case 1: L("Connected · 1 tool")
+        case let count: L("Connected · \(count) tools")
         }
     }
 }

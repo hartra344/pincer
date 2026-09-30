@@ -91,6 +91,17 @@ public struct MCPServer: Identifiable, Hashable, Sendable {
     public let oauthIdentity: String?
     /// `oauth.authProfileId`, when the server signs in with a named auth profile.
     public let oauthAuthProfileId: String?
+    public let oauthScope: String?
+    /// `connectionTimeoutMs` / `requestTimeoutMs`, when set to a number.
+    public let connectionTimeoutMs: Int?
+    public let requestTimeoutMs: Int?
+    /// `toolFilter.include` / `toolFilter.exclude` patterns.
+    public let toolInclude: [String]
+    public let toolExclude: [String]
+    /// `sslVerify`; nil when the key is absent (verification on).
+    public let sslVerify: Bool?
+    public let clientCert: String?
+    public let clientKey: String?
     /// The whole entry, so edits keep keys Pincer doesn't know.
     public let raw: JSONValue
 
@@ -109,6 +120,14 @@ public struct MCPServer: Identifiable, Hashable, Sendable {
         self.usesOAuth = json["auth"]?.string == "oauth"
         self.oauthIdentity = json["oauth"]?["identity"]?.text
         self.oauthAuthProfileId = json["oauth"]?["authProfileId"]?.text
+        self.oauthScope = json["oauth"]?["scope"]?.text
+        self.connectionTimeoutMs = json["connectionTimeoutMs"]?.int
+        self.requestTimeoutMs = json["requestTimeoutMs"]?.int
+        self.toolInclude = json["toolFilter"]?["include"]?.array?.compactMap(\.text) ?? []
+        self.toolExclude = json["toolFilter"]?["exclude"]?.array?.compactMap(\.text) ?? []
+        self.sslVerify = json["sslVerify"]?.bool
+        self.clientCert = json["clientCert"]?.text
+        self.clientKey = json["clientKey"]?.text
         let declared = json["transport"]?.string.flatMap(MCPTransport.init(configValue:))
         if self.command != nil {
             self.transport = .stdio
@@ -175,6 +194,7 @@ public struct MCPServer: Identifiable, Hashable, Sendable {
 public enum MCPServers {
     public static let path = ["mcp", "servers"]
     public static let statusMethod = "mcp.status"
+    public static let probeMethod = "mcp.probe"
     public static let reconnectMethod = "mcp.reconnect"
     public static let oauthStatusMethod = "mcp.oauth.status"
     public static let oauthStartMethod = "mcp.oauth.start"
@@ -230,6 +250,23 @@ public struct MCPServerDraft: Hashable, Sendable {
     public var urlIsRedacted: Bool
     public var headers: [MCPKeyValue]
     public var usesOAuth: Bool
+    /// Positive whole milliseconds as text; empty removes the key.
+    public var connectionTimeoutMs = ""
+    public var requestTimeoutMs = ""
+    public var toolInclude: [String] = []
+    public var toolExclude: [String] = []
+    /// Remote only. Off is written as `sslVerify: false`.
+    public var sslVerify = true
+    /// Remote only: file paths. A saved redacted value holds the sentinel.
+    public var clientCert = ""
+    public var clientKey = ""
+    /// `oauth.identity`: "" (Gateway default), `shared` or `per-requester`. Remote + OAuth only.
+    public var oauthIdentity = ""
+    public var oauthScope = ""
+    public var oauthAuthProfileId = ""
+
+    /// Identity choices for `oauthIdentity`.
+    public static let oauthIdentities = ["shared", "per-requester"]
 
     private var savedEnvKeys: Set<String> = []
     private var savedHeaderKeys: Set<String> = []
@@ -266,6 +303,16 @@ public struct MCPServerDraft: Hashable, Sendable {
         self.urlIsRedacted = server.urlIsRedacted
         self.headers = server.headers
         self.usesOAuth = server.usesOAuth
+        self.connectionTimeoutMs = server.connectionTimeoutMs.map(String.init) ?? ""
+        self.requestTimeoutMs = server.requestTimeoutMs.map(String.init) ?? ""
+        self.toolInclude = server.toolInclude
+        self.toolExclude = server.toolExclude
+        self.sslVerify = server.sslVerify ?? true
+        self.clientCert = server.clientCert ?? ""
+        self.clientKey = server.clientKey ?? ""
+        self.oauthIdentity = server.oauthIdentity ?? ""
+        self.oauthScope = server.oauthScope ?? ""
+        self.oauthAuthProfileId = server.oauthAuthProfileId ?? ""
         self.savedEnvKeys = Set(server.env.map(\.key))
         self.savedHeaderKeys = Set(server.headers.map(\.key))
         self.savedTransport = server.transport
@@ -280,6 +327,8 @@ public struct MCPServerDraft: Hashable, Sendable {
         if server.url != nil { remote.append(L("URL")) }
         if !server.headers.isEmpty { remote.append(L("Headers")) }
         if server.usesOAuth { remote.append(L("OAuth sign-in")) }
+        if server.sslVerify != nil { remote.append(L("TLS verification")) }
+        if server.clientCert != nil || server.clientKey != nil { remote.append(L("Client certificate")) }
         self.savedFields = [.stdio: local, .streamableHTTP: remote, .sse: remote]
     }
 
@@ -302,7 +351,7 @@ public struct MCPServerDraft: Hashable, Sendable {
 
     private static var resecret: String { L("Re-enter this value; saved secrets can't move to a new name.") }
 
-    /// Problems by field: `name`, `command`, `url`, `env.<key>`, `headers.<key>`.
+    /// Problems by field: `name`, `command`, `url`, `env.<key>`, `headers.<key>`, `connectionTimeoutMs`, `requestTimeoutMs`, `oauthIdentity`.
     public func problems(existingNames: Set<String>) -> [String: String] {
         var problems: [String: String] = [:]
         let name = self.trimmedName
@@ -327,11 +376,22 @@ public struct MCPServerDraft: Hashable, Sendable {
                 problems["url"] = L("Enter a full http:// or https:// URL.")
             }
             self.checkRows(self.headers, saved: self.savedHeaderKeys, prefix: "headers", into: &problems)
+            if self.usesOAuth, !self.oauthIdentity.isEmpty, !Self.oauthIdentities.contains(self.oauthIdentity) {
+                problems["oauthIdentity"] = L("Choose shared or per-requester.")
+            }
         } else {
             if self.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { problems["command"] = L("Enter the command to run.") }
             self.checkRows(self.env, saved: self.savedEnvKeys, prefix: "env", into: &problems)
         }
+        for (key, text) in [("connectionTimeoutMs", self.connectionTimeoutMs), ("requestTimeoutMs", self.requestTimeoutMs)] {
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty, !Self.isPositiveInteger(trimmed) { problems[key] = L("Enter a whole number of milliseconds.") }
+        }
         return problems
+    }
+
+    private static func isPositiveInteger(_ text: String) -> Bool {
+        text.allSatisfy(\.isASCII) && text.allSatisfy(\.isNumber) && (Int(text) ?? 0) > 0
     }
 
     private func checkRows(_ rows: [MCPKeyValue], saved: Set<String>, prefix: String, into problems: inout [String: String]) {
@@ -350,6 +410,10 @@ public struct MCPServerDraft: Hashable, Sendable {
         }
     }
 
+    private static func patterns(_ list: [String]) -> [String] {
+        list.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
+
     /// The whole server object for `mcp.servers.<name>`. It starts from the original so unknown
     /// keys survive, drops the other transport's keys, and leaves unchanged secrets as the
     /// sentinel (which the Gateway restores).
@@ -364,6 +428,19 @@ public struct MCPServerDraft: Hashable, Sendable {
             put("enabled", .bool(false))
         }
 
+        func number(_ text: String) -> JSONValue? {
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            return Self.isPositiveInteger(trimmed) ? Int(trimmed).map { .number(Double($0)) } : nil
+        }
+        put("connectionTimeoutMs", number(self.connectionTimeoutMs))
+        put("requestTimeoutMs", number(self.requestTimeoutMs))
+        let include = Self.patterns(self.toolInclude), exclude = Self.patterns(self.toolExclude)
+        var filter = original?.raw["toolFilter"]?.object ?? [:]
+        filter["include"] = include.isEmpty ? nil : .array(include.map(JSONValue.string))
+        filter["exclude"] = exclude.isEmpty ? nil : .array(exclude.map(JSONValue.string))
+        filter = filter.filter { !$0.value.isNull }
+        put("toolFilter", filter.isEmpty ? nil : .object(filter))
+
         if self.transport.isRemote {
             for key in ["command", "args", "env", "cwd"] { put(key, nil) }
             put("url", .string(self.urlIsRedacted ? JSONValue.redactedSentinel : self.url.trimmingCharacters(in: .whitespacesAndNewlines)))
@@ -374,14 +451,28 @@ public struct MCPServerDraft: Hashable, Sendable {
                 put("transport", .string(self.transport.rawValue))
             }
             put("headers", MCPKeyValue.object(self.headers))
+            // Off is written; on removes the key unless the original said `true` explicitly.
+            put("sslVerify", self.sslVerify ? (original?.sslVerify == true ? .bool(true) : nil) : .bool(false))
+            func path(_ text: String) -> JSONValue? {
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : .string(trimmed)
+            }
+            put("clientCert", path(self.clientCert))
+            put("clientKey", path(self.clientKey))
             if self.usesOAuth {
                 put("auth", .string("oauth"))
+                var oauth = original?.raw["oauth"]?.object ?? [:]
+                oauth["identity"] = self.oauthIdentity.isEmpty ? nil : .string(self.oauthIdentity)
+                oauth["scope"] = path(self.oauthScope)
+                oauth["authProfileId"] = path(self.oauthAuthProfileId)
+                oauth = oauth.filter { !$0.value.isNull }
+                put("oauth", oauth.isEmpty ? nil : .object(oauth))
             } else {
                 put("auth", nil)
                 put("oauth", nil)
             }
         } else {
-            for key in ["url", "headers", "auth", "oauth"] { put(key, nil) }
+            for key in ["url", "headers", "auth", "oauth", "sslVerify", "clientCert", "clientKey"] { put(key, nil) }
             put("transport", originalTransport == "stdio" ? .string("stdio") : nil)
             put("command", .string(self.command.trimmingCharacters(in: .whitespacesAndNewlines)))
             put("args", self.args.isEmpty ? nil : .array(self.args.map(JSONValue.string)))
@@ -504,5 +595,97 @@ public struct MCPOAuthAttempt: Hashable, Sendable, Identifiable {
     /// The demo's consent link isn't a web page; the app shows its own consent sheet.
     public var isSimulated: Bool {
         !["http", "https"].contains(self.authorizationURL.scheme?.lowercased() ?? "")
+    }
+}
+
+// MARK: Probe
+
+/// The answer to `mcp.probe`: a one-off connection test of a server, saved or still a draft.
+public struct MCPProbeResult: Hashable, Sendable {
+    public let ok: Bool
+    public let tools: [String]
+    public let resources: Int?
+    public let prompts: Int?
+    public let diagnostics: [String]
+    public let auth: MCPAuthStatus?
+
+    public init(ok: Bool, tools: [String] = [], resources: Int? = nil, prompts: Int? = nil, diagnostics: [String] = [],
+                auth: MCPAuthStatus? = nil)
+    {
+        self.ok = ok
+        self.tools = tools
+        self.resources = resources
+        self.prompts = prompts
+        self.diagnostics = diagnostics
+        self.auth = auth
+    }
+
+    /// A failed probe made from a message (request errors, missing support).
+    public static func failure(_ message: String) -> MCPProbeResult { MCPProbeResult(ok: false, diagnostics: [message]) }
+
+    init(json: JSONValue) {
+        // `tools`, `resources` and `prompts` may be lists (of names or objects) or counts.
+        func names(_ value: JSONValue?) -> [String] {
+            (value?.array ?? []).compactMap { $0.text ?? $0["name"]?.text }
+        }
+        func count(_ value: JSONValue?) -> Int? { value?.int ?? value?.array?.count }
+        self.init(
+            ok: json["ok"]?.bool ?? false,
+            tools: names(json["tools"]),
+            resources: count(json["resources"]),
+            prompts: count(json["prompts"]),
+            diagnostics: (json["diagnostics"]?.array ?? []).compactMap { $0.text ?? $0["message"]?.text },
+            auth: json["auth"].flatMap(MCPAuthStatus.init(json:)))
+    }
+
+    public var toolCount: Int { self.tools.count }
+}
+
+// MARK: Plugin-declared servers
+
+/// An MCP server a plugin declares (`plugins.inspect` → `declared.mcpServers`), read-only.
+public struct PluginMCPServer: Identifiable, Hashable, Sendable {
+    public var id: String { "\(self.pluginId)/\(self.name)" }
+    public let name: String
+    public let pluginId: String
+    public let pluginName: String?
+    public let transport: MCPTransport?
+    public let launchSummary: String
+    public let auth: MCPAuthStatus?
+
+    public init(name: String, pluginId: String, pluginName: String? = nil, transport: MCPTransport? = nil, launchSummary: String = "",
+                auth: MCPAuthStatus? = nil)
+    {
+        self.name = name
+        self.pluginId = pluginId
+        self.pluginName = pluginName
+        self.transport = transport
+        self.launchSummary = launchSummary
+        self.auth = auth
+    }
+
+    /// One declared entry: an object (with `name`, or keyed by name) shaped like a config server.
+    init?(name: String?, json: JSONValue, pluginId: String, pluginName: String?, auth: JSONValue?) {
+        guard let name = name ?? json["name"]?.text ?? json["id"]?.text else { return nil }
+        let server = json.object == nil ? nil : MCPServer(name: name, json: json)
+        var launch = server?.launchSummary ?? ""
+        if launch.isEmpty { launch = json["launchSummary"]?.text ?? json["summary"]?.text ?? "" }
+        let transport = server?.transport ?? json["transport"]?.text.flatMap(MCPTransport.init(configValue:))
+        self.init(name: name, pluginId: pluginId, pluginName: pluginName, transport: transport, launchSummary: launch,
+                  auth: (auth?[name] ?? json["auth"]).flatMap { $0.object == nil ? nil : MCPAuthStatus(json: $0) })
+    }
+
+    /// Servers declared in a `plugins.inspect` result.
+    static func servers(inspect result: JSONValue) -> [PluginMCPServer] {
+        guard let pluginId = result["plugin"]?["id"]?.text else { return [] }
+        let pluginName = result["plugin"]?["name"]?.text
+        let declared = result["declared"]?["mcpServers"]
+        let auth = result["declared"]?["mcpAuth"] ?? result["mcpAuth"]
+        if let list = declared?.array {
+            return list.compactMap { PluginMCPServer(name: $0.string, json: $0, pluginId: pluginId, pluginName: pluginName, auth: auth) }
+        }
+        return (declared?.object ?? [:]).sorted { $0.key < $1.key }.compactMap {
+            PluginMCPServer(name: $0.key, json: $0.value, pluginId: pluginId, pluginName: pluginName, auth: auth)
+        }
     }
 }

@@ -38,6 +38,10 @@ Each row shows the server's name, how it starts (its command, or its URL) and a 
 
 An OAuth server that's signed in says **Signed in as** *account*, or **Signed in**. Choose a row to open the server.
 
+### From Plugins
+
+Plugins can declare MCP servers of their own. They appear in a **From Plugins** section below your servers, with the plugin's name, how the server starts and its sign-in state, and a status when the Gateway reports one. These are read-only: you can't edit, disable or remove them here. Choose one to open its plugin, and change it in the plugin's settings.
+
 ## Adding and editing
 
 Choose **+** to add a server, or open a server and choose **Edit**. Pick how it connects:
@@ -47,6 +51,17 @@ Choose **+** to add a server, or open a server and choose **Edit**. Pick how it 
 - **SSE** is the older remote transport. Use it only if the server doesn't offer Streamable HTTP.
 
 Names can use letters, numbers, `.`, `_` and `-`, and must start with a letter or number.
+
+### Advanced
+
+Open **Advanced** in the editor for optional settings. Leave a field empty and it isn't written to the config.
+
+- **Timeouts**: **Connection timeout** and **Request timeout**, in milliseconds. Whole numbers only.
+- **Tool Filter**: **Include** and **Exclude** lists of tool name patterns. Add one pattern per row. Include limits the server to the tools that match, and Exclude hides the ones that match.
+- **TLS** (remote servers): **Verify TLS certificate** is on by default. Turn it off only for a server you trust with a self-signed certificate. **Client certificate** and **Client key** are file paths on the Gateway host, for servers that need mutual TLS.
+- **OAuth** (remote servers that use OAuth sign-in): **Identity** chooses whose sign-in the server uses, and **Scope** and **Auth profile** set the requested scope and the saved auth profile to use.
+
+Switching a server to **stdio** removes the remote-only settings (TLS and OAuth), and the editor tells you which ones before you save.
 
 ### Secrets
 
@@ -65,6 +80,10 @@ Use the **Enabled** switch to turn a server off without losing its settings. Cho
 ## Review & Save
 
 Changes stay in a draft until you choose **Review & Save**, the same as the other Gateway Settings pages. You see what will change first, then save. The Gateway applies MCP changes live, so **no Gateway restart is needed**, and the list refreshes when it does. **Revert** throws the draft away.
+
+## Test Connection
+
+Choose **Test Connection** in the editor, or on the server's page, to try the server without saving. Pincer shows the result on the spot, such as **Connected · 12 tools**, or the reasons it failed. It tests what's in the editor, so you can check changes before you choose **Review & Save**. The button only appears when your Gateway supports it.
 
 ## Reconnect
 
@@ -87,6 +106,7 @@ Choose **Tools** on a server to open the [Tools inspector](../skills-and-tools/#
 ## What your Gateway needs
 
 - **Editing** works on any Gateway that offers `config.get` and `config.patch`: add, edit, remove, enable and disable.
+- **Test Connection** appears when the Gateway offers `mcp.probe`.
 - **Live status, Reconnect and in-app sign-in** need Gateway support that is proposed upstream in OpenClaw: [mcp.status](https://github.com/hartra344/pincer/issues/327), [mcp.reconnect](https://github.com/hartra344/pincer/issues/328) and [mcp.oauth](https://github.com/hartra344/pincer/issues/329). Pincer only shows these controls when your Gateway advertises them.
 
 Until then:
@@ -96,4 +116,4 @@ Until then:
 
 ## Try it in the demo
 
-Everything here works in [Try the Demo](../../getting-started/try-the-demo/), with sample servers in each state: **linear** needs sign-in, **notion**'s sign-in has expired, **postgres** has an error, **sentry** is disabled, and **filesystem**, **home-assistant** and **github** are connected. Nothing touches a real Gateway.
+Everything here works in [Try the Demo](../../getting-started/try-the-demo/), with sample servers in each state: **linear** needs sign-in, **notion**'s sign-in has expired, **postgres** has an error, **sentry** is disabled, and **filesystem**, **home-assistant** and **github** are connected. Under **From Plugins**, a **linear** server is signed in and another needs sign-in. Nothing touches a real Gateway.

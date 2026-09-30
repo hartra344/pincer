@@ -206,7 +206,7 @@ struct DemoMCPState {
 extension DemoGateway {
     static let mcpMethods = [
         "config.get", "config.schema", "config.patch", "config.apply",
-        "mcp.status", "mcp.reconnect", "mcp.oauth.status", "mcp.oauth.start", "mcp.oauth.complete", "mcp.oauth.cancel", "mcp.oauth.logout",
+        "mcp.status", "mcp.reconnect", "mcp.probe", "plugins.list", "plugins.inspect", "mcp.oauth.status", "mcp.oauth.start", "mcp.oauth.complete", "mcp.oauth.cancel", "mcp.oauth.logout",
     ]
     static let demoOAuthScheme = "pincer-demo-oauth"
 
@@ -221,6 +221,9 @@ extension DemoGateway {
             let names = self.mcpNames(params["serverNames"])
             return ["generatedAt": .number((Date().timeIntervalSince1970 * 1000).rounded()),
                     "servers": .array(names.compactMap { self.mcp.statusEntry($0) })]
+        case "mcp.probe": return try self.mcpProbe(params)
+        case "plugins.list": return Self.demoPluginList
+        case "plugins.inspect": return try Self.demoPluginInspect(params)
         case "mcp.oauth.status":
             let names = self.mcpNames(params["serverNames"]).filter { self.mcp.runtime[$0]?.auth != nil }
             return ["servers": .array(names.compactMap { name in
@@ -313,6 +316,65 @@ extension DemoGateway {
         default:
             return nil
         }
+    }
+
+    // MARK: probe and plugins
+
+    /// One-off connection test of a saved server or an unsaved draft; the status table is untouched.
+    private func mcpProbe(_ params: JSONValue) throws -> JSONValue {
+        let name = params["serverName"]?.string ?? ""
+        let saved = self.mcp.servers[name]
+        guard let server = params["server"].flatMap({ $0.object == nil ? nil : $0 }) ?? saved else {
+            throw Self.mcpInvalid("unknown MCP server: \(name)")
+        }
+        func failure(_ message: String, auth: JSONValue? = nil) -> JSONValue {
+            var result: [String: JSONValue] = ["ok": false, "tools": [], "resources": 0, "prompts": 0, "diagnostics": [["message": .string(message)]]]
+            result["auth"] = auth
+            return .object(result)
+        }
+        guard DemoMCPState.transport(server) != nil else { return failure("server needs a command or a url") }
+        if let command = server["command"]?.string, command.contains("nonexistent") || command.contains("missing") {
+            return failure("spawn \(command) ENOENT")
+        }
+        if let url = server["url"]?.string, !(url.hasPrefix("http://") || url.hasPrefix("https://")) { return failure("invalid url: \(url)") }
+        if server["auth"]?.string == "oauth" {
+            let auth = (server == saved ? self.mcp.runtime[name]?.auth : nil)
+                ?? DemoMCPState.Auth(mode: DemoMCPState.authMode(server) ?? "oauth-shared")
+            if auth.state != "authorized" { return failure("authorization required", auth: .object(DemoMCPState.authObject(auth))) }
+        }
+        if name == "postgres" { return failure("spawn uvx ENOENT") }
+        var tools = name == "linear" ? DemoMCPState.linearTools : (DemoMCPState.seedTools[name] ?? DemoMCPState.genericTools)
+        let include = server["toolFilter"]?["include"]?.array?.compactMap(\.string) ?? []
+        let exclude = server["toolFilter"]?["exclude"]?.array?.compactMap(\.string) ?? []
+        tools = tools.filter { (include.isEmpty || include.contains($0)) && !exclude.contains($0) }
+        return ["ok": true, "tools": JSONValue(tools), "resources": .number(name == "filesystem" ? 1 : 0), "prompts": 0, "diagnostics": []]
+    }
+
+    private static let demoPlugins: [(id: String, name: String, description: String, server: JSONValue, auth: JSONValue)] = [
+        ("linear", "Linear", "Linear issues through its hosted MCP server.",
+         ["name": "linear", "url": "https://mcp.linear.app/mcp", "transport": "streamable-http", "auth": "oauth"],
+         ["linear": ["mode": "oauth-shared", "state": "authorized", "account": "demo@pincer.app"]]),
+        ("asana", "Asana", "Asana tasks through its hosted MCP server.",
+         ["name": "asana", "url": "https://mcp.asana.com/sse", "transport": "sse", "auth": "oauth"],
+         ["asana": ["mode": "oauth-shared", "state": "requires-authorization"]]),
+    ]
+
+    private static func demoPluginEntry(_ plugin: (id: String, name: String, description: String, server: JSONValue, auth: JSONValue)) -> JSONValue {
+        ["id": .string(plugin.id), "name": .string(plugin.name), "description": .string(plugin.description), "version": "1.0.0",
+         "origin": "clawhub", "installed": true, "enabled": true, "state": "enabled", "runtime": ["state": "active"],
+         "removable": true, "kind": ["tool"]]
+    }
+
+    private static var demoPluginList: JSONValue {
+        ["plugins": .array(demoPlugins.map(demoPluginEntry)), "diagnostics": [], "mutationAllowed": false]
+    }
+
+    private static func demoPluginInspect(_ params: JSONValue) throws -> JSONValue {
+        guard let plugin = demoPlugins.first(where: { $0.id == params["pluginId"]?.string }) else {
+            throw Self.mcpInvalid("unknown plugin: \(params["pluginId"]?.string ?? "")")
+        }
+        return ["ok": true, "plugin": demoPluginEntry(plugin), "credentials": [],
+                "declared": ["mcpServers": [plugin.server], "mcpAuth": plugin.auth], "components": [:], "grants": [:]]
     }
 
     // MARK: config

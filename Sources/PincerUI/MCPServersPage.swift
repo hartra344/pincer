@@ -250,7 +250,7 @@ struct MCPServersPage: View {
                     }
                 }
             }
-            if rows.isEmpty {
+            if rows.isEmpty, model.pluginServers.isEmpty {
                 Section {
                     ContentUnavailableView {
                         Label(L("No MCP Servers"), systemImage: "point.3.connected.trianglepath.dotted")
@@ -262,7 +262,7 @@ struct MCPServersPage: View {
                         }
                     }
                 }
-            } else {
+            } else if !rows.isEmpty {
                 Section {
                     ForEach(rows) { server in
                         if model.isRemoved(server.name) {
@@ -277,6 +277,23 @@ struct MCPServersPage: View {
                 } footer: {
                     self.footer(model, rows: rows)
                 }
+            }
+            self.pluginSection(model)
+        }
+    }
+
+    @ViewBuilder private func pluginSection(_ model: MCPServersModel) -> some View {
+        if !model.pluginServers.isEmpty {
+            Section {
+                ForEach(model.pluginServers) { server in
+                    MCPPluginServerRow(server: server, status: model.status(for: server.name)) {
+                        self.navigator.go(to: SettingsLocation(destination: .plugins, routes: [.plugin(server.pluginId)]))
+                    }
+                }
+            } header: {
+                Text("From Plugins", bundle: .module)
+            } footer: {
+                Text("Managed by plugins. Change them in the plugin's settings.", bundle: .module)
             }
         }
     }
@@ -375,6 +392,68 @@ extension View {
     }
 }
 
+/// A read-only row for a server a plugin declares. Tapping opens the plugin.
+private struct MCPPluginServerRow: View {
+    let server: PluginMCPServer
+    let status: MCPServerStatus
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: self.open) {
+            HStack {
+                self.details
+                Spacer()
+                self.badges
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+            Text(self.server.name)
+            Text(self.server.pluginName.map { L("\($0) plugin") } ?? L("\(self.server.pluginId) plugin"))
+                .font(.caption).foregroundStyle(.secondary)
+            Text(self.launch).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+
+    private var launch: String {
+        let transport = self.server.transport?.title
+        return [transport, self.server.launchSummary].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    private var badges: some View {
+        VStack(alignment: .trailing, spacing: Theme.Spacing.xxs) {
+            if let auth = self.server.auth { MCPAuthBadge(auth: auth) }
+            if self.status.state != .unknown { MCPStatusLabel(status: self.status) }
+        }
+    }
+}
+
+/// "Signed in" / "Sign-in required" for a plugin server's auth.
+struct MCPAuthBadge: View {
+    let auth: MCPAuthStatus
+
+    var body: some View {
+        let signedIn = self.auth.state == .authorized
+        Label(self.title, systemImage: signedIn ? "checkmark.seal.fill" : "person.badge.key")
+            .font(.caption)
+            .foregroundStyle(signedIn ? .green : .orange)
+    }
+
+    private var title: String {
+        switch self.auth.state {
+        case .authorized: L("Signed in")
+        case .pendingAuthorization: L("Waiting for Sign-In…")
+        default: self.auth.isExpired ? L("Sign-In Expired") : L("Sign-in required")
+        }
+    }
+}
+
 // MARK: Detail page
 
 struct MCPServerPage: View {
@@ -387,6 +466,7 @@ struct MCPServerPage: View {
     @State private var signingOut: String?
     @State private var pasting = false
     @State private var flow = MCPSignInFlow()
+    @State private var probe = MCPProbeState()
 
     var body: some View {
         let model = self.gateway.mcp
@@ -618,11 +698,24 @@ struct MCPServerPage: View {
                 Button(L("Reconnect"), systemImage: "arrow.clockwise") { Task { await model.reconnect(server.name) } }
                     .disabled(operation.isRunning || block != nil || !model.canEdit)
             }
+            if model.supportsProbe { self.testRows(server, model: model, block: block) }
             if model.canEdit {
                 Button(L("Remove Server…"), role: .destructive) { self.confirmRemove = true }
             }
         } footer: {
             if model.supportsReconnect, let block { Text(block) }
         }
+    }
+
+    @ViewBuilder private func testRows(_ server: MCPServer, model: MCPServersModel, block: String?) -> some View {
+        HStack {
+            Button(L("Test Connection"), systemImage: "bolt.horizontal") {
+                self.probe = MCPProbeState(running: true, result: nil)
+                Task { self.probe = MCPProbeState(running: false, result: await model.probe(name: server.name, draft: nil)) }
+            }
+            .disabled(self.probe.running || block != nil)
+            if self.probe.running { ProgressView().controlSize(.small) }
+        }
+        if let result = self.probe.result { MCPProbeResultView(result: result) }
     }
 }

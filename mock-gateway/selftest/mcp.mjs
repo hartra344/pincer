@@ -16,6 +16,7 @@ export async function run() {
 
     for (const [method, params] of [
       ['mcp.reconnect', {}],
+      ['mcp.probe', { serverName: 'github' }],
       ['mcp.oauth.start', { serverName: 'linear', redirect: 'gateway' }],
       ['mcp.oauth.complete', { attemptId: 'x', code: 'y' }],
       ['mcp.oauth.cancel', { attemptId: 'x' }],
@@ -52,6 +53,26 @@ export async function run() {
     assert.deepEqual([by.sentry.state, by.sentry.enabled, by.sentry.transport], ['disabled', false, 'sse']);
     assert.deepEqual((await reader.send('mcp.status', { serverNames: ['github'] })).servers.map((s) => s.name), ['github']);
     assert.deepEqual((await reader.send('mcp.oauth.status', {})).servers.map((s) => s.name), ['linear', 'notion']);
+
+    // mcp.probe: saved servers and unsaved drafts; nothing changes in the status table.
+    const probeOk = await admin.send('mcp.probe', { serverName: 'github' });
+    assert.equal(probeOk.ok, true);
+    assert.equal(probeOk.tools.length, 6);
+    const filtered = await admin.send('mcp.probe', { serverName: 'github', server: { url: 'https://x.test/mcp', transport: 'streamable-http', toolFilter: { include: ['get_issue'] } } });
+    assert.deepEqual(filtered.tools, ['get_issue']);
+    const unsignedIn = await admin.send('mcp.probe', { serverName: 'linear' });
+    assert.equal(unsignedIn.ok, false);
+    assert.equal(unsignedIn.auth.state, 'requires-authorization');
+    const broken = await admin.send('mcp.probe', { serverName: 'new', server: { command: 'nonexistent-cmd' } });
+    assert.deepEqual([broken.ok, broken.diagnostics[0].message], [false, 'spawn nonexistent-cmd ENOENT']);
+    assert.equal((await admin.call('mcp.probe', { serverName: 'nope' })).error.code, 'INVALID_REQUEST');
+    assert.equal((await reader.send('mcp.status', { serverNames: ['linear'] })).servers[0].state, 'idle');
+
+    // plugins.inspect: plugin-declared MCP servers and their auth.
+    const linearPlugin = await reader.send('plugins.inspect', { pluginId: 'linear' });
+    assert.equal(linearPlugin.declared.mcpServers[0].name, 'linear');
+    assert.equal(linearPlugin.declared.mcpAuth.linear.state, 'authorized');
+    assert.equal((await reader.send('plugins.inspect', { pluginId: 'asana' })).declared.mcpAuth.asana.state, 'requires-authorization');
 
     // tools.effective: tools of connected servers plus a diagnostic for the failing one.
     const eff = await reader.send('tools.effective', { sessionKey: 'agent:main:main' });

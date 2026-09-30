@@ -62,7 +62,15 @@ private func checkToolCardPresentations(_ calls: [ToolActivity], label: String) 
     check(failed.output?.exitCode == 1 && failed.output?.isError == true, "\(label): failed exec has exit code 1 and the error flag")
     let mcp = ToolCallPresentation.make(calls[4])
     check(mcp.kind == .mcp && mcp.mcpServer == "github" && mcp.displayName == "search_issues",
-          "\(label): MCP call is github › search_issues (\(mcp.mcpServer ?? "nil") \(mcp.displayName))")
+          "\(label): MCP call is github · search_issues (\(mcp.mcpServer ?? "nil") \(mcp.displayName))")
+    for (name, server, tool) in [("mcp__github__search_issues", "github", "search_issues"), ("home-assistant__turn_on", "home-assistant", "turn_on"),
+                                 ("fs__read__file", "fs", "read__file")]
+    {
+        var call = calls[4]
+        call.name = name
+        let p = ToolCallPresentation.make(call)
+        check(p.kind == .mcp && p.mcpServer == server && p.displayName == tool, "\(label): \(name) splits to \(server) · \(tool) (\(p.mcpServer ?? "nil") \(p.displayName))")
+    }
     let fetch = ToolCallPresentation.make(calls[5])
     check(fetch.kind == .webFetch && fetch.output?.status == "200", "\(label): web_fetch status is 200 (\(fetch.output?.status ?? "nil"))")
 

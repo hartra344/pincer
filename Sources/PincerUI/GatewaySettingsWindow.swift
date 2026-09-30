@@ -18,6 +18,13 @@ struct GatewaySettingsOpener {
         gateway.usage.prepareSession(key, agentId: agentId)
         self(gateway, at: .usage, routes: [.sessionUsage(key: key, agentId: agentId)])
     }
+
+    /// MCP Servers, on the server's page when `name` is a configured server, else on the list.
+    @MainActor
+    func mcpServer(_ gateway: GatewayStore, name: String) {
+        let configured = gateway.mcp.servers.contains { $0.name == name }
+        self(gateway, at: .mcpServers, routes: configured ? [.mcpServer(name)] : [])
+    }
 }
 
 extension EnvironmentValues {

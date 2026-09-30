@@ -59,6 +59,52 @@ private func mcpDemoSignIn(_ mcp: MCPServersModel) async {
     }
 }
 
+/// Plugin-declared servers (#357) and Test Connection (#358), in the shape both gateways share.
+@MainActor
+private func mcpPluginAndProbeChecks(_ mcp: MCPServersModel, label: String) async {
+    check(mcp.supportsPluginServers && mcp.supportsProbe, "\(label): advertises plugins.inspect and mcp.probe")
+    let byName = Dictionary(mcp.pluginServers.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+    check(Set(byName.keys).isSuperset(of: ["linear", "asana"]), "\(label): plugin-declared servers include linear and asana (\(mcp.pluginServers.map(\.name)))")
+    let linear = byName["linear"], asana = byName["asana"]
+    check(linear?.pluginId == "linear" && linear?.pluginName == "Linear" && linear?.transport == .streamableHTTP
+          && linear?.launchSummary.contains("mcp.linear.app") == true,
+          "\(label): linear plugin server (\(String(describing: linear?.pluginName)) \(String(describing: linear?.transport)) \(linear?.launchSummary ?? "nil"))")
+    check(linear?.auth?.state == .authorized && linear?.auth?.account == "demo@pincer.app", "\(label): plugin linear is signed in as demo@pincer.app")
+    check(asana?.transport == .sse && asana?.auth?.state == .requiresAuthorization, "\(label): plugin asana is SSE and needs sign-in")
+    check(mcp.servers.map(\.name) == seedNames, "\(label): plugin servers are not in the configured list")
+    check(!mcp.servers.map(\.name).contains("asana"), "\(label): plugin server is not editable config")
+
+    let saved = await mcp.probe(name: "filesystem")
+    check(saved.ok && saved.toolCount == 4 && saved.diagnostics.isEmpty, "\(label): probe filesystem ok with 4 tools (\(saved.ok) \(saved.toolCount) \(saved.diagnostics))")
+    let broken = await mcp.probe(name: "postgres")
+    check(!broken.ok && broken.diagnostics.contains { $0.contains("ENOENT") }, "\(label): probe postgres fails with ENOENT (\(broken.diagnostics))")
+    let oauth = await mcp.probe(name: "linear")
+    check(!oauth.ok && oauth.auth?.state == .requiresAuthorization, "\(label): probe of signed-out linear reports requires-authorization (\(oauth.diagnostics))")
+    let unknown = await mcp.probe(name: "no-such-server")
+    check(!unknown.ok && !unknown.diagnostics.isEmpty, "\(label): probe of an unknown server fails with a message")
+
+    var draft = MCPServerDraft()
+    draft.name = "probe-draft"
+    draft.command = "nonexistent-binary"
+    let missing = await mcp.probe(name: draft.name, draft: draft)
+    check(!missing.ok && missing.diagnostics.contains { $0.contains("ENOENT") }, "\(label): probe of a draft with a missing command fails (\(missing.diagnostics))")
+    check(mcp.server("probe-draft") == nil && !mcp.isNew("probe-draft"), "\(label): probing a draft doesn't add it to the config")
+    draft.command = "node"
+    let fine = await mcp.probe(name: draft.name, draft: draft)
+    check(fine.ok && fine.toolCount > 0, "\(label): probe of a draft with a working command connects (\(fine.diagnostics))")
+
+    if let filesystem = mcp.server("filesystem"), let first = saved.tools.first {
+        var filtered = MCPServerDraft(server: filesystem)
+        filtered.toolInclude = [first]
+        let result = await mcp.probe(name: "filesystem", draft: filtered)
+        check(result.ok && result.tools == [first], "\(label): probe honours the draft's tool filter (\(result.tools))")
+        var excluded = MCPServerDraft(server: filesystem)
+        excluded.toolExclude = [first]
+        let rest = await mcp.probe(name: "filesystem", draft: excluded)
+        check(rest.ok && rest.toolCount == saved.toolCount - 1 && !rest.tools.contains(first), "\(label): probe honours the draft's tool exclude (\(rest.toolCount))")
+    }
+}
+
 /// Add (apply + save), disable/enable, reconnect and remove, in the shape both gateways share.
 @MainActor
 private func mcpLifecycle(_ gateway: GatewayStore, label: String, settleTimeout: Double) async {
@@ -132,6 +178,7 @@ func runDemoMCP() async {
     check(mcp.supportsLiveStatus && mcp.supportsReconnect && mcp.supportsOAuth, "demo advertises mcp.status, mcp.reconnect and mcp.oauth.*")
     await mcp.load()
     mcpSeedChecks(mcp, label: "demo")
+    await mcpPluginAndProbeChecks(mcp, label: "demo")
     await mcpDemoSignIn(mcp)
     await mcp.reconnect("github")
     check(mcp.status(for: "github").state == .connected, "demo: reconnect github stays connected")
@@ -182,6 +229,7 @@ func runLiveMCP(url: String, token: String) async {
     let ok29241 = await waitFor("mock statuses settle", timeout: 10) { mcp.status(for: "filesystem").state == .connected }
     check(ok29241, "mock: filesystem connects")
     mcpSeedChecks(mcp, label: "mock")
+    await mcpPluginAndProbeChecks(mcp, label: "mock")
 
     // Secrets stay redacted in config.get, and an unrelated edit doesn't clobber them.
     let sentinel = "__OPENCLAW_REDACTED__"

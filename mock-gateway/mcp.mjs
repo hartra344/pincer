@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 export const MCP_METHODS = [
   'mcp.status',
   'mcp.reconnect',
+  'mcp.probe',
   'mcp.oauth.status',
   'mcp.oauth.start',
   'mcp.oauth.complete',
@@ -16,7 +17,7 @@ export const MCP_EVENTS = ['mcp.oauth.changed', 'mcp.status.changed'];
 
 const ADMIN_SCOPE = 'operator.admin';
 const READ_SCOPE = 'operator.read';
-const ADMIN_METHODS = new Set(['mcp.reconnect', 'mcp.oauth.start', 'mcp.oauth.complete', 'mcp.oauth.cancel', 'mcp.oauth.logout']);
+const ADMIN_METHODS = new Set(['mcp.reconnect', 'mcp.probe', 'mcp.oauth.start', 'mcp.oauth.complete', 'mcp.oauth.cancel', 'mcp.oauth.logout']);
 const ATTEMPT_TTL_MS = 10 * 60 * 1000;
 const CONNECT_DELAY_MS = 800;
 const DEMO_ACCOUNT = 'demo@pincer.app';
@@ -24,6 +25,22 @@ const GENERIC_TOOLS = ['echo', 'ping', 'time'];
 
 export function mcpDisabled() {
   return process.env.MOCK_NO_MCP === '1';
+}
+
+/** MCP servers declared by seeded plugins (`plugins.inspect` → `declared.mcpServers` / `mcpAuth`). */
+export const PLUGIN_MCP_SERVERS = {
+  linear: [{ name: 'linear', url: 'https://mcp.linear.app/mcp', transport: 'streamable-http', auth: 'oauth' }],
+  asana: [{ name: 'asana', url: 'https://mcp.asana.com/sse', transport: 'sse', auth: 'oauth' }],
+};
+const PLUGIN_MCP_AUTH = {
+  linear: { linear: { mode: 'oauth-shared', state: 'authorized', account: DEMO_ACCOUNT, expiresAt: Date.now() + 86_400_000 } },
+  asana: { asana: { mode: 'oauth-shared', state: 'requires-authorization' } },
+};
+
+export function pluginMcpDeclared(pluginId) {
+  const servers = PLUGIN_MCP_SERVERS[pluginId];
+  if (!servers) return {};
+  return { mcpServers: servers.map((server) => ({ ...server })), mcpAuth: { ...PLUGIN_MCP_AUTH[pluginId] } };
 }
 
 /** Seeded `mcp.servers` config; the demo gateway mirrors it. */
@@ -238,6 +255,25 @@ export function mcpNotices(state) {
   return notices;
 }
 
+/** One-off connection test: never touches the status table. */
+function probeResult(state, name, server, isSaved) {
+  const transport = transportOf(server);
+  const diagnostics = (message) => ({ ok: false, tools: [], resources: 0, prompts: 0, diagnostics: [{ message }] });
+  if (!transport) return diagnostics('server needs a command or a url');
+  if (server.command && /nonexistent|missing/.test(server.command)) return diagnostics(`spawn ${server.command} ENOENT`);
+  if (server.url && !/^https?:\/\//.test(server.url)) return diagnostics(`invalid url: ${server.url}`);
+  if (server.auth === 'oauth') {
+    const rt = isSaved ? mcpState(state).runtime.get(name) : undefined;
+    const auth = rt?.auth ?? { mode: authModeOf(server), state: 'requires-authorization' };
+    if (auth.state !== 'authorized') return { ...diagnostics('authorization required'), auth: { mode: auth.mode, state: auth.state } };
+  }
+  if (name === 'postgres') return diagnostics('spawn uvx ENOENT');
+  const tools = toolsFor(name, mcpState(state).runtime.get(name) ?? {});
+  const filter = server.toolFilter ?? {};
+  const kept = tools.filter((tool) => (!filter.include?.length || filter.include.includes(tool)) && !filter.exclude?.includes(tool));
+  return { ok: true, tools: kept, resources: name === 'filesystem' ? 1 : 0, prompts: 0, diagnostics: [] };
+}
+
 function authorizeAttempt(state, broadcast, attempt, { account = DEMO_ACCOUNT } = {}) {
   const mcp = mcpState(state);
   const rt = mcp.runtime.get(attempt.server);
@@ -344,6 +380,13 @@ export function handleMcpRequest(state, conn, msg, { sendRes, sendErr, broadcast
     case 'mcp.status':
       sendRes(conn, id, { generatedAt: Date.now(), servers: names(state, params.serverNames).map((name) => statusEntry(state, name)) });
       break;
+    case 'mcp.probe': {
+      const saved = servers[params.serverName];
+      const candidate = params.server && typeof params.server === 'object' ? params.server : saved;
+      if (!candidate) return invalid(`unknown MCP server: ${params.serverName}`);
+      sendRes(conn, id, probeResult(state, params.serverName, candidate, candidate === saved));
+      break;
+    }
     case 'mcp.oauth.status':
       sendRes(conn, id, {
         servers: names(state, params.serverNames)

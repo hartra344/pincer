@@ -180,12 +180,8 @@ public struct ToolCallPresentation: Hashable, Sendable {
 
     private static func classify(name: String, hasCommand: Bool) -> (Kind, String?, String) {
         if name.contains("__") {
-            var parts = name.components(separatedBy: "__")
-            if parts.first == "mcp" { parts.removeFirst() }
-            if parts.count >= 2 {
-                return (.mcp, parts[0].isEmpty ? nil : parts[0], parts.dropFirst().joined(separator: "__"))
-            }
-            return (.mcp, nil, parts.first ?? name)
+            let split = MCPToolName.split(name)
+            return (.mcp, split.server, split.tool)
         }
         let lower = name.lowercased()
         let execNames: Set<String> = ["exec", "bash", "shell", "sh", "run_command", "run_shell_command",
@@ -236,5 +232,20 @@ public struct ToolCallPresentation: Hashable, Sendable {
         default:
             return nil
         }
+    }
+}
+
+/// Splits an MCP tool name (`server__tool`, optionally `mcp__server__tool`) into its server and tool.
+/// The server is everything before the FIRST `__` (after an optional `mcp__` prefix), so tool names
+/// may contain `__`. Names without a usable split have no server and keep `tool == name` unless
+/// only the prefix was there.
+public enum MCPToolName {
+    public static func split(_ name: String) -> (server: String?, tool: String) {
+        var rest = Substring(name)
+        if rest.hasPrefix("mcp__") { rest = rest.dropFirst(5) }
+        if let range = rest.range(of: "__"), range.lowerBound > rest.startIndex, range.upperBound < rest.endIndex {
+            return (String(rest[..<range.lowerBound]), String(rest[range.upperBound...]))
+        }
+        return (nil, rest.isEmpty ? name : String(rest))
     }
 }
