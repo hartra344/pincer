@@ -13,8 +13,8 @@ struct SessionDeleteMessageTests {
     }
 
     @Test func oneChat() {
-        #expect(SessionManager.deleteMessage(unsentCount: 1) == self.base + " Its 1 unsent message will be discarded too.")
-        #expect(SessionManager.deleteMessage(unsentCount: 3) == self.base + " Its 3 unsent messages will be discarded too.")
+        #expect(SessionManager.deleteMessage(unsentCount: 1) == self.base + " The 1 unsent message in this chat will be discarded too.")
+        #expect(SessionManager.deleteMessage(unsentCount: 3) == self.base + " The 3 unsent messages in this chat will be discarded too.")
     }
 
     @Test func bulk() {

@@ -73,7 +73,8 @@ struct SessionsPage: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(SessionManager.deleteMessage(unsentCount: self.unsentCount(self.selection), sessionCount: self.selection.count))
+            Text(SessionManager.deleteMessage(unsentCount: self.unsentCount(model.deletePlan(self.selection).deletable),
+                                                 sessionCount: self.selection.count))
         }
         .onAppear { model.clearMessages() }
         .onChange(of: rows.map(\.key)) { _, keys in
@@ -86,7 +87,7 @@ struct SessionsPage: View {
         }
     }
 
-    private func unsentCount(_ keys: Set<String>) -> Int {
+    private func unsentCount(_ keys: [String]) -> Int {
         keys.reduce(0) { $0 + self.gateway.outbox.entries(for: $1).count }
     }
 

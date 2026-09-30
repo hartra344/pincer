@@ -40,8 +40,8 @@ public enum SessionManager {
         let count = unsentCount.formatted()
         let extra: String
         switch (sessionCount > 1, unsentCount == 1) {
-        case (false, true): extra = L("Its 1 unsent message will be discarded too.")
-        case (false, false): extra = L("Its \(count) unsent messages will be discarded too.")
+        case (false, true): extra = L("The 1 unsent message in this chat will be discarded too.")
+        case (false, false): extra = L("The \(count) unsent messages in this chat will be discarded too.")
         case (true, true): extra = L("1 unsent message in these chats will be discarded too.")
         case (true, false): extra = L("\(count) unsent messages in these chats will be discarded too.")
         }
