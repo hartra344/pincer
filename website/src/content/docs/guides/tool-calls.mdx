@@ -9,12 +9,12 @@ When an agent runs a command, fetches a page or calls a tool, the transcript sho
 
 ## Collapsed and expanded
 
-Tap or click a card's header to expand it, and again to collapse it. The header shows:
+Tap or click a card's header to expand it, and again to collapse it; the chevron at the right shows which way it's open. The header shows:
 
 - an icon and the tool's name. For an [MCP tool](#mcp-tools) it reads `server · tool`.
 - a one-line summary: the command, path, URL or query, cut short in the middle so both ends stay visible.
 - how long the call took, for example `1.2 s`, at the right before the chevron. It appears once the call has finished, and only when the gateway reported a time. It's the first thing dropped when the header is tight, so the name and summary stay readable.
-- a spinner while the tool is running, and a red **Failed** badge when the call failed. A failed card gets an outlined red ✕ icon, a border in red and a darker chevron, so it stands out in a long chat. Every kind of card shows the badge, including the plain one for tools Pincer has no special layout for.
+- a spinner while the tool is running, and a red **Failed** badge when the call failed. A failed card gets an outlined red ✕ icon and a red border, so it stands out in a long chat. Every kind of card shows the badge, including the plain one for tools Pincer has no special layout for.
 
 Pincer only works out the details when you expand a card, so long chats stay quick.
 
