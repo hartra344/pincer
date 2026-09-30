@@ -219,12 +219,13 @@ struct ReadAloudControllerTests {
         #expect(clamped.speaker.spoken[0].rate == 0.7)
     }
 
-    @Test func gatewayTextIsTruncatedButDeviceGetsFullText() async {
+    @Test func gatewayGetsLongTextInChunksAndDeviceGetsFullText() async {
         let long = String(repeating: "This is a sentence. ", count: 400)
         let h = Harness()
         h.controller.toggle(messageId: "m1", text: long, gateway: h.gateway)
         #expect(await waitUntil { h.controller.phase == .idle })
-        #expect(h.speakCalls.count == 1 && h.speakCalls[0].count <= 4000 && h.speakCalls[0].count > 3000)
+        #expect(h.speakCalls.count > 10 && h.speakCalls.allSatisfy { $0.count <= SpeechChunker.limit })
+        #expect(h.speakCalls.joined(separator: " ").count == long.trimmingCharacters(in: .whitespaces).count)
 
         let device = Harness()
         device.speakError = .rpc(code: "UNAVAILABLE", message: "x", details: nil)

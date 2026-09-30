@@ -1,5 +1,7 @@
 # Contributing
 
+Coding agents (and humans) should also read [AGENTS.md](AGENTS.md): what Pincer is, the performance rules, checks and PR conventions.
+
 Pincer is laid out so parallel branches rarely touch the same file. Add new work in a new file and register it in one small list.
 
 ## Checks (`Sources/PincerChecks`)
