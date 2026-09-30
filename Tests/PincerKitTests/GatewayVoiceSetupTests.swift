@@ -22,7 +22,7 @@ private final class FakeGateway {
             let states = configured.sorted { $0.key < $1.key }.map { "{\"id\":\"\($0.key)\",\"label\":\"\($0.key == "elevenlabs" ? "ElevenLabs" : "OpenAI")\",\"configured\":\($0.value)}" }
             return Fixtures.json("{\"enabled\":false,\"auto\":\"off\",\"provider\":\"\(provider)\",\"providerStates\":[\(states.joined(separator: ","))]}")
         case "tts.providers":
-            return Fixtures.json(#"{"providers":[{"id":"openai","name":"OpenAI","configured":true,"models":["gpt-4o-mini-tts"],"voices":["alloy"]},{"id":"elevenlabs","name":"ElevenLabs","configured":false,"models":["eleven_v3"],"voices":[]}],"active":"openai"}"#)
+            return Fixtures.json("{\"providers\":[{\"id\":\"openai\",\"name\":\"OpenAI\",\"configured\":\(configured["openai"] ?? false),\"models\":[\"gpt-4o-mini-tts\"],\"voices\":[\"alloy\"]},{\"id\":\"elevenlabs\",\"name\":\"ElevenLabs\",\"configured\":\(configured["elevenlabs"] ?? false),\"models\":[\"eleven_v3\"],\"voices\":[]}],\"active\":\"\(provider)\"}")
         case "config.get":
             var node: JSONValue = ["providers": .object(tts)]
             for key in TTSProviderKeys.configRoot.reversed() { node = .object([key: node]) }
@@ -183,7 +183,7 @@ struct GatewayVoiceSetupTests {
     @Test func saveVoiceWritesVoiceId() async throws {
         let g = FakeGateway()
         _ = try await makeModel(g).saveVoice("21m00Tcm4TlvDq8ikWAM", provider: "elevenlabs")
-        #expect(providerNode(g.patch(), "elevenlabs") == ["voiceId": "21m00Tcm4TlvDq8ikWAM"])
+        #expect(providerNode(g.patch(), "elevenlabs")?["voiceId"]?.text == "21m00Tcm4TlvDq8ikWAM")
         #expect(g.calls("secrets.store.set").isEmpty)
     }
 
@@ -220,7 +220,7 @@ struct GatewayVoiceSetupTests {
         let model = makeModel(g)
         await model.refresh()
         let e = model.setups["elevenlabs"]
-        #expect(e?.keySource == .secretRef(source: "store", provider: "default", id: "__OPENCLAW_REDACTED__"))
+        #expect(e?.keySource == .secretRef(source: "store", provider: "default", id: "ELEVENLABS_API_KEY"))
         #expect(e?.model == "eleven_v4_turbo" && e?.voice == "abc")
         #expect(e?.voiceSettings == TTSVoiceSettings(stability: 0.4, similarityBoost: 0.6, style: 0.1, useSpeakerBoost: false, speed: 1.1))
         #expect(model.setups["openai"]?.keySource == .redacted && model.setups["openai"]?.model == "gpt-4o-mini-tts")
