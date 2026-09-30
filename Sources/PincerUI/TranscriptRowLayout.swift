@@ -564,13 +564,6 @@ struct TranscriptLayoutBuilder {
         }
     }
 
-    /// The end of a streaming reply, so the spoken label costs the same however long the reply has grown.
-    private static func spokenTail(of body: String, limit: Int = 1200) -> String {
-        guard body.utf8.count > limit else { return body }
-        let start = body.utf8.index(body.endIndex, offsetBy: -limit, limitedBy: body.startIndex) ?? body.startIndex
-        return String(body[start...].drop { !$0.isNewline && $0 != " " })
-    }
-
     private func assistant(_ turn: AssistantTurn, into layout: inout TranscriptRowLayout) {
         let agent = self.context.agent
         let from = turn.sender.map { self.sender($0) }
@@ -584,7 +577,7 @@ struct TranscriptLayoutBuilder {
         if !thinking.isEmpty { layout.copyItems.append(.init(title: L("Copy Thinking"), text: thinking)) }
         layout.accessibilityLabel = AccessibilityText.messageRow(
             role: .assistant, author: AccessibilityText.join([header.name, from?.marker]),
-            text: turn.isStreaming ? Self.spokenTail(of: body) : body, timestamp: header.time,
+            text: turn.isStreaming ? AccessibilityText.streamingExcerpt(body) : body, timestamp: header.time,
             toolCount: turn.tools.count, attachmentCount: turn.images.count + turn.files.count,
             isStreaming: turn.isStreaming, isError: turn.isError, isBookmarked: !layout.decoration.bookmarks.isEmpty,
             summaryLimit: 0)

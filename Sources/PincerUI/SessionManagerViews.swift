@@ -255,6 +255,7 @@ struct SessionManagerRowView: View {
                             .labelStyle(.iconOnly)
                             .foregroundStyle(.orange)
                             .help("Interrupted by a Gateway restart")
+                            .accessibilityLabel(AccessibilityText.runStatusLabel("interrupted"))
                     }
                 }
                 Text(self.subtitle)
@@ -270,7 +271,29 @@ struct SessionManagerRowView: View {
             }
         }
         .padding(.vertical, Theme.Spacing.xxs)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(self.spokenLabel)
+        .accessibilityHint(SessionManager.isRecoverable(self.row) ? L("Interrupted by a Gateway restart") : "")
+    }
+
+    /// Title, agent, run status, duration and last activity as one VoiceOver label.
+    private var spokenLabel: String {
+        let state = SessionRunState(row: self.row)
+        let status = AccessibilityText.join([
+            SessionManager.isRecoverable(self.row) ? "interrupted" : nil,
+            state == .idle ? nil : state.title,
+        ].map { $0.map(AccessibilityText.runStatusLabel) })
+        let duration = SessionManager.runDuration(self.row, now: Date()).map(Self.spokenDuration)
+        let updated = self.row.activityDate.map { L("updated \($0.formatted(.relative(presentation: .named)))") }
+        return AccessibilityText.sessionManagerRow(
+            title: self.row.title, agentName: self.row.agentId, runStatus: status.isEmpty ? nil : status,
+            duration: duration, updated: updated,
+            extra: [self.row.isArchived ? L("Archived") : nil, self.row.channel])
+    }
+
+    static func spokenDuration(_ seconds: TimeInterval) -> String {
+        let style = Duration.UnitsFormatStyle(allowedUnits: [.hours, .minutes, .seconds], width: .wide)
+        return Duration.seconds(max(0, Int(seconds))).formatted(style)
     }
 
     private var subtitle: String {

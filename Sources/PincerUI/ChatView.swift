@@ -33,6 +33,7 @@ struct ChatView: View {
     @State private var exporting: ExportedFile?
     @State private var find = TranscriptFind()
     @State private var jump: TranscriptJump?
+    @State private var navigator = TranscriptNavigator()
     @State private var exportState = ChatExportState()
     /// A built export waiting for its sheet to close: the save panel or share sheet can't open over it (#430).
     @State private var pendingExport: ExportedFile?
@@ -85,6 +86,12 @@ struct ChatView: View {
                 Button(L("Reply to Last Message")) { ReplyToLast(chat: self.chat, agentName: self.agent.name).perform() }
                     .shortcut(.replyToLastMessage)
                     .disabled(self.chat.latestReplyableId == nil)
+                Button(L("Previous Message")) { self.navigator.move?(false) }
+                    .shortcut(.previousMessage)
+                    .disabled(!self.paneIsActive)
+                Button(L("Next Message")) { self.navigator.move?(true) }
+                    .shortcut(.nextMessage)
+                    .disabled(!self.paneIsActive)
             }
             .opacity(0)
             .allowsHitTesting(false)
@@ -96,7 +103,7 @@ struct ChatView: View {
     // Split out of `body` so the iOS compiler can type-check the modifier chain in time.
     private var transcript: some View {
         TranscriptPane(
-            chat: self.chat, find: self.find, jump: self.jump, disclosure: self.disclosure,
+            chat: self.chat, find: self.find, jump: self.jump, navigator: self.navigator, disclosure: self.disclosure,
             previewing: self.$previewing, previewingHTML: self.$previewingHTML, quickLookURL: self.$quickLookURL,
             exporting: self.$exporting, bottomState: self.bottomState,
             bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
@@ -172,6 +179,7 @@ struct ChatView: View {
         }
         // In the split view only the focused side answers menu commands (#404).
         .focusedSceneValue(\.transcriptFind, self.paneIsActive ? self.find : nil)
+        .focusedSceneValue(\.transcriptNavigator, self.paneIsActive ? self.navigator : nil)
         .focusedSceneValue(\.chatExport, self.paneIsActive ? self.exportState : nil)
         .onAppear {
             self.paneHandles?.find = self.find
@@ -377,6 +385,7 @@ private struct TranscriptPane: View {
     let chat: ChatStore
     let find: TranscriptFind
     let jump: TranscriptJump?
+    let navigator: TranscriptNavigator
     let disclosure: TranscriptDisclosure
     @Binding var previewing: ImageRef?
     @Binding var previewingHTML: HTMLPreviewItem?
@@ -472,7 +481,8 @@ private struct TranscriptPane: View {
                 topInset: self.topInset,
                 highlight: self.find.highlight,
                 jump: self.jump,
-                bottomState: self.bottomState)
+                bottomState: self.bottomState,
+                navigator: self.navigator)
                 .ignoresSafeArea(.container, edges: [.top, .bottom])
         }
     }
@@ -808,6 +818,7 @@ struct ReplyToLast: Equatable {
 
 extension FocusedValues {
     @Entry var replyToLast: ReplyToLast?
+    @Entry var transcriptNavigator: TranscriptNavigator?
 }
 
 /// Placeholder rows shown while a chat's history loads, laid out like real transcript rows: an

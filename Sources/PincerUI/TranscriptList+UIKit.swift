@@ -22,6 +22,8 @@ struct TranscriptList: UIViewRepresentable {
     /// Told how far the reader is from the latest message and whether the list follows the bottom;
     /// runs the scroll-to-bottom button's scroll (#439).
     var bottomState: TranscriptBottomState?
+    /// Go ▸ Previous/Next Message for this list (#195).
+    var navigator: TranscriptNavigator?
 
     func makeCoordinator() -> Coordinator { Coordinator(context: self.context) }
 
@@ -34,6 +36,7 @@ struct TranscriptList: UIViewRepresentable {
         context.coordinator.update(rows: self.rows, context: self.context, insets: (self.topInset, self.bottomInset))
         context.coordinator.apply(self.highlight)
         context.coordinator.apply(self.jump)
+        context.coordinator.install(self.navigator)
     }
 
     @MainActor
@@ -84,6 +87,7 @@ struct TranscriptList: UIViewRepresentable {
             view.dataSource = self
             view.delegate = self
             self.collectionView = view
+            view.accessibilityCustomRotors = self.makeRotors()
             return view
         }
 
@@ -424,6 +428,50 @@ extension TranscriptList.Coordinator: TranscriptListHost {
     }
 
     func settle(changed: IndexSet) { self.settle() }
+
+    // MARK: Message navigation and rotors (#195)
+
+    func install(_ navigator: TranscriptNavigator?) {
+        navigator?.move = { [weak self] forward in self?.navigate(forward: forward) }
+    }
+
+    /// Moves the current message on, scrolls it into view and moves VoiceOver to it.
+    private func navigate(forward: Bool) {
+        guard let row = self.controller.moveNavigation(forward: forward), let cell = self.showCell(at: row) else { return }
+        UIAccessibility.post(notification: .layoutChanged, argument: cell)
+    }
+
+    /// Scrolls to a row and returns its cell, which the scroll has just brought on screen.
+    private func showCell(at row: Int) -> TranscriptCell? {
+        guard let view = self.collectionView else { return nil }
+        self.controller.scrollIntoView(row)
+        view.layoutIfNeeded()
+        return view.cellForItem(at: IndexPath(item: row, section: 0)) as? TranscriptCell
+    }
+
+    private func makeRotors() -> [UIAccessibilityCustomRotor] {
+        let kinds: [(String, TranscriptNavKind)] = [
+            (L("Messages"), .message), (L("Replies"), .reply), (L("Your Messages"), .user), (L("Tool Calls"), .tool),
+        ]
+        return kinds.map { name, kind in
+            UIAccessibilityCustomRotor(name: name) { [weak self] predicate in
+                self?.rotorResult(kind: kind, predicate: predicate)
+            }
+        }
+    }
+
+    /// The next or previous row of `kind`, searched in every row (not only the windowed cells).
+    private func rotorResult(kind: TranscriptNavKind, predicate: UIAccessibilityCustomRotorSearchPredicate)
+        -> UIAccessibilityCustomRotorItemResult? {
+        var from: Int?
+        if let cell = predicate.currentItem.targetElement as? UICollectionViewCell,
+           let path = self.collectionView?.indexPath(for: cell) { from = path.item }
+        let forward = predicate.searchDirection == .next
+        guard let row = self.controller.adjacentRow(from: from, forward: forward, kind: kind),
+              let cell = self.showCell(at: row) else { return nil }
+        self.controller.navigationRowId = self.rows[row].id
+        return UIAccessibilityCustomRotorItemResult(targetElement: cell, targetRange: nil)
+    }
 
     /// Scrolls so the selected match (or the top of its row) sits a little above the middle
     /// of the visible area, clear of the bars and chrome floating over the transcript.

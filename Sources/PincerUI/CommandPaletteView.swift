@@ -462,7 +462,9 @@ struct CommandPaletteView: View {
         let results = results.filter { !$0.isHeader }
         guard !results.isEmpty else { return }
         let current = self.currentSelection(in: results).flatMap { id in results.firstIndex { $0.id == id } } ?? 0
-        self.selection = results[(current + offset + results.count) % results.count].id
+        let item = results[(current + offset + results.count) % results.count]
+        self.selection = item.id
+        AccessibilityAnnouncer.announce(item.title)
         #if os(macOS)
         self.keyboardMoveMouseLocation = NSEvent.mouseLocation
         #endif
@@ -683,6 +685,7 @@ struct CommandPaletteOverlay: View {
                 CommandPaletteView(isPresented: Binding(get: { self.request != nil }, set: { if !$0 { self.request = nil } }),
                                    page: request.page, query: request.query, openAppSettings: self.openAppSettings)
                     .id(request.id)
+                    .accessibilityAddTraits(.isModal)
                     .padding(.top, 72)
                     .padding(.horizontal, Theme.Spacing.xxl)
             }
@@ -703,6 +706,7 @@ struct GoCommands: Commands {
     let app: AppModel
     @FocusedValue(\.commandPalette) private var palette
     @FocusedValue(\.searchMessages) private var searchMessages
+    @FocusedValue(\.transcriptNavigator) private var navigator
     #if os(macOS)
     /// Commands live in the app's scenes, so this can open a main window even when none has
     /// existed since launch; Quick Capture uses it for Send & Open and Open in Pincer.
@@ -732,6 +736,13 @@ struct GoCommands: Commands {
             Button(L("Forward")) { self.app.goForward() }
                 .shortcut(.goForward)
                 .disabled(!self.app.canGoForward)
+            Divider()
+            Button(L("Previous Message")) { self.navigator?.move?(false) }
+                .shortcut(.previousMessage)
+                .disabled(self.navigator == nil)
+            Button(L("Next Message")) { self.navigator?.move?(true) }
+                .shortcut(.nextMessage)
+                .disabled(self.navigator == nil)
             let pinned = self.app.selectedGateway?.pinnedChats.prefix(9) ?? []
             if !pinned.isEmpty {
                 Divider()
