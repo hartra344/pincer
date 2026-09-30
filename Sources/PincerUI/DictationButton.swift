@@ -31,24 +31,7 @@ struct DictationButton: View {
     var body: some View {
         Group {
             if self.model.isAvailable || self.model.isActive {
-                let listening = self.model.isActive
-                self.focusedPaneShortcut(Button(action: { self.toggle() }) {
-                    Label {
-                        Text(listening ? L("Stop Dictation") : L("Dictate Message"))
-                    } icon: {
-                        Image(systemName: listening ? "mic.fill" : "mic")
-                    }
-                    .labelStyle(.iconOnly)
-                        .font(.system(size: min(self.iconSize, 22), weight: .semibold))
-                        .foregroundStyle(listening ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                        .symbolEffect(.pulse, isActive: self.model.isListening)
-                        .frame(width: 26, height: 26)
-                        .contentShape(Circle())
-                })
-                .buttonStyle(.plain)
-                .frame(width: 32, height: Composer.controlHeight)
-                .help(self.helpText(listening: listening))
-                .accessibilityLabel(listening ? L("Stop Dictation") : L("Dictate Message"))
+                self.micButton(listening: self.model.isActive)
             }
         }
         .onChange(of: self.app.dictationToggleRequest) { _, request in
@@ -78,9 +61,22 @@ struct DictationButton: View {
         }
     }
 
+    private func micButton(listening: Bool) -> some View {
+        let button = Button(action: { self.toggle() }) {
+            DictationMicLabel(listening: listening, pulsing: self.model.isListening, iconSize: min(self.iconSize, 22))
+        }
+        return self.focusedPaneShortcut(button)
+            .buttonStyle(.plain)
+            .frame(width: 32, height: Composer.controlHeight)
+            .help(self.helpText(listening: listening))
+            .accessibilityLabel(listening ? L("Stop Dictation") : L("Dictate Message"))
+    }
+
     private func helpText(listening: Bool) -> String {
         guard !listening else { return L("Stop Dictation") }
         let base = L("Dictate a message with your voice")
+        // In split view only the focused pane's button has the shortcut.
+        guard self.paneIsActive else { return base }
         return ShortcutCommand.toggleDictation.displayShortcut.map { "\(base) (\($0))" } ?? base
     }
 
@@ -127,6 +123,29 @@ struct DictationButton: View {
         let pane = issue == .micDenied ? "Privacy_Microphone" : "Privacy_SpeechRecognition"
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)") { NSWorkspace.shared.open(url) }
         #endif
+    }
+}
+
+/// The mic glyph, with a text title so the iPad ⌘-hold shortcut overlay can name it.
+private struct DictationMicLabel: View {
+    let listening: Bool
+    let pulsing: Bool
+    let iconSize: CGFloat
+
+    var body: some View {
+        let title = self.listening ? L("Stop Dictation") : L("Dictate Message")
+        let style: AnyShapeStyle = self.listening ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary)
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: self.listening ? "mic.fill" : "mic")
+        }
+        .labelStyle(.iconOnly)
+        .font(.system(size: self.iconSize, weight: .semibold))
+        .foregroundStyle(style)
+        .symbolEffect(.pulse, isActive: self.pulsing)
+        .frame(width: 26, height: 26)
+        .contentShape(Circle())
     }
 }
 
