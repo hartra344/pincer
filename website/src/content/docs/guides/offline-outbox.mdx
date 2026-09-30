@@ -21,9 +21,9 @@ When Pincer isn't connected to the gateway, the composer still works for text me
 
 Attachments queue with their message. Pincer saves a copy of each file in the outbox, so a queued photo or document goes out with its message when you reconnect, even after quitting Pincer. See [Attachments in the outbox](#attachments-in-the-outbox).
 
-While you're offline, Pincer checks each attachment against the upload limits your gateway reported the last time you were connected, and saved for later. A file that's too big is refused in the composer with the usual message, for example **photo.heic is larger than this Gateway accepts (5 MB, last known limit).** You find out before you queue it. If Pincer has never connected to that gateway, it doesn't know the limits and accepts the file.
+While you're offline, Pincer checks each attachment against the upload limits your gateway reported the last time you were connected, and saved for later. A file that's too big is refused in the composer with the usual message, for example **photo.heic is larger than the Gateway allows (5 MB, last known limit).** You find out before you queue it. If Pincer has never connected to that gateway, it doesn't know the limits and accepts the file.
 
-Limits can change. If the gateway's limits have dropped since you queued a message and an attachment is now over the limit, the message isn't sent. It's marked **Failed** with the reason, for example **Couldn’t send: photo.jpg is larger than this Gateway accepts (5 MB).** Retrying can't help, so it offers **Delete** only.
+Limits can change. If the gateway's limits have dropped since you queued a message and an attachment is now over the limit, the message isn't sent. It's marked **Failed** with the reason, for example **Failed — photo.jpg is larger than this Gateway accepts (5 MB).** Retrying can't help, so it offers **Delete** only.
 
 Some things need a connection:
 
@@ -50,12 +50,12 @@ Queued and failed messages don't count as unread, don't post notifications and d
 
 ## Large uploads wait for Wi‑Fi
 
-A message whose attachments add up to more than 2 MB is a large upload. So that a queued video doesn't eat your data plan, Pincer holds it when it would go out automatically, for example after you reconnect, or while it waits behind another message. It's held while your device is on:
+A message whose attachments add up to 2 MB or more is a large upload. So that a queued video doesn't eat your data plan, Pincer holds it when it would go out automatically, for example after you reconnect, or once the message before it has gone out. It's held while your device is on:
 
 - a cellular connection, a personal hotspot or another network the system marks as expensive. iPhone and iPad show **Waiting for Wi‑Fi**; the Mac shows **Waiting — Personal Hotspot**.
 - any network while **Low Data Mode** is on, which shows **Waiting — Low Data Mode**.
 
-It goes out by itself once you're on a regular network again. Hover over the status on macOS, or use VoiceOver, to hear the upload's size, for example *This is a large upload (4.2 MB), so it’s waiting for Wi‑Fi to save cellular data.*
+The hold only shows while Pincer is connected and the message is next in its chat. While you're offline, or while an earlier message is ahead of it, it's a plain **Queued** message. It goes out by itself once you're on a regular network again. Hover over the status on macOS, or use VoiceOver, to hear the upload's size, for example *This is a large upload (4.2 MB), so it’s waiting for Wi‑Fi to save cellular data.*
 
 To upload it anyway, choose **Send Now** next to the status, or use it from the message's context menu (right-click on macOS, long-press on iOS) or VoiceOver actions. Send Now releases that message only, and it goes straight to **Sending…**. **Delete** is offered next to it. Small messages are never held.
 
