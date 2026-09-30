@@ -131,6 +131,26 @@ struct PanelSlideProbe {
         return ProbeMeter.wall() - start
     }
 
+    /// Waits until the anchor row sits at the same spot for 5 polls (20 ms apart) while no layout build
+    /// lands in between, capped at 5 s. The builds counter alone can look quiet for 180 ms on a starved
+    /// runner while a height fix or prefetch turn is still queued on the main loop; each of those ends
+    /// with the coordinator putting the anchor back, so the position is what says it has finished.
+    static func waitAnchorStable(_ host: Host, row: Int?) async {
+        func position() -> CGFloat {
+            let r = row ?? host.table.numberOfRows - 1
+            return host.table.rect(ofRow: r).minY - host.clip.bounds.minY
+        }
+        let start = ProbeMeter.wall()
+        var last = position(), lastBuilds = builds(host), stable = 0
+        while stable < 5, ProbeMeter.wall() - start < 5 {
+            try? await Task.sleep(for: .milliseconds(20))
+            let now = position(), nowBuilds = builds(host)
+            stable = now == last && nowBuilds == lastBuilds ? stable + 1 : 0
+            last = now
+            lastBuilds = nowBuilds
+        }
+    }
+
     /// Polls (every 5 ms, up to 10 s) until a thaw after `thaws` has run and the width is no longer frozen.
     static func waitUntilThawed(_ host: Host, after thaws: Int) async -> Bool {
         func thawed() -> Bool { !host.coordinator.isWidthFrozen && host.coordinator.thawStats.count > thaws }
@@ -182,6 +202,7 @@ struct PanelSlideProbe {
         result.measuredAfterThaw = thaw.rowsMeasured
         result.offloadedAtThaw = host.coordinator.premeasureStats.offloaded - offloadedFrames
         await waitQuiet(host, minimum: 0)
+        await waitAnchorStable(host, row: anchor?.row)
         result.buildsTail = builds(host) - thaw.buildsAfter
         result.settleCPU = (ProbeMeter.threadCPU() - settleStart) * 1000
 
@@ -214,7 +235,11 @@ struct PanelSlideProbe {
             #expect(t.thawed, "\(t.name): the width thaws once it settles")
             #expect(t.buildsAfterThaw > 0, "\(t.name): one relayout after the width settles")
             #expect(t.buildsAfterThaw <= 120, "\(t.name): relayout bounded by ~1 screen either side of the viewport")
-            #expect(t.anchorDrift <= 1, "\(t.name): anchor moved \(t.anchorDrift) pt")
+            // The coordinator skips re-anchoring when the clip is within 0.5 pt of the target
+            // (TranscriptList.Coordinator.restore), so the position captured before the slide and the one
+            // read after it can each be off by up to 0.5 pt: 1 pt in total. Anything beyond that is a
+            // real move, not rounding (the clip keeps fractional offsets, no backing-pixel snapping).
+            #expect(t.anchorDrift <= 1 + 1e-6, "\(t.name): anchor moved \(t.anchorDrift) pt")
             #expect(t.staleVisibleRows == 0, "\(t.name): visible rows not at the final clip width")
         }
     }
@@ -237,6 +262,7 @@ struct PanelSlideProbe {
         host.clip.scroll(to: NSPoint(x: 0, y: host.clip.bounds.minY + 1))
         host.scroll.reflectScrolledClipView(host.clip)
         await Self.waitQuiet(host)
+        await Self.waitAnchorStable(host, row: Self.midAnchor(host).row)
         let open = await Self.toggle(host, name: "sidebar open \(Int(Self.wide))->\(Int(Self.narrow))", to: Self.narrow, mid: true)
         let close = await Self.toggle(host, name: "sidebar close \(Int(Self.narrow))->\(Int(Self.wide))", to: Self.wide, mid: true)
         Self.table("mid-transcript", [open, close])

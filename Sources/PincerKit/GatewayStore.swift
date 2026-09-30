@@ -160,6 +160,11 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored private var didPickInitialChat = false
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var prefetchTask: Task<Void, Never>?
+    @ObservationIgnored private var prefetchGeneration = 0
+    /// Whether a background history prefetch is waiting to start or running (checks wait on it).
+    @ObservationIgnored public private(set) var isPrefetching = false
+    /// Prefetch runs that finished without being cancelled or replaced (checks).
+    @ObservationIgnored public private(set) var prefetchesFinished = 0
     /// Background full-history fills, one per chat, shared by the prefetch and the open chat.
     @ObservationIgnored private var headlessFills: [String: (id: UUID, task: Task<Void, Never>)] = [:]
     /// How many background fills actually started per chat (tests).
@@ -716,7 +721,16 @@ public final class GatewayStore: Identifiable {
 
     func startPrefetch() {
         self.prefetchTask?.cancel()
+        self.prefetchGeneration += 1
+        let generation = self.prefetchGeneration
+        self.isPrefetching = true
         self.prefetchTask = Task { [weak self] in
+            defer {
+                if let self, self.prefetchGeneration == generation {
+                    self.isPrefetching = false
+                    if !Task.isCancelled { self.prefetchesFinished += 1 }
+                }
+            }
             try? await Task.sleep(for: .seconds(2))
             guard let rows = self?.sessions.values.filter({ !$0.isSubagent && !$0.isPlaceholder })
                 .sorted(by: { $0.activityMs > $1.activityMs })

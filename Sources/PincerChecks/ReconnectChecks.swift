@@ -127,6 +127,9 @@ private func runRPCCountProbe(url: String, token: String, control: MockControl) 
     let chat = gateway.chat(for: key)
     let chatLoaded = await waitFor("chat loaded") { chat.hasLoaded }
     check(chatLoaded, "selected chat loaded")
+    // The background prefetch starts 2 s after bootstrap; its fetches belong to the launch, not the reconnect.
+    let prefetched = await waitFor("launch prefetch", timeout: 60) { gateway.prefetchesFinished >= 1 && !gateway.isPrefetching }
+    check(prefetched, "launch prefetch finished")
     var last = -1, since = Date()
     while Date().timeIntervalSince(since) < 2 {
         try? await Task.sleep(for: .milliseconds(250))
@@ -141,8 +144,13 @@ private func runRPCCountProbe(url: String, token: String, control: MockControl) 
 
     await control.call("resetStats")
     await control.call("drop")
+    let prefetchesBefore = gateway.prefetchesFinished
     let reconnected = await settleAfterReconnect(gateway, control: control)
     check(reconnected, "reconnected after a drop")
+    let reprefetched = await waitFor("reconnect prefetch", timeout: 60) {
+        gateway.prefetchesFinished > prefetchesBefore && !gateway.isPrefetching
+    }
+    check(reprefetched, "reconnect prefetch finished")
     let reconnect = await control.stats()
     print("  reconnect: \(summary(reconnect))")
     check(reconnect.count("users.prefs.get") <= 1, "reconnect: users.prefs.get ≤ 1 (\(reconnect.count("users.prefs.get")))")

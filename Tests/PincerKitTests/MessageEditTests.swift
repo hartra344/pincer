@@ -290,7 +290,10 @@ struct MessageEditTests {
         let (chat, user) = await self.editableFork(gateway)
         #expect(chat.beginEdit(user.id))
         async let first = chat.sendEdit("once", attachments: [])
-        await Task.yield()
+        // Wait for the first edit to actually be in flight; a single yield doesn't guarantee the child task started.
+        var yields = 0
+        while !chat.isSendingEdit, yields < 100_000 { await Task.yield(); yields += 1 }
+        #expect(chat.isSendingEdit, "first edit never went in flight")
         let second = await chat.sendEdit("twice", attachments: [])
         let firstOutcome = await first
         if case .sent = firstOutcome {} else { Issue.record("first edit not sent: \(firstOutcome)") }
