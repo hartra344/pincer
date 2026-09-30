@@ -221,6 +221,25 @@ struct BookmarkSyncStoreTests {
         #expect(store.droppedCount >= 1)
     }
 
+    @Test func dropNoticeIncrementsOncePerAddThatDropsAndApplyNeverTouchesIt() {
+        let store = self.store()
+        defer { self.defaults.removePersistentDomain(forName: self.suite) }
+        for index in 0..<BookmarkStore.limit { store.add(bookmark("m\(index)", at: TimeInterval(index + 1))) }
+        #expect(store.dropNotice == 0 && store.droppedCount == 0)
+        store.add(bookmark("over-1", at: 10_000))
+        #expect(store.dropNotice == 1)
+        #expect(store.droppedCount >= 1)
+        store.add(bookmark("over-2", at: 10_001))
+        #expect(store.dropNotice == 2)
+        let (notice, dropped) = (store.dropNotice, store.droppedCount)
+        // Pulls and duplicate adds leave both alone.
+        let remote = bookmark("remote", at: 20_000)
+        store.apply(synced: [remote.id: remote.syncedValue], shard: Bookmark.shard(ofKey: remote.id))
+        store.apply(synced: [:], shard: 0)
+        store.add(remote)
+        #expect(store.dropNotice == notice && store.droppedCount == dropped)
+    }
+
     @Test func persistsAcrossInstancesAsBefore() {
         let gateway = UUID()
         let defaults = self.defaults
@@ -395,6 +414,31 @@ struct BookmarkGatewaySyncTests {
         #expect(store.bookmarkStore.isBookmarked(sessionKey: item.sessionKey, messageId: item.messageId), "a pull doesn't revert it")
     }
 
+    @Test func starOnAnAlreadySyncedGatewayMadeOfflineIsPushedAfterConnect() async throws {
+        let scratch = ScratchDefaults()
+        let gateway = try FakePrefsGateway()
+        defer { gateway.stop(); scratch.remove() }
+        let profile = GatewayProfile(name: "Synced offline", url: gateway.url, authMode: .none)
+        // A first launch syncs and quits.
+        let first = PrefsHarness.makeStore(profile, scratch.defaults)
+        first.start()
+        let keys = first.syncedMaps.map(\.syncedDefaultsKey)
+        let up = await eventually(timeout: .seconds(10)) { first.state.isConnected && keys.allSatisfy { scratch.defaults.bool(forKey: $0) } }
+        #expect(up)
+        first.stop()
+        defer { BookmarkStore.forget(gatewayId: profile.id) }
+        // The next launch stars a message before connecting.
+        let second = PrefsHarness.makeStore(profile, scratch.defaults)
+        defer { second.stop() }
+        let item = bookmarks(inShard: 2, count: 1)[0]
+        BookmarkStore.shared(gatewayId: profile.id).add(item)
+        second.start()
+        let landed = await eventually(timeout: .seconds(10)) { gateway.map(Bookmark.prefKey(shard: 2))?[item.id] != nil }
+        #expect(landed, "pushed after connect")
+        await second.pull(second.syncedMap(Bookmark.prefKey(shard: 2)))
+        #expect(second.bookmarkStore.isBookmarked(sessionKey: item.sessionKey, messageId: item.messageId), "not reverted by the pull")
+    }
+
     @Test func editsAfterTheGatewayStoreIsReplacedStillPush() async throws {
         let h = try await PrefsHarness()
         defer { self.cleanUp(h) }
@@ -437,10 +481,11 @@ struct BookmarkGatewaySyncTests {
         for shard in 0..<Bookmark.shardCount {
             let map = gateway.map(Bookmark.prefKey(shard: shard)) ?? [:]
             total += map.count
-            #expect(((try? JSONEncoder().encode(map).count) ?? 0) <= 4 * 1024)
+            #expect(((try? JSONEncoder().encode(map).count) ?? 0) <= BookmarkStore.syncedByteBudget)
         }
         #expect(total > 0 && total <= BookmarkStore.limit)
         #expect(store.rejectedPrefs.isEmpty)
+        #expect(store.bookmarkStore.bookmarks.count <= BookmarkStore.limit)
         // The newest survive.
         #expect(store.bookmarkStore.isBookmarked(sessionKey: "agent:main:main", messageId: "legacy-299"))
     }
