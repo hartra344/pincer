@@ -17,6 +17,7 @@ struct MCPServerEditor: View {
     @State private var revealed: Set<Int> = []
     @State private var advancedOpen = false
     @State private var probe = MCPProbeState()
+    @State private var scrollTarget: MCPScrollTarget?
     private let initial: MCPServerDraft
 
     init(draft: MCPServerDraft) {
@@ -32,6 +33,7 @@ struct MCPServerEditor: View {
         let problems = self.draft.problems(existingNames: existing)
         let shown = self.showProblems || self.draft != self.initial ? problems : [:]
         NavigationStack {
+            ScrollViewReader { proxy in
             Form {
                 Section {
                     self.field(L("Name"), text: self.$draft.name, prompt: "filesystem")
@@ -71,6 +73,11 @@ struct MCPServerEditor: View {
                 }
             }
             .formStyle(.grouped)
+            .onChange(of: self.scrollTarget) { _, target in
+                guard let target else { return }
+                withAnimation { proxy.scrollTo(target.id, anchor: target.anchor) }
+            }
+            }
             .navigationTitle(self.isNew ? L("Add Server") : L("Edit \(self.initial.originalName ?? "")"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -84,6 +91,7 @@ struct MCPServerEditor: View {
                             self.dismiss()
                         } else {
                             self.showProblems = true
+                            self.revealAdvancedProblem(problems)
                         }
                     }
                     .disabled(!self.isNew && self.draft == self.initial)
@@ -261,6 +269,14 @@ extension MCPServerEditor {
                 self.advancedLabel(open: open.wrappedValue)
             }
         }
+        .id(MCPScrollTarget.advancedID)
+    }
+
+    /// Done with an error inside Advanced: open it and scroll there.
+    fileprivate func revealAdvancedProblem(_ problems: [String: String]) {
+        guard Self.advancedProblemKeys.contains(where: { problems[$0] != nil }) else { return }
+        self.advancedOpen = true
+        self.scrollTarget = MCPScrollTarget(id: MCPScrollTarget.advancedID, anchor: .top)
     }
 
     @ViewBuilder private func advancedLabel(open: Bool) -> some View {
@@ -345,9 +361,8 @@ extension MCPServerEditor {
     private func oauthRows(_ problems: [String: String]) -> some View {
         Group {
             Picker(L("Sign-in"), selection: self.$draft.oauthIdentity) {
-                Text("Default (shared)", bundle: .module).tag("")
-                Text("Shared by everyone", bundle: .module).tag("shared")
-                Text("Each person signs in", bundle: .module).tag("per-requester")
+                Text("Shared (one sign-in for everyone)", bundle: .module).tag(self.draft.oauthIdentity == "shared" ? "shared" : "")
+                Text("Per person (each person signs in)", bundle: .module).tag("per-requester")
             }
             self.problem(problems["oauthIdentity"])
             self.field(L("Auth profile"), text: self.$draft.oauthAuthProfileId, prompt: "Optional")
@@ -357,6 +372,16 @@ extension MCPServerEditor {
 }
 
 // MARK: Test connection
+
+/// A one-shot request to scroll the form; `token` makes repeats distinct.
+struct MCPScrollTarget: Equatable {
+    static let advancedID = "mcp-advanced"
+    static let resultID = "mcp-probe-result"
+
+    let id: String
+    let anchor: UnitPoint
+    let token = UUID()
+}
 
 /// The state of one Test Connection run. `tested` is the draft that was sent, to spot stale results.
 struct MCPProbeState {
@@ -383,6 +408,8 @@ extension MCPServerEditor {
             let timeout = Int(draft.connectionTimeoutMs) ?? 15000
             let result = await self.gateway.mcp.probe(name: draft.name, draft: draft, timeoutMs: timeout)
             self.probe = MCPProbeState(running: false, result: result, tested: draft)
+            await Task.yield()
+            self.scrollTarget = MCPScrollTarget(id: MCPScrollTarget.resultID, anchor: .bottom)
         }
     }
 }
@@ -407,7 +434,7 @@ struct MCPTestConnectionRows: View {
             Text(reason).font(.caption).foregroundStyle(.secondary)
         }
         if let result = self.state.result, !self.state.running {
-            MCPProbeResultView(result: result, stale: self.stale)
+            MCPProbeResultView(result: result, stale: self.stale).id(MCPScrollTarget.resultID)
         }
     }
 }

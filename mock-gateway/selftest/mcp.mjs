@@ -79,10 +79,10 @@ export async function run() {
     // plugins.inspect: plugin-declared MCP servers and their auth.
     const linearPlugin = await reader.send('plugins.inspect', { pluginId: 'linear' });
     assert.deepEqual(linearPlugin.declared.mcpServers, ['linear']);
-    assert.deepEqual(linearPlugin.mcpAuth, [{ serverName: 'linear', state: 'authorized' }]);
+    assert.deepEqual(linearPlugin.mcpAuth, [{ serverName: 'linear', state: 'requires-authorization' }]);
     const asanaPlugin = await reader.send('plugins.inspect', { pluginId: 'asana' });
     assert.deepEqual(asanaPlugin.components.unavailable.mcpServers, ['asana-beta']);
-    assert.equal(asanaPlugin.mcpAuth[0].state, 'requires-authorization');
+    assert.equal(asanaPlugin.mcpAuth, undefined);
 
     // tools.effective: tools of connected servers plus a diagnostic for the failing one.
     const eff = await reader.send('tools.effective', { sessionKey: 'agent:main:main' });

@@ -29,20 +29,29 @@ export function mcpDisabled() {
   return process.env.MOCK_NO_MCP === '1';
 }
 
-/** Seeded plugin-declared MCP servers, as `plugins.inspect` reports them: names, unavailable names and `mcpAuth`. */
+/** Seeded plugin-declared MCP servers: names and unavailable names, as `plugins.inspect` reports them. */
 const PLUGIN_MCP = {
-  linear: { servers: ['linear'], unavailable: [], auth: [{ serverName: 'linear', state: 'authorized' }] },
-  asana: { servers: ['asana', 'asana-beta'], unavailable: ['asana-beta'], auth: [{ serverName: 'asana', state: 'requires-authorization' }] },
+  linear: { servers: ['linear'], unavailable: [] },
+  asana: { servers: ['asana', 'asana-beta'], unavailable: ['asana-beta'] },
 };
 
-/** The MCP parts of a `plugins.inspect` result. */
-export function pluginMcpInspect(pluginId) {
+/**
+ * The MCP parts of a `plugins.inspect` result. Like upstream, `mcpAuth` only has entries for servers that match a
+ * configured OAuth `mcp.servers` entry (here by name), and carries that server's live sign-in state, so plugin
+ * `linear` follows the configured `linear` server; `asana` has no configured entry and so no `mcpAuth`.
+ */
+export function pluginMcpInspect(state, pluginId) {
   const mcp = PLUGIN_MCP[pluginId];
   if (!mcp) return { declared: {}, components: {} };
+  const runtime = mcpState(state).runtime;
+  const servers = configServers(state);
+  const auth = mcp.servers
+    .filter((name) => servers[name]?.auth === 'oauth' && runtime.get(name)?.auth)
+    .map((name) => ({ serverName: name, state: runtime.get(name).auth.state }));
   return {
     declared: { mcpServers: [...mcp.servers] },
     components: { mcpServers: mcp.servers.filter((name) => !mcp.unavailable.includes(name)), unavailable: { mcpServers: [...mcp.unavailable] } },
-    mcpAuth: mcp.auth.map((entry) => ({ ...entry })),
+    ...(auth.length ? { mcpAuth: auth } : {}),
   };
 }
 

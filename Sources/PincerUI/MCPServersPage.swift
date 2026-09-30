@@ -118,6 +118,11 @@ extension MCPServersModel {
         return nil
     }
 
+    /// Why Test Connection can't run yet: it tests the saved server, so unsaved edits don't count.
+    func probeBlock(_ name: String) -> String? {
+        self.isNew(name) || self.isChanged(name) ? L("Save your changes first.") : nil
+    }
+
     /// Servers removed in the draft but still saved on the Gateway.
     func removedServers(in settings: GatewaySettingsModel) -> [MCPServer] {
         (settings.savedValue(at: MCPServers.path)?.object ?? [:]).keys
@@ -432,16 +437,18 @@ private struct MCPPluginServerRow: View {
             Text(self.server.name)
             Text(L("\(self.pluginTitle) plugin"))
                 .font(.caption).foregroundStyle(.secondary)
-            if !self.server.isAvailable {
-                Text("Unavailable", bundle: .module).font(.caption).foregroundStyle(.orange)
-            }
         }
     }
 
     private var badges: some View {
         VStack(alignment: .trailing, spacing: Theme.Spacing.xxs) {
-            if let auth = self.server.auth { MCPAuthBadge(auth: auth) }
-            if self.status.state != .unknown { MCPStatusLabel(status: self.status) }
+            if !self.server.isAvailable {
+                Text("Unavailable", bundle: .module).font(.caption).foregroundStyle(.orange)
+            } else if self.status.state != .unknown {
+                MCPStatusLabel(status: self.status)
+            } else if let auth = self.server.auth {
+                MCPAuthBadge(auth: auth)
+            }
         }
     }
 }
@@ -495,6 +502,7 @@ struct MCPServerPage: View {
         } else if let server = model.server(self.name) {
             let status = model.status(for: server.name)
             let operation = model.operation(for: server.name)
+            ScrollViewReader { proxy in
             GatewaySettingsForm {
                 if !model.canEdit {
                     Section { FullManagementBadge { self.navigator.destination = .connection } }
@@ -504,6 +512,14 @@ struct MCPServerPage: View {
                 self.toolsSection(server, status: status, model: model)
                 self.configSection(server)
                 self.actionsSection(server, status: status, model: model, operation: operation)
+            }
+            .onChange(of: self.probe.result) { _, result in
+                guard result != nil else { return }
+                Task {
+                    await Task.yield()
+                    withAnimation { proxy.scrollTo(MCPScrollTarget.resultID, anchor: .bottom) }
+                }
+            }
             }
             .navigationTitle(server.name)
             .sheet(item: self.$editor) { target in
@@ -710,12 +726,14 @@ struct MCPServerPage: View {
                 Button(L("Reconnect"), systemImage: "arrow.clockwise") { Task { await model.reconnect(server.name) } }
                     .disabled(operation.isRunning || block != nil || !model.canEdit)
             }
-            if model.supportsProbe { self.testRows(server, model: model, block: block) }
+            if model.supportsProbe { self.testRows(server, model: model, block: model.probeBlock(server.name)) }
             if model.canEdit {
                 Button(L("Remove Server…"), role: .destructive) { self.confirmRemove = true }
             }
         } footer: {
-            if model.supportsReconnect, let block { Text(block) }
+            if model.supportsReconnect, let block, !(model.supportsProbe && block == model.probeBlock(server.name)) {
+                Text(block)
+            }
         }
     }
 

@@ -391,7 +391,7 @@ export function handleConfigRequest(state, conn, msg, { sendRes, sendErr, broadc
         credentials: plugin.id === 'weather'
           ? [{ path: ['plugins', 'entries', 'weather', 'config', 'apiKey'], label: 'Weather API key', envVars: ['WEATHER_API_KEY'], signupUrl: 'https://example.com/weather/signup', requiresCredential: true }]
           : [],
-        ...pluginMcpInspect(plugin.id),
+        ...pluginMcpInspect(state, plugin.id),
         reviewToken: `review_${plugin.id}`,
         grants: {},
       });

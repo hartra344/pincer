@@ -64,6 +64,6 @@ import Testing
         draft.url = "https://a.b/other"
         #expect(draft.resetsSignIn)
         draft.transport = .stdio
-        #expect(draft.droppedFieldsOnTransportChange == ["URL", "OAuth sign-in"])
+        #expect(draft.droppedFieldsOnTransportChange == ["URL", "OAuth options"])
     }
 }

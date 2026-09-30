@@ -99,7 +99,7 @@ export function seededToolCards({ makeMessage, textBlock, toolCallBlock }) {
     }),
     makeMessage('assistant', [
       textBlock('Config updated. Checking for known issues with OAuth servers.'),
-      toolCallBlock('call_seed_mcp_issues', 'github__search_issues', { query: 'MCP OAuth authorization required', repo: 'hartra344/pincer', state: 'open' }),
+      toolCallBlock('call_seed_mcp_issues', 'github__search_issues', { query: 'MCP server configuration', repo: 'hartra344/pincer', state: 'open' }),
     ]),
     result('call_seed_mcp_issues', 'github__search_issues', JSON.stringify(ISSUES, null, 2)),
     makeMessage('assistant', [toolCallBlock('call_seed_web_fetch', 'web_fetch', { url: FETCH_URL, extractMode: 'markdown' })]),

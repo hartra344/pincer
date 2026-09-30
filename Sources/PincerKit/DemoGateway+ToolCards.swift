@@ -150,7 +150,7 @@ extension DemoGateway {
             Self.message("assistant", [
                 Self.text("Config updated. Checking for known issues with OAuth servers."),
                 Self.toolCall(Self.toolCardsMCPCall, "github__search_issues", [
-                    "query": "MCP OAuth authorization required", "repo": "hartra344/pincer", "state": "open",
+                    "query": "MCP server configuration", "repo": "hartra344/pincer", "state": "open",
                 ]),
             ], ago: start - 170),
             result(Self.toolCardsMCPCall, "github__search_issues", Self.toolCardsIssuesJSON, ago: start - 172),

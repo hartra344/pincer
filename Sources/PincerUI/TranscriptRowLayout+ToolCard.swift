@@ -190,7 +190,9 @@ extension TranscriptLayoutBuilder {
         let openServer = presentation.kind == .mcp && self.settings.supportsMCPServers ? presentation.mcpServer : nil
         var openPlaced = false
         func placeOpenServer(_ server: String, ownRow: Bool, into card: inout ToolCardBuild) {
-            let title = L("Open MCP Server")
+            // A server that isn't configured (e.g. declared by a plugin) can only be found in the list.
+            let known = self.settings.mcpServerNames.map { $0.contains(server) } ?? true
+            let title = known ? L("Open MCP Server") : L("Show MCP Servers")
             let size = TranscriptLabelButton.size(title: title)
             if ownRow { card.gap(8) }
             card.controls.append(.init(id: "open-mcp-server", title: title, symbol: "point.3.connected.trianglepath.dotted",
@@ -205,7 +207,8 @@ extension TranscriptLayoutBuilder {
             let width = max(size.width, TranscriptLabelButton.size(title: L("Show raw JSON")).width,
                             TranscriptLabelButton.size(title: L("Show formatted")).width)
             if let openServer {
-                let open = TranscriptLabelButton.size(title: L("Open MCP Server")).width
+                let open = max(TranscriptLabelButton.size(title: L("Open MCP Server")).width,
+                               TranscriptLabelButton.size(title: L("Show MCP Servers")).width)
                 if open + 12 + width <= card.inner {
                     placeOpenServer(openServer, ownRow: false, into: &card)
                     openPlaced = true

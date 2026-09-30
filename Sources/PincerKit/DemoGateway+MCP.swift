@@ -225,7 +225,7 @@ extension DemoGateway {
                     "servers": .array(names.compactMap { self.mcp.statusEntry($0) })]
         case "mcp.probe": return try await self.mcpProbe(params)
         case "plugins.list": return Self.demoPluginList
-        case "plugins.inspect": return try Self.demoPluginInspect(params)
+        case "plugins.inspect": return try self.demoPluginInspect(params)
         case "mcp.oauth.status":
             let names = self.mcpNames(params["serverNames"]).filter { self.mcp.runtime[$0]?.auth != nil }
             return ["servers": .array(names.compactMap { name in
@@ -375,13 +375,11 @@ extension DemoGateway {
                 "diagnostics": []]
     }
 
-    private typealias DemoPlugin = (id: String, name: String, description: String, servers: [String], unavailable: [String], auth: JSONValue)
+    private typealias DemoPlugin = (id: String, name: String, description: String, servers: [String], unavailable: [String])
 
     private static let demoPlugins: [DemoPlugin] = [
-        ("linear", "Linear", "Linear issues through its hosted MCP server.", ["linear"], [],
-         [["serverName": "linear", "state": "authorized"]]),
-        ("asana", "Asana", "Asana tasks through its hosted MCP server.", ["asana", "asana-beta"], ["asana-beta"],
-         [["serverName": "asana", "state": "requires-authorization"]]),
+        ("linear", "Linear", "Linear issues through its hosted MCP server.", ["linear"], []),
+        ("asana", "Asana", "Asana tasks through its hosted MCP server.", ["asana", "asana-beta"], ["asana-beta"]),
     ]
 
     private static func demoPluginEntry(_ plugin: DemoPlugin) -> JSONValue {
@@ -394,15 +392,26 @@ extension DemoGateway {
         ["plugins": .array(demoPlugins.map(demoPluginEntry)), "diagnostics": [], "mutationAllowed": false]
     }
 
-    private static func demoPluginInspect(_ params: JSONValue) throws -> JSONValue {
-        guard let plugin = demoPlugins.first(where: { $0.id == params["pluginId"]?.string }) else {
+    private func demoPluginInspect(_ params: JSONValue) throws -> JSONValue {
+        guard let plugin = Self.demoPlugins.first(where: { $0.id == params["pluginId"]?.string }) else {
             throw Self.mcpInvalid("unknown plugin: \(params["pluginId"]?.string ?? "")")
         }
-        return ["ok": true, "plugin": demoPluginEntry(plugin), "credentials": [],
+        self.mcp.seedIfNeeded()
+        var result: JSONValue = ["ok": true, "plugin": Self.demoPluginEntry(plugin), "credentials": [],
                 "declared": ["mcpServers": JSONValue(plugin.servers)],
                 "components": ["mcpServers": JSONValue(plugin.servers.filter { !plugin.unavailable.contains($0) }),
                                "unavailable": ["mcpServers": JSONValue(plugin.unavailable)]],
-                "mcpAuth": plugin.auth, "grants": [:]]
+                "grants": [:]]
+        // Like upstream, `mcpAuth` only covers servers with a matching configured OAuth entry, and follows its sign-in.
+        let auth: [JSONValue] = plugin.servers.compactMap { name in
+            guard self.mcp.servers[name]?["auth"]?.string == "oauth", let state = self.mcp.runtime[name]?.auth?.state else { return nil }
+            return ["serverName": .string(name), "state": .string(state)]
+        }
+        if !auth.isEmpty, case var .object(object) = result {
+            object["mcpAuth"] = .array(auth)
+            result = .object(object)
+        }
+        return result
     }
 
     // MARK: config

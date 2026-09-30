@@ -24,7 +24,8 @@ public final class MCPServersModel {
     public private(set) var statuses: [String: MCPServerStatus] = [:]
     /// Servers declared by installed plugins (`plugins.inspect`), from the last `load()`. Read-only.
     public private(set) var pluginServers: [PluginMCPServer] = []
-    /// Live state of plugin-declared servers that `mcp.status` reports with `source: "plugin"`, by name.
+    /// Live state of plugin-declared servers that `mcp.status` reports with `source: "plugin"` and a `pluginId`,
+    /// by `PluginMCPServer.id` ("pluginId/name").
     public private(set) var pluginStatuses: [String: MCPServerStatus] = [:]
     /// Actions in flight or failed, by server name.
     public private(set) var operations: [String: OperationState] = [:]
@@ -152,7 +153,7 @@ public final class MCPServersModel {
 
     /// The live state of a plugin-declared server, when `mcp.status` reports it.
     public func status(for pluginServer: PluginMCPServer) -> MCPServerStatus? {
-        self.pluginStatuses[pluginServer.name]
+        self.pluginStatuses[pluginServer.id]
     }
 
     public func load() async {
@@ -195,8 +196,11 @@ public final class MCPServersModel {
                     }
                 }
                 self.pluginStatuses = Dictionary(
-                    (result["servers"]?.array ?? []).filter { $0["source"]?.text == "plugin" }
-                        .compactMap { entry in fresh[entry["name"]?.text ?? ""].map { ($0.name, $0) } },
+                    (result["servers"]?.array ?? []).compactMap { entry in
+                        guard entry["source"]?.text == "plugin", let pluginId = entry["pluginId"]?.text, !pluginId.isEmpty else { return nil }
+                        let status = MCPServerStatus(json: entry)
+                        return status.name.isEmpty ? nil : ("\(pluginId)/\(status.name)", status)
+                    },
                     uniquingKeysWith: { _, new in new })
                 self.statuses = fresh
             } catch {
@@ -410,8 +414,9 @@ public final class MCPServersModel {
         var timeout = timeoutMs
         if let draft {
             let saved = draft.originalName.flatMap { self.savedServer($0) }
-            let json = draft.json(original: saved)
-            if saved == nil || json != saved?.raw || draft.originalName != name { params["server"] = json }
+            // A disabled saved server can still be tested, so `enabled` isn't part of the comparison or the payload.
+            let json = Self.withoutEnabled(draft.json(original: saved))
+            if saved == nil || json != saved.map({ Self.withoutEnabled($0.raw) }) || draft.originalName != name { params["server"] = json }
             if timeout == nil, let custom = json["connectionTimeoutMs"]?.int { timeout = custom }
         }
         params["timeoutMs"] = .number(Double(timeout ?? Self.defaultProbeTimeoutMs))
@@ -420,6 +425,12 @@ public final class MCPServersModel {
         } catch {
             return .failure(GatewayError.message(for: error, scope: ConfigWriteError.adminRequired.message, unavailable: L("testing MCP connections")))
         }
+    }
+
+    private static func withoutEnabled(_ json: JSONValue) -> JSONValue {
+        guard case var .object(object) = json else { return json }
+        object["enabled"] = nil
+        return .object(object)
     }
 
     private func canRun(_ name: String, method: String) -> Bool {

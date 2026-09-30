@@ -9203,6 +9203,16 @@
         }
       }
     },
+    "Show MCP Servers": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show MCP Servers"
+          }
+        }
+      }
+    },
     "Open MCP Server": {
       "localizations": {
         "en": {

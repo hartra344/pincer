@@ -372,6 +372,8 @@ struct TranscriptSettings: Equatable {
     var agentStyles: [String: AvatarStyle] = [:]
     /// MCP tool cards offer "Open MCP Server", so their layouts depend on it.
     var supportsMCPServers = false
+    /// Names (and their transcript spellings) of the configured MCP servers; nil until the config has loaded.
+    var mcpServerNames: Set<String>?
 
     @MainActor static func current(for context: TranscriptContext) -> TranscriptSettings {
         let animated = AvatarSettings.isEnabled
@@ -385,7 +387,10 @@ struct TranscriptSettings: Equatable {
             agentStyles: animated
                 ? Dictionary(context.gateway.agents.map { ($0.id, AvatarSettings.style(for: $0)) }) { first, _ in first }
                 : [:],
-            supportsMCPServers: context.gateway.supportsMCPServers)
+            supportsMCPServers: context.gateway.canOpenMCPServers,
+            mcpServerNames: context.gateway.settings.hasLoaded ? Set(context.gateway.mcp.servers.flatMap {
+                [$0.name, MCPToolName.safeServerName($0.name)]
+            }) : nil)
     }
 }
 

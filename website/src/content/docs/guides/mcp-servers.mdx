@@ -40,7 +40,7 @@ An OAuth server that's signed in says **Signed in as** *account*, or **Signed in
 
 ### From Plugins
 
-Plugins can declare MCP servers of their own. They appear in a **From Plugins** section below your servers, with the server's name, the plugin it belongs to, and its sign-in state (**Signed in**, **Sign-in required**, **Waiting for Sign-In…**). A server shows **Unavailable** when your Gateway can't run it. A status appears too when the Gateway reports one. These are read-only: you can't edit, disable or remove them here. Choose one to open its plugin, and change it in the plugin's settings.
+Plugins can declare MCP servers of their own. They appear in a **From Plugins** section below your servers, with the server's name and the plugin it belongs to. Each row shows one status: **Unavailable** if your Gateway can't run the server, otherwise its live status when the Gateway reports one, otherwise its sign-in badge (**Signed in**, **Sign-in required**, **Waiting for Sign-In…**). These are read-only: you can't edit, disable or remove them here. Choose one to open its plugin, and change it in the plugin's settings.
 
 ## Adding and editing
 
@@ -56,10 +56,10 @@ Names can use letters, numbers, `.`, `_` and `-`, and must start with a letter o
 
 Open **Advanced** in the editor for optional settings. Leave a field empty and it isn't written to the config.
 
-- **Timeouts**: **Connection timeout (ms)** and **Request timeout (ms)**. Whole numbers of milliseconds. When empty, the Gateway uses 30 seconds to connect and 60 seconds per request.
+- **Timeouts**: **Connection timeout** and **Request timeout**, in milliseconds. Whole numbers only. When empty, the Gateway uses 30 seconds to connect and 60 seconds per request.
 - **Tool filter**: **Only allow tools** and **Hide tools** take tool name patterns, one per row. `*` matches any characters and is the only wildcard. The Gateway applies the allow list first, then hides anything that matches the hide list.
 - **TLS** (remote servers): **Verify TLS certificate** is on by default. Turn it off only for a server you trust, such as one with a self-signed certificate. **Client certificate** and **Client key** are file paths on the Gateway host, for servers that need mutual TLS.
-- **OAuth** (remote servers that use OAuth sign-in): **Sign-in** is **Shared by everyone** (the default) or **Each person signs in**. **Scope** sets the requested scope, and **Auth profile** picks a saved auth profile. Each-person sign-in can't use an auth profile.
+- **OAuth** (remote servers that use OAuth sign-in): turn on **Requires OAuth sign-in** and set an optional **Scope** right under it. In **Advanced**, **Sign-in** is **Shared (one sign-in for everyone)** or **Per person (each person signs in)**, and **Auth profile** picks a saved auth profile. Per-person sign-in can't use an auth profile.
 
 Switching a server to **stdio** removes the remote-only settings (TLS and OAuth), and the editor tells you which ones before you save.
 
@@ -83,7 +83,13 @@ Changes stay in a draft until you choose **Review & Save**, the same as the othe
 
 ## Test Connection
 
-Choose **Test Connection** in the editor, or on the server's page, to try a server without saving. The result appears on the spot, such as **Connected · 12 tools**, or the reasons it failed. It tests the settings in the editor, so you can check changes before you choose **Review & Save**. The button only appears when your Gateway supports it.
+Choose **Test Connection** to try a server and see the result on the spot. In the editor it tests the settings you've typed, without saving. On the server's page it tests the saved server, so save your changes first. The result is one of:
+
+- **Connected · 12 tools**, which can also count resources and prompts.
+- **Connected. Needs sign-in.** The server is reachable but you still need to sign in. Save, then sign in from the server's page.
+- **Couldn't connect**, with the reasons below it and **Copy Details**.
+
+If you change the settings after a test, the result is dimmed and marked **Settings changed since the test.** The button only appears when your Gateway supports it.
 
 ## Reconnect
 

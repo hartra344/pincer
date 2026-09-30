@@ -137,7 +137,7 @@ struct MCPAdvancedDraftTests {
         // Timeouts and filter are not transport specific.
         #expect(json["connectionTimeoutMs"]?.int == 5000 && json["toolFilter"] != nil && json["futureKey"] != nil)
         let dropped = d.droppedFieldsOnTransportChange
-        for label in ["URL", "OAuth sign-in", "TLS verification", "Client certificate"] { #expect(dropped.contains(label), "\(label): \(dropped)") }
+        for label in ["URL", "OAuth options", "TLS settings"] { #expect(dropped.contains(label), "\(label): \(dropped)") }
     }
 
     @Test func stdioDraftIgnoresRemoteFieldsSetInTheDraft() {
@@ -281,7 +281,33 @@ struct MCPProbeAndPluginTests {
         var sent: JSONValue?
         let m = model(methods: ["mcp.probe"]) { _, params in sent = params; return ["ok": true] }
         let result = await m.probe(name: "saved")
-        #expect(result.ok && result.tools.isEmpty && sent?["server"] == nil && sent?["timeoutMs"] == nil)
+        #expect(result.ok && result.tools.isEmpty && sent?["server"] == nil && sent?["timeoutMs"]?.int == MCPServersModel.defaultProbeTimeoutMs)
+    }
+
+    @Test func probeTimeoutPrecedence() async {
+        var timeouts: [Int?] = []
+        let m = model(methods: ["mcp.probe"]) { _, params in timeouts.append(params["timeoutMs"]?.int); return ["ok": true] }
+        #expect(MCPServersModel.defaultProbeTimeoutMs == 15_000)
+        var draft = MCPServerDraft()
+        draft.name = "n"
+        draft.command = "x"
+        _ = await m.probe(name: "n", draft: draft)
+        draft.connectionTimeoutMs = "2500"
+        _ = await m.probe(name: "n", draft: draft)
+        _ = await m.probe(name: "n", draft: draft, timeoutMs: 900)
+        draft.connectionTimeoutMs = "abc"
+        _ = await m.probe(name: "n", draft: draft)
+        #expect(timeouts == [15_000, 2500, 900, 15_000])
+    }
+
+    @Test func unsavedDraftAlwaysSendsServer() async {
+        var sent: JSONValue?
+        let m = model(methods: ["mcp.probe"]) { _, params in sent = params; return ["ok": true] }
+        var draft = MCPServerDraft()
+        draft.name = "n"
+        draft.command = "x"
+        _ = await m.probe(name: "n", draft: draft)
+        #expect(sent?["server"]?["command"]?.string == "x")
     }
 
     @Test func probeFailureShapesAndErrors() async {
