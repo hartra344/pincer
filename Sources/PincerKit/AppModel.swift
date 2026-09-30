@@ -343,6 +343,7 @@ public final class AppModel {
     public func clearTranscriptCache() async {
         await Task.detached(priority: .userInitiated) { TranscriptCache.removeEverything() }.value
         for gateway in self.gateways { await gateway.cacheCleared() }
+        await self.spotlightCacheCleared()
     }
 
     /// Unsent messages (queued or failed) across every Gateway.

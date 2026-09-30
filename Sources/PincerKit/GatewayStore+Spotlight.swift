@@ -65,10 +65,18 @@ extension GatewayStore {
         let rows = Spotlight.candidates(Array(self.sessions.values), cap: Spotlight.maxEntries)
         var snippets: [String: String] = [:]
         if includeMessages {
+            let sent = center.sent[self.id] ?? [:]
             for row in rows {
-                guard let snapshot = await TranscriptCache.load(gatewayId: self.id, sessionKey: row.key, root: self.cacheRoot),
-                      let snippet = Spotlight.snippet(from: snapshot.items) else { continue }
-                snippets[row.key] = snippet
+                let id = Spotlight.identifier(gatewayId: self.id, sessionKey: row.key, gatewayURL: self.profile.url,
+                                              gatewayHost: self.gatewayHost)
+                // Unchanged activity keeps the snippet already sent; only changed chats are read.
+                if let known = sent[id], known.lastActivity == row.activityDate, let snippet = known.snippet {
+                    snippets[row.key] = snippet
+                    continue
+                }
+                let tail = await TranscriptCache.loadNewest(gatewayId: self.id, sessionKey: row.key,
+                                                            limit: Spotlight.tailItems, root: self.cacheRoot)
+                if let snippet = Spotlight.snippet(from: tail.items) { snippets[row.key] = snippet }
             }
         }
         guard !Task.isCancelled, !self.profile.isDemo, Spotlight.isEnabled(self.defaults) else { return }
@@ -82,7 +90,7 @@ extension GatewayStore {
         let changed = entries.filter { previous?[$0.id] != $0 }
         let removed = (previous ?? [:]).keys.filter { current[$0] == nil }
         if !removed.isEmpty { await indexer.delete(ids: Array(removed)) }
-        if !changed.isEmpty { await indexer.index(changed) }
+        if !changed.isEmpty, Spotlight.isEnabled(self.defaults) { await indexer.index(changed) }
     }
 
     /// A chat's cache was dropped (deleted or vanished): it leaves Spotlight too.
@@ -96,6 +104,12 @@ extension GatewayStore {
 }
 
 extension AppModel {
+    /// The transcript cache was cleared: resend every chat so cached snippets go away now.
+    public func spotlightCacheCleared() async {
+        SpotlightCenter.shared.sent.removeAll()
+        for store in self.gateways { await store.reindexSpotlight() }
+    }
+
     /// A Spotlight setting changed: off clears the index, anything else resends every chat.
     public func spotlightPreferencesChanged() {
         let center = SpotlightCenter.shared

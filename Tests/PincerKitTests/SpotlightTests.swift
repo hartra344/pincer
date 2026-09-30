@@ -50,4 +50,40 @@ import Testing
         await fake.deleteDomain(gatewayId: gateway)
         #expect(fake.ids.isEmpty)
     }
+
+    @Test func itemsNeverExpire() {
+        #expect(Spotlight.expirationDate == .distantFuture)
+    }
+
+    @MainActor
+    @Test func unchangedActivityReusesSnippetWithoutReadingCache() async {
+        let scratch = ScratchDefaults()
+        let temp = TempDir()
+        scratch.defaults.set(true, forKey: Spotlight.includeMessagesKey)
+        let id = UUID()
+        let profile = GatewayProfile(id: id, name: "Mac", url: "ws://127.0.0.1:18789", authMode: .none)
+        let store = GatewayStore(profile: profile, defaults: scratch.defaults, identity: Fixtures.identity())
+        store.cacheRoot = temp.url
+        let fake = FakeSpotlightIndexer()
+        store.spotlightIndexer = fake
+        defer { SpotlightCenter.shared.forgetGateway(id) }
+        func snapshot(_ text: String) -> TranscriptCache.Snapshot {
+            .init(items: [ChatItem(role: .user, blocks: [.text(text)])], complete: true)
+        }
+        func list(_ ms: Double) -> JSONValue {
+            .object(["sessions": .array([.object(["key": .string("a"), "label": .string("A"), "updatedAt": .number(ms)])])])
+        }
+        await TranscriptCache.save(snapshot("first"), gatewayId: id, sessionKey: "a", root: temp.url)
+        store.applySnapshot(list(1000))
+        await store.reindexSpotlight()
+        #expect(fake.entries.first?.snippet == "first")
+
+        await TranscriptCache.save(snapshot("second"), gatewayId: id, sessionKey: "a", root: temp.url)
+        await store.reindexSpotlight()
+        #expect(fake.entries.first?.snippet == "first")
+
+        store.applySnapshot(list(2000))
+        await store.reindexSpotlight()
+        #expect(fake.entries.first?.snippet == "second")
+    }
 }

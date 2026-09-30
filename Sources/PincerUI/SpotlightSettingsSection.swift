@@ -15,7 +15,7 @@ struct SpotlightSettingsSection: View {
         } header: {
             Text("Search", bundle: .module)
         } footer: {
-            Text("Spotlight always shows chat titles. Message text is the last few cached messages and stays on this device.", bundle: .module)
+            Text("Chat titles appear in Spotlight. Message text comes from the last few cached messages and never leaves this device.", bundle: .module)
         }
         .onChange(of: self.enabled) { self.app.spotlightPreferencesChanged() }
         .onChange(of: self.includeMessages) { self.app.spotlightPreferencesChanged() }

@@ -30,8 +30,12 @@ public enum Spotlight {
     public static let enabledDefault = true
     public static let includeMessagesDefault = false
     public static let maxEntries = 200
+    /// Core Spotlight drops items after 30 days unless told otherwise.
+    public static let expirationDate = Date.distantFuture
     public static let maxSnippetLength = 300
     static let snippetMessages = 3
+    /// Transcript items read per chat; enough for three text messages among tool and marker rows.
+    static let tailItems = 20
 
     public static func isEnabled(_ defaults: UserDefaults = .standard) -> Bool {
         defaults.object(forKey: self.enabledKey) as? Bool ?? self.enabledDefault
@@ -147,8 +151,10 @@ public struct CoreSpotlightIndexer: SpotlightIndexer {
             attributes.contentDescription = entry.snippet
             attributes.contentModificationDate = entry.lastActivity
             attributes.lastUsedDate = entry.lastActivity
-            return CSSearchableItem(uniqueIdentifier: entry.id, domainIdentifier: entry.domainIdentifier,
-                                    attributeSet: attributes)
+            let item = CSSearchableItem(uniqueIdentifier: entry.id, domainIdentifier: entry.domainIdentifier,
+                                        attributeSet: attributes)
+            item.expirationDate = Spotlight.expirationDate
+            return item
         }
         await withCheckedContinuation { continuation in
             CSSearchableIndex.default().indexSearchableItems(items) { _ in continuation.resume() }
