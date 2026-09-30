@@ -531,7 +531,7 @@ final class TranscriptSendStatusView: TranscriptBaseView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         self.sendNowButton.set(title: L("Send Now"), symbol: "arrow.up.circle")
-        self.sendNowButton.accessibilityText = L("Send now over this network")
+        self.sendNowButton.accessibilityText = L("Send now")
         self.sendNowButton.onTap = { [weak self] in
             guard let self, let id = self.status?.id else { return }
             self.actions?.sendNow(id)
@@ -622,6 +622,12 @@ final class TranscriptSendStatusView: TranscriptBaseView {
         #endif
     }
 
+    #if os(macOS)
+    private static let heldSymbol = "pause.circle"
+    #else
+    private static let heldSymbol = "wifi.exclamationmark"
+    #endif
+
     private var font: PFont { TranscriptStyle.shared.caption }
     private static let iconWidth: CGFloat = 18
 
@@ -659,7 +665,7 @@ final class TranscriptSendStatusView: TranscriptBaseView {
         let height = self.bounds.height
         let symbol = switch status.kind {
         case .failed: "exclamationmark.circle.fill"
-        case .held: "wifi.exclamationmark"
+        case .held: Self.heldSymbol
         case .queued: "clock"
         case .sending: ""
         }

@@ -91,7 +91,7 @@ final class TranscriptRowView: TranscriptBaseView {
         guard let status = status ?? self.layout?.sendStatus, let actions else { return [] }
         var result: [SendAction] = []
         if status.canSendNow {
-            result.append(SendAction(title: L("Send Now"), symbol: "arrow.up.circle", isDestructive: false) { [weak actions] in
+            result.append(SendAction(title: L("Send now"), symbol: "arrow.up.circle", isDestructive: false) { [weak actions] in
                 actions?.sendNow(status.id)
             })
         }

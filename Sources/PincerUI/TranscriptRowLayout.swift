@@ -559,19 +559,36 @@ struct TranscriptLayoutBuilder {
         }
     }
 
+    /// A large upload waiting for a cheaper network; Send Now uploads it anyway.
+    static func heldStatus(id: String, hold: OutboxHold, bytes: Int?) -> TranscriptPart.SendStatus {
+        let size = bytes.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) } ?? L("large")
+        let text: String, detail: String, spoken: String
+        switch hold {
+        case .constrained:
+            text = L("Waiting — Low Data Mode")
+            detail = L("This is a large upload (\(size)), so it’s waiting while Low Data Mode is on. Send Now uploads it anyway.")
+            spoken = L("Not sent yet. It’s a large upload, \(size), waiting while Low Data Mode is on.")
+        case .expensive:
+            #if os(macOS)
+            text = L("Waiting — Personal Hotspot")
+            detail = L("This is a large upload (\(size)), so it’s waiting until you’re off Personal Hotspot. Send Now uploads it anyway.")
+            spoken = L("Not sent yet. It’s a large upload, \(size), waiting until you’re off Personal Hotspot.")
+            #else
+            text = L("Waiting for Wi‑Fi")
+            detail = L("This is a large upload (\(size)), so it’s waiting for Wi‑Fi to save cellular data. Send Now uploads it anyway.")
+            spoken = L("Not sent yet. It’s a large upload, \(size), waiting for Wi‑Fi.")
+            #endif
+        }
+        return .init(kind: .held, id: id, text: text, isFailed: false, canRetry: false, canDelete: true, canSendNow: true,
+                     detail: detail, spoken: spoken)
+    }
+
     /// The status line of a queued or failed message; nil while sending and once accepted.
     static func sendStatus(_ item: ChatItem) -> TranscriptPart.SendStatus? {
         guard item.isPending, let state = item.outboxState, let id = item.idempotencyKey else { return nil }
         switch state {
         case .queued:
-            if let hold = item.outboxHold {
-                let constrained = hold == .constrained
-                return .init(kind: .held, id: id, text: constrained ? L("Waiting — Low Data Mode") : L("Waiting for Wi‑Fi"),
-                             isFailed: false, canRetry: false, canDelete: true, canSendNow: true,
-                             detail: L("Large uploads wait for Wi‑Fi. Send Now uploads it anyway."),
-                             spoken: constrained ? L("Not sent yet. It’s a large upload, waiting while Low Data Mode is on.")
-                                 : L("Not sent yet. It’s a large upload, waiting for Wi‑Fi."))
-            }
+            if let hold = item.outboxHold { return Self.heldStatus(id: id, hold: hold, bytes: item.outboxUploadBytes) }
             return .init(kind: .queued, id: id, text: L("Queued"), isFailed: false, canRetry: false, canDelete: true, spoken: L("Not sent yet, queued."))
         case .sending:
             return .init(kind: .sending, id: id, text: L("Sending…"), isFailed: false, canRetry: false, canDelete: false, spoken: L("Sending."))

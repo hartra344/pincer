@@ -8,6 +8,8 @@ import UniformTypeIdentifiers
 @MainActor
 struct AttachmentIngest: Sendable {
     let limits: UploadLimits
+    /// The limits come from a saved policy while offline, so a size problem says so.
+    var limitsAreLastKnown = false
     let add: @MainActor @Sendable (OutgoingAttachment) -> Void
     let report: @MainActor @Sendable (String?) -> Void
 
@@ -48,7 +50,7 @@ struct AttachmentIngest: Sendable {
                 case let .success(file)?:
                     self.addData(file.data, type: file.type, name: file.name)
                 case let .failure(error)?:
-                    self.report(error.message)
+                    self.report(self.annotated(error.message))
                 case nil:
                     self.report("That item can’t be attached.")
                 }
@@ -78,7 +80,7 @@ struct AttachmentIngest: Sendable {
         case let .success(file):
             self.addData(file.data, type: file.type, name: file.name)
         case let .failure(error):
-            self.report(error.message)
+            self.report(self.annotated(error.message))
         }
     }
 
@@ -86,7 +88,7 @@ struct AttachmentIngest: Sendable {
         if type?.conforms(to: .image) == true {
             self.addImage(data, name: name)
         } else if data.count > self.limits.fileBytes {
-            self.report("\(name) is larger than the Gateway allows (\(Self.byteString(self.limits.fileBytes))).")
+            self.report(self.annotated("\(name) is larger than the Gateway allows (\(Self.byteString(self.limits.fileBytes)))."))
         } else {
             self.add(OutgoingAttachment(
                 fileName: name,
@@ -94,6 +96,11 @@ struct AttachmentIngest: Sendable {
                 data: data))
             self.report(nil)
         }
+    }
+
+    private func annotated(_ message: String) -> String {
+        guard self.limitsAreLastKnown, message.contains("is larger than the Gateway allows"), message.hasSuffix(").") else { return message }
+        return String(message.dropLast(2)) + ", last known limit)."
     }
 
     private struct ReadFile: Sendable {

@@ -271,6 +271,7 @@ struct QuickCaptureView: View {
         let model = self.model
         return AttachmentIngest(
             limits: model.gateway?.uploadLimits ?? UploadLimits(hello: nil),
+            limitsAreLastKnown: model.gateway?.uploadLimitsAreLastKnown ?? false,
             add: { model.attachments.append($0) },
             report: { self.attachmentError = $0 })
     }
