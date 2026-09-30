@@ -44,7 +44,12 @@ Open **Settings** and find the **Read Aloud** section. On a Mac it's on the **Co
 - **Voice**: **Automatic** uses the gateway voice when there is one. **This Device Only** always uses the device voice, so the text of replies never goes back to the gateway to be spoken.
 - **Device Voice** and **Speaking Rate** set the voice used when the device speaks. Pick **System Default** to follow your system language. If a voice you chose earlier isn't installed any more, the picker shows **System Default** instead of going blank.
 - **Read New Replies Aloud** speaks an agent's final reply when a run finishes successfully in the chat you have open. It doesn't read old messages, chats in the background or history loading in. It stays quiet while VoiceOver is running, so the two don't talk over each other.
-- **Gateway voice** shows what **Automatic** will use, for example "Automatic: ElevenLabs (Eleven v4 Turbo) via your gateway", or why the device voice is used instead. **Open Gateway Voice Settings** takes you to the setup page.
+- **Gateway Voice** shows what **Automatic** will do, and **Open Gateway Voice Settings…** takes you to the setup page. It reads:
+  - "ElevenLabs (Eleven v4 Turbo) via *your gateway*" when the gateway voice is working.
+  - "ElevenLabs can't be used (…). Gateway uses OpenAI." when the provider you picked isn't usable and the gateway would use another. Without another, it says "Using this device's voice."
+  - "Not set up. Using this device's voice." or "Gateway not connected. Using this device's voice."
+  - "Not used (This Device Only)" when you chose **This Device Only**.
+  - "Last reply used this device's voice: …" with the reason, when the most recent reply fell back.
 - **Test Device Voice** plays a short sentence with your device voice and speaking rate.
 
 ## Gateway voice settings
