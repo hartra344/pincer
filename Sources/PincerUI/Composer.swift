@@ -20,6 +20,9 @@ struct Composer: View {
     @State private var dismissedMenuText: String?
     @State private var caretAtEnd = true
     @State private var focusRequest = 0
+    @State private var sendPending = false
+    @State private var selection: NSRange?
+    @State private var caretRequest: CaretRequest?
     @State private var dictationHolder = DictationHolder()
     private var dictation: DictationModel { self.dictationHolder.model }
     @ScaledMetric(relativeTo: .body) private var attachIconSize: CGFloat = 14
@@ -75,13 +78,17 @@ struct Composer: View {
                     onMedia: self.ingest,
                     onKey: self.menuKey,
                     onCaretAtEnd: { if self.caretAtEnd != $0 { self.caretAtEnd = $0 } },
+                    onSelectionChange: self.selectionChanged,
+                    caretRequest: self.caretRequest,
                     autoFocus: { [find = self.find, app = self.app, gateway = self.gateway, chat = self.chat] in
                         // Opening on a message search result: the Find field keeps focus.
                         !(find?.isPresented ?? false) && !ChatView.hasFindRequest(app: app, gateway: gateway, chat: chat)
                     })
                     .padding(.vertical, 11)
                     .frame(minHeight: Self.controlHeight)
-                DictationButton(model: self.dictation, draft: self.$chat.draft.text)
+                DictationButton(
+                    model: self.dictation, app: self.app, draft: self.$chat.draft.text, selection: self.selection,
+                    onCaret: self.placeCaret)
                 ContextMeter(chat: self.chat)
                 if self.chat.isRunning {
                     Button {
@@ -101,7 +108,7 @@ struct Composer: View {
                 }
                 .buttonStyle(.plain)
                 .composerControl()
-                .disabled(!self.canSend)
+                .disabled(!self.canSend || self.sendPending)
                 .help(self.sendLabel)
                 .accessibilityLabel(self.sendLabel)
                 .accessibilityHint(self.gateway.state.isConnected ? "" : Self.offlineHint)
@@ -264,8 +271,30 @@ struct Composer: View {
         return [waiting, Self.offlineHint].compactMap(\.self).joined(separator: " · ")
     }
 
+    private func selectionChanged(_ range: NSRange) {
+        if self.selection != range { self.selection = range }
+    }
+
+    private func placeCaret(_ offset: Int) {
+        self.caretRequest = CaretRequest(offset: offset, serial: (self.caretRequest?.serial ?? 0) + 1)
+    }
+
+    /// Words still being recognised land in the draft before it's read, so Send doesn't lose the last few.
     private func submit() {
-        self.dictation.finish()
+        guard !self.sendPending else { return }
+        guard self.dictation.isActive else {
+            self.send()
+            return
+        }
+        self.sendPending = true
+        Task {
+            await self.dictation.finishForSend()
+            self.sendPending = false
+            self.send()
+        }
+    }
+
+    private func send() {
         let suggestions = self.suggestions
         if suggestions.indices.contains(self.menuSelection), !suggestions[self.menuSelection].isComplete(for: self.text) {
             self.accept(suggestions[self.menuSelection])

@@ -57,7 +57,7 @@ struct CommandPaletteView: View {
 
     private enum Command: String {
         case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, skills, mcpServers, usage, sessionUsage,
-             gatewayLogs, devices, setupGateway, sessions, manageSession, addGateway
+             gatewayLogs, devices, setupGateway, sessions, manageSession, addGateway, toggleDictation
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -394,6 +394,11 @@ struct CommandPaletteView: View {
                               enabled: !row.isModelSelectionLocked))
             items.append(item(.togglePin, row.isPinned ? L("Unpin Chat") : L("Pin Chat"), row.isPinned ? "pin.slash" : "pin"))
         }
+        if row != nil, self.app.dictationAvailable || self.app.dictationActive {
+            let listening = self.app.dictationActive
+            items.append(item(.toggleDictation, listening ? L("Stop Dictation") : L("Start Dictation"), listening ? "mic.fill" : "mic",
+                              keywords: ["dictate", "voice", "speech", "microphone"], shortcut: ShortcutCommand.toggleDictation.displayShortcut))
+        }
         let showsThinking = self.thinkingDisplay != .none
         items += [
             item(.toggleThinking, showsThinking ? L("Hide Thinking Steps") : L("Show Thinking Steps"), "brain.head.profile",
@@ -604,6 +609,8 @@ struct CommandPaletteView: View {
             if let gateway, let row { self.openGatewaySettings(gateway, at: .sessions, routes: [.sessionDetail(row.key)]) }
         case .setupGateway:
             gateway?.setup.present()
+        case .toggleDictation:
+            self.app.dictationToggleRequests += 1
         }
     }
 }

@@ -20,6 +20,11 @@ public final class AppModel {
     }
     public let notifier = Notifier.shared
     public let push = PushRegistrar.shared
+    /// Counts palette/shortcut requests to start or stop dictation; the focused pane's composer acts on each.
+    public var dictationToggleRequests = 0
+    /// What the focused pane's composer reports, for the palette's Start/Stop Dictation item.
+    public var dictationActive = false
+    public var dictationAvailable = false
     /// Counts `open(_:)` calls (from notifications), so the UI can bring the chat on screen.
     public private(set) var openRequests = 0
     /// Find in Chat to open with a chat, e.g. after picking a message search result.
