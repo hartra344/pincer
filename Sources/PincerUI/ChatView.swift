@@ -619,6 +619,7 @@ struct ChatSessionMenu: View {
                 }
                 ThinkingDisplayPicker()
                 ReasoningMenu(row: row)
+                ReactionLevelMenu(row: row)
                 ShowRunsButton(isPresented: Binding(get: { self.showRuns }, set: {
                     self.willAct()
                     self.showRuns = $0

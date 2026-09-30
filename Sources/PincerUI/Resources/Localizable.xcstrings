@@ -391,6 +391,46 @@
         }
       }
     },
+    "%@ · Default": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Default"
+          }
+        }
+      }
+    },
+    "%@ · Inherited from the channel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Inherited from the channel"
+          }
+        }
+      }
+    },
+    "%@ · Set for the channel": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Set for the channel"
+          }
+        }
+      }
+    },
+    "%@ · Set for this account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Set for this account"
+          }
+        }
+      }
+    },
     "%@ — too large to preview": {
       "localizations": {
         "en": {
@@ -989,6 +1029,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Accounts Using DM Pairing"
+          }
+        }
+      }
+    },
+    "Acknowledge only": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Acknowledge only"
           }
         }
       }
@@ -3643,6 +3693,16 @@
         }
       }
     },
+    "Couldn't Change Reactions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn't Change Reactions"
+          }
+        }
+      }
+    },
     "Couldn't Delete Agent": {
       "localizations": {
         "en": {
@@ -5203,6 +5263,16 @@
         }
       }
     },
+    "Extensive": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensive"
+          }
+        }
+      }
+    },
     "Extract mode": {
       "localizations": {
         "en": {
@@ -6093,6 +6163,16 @@
         }
       }
     },
+    "How freely the agent reacts": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How freely the agent reacts"
+          }
+        }
+      }
+    },
     "ID": {
       "localizations": {
         "en": {
@@ -6169,6 +6249,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "In %@"
+          }
+        }
+      }
+    },
+    "In effect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In effect"
           }
         }
       }
@@ -7233,6 +7323,16 @@
         }
       }
     },
+    "Minimal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimal"
+          }
+        }
+      }
+    },
     "Minimize": {
       "localizations": {
         "en": {
@@ -7809,6 +7909,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "No Requests for %@"
+          }
+        }
+      }
+    },
+    "No acknowledgement reaction and no agent reactions.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No acknowledgement reaction and no agent reactions."
           }
         }
       }
@@ -8509,6 +8619,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Only archived sessions can be deleted without Full Management."
+          }
+        }
+      }
+    },
+    "Only the 👀 acknowledgement while the agent works.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only the 👀 acknowledgement while the agent works."
           }
         }
       }
@@ -9759,6 +9879,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "React %@"
+          }
+        }
+      }
+    },
+    "Reactions": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reactions"
           }
         }
       }
@@ -11149,6 +11279,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Same Wi-Fi"
+          }
+        }
+      }
+    },
+    "Same as channel (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Same as channel (%@)"
           }
         }
       }
@@ -13173,6 +13313,26 @@
         }
       }
     },
+    "The agent reacts liberally. No acknowledgement.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent reacts liberally. No acknowledgement."
+          }
+        }
+      }
+    },
+    "The agent reacts sparingly. No acknowledgement.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The agent reacts sparingly. No acknowledgement."
+          }
+        }
+      }
+    },
     "The changes made on the Gateway since you opened it will be replaced by yours.": {
       "localizations": {
         "en": {
@@ -13289,6 +13449,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "The server is removed when you save your changes."
+          }
+        }
+      }
+    },
+    "The stored value isn't a valid level, so the agent uses this fallback.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The stored value isn't a valid level, so the agent uses this fallback."
           }
         }
       }
