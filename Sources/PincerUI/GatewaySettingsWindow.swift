@@ -295,6 +295,7 @@ private struct GatewaySettingsRoot: View {
     private func showPolicyToast() {
         guard let id = self.policy.lastSave else { return }
         withAnimation { self.policyToast = id }
+        AccessibilityAnnouncer.announce(L("Command policy saved"))
         Task {
             try? await Task.sleep(for: .seconds(3))
             if self.policyToast == id { withAnimation { self.policyToast = nil } }
@@ -327,6 +328,7 @@ private struct GatewaySettingsRoot: View {
     private func showToast() {
         guard let last = self.settings.lastSave else { return }
         withAnimation { self.toast = last }
+        AccessibilityAnnouncer.announce(last.outcome.message)
         Task {
             try? await Task.sleep(for: .seconds(3))
             if self.toast?.id == last.id { withAnimation { self.toast = nil } }
