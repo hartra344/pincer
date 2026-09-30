@@ -38,7 +38,7 @@ actor DemoGateway {
         "approval.history", "approval.get", "logs.tail", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.dismiss",
         "health", "status", "last-heartbeat", "system-presence", "gateway.restart.request",
         "exec.approvals.get", "exec.approvals.set", "message.action",
-    ] + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.channelLifecycleMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
+    ] + DemoGateway.reactionMethods + DemoUsage.methods + DemoGateway.setupMethods + DemoGateway.agentMethods + DemoGateway.channelLifecycleMethods + DemoGateway.skillMethods + DemoGateway.deviceMethods
         + DemoGateway.sessionManagerMethods + DemoGateway.mcpMethods + DemoGateway.voiceMethods
     /// The device the demo credits with decisions made in Pincer ("Decided by: This device").
     static let deviceId = "demo0device0000000000000000000000000000000000000000000000000001"
@@ -105,6 +105,8 @@ actor DemoGateway {
     /// The last `agent` seq the seeded running helper sent; it keeps streaming tool calls until stopped.
     var seededRunningSeq = DemoGateway.seededRunningLastSeq
     var seededStreamTask: Task<Void, Never>?
+    /// Shared reactions by session key, then message id (DemoGateway+Reactions.swift).
+    var sessionReactions: [String: [String: [DemoReaction]]] = [:]
     var messageSubscriptions: Set<String> = []
     var eventSeq = 0
     var sink: (@Sendable (GatewayEvent) -> Void)?
@@ -136,6 +138,7 @@ actor DemoGateway {
         self.branchTips = Self.seedSessionManager(sessions: &seeded.sessions, transcripts: &seeded.transcripts)
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts
+        self.sessionReactions = Self.seedSessionReactions()
         Self.seedSubagents(sessions: &self.sessions, transcripts: &self.transcripts)
         self.approvalHistory = Self.seedApprovalHistory()
         let pending = Self.seedPendingApproval()
@@ -209,7 +212,7 @@ actor DemoGateway {
             "type": "hello-ok",
             "protocol": .number(Double(GatewayConnection.protocolVersion)),
             "server": ["version": "demo", "connId": .string(Self.shortId("conn_"))],
-            "features": ["methods": JSONValue(Self.methods), "events": []],
+            "features": ["methods": JSONValue(Self.methods), "events": ["session.reaction"]],
             "snapshot": [
                 "presence": .array(self.presence()),
                 "health": self.health(),
@@ -235,6 +238,7 @@ actor DemoGateway {
         if let result = try self.handleSessionManager(method, params) { return result }
         if let result = try self.handleVoice(method, params) { return result }
         if let result = try self.handleCatalog(method, params) { return result }
+        if let result = try self.handleReactions(method, params) { return result }
         if let result = try self.handleSessionList(method, params) { return result }
         if let result = try self.handleGroups(method, params) { return result }
         if let result = try self.handleRuns(method, params) { return result }

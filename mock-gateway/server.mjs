@@ -25,6 +25,7 @@ import { DEVICE_PAIRING_EVENTS, DEVICE_PAIRING_METHODS, NODE_METHODS, approvePen
 import { handleCatalogRequest } from './catalog.mjs';
 import { abortMatchingRuns, finishRunAbort, handleChatRequest, postToSession } from './chat.mjs';
 import { handleMiscRequest } from './misc.mjs';
+import { REACTION_EVENTS, REACTION_METHODS, handleReactionsRequest, reactionsDisabled } from './reactions.mjs';
 import { handleQuestionRequest } from './questions.mjs';
 import { createSeedState } from './seed.mjs';
 import { broadcastSessionChanged, handleSessionListRequest, registerGroup, updateSessionRow } from './session-list.mjs';
@@ -51,6 +52,8 @@ const METHODS = [
   'chat.send',
   'chat.abort',
   'message.action',
+  'users.self',
+  ...REACTION_METHODS,
   'sessions.patch',
   'sessions.compact',
   ...SESSION_MANAGER_METHODS,
@@ -95,6 +98,7 @@ const EVENTS = [
   'question.requested',
   'question.resolved',
   'users.prefs.changed',
+  ...REACTION_EVENTS,
   'plugins.changed',
   ...MCP_EVENTS,
   'progressCard.changed',
@@ -192,6 +196,7 @@ function advertisedMethods() {
     ...(secretsDisabled() ? SECRETS_METHODS : []),
     ...(logsDisabled() ? LOGS_METHODS : []),
     ...(mcpDisabled() ? MCP_METHODS : []),
+    ...(reactionsDisabled() ? REACTION_METHODS : []),
     ...hiddenSessionManagerMethods(),
   ];
   return METHODS.filter((m) => !hidden.includes(m));
@@ -202,7 +207,7 @@ function makeHelloPayload(state, params, connId, deviceId) {
     type: 'hello-ok',
     protocol: state.protocol ?? 4,
     server: { version: 'mock-2026.1', connId },
-    features: { methods: advertisedMethods(), events: devicePairingDisabled() ? EVENTS.filter((e) => !DEVICE_PAIRING_EVENTS.includes(e)) : EVENTS },
+    features: { methods: advertisedMethods(), events: EVENTS.filter((e) => !(devicePairingDisabled() && DEVICE_PAIRING_EVENTS.includes(e)) && !(reactionsDisabled() && REACTION_EVENTS.includes(e))) },
     snapshot: healthDisabled() ? {} : helloSnapshot(state),
     auth: { role: 'operator', scopes: params.scopes ?? [], deviceToken: deviceTokenFor(state, deviceId) },
     policy: {
@@ -244,6 +249,7 @@ const REQUEST_HANDLERS = [
   handleSessionListRequest,
   handleCatalogRequest,
   handleMiscRequest,
+  handleReactionsRequest,
   handleQuestionRequest,
 ];
 
