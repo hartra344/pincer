@@ -24,6 +24,13 @@ func checkReactionLevel() {
     check(bad.level == ReactionLevels.invalidFallback(channel: "telegram") && bad.isInvalid, "invalid value → the channel's invalid fallback")
     let blank = ReactionLevels.effective(config: config(#"{"channels":{"telegram":{"reactionLevel":"  "}}}"#), channel: "telegram", account: nil)
     check(blank.source == .default, "blank value counts as missing")
+    check(ReactionLevel.off.offAlsoStopsAcknowledgement(channel: "whatsapp") && ReactionLevel.off.offAlsoStopsAcknowledgement(channel: "signal")
+          && !ReactionLevel.off.offAlsoStopsAcknowledgement(channel: "telegram") && !ReactionLevel.ack.offAlsoStopsAcknowledgement(channel: "whatsapp"),
+          "Off also stops the 👀 on WhatsApp and Signal, not Telegram")
+    check(ReactionLevels.overridingAccount(config: cfg, channel: "telegram", account: "home") == "home"
+          && ReactionLevels.overridingAccount(config: cfg, channel: "telegram", account: "work") == nil
+          && ReactionLevels.overridingAccount(config: cfg, channel: "telegram", account: nil) == nil,
+          "a chat edits its account only when that account has its own level")
     check(ReactionLevels.patch(channel: "telegram", account: nil, level: .ack) == ["channels": ["telegram": ["reactionLevel": "ack"]]], "channel patch")
     check(ReactionLevels.patch(channel: "telegram", account: "home", level: .off)
           == ["channels": ["telegram": ["accounts": ["home": ["reactionLevel": "off"]]]]], "account patch")

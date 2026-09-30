@@ -141,4 +141,23 @@ struct ReactionLevelTests {
         #expect(ReactionLevels.editableAccount(config: config, channel: "telegram", account: "ghost") == nil)
         #expect(ReactionLevels.editableAccount(config: config, channel: "telegram", account: nil) == nil)
     }
+
+    @Test func offStopsTheAcknowledgementOnWhatsAppAndSignalOnly() {
+        for channel in ["whatsapp", "signal", "WhatsApp"] { #expect(ReactionLevel.off.offAlsoStopsAcknowledgement(channel: channel), "\(channel)") }
+        #expect(!ReactionLevel.off.offAlsoStopsAcknowledgement(channel: "telegram"))
+        #expect(!ReactionLevel.off.offAlsoStopsAcknowledgement(channel: "discord"))
+        for level in ReactionLevel.allCases where level != .off {
+            #expect(!level.offAlsoStopsAcknowledgement(channel: "whatsapp"), "\(level)")
+        }
+    }
+
+    @Test func overridingAccountOnlyWhenItHasItsOwnLevel() {
+        let config = Self.config(#"{"channels":{"telegram":{"reactionLevel":"minimal","accounts":{"home":{"reactionLevel":"off"},"work":{"name":"Work"},"nulled":{"reactionLevel":null}}}}}"#)
+        #expect(ReactionLevels.overridingAccount(config: config, channel: "telegram", account: "home") == "home")
+        #expect(ReactionLevels.overridingAccount(config: config, channel: "telegram", account: "work") == nil)
+        #expect(ReactionLevels.overridingAccount(config: config, channel: "telegram", account: "ghost") == nil)
+        #expect(ReactionLevels.overridingAccount(config: config, channel: "telegram", account: nil) == nil)
+        #expect(ReactionLevels.overridingAccount(config: config, channel: "telegram", account: "") == nil)
+        #expect(ReactionLevels.overridingAccount(config: nil, channel: "telegram", account: "home") == nil)
+    }
 }
