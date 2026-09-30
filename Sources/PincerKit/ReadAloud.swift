@@ -25,7 +25,8 @@ public enum ReadAloudSettings {
     public static let sourceAutomatic = "automatic"
     public static let sourceDevice = "device"
     public static let rateRange: ClosedRange<Float> = 0.3 ... 0.7
-    public static let gatewayTextLimit = 4000
+    /// Sent in `SpeechChunker` pieces, so this only guards against huge messages.
+    public static let gatewayTextLimit = 20000
     public static let gatewayTimeout: Duration = .seconds(15)
 
     /// The device voice to show in a picker: the stored id when it's still available, else "" (the
@@ -161,21 +162,50 @@ public final class ReadAloudController {
         } else if let gateway {
             if gateway.canSpeak {
                 let limited = SpeechText.truncated(text, limit: ReadAloudSettings.gatewayTextLimit)
-                let (clip, failure) = await self.fetchClip(limited, from: gateway)
-                if let clip, !clip.isHeaderless, generation == self.generation {
-                    self.lastSource = .gateway(clip.provider)
-                    let selected = gateway.status?.provider
-                    if let used = clip.provider, let selected, !selected.isEmpty, used != selected {
-                        self.lastFallback = gateway.fallbackReasonForRead(selected: selected)
-                    } else {
-                        self.lastFallback = nil
-                    }
-                    self.phase = .speaking(messageId)
-                    if await self.clipPlayer.play(clip) { return }
+                let chunks = SpeechChunker.chunks(limited)
+                // While chunk n plays, chunk n+1 is fetched; each fetch has its own timeout (#562).
+                var pending: Task<(TTSClip?, TTSFallbackReason?), Never>? = chunks.isEmpty ? nil : Task { @MainActor in
+                    await self.fetchClip(chunks[0], from: gateway)
+                }
+                defer { pending?.cancel() }
+                var index = 0
+                while index < chunks.count, let fetch = pending {
+                    let (clip, failure) = await fetch.value
                     guard generation == self.generation, !Task.isCancelled else { return }
-                    fallback = .other(L("The Gateway audio couldn't be played."))
-                } else {
-                    fallback = failure ?? .other(L("The Gateway audio couldn't be played."))
+                    guard let clip, !clip.isHeaderless else {
+                        fallback = failure ?? .other(L("The Gateway audio couldn't be played."))
+                        break
+                    }
+                    if index == 0 {
+                        self.lastSource = .gateway(clip.provider)
+                        let selected = gateway.status?.provider
+                        if let used = clip.provider, let selected, !selected.isEmpty, used != selected {
+                            self.lastFallback = gateway.fallbackReasonForRead(selected: selected)
+                        } else {
+                            self.lastFallback = nil
+                        }
+                    }
+                    let nextIndex = index + 1
+                    pending = nextIndex < chunks.count ? Task { @MainActor in
+                        await self.fetchClip(chunks[nextIndex], from: gateway)
+                    } : nil
+                    self.phase = .speaking(messageId)
+                    let played = await self.clipPlayer.play(clip)
+                    guard generation == self.generation, !Task.isCancelled else { return }
+                    guard played else {
+                        fallback = .other(L("The Gateway audio couldn't be played."))
+                        break
+                    }
+                    index = nextIndex
+                }
+                if index >= chunks.count { return }
+                if index > 0 {
+                    // Part of the message was already voiced by the Gateway: read only the rest on this device.
+                    self.lastFallback = fallback
+                    self.phase = .speaking(messageId)
+                    let voice = self.defaults.string(forKey: ReadAloudSettings.deviceVoiceKey).flatMap { $0.isEmpty ? nil : $0 }
+                    _ = await self.localSpeaker.speak(chunks[index...].joined(separator: "\n\n"), voice: voice, rate: self.deviceRate)
+                    return
                 }
             } else {
                 fallback = gateway.cannotSpeakReason
