@@ -21,6 +21,8 @@ If another Pincer command already uses the keys, Pincer asks before moving the s
 
 **Edit Last Message**, **Regenerate Last Reply**, **Bookmarks…**, **Swap Chats** and **Add Gateway…** have no shortcut by default; give them one here.
 
+**Show/Hide Sidebar** (<kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>S</kbd>) is in the **View** menu. On iPad it's listed as **Toggle Sidebar** and can be changed. On a Mac it's the system's own menu item, so it isn't listed and its keys can't go to another command. It's also in the [command palette](../../guides/command-palette-and-navigation/). On iPad, when the sidebar is hidden, the **Show Sidebar** button at the top left of the chat brings it back.
+
 Quick Capture's shortcut works from any app, so it's set separately in **Settings → General → Quick Capture**.
 
 ## App
@@ -33,6 +35,7 @@ Quick Capture's shortcut works from any app, so it's set separately in **Setting
 | Gateway Settings | <kbd>⇧</kbd> <kbd>⌘</kbd> <kbd>,</kbd> |
 | Settings | <kbd>⌘</kbd> <kbd>,</kbd> |
 | Reload Pincer | <kbd>⌘</kbd> <kbd>R</kbd> |
+| Show or Hide Sidebar | <kbd>⌃</kbd> <kbd>⌘</kbd> <kbd>S</kbd> |
 | Open Chat in New Window (macOS) | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>N</kbd> |
 | Split Right / Close Split View (macOS) | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>\</kbd> |
 | Show Runs | <kbd>⌥</kbd> <kbd>⌘</kbd> <kbd>R</kbd> |

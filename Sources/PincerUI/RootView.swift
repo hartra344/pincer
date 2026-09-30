@@ -56,6 +56,9 @@ public struct PincerScene: Scene {
         }
         #endif
         .commands { GoCommands(app: self.app) }
+        #if os(iOS)
+        .commands { SidebarCommands() }
+        #endif
 
         #if os(macOS)
         // Restored on relaunch, unlike the settings windows below (#48).
@@ -197,6 +200,9 @@ struct RootView: View {
         #endif
         .modifier(AppActivityTracking())
         .modifier(CompactColumnRouting(column: self.$compactColumn))
+        #if os(iOS)
+        .modifier(SidebarToggleProvider(columns: self.$columns, isSplitView: !self.showsFirstRun && self.app.selectedGateway != nil))
+        #endif
         .modifier(MainChatVisibility(compactColumn: self.compactColumn))
         .background { UnreadBadgeSync() }
         #if os(macOS)
@@ -274,6 +280,30 @@ private struct CompactColumnRouting: ViewModifier {
             .onChange(of: self.app.gatewayListRequests) { self.column = .sidebar }
     }
 }
+
+#if os(iOS)
+/// iPad: the sidebar toggle for the chat's "Show Sidebar" button, ⌃⌘S and the command palette
+/// (#564). None on iPhone, whose split view is a stack.
+private struct SidebarToggleProvider: ViewModifier {
+    @Binding var columns: NavigationSplitViewVisibility
+    let isSplitView: Bool
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    private var toggle: SidebarToggle? {
+        guard self.isSplitView, self.sizeClass == .regular else { return nil }
+        return SidebarToggle(isCollapsed: self.columns == .detailOnly) {
+            withAnimation { self.columns = SidebarToggle.toggled(self.columns) }
+        }
+    }
+
+    func body(content: Content) -> some View {
+        let toggle = self.toggle
+        content
+            .environment(\.sidebarToggle, toggle)
+            .focusedSceneValue(\.sidebarToggle, toggle)
+    }
+}
+#endif
 
 /// Keeps the app badge in sync with unread chats. Its own view because the count reads every
 /// session: watching it from `RootView` rebuilt the sidebar whenever a chat was read.

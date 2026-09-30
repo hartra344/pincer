@@ -10,6 +10,7 @@ struct CommandPaletteView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.openAutomations) private var openAutomations
+    @Environment(\.sidebarToggle) private var sidebarToggle
     #if os(macOS)
     @Environment(\.openSettings) private var openSettings
     #endif
@@ -58,7 +59,8 @@ struct CommandPaletteView: View {
 
     private enum Command: String {
         case back, forward, nextUnread, changeModel, togglePin, toggleThinking, appSettings, gatewaySettings, automations, approvalHistory, execPolicy, skills, mcpServers, usage, sessionUsage,
-             gatewayLogs, devices, setupGateway, sessions, manageSession, addGateway, toggleDictation, readAloud, readAloudSettings, voiceSettings
+             gatewayLogs, devices, setupGateway, sessions, manageSession, addGateway, toggleDictation, readAloud, readAloudSettings, voiceSettings,
+             toggleSidebar
     }
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
@@ -418,6 +420,10 @@ struct CommandPaletteView: View {
                  keywords: ["read aloud", "listen", "speech", "voice", "tts", "speak", "settings"]),
             item(.addGateway, L("Add Gateway…"), "plus.circle", keywords: ["connect", "new", "server", "setup", "wizard"]),
         ]
+        if self.canToggleSidebar {
+            items.append(item(.toggleSidebar, self.sidebarItemTitle, "sidebar.leading", keywords: ["sidebar", "chats", "show", "hide", "toggle"],
+                              shortcut: ShortcutCommand.toggleSidebar.displayShortcut))
+        }
         if let setup = CommandPalette.setupGatewayItem(gateway: self.gateway) { items.append(setup) }
         if self.gateway?.voice.supportsStatus == true {
             items.append(item(.voiceSettings, L("Gateway Voice Settings…"), "speaker.wave.2",
@@ -459,6 +465,23 @@ struct CommandPaletteView: View {
             }
         }
         return items
+    }
+
+    /// macOS: the system's View ▸ Show/Hide Sidebar, whose state the palette can't see.
+    private var sidebarItemTitle: String {
+        #if os(macOS)
+        L("Toggle Sidebar")
+        #else
+        self.sidebarToggle?.title ?? L("Toggle Sidebar")
+        #endif
+    }
+
+    private var canToggleSidebar: Bool {
+        #if os(macOS)
+        self.gateway != nil
+        #else
+        self.sidebarToggle != nil
+        #endif
     }
 
     private var readAloudItems: [PaletteItem] {
@@ -593,6 +616,12 @@ struct CommandPaletteView: View {
             self.app.goForward()
         case .nextUnread:
             self.app.selectNextUnread()
+        case .toggleSidebar:
+            #if os(macOS)
+            SidebarToggle.toggleSystemSidebar()
+            #else
+            self.sidebarToggle?.toggle()
+            #endif
         case .togglePin:
             guard let gateway, let row else { return }
             Task { await gateway.patch(row.key, ["pinned": .bool(!row.isPinned)]) }
