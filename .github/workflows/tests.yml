@@ -113,6 +113,60 @@ jobs:
             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
           exit "${PIPESTATUS[0]}"
 
+  # The Swift job runs the tests on macOS, where the UIKit list never loads. This runs the transcript suites
+  # (hosted UIKit list, Dynamic Type parity, controller) against an iPhone simulator, booted headless by xcodebuild.
+  # Other suites (e.g. StreamingRenderingTests) aren't listed: they haven't run on iOS yet.
+  ios-tests:
+    name: iOS simulator tests
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select newest Xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      # Pincer-Package would also build the macOS-only PincerChecks and PincerMacDev for iOS.
+      - name: Make the test scheme
+        run: scripts/ios-test-scheme.sh
+
+      - name: Pick an iPhone simulator
+        id: sim
+        run: |
+          UDID="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          phones = [d for runtime, devices in json.load(sys.stdin)["devices"].items() if "iOS" in runtime
+                    for d in devices if d["name"].startswith("iPhone") and d["isAvailable"]]
+          print(phones[0]["udid"] if phones else "")')"
+          test -n "$UDID"
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Test the transcript lists on iOS
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme PincerUITests-iOS \
+            -destination 'platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}' \
+            -derivedDataPath .build/xcode-ios \
+            -only-testing:PincerUITests/TranscriptUIKitHostedTests \
+            -only-testing:PincerUITests/TranscriptUIKitLayoutTests \
+            -only-testing:PincerUITests/TranscriptDynamicTypeParityTests \
+            -only-testing:PincerUITests/TranscriptPremeasureTests \
+            -only-testing:PincerUITests/TranscriptListControllerTests \
+            -only-testing:PincerUITests/TranscriptMeasureQueueTests \
+            -only-testing:PincerUITests/TranscriptLayoutCacheTests \
+            -only-testing:PincerUITests/TranscriptWidthFreezeTests \
+            -only-testing:PincerUITests/TranscriptFindTrimTests \
+            -only-testing:PincerUITests/TranscriptNavigationTests \
+            -only-testing:PincerUITests/TranscriptAccessibilityActionTests \
+            -only-testing:PincerUITests/ScrollToBottomTests \
+            | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
+
   swift:
     name: Swift build and checks
     needs: changes

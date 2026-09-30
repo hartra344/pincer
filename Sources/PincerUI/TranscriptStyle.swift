@@ -61,11 +61,16 @@ final class TranscriptStyle {
         self.listMarker = PFont.monospacedDigitSystemFont(ofSize: body.pointSize, weight: .regular)
     }
 
+    #if os(iOS)
+    /// Text size to build fonts at instead of the system's; set by tests to exercise non-default Dynamic Type sizes.
+    static var textSizeOverride: UIContentSizeCategory?
+    #endif
+
     static func font(_ style: PFont.TextStyle) -> PFont {
         #if os(macOS)
         NSFont.preferredFont(forTextStyle: style, options: [:])
         #else
-        UIFont.preferredFont(forTextStyle: style)
+        UIFont.preferredFont(forTextStyle: style, compatibleWith: self.textSizeOverride.map { UITraitCollection(preferredContentSizeCategory: $0) })
         #endif
     }
 
