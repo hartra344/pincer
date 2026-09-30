@@ -13143,6 +13143,16 @@
         }
       }
     },
+    "Yesterday": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yesterday"
+          }
+        }
+      }
+    },
     "Show Chats in Spotlight": {
       "localizations": {
         "en": {
