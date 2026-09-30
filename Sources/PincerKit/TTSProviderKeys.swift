@@ -74,6 +74,15 @@ public struct TTSProviderKeys: Sendable, Equatable {
         }
     }
 
+    /// What the Gateway uses when nothing is configured.
+    public static func defaultModel(_ provider: String) -> String? {
+        provider.lowercased() == "elevenlabs" ? "eleven_multilingual_v2" : nil
+    }
+
+    public static func defaultVoice(_ provider: String) -> String? {
+        provider.lowercased() == "elevenlabs" ? "pMsXgVXv3BLzUgSXRplE" : nil
+    }
+
     /// Known models, then any `tts.providers` model ids not already listed.
     static func models(_ provider: String, advertised: [String]) -> [TTSModelOption] {
         var options = knownModels(provider)

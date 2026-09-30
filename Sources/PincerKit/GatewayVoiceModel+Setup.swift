@@ -43,13 +43,22 @@ public enum TTSFallbackReason: Equatable, Sendable {
 
     public var message: String {
         switch self {
-        case .noWritePermission: L("This device doesn't have write access to the Gateway voice.")
-        case let .notConfigured(provider): String(format: L("%@ isn't configured on the Gateway."), provider)
-        case .keyNotResolving: L("The Gateway can't read the saved API key.")
+        case .noWritePermission: L("This device can't use the Gateway voice (no write access), so it used this device's voice.")
+        case let .notConfigured(provider): String(format: L("%@ isn't set up on the Gateway yet."), provider)
+        case .keyNotResolving: L("The Gateway can't read the API key.")
         case let .modelRejected(detail): String(format: L("The provider rejected the model or voice: %@"), detail)
-        case .gatewayUnsupported: L("This Gateway doesn't support voice.")
-        case .deviceOnlySetting: L("Read Aloud is set to use this device's voice.")
+        case .gatewayUnsupported: L("This Gateway can't speak replies. Update it to use a Gateway voice.")
+        case .deviceOnlySetting: L("Read Aloud is set to This Device Only.")
         case let .other(detail): detail
+        }
+    }
+
+    /// The message naming `provider` where the case doesn't carry it.
+    public func message(provider: String) -> String {
+        switch self {
+        case .keyNotResolving: String(format: L("The Gateway can't read the %@ API key."), provider)
+        case let .modelRejected(detail): String(format: L("%@ rejected the model or voice: %@"), provider, detail)
+        default: self.message
         }
     }
 }
@@ -93,12 +102,18 @@ public struct TTSEffectiveRow: Equatable, Sendable, Identifiable {
     public let value: String
     /// "Gateway config", "Local /tts prefs", "Persona <x>" or "Default".
     public let source: String
+    /// Raw config path for power users, e.g. "providers.elevenlabs.modelId"; nil when it has none.
+    public let keyPath: String?
+    /// Set when a local override (prefs, persona) wins over what the setup sections show.
+    public let overrideNote: String?
     public var id: String { self.label }
 
-    public init(label: String, value: String, source: String) {
+    public init(label: String, value: String, source: String, keyPath: String? = nil, overrideNote: String? = nil) {
         self.label = label
         self.value = value
         self.source = source
+        self.keyPath = keyPath
+        self.overrideNote = overrideNote
     }
 }
 
@@ -438,32 +453,128 @@ extension GatewayVoiceModel {
         let provider = status.provider
         let setup = self.setups[provider]
         let keys = TTSProviderKeys.forProvider(provider)
-        let elevenLabs = provider == "elevenlabs"
-        let defaultSpeed = TTSVoiceSettings.elevenLabsDefault
-        // tts.status doesn't say where the provider came from: a different one in config means /tts prefs or a persona won.
-        let providerSource = self.configuredProvider.map { $0 == provider ? L("Gateway config") : L("Local /tts prefs") } ?? L("Default")
-        var rows = [TTSEffectiveRow(label: L("Provider"), value: self.displayName(for: provider), source: providerSource)]
+        let base = (TTSProviderKeys.configRoot + [TTSProviderKeys.providersKey, provider]).joined(separator: ".")
+        let gatewayConfig = L("Gateway config")
+        let prefs = L("Local /tts preferences")
+        // tts.status doesn't say where the provider came from: a different one in config means prefs or a persona won.
+        var providerSource = L("Default")
+        var override: String?
+        if let configured = self.configuredProvider {
+            providerSource = gatewayConfig
+            if configured != provider {
+                providerSource = prefs
+                override = L("Overridden by local /tts preferences")
+            }
+        }
+        var rows = [TTSEffectiveRow(label: L("Provider"), value: self.displayName(for: provider), source: providerSource,
+                                    keyPath: (TTSProviderKeys.configRoot + ["provider"]).joined(separator: "."), overrideNote: override)]
         if let persona = status.persona, !persona.isEmpty {
             let name = status.personas.first { $0.id == persona }?.displayName ?? persona
-            rows.append(TTSEffectiveRow(label: L("Persona"), value: name, source: L("Local /tts prefs")))
+            rows.append(TTSEffectiveRow(label: L("Persona"), value: name, source: String(format: L("Persona \"%@\""), name)))
         }
-        if keys.model != nil {
+        if let field = keys.model {
             let model = setup?.model
-            rows.append(TTSEffectiveRow(label: L("Model"), value: self.modelName(model ?? (elevenLabs ? "eleven_multilingual_v2" : nil), provider: provider) ?? L("Provider default"),
-                                        source: model == nil ? L("Default") : L("Gateway config")))
+            rows.append(TTSEffectiveRow(label: L("Model"), value: self.modelDisplay(model, provider: provider), source: model == nil ? L("Default") : gatewayConfig,
+                                        keyPath: "\(base).\(field)"))
         }
-        if keys.voice != nil {
+        if let field = keys.voice {
             let voice = setup?.voice
-            rows.append(TTSEffectiveRow(label: L("Voice"), value: voice.map { id in self.voices.first { $0.id == id }?.name ?? id } ?? L("Provider default"),
-                                        source: voice == nil ? L("Default") : L("Gateway config")))
+            rows.append(TTSEffectiveRow(label: L("Voice"), value: self.voiceDisplay(voice, provider: provider), source: voice == nil ? L("Default") : gatewayConfig,
+                                        keyPath: "\(base).\(field)"))
         }
-        if keys.voiceSettings != nil {
+        if let field = keys.voiceSettings {
             let settings = setup?.voiceSettings
-            let speed = settings?.speed ?? defaultSpeed.speed
-            rows.append(TTSEffectiveRow(label: L("Speed"), value: String(format: "%.2f×", speed), source: settings == nil ? L("Default") : L("Gateway config")))
+            let d = settings ?? TTSVoiceSettings.elevenLabsDefault
+            let source = settings == nil ? L("Default") : gatewayConfig
+            let path = "\(base).\(field)"
+            rows.append(TTSEffectiveRow(label: L("Speed"), value: String(format: "%.1f×", d.speed), source: source, keyPath: path + ".speed"))
+            rows.append(TTSEffectiveRow(label: L("Stability"), value: "\(Int((d.stability * 100).rounded()))%", source: source, keyPath: path + ".stability"))
         }
-        rows.append(TTSEffectiveRow(label: L("Auto speak"), value: status.auto, source: L("Local /tts prefs")))
+        if keys.apiKey != nil {
+            rows.append(TTSEffectiveRow(label: L("API Key"), value: self.keySourceText(for: provider), source: gatewayConfig,
+                                        keyPath: "\(base).apiKey"))
+        }
+        let autoText = status.auto == "off" || !status.enabled
+            ? L("Off. Replies aren't spoken on channels automatically. Read Aloud and Test Voice still work.")
+            : status.auto
+        rows.append(TTSEffectiveRow(label: L("Auto-Speak on Channels"), value: autoText, source: prefs))
         return rows
+    }
+
+    // MARK: Display text (never blank)
+
+    /// The model name to show: the selected one, else the provider's actual default with "(Default)".
+    public func modelDisplay(_ id: String?, provider: String) -> String {
+        if let id, !id.isEmpty { return self.modelOptions(for: provider).first { $0.id == id }?.name ?? String(format: L("Custom: %@"), id) }
+        if let def = TTSProviderKeys.defaultModel(provider), let name = self.modelName(def, provider: provider) { return String(format: L("%@ (Default)"), name) }
+        return L("Provider default")
+    }
+
+    /// The voice name to show: its name if known, "Default voice", else the raw id.
+    public func voiceDisplay(_ id: String?, provider: String) -> String {
+        guard let id, !id.isEmpty else { return L("Default voice") }
+        if let name = self.voices.first(where: { $0.id == id })?.name { return name }
+        if id == TTSProviderKeys.defaultVoice(provider) { return L("Default voice") }
+        return id
+    }
+
+    /// How the API key is provided, for the key section's source line.
+    public func keySourceText(for provider: String) -> String {
+        let keys = TTSProviderKeys.forProvider(provider)
+        guard keys.apiKey != nil else { return L("No key needed") }
+        let env = keys.envVar ?? ""
+        switch self.setups[provider]?.keySource ?? .none {
+        case let .secretRef(source, _, id):
+            let name = id.isEmpty ? env : id
+            if self.isConfigured(provider) == false {
+                return String(format: L("Set to %@ (%@), but the Gateway can't read it"), name, source)
+            }
+            switch source {
+            case "store": return String(format: L("Stored in the Gateway's secrets as %@"), name)
+            case "env": return String(format: L("Stored as the Gateway environment variable %@"), name)
+            default: return String(format: L("Read from %@ (%@)"), name, source)
+            }
+        case .inline, .redacted:
+            return L("Set in the Gateway's config file")
+        case .none:
+            return self.isConfigured(provider) == true ? L("From the Gateway's environment or an auth profile") : L("Not set")
+        }
+    }
+
+    /// True when a key is set but the Gateway can't use it (the original bug: a SecretRef that doesn't resolve).
+    public func keyIsNotResolving(_ provider: String) -> Bool {
+        if case .secretRef = self.setups[provider]?.keySource { return self.isConfigured(provider) == false }
+        return false
+    }
+
+    // MARK: Check (no fallback)
+
+    public enum CheckResult: Equatable, Sendable {
+        case working
+        /// The provider refused (bad key, model or voice): its message.
+        case rejected(String)
+        /// Couldn't check (no permission, or the Gateway has no `tts.convert`).
+        case unavailable
+    }
+
+    /// Asks the provider itself, bypassing fallback (`tts.convert` with an explicit provider), so a working
+    /// fallback can't mask a bad key, model or voice. Updates the provider's badge.
+    public func checkProvider(_ provider: String) async -> CheckResult {
+        guard self.supports(Self.convertMethod), self.canWrite else { return .unavailable }
+        let setup = self.setups[provider]
+        var params: [String: JSONValue] = ["text": "Test", "provider": .string(provider)]
+        if let model = setup?.model { params["modelId"] = .string(model) }
+        if let voice = setup?.voice { params["voiceId"] = .string(voice) }
+        do {
+            _ = try await self.call(Self.convertMethod, .object(params))
+            self.lastTestError[provider] = nil
+            return .working
+        } catch {
+            if GatewayError.isUnknownMethod(error) || GatewayError.isMissingScope(error) { return .unavailable }
+            let message = Self.message(error)
+            self.lastTestError[provider] = message
+            return .rejected(message)
+        }
     }
 
     /// What Read Aloud's automatic mode does on this Gateway.
