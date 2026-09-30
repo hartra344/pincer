@@ -68,6 +68,8 @@ final class TranscriptToolSearchBar: TranscriptBaseView {
     private weak var renderer: TranscriptRenderer?
     private var search: TranscriptPart.Tool.Search?
     private var didFocus = false
+    private var announced = ""
+    private var announceTask: Task<Void, Never>?
     private let field = ToolSearchField()
     private let countLabel = ToolSearchLabel()
     private let previousButton = TranscriptLabelButton()
@@ -109,11 +111,15 @@ final class TranscriptToolSearchBar: TranscriptBaseView {
                 self.field.resign()
             }
             self.didFocus = false
+            self.announced = ""
+            self.announceTask?.cancel()
             return
         }
         self.isHidden = false
         self.field.setText(search.query)
-        self.countLabel.set(self.countText(search))
+        let count = self.countText(search)
+        self.countLabel.set(count)
+        self.announceChange(count)
         self.previousButton.isDisabled = search.total < 2
         self.nextButton.isDisabled = search.total < 2
         self.frame = search.frame
@@ -121,6 +127,19 @@ final class TranscriptToolSearchBar: TranscriptBaseView {
         if !self.didFocus {
             self.didFocus = true
             self.field.focus()
+        }
+    }
+
+    /// Speaks the count once typing or stepping pauses, not on every keystroke.
+    private func announceChange(_ count: String) {
+        guard count != self.announced else { return }
+        self.announced = count
+        self.announceTask?.cancel()
+        guard !count.isEmpty, AccessibilityAnnouncer.isVoiceOverRunning else { return }
+        self.announceTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(700))
+            guard !Task.isCancelled else { return }
+            AccessibilityAnnouncer.announce(count)
         }
     }
 
@@ -139,9 +158,12 @@ final class TranscriptToolSearchBar: TranscriptBaseView {
             right = button.frame.minX - 4
         }
         let countWidth = min(self.countLabel.fittingWidth, bounds.width * 0.4)
-        self.countLabel.frame = CGRect(x: right - countWidth, y: 0, width: countWidth, height: bounds.height)
+        let labelHeight = min(self.countLabel.fittingHeight, bounds.height)
+        self.countLabel.frame = CGRect(x: right - countWidth, y: ((bounds.height - labelHeight) / 2).rounded(),
+                                       width: countWidth, height: labelHeight)
         right = self.countLabel.frame.minX - 6
-        self.field.frame = CGRect(x: 0, y: 0, width: max(right, 40), height: bounds.height)
+        let fieldHeight = min(self.field.fittingHeight, bounds.height)
+        self.field.frame = CGRect(x: 0, y: ((bounds.height - fieldHeight) / 2).rounded(), width: max(right, 40), height: fieldHeight)
     }
 
     /// Opens the search for this bar's card (⌘F while focus is in the card's text).
@@ -209,6 +231,7 @@ final class ToolSearchLabel: NSTextField {
     func set(_ text: String) { self.stringValue = text }
 
     var fittingWidth: CGFloat { ceil(self.attributedStringValue.size().width) + 4 }
+    var fittingHeight: CGFloat { ceil(self.attributedStringValue.size().height) }
 
     override var isFlipped: Bool { true }
 }
@@ -235,6 +258,8 @@ final class ToolSearchField: NSTextField, NSTextFieldDelegate {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    var fittingHeight: CGFloat { max(ceil(self.intrinsicContentSize.height), 20) }
 
     var hasFocus: Bool { self.currentEditor() != nil && self.window?.firstResponder === self.currentEditor() }
 
@@ -289,6 +314,7 @@ final class ToolSearchLabel: UILabel {
     func set(_ text: String) { self.text = text }
 
     var fittingWidth: CGFloat { ceil(self.intrinsicContentSize.width) + 4 }
+    var fittingHeight: CGFloat { ceil(self.intrinsicContentSize.height) }
 }
 
 final class ToolSearchField: UITextField, UITextFieldDelegate {
@@ -312,6 +338,8 @@ final class ToolSearchField: UITextField, UITextFieldDelegate {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    var fittingHeight: CGFloat { max(ceil(self.intrinsicContentSize.height), 26) }
 
     var hasFocus: Bool { self.isFirstResponder }
 
