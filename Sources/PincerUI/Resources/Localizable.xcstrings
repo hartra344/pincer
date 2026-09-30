@@ -101,6 +101,26 @@
         }
       }
     },
+    "%@ group": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ group"
+          }
+        }
+      }
+    },
+    "%@ group in %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ group in %2$@"
+          }
+        }
+      }
+    },
     "%@ is already used": {
       "localizations": {
         "en": {
@@ -457,6 +477,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@: reply failed"
+          }
+        }
+      }
+    },
+    "%lld / %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld / %lld"
           }
         }
       }
@@ -7673,6 +7703,16 @@
         }
       }
     },
+    "Next match (⌘G)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next match (⌘G)"
+          }
+        }
+      }
+    },
     "Next run": {
       "localizations": {
         "en": {
@@ -9469,6 +9509,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Previous match (%@)"
+          }
+        }
+      }
+    },
+    "Previous match (⇧⌘G)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Previous match (⇧⌘G)"
           }
         }
       }
