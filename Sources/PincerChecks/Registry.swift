@@ -83,6 +83,7 @@ enum Suites {
             Section("Gateway config schema") { runConfigChecks() },
             Section("Progress card") { runProgressCardChecks() },
             Section("Slash commands") { runSlashCommandChecks() },
+            Section("Dictation") { await runDictationChecks() },
             Section("Automations") { runAutomationChecks() },
             Section("Web Push") { await runWebPushChecks() },
             Section("Find in chat") { await runFindInChatChecks() },

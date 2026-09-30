@@ -48,6 +48,8 @@ targets:
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer looks for OpenClaw Gateways on your network."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Dictate messages to your agents."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn what you say into text in the message box. Pincer never sends it on its own."
   Pincer-iOS:
     type: application
     scheme: {}
@@ -76,6 +78,8 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Pincer looks for OpenClaw Gateways on your network."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach photos to messages you send to your agents."
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "Dictate messages to your agents."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "Turn what you say into text in the message box. Pincer never sends it on its own."
         TARGETED_DEVICE_FAMILY: "1,2"
   # Share extensions: send text, links and files into a chat. They connect as the app's paired
   # device, reading gateways from the App Group and credentials from the shared Keychain group.

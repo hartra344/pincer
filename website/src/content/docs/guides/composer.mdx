@@ -1,6 +1,6 @@
 ---
 title: Composer & slash commands
-description: Sending messages, attachments, stopping runs and using slash commands in Pincer.
+description: Sending messages, attachments, dictation, stopping runs and using slash commands in Pincer.
 ---
 
 import DocScreenshot from '../../../components/DocScreenshot.astro';
@@ -38,6 +38,27 @@ Paste, drag in, or pick images and files with the **+** button. Images are downs
 Attachments need a connection: while you're offline the **+** button is unavailable. See [Offline sending & retry](../offline-outbox/).
 
 To send something from another app, use the share sheet. See [Share to Pincer](../sharing-to-pincer/).
+
+## Dictation
+
+Click or tap the **microphone** button next to the text box and start talking. Your words appear in the text box as you speak, after anything you've already typed. Pincer never sends a dictated message on its own: read it over, fix anything, then send it as usual.
+
+Dictation stops when you:
+
+- click or tap the microphone again,
+- press <kbd>Esc</kbd>, which keeps the text,
+- start typing, or
+- send the message or switch to another chat. The text is kept as it is.
+
+Starting dictation stops [Read Aloud](../read-aloud/) if a reply is being read.
+
+The first time, Pincer asks for permission to use the **microphone** and **speech recognition**. If you said no, the microphone button shows why and offers **Open Settings**, where you can allow it. On a Mac, that's **System Settings → Privacy & Security**.
+
+:::note
+When your device can recognize speech on its own, Pincer keeps dictation **on the device**. Otherwise, your device may send the audio to Apple to turn it into text. It isn't sent to your gateway. Only the text you send reaches the gateway.
+:::
+
+The microphone button doesn't appear if speech recognition isn't available for your language.
 
 ## Drafts
 

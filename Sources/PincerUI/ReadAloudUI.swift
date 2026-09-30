@@ -141,7 +141,7 @@ struct ReadAloudModifier: ViewModifier {
         let state = self.state
         self.chat.onFinalAssistantReplyOwner = state
         self.chat.onFinalAssistantReply = { [weak state] item in
-            guard let state, state.isVisible, !ReadAloudSupport.isVoiceOverRunning,
+            guard let state, state.isVisible, !ReadAloudSupport.isVoiceOverRunning, !ReadAloudController.shared.isDictating,
                   let text = SpeechText.speakableText(for: item) else { return }
             ReadAloudController.shared.start(messageId: item.transcriptId ?? item.id, text: text, gateway: state.gateway?.voice)
         }
