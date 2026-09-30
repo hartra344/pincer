@@ -244,10 +244,10 @@ struct Composer: View {
 
     /// Offline, attachments queue like text while the outbox can keep them on disk.
     private var attachmentsFitOffline: Bool {
-        self.gateway.canPersistAttachments(bytes: self.attachments.reduce(0) { $0 + $1.data.count })
+        self.attachments.isEmpty || self.gateway.canPersistAttachments(bytes: self.attachments.reduce(0) { $0 + $1.data.count })
     }
 
-    private var canAttach: Bool { self.gateway.state.isConnected || self.attachmentsFitOffline }
+    private var canAttach: Bool { self.gateway.state.isConnected || self.gateway.canPersistAttachments(bytes: 0) }
 
     private static var offlineHint: String { L("Offline — messages send when you reconnect") }
     private static var attachmentsNeedConnection: String { L("Attachments need a connection") }
@@ -263,7 +263,7 @@ struct Composer: View {
         let queued = self.chat.unsentEntries.filter { $0.state == .queued }.count
         let waiting = queued == 0 ? nil : L("\(queued) messages queued")
         if !self.attachments.isEmpty, !self.attachmentsFitOffline {
-            return [waiting, Self.attachmentsNeedConnection].compactMap(\.self).joined(separator: " · ")
+            return [waiting, L("Too large to queue offline — sends when you’re connected")].compactMap(\.self).joined(separator: " · ")
         }
         if self.isTypingCommand {
             return [waiting, L("Connect to run commands")].compactMap(\.self).joined(separator: " · ")

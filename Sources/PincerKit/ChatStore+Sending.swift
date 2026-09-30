@@ -76,9 +76,10 @@ extension ChatStore {
             entry.replyPreview = preview
         }
         if !attachments.isEmpty {
-            gateway.outboxAttachments[idempotencyKey] = attachments
             if persistsAttachments, let refs = gateway.persistAttachments(attachments, entryId: idempotencyKey) {
                 entry.attachments = refs
+            } else {
+                gateway.outboxAttachments[idempotencyKey] = attachments
             }
         }
         self.items.append(pending)
@@ -95,7 +96,7 @@ extension ChatStore {
             if connected { Task { await gateway.flushOutbox() } }
             return .queued
         }
-        let outcome = await self.deliver(entry, keepFailure: !requiresConnection)
+        let outcome = await self.deliver(entry, keepFailure: !requiresConnection, attachments: attachments)
         if case .failed = outcome { return outcome }
         if let replyTo, self.replyTarget == replyTo { self.replyTarget = nil }
         return outcome
@@ -105,10 +106,21 @@ extension ChatStore {
     /// outbox and the message waits for the transcript; on failure it's marked by kind (see
     /// `Outbox.markFailed`), or with `keepFailure` off, dropped along with its row.
     @discardableResult
-    func deliver(_ entry: OutboxEntry, keepFailure: Bool = true) async -> SendOutcome {
+    func deliver(_ entry: OutboxEntry, keepFailure: Bool = true, attachments provided: [OutgoingAttachment]? = nil) async -> SendOutcome {
         guard let gateway else { return .failed("Couldn’t send: the Gateway is gone.") }
         var key = entry.id
-        let attachments = await gateway.attachmentBytes(for: entry)
+        // Bytes of persisted attachments are read for this send only, never kept in memory.
+        var attachments = provided ?? gateway.outboxAttachments[key] ?? []
+        if entry.hasAttachments, attachments.isEmpty, !entry.attachments.isEmpty {
+            if let loaded = await gateway.readAttachments(for: entry) {
+                attachments = loaded
+            } else if gateway.attachmentFilesExist(for: entry) {
+                // The files are there but unreadable (say the device is locked): worth a Retry.
+                let message = "Couldn’t send: the attachments couldn’t be read. Try again."
+                gateway.outbox.markFailed(id: key, kind: .transient, isConnected: true, message: message)
+                return .failedInline(message)
+            }
+        }
         if entry.hasAttachments, attachments.isEmpty {
             let message = "Couldn’t send: the attachments are no longer available. Delete this message and attach them again."
             gateway.outbox.markFailed(id: key, kind: .rejected(message), message: message)

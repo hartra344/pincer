@@ -148,6 +148,7 @@ public enum OutboxAttachmentStore {
     private static func createDirectory(_ url: URL) throws {
         var attributes: [FileAttributeKey: Any] = [:]
         #if os(iOS)
+        // Not `complete`: a send after the device locks (background reconnect) must still read them.
         attributes[.protectionKey] = FileProtectionType.completeUntilFirstUserAuthentication
         #endif
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true, attributes: attributes.isEmpty ? nil : attributes)

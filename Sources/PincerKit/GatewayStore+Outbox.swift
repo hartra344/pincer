@@ -41,14 +41,21 @@ extension GatewayStore {
         OutboxAttachmentStore.enqueueMove(from: id, to: newId, gatewayId: self.id, root: self.outboxRoot)
     }
 
-    /// The bytes of a queued entry's attachments: in memory, else read from disk (cached until it leaves).
+    /// Reads a persisted entry's attachment bytes from disk; nil when they can't be read.
+    func readAttachments(for entry: OutboxEntry) async -> [OutgoingAttachment]? {
+        guard !self.profile.isDemo else { return nil }
+        return await OutboxAttachmentStore.read(entry: entry, gatewayId: self.id, root: self.outboxRoot)
+    }
+
+    /// The bytes of an entry's attachments (memory-only ones from memory, persisted ones read from
+    /// disk and not kept); empty when unavailable.
     func attachmentBytes(for entry: OutboxEntry) async -> [OutgoingAttachment] {
-        if let cached = self.outboxAttachments[entry.id] { return cached }
-        guard !entry.attachments.isEmpty, !self.profile.isDemo,
-              let loaded = await OutboxAttachmentStore.read(entry: entry, gatewayId: self.id, root: self.outboxRoot),
-              self.outbox.entry(id: entry.id) != nil else { return [] }
-        self.outboxAttachments[entry.id] = loaded
-        return loaded
+        if let memory = self.outboxAttachments[entry.id] { return memory }
+        return await self.readAttachments(for: entry) ?? []
+    }
+
+    func attachmentFilesExist(for entry: OutboxEntry) -> Bool {
+        OutboxAttachmentStore.filesExist(for: entry, gatewayId: self.id, root: self.outboxRoot)
     }
 
     /// Discards every unsent message of this Gateway (Settings → Storage).
