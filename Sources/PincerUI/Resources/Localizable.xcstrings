@@ -751,6 +751,16 @@
         }
       }
     },
+    "%lld files deleted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld files deleted"
+          }
+        }
+      }
+    },
     "%lld images (shown in the reply)": {
       "localizations": {
         "en": {
@@ -999,6 +1009,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 dismissed issue"
+          }
+        }
+      }
+    },
+    "1 file deleted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 file deleted"
           }
         }
       }
@@ -1359,6 +1379,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "Add Plugin"
+          }
+        }
+      }
+    },
+    "Answer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Answer"
+          }
+        }
+      }
+    },
+    "Cached result": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cached result"
+          }
+        }
+      }
+    },
+    "Close search": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close search"
+          }
+        }
+      }
+    },
+    "Provider %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Provider %@"
+          }
+        }
+      }
+    },
+    "Search in output": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search in output"
+          }
+        }
+      }
+    },
+    "Sources": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sources"
           }
         }
       }
@@ -7219,6 +7299,76 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kind"
+          }
+        }
+      }
+    },
+    "Took %lld minutes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took %lld minutes"
+          }
+        }
+      }
+    },
+    "Took %lld minutes %lld seconds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took %1$lld minutes %2$lld seconds"
+          }
+        }
+      }
+    },
+    "Took %lld minutes 1 second": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took %lld minutes 1 second"
+          }
+        }
+      }
+    },
+    "Took 1 minute": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took 1 minute"
+          }
+        }
+      }
+    },
+    "Took 1 minute %lld seconds": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took 1 minute %lld seconds"
+          }
+        }
+      }
+    },
+    "Took 1 minute 1 second": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Took 1 minute 1 second"
+          }
+        }
+      }
+    },
+    "cached": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "cached"
           }
         }
       }
