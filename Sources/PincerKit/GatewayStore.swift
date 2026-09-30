@@ -217,7 +217,7 @@ public final class GatewayStore: Identifiable {
         connection: self.connection, hello: { [weak self] in self?.hello },
         allowsWritesWithoutAdmin: self.profile.isDemo,
         onAgentsChanged: { [weak self] in await self?.agentsDidChange() },
-        onAgentDeleted: { [weak self] in self?.forgetAvatar(for: $0) })
+        onAgentDeleted: { [weak self] in self?.clearAvatarChoices(for: $0) })
     /// Skills (`skills.*`): the per-agent list, ClawHub search, installs and config. The demo may
     /// write without `operator.admin`.
     @ObservationIgnored public private(set) lazy var skills = SkillsModel(

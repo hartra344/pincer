@@ -384,7 +384,7 @@ extension GatewayStore {
     }
 
     /// Drops a deleted agent's seed and character here and on the Gateway.
-    func forgetAvatar(for agentId: String) {
+    func clearAvatarChoices(for agentId: String) {
         self.queuedAvatarChoices.removeValue(forKey: agentId)
         var removed: [String: String?] = [:]
         for entry in [AvatarPreferences.seedEntry(for: agentId), agentId] where self.avatarChoices[entry] != nil {
