@@ -1210,10 +1210,12 @@ final class TranscriptToolView: TranscriptBaseView {
     private var noteViews: [TranscriptNoteView] = []
     private var copiedControl: String?
     private weak var actions: TranscriptRowActions?
+    let searchBar = TranscriptToolSearchBar()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         self.addSubview(self.header)
+        self.addSubview(self.searchBar)
         self.addSubview(self.runButton)
         self.runButton.set(title: L("Open run"), symbol: "sparkles")
         self.addSubview(self.copyButton)
@@ -1323,6 +1325,7 @@ final class TranscriptToolView: TranscriptBaseView {
                 view.isHidden = true
             }
         }
+        self.searchBar.configure(tool.search, toolId: tool.tool.id, row: rowId, actions: actions)
         self.redraw()
     }
 
@@ -1663,6 +1666,8 @@ extension TranscriptToolHeaderView {
 final class TranscriptToolSectionView: TranscriptBaseView {
     private let textView = TranscriptTextView(wraps: true)
     private var contentHeight: CGFloat = 0
+    /// Bottom of the current card-search match in the text, kept in view when the text scrolls.
+    private var searchMatchBottom: CGFloat?
     #if os(macOS)
     private let scroller = TranscriptScroller(axis: .vertical)
     #endif
@@ -1679,6 +1684,7 @@ final class TranscriptToolSectionView: TranscriptBaseView {
 
     func configure(_ section: TranscriptPart.Tool.Section, row: TranscriptRowLayout, resetScroll: Bool) {
         self.contentHeight = section.contentHeight
+        self.searchMatchBottom = section.searchMatchBottom
         self.textView.copyItems = row.copyItems
         self.textView.set(section.text, identity: "\(row.id):\(section.id ?? section.title)")
         #if os(macOS)
@@ -1687,7 +1693,35 @@ final class TranscriptToolSectionView: TranscriptBaseView {
         self.textView.isScrollEnabled = section.contentHeight > section.frame.height + 0.5
         if resetScroll { self.textView.contentOffset = .zero }
         #endif
+        self.scrollToSearchMatch(height: section.frame.height)
     }
+
+    /// Scrolls a tall text so the current card-search match is inside the visible frame.
+    private func scrollToSearchMatch(height: CGFloat) {
+        guard let bottom = self.searchMatchBottom, self.contentHeight > height + 0.5 else { return }
+        let offset = bottom > height ? min(bottom - height / 2, self.contentHeight - height) : 0
+        #if os(macOS)
+        self.scroller.contentView.scroll(to: CGPoint(x: 0, y: offset))
+        self.scroller.reflectScrolledClipView(self.scroller.contentView)
+        #else
+        self.textView.contentOffset = CGPoint(x: 0, y: offset)
+        #endif
+    }
+
+    #if os(macOS)
+    /// ⌘F with the focus in this card's text searches the card instead of the chat.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "f",
+           let responder = self.window?.firstResponder as? NSView, responder.isDescendant(of: self),
+           let card = self.superview as? TranscriptToolView
+        {
+            card.searchBar.open()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+    #endif
 
     override func layoutContent() {
         let bounds = self.bounds
