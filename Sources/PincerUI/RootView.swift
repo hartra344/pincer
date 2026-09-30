@@ -647,7 +647,7 @@ private struct TranscriptCacheSettingsSection: View {
         let messages = count == 1 ? L("1 message") : L("\(count.formatted()) messages")
         let bytes = self.app.outboxAttachmentBytes
         guard bytes > 0 else { return messages }
-        return L("\(messages) · \(bytes.formatted(.byteCount(style: .file)))")
+        return "\(messages) · \(bytes.formatted(.byteCount(style: .file)))"
     }
 
     private func measure() async {
