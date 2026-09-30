@@ -3,9 +3,22 @@ title: Tool calls
 description: How Pincer shows the agent's commands, web lookups and MCP tool calls as readable cards in the chat transcript.
 ---
 
+import DocScreenshot from '../../../components/DocScreenshot.astro';
+import shotCommands from '../../../assets/screenshots/features/tool-calls-commands-light.png';
+import shotCommandsDark from '../../../assets/screenshots/features/tool-calls-commands-dark.png';
+import shotWeb from '../../../assets/screenshots/features/tool-calls-web-light.png';
+import shotWebDark from '../../../assets/screenshots/features/tool-calls-web-dark.png';
+import shotSearch from '../../../assets/screenshots/features/tool-calls-search-light.png';
+import shotRead from '../../../assets/screenshots/features/tool-calls-read-light.png';
+import shotCommandsIOS from '../../../assets/screenshots/features/ios/tool-calls-commands-light.png';
+import shotCommandsDarkIOS from '../../../assets/screenshots/features/ios/tool-calls-commands-dark.png';
+import shotWebIOS from '../../../assets/screenshots/features/ios/tool-calls-web-light.png';
+import shotWebDarkIOS from '../../../assets/screenshots/features/ios/tool-calls-web-dark.png';
+import shotSearchIOS from '../../../assets/screenshots/features/ios/tool-calls-search-light.png';
+
 When an agent runs a command, fetches a page or calls a tool, the transcript shows a tool card. Collapsed, it's a single line. Expanded, it shows what the agent asked for and what came back, laid out for that kind of tool instead of as raw JSON.
 
-{/* Screenshot: an expanded exec card (terminal block, chips, exit badge) once the demo capture exists. */}
+<DocScreenshot src={shotCommands} alt="An expanded exec card with the command, working directory and timeout chips, an exit 0 badge and the output, above a failed exec card with a red border, a Failed badge and exit 1." caption="macOS, built-in demo. Open Check the MCP servers and set Thinking Steps to All. Each header shows how long the call took." ios={shotCommandsIOS} iosAlt="The expanded exec card with its output on iPhone, above the collapsed failed exec card and the other tool calls. Each header shows its duration." iosCaption="iOS, built-in demo. The collapsed cards below the open one show the failed exec in red and each call's duration." />
 
 ## Collapsed and expanded
 
@@ -50,9 +63,11 @@ A fetch shows the URL, and a search shows the query, each in a chip with an icon
 
 A `web_search` result appears as a list of links instead of JSON. The section is titled **Results**, and its badges show the search provider (for example `brave`), the number of results, how long the search took, and **cached** when the gateway served a saved answer.
 
-Each result is a title link, a dimmed line with the site name and host, and the snippet. The titles are ordinary links inside the card's selectable text, so click or tap one to open the page, and use the VoiceOver links rotor to move between them. On macOS, hovering a title shows the full URL. **Copy** copies one `title` and `url` pair per result.
+Each result is a title link, a dimmed line with the site, host and publish date when the provider gives them, and the snippet. The titles are ordinary links inside the card's selectable text, so click or tap one to open the page, and use the VoiceOver links rotor to move between them. On macOS, hovering a title shows the full URL. **Copy** copies one `title` and `url` pair per result.
 
 Some providers answer the question instead of listing pages. Then the section is titled **Answer**, the card shows the answer text, and a **Sources** list of links follows. If the search failed, the card shows the error like any other tool.
+
+<DocScreenshot src={shotWeb} alt="A web_search card listing five results as blue links with site, date and snippet, above an expanded web_fetch card." caption="macOS, built-in demo. The brave, 5 results and 640 ms badges sit in the title row." ios={shotWebIOS} iosAlt="A web_search card on iPhone listing five results as links with site, date and snippet." iosCaption="iOS, built-in demo. Tap a title to open the page." />
 
 Only `http` and `https` links are shown. If the gateway's result is in a shape Pincer doesn't recognize, or the chat was cached by an earlier version of Pincer without the result details, the card shows the output as plain text. **Show raw JSON** in the section's title row always shows the full result. To get the links for an old cached chat, clear the cache under **Settings → Storage** (see [Local cache](../local-cache/#clearing-the-cache)).
 
@@ -72,6 +87,8 @@ Any tool Pincer has no special layout for uses this list, with its output as pla
 
 Output that is JSON, and JSON values in a call's arguments, is lightly coloured: keys, strings, numbers, and `true`, `false` and `null` each get their own colour. A file read is coloured by its file extension (Swift, JavaScript and TypeScript, Python, shell, Ruby, Go, Rust, C-family, JSON and YAML) with strings, numbers, comments and a few keywords. Markdown and unknown types stay plain. The colours meet contrast in light and dark mode, and the text itself never changes, so copying and Find work as before. Highlighting is worked out only when you expand a card.
 
+<DocScreenshot src={shotRead} alt="An expanded read card showing a Swift file with keywords, comments and numbers in different colours." caption="macOS, built-in demo. A read of a Swift file, with keywords, comments, numbers and literals coloured." narrow />
+
 ## Searching within a card
 
 To look for something inside one card's output, choose the magnifier button next to **Copy** in the output's title row. A search field opens in the card. As you type, every match in the card's output and arguments is highlighted and the field shows where you are, for example "3 of 12", with previous, next and close buttons.
@@ -80,7 +97,10 @@ To look for something inside one card's output, choose the magnifier button next
 - On macOS, **⌘G** and **⇧⌘G** also move between matches, and **⌘F** with the cursor inside a card's output opens that card's search (and puts the cursor back in its field if it's already open). Anywhere else **⌘F** still opens [Find in Chat](../transcript/#find-in-chat).
 - **Esc**, or the magnifier again, closes the search and clears the highlights.
 
-Searching shows all of the card's lines, so a match is never hidden behind **Show all**. Only that card is redrawn as you type; the rest of the chat isn't touched. On iPhone and iPad the field works the same, with the on-screen keyboard or a hardware keyboard (Return, Shift-Return, Esc, ⌘G and ⇧⌘G).
+Searching shows all of the card's lines, so a match is never hidden behind **Show all**. Only that card is redrawn as you type; the rest of the chat isn't touched.
+
+<DocScreenshot src={shotSearch} alt="An exec card with a search field under the Output title showing Era, four highlighted matches and 1 of 4." caption="macOS, built-in demo. Searching for Era in one card's output." ios={shotSearchIOS} iosAlt="The same search on iPhone, with the matches highlighted and 1 of 4 in the field." iosCaption="iOS, built-in demo." />
+ On iPhone and iPad the field works the same, with the on-screen keyboard or a hardware keyboard (Return, Shift-Return, Esc, ⌘G and ⇧⌘G).
 
 ## Finding text in tool calls
 
@@ -93,6 +113,14 @@ With **Include Tool Output** turned on in [Find in Chat](../transcript/#find-in-
 - Text follows your text size (Dynamic Type on iOS and iPadOS) and works in light and dark mode. The exit code badge is always spelled out, so colour is never the only signal.
 
 See [Accessibility](../accessibility/) for more.
+
+## Light and dark
+
+Tool cards follow the app's light or dark appearance.
+
+<DocScreenshot src={shotCommandsDark} alt="The exec and failed exec cards in dark mode." caption="macOS, dark mode." ios={shotCommandsDarkIOS} iosAlt="The expanded exec card in dark mode on iPhone." iosCaption="iOS, dark mode." />
+
+<DocScreenshot src={shotWebDark} alt="A web_search link list and a web_fetch card in dark mode." caption="macOS, dark mode." ios={shotWebDarkIOS} iosAlt="A web_search link list in dark mode on iPhone." iosCaption="iOS, dark mode." />
 
 ## Try it in the demo
 
