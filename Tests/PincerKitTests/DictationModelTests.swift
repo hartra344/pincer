@@ -516,4 +516,69 @@ struct DictationModelTests {
         #expect(draft == "Hi there" && caret == 8)
         model.cancel()
     }
+
+    // MARK: - Selection stays until words arrive; endedForSend
+
+    @Test(arguments: [DictationIssue.speechDenied, .micDenied, .declined])
+    func deniedStartLeavesASelectedDraftUntouched(issue: DictationIssue) async {
+        let engine = FakeEngine()
+        engine.authorizeResult = issue
+        let model = DictationModel(engine: engine)
+        var writes: [String] = []
+        model.toggle(draft: "Hello big world", selection: NSRange(location: 6, length: 3)) { text, _ in writes.append(text) }
+        #expect(await settle(model, until: .idle))
+        #expect(writes.isEmpty && engine.starts == 0)
+    }
+
+    @Test func failedStartLeavesASelectedDraftUntouched() async {
+        let engine = FakeEngine()
+        engine.startError = DictationIssue.onDeviceUnavailable(language: "German")
+        let model = DictationModel(engine: engine)
+        var writes: [String] = []
+        model.toggle(draft: "Hello big world", selection: NSRange(location: 6, length: 3)) { text, _ in writes.append(text) }
+        #expect(await settle(model, until: .idle))
+        #expect(writes.isEmpty && model.issue == .onDeviceUnavailable(language: "German"))
+    }
+
+    @Test func cancelBeforeAnyWordsLeavesASelectedDraftUntouched() async {
+        let engine = FakeEngine()
+        let model = DictationModel(engine: engine)
+        var writes: [String] = []
+        model.toggle(draft: "Hello big world", selection: NSRange(location: 6, length: 3)) { text, _ in writes.append(text) }
+        #expect(await settle(model, until: .listening))
+        engine.onPartial?("", false)
+        engine.onPartial?("  ", false)
+        #expect(writes.allSatisfy { $0 == "Hello big world" }, "an empty transcript never deletes the selection")
+        model.cancel()
+        #expect(writes.allSatisfy { $0 == "Hello big world" })
+    }
+
+    @Test func endedForSendIsSetOnlyByFinishForSend() async {
+        let engine = FakeEngine()
+        engine.finalAfterStop = ("hi there", .milliseconds(20))
+        let model = DictationModel(engine: engine)
+        #expect(!model.endedForSend)
+        #expect(await start(model, Draft("")))
+        model.finish()
+        #expect(await settle(model, until: .idle))
+        #expect(!model.endedForSend, "plain Stop isn't a send")
+
+        #expect(await start(model, Draft("")))
+        await model.finishForSend()
+        #expect(model.endedForSend && model.phase == .idle)
+
+        model.toggle(draft: "", caret: nil) { _ in }
+        #expect(!model.endedForSend, "a new session resets it")
+        model.cancel()
+    }
+
+    @Test func endedForSendAlsoSetWhenSendCancelsAPendingStart() async {
+        let engine = FakeEngine()
+        engine.authorizeHold = true
+        let model = DictationModel(engine: engine)
+        model.toggle(draft: "", caret: nil) { _ in }
+        await model.finishForSend()
+        #expect(model.endedForSend && model.phase == .idle)
+        engine.releaseAuthorize()
+    }
 }

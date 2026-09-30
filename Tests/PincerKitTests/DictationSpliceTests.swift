@@ -160,4 +160,14 @@ struct DictationSpliceTests {
         #expect(splice.caret(after: "small") == 11)
         #expect(splice.caret(after: "") == 6)
     }
+
+    @Test func selectionSurvivesUntilWordsArrive() {
+        let draft = "Hello big world"
+        let splice = DictationSplice(draft: draft, selection: NSRange(location: 6, length: 3))
+        #expect(splice.applying("") == draft)
+        #expect(splice.applying("  \n") == draft)
+        #expect(splice.caret(after: "") == 6)
+        #expect(splice.caret(after: " ") == 6)
+        #expect(splice.applying("small") == "Hello small world")
+    }
 }
