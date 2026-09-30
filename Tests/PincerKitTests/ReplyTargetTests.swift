@@ -1,0 +1,236 @@
+import Foundation
+import Testing
+@testable import PincerKit
+
+/// #110: assistant reply targets (`openclawDelivery`, `[[reply_to…]]` directives) and how they resolve to quotes.
+@MainActor
+@Suite("Reply targets")
+struct ReplyTargetTests {
+    static func item(_ text: String) -> ChatItem {
+        ChatItem(Fixtures.json(text), fallbackIndex: 0)!
+    }
+
+    static func assistant(_ id: String, _ text: String = "answer", delivery: String? = nil, structured: String? = nil) -> ChatItem {
+        let delivery = delivery.map { #","openclawDelivery":\#($0)"# } ?? ""
+        let structured = structured.map { #","replyToId":"\#($0)""# } ?? ""
+        return Self.item(#"{"role":"assistant","content":[{"type":"text","text":"\#(text)"}]\#(delivery),"__openclaw":{"id":"\#(id)"\#(structured)}}"#)
+    }
+
+    static func user(_ id: String, _ text: String = "question", channelId: String? = nil) -> ChatItem {
+        let transport = channelId.map { #","transport":{"channel":"telegram","messageId":"\#($0)"}"# } ?? ""
+        return Self.item(#"{"role":"user","content":[{"type":"text","text":"\#(text)"}],"__openclaw":{"id":"\#(id)"\#(transport)}}"#)
+    }
+
+    func chat(_ items: [ChatItem]) -> ChatStore {
+        let suite = "ReplyTargetTests.\(UUID().uuidString)"
+        let profile = GatewayProfile(id: UUID(), name: "T", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = GatewayStore(profile: profile, defaults: UserDefaults(suiteName: suite)!, identity: Fixtures.identity())
+        let chat = ChatStore(sessionKey: "agent:main:main", agentId: nil, gateway: gateway, headless: true)
+        chat.items = items
+        chat.rebuild(itemsChanged: true)
+        return chat
+    }
+
+    // MARK: Parsing
+
+    @Test func deliveryReplyToIdParses() {
+        let a = Self.assistant("a1", delivery: #"{"replyToId":"  u1  "}"#)
+        #expect(a.replyToId == "u1" && a.replyToCurrent == false)
+    }
+
+    @Test func deliveryReplyToCurrentParses() {
+        let a = Self.assistant("a1", delivery: #"{"replyToCurrent":true}"#)
+        #expect(a.replyToCurrent && a.replyToId == nil)
+        #expect(Self.assistant("a2", delivery: #"{"replyToCurrent":false}"#).replyToCurrent == false)
+        #expect(Self.assistant("a3", delivery: #"{"audioAsVoice":true}"#).replyToCurrent == false)
+    }
+
+    @Test func blankDeliveryReplyToIdIsNil() {
+        #expect(Self.assistant("a1", delivery: #"{"replyToId":"   "}"#).replyToId == nil)
+        #expect(Self.assistant("a2", delivery: #"{"replyToId":""}"#).replyToId == nil)
+    }
+
+    @Test func structuredReplyToIdWinsOverDelivery() {
+        let a = Self.assistant("a1", delivery: #"{"replyToId":"delivery"}"#, structured: "structured")
+        #expect(a.replyToId == "structured")
+    }
+
+    @Test func deliveryIsNotReadOnUserMessages() {
+        let u = Self.item(#"{"role":"user","content":[{"type":"text","text":"x"}],"openclawDelivery":{"replyToId":"a1","replyToCurrent":true},"__openclaw":{"id":"u1"}}"#)
+        #expect(u.replyToId == nil && u.replyToCurrent == false)
+    }
+
+    @Test func plainAssistantHasNoTarget() {
+        let a = Self.assistant("a1")
+        #expect(a.replyToId == nil && a.replyToCurrent == false)
+    }
+
+    @Test func replyFieldsSurviveCoding() throws {
+        for a in [Self.assistant("a1", delivery: #"{"replyToId":"u1"}"#), Self.assistant("a2", delivery: #"{"replyToCurrent":true}"#)] {
+            let decoded = try JSONDecoder().decode(ChatItem.self, from: JSONEncoder().encode(a))
+            #expect(decoded == a && decoded.replyToId == a.replyToId && decoded.replyToCurrent == a.replyToCurrent)
+        }
+    }
+
+    @Test func transcriptCacheVersionBumpedForReplyTargets() {
+        #expect(TranscriptCache.Snapshot.currentVersion > 8)
+    }
+
+    // MARK: Directives
+
+    @Test func extractsDirectives() {
+        let byId = Replies.extractDirective("[[reply_to:abc-123]] Recovered answer")
+        #expect(byId.target == .id("abc-123") && byId.text.trimmingCharacters(in: .whitespaces) == "Recovered answer")
+        let current = Replies.extractDirective("[[reply_to_current]] Ready")
+        #expect(current.target == .current && current.text.trimmingCharacters(in: .whitespaces) == "Ready")
+    }
+
+    @Test func directiveWhitespaceVariants() {
+        let spaced = Replies.extractDirective("[[ reply_to : 123 ]]ok")
+        #expect(spaced.target == .id("123") && spaced.text == "ok")
+        #expect(Replies.extractDirective("[[ reply_to_current ]]ok").target == .current)
+        let lines = Replies.extractDirective("[[reply_to:\nid\n ]]Visible reply")
+        #expect(lines.target == .id("id") && lines.text == "Visible reply")
+    }
+
+    @Test func directiveInTheMiddleOfText() {
+        let r = Replies.extractDirective("hello [[reply_to_current]] world")
+        #expect(r.target == .current && !r.text.contains("[["))
+        #expect(r.text.contains("hello") && r.text.contains("world"))
+    }
+
+    @Test func plainTextIsUntouched() {
+        let input = "  keep leading and trailing whitespace  "
+        let r = Replies.extractDirective(input)
+        #expect(r.target == nil && r.text == input)
+    }
+
+    @Test func malformedDirectivesStayLiteral() {
+        for input in ["[[reply_to:message-7 Visible reply", "Visible reply\n[[reply_to_current] literally", "[[reply_to:]] x"] {
+            let r = Replies.extractDirective(input)
+            #expect(r.target == nil, "\(input)")
+        }
+        #expect(Replies.extractDirective("[[reply_to:message-7 Visible reply").text == "[[reply_to:message-7 Visible reply")
+    }
+
+    @Test func directivesInCodeStayLiteral() {
+        let input = "Use `[[reply_to_current]]` literally.\n```text\n[[reply_to:example-id]]\n```"
+        let r = Replies.extractDirective(input)
+        #expect(r.target == nil && r.text == input)
+    }
+
+    @Test func unrelatedDoubleBracketsStayLiteral() {
+        let r = Replies.extractDirective("see [[wiki link]] and [[reply_toX]]")
+        #expect(r.target == nil && r.text == "see [[wiki link]] and [[reply_toX]]")
+    }
+
+    @Test func leakedDirectiveIsStrippedAndSuppliesTarget() {
+        let a = Self.assistant("a1", "[[reply_to:u1]] Here you go")
+        #expect(a.plainText.trimmingCharacters(in: .whitespaces) == "Here you go" && a.replyToId == "u1")
+        let c = Self.assistant("a2", "[[reply_to_current]] Ready")
+        #expect(c.plainText.trimmingCharacters(in: .whitespaces) == "Ready" && c.replyToCurrent)
+    }
+
+    @Test func deliveryAndStructuredBeatDirective() {
+        let a = Self.assistant("a1", "[[reply_to:leaked]] Hi", delivery: #"{"replyToId":"delivery"}"#)
+        #expect(a.replyToId == "delivery" && !a.plainText.contains("[["))
+        let b = Self.assistant("a2", "[[reply_to:leaked]] Hi", structured: "structured")
+        #expect(b.replyToId == "structured")
+    }
+
+    @Test func directivesAreNotStrippedFromUserText() {
+        let u = Self.user("u1", "please write [[reply_to_current]] in docs")
+        #expect(u.plainText.contains("[[reply_to_current]]") && u.replyToId == nil)
+    }
+
+    // MARK: Resolution
+
+    @Test func targetResolvesByTranscriptId() throws {
+        let store = self.chat([Self.user("u1", "disk?"), Self.assistant("a1", "40% used"), Self.user("u2", "and memory?"),
+                               Self.assistant("a2", "late answer", delivery: #"{"replyToId":"u1"}"#)])
+        let quote = try #require(store.quote(for: store.items[3]))
+        #expect(quote.targetId == "u1" && quote.sender == .you && quote.text == "disk?")
+    }
+
+    @Test func targetResolvesByChannelMessageId() throws {
+        let store = self.chat([Self.user("u1", "disk?", channelId: "9001"), Self.user("u2", "and memory?", channelId: "9002"),
+                               Self.assistant("a1", "late answer", delivery: #"{"replyToId":"9001"}"#)])
+        let quote = try #require(store.quote(for: store.items[2]))
+        #expect(quote.text == "disk?" && quote.sender == .you)
+    }
+
+    @Test func channelIdOfAnAssistantItemDoesNotResolve() throws {
+        // Only user items carry the channel's own message id.
+        let store = self.chat([Self.user("u1", "q"), Self.assistant("a1", "one"), Self.user("u2", "q2"), Self.assistant("a2", "two", delivery: #"{"replyToId":"nope"}"#)])
+        let quote = try #require(store.quote(for: store.items[3]))
+        #expect(quote.text == nil)
+    }
+
+    @Test func replyToCurrentDirectlyAnsweringRendersNoQuote() {
+        let store = self.chat([Self.user("u1"), Self.assistant("a1", delivery: #"{"replyToCurrent":true}"#)])
+        #expect(store.quote(for: store.items[1]) == nil)
+    }
+
+    @Test func replyToCurrentSkipsToolAndAssistantItems() {
+        let store = self.chat([Self.user("u1"), Self.assistant("a0", "working"), Self.assistant("a1", delivery: #"{"replyToCurrent":true}"#)])
+        #expect(store.quote(for: store.items[2]) == nil)
+    }
+
+    @Test func replyToIdOfTheDirectlyAnsweredMessageRendersNoQuote() {
+        let store = self.chat([Self.user("u0"), Self.assistant("a0"), Self.user("u1"), Self.assistant("a1", delivery: #"{"replyToId":"u1"}"#)])
+        #expect(store.quote(for: store.items[3]) == nil)
+        let byChannel = self.chat([Self.user("u1", channelId: "77"), Self.assistant("a1", delivery: #"{"replyToId":"77"}"#)])
+        #expect(byChannel.quote(for: byChannel.items[1]) == nil)
+    }
+
+    @Test func quotesAnEarlierMessageWhenAnotherUserMessageIntervenes() throws {
+        let store = self.chat([Self.user("u1", "first"), Self.user("u2", "second"), Self.assistant("a1", delivery: #"{"replyToId":"u1"}"#)])
+        let quote = try #require(store.quote(for: store.items[2]))
+        #expect(quote.targetId == "u1" && quote.text == "first")
+    }
+
+    @Test func unresolvedIdStillQuotes() throws {
+        let store = self.chat([Self.user("u1"), Self.assistant("a1", delivery: #"{"replyToId":"gone-42"}"#)])
+        let quote = try #require(store.quote(for: store.items[1]))
+        #expect(quote.targetId == "gone-42" && quote.text == nil)
+    }
+
+    @Test func assistantTargetingAnAssistantMessageQuotesIt() throws {
+        let store = self.chat([Self.user("u1"), Self.assistant("a1", "the plan"), Self.user("u2"), Self.assistant("a2", "again", delivery: #"{"replyToId":"a1"}"#)])
+        let quote = try #require(store.quote(for: store.items[3]))
+        #expect(quote.targetId == "a1" && quote.text == "the plan" && quote.sender == .agent)
+    }
+
+    @Test func assistantWithoutTargetHasNoQuote() {
+        let store = self.chat([Self.user("u1"), Self.assistant("a1")])
+        #expect(store.quote(for: store.items[1]) == nil)
+    }
+
+    @Test func leakedDirectiveDrivesTheQuote() throws {
+        let store = self.chat([Self.user("u1", "first"), Self.user("u2", "second"), Self.assistant("a1", "[[reply_to:u1]] done")])
+        let quote = try #require(store.quote(for: store.items[2]))
+        #expect(quote.targetId == "u1" && quote.text == "first")
+    }
+
+    @Test func userQuotesStillWork() throws {
+        let store = self.chat([Self.assistant("a1", "Disk status"),
+                               Self.item(#"{"role":"user","content":[{"type":"text","text":"that"}],"__openclaw":{"id":"u1","replyToId":"a1"}}"#)])
+        let quote = try #require(store.quote(for: store.items[1]))
+        #expect(quote.targetId == "a1" && quote.text == "Disk status" && quote.sender == .agent)
+    }
+
+    // MARK: Transcript cache
+
+    @Test func cacheRoundTripsReplyTargets() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let id = UUID()
+        let items = [Self.user("u1"), Self.assistant("a1", delivery: #"{"replyToId":"u1"}"#), Self.assistant("a2", delivery: #"{"replyToCurrent":true}"#)]
+        let snapshot = TranscriptCache.Snapshot(items: items, complete: true)
+        await TranscriptCache.save(snapshot, gatewayId: id, sessionKey: "agent:main:main", root: temp.url)
+        await TranscriptCache.flush(gatewayId: id, root: temp.url)
+        let loaded = try #require(await TranscriptCache.load(gatewayId: id, sessionKey: "agent:main:main", root: temp.url))
+        #expect(loaded.items.map(\.replyToId) == [nil, "u1", nil] && loaded.items.map(\.replyToCurrent) == [false, false, true])
+        await TranscriptCache.shutdown(root: temp.url)
+    }
+}
