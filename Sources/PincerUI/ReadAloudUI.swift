@@ -123,6 +123,9 @@ struct ReadAloudModifier: ViewModifier {
                     .padding(.bottom, self.bottomInset + 8)
                     .animation(.snappy, value: ReadAloudController.shared.phase) }
             }
+            .background { self.hardwareShortcut }
+            // Lowest priority: the composer, find bar and menus see Esc first and only pass it on when they don't use it.
+            .onKeyPress(.escape) { self.stopWithEscape() }
             .onAppear { self.install() }
             .onChange(of: self.scenePhase) {
                 self.state.isVisible = self.scenePhase == .active
@@ -131,6 +134,29 @@ struct ReadAloudModifier: ViewModifier {
             }
             .onChange(of: self.autoRead) { self.install() }
             .onDisappear { self.uninstall() }
+    }
+
+    /// ⌥⌘L on iPad hardware keyboards (macOS has the Edit menu command); only the active pane answers.
+    @ViewBuilder private var hardwareShortcut: some View {
+        #if os(iOS)
+        if self.paneIsActive {
+            Button(ReadAloudController.shared.isActive ? L("Stop Reading Aloud") : L("Read Last Reply Aloud")) {
+                self.state.toggleLastReply()
+            }
+            .shortcut(.readAloud)
+            .disabled(!self.state.isEnabled)
+            .opacity(0)
+            .frame(width: 0, height: 0)
+            .accessibilityHidden(true)
+        }
+        #endif
+    }
+
+    private func stopWithEscape() -> KeyPress.Result {
+        let controller = ReadAloudController.shared
+        guard self.paneIsActive, controller.isActive, !controller.isDictating else { return .ignored }
+        controller.stop()
+        return .handled
     }
 
     private func install() {

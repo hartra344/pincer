@@ -1,6 +1,126 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Always": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always"
+          }
+        }
+      }
+    },
+    "Only After Voice Messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only After Voice Messages"
+          }
+        }
+      }
+    },
+    "Only When Tagged": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only When Tagged"
+          }
+        }
+      }
+    },
+    "Unknown (%@)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown (%@)"
+          }
+        }
+      }
+    },
+    "Remove Key…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Key…"
+          }
+        }
+      }
+    },
+    "Remove Key": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Key"
+          }
+        }
+      }
+    },
+    "Remove the %@ key from the Gateway?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove the %@ key from the Gateway?"
+          }
+        }
+      }
+    },
+    "The Gateway can't use %@ until you add a key again. Replies fall back to the next provider or this device's voice.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway can't use %@ until you add a key again. Replies fall back to the next provider or this device's voice."
+          }
+        }
+      }
+    },
+    "Key removed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Key removed"
+          }
+        }
+      }
+    },
+    "Replace “%@” with “%@”?": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace “%@” with “%@”?"
+          }
+        }
+      }
+    },
+    "Pincer can't set it back; the Gateway only offers on/off.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pincer can't set it back; the Gateway only offers on/off."
+          }
+        }
+      }
+    },
+    "“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config; Pincer can only switch replies Off or Always.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Only After Voice Messages” and “Only When Tagged” are set in the Gateway's config; Pincer can only switch replies Off or Always."
+          }
+        }
+      }
+    },
     "%@ %@ window": {
       "localizations": {
         "en": {
@@ -17099,6 +17219,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "↩ Send · ⌘↩ Send & Open · esc Close"
+          }
+        }
+      }
+    },
+    "Listen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listen"
+          }
+        }
+      }
+    },
+    "Read Aloud Settings…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read Aloud Settings…"
+          }
+        }
+      }
+    },
+    "Voice…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice…"
           }
         }
       }
