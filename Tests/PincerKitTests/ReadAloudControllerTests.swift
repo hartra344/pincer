@@ -166,9 +166,8 @@ struct ReadAloudControllerTests {
         let h = Harness(timeout: .milliseconds(50))
         h.speakDelay = .seconds(300)
         h.controller.toggle(messageId: "m1", text: "Slow.", gateway: h.gateway)
-        // Await the read itself: polling a wall-clock deadline fails when a stalled main actor eats it.
-        await h.controller.finishedCurrent()
-        #expect(h.controller.phase == .idle)
+        // Generous deadline: a stalled main actor can eat a short one before the fallback gets to run.
+        #expect(await waitUntil { h.controller.phase == .idle })
         #expect(h.speaker.spoken.map(\.text) == ["Slow."] && h.player.played.isEmpty)
     }
 

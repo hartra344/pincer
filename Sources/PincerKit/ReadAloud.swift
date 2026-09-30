@@ -63,11 +63,6 @@ public final class ReadAloudController {
         self.gatewayTimeout = gatewayTimeout
     }
 
-    /// Returns once the current read (gateway fetch, then playback or the device voice) has finished.
-    func finishedCurrent() async {
-        await self.task?.value
-    }
-
     public var activeMessageId: String? {
         switch self.phase {
         case .idle: nil
