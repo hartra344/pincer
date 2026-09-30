@@ -65,7 +65,7 @@ A `web_search` result appears as a list of links instead of JSON. The section is
 
 Each result is a title link, a dimmed line with the site, host and publish date when the provider gives them, and the snippet. The titles are ordinary links inside the card's selectable text, so click or tap one to open the page, and use the VoiceOver links rotor to move between them. On macOS, hovering a title shows the full URL. **Copy** copies one `title` and `url` pair per result.
 
-Some providers answer the question instead of listing pages. Then the section is titled **Answer**, the card shows the answer text, and a **Sources** list of links follows. If the search failed, the card shows the error like any other tool.
+Some providers answer the question instead of listing pages. Then the section is titled **Answer**, the card shows the answer text, and a **Sources** list of links follows. If the search failed, the card shows the provider's own error message, with its documentation link when it sent one, like any other tool.
 
 <DocScreenshot src={shotWeb} alt="A web_search card listing five results as blue links with site, date and snippet, above an expanded web_fetch card." caption="macOS, built-in demo. The brave, 5 results and 640 ms badges sit in the title row." ios={shotWebIOS} iosAlt="A web_search card on iPhone listing five results as links with site, date and snippet." iosCaption="iOS, built-in demo. Tap a title to open the page." />
 
@@ -91,7 +91,7 @@ Output that is JSON, and JSON values in a call's arguments, is lightly coloured:
 
 ## Searching within a card
 
-To look for something inside one card's output, choose the magnifier button next to **Copy** in the output's title row. A search field opens in the card. As you type, every match in the card's output and arguments is highlighted and the field shows where you are, for example "3 of 12", with previous, next and close buttons.
+To look for something inside one card's output, choose the magnifier button next to **Copy** in the output's title row. It's there on search results too. A search field opens in the card. As you type, every match in the card's output and arguments is highlighted and the field shows where you are, for example "3 of 12", with previous, next and close buttons.
 
 - **Return** goes to the next match, and **Shift-Return** to the previous one. The card and chat scroll to show it.
 - On macOS, **⌘G** and **⇧⌘G** also move between matches, and **⌘F** with the cursor inside a card's output opens that card's search (and puts the cursor back in its field if it's already open). Anywhere else **⌘F** still opens [Find in Chat](../transcript/#find-in-chat).
@@ -108,7 +108,7 @@ With **Include Tool Output** turned on in [Find in Chat](../transcript/#find-in-
 
 ## Accessibility
 
-- The header is a button. VoiceOver reads the tool, its summary, whether it failed and whether it's expanded, for example "exec, `df -h`, failed, expanded".
+- The header is a button. VoiceOver reads the tool, its summary, whether it failed and whether it's expanded, for example "exec, `df -h`, failed, expanded". Durations are spoken in words, so a long call reads as "2 minutes 5 seconds".
 - Chips and badges are labelled: "Working directory", "Exit code 1", "Took 1.2 seconds".
 - Text follows your text size (Dynamic Type on iOS and iPadOS) and works in light and dark mode. The exit code badge is always spelled out, so colour is never the only signal.
 
