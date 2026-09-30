@@ -471,6 +471,7 @@ public final class GatewayStore: Identifiable {
             self.outbox.connectionLost()
             self.channels.disconnected()
             self.devices.reset()
+            self.resyncOutboxHolds()
         }
         guard state == .connected, let hello else {
             self.health.connectionChanged(state, hello: nil)
@@ -478,6 +479,7 @@ public final class GatewayStore: Identifiable {
         }
         self.hasConnected = true
         self.hello = hello
+        self.resyncOutboxHolds()
         if !self.profile.isDemo { self.saveUploadPolicy(UploadPolicy(hello: hello)) }
         if !self.profile.isDemo, let host = hello.gatewayHost, host != self.gatewayHost {
             self.gatewayHost = host

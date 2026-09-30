@@ -38,9 +38,14 @@ extension GatewayStore {
     public var uploadLimitsKnown: Bool { self.hello != nil || self.lastUploadPolicy != nil }
 
     /// Why this entry waits for a better network, if it does: a large upload (nothing Send Now
-    /// released) that's still queued while the network is expensive or constrained.
+    /// released) that the flush would send next in its chat, while the Gateway is connected and
+    /// the network is expensive or constrained. Anything behind another unsent message, or
+    /// offline, is just queued.
     public func hold(for entry: OutboxEntry) -> OutboxHold? {
-        guard entry.state == .queued, !entry.sendOnAnyNetwork, !entry.isMemoryOnly else { return nil }
+        guard entry.state == .queued, !entry.sendOnAnyNetwork, !entry.isMemoryOnly,
+              self.state.isConnected, self.hello != nil,
+              self.outbox.nextToSend(sessionKey: entry.sessionKey)?.id == entry.id
+        else { return nil }
         guard self.uploadBytes(for: entry) >= OutboxEntry.largeUploadBytes else { return nil }
         if self.network.isConstrained { return .constrained }
         if self.network.isExpensive { return .expensive }
