@@ -118,4 +118,79 @@ struct OutboxHoldTests {
     @Test func thresholdIsTwoMebibytes() {
         #expect(OutboxEntry.largeUploadBytes == 2 * 1024 * 1024)
     }
+
+    // MARK: Connected (the in-process demo Gateway, which sends a hello)
+
+    func connected(_ network: NetworkConditions) async -> GatewayStore? {
+        let store = GatewayStore(profile: .demo(), defaults: self.scratch.defaults, identity: Fixtures.identity(), network: network)
+        store.outboxRoot = self.temp.url
+        store.start()
+        let ready = await eventually(timeout: .seconds(10)) { store.state.isConnected && store.hello != nil }
+        if !ready { self.finish(store) }
+        return ready ? store : nil
+    }
+
+    func row(_ store: GatewayStore, _ key: String, _ id: String) -> ChatItem? {
+        store.chat(for: key).items.first { $0.idempotencyKey == id }
+    }
+
+    @Test func connectedHoldFollowsSizeNetworkAndOverride() async throws {
+        let network = NetworkConditions()
+        let store = try #require(await self.connected(network))
+        defer { self.finish(store) }
+        let chat = "agent:held:main"
+        let big = self.entry("big", chat, bytes: self.large)
+        store.injectOutboxEntry(big)
+        network.override(expensive: false, constrained: false)
+        #expect(store.hold(for: big) == nil, "an unmetered network holds nothing")
+        network.override(expensive: true, constrained: false)
+        #expect(store.hold(for: big) == .expensive)
+        let small = self.entry("small", "agent:small:main", bytes: 1024)
+        store.injectOutboxEntry(small)
+        #expect(store.hold(for: small) == nil, "small uploads never wait")
+        network.override(expensive: true, constrained: true)
+        #expect(store.hold(for: big) == .constrained, "constrained wins")
+        network.override(expensive: true, constrained: false)
+        store.outbox.allowAnyNetwork(id: "big")
+        #expect(store.hold(for: store.outbox.entry(id: "big")!) == nil, "Send Now lifts it")
+    }
+
+    @Test func behindAFailedEntryIsJustQueued() async throws {
+        let network = NetworkConditions()
+        let store = try #require(await self.connected(network))
+        defer { self.finish(store) }
+        network.override(expensive: true, constrained: false)
+        let chat = "agent:held:main"
+        var failed = self.entry("head", chat)
+        failed.state = .failed(OutboxFailure(message: "no", retryable: false))
+        store.injectOutboxEntry(failed)
+        let big = self.entry("big", chat, bytes: self.large)
+        store.injectOutboxEntry(big)
+        #expect(store.hold(for: big) == nil, "not next to send, so no hold")
+        #expect(store.hold(for: failed) == nil)
+        store.outbox.delete(id: "head")
+        #expect(store.hold(for: big) == .expensive, "held once it is next in line")
+    }
+
+    @Test func rowsFollowTheNetworkAndSendNow() async throws {
+        let network = NetworkConditions()
+        let store = try #require(await self.connected(network))
+        defer { self.finish(store) }
+        let chat = "agent:held:main"
+        store.injectOutboxEntry(self.entry("big", chat, bytes: self.large))
+        store.resyncOutboxHolds()
+        #expect(self.row(store, chat, "big")?.outboxHold == nil)
+        network.override(expensive: true, constrained: false)
+        store.resyncOutboxHolds()
+        #expect(self.row(store, chat, "big")?.outboxHold == .expensive)
+        #expect(self.row(store, chat, "big")?.outboxUploadBytes == self.large)
+        network.override(expensive: false, constrained: true)
+        store.resyncOutboxHolds()
+        #expect(self.row(store, chat, "big")?.outboxHold == .constrained)
+        network.override(expensive: true, constrained: false)
+        store.chat(for: chat).sendNow(outboxId: "big")
+        store.resyncOutboxHolds()
+        #expect(store.outbox.entry(id: "big")?.sendOnAnyNetwork == true || store.outbox.entry(id: "big") == nil)
+        #expect(self.row(store, chat, "big")?.outboxHold == nil)
+    }
 }
