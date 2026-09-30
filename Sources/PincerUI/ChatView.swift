@@ -86,8 +86,12 @@ struct ChatView: View {
                 Button(L("Reply to Last Message")) { ReplyToLast(chat: self.chat, agentName: self.agent.name).perform() }
                     .shortcut(.replyToLastMessage)
                     .disabled(self.chat.latestReplyableId == nil)
-                Button(L("Previous Message")) { self.navigator.move?(false) }.shortcut(.previousMessage)
-                Button(L("Next Message")) { self.navigator.move?(true) }.shortcut(.nextMessage)
+                Button(L("Previous Message")) { self.navigator.move?(false) }
+                    .shortcut(.previousMessage)
+                    .disabled(!self.paneIsActive)
+                Button(L("Next Message")) { self.navigator.move?(true) }
+                    .shortcut(.nextMessage)
+                    .disabled(!self.paneIsActive)
             }
             .opacity(0)
             .allowsHitTesting(false)
