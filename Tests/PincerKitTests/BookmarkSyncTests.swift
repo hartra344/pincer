@@ -366,7 +366,8 @@ struct BookmarkGatewaySyncTests {
         second.store.bookmarkStore.add(pair[1])
         let both = await eventually { Set(first.gateway.map(pref)?.keys.map { $0 } ?? []) == Set(pair.map(\.id)) }
         #expect(both, "the conflicted write re-reads and retries, keeping the other device's bookmark")
-        #expect(second.store.pendingPrefChanges.isEmpty)
+        let cleared = await eventually { second.store.pendingPrefChanges.isEmpty }
+        #expect(cleared, "the retried write clears its pending entry once acknowledged")
     }
 
     @Test func removingGatewayLocalBookmarksPushesNothing() async throws {
