@@ -1397,6 +1397,8 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var pendingPrefChanges: [String: [String: String?]] = [:] {
         didSet { self.savePending(self.pendingPrefChanges, isEmpty: self.pendingPrefChanges.isEmpty, key: Self.pendingPrefsKey(self.id)) }
     }
+    /// The latest nonempty legacy reaction change stays in a fitted prefs value.
+    @ObservationIgnored var mostRecentChangedReactionKey: String?
     /// The latest write per pref, which the next one waits for.
     @ObservationIgnored var prefPushes: [String: Task<Void, Never>] = [:]
 

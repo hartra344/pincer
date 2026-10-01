@@ -176,6 +176,9 @@ extension GatewayStore {
             var merged = self[keyPath: map.local]
             merged.merge(fetched ?? [:]) { _, remote in remote }
             merged = Self.fittingBookmarkShard(merged, pref: map.pref)
+            if map.pref == Reactions.prefKey, !self.supportsSessionReactions {
+                merged = LegacyReactionPrefs.fitting(merged, preserving: self.mostRecentChangedReactionKey) ?? merged
+            }
             if merged != (fetched ?? [:]) {
                 guard await self.writeRemoteMap(map.pref, merged, expected: fetched) == .ok else { return }
             }
@@ -236,6 +239,13 @@ extension GatewayStore {
             guard let current = cached == nil ? await self.fetchRemoteMap(map.pref) : .some(cached) else { break }
             var next = current ?? [:]
             for (id, value) in changes { next[id] = value }
+            if map.pref == Reactions.prefKey, !self.supportsSessionReactions {
+                guard let fitting = LegacyReactionPrefs.fitting(next, preserving: self.mostRecentChangedReactionKey) else {
+                    self.rejectedPrefs[map.pref] = "The latest reaction is too large to sync."
+                    return false
+                }
+                next = fitting
+            }
             let outcome = await self.writeRemoteMap(map.pref, next, expected: current)
             if outcome == .ok {
                 self.rejectedPrefs.removeValue(forKey: map.pref)
@@ -309,6 +319,7 @@ extension GatewayStore {
         let value = Reactions.encode(emoji)
         guard self.reactions[key] != value else { return }
         self.reactions[key] = value
+        if !emoji.isEmpty { self.mostRecentChangedReactionKey = key }
         Task { await self.push(self.syncedMap(Reactions.prefKey), key, value) }
     }
 
