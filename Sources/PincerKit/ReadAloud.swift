@@ -9,6 +9,12 @@ public protocol ReadAloudClipPlaying: AnyObject {
     /// Plays `clip` to the end; false when it can't be decoded or played (the caller falls back).
     @MainActor func play(_ clip: TTSClip) async -> Bool
     @MainActor func stop()
+    /// Gets `clip` ready ahead of its `play`, so there's no setup gap between chunks.
+    @MainActor func prepare(_ clip: TTSClip)
+}
+
+public extension ReadAloudClipPlaying {
+    @MainActor func prepare(_: TTSClip) {}
 }
 
 public protocol ReadAloudLocalSpeaking: AnyObject {
@@ -207,6 +213,13 @@ public final class ReadAloudController {
                         }
                     }
                     self.phase = .speaking(messageId)
+                    if index + 1 < fetches.count {
+                        let next = fetches[index + 1]
+                        Task { @MainActor [weak self] in
+                            guard let clip = await next.value.0, !clip.isHeaderless, let self, generation == self.generation else { return }
+                            self.clipPlayer.prepare(clip)
+                        }
+                    }
                     let played = await self.clipPlayer.play(clip)
                     guard generation == self.generation, !Task.isCancelled else { return }
                     guard played else {
@@ -302,13 +315,22 @@ enum ReadAloudAudioSession {
 @MainActor
 final class AVClipPlayer: NSObject, ReadAloudClipPlaying, AVAudioPlayerDelegate {
     private var player: AVAudioPlayer?
+    private var prepared: (clip: TTSClip, player: AVAudioPlayer)?
     /// The player whose callbacks count; a stopped player's late callbacks must not end a newer clip.
     private var playerId: ObjectIdentifier?
     private var continuation: CheckedContinuation<Bool, Never>?
 
+    func prepare(_ clip: TTSClip) {
+        guard self.prepared?.clip != clip,
+              let player = try? AVAudioPlayer(data: clip.data, fileTypeHint: clip.fileTypeHint), player.prepareToPlay() else { return }
+        self.prepared = (clip, player)
+    }
+
     func play(_ clip: TTSClip) async -> Bool {
-        self.stop()
-        guard let player = try? AVAudioPlayer(data: clip.data, fileTypeHint: clip.fileTypeHint) else { return false }
+        self.stopCurrent()
+        let ready = self.prepared?.clip == clip ? self.prepared?.player : nil
+        self.prepared = nil
+        guard let player = ready ?? (try? AVAudioPlayer(data: clip.data, fileTypeHint: clip.fileTypeHint)) else { return false }
         ReadAloudAudioSession.activate()
         player.delegate = self
         self.player = player
@@ -324,6 +346,13 @@ final class AVClipPlayer: NSObject, ReadAloudClipPlaying, AVAudioPlayerDelegate 
     }
 
     func stop() {
+        let keptSession = self.prepared != nil && self.continuation == nil
+        self.prepared = nil
+        if keptSession { ReadAloudAudioSession.deactivate() }
+        self.stopCurrent()
+    }
+
+    private func stopCurrent() {
         self.playerId = nil
         self.player?.stop()
         self.player = nil
@@ -333,7 +362,8 @@ final class AVClipPlayer: NSObject, ReadAloudClipPlaying, AVAudioPlayerDelegate 
     private func finish(_ success: Bool) {
         guard let continuation = self.continuation else { return }
         self.continuation = nil
-        ReadAloudAudioSession.deactivate()
+        // Keep the session (and other audio ducked) when the next chunk is already waiting.
+        if self.prepared == nil { ReadAloudAudioSession.deactivate() }
         continuation.resume(returning: success)
     }
 

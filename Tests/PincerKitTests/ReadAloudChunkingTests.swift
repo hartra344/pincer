@@ -6,6 +6,8 @@ import Testing
 @MainActor
 private final class HeldClips: ReadAloudClipPlaying {
     var played: [String] = []
+    var prepared: [String] = []
+    func prepare(_ clip: TTSClip) { self.prepared.append(clip.provider ?? "") }
     private var waiting: CheckedContinuation<Bool, Never>?
     var isPlaying: Bool { self.waiting != nil }
 
@@ -83,6 +85,8 @@ struct ReadAloudChunkingTests {
             await until { requested().count == expected }
             // While chunk n plays, the next `prefetchDepth` chunks (and nothing further) have been requested.
             #expect(requested().count == expected)
+            if n + 1 < chunks.count { await until { clips.prepared.contains("c\(n + 1)") } }
+            #expect(n + 1 == chunks.count || clips.prepared.contains("c\(n + 1)")) // next player is ready before this one ends
             clips.finish()
         }
         await until { c.phase == .idle }
