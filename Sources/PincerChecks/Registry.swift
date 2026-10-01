@@ -107,6 +107,10 @@ enum Suites {
                 await checkMessageIndex()
                 await checkTranscriptCacheVersioning()
             },
+            Section("Orphan transcript sidecars") {
+                await withScratchCache { root in await runOrphanSidecarChecks(root: root) }
+            },
+            Section("Spotlight descriptions") { runSpotlightChecks() },
             Section("Transcript window") {
                 await withScratchCache { root in await withCacheEnvironment(root.path(percentEncoded: false)) { await runTranscriptWindowChecks() } }
                 await withCacheEnvironment("off") { await runTranscriptWindowCacheOffChecks() }
@@ -194,6 +198,7 @@ enum Suites {
 
     /// Against a (mock) Gateway, second half.
     static let liveExtras: [LiveSection] = [
+        LiveSection("Spotlight indexing (live)") { url, token in await runLiveSpotlightChecks(url: url, token: token) },
         LiveSection("Messages from other agents (live)") { url, token in await runLiveForwarded(url: url, token: token) },
         LiveSection("Gateway reactions (live)") { url, token in await runLiveGatewayReactions(url: url, token: token) },
         LiveSection("Quick Capture (live)") { url, token in await runQuickCaptureLive(url: url, token: token) },

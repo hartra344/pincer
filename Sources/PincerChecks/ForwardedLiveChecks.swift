@@ -1,5 +1,5 @@
 import Foundation
-import PincerKit
+@testable import PincerKit
 
 // Messages from another agent or an automation, end to end (#207): the demo's and the mock's
 // `chat.history` through GatewayStore and ChatStore, as the chat view gets them.
@@ -153,6 +153,122 @@ func runDemoForwarded() async {
     await kiko.load()
     _ = await waitFor("Kiko's chat") { kiko.message(withId: "demo-kiko-summary") != nil }
     check(kiko.items.allSatisfy { $0.sender == nil }, "Kiko's own chat has no forwarded senders")
+    await runDemoForwardedSenderRefresh()
+}
+
+/// A stale segmented v9 cache keeps Kiko's already-projected rows visible, then repairs those
+/// same stable ids by scanning the demo Gateway's older pages through the production headless fill.
+@MainActor
+private func runDemoForwardedSenderRefresh() async {
+    check(ChatStore.forwardedRefreshPageDisposition(messageCount: 0, reportedHasMore: true,
+                                                     requestedOffset: 120, returnedOffset: 120,
+                                                     fallbackLimit: 120) == .abort,
+          "sender refresh keeps its marker when an empty page claims more history")
+    check(ChatStore.forwardedRefreshPageDisposition(messageCount: 0, reportedHasMore: nil,
+                                                     requestedOffset: 120, returnedOffset: nil,
+                                                     fallbackLimit: 120) == .complete(nextOffset: 120),
+          "sender refresh accepts a normal empty terminal page")
+    let profile = GatewayProfile.demoForwardedSenderRefresh()
+    let (defaults, suite) = scratchDefaults()
+    // Bootstrap may open its selected chat even while background prefetch is paused. Keep this
+    // chat unopened until its pre-upgrade cache is seeded, as on the first launch after upgrade.
+    defaults.set("agent:kiko:main", forKey: "pincer.selected.\(profile.id.uuidString)")
+    let gateway = GatewayStore(profile: profile, defaults: defaults)
+    let root = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-forwarded-refresh-\(UUID().uuidString)",
+                                                                 directoryHint: .isDirectory)
+    gateway.cacheRoot = root
+    gateway.appIsActive = false
+    gateway.start()
+    gateway.reconnectIfNeeded()
+    let connected = await waitFor("long-history demo for forwarded cache repair", timeout: 25) {
+        gateway.state.isConnected && gateway.sessions["agent:main:main"] != nil
+    }
+    check(connected, "forwarded cache repair demo connected")
+    defer {
+        gateway.stop()
+        TranscriptCache.removeAll(gatewayId: gateway.id, root: root)
+        try? FileManager.default.removeItem(at: root)
+        defaults.removePersistentDomain(forName: suite)
+    }
+    guard connected else { return }
+
+    let key = "agent:main:main"
+    let response: JSONValue
+    do {
+        response = try await gateway.connection.request("chat.history", .object([
+            "sessionKey": .string(key), "limit": .number(300),
+        ]), timeout: 10)
+    } catch {
+        check(false, "forwarded cache repair reads the demo history: \(error.localizedDescription)")
+        return
+    }
+    let raw = response["messages"]?.array ?? []
+    let newest: JSONValue
+    do {
+        newest = try await gateway.connection.request("chat.history", .object([
+            "sessionKey": .string(key), "limit": .number(120),
+        ]), timeout: 10)
+    } catch {
+        check(false, "forwarded cache repair reads the newest demo page: \(error.localizedDescription)")
+        return
+    }
+    let newestIds = Set((newest["messages"]?.array ?? []).compactMap { $0["__openclaw"]?["id"]?.text })
+    check(raw.count > 120 && !newestIds.contains(DemoGateway.kikoIntroId),
+          "Kiko's seeded message falls outside the newest 120-item page")
+
+    var staleItems = ChatStore.parse(raw, fallbackBase: 0)
+    for index in staleItems.indices where staleItems[index].sender != nil { staleItems[index].sender = nil }
+    var offlineOnly = ChatItem(id: "offline-only-forwarded-refresh", role: .user,
+                               blocks: [.text("An offline-only cached note")], timestamp: Date(timeIntervalSince1970: 1))
+    offlineOnly.transcriptId = "offline-only-forwarded-refresh"
+    staleItems.insert(offlineOnly, at: 0)
+    await TranscriptCache.save(TranscriptCache.Snapshot(version: 9, items: staleItems, complete: true,
+                                                          activityMs: gateway.sessions[key]?.activityMs),
+                               gatewayId: gateway.id, sessionKey: key, root: root)
+    await TranscriptCache.flush(gatewayId: gateway.id, root: root)
+
+    // Remove the v10-only field to reproduce a real pre-v10 manifest instead of a handcrafted RPC shape.
+    if let manifestURL = TranscriptCache.file(gatewayId: gateway.id, sessionKey: key, root: root),
+       let bytes = try? Data(contentsOf: manifestURL),
+       var manifest = (try? JSONSerialization.jsonObject(with: bytes)) as? [String: Any]
+    {
+        manifest["version"] = 9
+        manifest.removeValue(forKey: "forwardedSenderRefreshPending")
+        if let oldManifest = try? JSONSerialization.data(withJSONObject: manifest) {
+            try? oldManifest.write(to: manifestURL, options: .atomic)
+        }
+        var oldMeta: [String: Any] = ["version": 9, "complete": true, "retained": false]
+        if let activity = gateway.sessions[key]?.activityMs { oldMeta["activityMs"] = activity }
+        if let oldSidecar = try? JSONSerialization.data(withJSONObject: oldMeta) {
+            try? oldSidecar.write(to: manifestURL.appendingPathExtension("meta"), options: .atomic)
+        }
+    }
+
+    let chat = gateway.chat(for: key)
+    chat.windowLimit = min(staleItems.count, TranscriptCache.maxItems)
+    await chat.restoreFromCache()
+    let cachedIntro = chat.message(withId: DemoGateway.kikoIntroId)
+    check(cachedIntro != nil && cachedIntro?.sender == nil,
+          "offline cached Kiko message stays visible before the Gateway refresh")
+    check(chat.message(withId: offlineOnly.id)?.plainText == "An offline-only cached note",
+          "offline-only cache rows stay available before refresh")
+
+    gateway.appIsActive = true
+    await chat.load()
+    await gateway.startHeadlessFill(sessionKey: key, agentId: "main").value
+    await TranscriptCache.flush(gatewayId: gateway.id, root: root)
+    let repaired = await TranscriptCache.load(gatewayId: gateway.id, sessionKey: key, root: root)
+    let repairedIntro = repaired?.items.first { $0.transcriptId == DemoGateway.kikoIntroId }
+    let repairedThanks = repaired?.items.first { $0.transcriptId == DemoGateway.kikoThanksId }
+    let ids = repaired?.items.compactMap(\.transcriptId) ?? []
+    check(repaired?.forwardedSenderRefreshPending == false
+          && repairedIntro?.sender?.agentId == "kiko" && repairedThanks?.sender?.agentId == "kiko",
+          "older same-id messages are repaired with Kiko's sender metadata")
+    check(chat.message(withId: DemoGateway.kikoIntroId)?.sender?.agentId == "kiko",
+          "the open chat adopts repaired sender metadata without requiring a cache clear")
+    check(repaired?.items.contains(where: { $0.id == offlineOnly.id }) == true,
+          "offline-only cache rows survive the authoritative refresh")
+    check(ids.count == Set(ids).count, "the refresh does not duplicate stable transcript ids")
 }
 
 /// The mock: the same exchange and a Morning briefing cron prompt, from `chat.history`.
