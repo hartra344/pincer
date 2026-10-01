@@ -40,6 +40,10 @@ extension DemoGateway {
             return self.create(params)
         case "users.prefs.get":
             let keys = params["keys"]?.array?.compactMap(\.string) ?? Array(self.prefs.keys)
+            if self.failsFirstAvatarPrefsRead && keys.contains(AvatarPreferences.prefKey) {
+                self.failsFirstAvatarPrefsRead = false
+                throw GatewayError.rpc(code: "UNAVAILABLE", message: "temporary demo preferences read failure", details: nil)
+            }
             return ["status": "ok", "entries": .object(self.prefs.filter { keys.contains($0.key) })]
         case "users.prefs.set":
             return try self.setPrefs(params)
