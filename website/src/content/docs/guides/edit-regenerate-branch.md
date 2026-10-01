@@ -18,13 +18,19 @@ On one of your messages, **Edit & Resend** puts its text in the composer with an
 
 When you send, the chat rewinds to before that message and your edited text is sent as a new message. The earlier path isn't lost: it stays as a branch you can see in the [Session Manager](../sessions/).
 
+If the original message had images, they're kept and sent again with the edited text.
+
 ## Regenerate
 
-On the last assistant reply, **Regenerate** rewinds to the message before it and sends that message again unchanged, for a fresh answer. It isn't offered while a reply is streaming.
+On the last assistant reply, **Regenerate** rewinds to the message before it and sends that message again unchanged, for a fresh answer. Any images on that message are sent again too. It isn't offered while a reply is streaming.
 
 ## Switching between branches
 
 When a chat has more than one path, a **Branch 1 of 2** control with previous and next arrows appears above the composer. Use the arrows to step to the previous or next path, or click the label for a menu that lists every branch (with its message count and a checkmark on the current one); the transcript reloads to show it. The switcher is hidden while a reply is streaming. Nothing is deleted by switching, and you can still manage every branch in the [Session Manager](../sessions/). Switching needs Full Management (admin) access.
+
+:::note
+The Gateway only reports where each branch ends, not where it forks. Pincer puts the switcher on the message your latest Edit & Resend or Regenerate sent (remembered until the app quits), otherwise on the last message you sent on the current branch. After relaunching, or on another device, it may sit lower than the real fork point.
+:::
 
 ## What you need
 

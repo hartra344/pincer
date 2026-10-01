@@ -74,6 +74,8 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
         return !chat.isRunning && texts.count == 2 && texts.last == "Make it shade tolerant and add a trellis."
             && chat.items.last?.role == .assistant
     }
+    let editedImages = chat.items.last { $0.role == .user }.map(imageCount) ?? 0
+    check(editedImages == 1, "edit resends the rewound message's image (#397) (\(editedImages))")
     check(edited, "the transcript shows the cut path plus the edited message (\(chat.items.map(\.plainText)))")
     await chat.load(force: true)
     check(!chat.items.contains { $0.isPending } && !gateway.outbox.entries.contains { $0.sessionKey == whole },
@@ -97,11 +99,18 @@ func runMessageEditChecks(_ gateway: GatewayStore, admin: Bool, _ label: String)
     }
     check(again, "regenerate resends the same message without duplicating it (\(chat.items.map(\.plainText)))")
     check(!chat.items.contains { $0.isPending }, "no send stays pending after regenerate (#429)")
+    await chat.load(force: true)
+    let regeneratedImages = chat.items.last { $0.role == .user }.map(imageCount) ?? 0
+    check(regeneratedImages == 1, "regenerate resends the image (#397) (\(regeneratedImages))")
     gateway.selectedKey = garden
     let forks = [userFork, assistantFork, whole].compactMap { $0 }
     await gateway.sessionManager.load(filter: .all)
     let cleaned = await gateway.sessionManager.delete(forks)
     check(cleaned.succeeded.count == forks.count, "forks deleted again (\(cleaned.failed.map(\.message)))")
+}
+
+private func imageCount(_ item: ChatItem) -> Int {
+    item.blocks.filter { if case .image = $0 { true } else { false } }.count
 }
 
 /// In-chat branch navigation on a chat that was just edited: the old path is a second branch.
