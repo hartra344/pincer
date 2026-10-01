@@ -263,12 +263,15 @@ struct Composer: View {
     }
 
     private var textField: some View {
-        ComposerTextView(
+        let menuActive = !self.suggestions.isEmpty
+        return ComposerTextView(
             placeholder: self.placeholder,
             text: self.$chat.draft.text,
-            menuActive: !self.suggestions.isEmpty,
+            menuActive: menuActive,
             escapeActive: self.chat.replyTarget != nil || self.chat.editTarget != nil || self.dictation.isActive
                 || ReadAloudController.shared.isActive,
+            // Same gate as the Send button (plus accepting a suggestion), so a hardware Return never sends an empty draft.
+            canSubmit: (self.canSend && !self.sendPending) || menuActive,
             focusRequest: self.focusRequest,
             onSubmit: self.submit,
             onMedia: self.ingest,

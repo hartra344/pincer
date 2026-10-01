@@ -92,6 +92,8 @@ struct ComposerTextView: View {
     var menuActive = false
     /// Escape goes to `onKey` even without a menu, such as to cancel a reply.
     var escapeActive = false
+    /// Whether `onSubmit` would do anything; off, a hardware-keyboard Return does nothing instead of sending.
+    var canSubmit = true
     /// Takes keyboard focus each time this changes.
     var focusRequest = 0
     let onSubmit: () -> Void
@@ -115,7 +117,7 @@ struct ComposerTextView: View {
     var body: some View {
         PlatformComposerTextView(
             text: self.$text, maxLines: self.maxLines, isEditable: self.isEditable, menuActive: self.menuActive,
-            escapeActive: self.escapeActive, focusRequest: self.focusRequest, onSubmit: self.onSubmit,
+            escapeActive: self.escapeActive, canSubmit: self.canSubmit, focusRequest: self.focusRequest, onSubmit: self.onSubmit,
             onCommandSubmit: self.onCommandSubmit,
             onMedia: self.onMedia, onKey: self.onKey, onCaretAtEnd: self.onCaretAtEnd, onSelectionChange: self.onSelectionChange, onFocusChange: self.onFocusChange,
             caretRequest: self.caretRequest, autoFocus: self.autoFocus)
@@ -197,6 +199,7 @@ private struct PlatformComposerTextView: NSViewRepresentable {
     let isEditable: Bool
     let menuActive: Bool
     let escapeActive: Bool
+    let canSubmit: Bool
     let focusRequest: Int
     let onSubmit: () -> Void
     let onCommandSubmit: (() -> Void)?
@@ -325,15 +328,18 @@ private struct PlatformComposerTextView: NSViewRepresentable {
             {
                 return true
             }
-            guard selector == #selector(NSResponder.insertNewline(_:)), !textView.hasMarkedText() else { return false }
+            guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
             let flags = NSApp.currentEvent?.modifierFlags ?? []
-            switch ComposerReturnAction.resolve(
+            switch ComposerReturnKey.resolve(
+                source: .hardware, hasMarkedText: textView.hasMarkedText(),
                 shift: flags.contains(.shift), option: flags.contains(.option), command: flags.contains(.command),
-                supportsSendAndOpen: self.parent.onCommandSubmit != nil)
+                supportsSendAndOpen: self.parent.onCommandSubmit != nil, canSubmit: self.parent.canSubmit)
             {
+            case .system: return false
             case .newline: textView.insertNewlineIgnoringFieldEditor(nil)
             case .send: self.parent.onSubmit()
             case .sendAndOpen: self.parent.onCommandSubmit?()
+            case .ignore: break
             }
             return true
         }
@@ -347,7 +353,9 @@ final class ComposerUITextView: UITextView {
     var onMedia: (([PastedMedia]) -> Void)?
     var menuActive = false
     var escapeActive = false
+    var canSubmit = true
     var onKey: ((ComposerKey) -> Bool)?
+    var onSubmit: (() -> Void)?
     var autoFocus: (@MainActor () -> Bool)?
     private var didAutoFocus = false
 
@@ -362,7 +370,32 @@ final class ComposerUITextView: UITextView {
             command.wantsPriorityOverSystemBehavior = true
             return command
         }
-        return menu + (super.keyCommands ?? [])
+        return menu + Self.returnCommands + (super.keyCommands ?? [])
+    }
+
+    /// Hardware-keyboard Return sends; ⇧↩ and ⌥↩ aren't claimed, so they insert a newline as usual.
+    /// Key commands only fire for physical keys, so the on-screen keyboard's Return is untouched.
+    private static let returnCommands: [UIKeyCommand] = {
+        let send = UIKeyCommand(title: L("Send"), action: #selector(ComposerUITextView.hardwareReturn(_:)), input: "\r")
+        let commandSend = UIKeyCommand(input: "\r", modifierFlags: .command, action: #selector(ComposerUITextView.hardwareReturn(_:)))
+        for command in [send, commandSend] { command.wantsPriorityOverSystemBehavior = true }
+        return [send, commandSend]
+    }()
+
+    private func returnKey(for command: UIKeyCommand?) -> ComposerReturnKey {
+        let flags = command?.modifierFlags ?? []
+        return ComposerReturnKey.resolve(
+            source: .hardware, hasMarkedText: self.markedTextRange != nil,
+            shift: flags.contains(.shift), option: flags.contains(.alternate), command: flags.contains(.command),
+            supportsSendAndOpen: false, canSubmit: self.canSubmit)
+    }
+
+    @objc private func hardwareReturn(_ command: UIKeyCommand) {
+        switch self.returnKey(for: command) {
+        case .send, .sendAndOpen: self.onSubmit?()
+        case .newline: self.insertText("\n")
+        case .system, .ignore: break
+        }
     }
 
     @objc private func menuKey(_ command: UIKeyCommand) {
@@ -371,6 +404,10 @@ final class ComposerUITextView: UITextView {
     }
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(self.hardwareReturn(_:)) {
+            // While composing (marked text), Return commits the candidate instead.
+            return self.isEditable && self.returnKey(for: sender as? UIKeyCommand) != .system
+        }
         if action == #selector(self.menuKey(_:)) {
             guard self.markedTextRange == nil else { return false }
             if self.menuActive { return true }
@@ -409,6 +446,7 @@ private struct PlatformComposerTextView: UIViewRepresentable {
     let isEditable: Bool
     let menuActive: Bool
     let escapeActive: Bool
+    let canSubmit: Bool
     let focusRequest: Int
     let onSubmit: () -> Void
     let onCommandSubmit: (() -> Void)?
@@ -436,6 +474,8 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         textView.onMedia = self.onMedia
         textView.menuActive = self.menuActive
         textView.escapeActive = self.escapeActive
+        textView.canSubmit = self.canSubmit
+        textView.onSubmit = self.onSubmit
         textView.onKey = self.onKey
         textView.autoFocus = self.autoFocus
         return textView
@@ -446,6 +486,8 @@ private struct PlatformComposerTextView: UIViewRepresentable {
         textView.onMedia = self.onMedia
         textView.menuActive = self.menuActive
         textView.escapeActive = self.escapeActive
+        textView.canSubmit = self.canSubmit
+        textView.onSubmit = self.onSubmit
         textView.onKey = self.onKey
         textView.autoFocus = self.autoFocus
         if textView.isEditable != self.isEditable { textView.isEditable = self.isEditable }

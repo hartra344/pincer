@@ -179,6 +179,36 @@ public enum ComposerReturnAction: Equatable, Sendable {
     }
 }
 
+/// What a Return key press in a composer turns into, given where it came from.
+public enum ComposerReturnKey: Equatable, Sendable {
+    /// Leave it to the text system: a newline from the on-screen keyboard, or committing an IME candidate.
+    case system
+    case newline, send, sendAndOpen
+    /// Swallow it: a send key with nothing that can be sent (empty draft, send disabled).
+    case ignore
+
+    public enum Source: Sendable {
+        /// A physical keyboard press (Mac, or iPad/iPhone with a hardware keyboard).
+        case hardware
+        /// The on-screen keyboard, whose Return always inserts a newline.
+        case software
+    }
+
+    /// `canSubmit` is whether the composer's Send path would do something (the Send button is enabled,
+    /// or a suggestion menu would accept its selection).
+    public static func resolve(
+        source: Source, hasMarkedText: Bool, shift: Bool, option: Bool, command: Bool,
+        supportsSendAndOpen: Bool, canSubmit: Bool) -> ComposerReturnKey
+    {
+        guard source == .hardware, !hasMarkedText else { return .system }
+        switch ComposerReturnAction.resolve(shift: shift, option: option, command: command, supportsSendAndOpen: supportsSendAndOpen) {
+        case .newline: return .newline
+        case .send: return canSubmit ? .send : .ignore
+        case .sendAndOpen: return canSubmit ? .sendAndOpen : .ignore
+        }
+    }
+}
+
 // MARK: Settings
 
 /// The Quick Capture shortcut and last target, in the app's own defaults (the extensions don't

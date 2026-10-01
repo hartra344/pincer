@@ -199,6 +199,7 @@ func runQuickCaptureDemo() async {
           "↩ in Quick Capture sends without revealing")
     check(ComposerReturnAction.resolve(shift: false, option: false, command: true, supportsSendAndOpen: false) == .send,
           "⌘↩ in the main composer still just sends")
+    checkComposerReturnKeySource()
 
     // Open in Pincer keeps the draft.
     gateway.selectedKey = "agent:main:main"
@@ -472,4 +473,20 @@ func runQuickCaptureLive(url: String, token: String) async {
     let afterDropCount = await delivered(work, trip, "qc after drop \(nonce)")
     check(afterDrop && afterDropCount == 1, "a send after reconnecting goes through (\(afterDropCount))")
     check(selectionUnchanged(), "no send changed the main window's selection")
+}
+
+/// Return from a hardware keyboard sends on every platform; the on-screen keyboard's Return stays a newline (#567).
+@MainActor
+private func checkComposerReturnKeySource() {
+    func resolve(_ source: ComposerReturnKey.Source, marked: Bool = false, shift: Bool = false, canSubmit: Bool = true) -> ComposerReturnKey {
+        ComposerReturnKey.resolve(
+            source: source, hasMarkedText: marked, shift: shift, option: false, command: false,
+            supportsSendAndOpen: false, canSubmit: canSubmit)
+    }
+    check(resolve(.hardware) == .send, "hardware-keyboard ↩ sends")
+    check(resolve(.hardware, shift: true) == .newline, "hardware-keyboard ⇧↩ inserts a newline")
+    check(resolve(.software) == .system && resolve(.software, canSubmit: false) == .system,
+          "the on-screen keyboard's Return is left to the text system (a newline)")
+    check(resolve(.hardware, marked: true) == .system, "↩ while composing marked text commits the candidate")
+    check(resolve(.hardware, canSubmit: false) == .ignore, "↩ with an empty draft neither sends nor inserts a newline")
 }
