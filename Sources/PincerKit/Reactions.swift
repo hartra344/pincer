@@ -41,6 +41,125 @@ public enum ReplyDirective: Hashable, Sendable {
 }
 
 public enum Replies {
+    struct StreamMarker: Hashable, Sendable {
+        var startUTF8: Int
+    }
+
+    struct StreamLexicalState: Hashable, Sendable {
+        private(set) var fenced = false
+        private(set) var inlineTicks = 0
+        private var pendingTickRun = 0
+        private var lineStart = true
+        private var fenceProbe: UInt8?
+        private var fenceProbeCount = 0
+        private var trailingOpenBracket = false
+        private(set) var lookaheadBytes = 0
+
+        /// Scans only this new frame and returns a possible reply-marker suffix outside code.
+        mutating func advance(_ text: String) -> [StreamMarker] {
+            self.lookaheadBytes = 0
+            let bytes = text.utf8
+            var index = bytes.startIndex
+            var byteOffset = 0
+            var markers: [StreamMarker] = []
+            while index < bytes.endIndex {
+                let byte = bytes[index]
+                let next = bytes.index(after: index)
+
+                if let probe = self.fenceProbe {
+                    if byte == probe {
+                        self.fenceProbeCount += 1
+                        index = next
+                        byteOffset += 1
+                        if self.fenceProbeCount == 3 {
+                            self.fenced.toggle()
+                            self.fenceProbe = nil
+                            self.fenceProbeCount = 0
+                            self.lineStart = false
+                            self.trailingOpenBracket = false
+                        }
+                        continue
+                    }
+                    if !self.fenced, probe == 0x60 { self.consumeInlineTicks(self.fenceProbeCount) }
+                    self.fenceProbe = nil
+                    self.fenceProbeCount = 0
+                    self.lineStart = false
+                }
+
+                if self.lineStart {
+                    if byte == 0x20 || byte == 0x09 {
+                        index = next
+                        byteOffset += 1
+                        continue
+                    }
+                    if byte == 0x60 || byte == 0x7E {
+                        self.fenceProbe = byte
+                        self.fenceProbeCount = 1
+                        index = next
+                        byteOffset += 1
+                        continue
+                    }
+                    self.lineStart = false
+                }
+
+                if !self.fenced {
+                    if self.pendingTickRun > 0 {
+                        if byte == 0x60 {
+                            self.pendingTickRun += 1
+                            index = next
+                            byteOffset += 1
+                            continue
+                        }
+                        self.consumeInlineTicks(self.pendingTickRun)
+                        self.pendingTickRun = 0
+                    }
+                    if byte == 0x60 {
+                        self.pendingTickRun = 1
+                        self.trailingOpenBracket = false
+                        index = next
+                        byteOffset += 1
+                        continue
+                    }
+                    if self.inlineTicks == 0, byte == 0x5B {
+                        let start = self.trailingOpenBracket ? byteOffset - 1 : nil
+                        if let start {
+                            let lookahead = Replies.isPotentialDirectivePrefix(in: bytes[next...])
+                            self.lookaheadBytes += lookahead.visitedBytes
+                            if lookahead.matches {
+                                markers.append(StreamMarker(startUTF8: start))
+                            }
+                        }
+                        self.trailingOpenBracket = true
+                    } else {
+                        self.trailingOpenBracket = false
+                    }
+                } else {
+                    self.trailingOpenBracket = false
+                }
+
+                index = next
+                byteOffset += 1
+                if byte == 0x0A {
+                    self.inlineTicks = 0
+                    self.pendingTickRun = 0
+                    self.lineStart = true
+                }
+            }
+            return markers
+        }
+
+        mutating func reset() { self = Self() }
+
+        private mutating func consumeInlineTicks(_ count: Int) {
+            self.inlineTicks = self.inlineTicks == 0 ? count : (self.inlineTicks == count ? 0 : self.inlineTicks)
+        }
+    }
+
+    struct PendingDirective: Hashable, Sendable {
+        var text: String
+        var startUTF8: Int
+    }
+
     /// Longest preview quoted into the message text when the Gateway can't take `replyToId`.
     public static let fallbackPreviewLimit = 280
 
@@ -92,9 +211,16 @@ public enum Replies {
     /// strips before delivery, matched case-insensitively; ones in code spans or fences are literal),
     /// and the first target they named.
     public static func extractDirective(_ text: String) -> (text: String, target: ReplyDirective?) {
-        guard text.contains("[[") else { return (text, nil) }
+        let parsed = self.extractStreamingDirective(text)
+        return (parsed.text, parsed.target)
+    }
+
+    static func extractStreamingDirective(_ text: String) -> (text: String, target: ReplyDirective?, targetRangeUTF8: Range<Int>?, pending: String?) {
+        guard text.contains("[[") else { return (text, nil, nil, nil) }
         var out = ""
         var target: ReplyDirective?
+        var targetRangeUTF8: Range<Int>?
+        var pendingStart: String.Index?
         var index = text.startIndex
         var lineStart = true
         var fenced = false
@@ -120,33 +246,105 @@ public enum Replies {
                 continue
             }
             if !fenced, inlineTicks == 0, rest.hasPrefix("[["), let tag = Self.parseTag(rest) {
-                if target == nil { target = tag.target }
+                if target == nil {
+                    target = tag.target
+                    targetRangeUTF8 = text[..<index].utf8.count..<text[..<tag.end].utf8.count
+                }
+                pendingStart = nil
                 index = tag.end
                 var trailing = index
                 while trailing < text.endIndex, text[trailing] == " " || text[trailing] == "\t" { trailing = text.index(after: trailing) }
                 let atStart = out.allSatisfy(\.isWhitespace)
                 index = atStart ? trailing : (trailing < text.endIndex && text[trailing] != "\n" ? index : trailing)
                 continue
+            } else if !fenced, inlineTicks == 0, rest.hasPrefix("[["), Self.isPotentialDirectivePrefix(rest) {
+                pendingStart = index
             }
             out.append(ch)
             lineStart = ch == "\n"
             if ch == "\n" { inlineTicks = 0 }
             index = text.index(after: index)
         }
-        guard target != nil else { return (text, nil) }
-        return (out.trimmingCharacters(in: .whitespacesAndNewlines), target)
+        let pending: String? = pendingStart.flatMap { start in
+            let candidate = text[start...]
+            guard Self.isPotentialDirectivePrefix(candidate), !candidate.contains("]]"),
+                  !candidate.contains("\n"), candidate.utf8.count <= 4_096
+            else { return nil }
+            return String(candidate)
+        }
+        guard target != nil else { return (text, nil, nil, pending) }
+        return (out.trimmingCharacters(in: .whitespacesAndNewlines), target, targetRangeUTF8, pending)
+    }
+
+    fileprivate static func isPotentialDirectivePrefix(_ candidate: Substring) -> Bool {
+        guard candidate.hasPrefix("[[") else { return false }
+        let body = candidate.dropFirst(2).drop(while: \.isWhitespace)
+        guard !body.isEmpty else { return true }
+        let current = "reply_to_current"
+        let currentPrefix = body.prefix(current.count).lowercased()
+        if current.hasPrefix(currentPrefix) && body.dropFirst(current.count).isEmpty { return true }
+        if currentPrefix == current { return true }
+        let replyName = "reply_to"
+        let replyPrefix = body.prefix(replyName.count).lowercased()
+        if replyName.hasPrefix(replyPrefix) && body.dropFirst(replyName.count).isEmpty { return true }
+        guard replyPrefix == replyName else { return false }
+        let afterName = body.dropFirst(replyName.count).drop(while: \.isWhitespace)
+        return afterName.isEmpty || afterName.first == ":"
+    }
+
+    /// Reads only the short ASCII directive prefix after `[[`; it never materializes or scans
+    /// the rest of a streaming frame. Full candidate parsing happens only after a valid prefix.
+    fileprivate static func isPotentialDirectivePrefix(in bytes: String.UTF8View.SubSequence) -> (matches: Bool, visitedBytes: Int) {
+        let bytes = bytes.prefix(64)
+        var index = bytes.startIndex
+        var visitedBytes = 0
+        func skipWhitespace() {
+            while index < bytes.endIndex, bytes[index] == 0x20 || bytes[index] == 0x09 || bytes[index] == 0x0A || bytes[index] == 0x0D {
+                index = bytes.index(after: index)
+                visitedBytes += 1
+            }
+        }
+        func matchesPrefix(_ literal: StaticString) -> (matched: Int, isPrefix: Bool) {
+            let expected = Array(String(describing: literal).utf8)
+            var cursor = index
+            var matched = 0
+            while cursor < bytes.endIndex, matched < expected.count {
+                let byte = bytes[cursor]
+                visitedBytes += 1
+                let lower = (0x41...0x5A).contains(byte) ? byte + 0x20 : byte
+                if lower != expected[matched] { return (matched, false) }
+                matched += 1
+                cursor = bytes.index(after: cursor)
+            }
+            return (matched, matched == expected.count || cursor == bytes.endIndex)
+        }
+        skipWhitespace()
+        let current = matchesPrefix("reply_to_current")
+        if current.isPrefix {
+            if current.matched < "reply_to_current".utf8.count { return (true, visitedBytes) }
+            index = bytes.index(index, offsetBy: current.matched)
+            skipWhitespace()
+            return (index == bytes.endIndex || bytes[index] == 0x5D, visitedBytes)
+        }
+        index = bytes.startIndex
+        skipWhitespace()
+        let reply = matchesPrefix("reply_to")
+        guard reply.isPrefix else { return (false, visitedBytes) }
+        if reply.matched < "reply_to".utf8.count { return (true, visitedBytes) }
+        index = bytes.index(index, offsetBy: reply.matched)
+        skipWhitespace()
+        return (index == bytes.endIndex || bytes[index] == 0x3A, visitedBytes)
     }
 
     private static func parseTag(_ rest: Substring) -> (target: ReplyDirective, end: String.Index)? {
         var cursor = rest.dropFirst(2)
         cursor = cursor.drop(while: \.isWhitespace)
-        let lower = cursor.lowercased()
-        if lower.hasPrefix("reply_to_current") {
+        if cursor.prefix("reply_to_current".count).lowercased() == "reply_to_current" {
             let after = cursor.dropFirst("reply_to_current".count).drop(while: \.isWhitespace)
             guard after.hasPrefix("]]") else { return nil }
             return (.current, after.index(after.startIndex, offsetBy: 2))
         }
-        guard lower.hasPrefix("reply_to") else { return nil }
+        guard cursor.prefix("reply_to".count).lowercased() == "reply_to" else { return nil }
         var after = cursor.dropFirst("reply_to".count).drop(while: \.isWhitespace)
         guard after.first == ":" else { return nil }
         after = after.dropFirst()
@@ -475,9 +673,11 @@ public enum Reactions {
     /// Your latest message, while a run is working on it and the agent hasn't reacted 👀 itself.
     /// Nothing once anything outside `runId` (another reply) follows it, or a newer send is pending.
     public static func ackTarget(items: [ChatItem], isRunning: Bool, runId: String?,
-                                 agentReactions: [String: [String]]) -> String?
+                                 agentReactions: [String: [String]], config: JSONValue? = nil,
+                                 channel: String? = nil, account: String? = nil, chatType: String? = nil) -> String?
     {
         guard isRunning,
+              !self.ackIsDisabled(config: config, channel: channel, account: account, chatType: chatType),
               let index = items.lastIndex(where: { $0.role == .user })
         else { return nil }
         let item = items[index]
@@ -491,6 +691,48 @@ public enum Reactions {
         }
         if agentReactions[id]?.contains(self.ackEmoji) == true { return nil }
         return id
+    }
+
+    /// Known configuration states that suppress OpenClaw's inbound ACK. Unknown provider-specific
+    /// shapes stay enabled rather than guessing about a channel's policy.
+    private static func ackIsDisabled(config: JSONValue?, channel: String?, account: String?, chatType: String?) -> Bool {
+        if let scope = config?["messages"]?["ackReactionScope"]?.string,
+           ["off", "none"].contains(scope)
+        {
+            return true
+        }
+        if let scope = config?["messages"]?["ackReactionScope"]?.string {
+            let kind = chatType?.lowercased()
+            if scope == "direct", kind == "group" || kind == "channel" { return true }
+            if scope == "group-all", kind == "direct" { return true }
+        }
+
+        if let channel {
+            let normalizedChannel = channel.lowercased()
+            let level = ReactionLevels.effective(config: config, channel: normalizedChannel, account: account).level
+            if level.offAlsoStopsAcknowledgement(channel: normalizedChannel) { return true }
+        }
+
+        var paths: [[String]] = []
+        let normalizedChannel = channel?.lowercased()
+        if let normalizedChannel, !normalizedChannel.isEmpty, let account, !account.isEmpty {
+            paths.append(["channels", normalizedChannel, "accounts", account, "ackReaction"])
+        }
+        if let normalizedChannel, !normalizedChannel.isEmpty {
+            paths.append(["channels", normalizedChannel, "ackReaction"])
+        }
+        paths.append(["messages", "ackReaction"])
+
+        for path in paths {
+            var value = config
+            for component in path { value = value?[component] }
+            guard let value, !value.isNull else { continue }
+            // Some providers have dedicated ACK objects. Their fields are deliberately not
+            // interpreted here; only the verified shared string setting can prove a disable.
+            guard let emoji = value.string else { return false }
+            return emoji.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        return false
     }
 
     // MARK: Forwarding

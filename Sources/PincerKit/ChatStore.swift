@@ -97,6 +97,14 @@ public struct LiveRun: Sendable, Hashable {
     public var isTextStreaming = false
     /// UTF-8 byte count is O(1) to read and lets cumulative snapshots signal growth without rescanning.
     var textUTF8Count = 0
+    /// A reply directive that began at the end of a streamed frame and is still incomplete.
+    var pendingReplyDirective: Replies.PendingDirective?
+    /// Incremental Markdown state needed to keep code literals safe across delta boundaries.
+    var replyLexicalState = Replies.StreamLexicalState()
+    /// Bytes parsed as reply candidates (separate from the linear lexical pass over each new delta).
+    var replyDirectiveParseBytes = 0
+    /// Bytes visited by the incremental lexical scanner; this must scale with incoming deltas only.
+    var replyDirectiveLexBytes = 0
     public var thinking: String?
     public var tools: [ToolActivity] = []
     public var images: [ImageRef] = []

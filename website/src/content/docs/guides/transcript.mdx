@@ -18,6 +18,8 @@ The transcript is where you read what your agents are doing. It's built with nat
 
 Replies stream in as the agent writes them. Markdown is fully supported, including tables and code blocks with a **Copy** button. Mermaid diagrams and display math are drawn in place, and HTML blocks can be previewed; see [Diagrams, math and HTML](../diagrams-and-math/).
 
+Reply transport markers are removed as streamed text arrives. The same marker syntax inside inline code or a fenced code block remains literal.
+
 Every message ends with **Copy**, **Reply** and **React** buttons and its details: the model that wrote it and the full date and time it was sent.
 
 <DocScreenshot src={overview} ios={overviewIOS} iosAlt="A demo disk status reply with formatted text and an inline chart on iPhone." iosCaption="iOS, built-in demo. Alex is a fictional documentation persona." alt="A demo conversation showing Alex, Claw, a disk summary, code, and an inline chart." caption="macOS, built-in demo. The reply combines formatted text, a code block, and an image." />
@@ -129,6 +131,8 @@ How freely the agent reacts is the **Reactions** setting, "How freely the agent 
 | **Extensive** | The agent reacts freely. |
 
 Change it under **Gateway Settings → Channels**, on the channel's page or on one of its accounts. The **In effect** row shows the level and where it comes from: **Set for this account**, **Inherited from the channel**, **Set for the channel**, or **Default**. An account's setting wins over its channel's, and the channel's over the default, which is **Minimal** on all three channels. Choose **Same as channel** (for an account) or **Default** (for a channel) to remove the setting. Like other settings on those pages, it's sent when you save. In a chat bridged from one of these channels, the chat's **⋯** menu has a **Reactions** submenu that changes the same setting at once. It says what it changes: "Applies to all Telegram chats", or "Applies to all chats on the account" when that account has its own setting. The same reset rows are there (for example **Same as channel (Minimal)**), and if a save fails the chat's notice banner says so. If the stored value isn't a valid level, the page says which level the agent uses instead. The control is hidden for other channels, and when the device can't edit settings or the gateway doesn't offer `config.patch`.
+
+The temporary 👀 is hidden when the effective ACK emoji is explicitly empty, `messages.ackReactionScope` is `off` or `none`, or WhatsApp/Signal's effective reaction level is **Off**. Pincer also honors a known `direct` versus `group-all` scope mismatch from the session row. It keeps the existing indicator when a `group-mentions` scope depends on mention details the session row does not provide.
 
 ### Reactions in bridged chats
 

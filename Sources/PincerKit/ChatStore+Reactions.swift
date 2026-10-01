@@ -133,8 +133,13 @@ extension ChatStore {
 
     /// Your latest message while the agent works on it, for the transient 👀.
     public var ackMessageId: String? {
-        Reactions.ackTarget(items: self.items, isRunning: self.isRunning, runId: self.live?.runId,
-                            agentReactions: self.agentReactions)
+        let row = self.sessionRow ?? self.gateway?.sessions[self.sessionKey]
+        let channel = row?.channel ?? row?.raw["lastChannel"]?.text
+        let account = row?.raw["lastAccountId"]?.text ?? row?.raw["deliveryContext"]?["accountId"]?.text
+            ?? row?.raw["origin"]?["accountId"]?.text
+        return Reactions.ackTarget(items: self.items, isRunning: self.isRunning, runId: self.live?.runId,
+                                  agentReactions: self.agentReactions, config: self.gateway?.settings.config,
+                                  channel: channel, account: account, chatType: row?.chatType)
     }
 
     /// Adds `emoji` to the message, or removes it when it's already yours. Through the Gateway's shared
