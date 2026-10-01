@@ -20,16 +20,27 @@ func runComposerSessionTitleChecks() {
 
 @MainActor
 func runDemoComposerSessionTitleChecks() async {
-    let gateway = GatewayStore(profile: .demo())
+    let (defaults, defaultsName) = scratchDefaults()
+    let gateway = GatewayStore(profile: .demo(), defaults: defaults)
     gateway.start()
-    defer { gateway.stop() }
+    defer {
+        gateway.stop()
+        UserDefaults.standard.removePersistentDomain(forName: defaultsName)
+    }
 
     let key = "agent:main:dashboard:garden"
-    let ready = await waitFor("seeded Garden planner row") { gateway.sessions[key]?.title == "Garden planner" }
-    check(ready, "demo connects with its Garden planner session seed")
-    guard ready, let row = gateway.sessions[key] else { return }
+    let otherKey = "agent:main:dashboard:trip"
+    let ready = await waitFor("seeded Garden planner and Kyoto trip rows") {
+        gateway.sessions[key]?.title == "Garden planner" && gateway.sessions[otherKey] != nil
+    }
+    check(ready, "demo connects with its Garden planner and Kyoto trip session seeds")
+    guard ready, let row = gateway.sessions[key], let other = gateway.sessions[otherKey] else { return }
     check(ComposerSessionTitle.title(sessionKey: key, current: nil, lastKnown: row) == "Garden planner",
           "demo composer keeps the seeded garden chat title during refresh")
     check(ComposerSessionTitle.title(sessionKey: key, current: row, lastKnown: nil) == row.title,
           "demo composer uses the seeded garden chat's current title")
+    check(ComposerSessionTitle.title(sessionKey: key, current: other, lastKnown: row) == "Garden planner",
+          "demo composer ignores a current row belonging to another chat")
+    check(ComposerSessionTitle.title(sessionKey: key, current: other, lastKnown: nil) == nil,
+          "demo composer never borrows another seeded chat's title")
 }
