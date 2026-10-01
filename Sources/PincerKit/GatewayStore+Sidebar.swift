@@ -454,7 +454,17 @@ extension GatewayStore {
                 return
             }
         }
-        await self.pull(self.syncedMap(Self.groupsPref))
+        let groups = self.syncedMap(Self.groupsPref)
+        await self.pull(groups)
+        // Same as the bootstrap prefs: an unsynced map doesn't push, so retry a failed first sync.
+        let epoch = self.connectionEpoch
+        var delays = Self.bootstrapPullRetryDelays[...]
+        while !self.defaults.bool(forKey: groups.syncedDefaultsKey), self.isCurrent(epoch), let delay = delays.popFirst() {
+            try? await Task.sleep(for: .seconds(delay))
+            guard self.isCurrent(epoch) else { return }
+            await self.pull(groups)
+        }
+        await self.retryPendingPrefs([groups])
         // Chats already in a group keep it listed once they leave it.
         self.registerGroups(Set(self.sessions.values.compactMap(\.category)))
     }

@@ -161,4 +161,4 @@ The quick `scripts/bundle-mac.sh` development bundle is only ad-hoc signed and i
 
 ## Synced preferences
 
-Some personal touches, such as custom chat colors, icons and server names, sync between your devices through the gateway's user preferences. They're stored on **your** gateway, not on a third-party service. See [Synced preferences](../synced-preferences/).
+Some personal touches, such as custom chat colors, icons, server names and bookmarks, sync between your devices through the gateway's user preferences. They're stored on **your** gateway, not on a third-party service. See [Synced preferences](../synced-preferences/).

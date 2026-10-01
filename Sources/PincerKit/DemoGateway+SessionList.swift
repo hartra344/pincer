@@ -19,10 +19,13 @@ extension DemoGateway {
             return self.sessionList(params)
         case "sessions.messages.subscribe":
             let key = try self.knownSession(params["key"])
-            self.messageSubscriptions.insert(key)
+            self.messageSubscriptions[key, default: []].insert(params["subscriptionId"]?.string ?? "")
             return ["subscribed": true, "key": .string(key)]
         case "sessions.messages.unsubscribe":
-            if let key = params["key"]?.string { self.messageSubscriptions.remove(key) }
+            if let key = params["key"]?.string {
+                self.messageSubscriptions[key]?.remove(params["subscriptionId"]?.string ?? "")
+                if self.messageSubscriptions[key]?.isEmpty == true { self.messageSubscriptions[key] = nil }
+            }
             return ["ok": true, "key": params["key"] ?? .null]
         case "chat.history":
             return try self.history(params)
@@ -34,7 +37,7 @@ extension DemoGateway {
             let keys = params["keys"]?.array?.compactMap(\.string) ?? Array(self.prefs.keys)
             return ["status": "ok", "entries": .object(self.prefs.filter { keys.contains($0.key) })]
         case "users.prefs.set":
-            return self.setPrefs(params)
+            return try self.setPrefs(params)
         case "message.action":
             return try self.messageAction(params)
         default:
@@ -171,11 +174,18 @@ extension DemoGateway {
         return ["key": .string(key), "sessionId": row["sessionId"] ?? .null, "session": .object(row)]
     }
 
-    func setPrefs(_ params: JSONValue) -> JSONValue {
+    /// Like upstream (v2026.9.7): at most 32 entries per set, 128 keys per profile, 4 KiB per value.
+    func setPrefs(_ params: JSONValue) throws -> JSONValue {
         for (key, expected) in params["expectedEntries"]?.object ?? [:] where (self.prefs[key] ?? .null) != expected {
             return ["status": "conflict"]
         }
         let entries = params["entries"]?.object ?? [:]
+        func invalid(_ message: String) -> GatewayError { .rpc(code: "INVALID_REQUEST", message: message, details: nil) }
+        if entries.count > 32 { throw invalid("too-many-entries") }
+        if Set(self.prefs.keys).union(entries.filter { !$0.value.isNull }.keys).count > 128 { throw invalid("profile-key-limit") }
+        for value in entries.values where ((try? JSONEncoder().encode(value))?.count ?? 0) > 4 * 1024 {
+            throw invalid("value-too-large")
+        }
         for (key, value) in entries {
             self.prefs[key] = value.isNull ? nil : value
         }

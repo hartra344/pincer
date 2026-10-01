@@ -299,6 +299,9 @@ public final class ChatStore: Identifiable {
     @ObservationIgnored var loadGeneration = 0
     var loadInFlight: Bool { self.loadTask != nil }
     @ObservationIgnored var subscribedEpoch: Int?
+    /// Names this chat's observer on the Gateway, so another chat or client on the same connection can't drop it.
+    @ObservationIgnored let subscriptionId = UUID().uuidString
+    @ObservationIgnored var subscribedWithId = false
     @ObservationIgnored var stale = false
     @ObservationIgnored var loadCount = 0
     @ObservationIgnored var finishedRunIds: [String] = []

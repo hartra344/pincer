@@ -212,7 +212,8 @@ struct ChatView: View {
         }
         #endif
         .sheet(isPresented: self.$exportState.showBookmarks) {
-            BookmarksView(store: BookmarkStore.shared(gatewayId: self.gateway.id), sessionKey: self.chat.sessionKey) { bookmark in
+            BookmarksView(store: BookmarkStore.shared(gatewayId: self.gateway.id), sessionKey: self.chat.sessionKey,
+                          syncProblem: self.gateway.bookmarkSyncProblem) { bookmark in
                 self.jump = TranscriptJump(id: UUID(), messageId: bookmark.messageId)
             }
         }
@@ -479,7 +480,8 @@ private struct TranscriptPane: View {
                         let added = store.toggle(Bookmark(
                             sessionKey: chat.sessionKey, messageId: id, preview: Bookmark.preview(item?.plainText ?? ""),
                             role: item?.role.rawValue ?? "assistant", messageDate: item?.timestamp))
-                        chat.notice = added ? L("Bookmarked") : L("Bookmark removed")
+                        chat.notice = added && store.droppedCount > 0 ? L("To make room, Pincer removed an older bookmark.")
+                            : added ? L("Bookmarked") : L("Bookmark removed")
                     },
                     isBookmarked: { [key = self.chat.sessionKey, id = self.gateway.id] in
                         BookmarkStore.shared(gatewayId: id).isBookmarked(sessionKey: key, messageId: $0)

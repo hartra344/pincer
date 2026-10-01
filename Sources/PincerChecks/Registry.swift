@@ -134,6 +134,7 @@ enum Suites {
         Section("Chat navigation") { await runNavigation() },
         Section("Quick Capture (demo)") { await runQuickCaptureDemo() },
         Section("Replies & reactions (demo)") { await runDemoReactionsReply() },
+        Section("Bookmark sync (demo)") { await runDemoBookmarkSync() },
         Section("Agent reply targets (demo)") { await runDemoReplyTargets() },
         Section("Reaction level (demo)") { await runDemoReactionLevel() },
         Section("Reactions on users.prefs (demo, Gateway reactions off)") { await runDemoPrefsReactions() },

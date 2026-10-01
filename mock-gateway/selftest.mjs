@@ -36,6 +36,7 @@ const SECTIONS = [
   'mcp',
   'first-run',
   'sessions',
+  'message-subscriptions',
   'large-media',
 ];
 

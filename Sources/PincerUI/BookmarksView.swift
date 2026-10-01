@@ -5,6 +5,7 @@ import SwiftUI
 struct BookmarksView: View {
     let store: BookmarkStore
     let sessionKey: String
+    var syncProblem: String?
     let open: (Bookmark) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -45,6 +46,13 @@ struct BookmarksView: View {
                             }
                         }
                     }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if let problem = self.syncProblem {
+                    Label(L("Some bookmarks couldn't be saved to the gateway: \(problem)"), systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote).foregroundStyle(.orange).padding().frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.bar)
                 }
             }
             .navigationTitle(L("Bookmarks"))
