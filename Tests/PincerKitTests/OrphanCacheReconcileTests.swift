@@ -93,6 +93,55 @@ struct OrphanCacheReconcileTests {
         self.temp.remove()
         self.scratch.remove()
     }
+
+    @Test func orphanMetadataAndSegmentDirectoriesAreRemovedOnConnect() async throws {
+        let gateway = self.demoGateway()
+        defer { gateway.stop() }
+        let metadataKey = "agent:main:dashboard:orphan-metadata-\(UUID().uuidString)"
+        let segmentsKey = "agent:main:dashboard:orphan-segments-\(UUID().uuidString)"
+        let metadataManifest = try #require(TranscriptCache.file(gatewayId: gateway.id, sessionKey: metadataKey, root: self.temp.url))
+        let segmentsManifest = try #require(TranscriptCache.file(gatewayId: gateway.id, sessionKey: segmentsKey, root: self.temp.url))
+        try FileManager.default.createDirectory(at: metadataManifest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("orphan metadata".utf8).write(to: metadataManifest.appendingPathExtension("meta"))
+        let orphanSegments = TranscriptCache.segmentsDirectory(of: segmentsManifest)
+        try FileManager.default.createDirectory(at: orphanSegments, withIntermediateDirectories: true)
+        try Data("orphan segment".utf8).write(to: orphanSegments.appending(path: "chunk.json"))
+
+        let directory = metadataManifest.deletingLastPathComponent()
+        let temporaryDigest = TranscriptCache.digest(of: "temporary-sidecar")
+        let temporaryMetadata = directory.appending(path: "\(temporaryDigest).json.meta.tmp")
+        let temporarySegments = directory.appending(path: "\(temporaryDigest).segments.tmp")
+        let malformedMetadata = directory.appending(path: "not-a-cache-digest.json.meta")
+        try Data("temporary metadata".utf8).write(to: temporaryMetadata)
+        try Data("temporary segments marker".utf8).write(to: temporarySegments)
+        try Data("unrelated metadata".utf8).write(to: malformedMetadata)
+
+        let liveKey = "agent:main:dashboard:tax-2025"
+        let liveManifest = try #require(TranscriptCache.file(gatewayId: gateway.id, sessionKey: liveKey, root: self.temp.url))
+        let liveSegments = TranscriptCache.segmentsDirectory(of: liveManifest)
+        try Data("listed manifest".utf8).write(to: liveManifest)
+        try Data("listed metadata".utf8).write(to: liveManifest.appendingPathExtension("meta"))
+        try FileManager.default.createDirectory(at: liveSegments, withIntermediateDirectories: true)
+        try Data("listed segment".utf8).write(to: liveSegments.appending(path: "chunk.json"))
+
+        gateway.start()
+        await self.settle { gateway.state.isConnected && !gateway.sessions.isEmpty }
+        await self.settle {
+            !FileManager.default.fileExists(atPath: metadataManifest.appendingPathExtension("meta").path)
+                && !FileManager.default.fileExists(atPath: orphanSegments.path)
+        }
+        #expect(!FileManager.default.fileExists(atPath: metadataManifest.appendingPathExtension("meta").path))
+        #expect(!FileManager.default.fileExists(atPath: orphanSegments.path))
+        #expect(self.cached(gateway, liveKey))
+        #expect(FileManager.default.fileExists(atPath: liveManifest.appendingPathExtension("meta").path))
+        #expect(FileManager.default.fileExists(atPath: liveSegments.path))
+        #expect(FileManager.default.fileExists(atPath: temporaryMetadata.path))
+        #expect(FileManager.default.fileExists(atPath: temporarySegments.path))
+        #expect(FileManager.default.fileExists(atPath: malformedMetadata.path))
+        await TranscriptCache.shutdown(root: self.temp.url)
+        self.temp.remove()
+        self.scratch.remove()
+    }
 }
 
 /// The paging behind the reconcile: a partial list must never count as complete.

@@ -79,8 +79,11 @@ extension GatewayStore {
                 if let snippet = Spotlight.snippet(from: tail.items) { snippets[row.key] = snippet }
             }
         }
-        guard !Task.isCancelled, !self.profile.isDemo, Spotlight.isEnabled(self.defaults) else { return }
+        guard !Task.isCancelled, !self.profile.isDemo,
+              Spotlight.canPublish(includeMessages: includeMessages, defaults: self.defaults)
+        else { return }
         let entries = Spotlight.entries(gatewayId: self.id, gatewayURL: self.profile.url, gatewayHost: self.gatewayHost,
+                                        gatewayName: self.profile.name,
                                         sessions: rows, cachedSnippets: snippets, includeMessages: includeMessages)
         let indexer = center.indexer(for: self.id)
         let previous = center.sent[self.id]
@@ -90,7 +93,10 @@ extension GatewayStore {
         let changed = entries.filter { previous?[$0.id] != $0 }
         let removed = (previous ?? [:]).keys.filter { current[$0] == nil }
         if !removed.isEmpty { await indexer.delete(ids: Array(removed)) }
-        if !changed.isEmpty, Spotlight.isEnabled(self.defaults) { await indexer.index(changed) }
+        guard !Task.isCancelled, !self.profile.isDemo,
+              Spotlight.canPublish(includeMessages: includeMessages, defaults: self.defaults)
+        else { return }
+        if !changed.isEmpty { await indexer.index(changed) }
     }
 
     /// A chat's cache was dropped (deleted or vanished): it leaves Spotlight too.

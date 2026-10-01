@@ -50,6 +50,21 @@ struct ChatStoreSaveTests {
         #expect(try #require(self.mtime(url)) > first)
     }
 
+    @Test func completedWriteMarksOnlyTheCapturedRevisionAsSaved() {
+        let (chat, gateway) = self.makeStore()
+        defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: self.temp.url) ; self.temp.remove() }
+        chat.items = V8.items(1)
+        let captured = chat.currentCacheState
+
+        // Model a transcript edit while the asynchronous disk writer is suspended.
+        chat.items = V8.items(2)
+        chat.recordSavedSnapshot(captured, result: TranscriptCache.SaveResult(unchanged: true))
+
+        #expect(chat.savedState == captured)
+        #expect(chat.currentCacheState != chat.savedState,
+                "the later revision must remain dirty for a follow-up save")
+    }
+
     @Test func unavailableRestoreDoesNotSaveAndRetries() async throws {
         let (chat, gateway) = self.makeStore()
         defer { TranscriptCache.removeAll(gatewayId: gateway.id, permanently: true, root: self.temp.url) ; self.temp.remove() }

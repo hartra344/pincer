@@ -130,7 +130,7 @@ struct TranscriptCacheVersioningTests {
         let (snapshot, outcome) = Cache.decode(Data(Self.legacyV5.utf8))
         #expect(outcome == .migrated(from: 5) && !outcome.discarded)
         let loaded = try #require(snapshot)
-        #expect(loaded.version == Self.current && Self.current == 9)
+        #expect(loaded.version == Self.current && Self.current == 10)
         #expect(loaded.items.map(\.id) == ["u1", "a1", "r1", "r2", "r3", "r4", "a2"] && loaded.complete && loaded.activityMs == 1_790_000_000_000)
         let byId = Dictionary(uniqueKeysWithValues: loaded.items.map { ($0.id, $0) })
         #expect(byId["r1"]?.toolDetails == Cache.unknownToolDetails, "pre-#154 write result marked unknown")

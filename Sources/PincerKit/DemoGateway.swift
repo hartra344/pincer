@@ -14,6 +14,8 @@ actor DemoGateway {
     static let noSessionReactionsURL = "demo://pincer?sessionReactions=off"
     /// One transient avatar-prefs read failure, for bootstrap recovery checks.
     static let avatarPrefsReadFailureURL = "demo://pincer?avatarPrefsReadFailure=once"
+    /// A long transcript used to check repair of forwarded messages outside the newest history page.
+    static let forwardedSenderRefreshURL = "demo://pincer?forwardedSenderRefresh=on"
 
     typealias Row = [String: JSONValue]
 
@@ -148,7 +150,9 @@ actor DemoGateway {
     let hasSessionReactions: Bool
     var failsFirstAvatarPrefsRead: Bool
 
-    init(acceptsReplyTo: Bool = true, hasSessionReactions: Bool = true, failsFirstAvatarPrefsRead: Bool = false) {
+    init(acceptsReplyTo: Bool = true, hasSessionReactions: Bool = true, failsFirstAvatarPrefsRead: Bool = false,
+         seedsForwardedSenderRefreshHistory: Bool = false)
+    {
         self.acceptsReplyTo = acceptsReplyTo
         self.hasSessionReactions = hasSessionReactions
         self.failsFirstAvatarPrefsRead = failsFirstAvatarPrefsRead
@@ -161,6 +165,18 @@ actor DemoGateway {
             self.prefs[AvatarPreferences.prefKey] = [AvatarPreferences.seedEntry(for: "research"): "Earlier Scout identity"]
         }
         var seeded = Self.seed()
+        if seedsForwardedSenderRefreshHistory {
+            // Keep the real Kiko exchange in place, then put it beyond chat.history's newest 120 rows.
+            let tail = (0..<65).flatMap { index in
+                [
+                    Self.message("user", [Self.text("Older-page fixture question \(index + 1)")],
+                                 id: "demo-forwarded-refresh-user-\(index)", ago: Double(index + 1)),
+                    Self.message("assistant", [Self.text("Older-page fixture reply \(index + 1)")],
+                                 id: "demo-forwarded-refresh-assistant-\(index)", ago: Double(index + 1) + 0.1),
+                ]
+            }
+            seeded.transcripts["agent:main:main", default: []].append(contentsOf: tail)
+        }
         self.branchTips = Self.seedSessionManager(sessions: &seeded.sessions, transcripts: &seeded.transcripts)
         self.sessions = seeded.sessions
         self.transcripts = seeded.transcripts

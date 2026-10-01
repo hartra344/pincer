@@ -454,6 +454,8 @@ extension GatewayStore {
             if inUse.contains(where: { TranscriptCache.digest(of: $0) == digest }) { continue }
             await TranscriptCache.remove(gatewayId: self.id, digest: digest, root: root)
         }
+        guard self.isCurrent(epoch) else { return }
+        await TranscriptCache.removeOrphanedSidecars(gatewayId: self.id, root: root)
     }
 
     /// Drops a chat's cached transcript and its messages from search; a refetch re-adds both.

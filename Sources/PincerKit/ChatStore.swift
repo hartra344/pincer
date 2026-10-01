@@ -242,6 +242,8 @@ public final class ChatStore: Identifiable {
     /// The last restore couldn't read the cache (`.unavailable`); saving now would replace the
     /// older history on disk with only what's loaded, so nothing is written until a restore succeeds.
     @ObservationIgnored var cacheUnreadable = false
+    @ObservationIgnored var forwardedSenderRefreshPending = false
+    @ObservationIgnored var forwardedSenderRefreshCompleted = false
     /// The session was deleted, so its transcript is never cached again.
     @ObservationIgnored var cachingStopped = false
     /// What restoring from the transcript cache found; nil until it's been tried.

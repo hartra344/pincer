@@ -45,6 +45,9 @@ private func checkToolCardsChat(_ gateway: GatewayStore, label: String) async {
           "\(label): web_fetch has its url args and markdown text")
     check(calls[2].arguments?.contains("\"offset\"") == true && calls[2].result?.contains("\"servers\"") == true,
           "\(label): read has path, offset, limit and the file text")
+    let contextMenuMCP = calls.first { $0.name == "mcp__filesystem__read_file" }
+    check(contextMenuMCP.map { MCPToolName.split($0.name).server == "filesystem" } == true,
+          "\(label): seeded MCP tool card retains the exact raw name and server for its native context actions")
     checkToolCardPresentations(calls, label: label)
 }
 

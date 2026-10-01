@@ -14,6 +14,7 @@ struct MCPServerEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft: MCPServerDraft
     @State private var showProblems = false
+    @State private var touchedFields: Set<String> = []
     @State private var revealed: Set<Int> = []
     @State private var advancedOpen = false
     @State private var probe = MCPProbeState()
@@ -31,13 +32,13 @@ struct MCPServerEditor: View {
     var body: some View {
         let existing = Set(self.gateway.mcp.servers.map(\.name)).subtracting([self.initial.originalName].compactMap { $0 })
         let problems = self.draft.problems(existingNames: existing)
-        let shown = self.showProblems || self.draft != self.initial ? problems : [:]
+        let shown = MCPFieldProblemVisibility.visible(problems, touched: self.touchedFields, showAll: self.showProblems)
         NavigationStack {
             ScrollViewReader { proxy in
             Form {
                 Section {
-                    self.field(L("Name"), text: self.$draft.name, prompt: "filesystem")
-                    self.problem(shown["name"])
+                    self.field(L("Name"), text: self.$draft.name, prompt: "filesystem", problemKey: "name")
+                    self.problem(shown["name"], key: "name")
                     Picker(L("Transport"), selection: self.$draft.transport) {
                         ForEach(MCPTransport.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
@@ -94,7 +95,7 @@ struct MCPServerEditor: View {
                             self.revealAdvancedProblem(problems)
                         }
                     }
-                    .disabled(!self.isNew && self.draft == self.initial)
+                    .disabled(!self.isNew && self.draft == self.initial && problems.isEmpty)
                 }
             }
         }
@@ -104,9 +105,12 @@ struct MCPServerEditor: View {
     }
 
     /// A labeled text field, so the label stays visible once there's text.
-    private func field(_ title: String, text: Binding<String>, prompt: LocalizedStringKey, url: Bool = false, number: Bool = false) -> some View {
-        LabeledContent(title) {
-            TextField(title, text: text, prompt: Text(prompt, bundle: .module))
+    private func field(_ title: String, text: Binding<String>, prompt: LocalizedStringKey, url: Bool = false,
+                       number: Bool = false, problemKey: String? = nil) -> some View
+    {
+        let binding = problemKey.map { self.tracked(text, key: $0) } ?? text
+        return LabeledContent(title) {
+            TextField(title, text: binding, prompt: Text(prompt, bundle: .module))
                 .labelsHidden()
                 .multilineTextAlignment(.trailing)
                 .autocorrectionDisabled()
@@ -117,9 +121,31 @@ struct MCPServerEditor: View {
         }
     }
 
-    @ViewBuilder private func problem(_ text: String?) -> some View {
+    private func tracked(_ binding: Binding<String>, key: String) -> Binding<String> {
+        Binding(get: { binding.wrappedValue }, set: { value in
+            self.touchedFields.insert(key)
+            binding.wrappedValue = value
+        })
+    }
+
+    private func trackedPairKey(_ binding: Binding<String>, prefix: String) -> Binding<String> {
+        Binding(get: { binding.wrappedValue }, set: { value in
+            func key(_ value: String) -> String { value.trimmingCharacters(in: .whitespaces) }
+            self.touchedFields.insert("\(prefix).\(key(binding.wrappedValue))")
+            binding.wrappedValue = value
+            self.touchedFields.insert("\(prefix).\(key(binding.wrappedValue))")
+        })
+    }
+
+    private func trackedPairValue(_ binding: Binding<String>, prefix: String, rowKey: String) -> Binding<String> {
+        self.tracked(binding, key: "\(prefix).\(rowKey.trimmingCharacters(in: .whitespaces))")
+    }
+
+    @ViewBuilder private func problem(_ text: String?, key: String? = nil) -> some View {
         if let text {
-            Label(text, systemImage: "exclamationmark.triangle.fill").font(.caption).foregroundStyle(.red)
+            Label(text, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption).foregroundStyle(.red)
+                .accessibilityIdentifier(key.map { "mcp-field-problem-\($0)" } ?? "")
         }
     }
 
@@ -127,8 +153,8 @@ struct MCPServerEditor: View {
 
     @ViewBuilder private func stdioSections(_ problems: [String: String]) -> some View {
         Section {
-            self.field(L("Command"), text: self.$draft.command, prompt: "npx")
-            self.problem(problems["command"])
+            self.field(L("Command"), text: self.$draft.command, prompt: "npx", problemKey: "command")
+            self.problem(problems["command"], key: "command")
             self.field(L("Working folder"), text: self.$draft.cwd, prompt: "Optional")
         }
         Section {
@@ -184,9 +210,9 @@ struct MCPServerEditor: View {
                     Button(L("Replace")) { self.draft.urlIsRedacted = false; self.draft.url = "" }
                 }
             } else {
-                self.field(L("URL"), text: self.$draft.url, prompt: "https://…", url: true)
+                self.field(L("URL"), text: self.$draft.url, prompt: "https://…", url: true, problemKey: "url")
             }
-            self.problem(problems["url"])
+            self.problem(problems["url"], key: "url")
             Toggle(L("Requires OAuth sign-in"), isOn: self.$draft.usesOAuth)
             if self.draft.usesOAuth {
                 self.field(L("Scope"), text: self.$draft.oauthScope, prompt: "Optional")
@@ -207,7 +233,7 @@ struct MCPServerEditor: View {
             ForEach(rows) { $row in
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     HStack {
-                        TextField(keyLabel, text: $row.key)
+                        TextField(keyLabel, text: self.trackedPairKey($row.key, prefix: prefix))
                             .autocorrectionDisabled()
                             #if os(iOS)
                             .textInputAutocapitalization(.never)
@@ -223,9 +249,10 @@ struct MCPServerEditor: View {
                             Button(L("Replace")) { row.isRedacted = false; row.value = "" }
                         }
                     } else {
-                        SecureField(L("Value"), text: $row.value)
+                        SecureField(L("Value"), text: self.trackedPairValue($row.value, prefix: prefix, rowKey: row.key))
                     }
-                    self.problem(problems["\(prefix).\(row.key)"])
+                    self.problem(problems["\(prefix).\(row.key.trimmingCharacters(in: .whitespaces))"],
+                                 key: "\(prefix).\(row.key.trimmingCharacters(in: .whitespaces))")
                 }
             }
             Button(L("Add"), systemImage: "plus") {
@@ -290,17 +317,21 @@ extension MCPServerEditor {
 
     private func timeoutRows(_ problems: [String: String]) -> some View {
         Group {
-            self.millisecondsField(L("Connection timeout"), text: self.$draft.connectionTimeoutMs, prompt: "Default (30 s)")
-            self.problem(problems["connectionTimeoutMs"])
-            self.millisecondsField(L("Request timeout"), text: self.$draft.requestTimeoutMs, prompt: "Default (60 s)")
-            self.problem(problems["requestTimeoutMs"])
+            self.millisecondsField(L("Connection timeout"), text: self.$draft.connectionTimeoutMs, prompt: "Default (30 s)",
+                                   problemKey: "connectionTimeoutMs")
+            self.problem(problems["connectionTimeoutMs"], key: "connectionTimeoutMs")
+            self.millisecondsField(L("Request timeout"), text: self.$draft.requestTimeoutMs, prompt: "Default (60 s)",
+                                   problemKey: "requestTimeoutMs")
+            self.problem(problems["requestTimeoutMs"], key: "requestTimeoutMs")
         }
     }
 
-    private func millisecondsField(_ title: String, text: Binding<String>, prompt: LocalizedStringKey) -> some View {
+    private func millisecondsField(_ title: String, text: Binding<String>, prompt: LocalizedStringKey,
+                                   problemKey: String) -> some View
+    {
         LabeledContent(title) {
             HStack(spacing: Theme.Spacing.xs) {
-                TextField(title, text: text, prompt: Text(prompt, bundle: .module))
+                TextField(title, text: self.tracked(text, key: problemKey), prompt: Text(prompt, bundle: .module))
                     .labelsHidden()
                     .multilineTextAlignment(.trailing)
                     #if os(iOS)
@@ -360,13 +391,16 @@ extension MCPServerEditor {
 
     private func oauthRows(_ problems: [String: String]) -> some View {
         Group {
-            Picker(L("Sign-in"), selection: self.$draft.oauthIdentity) {
+            Picker(L("Sign-in"), selection: Binding(get: { self.draft.oauthIdentity }, set: { value in
+                self.touchedFields.insert("oauthIdentity")
+                self.draft.oauthIdentity = value
+            })) {
                 Text("Shared (one sign-in for everyone)", bundle: .module).tag(self.draft.oauthIdentity == "shared" ? "shared" : "")
                 Text("Per person (each person signs in)", bundle: .module).tag("per-requester")
             }
-            self.problem(problems["oauthIdentity"])
-            self.field(L("Auth profile"), text: self.$draft.oauthAuthProfileId, prompt: "Optional")
-            self.problem(problems["oauthAuthProfileId"])
+            self.problem(problems["oauthIdentity"], key: "oauthIdentity")
+            self.field(L("Auth profile"), text: self.$draft.oauthAuthProfileId, prompt: "Optional", problemKey: "oauthAuthProfileId")
+            self.problem(problems["oauthAuthProfileId"], key: "oauthAuthProfileId")
         }
     }
 }
