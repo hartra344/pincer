@@ -168,6 +168,20 @@ public struct HotKeyShortcut: Codable, Hashable, Sendable {
 
 // MARK: Composer Return
 
+/// What Tab does in a composer, given the menu, text-input, and modifier state.
+public enum ComposerTabAction: Equatable, Sendable {
+    /// Let AppKit insert a literal tab in the text view.
+    case insertLiteralTab
+    /// Let AppKit keep handling the key, such as IME input or Shift-Tab with a menu open.
+    case system
+    case acceptSuggestion, nextKeyView, previousKeyView
+
+    public static func resolve(menuActive: Bool, backwards: Bool, optionPressed: Bool, hasMarkedText: Bool) -> Self {
+        if menuActive, !backwards, !hasMarkedText { return .acceptSuggestion }
+        return .system
+    }
+}
+
 /// What Return does in a composer, given the held modifiers.
 public enum ComposerReturnAction: Equatable, Sendable {
     case newline, send, sendAndOpen
