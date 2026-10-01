@@ -105,6 +105,58 @@ struct TranscriptCacheSegmentsTests {
         #expect(second == .loaded && again?.items == items)
     }
 
+    // MARK: v8 manifest → v9 (#563)
+
+    /// A v8 manifest (the v9 bump only added optional item fields) is read and saved back at the
+    /// current version, not discarded; `loadNewest` gets its items too.
+    @Test func v8ManifestMigratesInsteadOfBeingDiscarded() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let items = V8.items(600)
+        await V8.save(V8.snapshot(items, complete: true, activityMs: 7), self.gateway, self.key, temp.url)
+        let url = V8.manifestURL(self.gateway, self.key, temp.url)
+        var manifest = try V8.manifest(url)
+        manifest["version"] = 8
+        try JSONSerialization.data(withJSONObject: manifest).write(to: url)
+        try JSONEncoder().encode(TranscriptCache.Meta(complete: true, activityMs: 7, version: 8)).write(to: url.appendingPathExtension("meta"))
+
+        let newest = await TranscriptCache.loadNewest(gatewayId: self.gateway, sessionKey: self.key, limit: 100, root: temp.url)
+        #expect(newest.outcome == .migrated(from: 8) && !newest.outcome.discarded)
+        #expect(newest.items == Array(items.suffix(100)) && newest.complete)
+        // The write-back is queued behind the writer, not awaited by the read.
+        try await Task.sleep(for: .milliseconds(50))
+        await TranscriptCache.flush(gatewayId: self.gateway, root: temp.url)
+
+        #expect(try V8.manifest(url)["version"] as? Int == TranscriptCache.Snapshot.currentVersion)
+        let (again, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
+        #expect(outcome == .loaded && again?.items == items && again?.activityMs == 7)
+    }
+
+    /// #563: opening a chat read its cache only after every save queued on the writer had landed
+    /// (the read primed the writer's layout and waited for it), so a switch could show the loading
+    /// placeholder for seconds behind other chats' saves. The read must not wait for them.
+    @Test func newestReadDoesNotWaitForQueuedSaves() async throws {
+        let temp = TempDir()
+        defer { temp.remove() }
+        let small = V8.items(120)
+        await V8.save(V8.snapshot(small), self.gateway, "agent:main:small", temp.url)
+        await TranscriptCache.flush(gatewayId: self.gateway, root: temp.url)
+        let big = V8.snapshot(V8.items(20000))
+        let clock = ContinuousClock()
+        let started = clock.now
+        let saves = (0..<3).map { n in
+            Task.detached { await V8.save(big, self.gateway, "agent:main:big\(n)", temp.url) }
+        }
+        try await Task.sleep(for: .milliseconds(20))
+        let newest = await TranscriptCache.loadNewest(gatewayId: self.gateway, sessionKey: "agent:main:small", limit: 100,
+                                                      root: temp.url)
+        let readTook = clock.now - started
+        for save in saves { _ = await save.value }
+        let savesTook = clock.now - started
+        #expect(newest.outcome == .loaded && newest.items == Array(small.suffix(100)))
+        #expect(readTook < .milliseconds(150), "read took \(readTook), queued saves \(savesTook)")
+    }
+
     @Test func removeDeletesSegmentsSidecarAndManifest() async throws {
         let temp = TempDir()
         defer { temp.remove() }

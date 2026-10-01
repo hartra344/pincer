@@ -47,6 +47,30 @@ struct ChatResidencyTests {
         #expect(r.victims(hydrated: ["a", "b"], pinned: [], limit: 1) == ["a"])
     }
 
+    /// #563: recent chats stay resident within an item budget; past it the oldest go first.
+    @Test func itemBudgetEvictsLeastRecentFirst() {
+        var r = ChatResidency(limit: 10, budget: 1_000)
+        for k in ["a", "b", "c", "d"] { r.touch(k) }
+        let costs = ["a": 400, "b": 300, "c": 300, "d": 200]
+        #expect(r.victims(hydrated: ["a", "b", "c", "d"], pinned: [], costs: costs) == ["a"])
+        #expect(r.victims(hydrated: ["a", "b", "c", "d"], pinned: ["a"], costs: costs) == ["b"])
+        #expect(r.victims(hydrated: ["b", "c", "d"], pinned: [], costs: costs).isEmpty)
+        // Pinned chats are never dropped, even past the budget.
+        #expect(r.victims(hydrated: ["a", "b"], pinned: ["a", "b"], costs: ["a": 5_000, "b": 5_000]).isEmpty)
+        // The count limit and the budget both apply.
+        #expect(r.victims(hydrated: ["a", "b", "c", "d"], pinned: [], limit: 3, costs: costs) == ["a"])
+        #expect(r.victims(hydrated: ["a", "b", "c", "d"], pinned: [], limit: 1, costs: costs) == ["a", "b", "c"])
+    }
+
+    @Test func defaultsKeepManyRecentChatsResident() {
+        #expect(ChatResidency.defaultLimit >= 8)
+        var r = ChatResidency()
+        let keys = (0..<ChatResidency.defaultLimit).map { "k\($0)" }
+        for k in keys { r.touch(k) }
+        let costs = Dictionary(uniqueKeysWithValues: keys.map { ($0, 150) })
+        #expect(r.victims(hydrated: Set(keys), pinned: [], costs: costs).isEmpty)
+    }
+
     @Test func pressureLimits() {
         #expect(ChatResidency.pressureLimit(critical: true) == 0)
         #expect(ChatResidency.pressureLimit(critical: false) == ChatResidency.warmFloor)

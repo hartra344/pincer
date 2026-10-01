@@ -145,6 +145,20 @@ func checkTranscriptCacheVersioning() async {
         let (loaded, loadedOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "ok", root: root)
         check(loadedOutcome == .loaded && loaded?.items.map(\.id) == ["a"], "current version round-trips")
 
+        // #563: a v8 segmented manifest (build 31's cache) migrates instead of being discarded.
+        await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("m8", .user, "from v8", at: 1)], complete: true),
+                                   gatewayId: gatewayId, sessionKey: "v8", root: root)
+        if let url = TranscriptCache.file(gatewayId: gatewayId, sessionKey: "v8", root: root),
+           let data = try? Data(contentsOf: url),
+           var manifest = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        {
+            manifest["version"] = 8
+            try? JSONSerialization.data(withJSONObject: manifest).write(to: url)
+            try? FileManager.default.removeItem(at: url.appendingPathExtension("meta"))
+        }
+        let v8 = await TranscriptCache.loadNewest(gatewayId: gatewayId, sessionKey: "v8", limit: 50, root: root)
+        check(v8.outcome == .migrated(from: 8) && v8.items.map(\.id) == ["m8"], "v8 manifest → migrated, not discarded (\(v8.outcome))")
+
         let old = writeRawCache(cacheData(version: current - 1, ids: ["o"]), gatewayId: gatewayId, sessionKey: "old", root: root)
         let (_, oldOutcome) = await TranscriptCache.loadWithOutcome(gatewayId: gatewayId, sessionKey: "old", root: root)
         let oldExpected: Bool = if case .migrated(from: current - 1) = oldOutcome { true } else { oldOutcome == .outdated(version: current - 1) }

@@ -71,5 +71,14 @@ if CommandLine.arguments.contains("--toolbar-stability-check") {
     }
 }
 
+// `--chat-switch-probe` times switches between demo chats (#563). See ChatSwitchProbe.
+// `--chat-switch-probe [ws://url [token]]` runs it against a Gateway (e.g. the mock) instead of the demo.
+if let index = CommandLine.arguments.firstIndex(of: "--chat-switch-probe") {
+    let rest = Array(CommandLine.arguments.dropFirst(index + 1).prefix { !$0.hasPrefix("--") })
+    Task { @MainActor in
+        exit(await ChatSwitchProbe.run(url: rest.first, token: rest.dropFirst().first ?? "dev-token"))
+    }
+}
+
 PincerMacApp.main()
 #endif

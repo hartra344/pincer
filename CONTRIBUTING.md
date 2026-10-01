@@ -34,6 +34,7 @@ Switching chats must not remove or re-add a window toolbar item. When one is reb
 - A per-chat `.id` never goes on a full-size detail view or on the root view of a `ToolbarItem`. Put it inside a stable container (a `ZStack` with a fixed or full-size frame), as `GatewayDetail` in `RootView.swift` and `ChatHeaderAvatar` do.
 - The chat's title, subtitle and toolbar items live in `ChatChrome`, outside the per-chat `.id`.
 - CI runs `PincerMacDev --toolbar-stability-check`, which fails if a chat switch rebuilds a toolbar item. Run it locally with `PINCER_DEV_NAMESPACE=toolbar-check PINCER_KEYCHAIN=memory swift run PincerMacDev --toolbar-stability-check` (it opens a window for a few seconds).
+- `PincerMacDev --chat-switch-probe [ws://url [token]]` times chat switches from a sidebar click to the new chat's rows on screen, in the demo (default) or against a Gateway, and fails when a chat's median switch exceeds 150 ms (#563). `PINCER_SWITCH_CHATS=N` cycles through N chats. Run it on a release build (`swift build -c release --product PincerMacDev`) with `PINCER_DEV_NAMESPACE=switch-probe PINCER_KEYCHAIN=memory`; it opens a window for about half a minute.
 
 ## Running checks
 

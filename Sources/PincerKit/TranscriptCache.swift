@@ -195,6 +195,12 @@ public enum TranscriptCache {
     /// Older transcripts are discarded rather than migrated.
     static let oldestMigratableVersion = 5
 
+    /// Manifest (segmented) versions read as they are. Manifests start at v8, and every migration
+    /// from v8 on is a no-op, so an older manifest is read and saved back at the current version
+    /// (#563: v8 manifests were discarded, so every chat went back to the network after the v9 bump).
+    /// A migration that changes items must end this range at its source version.
+    static let manifestVersions: ClosedRange<Int> = 8...Snapshot.currentVersion
+
     struct MigrationError: Error, CustomStringConvertible {
         var description: String
     }
@@ -347,11 +353,14 @@ public enum TranscriptCache {
                     // The file is there, so this isn't a content problem: keep it.
                     return (nil, .unavailable("unreadable: \(error.localizedDescription)"))
                 }
-                if let peek = try? JSONDecoder().decode(VersionPeek.self, from: data), peek.version == Snapshot.currentVersion,
+                if let peek = try? JSONDecoder().decode(VersionPeek.self, from: data),
+                   Self.manifestVersions.contains(peek.version),
                    let manifest = try? JSONDecoder().decode(Manifest.self, from: data)
                 {
+                    let current = peek.version == Snapshot.currentVersion
                     var range: Range<Int>?
-                    if let newest {
+                    // An older manifest is read whole, so it's saved back whole at the current version.
+                    if let newest, current {
                         var covered = 0
                         var start = manifest.segments.count
                         while start > 0, covered < newest {
@@ -362,9 +371,21 @@ public enum TranscriptCache {
                     }
                     switch Self.readSegments(manifest, manifestURL: url, range: range) {
                     case let .loaded(snapshot, layout):
+                        guard current else {
+                            var snapshot = snapshot
+                            snapshot.version = Snapshot.currentVersion
+                            Self.logger.notice("Migrated cached transcript \(url.lastPathComponent, privacy: .private) from v\(peek.version) to v\(Snapshot.currentVersion)")
+                            // Written back behind the writer's queue; the chat being opened doesn't wait for it.
+                            if !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId) {
+                                Task.detached(priority: .utility) { _ = await Writer.shared.write(snapshot, to: url) }
+                            }
+                            return (snapshot, .migrated(from: peek.version))
+                        }
                         var layout = layout
                         layout.manifestDate = manifestDate
-                        await Writer.shared.prime(url, layout: layout)
+                        // Not awaited: the writer may be busy saving other chats, and opening this one
+                        // must not wait for them (#563). `prime` skips a layout a newer save already set.
+                        Task.detached(priority: .utility) { await Writer.shared.prime(url, layout: layout) }
                         return (snapshot, .loaded)
                     case let .unavailable(reason):
                         return (nil, .unavailable(reason))

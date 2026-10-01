@@ -4,7 +4,8 @@ import Foundation
 /// - **Warm** (`warmKeys`, `recentKeys`, `warmChatLimit`): the selected chat, the most recent selections and running
 ///   chats keep their message subscription. Others release it and reload when opened.
 /// - **Resident** (`residency`): hydrated chats, ranked by any use (`chat(for:)`, selection, runs). Beyond
-///   `residency.limit` (pinned chats included), the least recently used unpinned ones are dehydrated in place.
+///   `residency.limit` chats or `residency.budget` items (pinned chats included), the least recently used
+///   unpinned ones are dehydrated in place (#563: recent chats stay resident, so switching back is instant).
 /// Every warm chat is pinned here, and the limit is never below `warmChatLimit`, so a chat that is subscribed
 /// is never dehydrated; a chat can be resident without being warm, but not the other way around.
 extension GatewayStore {
@@ -27,8 +28,11 @@ extension GatewayStore {
             self.pendingChatBudgetLimit = min(self.pendingChatBudgetLimit ?? requested, requested)
             return
         }
-        let hydrated = Set(self.chats.values.filter(\.isHydrated).map(\.sessionKey))
-        let victims = self.residency.victims(hydrated: hydrated, pinned: self.pinnedChatKeys(), limit: requested)
+        let hydratedChats = self.chats.values.filter(\.isHydrated)
+        let hydrated = Set(hydratedChats.map(\.sessionKey))
+        let costs = Dictionary(hydratedChats.map { ($0.sessionKey, $0.items.count) }, uniquingKeysWith: max)
+        let victims = self.residency.victims(hydrated: hydrated, pinned: self.pinnedChatKeys(), limit: requested,
+                                             costs: costs)
         let trims = Set(self.chats.values.filter { $0.isHydrated && !$0.residencySnapshot.isPinned }.map(\.sessionKey))
             .subtracting(victims)
         guard !victims.isEmpty || !trims.isEmpty else { return }
