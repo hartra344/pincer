@@ -371,7 +371,7 @@ enum ChannelRowStyle {
     }
 
     static func relativeDate(_ date: Date) -> String {
-        date.formatted(.relative(presentation: .numeric, unitsStyle: .narrow))
+        SidebarActivityDate.relativeDate(date)
     }
 
     #if os(macOS)
