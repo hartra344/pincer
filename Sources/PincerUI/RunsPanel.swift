@@ -70,6 +70,9 @@ struct RunsToolbarButton: View {
            case let running = self.gateway.subagentTree(rootKey: key).runningCount,
            RunsToolbarVisibility.shows(isCompact: self.isCompact, isPresented: self.isPresented, running: running)
         {
+            let runningLabel = running == 0 ? L("Runs")
+                : running == 1 ? L("Runs — 1 helper running")
+                : L("Runs — \(running) helpers running")
             self.focusedPaneShortcut(Button {
                 if self.isFocused {
                     self.isPresented.toggle()
@@ -78,12 +81,36 @@ struct RunsToolbarButton: View {
                     self.isPresented = true
                 }
             } label: {
-                Label(L("Runs"), systemImage: "point.3.connected.trianglepath.dotted")
+                Label {
+                    Text(L("Runs"))
+                } icon: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "point.3.connected.trianglepath.dotted")
+                            .frame(width: 18, height: 18)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        if running > 0 {
+                            Text(running > 99 ? "99+" : "\(running)")
+                                .font(.system(size: 9, weight: .bold, design: .rounded))
+                                .monospacedDigit()
+                                .foregroundStyle(Color.white)
+                                .padding(.horizontal, running > 9 ? 3 : 0)
+                                .frame(minWidth: 16, minHeight: 16)
+                                .background(Color.red, in: Capsule())
+                                .overlay(Capsule().strokeBorder(Color.white.opacity(0.9), lineWidth: 1))
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .frame(width: 28, height: 28)
+                }
                     .foregroundStyle(running > 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
                     .symbolEffect(.pulse, isActive: running > 0)
             })
-            .help(running == 0 ? L("Runs") : running == 1 ? L("Runs — 1 helper running") : L("Runs — \(running) helpers running"))
-            .accessibilityValue(running > 0 ? L("\(running) running") : "")
+            #if os(iOS)
+            // Keep SwiftUI drawing the composite icon; native toolbar label extraction loses its badge.
+            .buttonStyle(.plain)
+            #endif
+            .help(runningLabel)
+            .accessibilityLabel(runningLabel)
         }
     }
 
