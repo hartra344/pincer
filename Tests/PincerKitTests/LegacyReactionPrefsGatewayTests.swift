@@ -1,19 +1,20 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import PincerKit
 
 private actor FirstFitGate {
-    private let entered = Gate()
+    private let entryProbe = Mutex(false)
     private let release = Gate()
     private var calls = 0
 
-    func waitUntilEntered() async { await self.entered.wait() }
+    nonisolated var hasEntered: Bool { self.entryProbe.withLock { $0 } }
     func open() async { await self.release.open() }
 
     func fit(_ entries: [String: String], preserving key: String?) async -> [String: String]? {
         self.calls += 1
         if self.calls == 1 {
-            await self.entered.open()
+            self.entryProbe.withLock { $0 = true }
             await self.release.wait()
         }
         return await Task.detached(priority: .utility) {
@@ -102,8 +103,22 @@ struct LegacyReactionPrefsGatewayTests {
         h.store.legacyReactionPrefsFitter = { entries, key in
             await gate.fit(entries, preserving: key)
         }
-        let stalePull = Task { await h.store.pullMaps([map], epoch: oldEpoch) }
-        await gate.waitUntilEntered()
+        let stalePullFinished = Mutex(false)
+        let stalePull = Task {
+            defer { stalePullFinished.withLock { $0 = true } }
+            await h.store.pullMaps([map], epoch: oldEpoch)
+        }
+        let entered = await eventually(timeout: .seconds(15)) { gate.hasEntered }
+        #expect(entered, "the old pull reaches the held reaction fitter")
+        guard entered else {
+            // Always open the fitter gate before cancellation, in case the RPC reaches it just after
+            // the timeout. The Gateway request itself has a 15-second timeout, so settling is bounded.
+            await gate.open()
+            stalePull.cancel()
+            let settled = await eventually(timeout: .seconds(15)) { stalePullFinished.withLock { $0 } }
+            #expect(settled, "the timed-out old pull settles after its fitter gate is released")
+            return
+        }
 
         // Reconnect while the old pull is suspended in its detached-fit seam. The new epoch
         // completes the same bounded pull; resuming the old fit must not issue another write.
