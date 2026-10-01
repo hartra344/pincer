@@ -86,7 +86,8 @@ struct KeyboardShortcutsTests {
 
     @Test func noDefaultComboIsReserved() {
         let blocked = Set(ReservedShortcuts.blocked.map(\.combo))
-        for command in ShortcutCommand.allCases {
+        // macOS's own Show/Hide Sidebar is reserved for itself (#564).
+        for command in ShortcutCommand.allCases where !ShortcutCommand.unavailable.contains(command) {
             guard let combo = command.defaultCombo else { continue }
             #expect(!blocked.contains(combo), "\(command)'s default \(combo) is reserved")
         }
@@ -340,8 +341,46 @@ struct KeyboardShortcutsTests {
     }
 
     @Test func readAloudIsListedInSettings() {
-        #expect(ShortcutCommand.unavailable.isEmpty)
+        #expect(!ShortcutCommand.unavailable.contains(.readAloud))
         #expect(ShortcutCommand.listed(in: ShortcutCommand.readAloud.category).contains(.readAloud))
+    }
+
+    // MARK: - Toggle Sidebar (#564)
+
+    @Test func toggleSidebarDefaultIsControlCommandS() {
+        let command = ShortcutCommand.toggleSidebar
+        #expect(command.rawValue == "toggleSidebar")
+        #expect(command.category == .view)
+        #expect(command.title == "Toggle Sidebar")
+        #expect(command.defaultCombo == KeyCombo("s", [.control, .command]))
+        #expect(command.defaultCombo?.displayString == "⌃⌘S")
+        let others = ShortcutCommand.allCases.filter { $0 != command }.compactMap(\.defaultCombo)
+        #expect(!others.contains(command.defaultCombo!))
+        // ⌘S (Save) is a different combo.
+        #expect(command.defaultCombo != KeyCombo("s", [.command]))
+    }
+
+    /// macOS: the system's View ▸ Show/Hide Sidebar owns ⌃⌘S, so Pincer doesn't list the command
+    /// or let another command take its keys. iPad lists it like any other command.
+    @MainActor
+    @Test func toggleSidebarIsSystemOwnedOnMac() {
+        let store = ShortcutStore(defaults: ScratchDefaults().defaults)
+        let combo = ShortcutCommand.toggleSidebarCombo
+        #if os(macOS)
+        #expect(ShortcutCommand.unavailable == [.toggleSidebar])
+        #expect(!ShortcutCommand.listed(in: .view).contains(.toggleSidebar))
+        #expect(store.commands(using: combo).isEmpty)
+        #expect(!store.conflicting.contains(.toggleSidebar))
+        guard case .blocked = store.validate(combo, for: .newChat) else {
+            Issue.record("expected ⌃⌘S to be blocked on macOS")
+            return
+        }
+        #else
+        #expect(ShortcutCommand.listed(in: .view).first == .toggleSidebar)
+        #expect(store.commands(using: combo) == [.toggleSidebar])
+        #expect(store.validate(combo, for: .toggleSidebar) == .ok)
+        #expect(store.validate(combo, for: .newChat) == .conflict([.toggleSidebar]))
+        #endif
     }
 
     // MARK: - Dictation (#462)

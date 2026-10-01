@@ -27,30 +27,45 @@ private final class Device: ReadAloudLocalSpeaking {
 
 @MainActor
 private func until(_ condition: () -> Bool) async {
-    let deadline = ContinuousClock.now + .seconds(5)
+    let deadline = ContinuousClock.now + .seconds(120) // only a safety net; every wait is on state
     while !condition(), ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(5)) }
 }
 
 private let paragraphs = (1 ... 3).map { p in (1 ... 12).map { "Paragraph \(p) sentence \($0) is here." }.joined(separator: " ") }
 private let message = "Opening line.\n\n" + paragraphs.joined(separator: "\n\n")
 
+/// A Gateway timeout that fires only when the test says so, never on the wall clock.
+private final class TimeoutGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isFired = false
+    var fired: Bool { self.lock.withLock { self.isFired } }
+    func fire() { self.lock.withLock { self.isFired = true } }
+    func wait() async {
+        while !self.fired, !Task.isCancelled { await Task.yield(); try? await Task.sleep(for: .milliseconds(5)) }
+    }
+}
+
+@MainActor
+private func settle() async { for _ in 0 ..< 200 { await Task.yield() } }
+
 @Suite("Read Aloud chunked Gateway voice")
 @MainActor
 struct ReadAloudChunkingTests {
-    private func setup(fail: Set<Int> = [], hang: Set<Int> = [], timeout: Duration = .seconds(30))
+    private func setup(fail: Set<Int> = [], hang: Set<Int> = [], gate: TimeoutGate = TimeoutGate())
         -> (ReadAloudController, HeldClips, Device, GatewayVoiceModel, () -> [String])
     {
         let scratch = ScratchDefaults()
         let clips = HeldClips()
         let device = Device()
-        let controller = ReadAloudController(clipPlayer: clips, localSpeaker: device, defaults: scratch.defaults, gatewayTimeout: timeout)
+        let controller = ReadAloudController(clipPlayer: clips, localSpeaker: device, defaults: scratch.defaults)
+        controller.gatewayTimer = { _ in await gate.wait() } // no Gateway call times out unless the test fires it
         var requested: [String] = []
         let gateway = GatewayVoiceModel(methods: { nil }, scopes: { ["operator.write"] }, request: { method, params in
             guard method == "tts.speak" else { return [:] }
             let text = params["text"]?.string ?? ""
             let index = requested.count
             requested.append(text)
-            if hang.contains(index) { try await Task.sleep(for: .seconds(60)) }
+            if hang.contains(index) { try await Task.sleep(for: .seconds(3600)) } // until the fetch is abandoned
             if fail.contains(index) { throw GatewayError.rpc(code: "UNAVAILABLE", message: "down", details: nil) }
             return Fixtures.json("{\"audioBase64\":\"AAEC\",\"provider\":\"c\(index)\",\"mimeType\":\"audio/wav\",\"fileExtension\":\"wav\"}")
         })
@@ -91,10 +106,13 @@ struct ReadAloudChunkingTests {
     }
 
     @Test func midSequenceTimeoutFallsBackForTheRest() async {
-        let (c, clips, device, gateway, _) = self.setup(hang: [1], timeout: .milliseconds(200))
+        let gate = TimeoutGate()
+        let (c, clips, device, gateway, requested) = self.setup(hang: [1], gate: gate)
         let chunks = SpeechChunker.chunks(message)
         c.toggle(messageId: "m", text: message, gateway: gateway)
-        await until { clips.isPlaying }; clips.finish()
+        await until { clips.isPlaying && requested().count == 2 }
+        gate.fire() // chunk 1 is hanging: its timeout goes off while chunk 0 plays
+        clips.finish()
         await until { c.phase == .idle }
         #expect(clips.played == ["c0"])
         #expect(device.spoken == [chunks[1...].joined(separator: "\n\n")])
@@ -115,7 +133,7 @@ struct ReadAloudChunkingTests {
         await until { clips.isPlaying && requested().count == 2 }
         c.toggle(messageId: "m", text: message, gateway: gateway)
         #expect(c.phase == .idle)
-        try? await Task.sleep(for: .milliseconds(100))
+        await settle()
         #expect(clips.played == ["c0"] && requested().count == 2 && device.spoken.isEmpty)
         #expect(c.phase == .idle)
     }

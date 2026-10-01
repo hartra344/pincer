@@ -157,7 +157,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
     // Edit
     case findInChat, findNext, findPrevious, replyToLastMessage, editLastMessage, regenerateLastReply, readAloud, toggleDictation
     // View
-    case toggleSplitView, swapSplitChats, nextUnreadChat, showRuns, reloadPincer
+    case toggleSidebar, toggleSplitView, swapSplitChats, nextUnreadChat, showRuns, reloadPincer
     // Go
     case commandPalette, searchMessages, goBack, goForward, previousMessage, nextMessage
     // Chat and Gateway
@@ -185,7 +185,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .newChat, .openChatInNewWindow, .addGateway, .exportChat, .showBookmarks: .file
         case .findInChat, .findNext, .findPrevious, .replyToLastMessage, .editLastMessage, .regenerateLastReply, .readAloud, .toggleDictation: .edit
-        case .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .reloadPincer: .view
+        case .toggleSidebar, .toggleSplitView, .swapSplitChats, .nextUnreadChat, .showRuns, .reloadPincer: .view
         case .commandPalette, .searchMessages, .goBack, .goForward, .previousMessage, .nextMessage: .go
         case .stopRun, .gatewaySettings: .chat
         }
@@ -207,6 +207,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .regenerateLastReply: L("Regenerate Last Reply")
         case .readAloud: L("Read Last Reply Aloud")
         case .toggleDictation: L("Dictate Message")
+        case .toggleSidebar: L("Toggle Sidebar")
         case .toggleSplitView: L("Split Right")
         case .swapSplitChats: L("Swap Chats")
         case .nextUnreadChat: L("Next Unread Chat")
@@ -237,6 +238,7 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         case .replyToLastMessage: KeyCombo("r", [.shift, .command])
         case .readAloud: KeyCombo("l", [.option, .command])
         case .toggleDictation: KeyCombo("d", [.shift, .command])
+        case .toggleSidebar: Self.toggleSidebarCombo
         case .toggleSplitView: KeyCombo("\\", [.option, .command])
         case .nextUnreadChat: KeyCombo(KeyCombo.Special.downArrow.rawValue, [.option, .shift])
         case .showRuns: KeyCombo("r", [.option, .command])
@@ -253,8 +255,17 @@ public enum ShortcutCommand: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
+    /// ⌃⌘S, as macOS's View ▸ Show/Hide Sidebar (#564).
+    public static let toggleSidebarCombo = KeyCombo("s", [.control, .command])
+
     /// Commands with no menu item or button in this build, hidden from Settings.
+    /// macOS: Toggle Sidebar is the system's View ▸ Show/Hide Sidebar, whose ⌃⌘S Pincer can't
+    /// change; `ReservedShortcuts` keeps it from other commands instead.
+    #if os(macOS)
+    public static let unavailable: Set<ShortcutCommand> = [.toggleSidebar]
+    #else
     public static let unavailable: Set<ShortcutCommand> = []
+    #endif
 
     /// Listed in Settings, in menu order within each category.
     public static func listed(in category: Category) -> [ShortcutCommand] {
@@ -320,6 +331,9 @@ public enum ReservedShortcuts {
             Entry(combo: combo("a", [.command]), owner: L("Select All")),
             Entry(combo: combo("/", [.shift, .command]), owner: L("Help")),
         ]
+        #if os(macOS)
+        entries.append(Entry(combo: ShortcutCommand.toggleSidebarCombo, owner: L("Show Sidebar")))
+        #endif
         for number in 1...9 {
             entries.append(Entry(combo: combo("\(number)", [.command]), owner: L("Open Pinned Chat \(number)")))
         }

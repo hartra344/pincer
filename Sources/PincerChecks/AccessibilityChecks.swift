@@ -52,4 +52,20 @@ func runDemoAccessibilityPass() async {
         seen[combo] = command
     }
     check(clashes.isEmpty, "a11y pass: no default shortcut clashes (\(clashes))")
+
+    // #564: ⌃⌘S toggles the sidebar; on macOS it stays the system's View menu item.
+    await MainActor.run {
+        let store = ShortcutStore(defaults: UserDefaults(suiteName: "pincer.checks.sidebar-toggle.\(UUID())")!)
+        let combo = KeyCombo("s", [.control, .command])
+        check(ShortcutCommand.toggleSidebar.defaultCombo == combo && combo.displayString == "⌃⌘S",
+              "a11y pass: Toggle Sidebar defaults to ⌃⌘S")
+        #if os(macOS)
+        check(!ShortcutCommand.listed(in: .view).contains(.toggleSidebar) && store.commands(using: combo).isEmpty
+              && store.validate(combo, for: .newChat) != .ok,
+              "a11y pass: macOS keeps the system Show/Hide Sidebar and reserves ⌃⌘S")
+        #else
+        check(ShortcutCommand.listed(in: .view).contains(.toggleSidebar) && store.commands(using: combo) == [.toggleSidebar],
+              "a11y pass: iPad lists Toggle Sidebar with ⌃⌘S")
+        #endif
+    }
 }
