@@ -108,6 +108,9 @@ actor DemoGateway {
     var idempotency: [String: String] = [:]
     var runs: [String: Run] = [:]
     var sessionsSubscribed = false
+    var holdsHistory = false
+    var heldHistory: [CheckedContinuation<Void, Never>] = []
+    var historyRequestCounts: [String: Int] = [:]
     /// The seeded runs' activity streams once per demo connection (DemoGateway+Subagents.swift).
     var replayedSeededRuns = false
     /// The seeded running subagent's run: stoppable, but not an active run that defers a restart.
@@ -252,7 +255,7 @@ actor DemoGateway {
         if let result = try self.handleVoice(method, params) { return result }
         if let result = try self.handleCatalog(method, params) { return result }
         if let result = try self.handleReactions(method, params) { return result }
-        if let result = try self.handleSessionList(method, params) { return result }
+        if let result = try await self.handleSessionList(method, params) { return result }
         if let result = try self.handleGroups(method, params) { return result }
         if let result = try self.handleRuns(method, params) { return result }
         if let result = try self.handleApprovals(method, params) { return result }

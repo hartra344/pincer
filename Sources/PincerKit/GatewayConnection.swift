@@ -235,6 +235,15 @@ public actor GatewayConnection {
         await self.demo?.setRepliesMarkUnread(marks)
     }
 
+    /// Parks the demo's `chat.history` until released, so tests can hold a load in flight.
+    func holdDemoHistory(_ hold: Bool) async {
+        await self.demo?.holdHistory(hold)
+    }
+
+    func demoHistoryRequestCount(for key: String) async -> Int {
+        await self.demo?.historyRequestCounts[key] ?? 0
+    }
+
     /// Handshake done and a socket to send on, so `request` won't throw `notConnected`.
     var isReady: Bool { self.hello != nil && (self.demo != nil || self.task != nil) }
 
