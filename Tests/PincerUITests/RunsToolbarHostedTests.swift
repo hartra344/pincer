@@ -40,6 +40,63 @@ private struct RunsToolbarHostContent: View {
 
 @MainActor
 private enum RunsToolbarHostedFixtures {
+    @MainActor
+    private final class DemoReadinessWaiter {
+        private let gateway: GatewayStore
+        private let rootKey: String
+        private var continuation: AsyncStream<Bool>.Continuation?
+
+        init(gateway: GatewayStore, rootKey: String) {
+            self.gateway = gateway
+            self.rootKey = rootKey
+        }
+
+        func stream() -> AsyncStream<Bool> {
+            let pair = AsyncStream<Bool>.makeStream()
+            self.continuation = pair.continuation
+            pair.continuation.onTermination = { [weak self] _ in
+                Task { @MainActor in self?.cancel() }
+            }
+            self.observe()
+            return pair.stream
+        }
+
+        private func observe() {
+            guard let continuation = self.continuation else { return }
+            var result: Bool?
+            withObservationTracking {
+                switch self.gateway.state {
+                case .connected:
+                    if self.gateway.sessions[self.rootKey] != nil { result = true }
+                case .failed(_), .awaitingPairing(_, _):
+                    result = false
+                case .idle, .connecting, .reconnecting:
+                    break
+                }
+            } onChange: { [weak self] in
+                Task { @MainActor in self?.observe() }
+            }
+
+            if let result {
+                continuation.yield(result)
+                continuation.finish()
+                self.continuation = nil
+            }
+        }
+
+        func cancel() {
+            self.continuation?.finish()
+            self.continuation = nil
+        }
+    }
+
+    static func waitForDemoReadiness(gateway: GatewayStore, rootKey: String) async -> Bool {
+        let waiter = DemoReadinessWaiter(gateway: gateway, rootKey: rootKey)
+        defer { waiter.cancel() }
+        for await ready in waiter.stream() { return ready }
+        return false
+    }
+
     static func snapshot(_ view: UIView) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = view.window?.screen.scale ?? UIScreen.main.scale
@@ -96,20 +153,19 @@ private enum RunsToolbarHostedFixtures {
 
 @MainActor
 extension TranscriptUIKitHostedTests {
-    @Test func compactRunsToolbarPaintsCurrentCountWhileRunsAreActive() async throws {
+    @Test(.timeLimit(.minutes(2)))
+    func compactRunsToolbarPaintsCurrentCountWhileRunsAreActive() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: UIFixtures.identity())
         gateway.start()
         defer { gateway.stop() }
 
-        let connected = await eventually(timeout: .seconds(15)) {
-            gateway.state.isConnected && gateway.sessions["agent:research:dashboard:launch-plan"] != nil
-        }
-        #expect(connected, "the local DemoGateway reaches its seeded launch-plan chat")
+        let rootKey = "agent:research:dashboard:launch-plan"
+        let connected = await RunsToolbarHostedFixtures.waitForDemoReadiness(gateway: gateway, rootKey: rootKey)
+        #expect(connected, "the local DemoGateway reaches its seeded launch-plan chat; connection state: \(gateway.state), error: \(gateway.lastError ?? "none")")
         guard connected else { return }
 
-        let rootKey = "agent:research:dashboard:launch-plan"
         let runningKey = "agent:main:subagent:8b3d7f40-6e5c-4d8f-b194-4f5a6b7c8d04"
         let secondKey = "agent:research:subagent:badge-test-running"
         let presentation = RunsToolbarPresentationState()
