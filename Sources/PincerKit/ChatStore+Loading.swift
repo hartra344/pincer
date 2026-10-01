@@ -2,6 +2,29 @@ import Foundation
 import Observation
 
 extension ChatStore {
+    enum ForwardedRefreshPageDisposition: Equatable {
+        case more(nextOffset: Int)
+        case complete(nextOffset: Int)
+        case abort
+    }
+
+    /// Validates paging progress before a sender refresh can be considered authoritative.
+    nonisolated static func forwardedRefreshPageDisposition(messageCount: Int?, reportedHasMore: Bool?,
+                                                             requestedOffset: Int, returnedOffset: Int?,
+                                                             fallbackLimit: Int) -> ForwardedRefreshPageDisposition
+    {
+        guard let messageCount else { return .abort }
+        if messageCount == 0 {
+            return reportedHasMore == true
+                ? .abort
+                : .complete(nextOffset: returnedOffset ?? requestedOffset)
+        }
+        let nextOffset = returnedOffset ?? (requestedOffset + messageCount)
+        guard nextOffset > requestedOffset else { return .abort }
+        let hasMore = reportedHasMore ?? (messageCount >= fallbackLimit)
+        return hasMore ? .more(nextOffset: nextOffset) : .complete(nextOffset: nextOffset)
+    }
+
     /// True when the message subscription was sent on the current connection.
     public var isSubscribed: Bool {
         guard let gateway else { return false }
@@ -28,6 +51,9 @@ extension ChatStore {
         await self.restoreDraft()
         await self.restoreFromCache()
         guard let gateway, gateway.state.isConnected else { return }
+        if self.forwardedSenderRefreshPending, !self.headless {
+            gateway.startHeadlessFill(sessionKey: self.sessionKey, agentId: self.agentId)
+        }
         if self.hasLoaded, !force, !self.stale { return }
         if !force, let running = self.loadTask {
             await Self.value(of: running)
@@ -108,11 +134,15 @@ extension ChatStore {
         var revision: Int
         var hasMoreHistory: Bool
         var activityMs: Double?
+        var forwardedSenderRefreshPending: Bool
+        var forwardedSenderRefreshCompleted: Bool
     }
 
     var currentCacheState: CacheState {
         CacheState(revision: self.contentRevision, hasMoreHistory: self.hasMoreHistory,
-                   activityMs: self.gateway?.sessions[self.sessionKey]?.activityMs)
+                   activityMs: self.gateway?.sessions[self.sessionKey]?.activityMs,
+                   forwardedSenderRefreshPending: self.forwardedSenderRefreshPending,
+                   forwardedSenderRefreshCompleted: self.forwardedSenderRefreshCompleted)
     }
 
     /// Saves the current snapshot unless the cache already holds this state (or can't be trusted).
@@ -120,9 +150,31 @@ extension ChatStore {
         guard !self.cacheUnreadable else { return }
         let state = self.currentCacheState
         guard state != self.savedState else { return }
-        await TranscriptCache.save(self.snapshot(), gatewayId: self.gatewayId, sessionKey: self.sessionKey,
-                                   keepingOlder: self.olderInCache || self.hasMoreHistory, root: self.cacheRoot)
-        self.savedState = state
+        let snapshot = self.snapshot()
+        let result = await TranscriptCache.saveReturningStats(
+            snapshot, gatewayId: self.gatewayId, sessionKey: self.sessionKey,
+            keepingOlder: self.olderInCache || self.hasMoreHistory, root: self.cacheRoot)
+        self.recordSavedSnapshot(state, result: result)
+    }
+
+    /// Records the state represented by a completed cache write, even if the store changed while
+    /// the disk writer was suspended.
+    func recordSavedSnapshot(_ state: CacheState, result: TranscriptCache.SaveResult) {
+        var persistedState = state
+        if state.forwardedSenderRefreshCompleted {
+            let completed = result.modified != nil || result.unchanged
+            persistedState.forwardedSenderRefreshPending = !completed
+            persistedState.forwardedSenderRefreshCompleted = false
+            // Another transcript edit or refresh may have happened while the writer was running.
+            // Only consume the one-write completion flag if this is still the state we captured.
+            if self.currentCacheState == state {
+                self.forwardedSenderRefreshPending = !completed
+                self.forwardedSenderRefreshCompleted = false
+            }
+        }
+        // The disk contains `snapshot`, not whatever state the store reached during the await.
+        // Leaving newer state unequal to this snapshot schedules another save instead of losing it.
+        self.savedState = persistedState
     }
 
     func restoreFromCache() async {
@@ -140,6 +192,7 @@ extension ChatStore {
             self.cacheUnreadable = true
             return
         }
+        self.forwardedSenderRefreshPending = loaded.forwardedSenderRefreshPending
         // Unsent messages shown before the cache arrived stay, after it.
         guard !cached.items.isEmpty else {
             self.cacheUnreadable = false
@@ -219,17 +272,111 @@ extension ChatStore {
     /// Brings the on-disk cache up to date with the full history, without touching the UI.
     /// `generation` is the cache generation this fill started under; a rewind or delete since
     /// then makes it discard what it fetched instead of saving it.
-    func fillCache(generation: Int? = nil) async {
+    func fillCache(generation: Int? = nil, connectionEpoch expectedConnectionEpoch: Int? = nil) async {
+        guard let gateway else { return }
+        let connectionEpoch = expectedConnectionEpoch ?? gateway.connectionEpoch
         await self.restoreFromCache()
-        guard !self.cacheUnreadable, let gateway, gateway.state.isConnected else { return }
+        guard !self.cacheUnreadable, gateway.state.isConnected,
+              gateway.connectionEpoch == connectionEpoch
+        else { return }
+        let expectedGeneration = generation ?? gateway.cacheGeneration(of: self.sessionKey)
+        let refreshForwardedSenders = self.forwardedSenderRefreshPending
+        // `apply(history:)` can discard cached history when the newest page has no overlap. Keep
+        // the complete restored snapshot for reconciliation until the authoritative scan finishes.
+        let restoredCacheItems = refreshForwardedSenders ? self.items : []
         var params = self.params(keyName: "sessionKey")
         params["limit"] = .number(Double(self.historyLimit))
         guard let result = try? await gateway.connection.request("chat.history", .object(params), timeout: 30) else { return }
-        let parsed = await Self.parseDetached(result["messages"]?.array ?? [], fallbackBase: 0)
-        guard !Task.isCancelled else { return }
+        let receivedFirstPage = result["messages"]?.array
+        let firstPageDisposition = Self.forwardedRefreshPageDisposition(
+            messageCount: receivedFirstPage?.count, reportedHasMore: result["hasMore"]?.bool,
+            requestedOffset: 0, returnedOffset: result["nextOffset"]?.int,
+            fallbackLimit: self.historyLimit)
+        if refreshForwardedSenders, firstPageDisposition == .abort { return }
+        let firstPage = receivedFirstPage ?? []
+        let parsed = await Self.parseDetached(firstPage, fallbackBase: 0)
+        guard !Task.isCancelled, self.gateway === gateway, gateway.state.isConnected,
+              gateway.connectionEpoch == connectionEpoch,
+              gateway.cacheGeneration(of: self.sessionKey) == expectedGeneration
+        else { return }
         self.apply(history: result, parsed: parsed)
         self.live = nil
         self.hasLoaded = true
+        if refreshForwardedSenders {
+            var pagesNewestFirst = [parsed]
+            var scanned = firstPage.count
+            var offset: Int
+            var hasMore: Bool
+            switch firstPageDisposition {
+            case let .more(nextOffset): offset = nextOffset; hasMore = true
+            case let .complete(nextOffset): offset = nextOffset; hasMore = false
+            case .abort: return
+            }
+            while hasMore, scanned < TranscriptCache.maxItems {
+                guard !Task.isCancelled, self.gateway === gateway, gateway.state.isConnected,
+                      gateway.connectionEpoch == connectionEpoch,
+                      gateway.cacheGeneration(of: self.sessionKey) == expectedGeneration,
+                      gateway.appIsActive
+                else { return }
+                params["limit"] = .number(Double(min(self.historyLimit, TranscriptCache.maxItems - scanned)))
+                params["offset"] = .number(Double(offset))
+                let page: JSONValue
+                do {
+                    page = try await gateway.connection.request("chat.history", .object(params), timeout: 30)
+                } catch {
+                    return
+                }
+                let receivedPage = page["messages"]?.array
+                guard !Task.isCancelled else { return }
+                let disposition = Self.forwardedRefreshPageDisposition(
+                    messageCount: receivedPage?.count, reportedHasMore: page["hasMore"]?.bool,
+                    requestedOffset: offset, returnedOffset: page["nextOffset"]?.int,
+                    fallbackLimit: min(self.historyLimit, TranscriptCache.maxItems - scanned))
+                if disposition == .abort { return }
+                guard let raw = receivedPage else { return }
+                let older = await Self.parseDetached(raw, fallbackBase: -(offset + raw.count))
+                pagesNewestFirst.append(older)
+                scanned += raw.count
+                switch disposition {
+                case let .more(nextOffset): offset = nextOffset; hasMore = true
+                case let .complete(nextOffset): offset = nextOffset; hasMore = false
+                case .abort: return
+                }
+            }
+            guard !Task.isCancelled, self.gateway === gateway, gateway.state.isConnected,
+                  gateway.connectionEpoch == connectionEpoch,
+                  gateway.cacheGeneration(of: self.sessionKey) == expectedGeneration,
+                  gateway.appIsActive,
+                  !hasMore || scanned >= TranscriptCache.maxItems
+            else { return }
+            var reconciled: [ChatItem]?
+            for attempt in 0...1 {
+                let revision = self.contentRevision
+                let currentItems = self.items
+                let result = await Self.reconcileForwardedRefresh(
+                    restoredCache: restoredCacheItems, pagesNewestFirst: pagesNewestFirst, current: currentItems)
+                guard !Task.isCancelled, self.gateway === gateway, gateway.state.isConnected,
+                      gateway.connectionEpoch == connectionEpoch,
+                      gateway.cacheGeneration(of: self.sessionKey) == expectedGeneration,
+                      gateway.appIsActive
+                else { return }
+                if self.contentRevision == revision {
+                    reconciled = result
+                    break
+                }
+                if attempt == 1 { return }
+            }
+            guard let reconciled else { return }
+            self.items = reconciled
+            self.hasMoreHistory = hasMore
+            self.olderInCache = false
+            self.olderOffset = offset
+            self.hasPagedOlder = true
+            self.forwardedSenderRefreshPending = false
+            self.forwardedSenderRefreshCompleted = true
+            await self.saveSnapshot()
+            return
+        }
         await self.loadAllCached()
         // Older items past the retention limit would be dropped anyway.
         while self.hasOlderItems, !Task.isCancelled, self.committedCount < TranscriptCache.maxItems {
@@ -240,11 +387,90 @@ extension ChatStore {
         await self.saveSnapshot()
     }
 
+    /// Replaces stale versions by stable transcript id while retaining offline-only cache rows.
+    nonisolated static func mergeForwardedRefresh(cached: [ChatItem], authoritative: [ChatItem]) async -> [ChatItem] {
+        await Task.detached(priority: .utility) {
+            Self.mergeForwardedRefreshSynchronously(cached: cached, authoritative: authoritative)
+        }.value
+    }
+
+    /// Filters and flattens full retained transcripts off-main before reconciling stable ids.
+    nonisolated static func reconcileForwardedRefresh(restoredCache: [ChatItem], pagesNewestFirst: [[ChatItem]],
+                                                       current: [ChatItem]) async -> [ChatItem]
+    {
+        await Task.detached(priority: .utility) {
+            var authoritative = pagesNewestFirst.reversed().flatMap { $0 }
+            var currentById: [String: ChatItem] = [:]
+            currentById.reserveCapacity(current.count)
+            for item in current where !item.isPending {
+                currentById[item.transcriptId ?? item.id] = item
+            }
+            for index in authoritative.indices {
+                let key = authoritative[index].transcriptId ?? authoritative[index].id
+                guard var currentItem = currentById[key] else { continue }
+                if let sender = authoritative[index].sender { currentItem.sender = sender }
+                authoritative[index] = currentItem
+            }
+            // For duplicate ids absent from the authoritative pages, the live row may contain a
+            // newer edit than the restored cache. The merge keeps its first matching row.
+            let cached = current.filter { !$0.isPending } + restoredCache.filter { !$0.isPending }
+            let committed = Self.mergeForwardedRefreshSynchronously(cached: cached, authoritative: authoritative)
+            return committed + current.filter(\.isPending)
+        }.value
+    }
+
+    /// Stable O(n log n) sort plus O(n) merge; preserves authoritative order, cached tie order,
+    /// and the existing convention that cached rows without timestamps lead in reverse cache order.
+    nonisolated private static func mergeForwardedRefreshSynchronously(cached: [ChatItem],
+                                                                        authoritative: [ChatItem]) -> [ChatItem]
+    {
+        var authoritativeIds = Set<String>()
+        authoritativeIds.reserveCapacity(authoritative.count)
+        for item in authoritative { authoritativeIds.insert(item.transcriptId ?? item.id) }
+
+        var seenIds = authoritativeIds
+        var unmatched: [ChatItem] = []
+        unmatched.reserveCapacity(cached.count)
+        for item in cached {
+            guard seenIds.insert(item.transcriptId ?? item.id).inserted else { continue }
+            unmatched.append(item)
+        }
+        let undated = unmatched.filter { $0.timestamp == nil }.reversed()
+        let dated = unmatched.enumerated().compactMap { ordinal, item -> (Int, ChatItem)? in
+            item.timestamp == nil ? nil : (ordinal, item)
+        }.sorted {
+            let left = $0.1.timestamp!
+            let right = $1.1.timestamp!
+            return left == right ? $0.0 < $1.0 : left < right
+        }
+
+        var merged = Array(undated)
+        merged.reserveCapacity(authoritative.count + unmatched.count)
+        var cachedIndex = 0
+        for item in authoritative {
+            if let time = item.timestamp {
+                while cachedIndex < dated.count, dated[cachedIndex].1.timestamp! < time {
+                    merged.append(dated[cachedIndex].1)
+                    cachedIndex += 1
+                }
+            }
+            merged.append(item)
+        }
+        while cachedIndex < dated.count {
+            merged.append(dated[cachedIndex].1)
+            cachedIndex += 1
+        }
+        return Array(merged.suffix(TranscriptCache.maxItems))
+    }
+
     var committedCount: Int { self.items.lazy.filter { !$0.isPending }.count }
 
     func snapshot() -> TranscriptCache.Snapshot {
-        Self.snapshot(items: self.items, hasMoreHistory: self.hasMoreHistory || self.olderInCache,
-                      activityMs: self.gateway?.sessions[self.sessionKey]?.activityMs)
+        var snapshot = Self.snapshot(items: self.items, hasMoreHistory: self.hasMoreHistory || self.olderInCache,
+                                     activityMs: self.gateway?.sessions[self.sessionKey]?.activityMs)
+        snapshot.forwardedSenderRefreshPending = self.forwardedSenderRefreshPending
+        snapshot.forwardedSenderRefreshCompleted = self.forwardedSenderRefreshCompleted
+        return snapshot
     }
 
     /// Committed items, newest `maxItems` kept; complete only when nothing older was left out.
@@ -327,7 +553,8 @@ extension ChatStore {
         Task { [weak self, sessionKey, agentId, gatewayId, cacheRoot = self.cacheRoot] in
             let meta = await TranscriptCache.meta(gatewayId: gatewayId, sessionKey: sessionKey, root: cacheRoot)
             let activityMs = gateway.sessions[sessionKey]?.activityMs ?? .infinity
-            guard meta?.retained != true, !GatewayStore.prefetchIsFresh(meta, activityMs: activityMs),
+            guard (meta?.retained != true || meta?.forwardedSenderRefreshPending == true),
+                  !GatewayStore.prefetchIsFresh(meta, activityMs: activityMs),
                   let self, self.hasMoreHistory, !self.cachingStopped else { return }
             gateway.startHeadlessFill(sessionKey: sessionKey, agentId: agentId)
         }
@@ -335,20 +562,31 @@ extension ChatStore {
 
     /// The background fill finished: the cache may now hold items older than the loaded window, and
     /// says whether it is complete. The window is saved over the filler's write, keeping the older part.
-    func adoptFilledCache(afterOlderRead: (@MainActor () async -> Void)? = nil) async {
+    func adoptFilledCache(generation: Int? = nil, connectionEpoch: Int? = nil,
+                          afterOlderRead: (@MainActor () async -> Void)? = nil) async {
         guard !self.headless, !self.cachingStopped, !self.isDehydrated, self.hasLoaded, let gateway else { return }
-        let generation = gateway.cacheGeneration(of: self.sessionKey)
+        let generation = generation ?? gateway.cacheGeneration(of: self.sessionKey)
+        let connectionEpoch = connectionEpoch ?? gateway.connectionEpoch
+        guard gateway.connectionEpoch == connectionEpoch else { return }
+        let refreshWasPending = self.forwardedSenderRefreshPending
+        var expectedRevision = self.contentRevision
         // A queued save must not land over the filler's write before this store reads it.
         let hadQueuedSave = self.saveTask != nil
         self.saveTask?.cancel()
         var adoptionSaved = false
-        func current() -> Bool {
-            !self.cachingStopped && !self.isDehydrated && gateway.cacheGeneration(of: self.sessionKey) == generation
+        func validCacheContext() -> Bool {
+            !self.cachingStopped && !self.isDehydrated && self.gateway === gateway
+                && gateway.connectionEpoch == connectionEpoch
+                && gateway.cacheGeneration(of: self.sessionKey) == generation
         }
+        func validContext() -> Bool {
+            validCacheContext() && !Task.isCancelled && gateway.state.isConnected && gateway.appIsActive
+        }
+        func current() -> Bool { validContext() && self.contentRevision == expectedRevision }
         defer {
-            // If adoption exits early after cancelling a dirty window save, keep that work queued.
-            // The same cache-generation and unreadable guards prevent stale or unsafe writes.
-            if !adoptionSaved, hadQueuedSave, current(), !self.cacheUnreadable {
+            // Keep a dirty write queued after an aborted adoption, including while offline. UI
+            // adoption needs an active connection; persistence only needs a current cache context.
+            if !adoptionSaved, hadQueuedSave, validCacheContext(), !self.cacheUnreadable {
                 self.scheduleSave()
             }
         }
@@ -365,9 +603,41 @@ extension ChatStore {
         }
         let meta = await TranscriptCache.meta(gatewayId: self.gatewayId, sessionKey: self.sessionKey, root: self.cacheRoot)
         guard current(), !self.cacheUnreadable else { return }
-        if let meta { self.hasMoreHistory = !meta.complete }
+        if let meta {
+            self.hasMoreHistory = !meta.complete
+            if meta.forwardedSenderRefreshPending == true {
+                self.forwardedSenderRefreshPending = true
+            }
+        }
+        let completedSenderRefresh = refreshWasPending && meta?.forwardedSenderRefreshPending == false
+        if completedSenderRefresh {
+            var reconciled: [ChatItem]?
+            for attempt in 0...1 {
+                expectedRevision = self.contentRevision
+                let currentItems = self.items
+                let limit = min(max(currentItems.count, self.windowLimit + Self.windowExtension), TranscriptCache.maxItems)
+                let refreshed = await TranscriptCache.loadNewest(
+                    gatewayId: self.gatewayId, sessionKey: self.sessionKey, limit: limit, root: self.cacheRoot)
+                guard validContext(), Self.cacheReadable(refreshed.outcome) else { return }
+                let result = await Self.reconcileForwardedRefresh(
+                    restoredCache: [], pagesNewestFirst: [refreshed.items], current: currentItems)
+                guard validContext() else { return }
+                if self.contentRevision == expectedRevision {
+                    reconciled = result
+                    break
+                }
+                if attempt == 1 { return }
+            }
+            guard let reconciled, current() else { return }
+            self.items = reconciled
+            // A refresh only becomes consumed once its full disk snapshot has been applied to the
+            // rows currently held by this chat. Earlier guards leave the marker set on failure.
+            self.forwardedSenderRefreshPending = false
+            expectedRevision = self.contentRevision
+        }
         self.saveTask?.cancel()
         self.savedState = nil
+        guard current() else { return }
         await self.saveSnapshot()
         adoptionSaved = true
     }

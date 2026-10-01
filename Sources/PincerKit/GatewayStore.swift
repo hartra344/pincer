@@ -727,7 +727,9 @@ public final class GatewayStore: Identifiable {
     /// A cached chat that holds everything it will (all of it, or the newest `maxItems`) and hasn't
     /// seen activity since needs no fetch.
     static func prefetchIsFresh(_ meta: TranscriptCache.Meta?, activityMs: Double) -> Bool {
-        guard let meta, meta.complete || meta.retained == true, let cached = meta.activityMs else { return false }
+        guard let meta, meta.version == TranscriptCache.Snapshot.currentVersion,
+              meta.forwardedSenderRefreshPending != true,
+              meta.complete || meta.retained == true, let cached = meta.activityMs else { return false }
         return cached >= activityMs
     }
 
@@ -768,16 +770,19 @@ public final class GatewayStore: Identifiable {
     func startHeadlessFill(sessionKey key: String, agentId: String?) -> Task<Void, Never> {
         if let running = self.headlessFills[key] { return running.task }
         let generation = self.cacheGeneration(of: key)
+        let connectionEpoch = self.connectionEpoch
         let fillId = UUID()
         self.headlessFillStarts[key, default: 0] += 1
         let task = Task { [weak self] in
             guard let self else { return }
             let store = ChatStore(sessionKey: key, agentId: agentId, gateway: self, headless: true)
             store.windowLimit = TranscriptCache.maxItems
-            await store.fillCache(generation: generation)
+            await store.fillCache(generation: generation, connectionEpoch: connectionEpoch)
             if self.headlessFills[key]?.id == fillId { self.headlessFills[key] = nil }
-            guard !Task.isCancelled, self.cacheGeneration(of: key) == generation else { return }
-            await self.chats[key]?.adoptFilledCache()
+            guard !Task.isCancelled, self.state.isConnected, self.connectionEpoch == connectionEpoch,
+                  self.cacheGeneration(of: key) == generation
+            else { return }
+            await self.chats[key]?.adoptFilledCache(generation: generation, connectionEpoch: connectionEpoch)
         }
         self.headlessFills[key] = (fillId, task)
         return task
