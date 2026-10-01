@@ -2,6 +2,38 @@ import Foundation
 import Testing
 @testable import PincerKit
 
+private actor GatedSpotlightIndexer: SpotlightIndexer {
+    private var entries: [SpotlightEntry] = []
+    private var deleteStarted: CheckedContinuation<Void, Never>?
+    private var deleteRelease: CheckedContinuation<Void, Never>?
+
+    func index(_ entries: [SpotlightEntry]) async { self.entries.append(contentsOf: entries) }
+
+    func delete(ids: [String]) async {
+        await withCheckedContinuation {
+            self.deleteRelease = $0
+            self.deleteStarted?.resume()
+            self.deleteStarted = nil
+        }
+    }
+
+    func deleteDomain(gatewayId: UUID) async {}
+
+    func deleteAll() async { self.entries.removeAll() }
+
+    func waitForDelete() async {
+        if self.deleteRelease != nil { return }
+        await withCheckedContinuation { self.deleteStarted = $0 }
+    }
+
+    func resumeDelete() {
+        self.deleteRelease?.resume()
+        self.deleteRelease = nil
+    }
+
+    func indexedEntries() -> [SpotlightEntry] { self.entries }
+}
+
 /// #53: what goes into Spotlight, and when it leaves.
 extension SpotlightSuites {
 @MainActor
@@ -269,6 +301,44 @@ struct SpotlightReconcileTests {
         scratch.defaults.set(false, forKey: Spotlight.enabledKey)
         #expect(!Spotlight.canPublish(includeMessages: false, defaults: scratch.defaults))
         scratch.remove()
+    }
+
+    @Test func preferenceChangeDuringDeletionCannotPublishCachedMessageText() async {
+        let scratch = ScratchDefaults()
+        scratch.defaults.set(true, forKey: Spotlight.includeMessagesKey)
+        let indexer = GatedSpotlightIndexer()
+        let profile = GatewayProfile(name: "Personal", url: "ws://127.0.0.1:1", authMode: .none)
+        let gateway = self.store(FakeSpotlightIndexer(), defaults: scratch.defaults, profile: profile)
+        gateway.spotlightIndexer = indexer
+        let currentKey = "agent:main:dashboard:privacy-race"
+        let removedKey = "agent:main:dashboard:removed"
+        let row = Self.row(currentKey, title: "After", at: 42)
+        gateway.setSession(row, for: currentKey)
+        let oldCurrent = Spotlight.entries(gatewayId: gateway.id, gatewayURL: profile.url,
+                                           gatewayHost: gateway.gatewayHost, gatewayName: profile.name,
+                                           sessions: [Self.row(currentKey, title: "Before", at: 42)],
+                                           cachedSnippets: [currentKey: "private cached excerpt"],
+                                           includeMessages: true)[0]
+        let removed = Spotlight.entries(gatewayId: gateway.id, gatewayURL: profile.url,
+                                        gatewayHost: gateway.gatewayHost, gatewayName: profile.name,
+                                        sessions: [Self.row(removedKey, at: 1)], includeMessages: true)[0]
+        let center = SpotlightCenter.shared
+        center.sent[gateway.id] = [oldCurrent.id: oldCurrent, removed.id: removed]
+        defer {
+            center.sent.removeValue(forKey: gateway.id)
+            center.overrides.removeValue(forKey: gateway.id)
+            center.tasks.removeValue(forKey: gateway.id)?.cancel()
+            scratch.remove()
+        }
+
+        let reindex = Task { await gateway.reindexSpotlight() }
+        await indexer.waitForDelete()
+        scratch.defaults.set(false, forKey: Spotlight.includeMessagesKey)
+        await indexer.resumeDelete()
+        await reindex.value
+
+        let indexed = await indexer.indexedEntries()
+        #expect(!indexed.contains { $0.snippet == "private cached excerpt" })
     }
 }
 }
