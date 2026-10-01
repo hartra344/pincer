@@ -55,14 +55,18 @@ func runTranscriptWindowChecks() async {
 
     let windowTail = chat.items.map(\.id)
     var gapFree = true
+    var everyPageFinished = true
     var rounds = 0
     while chat.olderInCache, rounds < 100 {
+        let countBeforePage = chat.items.count
         let ok = await chat.loadOlder()
+        everyPageFinished = everyPageFinished && !chat.isLoadingOlder && chat.items.count > countBeforePage
         gapFree = gapFree && ok && Set(chat.items.map(\.id)).count == chat.items.count
             && Array(chat.items.suffix(windowTail.count)).map(\.id) == windowTail
         rounds += 1
     }
     check(gapFree && chat.items.map(\.id) == windowIds(0..<total), "paging older from the cache leaves no gaps or duplicates (\(rounds) pages)")
+    check(rounds > 0 && everyPageFinished, "each awaited cache page applies its rows and clears the loading state before returning")
     check(!chat.olderInCache && chat.hasMoreHistory && chat.hasOlderItems && chat.olderOffset == total,
           "at the cache start Gateway paging takes over")
     let offline = await chat.loadOlder()

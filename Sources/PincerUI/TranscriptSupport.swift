@@ -198,6 +198,8 @@ final class TranscriptRenderer: TranscriptRowActions {
     private var flash: String?
     private var flashToken = 0
     private var ack: String?
+    /// Testable page source for exercising the older-row loop without touching the transcript cache.
+    var olderPageLoader: (@MainActor (ChatStore) async -> Bool)?
 
     /// Rows whose layout changed (nil means all of them), and a row to hold still on screen while
     /// they change, when the change came from a click in that row.
@@ -799,6 +801,12 @@ final class TranscriptRenderer: TranscriptRowActions {
 
     private var olderLoop: Task<Void, Never>?
 
+    /// Waits for the current paging pass to finish. Used by deterministic controller tests.
+    func waitForOlderLoop() async {
+        let loop = self.olderLoop
+        await loop?.value
+    }
+
     /// The loading-older row is on screen: pages in older history (the cache first) for as long as
     /// the row stays visible, so a page that adds no rows (duplicates, rows folding together) doesn't
     /// stall the list. Failures back off a second and give up after a few.
@@ -808,7 +816,13 @@ final class TranscriptRenderer: TranscriptRowActions {
             var failures = 0
             for _ in 0..<40 {
                 guard chat.hasOlderItems, !Task.isCancelled else { break }
-                if await chat.loadOlder() {
+                let loaded: Bool
+                if let pageLoader = self?.olderPageLoader {
+                    loaded = await pageLoader(chat)
+                } else {
+                    loaded = await chat.loadOlder()
+                }
+                if loaded {
                     failures = 0
                 } else {
                     failures += 1
