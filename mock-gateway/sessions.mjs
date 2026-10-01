@@ -191,11 +191,15 @@ function messageText(message) {
 }
 
 /** Upstream editorAttachments: the message's image blocks as {mimeType, data} (base64). */
-function editorAttachmentsOf(message) {
+function editorAttachmentsOf(state, message) {
   if (!Array.isArray(message?.content)) return {};
-  const editorAttachments = message.content
-    .filter((b) => b?.type === 'image' && typeof b.data === 'string' && b.data.trim() && typeof b.mimeType === 'string' && b.mimeType.startsWith('image/'))
-    .map((b) => ({ mimeType: b.mimeType, data: b.data }));
+  // Images sent through chat.send are stored as uploaded artifacts; those resolve back to their bytes.
+  const editorAttachments = message.content.flatMap((b) => {
+    if (b?.type !== 'image') return [];
+    if (typeof b.data === 'string' && b.data.trim() && typeof b.mimeType === 'string' && b.mimeType.startsWith('image/')) return [{ mimeType: b.mimeType, data: b.data }];
+    const artifact = typeof b.artifactId === 'string' ? state.artifacts.get(b.artifactId) : undefined;
+    return artifact?.mimeType?.startsWith('image/') ? [{ mimeType: artifact.mimeType, data: Buffer.from(artifact.data).toString('base64') }] : [];
+  });
   return editorAttachments.length ? { editorAttachments } : {};
 }
 
@@ -506,7 +510,7 @@ export function handleSessionManagerRequest(state, conn, msg, helpers) {
       row.lastMessagePreview = kept.length ? messageText(kept[kept.length - 1])?.slice(0, 120) : undefined;
       row.updatedAt = Date.now();
       const editorText = messageText(target);
-      sendRes(conn, id, { ...(editorText ? { editorText } : {}), ...editorAttachmentsOf(target) });
+      sendRes(conn, id, { ...(editorText ? { editorText } : {}), ...editorAttachmentsOf(state, target) });
       changed(key, 'rewind', { agentId: row.agentId ?? sessionAgentId(key), session: clone(row) });
       return true;
     }
@@ -545,7 +549,7 @@ export function handleSessionManagerRequest(state, conn, msg, helpers) {
       state.sessions.set(newKey, child);
       state.transcripts.set(newKey, kept);
       const editorText = messageText(target);
-      sendRes(conn, id, { sessionKey: newKey, ...(editorText ? { editorText } : {}), ...editorAttachmentsOf(target) });
+      sendRes(conn, id, { sessionKey: newKey, ...(editorText ? { editorText } : {}), ...editorAttachmentsOf(state, target) });
       changed(newKey, 'fork', { agentId, session: clone(child) });
       return true;
     }
