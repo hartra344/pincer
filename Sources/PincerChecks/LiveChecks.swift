@@ -98,11 +98,8 @@ func runLive(url: String, token: String) async {
         check(false, "history includes an image")
     }
 
-    // Background prefetch may have cached trip's whole history: let it finish and drop that, then
-    // open trip only now, so a reconnect earlier on can't have reloaded (and backfilled) it.
-    await gateway.settlePrefetch()
-    await TranscriptCache.remove(gatewayId: gateway.id, sessionKey: "agent:main:dashboard:trip")
-    let trip = gateway.chat(for: "agent:main:dashboard:trip")
+    // A cold, unregistered probe pages the server independently of cached/resident UI chats.
+    let trip = pagingProbe(gateway: gateway, key: "agent:main:dashboard:trip")
     await trip.load()
     let firstPage = trip.items.map(\.id)
     check(trip.hasMoreHistory && firstPage.count == 120, "latest page only (\(firstPage.count))")

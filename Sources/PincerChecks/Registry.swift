@@ -103,6 +103,7 @@ enum Suites {
                 await withScratchCache { root in await withCacheEnvironment(root.path(percentEncoded: false)) { await runTranscriptWindowChecks() } }
                 await withCacheEnvironment("off") { await runTranscriptWindowCacheOffChecks() }
             },
+            Section("Paged history probe") { runPagingProbeChecks() },
             Section("Message search in the palette") { checkPaletteMessages() },
             Section("Context usage") { runContextUsageChecks() },
             Section("Quick Capture") { await runQuickCaptureChecks() },
