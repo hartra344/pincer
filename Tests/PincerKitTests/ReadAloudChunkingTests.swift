@@ -32,7 +32,7 @@ private func until(_ condition: () -> Bool) async {
 }
 
 private let paragraphs = (1 ... 3).map { p in (1 ... 12).map { "Paragraph \(p) sentence \($0) is here." }.joined(separator: " ") }
-private let message = "Opening line.\n\n" + paragraphs.joined(separator: "\n\n")
+private let message = "Opening line.\n\n" + paragraphs.joined(separator: " ")
 
 /// A Gateway timeout that fires only when the test says so, never on the wall clock.
 private final class TimeoutGate: @unchecked Sendable {
@@ -75,13 +75,13 @@ struct ReadAloudChunkingTests {
     @Test func chunksAreRequestedInOrderAndPrefetchedDuringPlayback() async {
         let (c, clips, device, gateway, requested) = self.setup()
         let chunks = SpeechChunker.chunks(message)
-        #expect(chunks.count >= 3)
+        #expect(chunks.count > ReadAloudSettings.prefetchDepth + 2)
         c.toggle(messageId: "m", text: message, gateway: gateway)
         for n in 0 ..< chunks.count {
             await until { clips.played.count == n + 1 && clips.isPlaying }
-            let expected = min(n + 2, chunks.count)
+            let expected = min(n + 1 + ReadAloudSettings.prefetchDepth, chunks.count)
             await until { requested().count == expected }
-            // While chunk n plays, chunk n+1 (and nothing further) has been requested.
+            // While chunk n plays, the next `prefetchDepth` chunks (and nothing further) have been requested.
             #expect(requested().count == expected)
             clips.finish()
         }
@@ -100,7 +100,7 @@ struct ReadAloudChunkingTests {
         await until { clips.played.count == 2 && clips.isPlaying }; clips.finish()
         await until { c.phase == .idle }
         #expect(clips.played == ["c0", "c1"])
-        #expect(device.spoken == [chunks[2...].joined(separator: "\n\n")])
+        #expect(device.spoken == [chunks[2...].joined(separator: " ")])
         #expect(c.lastSource == .gateway("c0") && c.lastFallback == .other("down"))
         #expect(requested().count == 3)
     }
@@ -115,7 +115,7 @@ struct ReadAloudChunkingTests {
         clips.finish()
         await until { c.phase == .idle }
         #expect(clips.played == ["c0"])
-        #expect(device.spoken == [chunks[1...].joined(separator: "\n\n")])
+        #expect(device.spoken == [chunks[1...].joined(separator: " ")])
     }
 
     @Test func firstChunkFailureReadsTheWholeMessageOnDevice() async {
@@ -130,11 +130,12 @@ struct ReadAloudChunkingTests {
     @Test func stopCancelsTheWholeSequence() async {
         let (c, clips, device, gateway, requested) = self.setup()
         c.toggle(messageId: "m", text: message, gateway: gateway)
-        await until { clips.isPlaying && requested().count == 2 }
+        #expect(c.phase == .preparing("m")) // Listen responds before any network or chunking work
+        await until { clips.isPlaying && requested().count == 1 + ReadAloudSettings.prefetchDepth }
         c.toggle(messageId: "m", text: message, gateway: gateway)
         #expect(c.phase == .idle)
         await settle()
-        #expect(clips.played == ["c0"] && requested().count == 2 && device.spoken.isEmpty)
+        #expect(clips.played == ["c0"] && requested().count == 1 + ReadAloudSettings.prefetchDepth && device.spoken.isEmpty)
         #expect(c.phase == .idle)
     }
 }

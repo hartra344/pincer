@@ -42,7 +42,7 @@ Pincer decides for each reply:
 1. **Gateway voice.** If your gateway supports spoken replies (OpenClaw 2026.7 or later) and has a text-to-speech provider set up, the gateway makes the audio with that provider and persona.
 2. **Device voice.** Otherwise, or if the gateway can't make the audio for any reason, Pincer uses the voice built into your Mac, iPhone or iPad. You never get silence just because the gateway had a problem.
 
-The gateway voice reads a long reply in pieces: first a sentence or two, so you hear it quickly, then about a paragraph at a time. The next piece is made while the current one plays. If one piece fails or takes too long, the device voice reads the rest of the reply from that point.
+The gateway voice reads a long reply two sentences at a time, so it starts quickly and keeps going without pauses. The next few pieces are made while the current one plays. If one piece fails or takes too long, the device voice reads the rest of the reply from that point.
 
 :::note
 Sending text to the gateway's voice needs write access. If you connected with a read-only token, Pincer uses the device voice.

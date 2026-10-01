@@ -1,50 +1,24 @@
 import Foundation
 import NaturalLanguage
 
-/// Splits a message into pieces the Gateway can voice within its timeout (#562). The first piece is the
-/// first sentence or two so audio starts fast; the rest follow paragraphs, merged or split to fit `limit`.
+/// Splits a message into small pieces the Gateway can voice quickly (#562): two sentences per chunk all
+/// the way through, so every chunk is made well before the one before it finishes playing. A sentence
+/// longer than `limit` is cut at spaces.
 public enum SpeechChunker {
-    public static let firstLimit = 200
-    public static let limit = 700
+    public static let sentencesPerChunk = 2
+    public static let limit = 300
 
-    public static func chunks(_ text: String, firstLimit: Int = Self.firstLimit, limit: Int = Self.limit) -> [String] {
-        let firstLimit = max(1, min(firstLimit, limit))
-        var paragraphs = self.paragraphs(text).map { self.sentences($0).flatMap { self.split($0, limit: limit) } }
-        guard !paragraphs.isEmpty else { return [] }
-
-        // First chunk: up to two sentences of the first paragraph that fit `firstLimit`.
-        var opening = paragraphs[0]
-        var first: [String] = []
-        while let next = opening.first, first.count < 2 {
-            if first.isEmpty, next.count > firstLimit {
-                let parts = self.split(next, limit: firstLimit)
-                first = [parts[0]]
-                opening[0] = parts.dropFirst().joined(separator: " ")
-                break
-            }
-            guard (first + [next]).joined(separator: " ").count <= firstLimit else { break }
-            first.append(opening.removeFirst())
-        }
-        paragraphs[0] = opening.filter { !$0.isEmpty }
-        var result = [first.joined(separator: " ")]
-
-        var current = ""
-        func flush() { if !current.isEmpty { result.append(current); current = "" } }
-        for sentences in paragraphs where !sentences.isEmpty {
-            let paragraph = sentences.joined(separator: " ")
-            if paragraph.count <= limit {
-                if current.isEmpty { current = paragraph }
-                else if current.count + 2 + paragraph.count <= limit { current += "\n\n" + paragraph }
-                else { flush(); current = paragraph }
-                continue
-            }
-            flush()
-            for sentence in sentences {
-                if current.isEmpty { current = sentence }
-                else if current.count + 1 + sentence.count <= limit { current += " " + sentence }
-                else { flush(); current = sentence }
-            }
-            flush()
+    public static func chunks(_ text: String, sentencesPerChunk: Int = Self.sentencesPerChunk,
+                              limit: Int = Self.limit) -> [String]
+    {
+        let perChunk = max(1, sentencesPerChunk)
+        let sentences = self.paragraphs(text).flatMap(self.sentences).flatMap { self.split($0, limit: max(1, limit)) }
+        var result: [String] = []
+        var current: [String] = []
+        func flush() { if !current.isEmpty { result.append(current.joined(separator: " ")); current = [] } }
+        for sentence in sentences {
+            if !current.isEmpty, current.count >= perChunk || (current + [sentence]).joined(separator: " ").count > limit { flush() }
+            current.append(sentence)
         }
         flush()
         return result

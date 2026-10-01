@@ -28,6 +28,8 @@ public enum ReadAloudSettings {
     /// Sent in `SpeechChunker` pieces, so this only guards against huge messages.
     public static let gatewayTextLimit = 20000
     public static let gatewayTimeout: Duration = .seconds(15)
+    /// How many chunks past the one playing are requested from the Gateway (#562).
+    public static let prefetchDepth = 3
 
     /// The device voice to show in a picker: the stored id when it's still available, else "" (the
     /// "Default" row), so the picker never has a selection that matches no row (#457).
@@ -163,16 +165,33 @@ public final class ReadAloudController {
             fallback = .deviceOnlySetting
         } else if let gateway {
             if gateway.canSpeak {
-                let limited = SpeechText.truncated(text, limit: ReadAloudSettings.gatewayTextLimit)
-                let chunks = SpeechChunker.chunks(limited)
+                // NLTokenizer over a long reply is too slow for the main actor.
+                let chunks = await Task.detached(priority: .userInitiated) {
+                    SpeechChunker.chunks(SpeechText.truncated(text, limit: ReadAloudSettings.gatewayTextLimit))
+                }.value
+                guard generation == self.generation, !Task.isCancelled else { return }
                 // While chunk n plays, chunk n+1 is fetched; each fetch has its own timeout (#562).
-                var pending: Task<(TTSClip?, TTSFallbackReason?), Never>? = chunks.isEmpty ? nil : Task { @MainActor in
-                    await self.fetchClip(chunks[0], from: gateway)
+                // Requests run one after another, each starting as soon as the one before returns, and stay
+                // up to `prefetchDepth` chunks ahead of playback so there's no gap between chunks.
+                typealias Fetch = Task<(TTSClip?, TTSFallbackReason?), Never>
+                var fetches: [Fetch] = []
+                defer { fetches.forEach { $0.cancel() } }
+                func requestAhead(of index: Int) {
+                    while fetches.count < min(chunks.count, index + 1 + ReadAloudSettings.prefetchDepth) {
+                        let previous = fetches.last
+                        let chunk = chunks[fetches.count]
+                        fetches.append(Task { @MainActor in
+                            if let previous, await previous.value.0 == nil { return (nil, nil) }
+                            guard !Task.isCancelled else { return (nil, nil) }
+                            return await self.fetchClip(chunk, from: gateway)
+                        })
+                    }
                 }
-                defer { pending?.cancel() }
                 var index = 0
-                while index < chunks.count, let fetch = pending {
-                    let (clip, failure) = await fetch.value
+                while index < chunks.count {
+                    requestAhead(of: index)
+                    let fetch = fetches[index]
+                    let (clip, failure) = await withTaskCancellationHandler { await fetch.value } onCancel: { fetch.cancel() }
                     guard generation == self.generation, !Task.isCancelled else { return }
                     guard let clip, !clip.isHeaderless else {
                         fallback = failure ?? .other(L("The Gateway audio couldn't be played."))
@@ -187,10 +206,6 @@ public final class ReadAloudController {
                             self.lastFallback = nil
                         }
                     }
-                    let nextIndex = index + 1
-                    pending = nextIndex < chunks.count ? Task { @MainActor in
-                        await self.fetchClip(chunks[nextIndex], from: gateway)
-                    } : nil
                     self.phase = .speaking(messageId)
                     let played = await self.clipPlayer.play(clip)
                     guard generation == self.generation, !Task.isCancelled else { return }
@@ -198,7 +213,7 @@ public final class ReadAloudController {
                         fallback = .other(L("The Gateway audio couldn't be played."))
                         break
                     }
-                    index = nextIndex
+                    index += 1
                 }
                 if index >= chunks.count { return }
                 if index > 0 {
@@ -206,7 +221,7 @@ public final class ReadAloudController {
                     self.lastFallback = fallback
                     self.phase = .speaking(messageId)
                     let voice = self.defaults.string(forKey: ReadAloudSettings.deviceVoiceKey).flatMap { $0.isEmpty ? nil : $0 }
-                    _ = await self.localSpeaker.speak(chunks[index...].joined(separator: "\n\n"), voice: voice, rate: self.deviceRate)
+                    _ = await self.localSpeaker.speak(chunks[index...].joined(separator: " "), voice: voice, rate: self.deviceRate)
                     return
                 }
             } else {

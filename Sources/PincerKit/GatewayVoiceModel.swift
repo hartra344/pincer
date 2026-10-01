@@ -203,7 +203,8 @@ public final class GatewayVoiceModel {
     /// `tts.speak`. Text longer than the Gateway allows is the caller's to truncate.
     public func speak(_ text: String) async throws -> TTSClip {
         let result = try await self.call(Self.speakMethod, ["text": .string(text)])
-        guard let clip = TTSClip(result) else {
+        // Base64-decoding a long clip is too slow for the main actor.
+        guard let clip = await Task.detached(priority: .userInitiated, operation: { TTSClip(result) }).value else {
             throw GatewayError.rpc(code: "UNAVAILABLE", message: "The Gateway returned no audio.", details: nil)
         }
         return clip
