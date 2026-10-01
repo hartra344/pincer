@@ -120,6 +120,9 @@ extension DemoGateway {
         if wantsTool {
             let callId = Self.shortId("call_")
             let output = " 10:42  up 3 days, 4 users, load averages: 1.20 1.04 0.86"
+            let preamble = "I'll check that now."
+            self.agentEvent(runId, stream: "assistant", ["delta": .string(preamble), "text": .string(preamble)])
+            guard await self.pause(runId, milliseconds: 140) else { return }
             self.agentEvent(runId, stream: "tool",
                             ["phase": "start", "name": "exec", "toolCallId": .string(callId), "args": ["command": "uptime"]])
             guard await self.pause(runId, milliseconds: 800) else { return }
@@ -130,6 +133,9 @@ extension DemoGateway {
                                           runId: runId, model: model))
             self.append(key, Self.message("toolResult", [Self.text(output)], runId: runId,
                                           extra: ["toolCallId": .string(callId), "toolName": "exec", "isError": false]))
+            let nextThought = "The check is back; I'll summarize."
+            self.agentEvent(runId, stream: "thinking", ["delta": .string(nextThought), "text": .string(nextThought)])
+            guard await self.pause(runId, milliseconds: 140) else { return }
         }
 
         let wantsLong = lowered.range(of: #"\blong\b"#, options: .regularExpression) != nil

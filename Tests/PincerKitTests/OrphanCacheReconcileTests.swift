@@ -100,10 +100,11 @@ struct OrphanCacheReconcileTests {
 struct CompleteSessionKeysTests {
     struct Failure: Error {}
 
-    func page(_ keys: [String], hasMore: Bool? = nil, next: Int? = nil) -> JSONValue {
+    func page(_ keys: [String], hasMore: Bool? = nil, next: Int? = nil, totalCount: Int? = nil) -> JSONValue {
         var object: [String: JSONValue] = ["sessions": .array(keys.map { .object(["key": .string($0)]) })]
         if let hasMore { object["hasMore"] = .bool(hasMore) }
         if let next { object["nextOffset"] = JSONValue(next) }
+        if let totalCount { object["totalCount"] = JSONValue(totalCount) }
         return .object(object)
     }
 
@@ -126,6 +127,14 @@ struct CompleteSessionKeysTests {
         #expect(result.params.count == 2)
         #expect(result.params[0]["offset"] == nil && result.params[0]["archived"]?.string == "all")
         #expect(result.params[1]["offset"]?.int == 2)
+    }
+
+    @Test func aPageWalkThatMissesAReportedChatIsPartial() async {
+        let pages = [self.page(["a", "b"], hasMore: true, next: 2, totalCount: 3),
+                     self.page(["b"], hasMore: false, totalCount: 3)]
+        #expect(await self.run(pages).keys == nil, "an updated chat can shift between pages; duplicates cannot prove completeness")
+        #expect(await self.run([self.page(["a"], totalCount: 2)]).keys == nil)
+        #expect(await self.run([self.page(["a", "b"], hasMore: false, totalCount: 2)]).keys == ["a", "b"])
     }
 
     @Test func hasMoreOnTheLastAllowedPageIsPartial() async {

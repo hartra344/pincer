@@ -93,6 +93,10 @@ public enum ChatSendRequest {
 public struct LiveRun: Sendable, Hashable {
     public var runId: String
     public var text = ""
+    /// Whether the latest run event is actively advancing assistant text.
+    public var isTextStreaming = false
+    /// UTF-8 byte count is O(1) to read and lets cumulative snapshots signal growth without rescanning.
+    var textUTF8Count = 0
     public var thinking: String?
     public var tools: [ToolActivity] = []
     public var images: [ImageRef] = []

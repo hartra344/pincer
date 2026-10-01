@@ -11,6 +11,7 @@ import UIKit
 struct TranscriptList: UIViewRepresentable {
     let rows: [TranscriptRow]
     let context: TranscriptContext
+    let isConnected: Bool
     /// Extra space below the last row for content floating over the transcript (the composer).
     var bottomInset: CGFloat = 0
     /// Extra space above the first row, for a toolbar the transcript scrolls under.
@@ -33,7 +34,8 @@ struct TranscriptList: UIViewRepresentable {
 
     func updateUIView(_ view: UICollectionView, context: Context) {
         context.coordinator.attach(self.bottomState)
-        context.coordinator.update(rows: self.rows, context: self.context, insets: (self.topInset, self.bottomInset))
+        context.coordinator.update(rows: self.rows, context: self.context,
+                                   insets: (self.topInset, self.bottomInset), isConnected: self.isConnected)
         context.coordinator.apply(self.highlight)
         context.coordinator.apply(self.jump)
         context.coordinator.install(self.navigator)
@@ -93,10 +95,13 @@ struct TranscriptList: UIViewRepresentable {
 
         // MARK: Data
 
-        func update(rows newRows: [TranscriptRow], context: TranscriptContext, insets: (top: CGFloat, bottom: CGFloat)) {
+        func update(rows newRows: [TranscriptRow], context: TranscriptContext,
+                    insets: (top: CGFloat, bottom: CGFloat), isConnected: Bool = true) {
             let contextChanged = self.controller.beginUpdate(context: context, rowCount: newRows.count)
+            var acceptedRows = false
             defer {
                 self.controller.revealPending()
+                if acceptedRows { self.controller.gatewayConnectionChanged(isConnected: isConnected) }
                 self.controller.loadOlderIfShown()
                 self.reportPosition()
             }
@@ -112,7 +117,9 @@ struct TranscriptList: UIViewRepresentable {
                 self.isAdjusting = false
                 if !self.rows.isEmpty, !contextChanged { self.settle() }
             }
-            switch self.controller.accept(newRows, contextChanged: contextChanged) {
+            let update = self.controller.accept(newRows, contextChanged: contextChanged)
+            acceptedRows = true
+            switch update {
             case .unchanged:
                 return
             case .tail:

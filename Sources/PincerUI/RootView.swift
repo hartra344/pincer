@@ -126,6 +126,7 @@ struct RootView: View {
     /// iOS: app Settings opened from the command palette.
     @State private var showingAppSettings = false
     @State private var paletteRequest: PaletteRequest?
+    @State private var dictationSceneID = UUID()
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -196,6 +197,7 @@ struct RootView: View {
         .environment(\.openGatewaySettings, self.settingsOpener)
         .environment(\.openAutomations, self.automationsOpener)
         .environment(\.searchMessages, self.searchMessagesAction)
+        .environment(\.dictationSceneID, self.dictationSceneID)
         #if os(macOS)
         .environment(\.openChatWindow, .window(self.openWindow))
         #endif

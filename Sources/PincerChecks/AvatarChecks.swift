@@ -1,5 +1,9 @@
 import Foundation
+#if DEBUG
+@testable import PincerKit
+#else
 import PincerKit
+#endif
 
 // Animated agent avatar (#75): the demo's seeded chats and triggers drive every avatar state, and
 // its agents get distinct identities (agent.identity.get) and seeded styles.
@@ -40,6 +44,60 @@ private func inOrder(_ seen: [AvatarState], _ expected: [AvatarState]) -> Bool {
     }
     return true
 }
+
+#if DEBUG
+@MainActor
+func runAvatarSignalChecks() {
+    let (defaults, suite) = scratchDefaults()
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let key = "agent:research:main"
+    let profile = GatewayProfile(name: "Avatar checks", url: "ws://127.0.0.1:1", authMode: .none)
+    let gateway = GatewayStore(profile: profile, defaults: defaults, identity: DeviceIdentity(privateKey: .init()))
+    gateway.cacheRoot = nil
+    defer { gateway.stop() }
+    let chat = ChatStore(sessionKey: key, agentId: "research", gateway: gateway, headless: true)
+    func chatEvent(_ fields: [String: JSONValue]) {
+        var payload = fields
+        payload["runId"] = .string("avatar-check")
+        payload["sessionKey"] = .string(key)
+        chat.handleChat(.object(payload))
+    }
+    func agentEvent(_ stream: String, _ data: JSONValue) {
+        chat.handleAgent(["runId": "avatar-check", "sessionKey": .string(key), "stream": .string(stream), "data": data])
+    }
+    func state() -> AvatarState { avatarState(chat) }
+
+    chatEvent(["state": "status", "phase": "thinking"])
+    agentEvent("assistant", ["text": .string("I should check that.")])
+    check(chat.avatarSignals.isStreaming, "avatar sees assistant text as streaming")
+    agentEvent("tool", ["phase": "start", "name": "exec", "toolCallId": "avatar-call", "args": ["command": "check"]])
+    check(state() == .tool(.exec), "avatar sees the active tool")
+    agentEvent("tool", ["phase": "result", "name": "exec", "toolCallId": "avatar-call", "isError": false, "result": "ok"])
+    check(state() == .thinking, "finishing a tool clears prior text activity without a thinking event")
+    agentEvent("thinking", ["text": "Now I can summarize."])
+    chatEvent(["state": "delta", "deltaText": "", "message": ["role": "assistant",
+              "content": [["type": "thinking", "thinking": "Now I can summarize."],
+                          ["type": "text", "text": "I should check that."]]]])
+    check(state() == .thinking && !chat.avatarSignals.isStreaming,
+          "thinking replaces prior streaming after tool even with the same cumulative snapshot")
+
+    chatEvent(["state": "delta", "message": ["role": "assistant", "content": [["type": "text",
+              "text": "I should check that. Here is the result."]]]])
+    check(state() == .streaming, "growing snapshot without deltaText resumes text streaming")
+    agentEvent("thinking", ["text": "I have the result."])
+    chatEvent(["state": "delta", "deltaText": "", "message": ["role": "assistant",
+              "content": [["type": "thinking", "thinking": "I have the result."],
+                          ["type": "text", "text": "I should check that. Here is the result."]]]])
+    check(state() == .thinking, "repeated snapshot without deltaText leaves the avatar thinking")
+    chat.apply(history: ["inFlightRun": ["runId": "avatar-check", "text": "I should check that. Here is the result."]], parsed: [])
+    check(state() == .thinking, "same-run history does not reactivate unchanged text after thinking")
+    agentEvent("assistant", ["delta": " Next sentence."])
+    check(state() == .streaming, "assistant delta without optional text signals active streaming")
+}
+#else
+@MainActor
+func runAvatarSignalChecks() {}
+#endif
 
 /// `agent.identity.get` over a raw connection: by id, by session key, the default, and an unknown agent.
 @MainActor
@@ -160,6 +218,8 @@ func runDemoAvatars() async {
     let toolRun = await watchAvatar(scout, timeout: 30) { $0 == .success }
     check(inOrder(toolRun, [.thinking, .tool(.exec), .streaming, .success]),
           "tool run: thinking → tool(exec) → streaming → success (\(describe(toolRun)))")
+    check(inOrder(toolRun, [.streaming, .tool(.exec), .thinking, .streaming]),
+          "streamed text returns to thinking after the tool before the final reply (\(describe(toolRun)))")
     check(!toolRun.contains(.error) && !toolRun.contains(.awaitingApproval), "tool run shows no error or approval")
     let rested = await watchAvatar(scout, timeout: AvatarStateMachine.successDuration + 3) { $0 == .idle }
     check(rested.last == .idle, "success fades back to idle (\(describe(rested)))")

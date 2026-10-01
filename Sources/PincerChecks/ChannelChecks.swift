@@ -19,7 +19,7 @@ func checkChannelStatus() async {
        "discord":[{"accountId":"default","enabled":true,"configured":true,"running":true,"connected":true,
                    "lastInboundAt":1699999000000,"lastOutboundAt":1699999500000}],
        "telegram":[{"accountId":"default","enabled":true,"configured":true,"running":true,"connected":false,
-                    "healthState":"disconnected","lastError":"getUpdates: 409 Conflict"},
+                    "healthState":"disconnected","lastError":"getUpdates: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running"},
                    {"accountId":"work","name":"Work bot","enabled":true,"configured":true,"running":false}],
        "whatsapp":[{"accountId":"default","enabled":true,"configured":false,"linked":false,"running":false}]},
      "statusIssues":[{"channel":"whatsapp","accountId":"default","kind":"auth","message":"Not linked"}]}
@@ -35,6 +35,8 @@ func checkChannelStatus() async {
           && snapshot.state(of: whatsappKey) == .loggedOut && snapshot.state(of: telegramKey) == .degraded,
           "badges: connected, stopped, logged out, Telegram needs attention (\(String(describing: snapshot.state(of: telegramKey))))")
     check(snapshot.account(discordKey)?.lastActivityAt == Date(timeIntervalSince1970: 1_699_999_500), "last activity is the latest message")
+    check(snapshot.account(telegramKey)?.lastError == "getUpdates: 409 Conflict: terminated by other getUpdates request; make sure that only one bot instance is running",
+          "full channel error text is preserved for disclosure")
     check(snapshot.issues(for: whatsappKey).map(\.kind) == ["auth"], "status issues keyed by account")
     check(ChannelAccountKey(healthIssueId: "channel:telegram:work") == work && ChannelAccountKey(healthIssueId: "plugin:telegram") == nil,
           "Health issue ids map to accounts")
@@ -103,8 +105,11 @@ func runDemoChannels() async {
     check(channels.hasLoaded && channels.canManage, "demo loads channels and manages them without admin")
     check(channels.state(of: discordKey) == .connected && channels.account(discordKey)?.lastActivityAt != nil,
           "demo Discord connected with recent activity (\(channels.state(of: discordKey)))")
-    check(channels.state(of: telegramKey) == .degraded && channels.account(telegramKey)?.lastError?.contains("409 Conflict") == true,
-          "demo Telegram degraded with a last error (\(channels.state(of: telegramKey)))")
+    let telegramError = channels.account(telegramKey)?.lastError
+    check(channels.state(of: telegramKey) == .degraded
+          && telegramError?.contains("409 Conflict") == true
+          && telegramError?.contains("make sure that only one bot instance is running") == true,
+          "demo Telegram keeps the complete 409 error available for disclosure (\(channels.state(of: telegramKey)))")
     check(channels.state(of: whatsappKey) == .loggedOut && channels.canLogIn(whatsappKey), "demo WhatsApp logged out, QR login offered")
     check(channels.attentionCount == 2, "demo attention: Telegram and WhatsApp (\(channels.attentionCount))")
     let telegramIssue = health.activeIssues.first { $0.channelAccount == telegramKey }

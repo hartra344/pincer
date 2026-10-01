@@ -562,7 +562,8 @@ extension ChatStore {
 
     /// The background fill finished: the cache may now hold items older than the loaded window, and
     /// says whether it is complete. The window is saved over the filler's write, keeping the older part.
-    func adoptFilledCache(generation: Int? = nil, connectionEpoch: Int? = nil) async {
+    func adoptFilledCache(generation: Int? = nil, connectionEpoch: Int? = nil,
+                          afterOlderRead: (@MainActor () async -> Void)? = nil) async {
         guard !self.headless, !self.cachingStopped, !self.isDehydrated, self.hasLoaded, let gateway else { return }
         let generation = generation ?? gateway.cacheGeneration(of: self.sessionKey)
         let connectionEpoch = connectionEpoch ?? gateway.connectionEpoch
@@ -570,17 +571,29 @@ extension ChatStore {
         let refreshWasPending = self.forwardedSenderRefreshPending
         var expectedRevision = self.contentRevision
         // A queued save must not land over the filler's write before this store reads it.
+        let hadQueuedSave = self.saveTask != nil
         self.saveTask?.cancel()
-        func validContext() -> Bool {
-            !Task.isCancelled && !self.cachingStopped && !self.isDehydrated
-                && self.gateway === gateway && gateway.state.isConnected && gateway.appIsActive
+        var adoptionSaved = false
+        func validCacheContext() -> Bool {
+            !self.cachingStopped && !self.isDehydrated && self.gateway === gateway
                 && gateway.connectionEpoch == connectionEpoch
                 && gateway.cacheGeneration(of: self.sessionKey) == generation
         }
+        func validContext() -> Bool {
+            validCacheContext() && !Task.isCancelled && gateway.state.isConnected && gateway.appIsActive
+        }
         func current() -> Bool { validContext() && self.contentRevision == expectedRevision }
+        defer {
+            // Keep a dirty write queued after an aborted adoption, including while offline. UI
+            // adoption needs an active connection; persistence only needs a current cache context.
+            if !adoptionSaved, hadQueuedSave, validCacheContext(), !self.cacheUnreadable {
+                self.scheduleSave()
+            }
+        }
         if !self.olderInCache, let first = self.items.first(where: { !$0.isPending }) {
             let older = await TranscriptCache.loadOlder(gatewayId: self.gatewayId, sessionKey: self.sessionKey,
                                                         before: first.id, limit: 1, root: self.cacheRoot)
+            await afterOlderRead?()
             guard current(), !self.olderInCache else { return }
             if Self.cacheReadable(older.outcome), !older.items.isEmpty {
                 self.olderInCache = true
@@ -626,6 +639,7 @@ extension ChatStore {
         self.savedState = nil
         guard current() else { return }
         await self.saveSnapshot()
+        adoptionSaved = true
     }
 
     /// Prepends the next older page, from the cache while it holds older items and then from the
@@ -847,8 +861,15 @@ extension ChatStore {
         self.recoverCappedMessages()
 
         if let inFlight = history["inFlightRun"], let runId = inFlight["runId"]?.text {
-            var run = self.live?.runId == runId ? self.live! : LiveRun(runId: runId)
-            if let text = inFlight["text"]?.string, !text.isEmpty { run.text = text }
+            let isSameRun = self.live?.runId == runId
+            var run = isSameRun ? self.live! : LiveRun(runId: runId)
+            if let text = inFlight["text"]?.string, !text.isEmpty {
+                let textUTF8Count = text.utf8.count
+                let grew = textUTF8Count > run.textUTF8Count
+                run.text = text
+                run.textUTF8Count = textUTF8Count
+                if !isSameRun || grew { run.isTextStreaming = true }
+            }
             self.live = run
             self.gateway?.track(runId: runId, sessionKey: self.sessionKey)
         } else if history["sessionInfo"]?["hasActiveRun"]?.bool == false {

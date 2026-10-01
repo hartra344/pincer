@@ -320,13 +320,7 @@ private struct ChannelAccountRow: View {
                 }
             }
             if let error = self.account.lastError, !error.isEmpty {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(self.errorExpanded ? nil : 2)
-                    .textSelection(.enabled)
-                    .help(error)
-                    .onTapGesture { self.errorExpanded.toggle() }
+                ChannelErrorDisclosure(error: error, isExpanded: self.$errorExpanded)
             }
             ForEach(self.issues, id: \.self) { issue in
                 VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
@@ -472,6 +466,30 @@ private struct ChannelAccountRow: View {
         }
         if self.model.canLogIn(self.key), !self.model.isBusy(self.key) {
             Button(self.needsLogIn(state) ? L("Link with QR Code…") : L("Relink with QR Code…"), action: self.logIn)
+        }
+    }
+}
+
+/// A selectable channel error with a separate disclosure control, so copying the failure details
+/// never changes whether the full text is shown.
+struct ChannelErrorDisclosure: View {
+    let error: String
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+            Text(self.error)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .lineLimit(self.isExpanded ? nil : 2)
+                .textSelection(.enabled)
+                .help(self.error)
+            Button(self.isExpanded ? L("Show Less") : L("Show More")) {
+                self.isExpanded.toggle()
+            }
+            .font(.caption)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("channel-error-disclosure")
         }
     }
 }

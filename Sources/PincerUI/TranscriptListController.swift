@@ -109,6 +109,7 @@ final class TranscriptListController {
     private var pendingReveal: String?
     private var lastJump: UUID?
     private var olderRowWasVisible = false
+    private var lastGatewayConnected: Bool?
 
     /// Idle prefetch's time per step.
     let prefetchBudget: TimeInterval
@@ -646,6 +647,15 @@ final class TranscriptListController {
         defer { self.olderRowWasVisible = visible }
         guard visible, !self.olderRowWasVisible else { return }
         self.renderer.loadOlderIfShown { [weak self] in self?.isOlderRowVisible ?? false }
+    }
+
+    /// Called when the Gateway reconnects while this transcript's older-history row is visible.
+    /// Kept as a separate transition seam so paging can resume without a scroll event.
+    func gatewayConnectionChanged(isConnected: Bool) {
+        let reconnected = self.lastGatewayConnected == false && isConnected
+        self.lastGatewayConnected = isConnected
+        guard reconnected, self.isOlderRowVisible else { return }
+        self.renderer.resumeOlderIfShown { [weak self] in self?.isOlderRowVisible ?? false }
     }
 
     private var isOlderRowVisible: Bool {

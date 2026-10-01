@@ -72,6 +72,28 @@ func runTranscriptWindowChecks() async {
     let offline = await chat.loadOlder()
     check(!offline && chat.items.count == total, "an offline Gateway page reports failure and loses nothing")
 
+    // A trim can mark older cache content while adoption is between its read and metadata checks.
+    // That early return must put back the window's cancelled save so its newest item reaches disk.
+    let adoptionKey = "agent:main:window-adoption"
+    let adoptionBoundary = messageItem("adoption-boundary", .user, "window boundary", at: 1_700_000_010)
+    await TranscriptCache.save(TranscriptCache.Snapshot(items: [messageItem("adoption-old", .user, "older", at: 1_700_000_000), adoptionBoundary],
+                                                        complete: false),
+                               gatewayId: gateway.id, sessionKey: adoptionKey)
+    let adoption = ChatStore(sessionKey: adoptionKey, agentId: nil, gateway: gateway, headless: false)
+    chats.append(adoption)
+    adoption.items = [adoptionBoundary, messageItem("adoption-new", .user, "newer", at: 1_700_000_100)]
+    adoption.hasLoaded = true
+    adoption.scheduleSave()
+    let canceledSave = adoption.saveTask
+    await adoption.adoptFilledCache(afterOlderRead: { adoption.olderInCache = true })
+    let recoveredSave = adoption.saveTask
+    await recoveredSave?.value
+    await TranscriptCache.flush(gatewayId: gateway.id)
+    let recoveredItems = await TranscriptCache.load(gatewayId: gateway.id, sessionKey: adoptionKey)?.items.map(\.id)
+    check(canceledSave?.isCancelled == true && recoveredSave?.isCancelled == false
+          && recoveredItems == ["adoption-old", "adoption-boundary", "adoption-new"],
+          "an adoption early return reschedules the dirty snapshot and preserves the older cached item")
+
     let cut = ChatStore.windowCut(windowItems(total), limit: limit)
     let cutItems = windowItems(total)
     check(cut >= total - limit && cut <= total - limit + 3 && (cut == 0 || cutItems[cut].role == .user),

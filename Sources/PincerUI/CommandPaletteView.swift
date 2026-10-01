@@ -8,6 +8,7 @@ struct CommandPaletteView: View {
     /// iOS: Settings is a sheet owned by the presenter.
     var openAppSettings: () -> Void
     @Environment(AppModel.self) private var app
+    @Environment(\.dictationSceneID) private var dictationSceneID
     @Environment(\.openGatewaySettings) private var openGatewaySettings
     @Environment(\.openAutomations) private var openAutomations
     @Environment(\.sidebarToggle) private var sidebarToggle
@@ -65,6 +66,10 @@ struct CommandPaletteView: View {
 
     private var gateway: GatewayStore? { self.app.selectedGateway }
     private var row: SessionRow? { self.gateway.flatMap { gateway in gateway.selectedKey.flatMap { gateway.sessions[$0] } } }
+    private var dictationTarget: DictationTarget? {
+        guard let sceneID = self.dictationSceneID, let gateway = self.gateway, let row = self.row else { return nil }
+        return DictationTarget(sceneID: sceneID, gatewayID: gateway.id, sessionKey: row.key)
+    }
 
     var body: some View {
         let results = self.results
@@ -399,8 +404,9 @@ struct CommandPaletteView: View {
                               enabled: !row.isModelSelectionLocked))
             items.append(item(.togglePin, row.isPinned ? L("Unpin Chat") : L("Pin Chat"), row.isPinned ? "pin.slash" : "pin"))
         }
-        if let row, self.app.dictationAvailable || self.app.dictationActiveKeys.contains(row.key) {
-            let listening = self.app.dictationActiveKeys.contains(row.key)
+        if let target = self.dictationTarget,
+           self.app.dictationAvailableTargets.contains(target) || self.app.dictationActiveTargets.contains(target) {
+            let listening = self.app.dictationActiveTargets.contains(target)
             items.append(item(.toggleDictation, listening ? L("Stop Dictation") : L("Dictate Message"), listening ? "mic.fill" : "mic",
                               keywords: ["dictate", "voice", "speech", "microphone"], shortcut: ShortcutCommand.toggleDictation.displayShortcut))
         }
@@ -672,9 +678,9 @@ struct CommandPaletteView: View {
         case .voiceSettings:
             if let gateway { self.openGatewaySettings(gateway, at: .voice) }
         case .toggleDictation:
-            guard let row else { return }
+            guard let target = self.dictationTarget else { return }
             self.app.dictationToggleRequest = DictationToggleRequest(
-                sessionKey: row.key, serial: (self.app.dictationToggleRequest?.serial ?? 0) + 1)
+                target: target, serial: (self.app.dictationToggleRequest?.serial ?? 0) + 1)
         }
     }
 }
