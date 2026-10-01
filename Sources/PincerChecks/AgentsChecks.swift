@@ -56,10 +56,11 @@ func checkAgentManagement() async {
           "a cleared workspace is left alone")
     draft.workspace = "/w/other"
     check(draft.changesWorkspace(from: original), "a new workspace is a workspace change")
-    let dupe = AgentDraft.duplicate(of: AgentSummary(id: "research", name: "Scout", emoji: "🔭", workspace: "/w/scout", model: "m"),
+    let dupe = AgentDraft.duplicate(of: AgentSummary(id: "research", name: "Scout", emoji: "🔭", avatar: "avatars/scout.png", workspace: "/w/scout", model: "m"),
                                     existing: roster)
-    check(dupe.name == "Scout Copy 2" && dupe.workspace.isEmpty && dupe.emoji == "🔭" && dupe.model == "m",
-          "duplicate draft: new name, same identity/model, fresh workspace")
+    check(dupe.name == "Scout Copy 2" && dupe.workspace.isEmpty && dupe.emoji == "🔭" && dupe.model == "m"
+          && dupe.avatar.isEmpty && dupe.createParams["avatar"] == nil,
+          "duplicate draft: new name/workspace/default avatar, same emoji/model (#130)")
 
     // Wire parsing.
     let entry = AgentFileEntry(json(#"{"name":"SOUL.md","path":"/w/SOUL.md","missing":false,"size":12,"updatedAtMs":1700000000000,"hash":"ABCDEF","content":"hi"}"#))
@@ -274,11 +275,30 @@ func runDemoAgents(_ gateway: GatewayStore) async {
             }
         }
 
-        let copy = try await management.duplicate(sourceId: agentId, draft: AgentDraft.duplicate(of: renamed!, existing: gateway.agents),
+        let sourceOriginal = AgentDraft(renamed!)
+        var sourceDraft = sourceOriginal
+        sourceDraft.avatar = "avatars/heron.png"
+        _ = try await management.update(agentId: agentId, original: sourceOriginal, draft: sourceDraft)
+        let sourceIdentityBeforeCopy = try await management.getFile(agentId: agentId, name: "IDENTITY.md")
+        check(sourceIdentityBeforeCopy.content?.contains("avatars/heron.png") == true, "demo source identity carries its workspace avatar")
+        let sourceAgent = gateway.agents.first { $0.id == agentId }!
+        let copy = try await management.duplicate(sourceId: agentId, draft: AgentDraft.duplicate(of: sourceAgent, existing: gateway.agents),
                                                   copyFiles: true)
         let copiedSoul = try await management.getFile(agentId: copy.agentId, name: "SOUL.md")
         check(copy.failedFiles.isEmpty && copy.copiedFiles.contains("SOUL.md") && copiedSoul.content == "someone else",
               "demo duplicate copies workspace files (\(copy.copiedFiles), \(copy.failedFiles))")
+        let copiedAgent = gateway.agents.first { $0.id == copy.agentId }
+        let copiedIdentity = try await management.getFile(agentId: copy.agentId, name: "IDENTITY.md")
+        let sourceIdentityAfterCopy = try await management.getFile(agentId: agentId, name: "IDENTITY.md")
+        let displayIdentity = try await management.identity(agentId: copy.agentId)
+        check(copiedAgent?.avatar == nil && copiedAgent?.name == "Demo Heron Copy" && copiedAgent?.emoji == sourceAgent.emoji
+              && copiedAgent?.workspace != sourceAgent.workspace && displayIdentity.avatar == sourceAgent.emoji,
+              "demo copy gets its new name/workspace and default emoji avatar (#130)")
+        check(copiedIdentity.content?.contains("Demo Heron Copy") == true
+              && copiedIdentity.content?.contains("avatars/heron.png") == false
+              && !copy.copiedFiles.contains("IDENTITY.md"), "demo copy keeps fresh identity without inherited avatar")
+        check(sourceIdentityAfterCopy.content == sourceIdentityBeforeCopy.content && gateway.agents.first { $0.id == agentId }?.avatar == "avatars/heron.png",
+              "demo duplication leaves the source avatar and identity unchanged")
 
         let chatKey = await gateway.createSession(agentId: copy.agentId, label: "Doomed demo chat", select: true)
         let listed = await waitFor("demo doomed chat") { chatKey.map { gateway.sessions[$0] != nil } ?? false }
