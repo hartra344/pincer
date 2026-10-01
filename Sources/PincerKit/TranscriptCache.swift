@@ -294,8 +294,19 @@ public enum TranscriptCache {
         return names.compactMap { name in
             guard name.hasSuffix(".json") else { return nil }
             let digest = String(name.dropLast(5))
-            return digest.count == 64 && digest.allSatisfy(\.isHexDigit) ? digest : nil
+            return self.isCacheDigest(digest) ? digest : nil
         }
+    }
+
+    /// Removes sidecars left behind without their transcript manifest. The scan and deletion run
+    /// through the writer actor so a cache save cannot race the inventory on the main actor.
+    package static func removeOrphanedSidecars(gatewayId: UUID, root: URL? = Self.root) async {
+        guard let directory = self.directory(gatewayId: gatewayId, root: root) else { return }
+        await Writer.shared.removeOrphanedSidecars(in: directory)
+    }
+
+    private static func isCacheDigest(_ digest: String) -> Bool {
+        digest.count == 64 && digest.allSatisfy(\.isHexDigit)
     }
 
     /// Deletes a transcript known only by its digest, through the writer like `remove(gatewayId:sessionKey:)`.
@@ -778,6 +789,27 @@ public enum TranscriptCache {
             try? FileManager.default.removeItem(at: url.appendingPathExtension("meta"))
             try? FileManager.default.removeItem(at: url)
             try? FileManager.default.removeItem(at: TranscriptCache.segmentsDirectory(of: url))
+        }
+
+        /// Sweeps only recognized transcript sidecars whose matching manifest is absent. Runs on
+        /// the same actor as writes/removals, so it can't delete a segment directory mid-commit.
+        func removeOrphanedSidecars(in directory: URL) {
+            let fileManager = FileManager.default
+            let names = (try? fileManager.contentsOfDirectory(atPath: directory.path(percentEncoded: false))) ?? []
+            for name in names {
+                let digest: String
+                if name.hasSuffix(".json.meta") {
+                    digest = String(name.dropLast(".json.meta".count))
+                } else if name.hasSuffix(".segments") {
+                    digest = String(name.dropLast(".segments".count))
+                } else {
+                    continue
+                }
+                guard TranscriptCache.isCacheDigest(digest) else { continue }
+                let manifest = directory.appending(path: "\(digest).json")
+                guard !fileManager.fileExists(atPath: manifest.path(percentEncoded: false)) else { continue }
+                try? fileManager.removeItem(at: directory.appending(path: name))
+            }
         }
 
         /// Removes an unusable transcript, unless a save replaced it since it was read.

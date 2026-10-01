@@ -56,7 +56,7 @@ public enum Spotlight {
 
     /// Whether an async reindex still matches the privacy settings it began with.
     package static func canPublish(includeMessages: Bool, defaults: UserDefaults = .standard) -> Bool {
-        Self.isEnabled(defaults)
+        Self.isEnabled(defaults) && Self.includesMessages(defaults) == includeMessages
     }
 
     public static func domain(_ gatewayId: UUID) -> String { "gateway:\(gatewayId.uuidString)" }

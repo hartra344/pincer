@@ -263,8 +263,11 @@ struct SpotlightReconcileTests {
         scratch.defaults.set(true, forKey: Spotlight.includeMessagesKey)
         #expect(!Spotlight.canPublish(includeMessages: false, defaults: scratch.defaults))
         #expect(Spotlight.canPublish(includeMessages: true, defaults: scratch.defaults))
-        scratch.defaults.set(false, forKey: Spotlight.enabledKey)
+        scratch.defaults.set(false, forKey: Spotlight.includeMessagesKey)
         #expect(!Spotlight.canPublish(includeMessages: true, defaults: scratch.defaults))
+        #expect(Spotlight.canPublish(includeMessages: false, defaults: scratch.defaults))
+        scratch.defaults.set(false, forKey: Spotlight.enabledKey)
+        #expect(!Spotlight.canPublish(includeMessages: false, defaults: scratch.defaults))
         scratch.remove()
     }
 }

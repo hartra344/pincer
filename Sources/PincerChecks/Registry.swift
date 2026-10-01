@@ -103,6 +103,10 @@ enum Suites {
                 await checkMessageIndex()
                 await checkTranscriptCacheVersioning()
             },
+            Section("Orphan transcript sidecars") {
+                await withScratchCache { root in await runOrphanSidecarChecks(root: root) }
+            },
+            Section("Spotlight descriptions") { runSpotlightChecks() },
             Section("Transcript window") {
                 await withScratchCache { root in await withCacheEnvironment(root.path(percentEncoded: false)) { await runTranscriptWindowChecks() } }
                 await withCacheEnvironment("off") { await runTranscriptWindowCacheOffChecks() }

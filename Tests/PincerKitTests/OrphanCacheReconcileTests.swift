@@ -107,6 +107,15 @@ struct OrphanCacheReconcileTests {
         try FileManager.default.createDirectory(at: orphanSegments, withIntermediateDirectories: true)
         try Data("orphan segment".utf8).write(to: orphanSegments.appending(path: "chunk.json"))
 
+        let directory = metadataManifest.deletingLastPathComponent()
+        let temporaryDigest = TranscriptCache.digest(of: "temporary-sidecar")
+        let temporaryMetadata = directory.appending(path: "\(temporaryDigest).json.meta.tmp")
+        let temporarySegments = directory.appending(path: "\(temporaryDigest).segments.tmp")
+        let malformedMetadata = directory.appending(path: "not-a-cache-digest.json.meta")
+        try Data("temporary metadata".utf8).write(to: temporaryMetadata)
+        try Data("temporary segments marker".utf8).write(to: temporarySegments)
+        try Data("unrelated metadata".utf8).write(to: malformedMetadata)
+
         let liveKey = "agent:main:dashboard:tax-2025"
         let liveManifest = try #require(TranscriptCache.file(gatewayId: gateway.id, sessionKey: liveKey, root: self.temp.url))
         let liveSegments = TranscriptCache.segmentsDirectory(of: liveManifest)
@@ -126,6 +135,9 @@ struct OrphanCacheReconcileTests {
         #expect(self.cached(gateway, liveKey))
         #expect(FileManager.default.fileExists(atPath: liveManifest.appendingPathExtension("meta").path))
         #expect(FileManager.default.fileExists(atPath: liveSegments.path))
+        #expect(FileManager.default.fileExists(atPath: temporaryMetadata.path))
+        #expect(FileManager.default.fileExists(atPath: temporarySegments.path))
+        #expect(FileManager.default.fileExists(atPath: malformedMetadata.path))
         await TranscriptCache.shutdown(root: self.temp.url)
         self.temp.remove()
         self.scratch.remove()
