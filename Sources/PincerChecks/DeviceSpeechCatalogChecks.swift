@@ -9,6 +9,12 @@ private final class DiscoveryThreadProbe: @unchecked Sendable {
 }
 
 @MainActor
+private final class CatalogSilentPlayer: ReadAloudClipPlaying {
+    func play(_: TTSClip) async -> Bool { false }
+    func stop() {}
+}
+
+@MainActor
 func runDeviceSpeechCatalogChecks() async {
     let probe = DiscoveryThreadProbe()
     let catalog = DeviceSpeechCatalog { locale in
@@ -33,7 +39,7 @@ func runDeviceSpeechCatalogChecks() async {
         check(false, "the completed device speech snapshot is present")
     }
 
-    let controller = ReadAloudController(clipPlayer: SilentReadAloudPlayer(), defaults: .standard)
+    let controller = ReadAloudController(clipPlayer: CatalogSilentPlayer(), defaults: .standard)
     check(!controller.hasCreatedSystemSpeaker, "reading Read Aloud state does not construct the audio synthesizer")
     controller.stop()
     check(!controller.hasCreatedSystemSpeaker, "stopping an idle controller keeps the synthesizer deferred")
