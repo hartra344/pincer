@@ -54,10 +54,10 @@ struct AvatarSeedStoreTests {
         return ["agents": .array(list), "defaultId": .string(agents.first?.0 ?? "main")]
     }
 
-    /// Applies the agent list, then finishes this connection's (unreachable, so failed) prefs pull.
+    /// Applies agents and simulates confirmed prefs-read completion without opening a Gateway.
     func load(_ store: GatewayStore, _ agents: [(String, String)]) async {
         store.applyAgents(Self.agentsResult(agents))
-        await store.pullBootstrapPrefs(epoch: store.connectionEpoch)
+        store.finishBootstrapPrefsPull(epoch: store.connectionEpoch, readSucceeded: true)
     }
 
     static func agent(_ id: String, _ name: String) -> AgentSummary { AgentSummary(id: id, name: name) }
@@ -90,9 +90,52 @@ struct AvatarSeedStoreTests {
         self.scratch.defaults.set(true, forKey: store.syncedMap(AvatarPreferences.prefKey).syncedDefaultsKey)
         store.applyAgents(Self.agentsResult([("main", "Claw")]))
         #expect(store.avatarChoices[AvatarPreferences.seedEntry(for: "main")] == nil)
-        await store.pullBootstrapPrefs(epoch: store.connectionEpoch)
+        store.finishBootstrapPrefsPull(epoch: store.connectionEpoch, readSucceeded: true)
         #expect(store.avatarChoices[AvatarPreferences.seedEntry(for: "main")]
             == AvatarStyle.identitySeed(name: "Claw", agentId: "main"))
+    }
+
+    /// A failed read on an already-synced Gateway must not authorize a new seed write.
+    @Test func failedPrefsReadDoesNotPromoteAvatarSeedsForTheCurrentEpoch() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        self.scratch.defaults.set(true, forKey: store.syncedMap(AvatarPreferences.prefKey).syncedDefaultsKey)
+        store.applyAgents(Self.agentsResult([("new-agent", "Renamed Before This Device Saw It")]))
+
+        store.finishBootstrapPrefsPull(epoch: store.connectionEpoch, readSucceeded: false)
+
+        let seedEntry = AvatarPreferences.seedEntry(for: "new-agent")
+        #expect(store.avatarPrefsPulledEpoch == nil)
+        #expect(store.avatarChoices[seedEntry] == nil)
+        #expect(store.pendingPrefChanges[AvatarPreferences.prefKey] == nil,
+                "an automatic seed is neither recorded nor pushed without a successful read")
+    }
+
+    @Test func successfulEmptyProfileReadAuthorizesSeedsForTheCurrentEpoch() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        self.scratch.defaults.set(true, forKey: store.syncedMap(AvatarPreferences.prefKey).syncedDefaultsKey)
+        store.applyAgents(Self.agentsResult([("main", "Claw")]))
+
+        // A successful users.prefs.get may omit pincer.avatars when the profile has no entries.
+        store.finishBootstrapPrefsPull(epoch: store.connectionEpoch, readSucceeded: true)
+
+        #expect(store.avatarPrefsPulledEpoch == store.connectionEpoch)
+        #expect(store.avatarChoices[AvatarPreferences.seedEntry(for: "main")]
+            == AvatarStyle.identitySeed(name: "Claw", agentId: "main"))
+    }
+
+    @Test func stalePrefsReadCannotPromoteAvatarSeeds() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        self.scratch.defaults.set(true, forKey: store.syncedMap(AvatarPreferences.prefKey).syncedDefaultsKey)
+        store.applyAgents(Self.agentsResult([("main", "Claw")]))
+
+        store.finishBootstrapPrefsPull(epoch: store.connectionEpoch - 1, readSucceeded: true)
+
+        #expect(store.avatarPrefsPulledEpoch == nil)
+        #expect(store.avatarChoices[AvatarPreferences.seedEntry(for: "main")] == nil)
+        #expect(store.pendingPrefChanges[AvatarPreferences.prefKey] == nil)
     }
 
     /// Before the first sync, seeds are kept here for the first sync's merge to write (the

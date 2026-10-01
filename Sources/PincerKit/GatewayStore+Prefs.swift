@@ -115,6 +115,22 @@ extension GatewayStore {
     /// Seconds between bootstrap pulls after the read or a first-sync write fails.
     static let bootstrapPullRetryDelays: [Double] = [2, 5, 10, 30, 30]
 
+    /// The epoch is promoted once the bootstrap prefs read has succeeded, so avatar seeds cannot
+    /// write from a connection that never saw the Gateway's existing seed map.
+    enum AvatarPrefsPullAuthorization {
+        static func promotedEpoch(readEpoch: Int, readSucceeded: Bool, currentEpoch: Int) -> Int? {
+            guard readSucceeded, readEpoch == currentEpoch else { return nil }
+            return readEpoch
+        }
+    }
+
+    func finishBootstrapPrefsPull(epoch: Int, readSucceeded: Bool) {
+        guard self.isCurrent(epoch) else { return }
+        self.avatarPrefsPulledEpoch = Self.AvatarPrefsPullAuthorization.promotedEpoch(
+            readEpoch: epoch, readSucceeded: readSucceeded, currentEpoch: self.connectionEpoch)
+        self.recordAvatarSeeds()
+    }
+
     /// Everything synced through `users.prefs`, except the group maps `loadGroups` owns, in one read.
     func pullBootstrapPrefs(epoch: Int) async {
         let prefs = Set([
@@ -123,12 +139,16 @@ extension GatewayStore {
         ]).union((0..<Self.bookmarkShardCount).map { Self.bookmarksPref(shard: $0) })
         let maps = self.syncedMaps.filter { prefs.contains($0.pref) }
         // A slow link can time out the first read (or its first-sync write); unsynced maps don't push,
-        // so without a retry this device's changes would wait for the next reconnect.
+        // so without a retry this device's changes would wait for the next reconnect. Keep the read
+        // result separately: exhausting retries must not authorize automatic avatar seeds, while an
+        // empty but successful profile read still protects seeds already stored on the Gateway.
         var delays = Self.bootstrapPullRetryDelays[...]
-        while await !self.pullMaps(maps, epoch: epoch)
-            || maps.contains(where: { !self.defaults.bool(forKey: $0.syncedDefaultsKey) }),
-            self.isCurrent(epoch), let delay = delays.popFirst()
-        {
+        var readSucceeded = false
+        while self.isCurrent(epoch) {
+            let succeeded = await self.pullMaps(maps, epoch: epoch)
+            readSucceeded = readSucceeded || succeeded
+            let firstSyncPending = maps.contains { !self.defaults.bool(forKey: $0.syncedDefaultsKey) }
+            guard (!succeeded || firstSyncPending), self.isCurrent(epoch), let delay = delays.popFirst() else { break }
             try? await Task.sleep(for: .seconds(delay))
             guard self.isCurrent(epoch) else { return }
         }
@@ -137,8 +157,7 @@ extension GatewayStore {
         self.queuedAvatarChoices = [:]
         for (entry, value) in queued { self.setAvatarChoice(value, for: entry) }
         guard self.isCurrent(epoch) else { return }
-        self.avatarPrefsPulledEpoch = epoch
-        self.recordAvatarSeeds()
+        self.finishBootstrapPrefsPull(epoch: epoch, readSucceeded: readSucceeded)
     }
 
     func pullServerNames() async { await self.pull(self.syncedMap(Self.serverNamesPref)) }
