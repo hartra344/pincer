@@ -495,15 +495,15 @@ func runDemoPrefsReactions() async {
 
     // Legacy Gateways enforce a 4 KiB users.prefs value cap. A burst of older reactions must be
     // bounded before the current gesture is written, rather than leaving pincer.reactions rejected.
+    let latestLegacyKey = Reactions.prefEntryKey(sessionKey: main, messageId: "legacy-cap-139")
     for index in 0..<140 {
         gateway.setReactions(["👍"], sessionKey: main, messageId: "legacy-cap-\(index)")
     }
     _ = await waitFor("legacy reaction preference sync settled") {
-        gateway.pendingPrefChanges[Reactions.prefKey]?.isEmpty == true
+        gateway.remotePrefMaps[Reactions.prefKey]?[latestLegacyKey] == "👍"
             || gateway.rejectedPrefs[Reactions.prefKey] != nil
     }
     await gateway.prefPushes[Reactions.prefKey]?.value
-    let latestLegacyKey = Reactions.prefEntryKey(sessionKey: main, messageId: "legacy-cap-139")
     let remoteReactions = gateway.remotePrefMaps[Reactions.prefKey]
     let remoteReactionBytes = remoteReactions.flatMap { try? JSONEncoder().encode($0).count } ?? Int.max
     check(remoteReactionBytes <= LegacyReactionPrefs.syncedByteBudget,

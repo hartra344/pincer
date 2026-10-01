@@ -83,6 +83,7 @@ enum Suites {
             Section("Agent reply targets") { checkReplyTargets() },
             Section("Reaction level") { checkReactionLevel() },
             Section("Gateway reactions") { checkGatewayReactions() },
+            Section("Legacy reaction preference cap") { checkLegacyReactionPrefs() },
             Section("Agent questions") { runAgentQuestionChecks() },
             Section("Gateway config schema") { runConfigChecks() },
             Section("Progress card") { runProgressCardChecks() },
