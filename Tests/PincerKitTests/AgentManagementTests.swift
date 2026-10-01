@@ -300,6 +300,62 @@ struct AgentManagementTests {
         #expect(saved["file"]?["content"]?.string == "- mine")
     }
 
+    @MainActor @Test func saveAllRecordsFirstWorkspaceFileConflictAndKeepsDraft() async throws {
+        let (model, demo) = Self.demoModel()
+        let first = model.editor(agentId: "main", name: "SOUL.md")
+        let second = model.editor(agentId: "main", name: "USER.md")
+        await first.load()
+        await second.load()
+        first.text += "\nfirst draft"
+        second.text += "\nsecond draft"
+        let secondDraft = second.text
+        let secondHash = second.entry?.hash
+        _ = try await demo.handle("agents.files.set", ["agentId": "main", "name": "USER.md", "content": "changed elsewhere",
+                                                        "expectedHash": .string(secondHash ?? "")])
+
+        #expect(!(await model.saveAll()))
+        #expect(first.conflict == nil && !first.isDirty, "earlier file saves before the conflict")
+        #expect(second.conflict?.theirs == "changed elsewhere" && second.conflict?.yours == secondDraft)
+        #expect(second.text == secondDraft && second.isDirty, "the unsaved draft remains available")
+        #expect(model.failedSaveAllFile === second, "the close flow can find the failed file even when its page is hidden")
+
+        #expect(await second.resolveConflictOverwrite())
+        #expect(await model.saveAll())
+        #expect(model.failedSaveAllFile == nil, "a successful retry clears the previous failure")
+        #expect(!model.hasUnsavedChanges)
+    }
+
+    @MainActor @Test func closingAResolvedFileClearsBulkSaveFailure() async throws {
+        let (model, demo) = Self.demoModel()
+        let editor = model.editor(agentId: "main", name: "SOUL.md")
+        await editor.load()
+        editor.text += "\nlocal draft"
+        _ = try await demo.handle("agents.files.set", ["agentId": "main", "name": "SOUL.md", "content": "changed elsewhere",
+                                                        "expectedHash": .string(editor.entry?.hash ?? "")])
+        #expect(!(await model.saveAll()))
+        #expect(model.failedSaveAllFile === editor)
+        await editor.resolveConflictKeepTheirs()
+        #expect(!editor.isDirty && editor.conflict == nil)
+        model.closeEditor(editor)
+        #expect(model.failedSaveAllFile == nil, "leaving a resolved file must release the failed editor without another bulk save")
+        #expect(!model.openEditors.contains { $0 === editor })
+    }
+
+    @MainActor @Test func discardAllClearsFailedWorkspaceFile() async throws {
+        let (model, demo) = Self.demoModel()
+        let editor = model.editor(agentId: "main", name: "SOUL.md")
+        await editor.load()
+        editor.text += "\nlocal draft"
+        let originalHash = editor.entry?.hash
+        _ = try await demo.handle("agents.files.set", ["agentId": "main", "name": "SOUL.md", "content": "changed elsewhere",
+                                                        "expectedHash": .string(originalHash ?? "")])
+        #expect(!(await model.saveAll()))
+        #expect(model.failedSaveAllFile === editor)
+        model.discardAll()
+        #expect(model.failedSaveAllFile == nil)
+        #expect(!model.hasUnsavedChanges)
+    }
+
     @Test func demoSeedsAndFileRules() async throws {
         let demo = DemoGateway()
         let list = try await demo.handle("agents.list", [:])

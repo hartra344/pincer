@@ -230,7 +230,7 @@ private struct GatewaySettingsRoot: View {
         .confirmationDialog(L("Save changes to \(self.agentManagement.unsavedTitle(agentNames: ExecPolicyUI.agentNames(self.gateway)))?"),
                             isPresented: self.$confirmAgentsClose, titleVisibility: .visible) {
             Button(L("Save")) {
-                Task { if await self.agentManagement.saveAll() { self.closeWindow() } }
+                Task { await self.navigator.saveAgentsBeforeClosing(self.agentManagement, close: self.closeWindow) }
             }
             .disabled(!self.gateway.state.isConnected)
             Button(L("Don't Save"), role: .destructive) {

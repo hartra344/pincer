@@ -8,6 +8,31 @@ import Testing
 @MainActor
 @Suite("Transcript list controller")
 struct TranscriptListControllerTests {
+    @MainActor
+    private final class OlderPageGate {
+        private var didStart = false
+        private var started: CheckedContinuation<Void, Never>?
+        private var completion: CheckedContinuation<Bool, Never>?
+
+        func load() async -> Bool {
+            self.didStart = true
+            self.started?.resume()
+            self.started = nil
+            return await withCheckedContinuation { self.completion = $0 }
+        }
+
+        func waitUntilStarted() async {
+            guard !self.didStart else { return }
+            await withCheckedContinuation { self.started = $0 }
+        }
+
+        func complete(_ result: Bool) {
+            guard let completion = self.completion else { return }
+            self.completion = nil
+            completion.resume(returning: result)
+        }
+    }
+
     /// Rows 100 points tall with no spacing, in a 300-point viewport.
     final class FakeHost: TranscriptListHost {
         var rowCount: () -> Int = { 0 }
@@ -302,18 +327,36 @@ struct TranscriptListControllerTests {
         let (controller, host, context) = self.make(scratch)
         let chat = context.chat!
         let rows: [TranscriptRow] = [.loadingOlder] + Self.rows(0..<3) + [Self.user(2)]
-        // An empty cached page is consumed by the first load-older run, which clears `olderInCache`.
-        chat.hasMoreHistory = false
-        chat.olderInCache = true
+        let gate = OlderPageGate()
+        var pageLoads = 0
+        controller.renderer.olderPageLoader = { _ in
+            pageLoads += 1
+            if pageLoads == 1 { return await gate.load() }
+            chat.olderInCache = false
+            return true
+        }
+        chat.hasMoreHistory = true
         self.update(controller, context, rows)
-        for _ in 0..<200 where chat.olderInCache { try? await Task.sleep(for: .milliseconds(10)) }
-        #expect(!chat.olderInCache, "the older row fires once when it first shows")
-        try? await Task.sleep(for: .milliseconds(400))
+        await gate.waitUntilStarted()
 
+        // Keep the real older loop in flight while identical raw input, including the duplicate,
+        // is accepted repeatedly. The gate removes cache I/O and controls exactly when paging ends.
+        for _ in 0..<3 { self.update(controller, context, rows) }
+        #expect(pageLoads == 1, "updates while a page is pending must not start another page")
+
+        chat.hasMoreHistory = false
+        gate.complete(true)
+        await controller.renderer.waitForOlderLoop()
+        #expect(pageLoads == 1, "the loop must finish before the trigger is checked again")
+        #expect(!chat.hasOlderItems)
+
+        // A still-visible loading row can page again if more history is genuinely available.
+        // Duplicate ids must not make the unchanged row look newly visible after completion.
         chat.olderInCache = true
         for _ in 0..<3 { self.update(controller, context, rows) }
-        try? await Task.sleep(for: .milliseconds(200))
-        #expect(chat.olderInCache, "repeated updates of the same rows don't fire it again")
+        await controller.renderer.waitForOlderLoop()
+        #expect(pageLoads == 1, "repeated duplicate ids don't re-arm the older-row trigger")
+        #expect(chat.olderInCache, "no redundant page should consume the cached older flag")
         withExtendedLifetime(host) {}
     }
 
