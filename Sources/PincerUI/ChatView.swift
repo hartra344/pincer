@@ -566,6 +566,7 @@ struct ChatChrome: ViewModifier {
         content
             .environment(\.showsChatSplit, split)
             .environment(\.chatChromeActions, ChatChromeActions(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector))
+            .environment(\.chatChromeSessionRow, self.row)
             .onGeometryChange(for: Bool.self) { $0.size.width >= ChatSplitHost.minWidth * 2 + 1 } action: { self.fitsSplit = $0 }
             .navigationTitle(self.key.map { chatTitle(self.gateway, key: $0, row: self.row) } ?? L("Chat"))
             #if os(macOS)
