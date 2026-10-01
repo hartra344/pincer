@@ -252,16 +252,25 @@ enum TranscriptSymbols {
                             width: drawn.width, height: drawn.height)
         #if os(macOS)
         // Palette rendering with one color fills a multi-layer symbol's (face.smiling) background layer into a dot.
+        self.tintedImage(name, size: size, weight: weight, drawnSize: target.size, color: color)?
+            .draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        #else
+        image.withTintColor(color, renderingMode: .alwaysOriginal).draw(in: target)
+        #endif
+    }
+    #if os(macOS)
+    /// The image used by the native draw path, exposed internally for reuse and appearance checks.
+    static func tintedImage(_ name: String, size: CGFloat, weight: Weight = .regular,
+                            drawnSize: CGSize, color: NSColor) -> NSImage? {
+        guard let image = self.image(name, size: size, weight: weight) else { return nil }
         let mono = image.withSymbolConfiguration(NSImage.SymbolConfiguration.preferringMonochrome()) ?? image
-        let tinted = NSImage(size: target.size, flipped: false) { rect in
+        return NSImage(size: drawnSize, flipped: false) { rect in
             mono.draw(in: rect)
             color.setFill()
             rect.fill(using: .sourceIn)
             return true
         }
-        tinted.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-        #else
-        image.withTintColor(color, renderingMode: .alwaysOriginal).draw(in: target)
-        #endif
     }
+    #endif
+
 }
