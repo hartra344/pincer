@@ -477,13 +477,20 @@ struct ChannelErrorDisclosure: View {
     @Binding var isExpanded: Bool
 
     var body: some View {
-        Text(self.error)
+        VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+            Text(self.error)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .lineLimit(self.isExpanded ? nil : 2)
+                .textSelection(.enabled)
+                .help(self.error)
+            Button(self.isExpanded ? L("Show Less") : L("Show More")) {
+                self.isExpanded.toggle()
+            }
             .font(.caption)
-            .foregroundStyle(.red)
-            .lineLimit(self.isExpanded ? nil : 2)
-            .textSelection(.enabled)
-            .help(self.error)
-            .onTapGesture { self.isExpanded.toggle() }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("channel-error-disclosure")
+        }
     }
 }
 
