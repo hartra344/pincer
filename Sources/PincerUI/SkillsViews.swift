@@ -372,9 +372,9 @@ struct SkillDetailPage: View {
             if let env = skill.apiKeyEnv {
                 LabeledContent(L("API Key (\(env))"), value: skill.apiKeyIsSet ? "Set" : "Not set")
                 HStack {
-                    SecureField(L("New API key"), text: self.$apiKey)
-                        .textContentType(.password)
-                        .onSubmit { self.saveApiKey(skill) }
+                    APIKeyField(title: L("New API key"), prompt: L("Paste API key"), text: self.$apiKey) {
+                        self.saveApiKey(skill)
+                    }
                     Button(L("Save")) { self.saveApiKey(skill) }
                         .disabled(!self.canChange || self.apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
                 }

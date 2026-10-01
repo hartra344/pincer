@@ -29,9 +29,11 @@ private struct APIKeyTextField: UIViewRepresentable {
     let prompt: String
     @Binding var text: String
     let onSubmit: () -> Void
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeUIView(context: Context) -> UITextField {
         let field = UITextField()
+        field.isEnabled = self.isEnabled
         field.isSecureTextEntry = true
         // .oneTimeCode is the content type that keeps the Passwords bar and Strong Password away.
         field.textContentType = .oneTimeCode
@@ -57,6 +59,7 @@ private struct APIKeyTextField: UIViewRepresentable {
 
     func updateUIView(_ field: UITextField, context: Context) {
         context.coordinator.parent = self
+        field.isEnabled = self.isEnabled
         if field.text != self.text { field.text = self.text }
     }
 

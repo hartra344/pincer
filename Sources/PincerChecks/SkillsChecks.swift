@@ -64,6 +64,17 @@ func checkSkillsTools() async {
     let admin = SkillsModel(methods: { methods }, request: { try await fake.request($0, $1) })
     let denied = await admin.setEnabled(disabled, true)
     check(denied == .failed(Skills.needsAdminMessage) && !admin.hasAdmin, "scope error → read-only")
+    // #505: the masked editor submits pasted keys without changing punctuation or case.
+    // Secrets remain write-only; the response exposes only whether the requirement is met.
+    let keyGateway = FakeAgentGateway()
+    keyGateway.handler = { method, _ in
+        method == Skills.statusMethod ? ["skills": []] : ["ok": true]
+    }
+    let keyModel = SkillsModel(methods: { methods }, request: { try await keyGateway.request($0, $1) })
+    let pastedKey = "sk-test_MiXeD-123+/=:@."
+    _ = await keyModel.setApiKey(needsEnv, "  \(pastedKey)\n")
+    check(keyGateway.calls.first { $0.method == Skills.updateMethod }?.params == ["skillKey": "notion", "apiKey": .string(pastedKey)],
+          "API-key submit trims outer whitespace and preserves key bytes (#505)")
     let noTools = ToolsInspectorModel(scope: .session(key: "agent:main:main", agentId: "main"), methods: { ["agents.list"] },
                                       request: { try await fake.request($0, $1) })
     await noTools.load()
@@ -80,6 +91,16 @@ func runDemoSkills(_ gateway: GatewayStore) async {
     check(skills.loadError == nil && skills.skills.count >= 6, "demo skills load (\(skills.skills.count))")
     check(Set(skills.skills.map(\.state)) == Set(SkillState.allCases), "demo covers every state")
     check(skills.skill(key: "video-frames")?.primaryReason == "Missing binary: ffmpeg", "demo missing binary")
+    if let notion = skills.skill(key: "notion") {
+        let saved = await skills.setApiKey(notion, "sk-demo_MiXeD-123+/=:@.")
+        check(saved == .done("Saved the API key for notion") && skills.skill(key: "notion")?.apiKeyIsSet == true
+              && skills.skill(key: "notion")?.state == .ready, "demo pasted API key satisfies the skill requirement (#505)")
+        if let keyed = skills.skill(key: "notion") {
+            _ = await skills.setApiKey(keyed, "")
+            check(skills.skill(key: "notion")?.apiKeyIsSet == false && skills.skill(key: "notion")?.state == .needsSetup,
+                  "demo clearing the API key restores Needs Setup")
+        }
+    } else { check(false, "demo API-key skill exists") }
     await skills.search("nas")
     if let nas = skills.searchResults.first(where: { $0.slug == "nas-report" }),
        case .updateAvailable = skills.installState(for: nas),
