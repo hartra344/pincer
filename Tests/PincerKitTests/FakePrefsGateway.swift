@@ -20,6 +20,7 @@ final class FakePrefsGateway: @unchecked Sendable {
     private var getCount = 0
     private var getFailures = 0
     private var reply: SetReply = .ok
+    private var methods = ["users.prefs.get", "users.prefs.set"]
     /// Whether an accepted set also sends `users.prefs.changed`, like the real Gateway.
     private var echoes = true
     private var echoCount = 0
@@ -61,6 +62,11 @@ final class FakePrefsGateway: @unchecked Sendable {
     var setReply: SetReply {
         get { self.locked { self.reply } }
         set { self.locked { self.reply = newValue } }
+    }
+
+    var advertisedMethods: [String] {
+        get { self.locked { self.methods } }
+        set { self.locked { self.methods = newValue } }
     }
 
     var sendsEchoes: Bool {
@@ -133,7 +139,7 @@ final class FakePrefsGateway: @unchecked Sendable {
         let params = frame["params"] ?? .null
         switch method {
         case "connect":
-            let methods: [JSONValue] = ["users.prefs.get", "users.prefs.set"]
+            let methods = self.advertisedMethods.map(JSONValue.string)
             self.respond(id, ["server": ["version": "test"], "auth": ["scopes": ["operator.read", "operator.write"]],
                               "policy": ["tickIntervalMs": 600_000], "features": ["methods": .array(methods)],
                               "snapshot": [:]], on: connection)
