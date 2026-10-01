@@ -1413,6 +1413,16 @@
         }
       }
     },
+    "Finished": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finished"
+          }
+        }
+      }
+    },
     "Hide Sidebar": {
       "localizations": {
         "en": {
@@ -1433,6 +1443,26 @@
         }
       }
     },
+    "Replying": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replying"
+          }
+        }
+      }
+    },
+    "Running %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running %@"
+          }
+        }
+      }
+    },
     "Search in output": {
       "localizations": {
         "en": {
@@ -1443,12 +1473,32 @@
         }
       }
     },
+    "Show running chats on the Lock Screen": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show running chats on the Lock Screen"
+          }
+        }
+      }
+    },
     "Show Sidebar": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Show Sidebar"
+          }
+        }
+      }
+    },
+    "Something went wrong": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Something went wrong"
           }
         }
       }
@@ -7319,6 +7369,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kind"
+          }
+        }
+      }
+    },
+    "Tidying up its memory": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tidying up its memory"
           }
         }
       }
@@ -13409,6 +13469,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Show Fonts"
+          }
+        }
+      }
+    },
+    "Waiting for your approval": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for your approval"
           }
         }
       }

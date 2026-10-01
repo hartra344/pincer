@@ -70,6 +70,7 @@ export default defineConfig({
 						{ slug: 'guides/sharing-to-pincer' },
 						{ slug: 'guides/approvals-and-notifications' },
 						{ slug: 'guides/push-notifications', label: 'Notifications while closed (iOS)' },
+						{ slug: 'guides/live-activities', label: 'Live Activities (iOS)' },
 						{ slug: 'guides/offline-outbox' },
 						{ slug: 'guides/local-cache' },
 						{ slug: 'guides/appearance' },

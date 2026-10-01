@@ -13,6 +13,9 @@ struct NotificationSettingsSection: View {
     @State private var refreshTick = 0
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(PushRegistrar.relayKey) private var pushRelay = ""
+    #if os(iOS)
+    @AppStorage(RunActivityCoordinator.enabledKey) private var liveActivities = true
+    #endif
 
     var body: some View {
         SwiftUI.Section {
@@ -22,6 +25,10 @@ struct NotificationSettingsSection: View {
                     self.app.syncPush()
                 }
             #if os(iOS)
+            Toggle("Show running chats on the Lock Screen", isOn: self.$liveActivities)
+                .onChange(of: self.liveActivities) { _, value in
+                    if !value { RunActivityCoordinator.shared.endAll() }
+                }
             Group {
                 Picker("While Pincer is closed", selection: self.$delivery) {
                     ForEach(ClosedAppDelivery.allCases) { Text($0.label).tag($0) }

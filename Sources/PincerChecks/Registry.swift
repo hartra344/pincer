@@ -120,6 +120,7 @@ enum Suites {
             Section(nil) { checkToolDiffs() },
             Section(nil) { checkOutboxLogic() },
             Section(nil) { checkSidebarWorking() },
+            Section(nil) { checkRunActivityState() },
             Section("First-run wizard") { await runFirstRunChecks() },
         ]
         return sections
@@ -158,6 +159,7 @@ enum Suites {
         Section("Accessibility labels (demo)") { await runDemoAccessibility() },
         Section("Accessibility pass (demo)") { await runDemoAccessibilityPass() },
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
+        Section("Live Activities (demo)") { await runDemoRunActivity() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
         Section("Sidebar group moves (demo, #416)") { await runDemoSidebarGroupMoves() },
         Section("Sidebar hierarchy (demo)") { await runDemoSidebarHierarchy() },

@@ -28,6 +28,7 @@ Signing uses manual App Store profiles through `project.appstore.yml`, which is 
 | `DISTRIBUTION_P12`, `MAC_INSTALLER_P12`, `P12_PASSWORD` | Apple Distribution and Mac Installer Distribution certificates (base64 `.p12`) |
 | `IOS_PROFILE`, `MACOS_PROFILE` | Base64 `Pincer_iOS_AppStore_CI` / `Pincer_macOS_AppStore_CI` provisioning profiles. The iOS app ID needs the Push Notifications capability. |
 | `IOS_NOTIFICATIONS_PROFILE` | Base64 `Pincer_iOS_Notifications_AppStore_CI` profile for the `chat.pincer.ios.notifications` notification service extension |
+| `IOS_LIVE_ACTIVITY_PROFILE` | Base64 `Pincer_iOS_LiveActivity_AppStore_CI` profile for the `chat.pincer.ios.liveactivity` Live Activity extension |
 | `IOS_SHARE_PROFILE`, `MACOS_SHARE_PROFILE` | Base64 `Pincer_iOS_Share_AppStore_CI` / `Pincer_macOS_Share_AppStore_CI` profiles for the Share extensions (`chat.pincer.ios.share`, `chat.pincer.mac.share`) |
 
 The iOS app and Share extension profiles need the App Groups capability with `group.chat.pincer`. macOS uses the team-prefixed group `<TeamID>.chat.pincer`, which needs no portal setup. The shared Keychain group `<TeamID>.chat.pincer.shared` is covered by the default keychain entitlement.

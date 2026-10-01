@@ -52,6 +52,7 @@ jobs:
           IOS_SHARE_PROFILE: ${{ secrets.IOS_SHARE_PROFILE }}
           MACOS_SHARE_PROFILE: ${{ secrets.MACOS_SHARE_PROFILE }}
           IOS_NOTIFICATIONS_PROFILE: ${{ secrets.IOS_NOTIFICATIONS_PROFILE }}
+          IOS_LIVE_ACTIVITY_PROFILE: ${{ secrets.IOS_LIVE_ACTIVITY_PROFILE }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
         run: |
@@ -88,6 +89,7 @@ jobs:
             install_profile "$IOS_PROFILE" mobileprovision
             install_profile "$IOS_SHARE_PROFILE" mobileprovision
             install_profile "$IOS_NOTIFICATIONS_PROFILE" mobileprovision
+            install_profile "$IOS_LIVE_ACTIVITY_PROFILE" mobileprovision
           fi
 
           echo "$ASC_KEY_P8" | base64 --decode > "$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"

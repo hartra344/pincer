@@ -291,6 +291,7 @@ public final class ChatStore: Identifiable {
         guard !self.headless, running != self.isRunning else { return }
         self.isRunning = running
         self.gateway?.chatRunStateChanged(self.sessionKey, running: running)
+        self.refreshRunActivity()
     }
 
     // MARK: Loading
@@ -319,8 +320,11 @@ public final class ChatStore: Identifiable {
     func liveChanged(from old: LiveRun?) {
         if Self.isTextGrowth(from: old, to: self.live) {
             self.publishLiveCoalesced()
+            // The first words of a reply change what a Live Activity says; more words don't.
+            if (old?.text.isEmpty ?? true) != (self.live?.text.isEmpty ?? true) { self.refreshRunActivity() }
         } else {
             self.rebuild(itemsChanged: false)
+            self.refreshRunActivity()
         }
     }
 
