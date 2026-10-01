@@ -232,6 +232,16 @@ struct ReplyTargetTests {
         #expect(quote.targetId == "u1" && quote.text == "first")
     }
 
+    @Test func transientAckIsHiddenWhenWhatsAppReactionLevelIsOff() {
+        let store = self.chat([Self.user("u1")], row: #"{"key":"agent:main:main","channel":"whatsapp","chatType":"direct"}"#)
+        let gateway = store.gateway!
+        gateway.settings.set(["messages", "ackReactionScope"], .string("all"))
+        gateway.settings.set(["messages", "ackReaction"], .string("👀"))
+        gateway.settings.set(["channels", "whatsapp", "reactionLevel"], .string("off"))
+        store.isRunning = true
+        #expect(store.ackMessageId == nil)
+    }
+
     @Test func userQuotesStillWork() throws {
         let store = self.chat([Self.assistant("a1", "Disk status"),
                                Self.item(#"{"role":"user","content":[{"type":"text","text":"that"}],"__openclaw":{"id":"u1","replyToId":"a1"}}"#)])

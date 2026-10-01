@@ -116,6 +116,16 @@ struct StreamingCoalescerTests {
         }
     }
 
+    @Test func liveReplyStripsTransportDirectiveAndKeepsCodeLiteral() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let text = "[[reply_to:message-1]] Recovered `[[reply_to_current]]` response"
+            self.delta(chat, text, full: text)
+            #expect(self.liveText(chat) == "Recovered `[[reply_to_current]]` response")
+        }
+    }
+
     @Test func toolEventsFlushPendingTextImmediately() async {
         defer { self.scratch.remove() }
         await self.withInterval(5) {
