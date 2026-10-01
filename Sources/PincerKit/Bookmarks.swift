@@ -26,6 +26,11 @@ public struct Bookmark: Codable, Hashable, Identifiable, Sendable {
         self.createdAt = createdAt
     }
 
+    /// Label for a bookmarked chat whose session may not be loaded on this device.
+    public static func chatTitle(_ loadedTitle: String?, sessionKey: String) -> String {
+        loadedTitle ?? sessionKey
+    }
+
     static func id(sessionKey: String, messageId: String) -> String { "\(sessionKey)\u{1F}\(messageId)" }
 
     /// Preview length kept for the list.
@@ -107,9 +112,9 @@ public final class BookmarkStore {
     private static var stores: [UUID: BookmarkStore] = [:]
 
     /// The shared store for `gatewayId`.
-    public static func shared(gatewayId: UUID) -> BookmarkStore {
+    public static func shared(gatewayId: UUID, defaults: UserDefaults = .standard) -> BookmarkStore {
         if let store = self.stores[gatewayId] { return store }
-        let store = BookmarkStore(gatewayId: gatewayId)
+        let store = BookmarkStore(gatewayId: gatewayId, defaults: defaults)
         self.stores[gatewayId] = store
         return store
     }

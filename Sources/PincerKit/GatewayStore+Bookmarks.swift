@@ -15,7 +15,7 @@ extension GatewayStore {
 
     /// The shared store, with local edits pushed to the gateway.
     var bookmarkStore: BookmarkStore {
-        let store = BookmarkStore.shared(gatewayId: self.id)
+        let store = BookmarkStore.shared(gatewayId: self.id, defaults: self.defaults)
         if store.onChange == nil { self.wireBookmarkSync(store) }
         return store
     }
@@ -24,7 +24,7 @@ extension GatewayStore {
     /// (a replaced gateway shares the store but not the instance).
     @discardableResult
     func wireBookmarkSync(_ store: BookmarkStore? = nil) -> BookmarkStore {
-        let store = store ?? BookmarkStore.shared(gatewayId: self.id)
+        let store = store ?? BookmarkStore.shared(gatewayId: self.id, defaults: self.defaults)
         // Bookmarks saved before the cap must fit a pref value before their first sync.
         if !self.defaults.bool(forKey: Self.bookmarksSyncedKey(0, self.id)) { store.enforceLimits() }
         store.onChange = { [weak self] changes in
