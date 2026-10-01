@@ -578,7 +578,12 @@ public final class GatewayStore: Identifiable {
         Task { await PushRegistrar.shared.sync(self) }
         self.dumpSessionShapesIfRequested()
         Task { await self.loadConfiguredServerNames() }
-        Task { await self.pullBootstrapPrefs(epoch: epoch) }
+        // Preference reads can restore remote bookmarks; reconcile deleted chats afterwards.
+        // Both operations stay in the background so opening the chat never waits for them.
+        Task {
+            await self.pullBootstrapPrefs(epoch: epoch)
+            await self.reconcileOrphanedTranscripts(epoch: epoch)
+        }
         Task { await self.loadGroups() }
         // Only pick a chat on the first connect: on iPhone, going back to the sidebar clears the
         // selection, and re-selecting on every reconnect would push a chat the user left.
@@ -600,7 +605,6 @@ public final class GatewayStore: Identifiable {
             guard self.isCurrent(epoch) else { return }
         }
         self.startPrefetch()
-        Task { await self.reconcileOrphanedTranscripts(epoch: epoch) }
         self.reconcileMessageIndex()
         self.enforceChatBudget()
         await self.flushOutbox()

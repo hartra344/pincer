@@ -96,6 +96,7 @@ enum Suites {
             Section("Web Push") { await runWebPushChecks() },
             Section("Find in chat") { await runFindInChatChecks() },
             Section("Rich rendering") { runRichRenderingChecks() },
+            Section("Bookmark cleanup") { await runBookmarkCleanupChecks() },
             Section("Command palette") { runCommandPaletteChecks() },
             Section("Composer drafts") { await checkDrafts() },
             Section("Message search") { checkMessageSearchLogic() },

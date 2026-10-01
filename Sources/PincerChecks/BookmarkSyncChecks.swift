@@ -65,6 +65,35 @@ func runDemoBookmarkSync() async {
         if !deleted { try? await Task.sleep(for: .milliseconds(100)) }
     }
     check(deleted, "bookmark demo: un-starring deletes the entry from users.prefs")
+    // A real, confirmed delete clears the local stars and their synced entries; other chats keep theirs.
+    let deletionBookmark = Bookmark(sessionKey: DemoBookmarks.tripSessionKey, messageId: "delete-sync-check",
+                                    preview: "A saved trip message to delete")
+    store.add(deletionBookmark)
+    var deletionSeedWritten = false
+    let seedDeadline = ContinuousClock.now.advanced(by: .seconds(15))
+    while !deletionSeedWritten && ContinuousClock.now < seedDeadline {
+        deletionSeedWritten = await stored(Bookmark.shard(ofKey: deletionBookmark.id))[deletionBookmark.id] != nil
+        if !deletionSeedWritten { try? await Task.sleep(for: .milliseconds(100)) }
+    }
+    check(deletionSeedWritten, "bookmark demo: the deletion fixture is saved to users.prefs before deleting the chat")
+    let tripBookmarks = store.bookmarks(in: DemoBookmarks.tripSessionKey)
+    check(!tripBookmarks.isEmpty, "bookmark demo: deleted-chat scenario starts with a saved trip message")
+    await gateway.sessionManager.load(filter: .all)
+    let outcome = await gateway.sessionManager.delete([DemoBookmarks.tripSessionKey])
+    check(outcome.succeeded == [DemoBookmarks.tripSessionKey] && outcome.failed.isEmpty,
+          "bookmark demo: the Gateway confirms deletion of the trip chat")
+    check(store.bookmarks(in: DemoBookmarks.tripSessionKey).isEmpty && !store.bookmarks.isEmpty,
+          "bookmark demo: only the deleted chat's bookmarks are removed locally")
+    var removedRemotely = false
+    let deletionDeadline = ContinuousClock.now.advanced(by: .seconds(15))
+    while !removedRemotely && ContinuousClock.now < deletionDeadline {
+        removedRemotely = true
+        for bookmark in tripBookmarks {
+            if await stored(Bookmark.shard(ofKey: bookmark.id))[bookmark.id] != nil { removedRemotely = false }
+        }
+        if !removedRemotely { try? await Task.sleep(for: .milliseconds(100)) }
+    }
+    check(removedRemotely, "bookmark demo: confirmed deletion removes the saved messages from users.prefs")
     #else
     print("  skipped: needs @testable access to PincerKit (debug builds)")
     #endif
