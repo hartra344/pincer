@@ -103,6 +103,14 @@ func runDemoRichRendering() async {
     }
     check(loaded && diagrams == 2 && formulas == 2,
           "demo chat draws 2 Mermaid diagrams and 2 formulas (got \(diagrams), \(formulas))")
+    // #264's native header test covers theme redraw and Copy/Copied state. Keep its visible
+    // demo counterpart available with an intact fenced HTML payload for both Copy and Preview.
+    let html = blocks.compactMap { block -> String? in
+        if case let .code(language, source) = block, language?.lowercased() == "html" { return source }
+        return nil
+    }
+    check(html.count == 1 && html[0].contains("<div style=") && html[0].contains("Slow down a little")
+          && html[0].contains("</div>"), "demo retains the complete HTML code card for Copy and Preview (#264)")
     var inline = 0
     for case let .paragraph(paragraph) in blocks {
         inline += InlineMath.spans(in: paragraph).filter { InlineMath.isDrawable($0.latex) }.count

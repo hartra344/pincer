@@ -983,6 +983,14 @@ final class TranscriptCodeView: TranscriptBaseView {
         self.previewButton.isHidden = true
     }
 
+    override func appearanceChanged() {
+        super.appearanceChanged()
+        // The buttons draw their own theme color, so redrawing this container does not refresh them.
+        // Keep the current title (including "Copied") while resolving the tint from the new theme.
+        self.copyButton.redraw()
+        self.previewButton.redraw()
+    }
+
     private var showsPreview: Bool {
         self.code.map { HTMLPreview.isPreviewable(language: $0.language, code: $0.code) } ?? false
     }
