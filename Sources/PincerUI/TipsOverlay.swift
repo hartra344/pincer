@@ -18,6 +18,22 @@ struct TipsOverlay: ViewModifier {
         let setupBlocking = (gateway?.setup.isShowingOrPending ?? true) || self.app.firstRun.presentation != nil
         let prompting = NotificationPrompt.shared.isShowing
         content
+            .modifier(TipsPresentation(tips: self.tips, isCompact: self.isCompact))
+            .onChange(of: TipsTrigger(gatewayId: gateway?.id, connected: connected, setupBlocking: setupBlocking,
+                                      prompting: prompting, seen: self.tips.hasSeen), initial: true) { _, trigger in
+                self.tips.evaluate(connected: trigger.connected, setupShowingOrPending: trigger.setupBlocking,
+                                   isDemo: gateway?.profile.isDemo == true, permissionPromptShowing: trigger.prompting)
+            }
+    }
+}
+
+/// Presents the noncompact card; iPhone keeps its card in the sidebar.
+struct TipsPresentation: ViewModifier {
+    let tips: TipsModel
+    let isCompact: Bool
+
+    func body(content: Content) -> some View {
+        content
             .overlay(alignment: .bottomTrailing) {
                 if !self.isCompact, self.tips.isPresented {
                     TipsCard { self.tips.dismiss() }
@@ -26,11 +42,6 @@ struct TipsOverlay: ViewModifier {
                 }
             }
             .animation(.snappy, value: self.tips.isPresented)
-            .onChange(of: TipsTrigger(gatewayId: gateway?.id, connected: connected, setupBlocking: setupBlocking,
-                                      prompting: prompting, seen: self.tips.hasSeen), initial: true) { _, trigger in
-                self.tips.evaluate(connected: trigger.connected, setupShowingOrPending: trigger.setupBlocking,
-                                   isDemo: gateway?.profile.isDemo == true, permissionPromptShowing: trigger.prompting)
-            }
     }
 }
 
