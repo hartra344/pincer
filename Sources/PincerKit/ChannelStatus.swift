@@ -268,7 +268,8 @@ public typealias SetupChannelsSnapshot = ChannelsStatusSnapshot
 
 /// Channel Status for one Gateway: every channel account's state from `channels.status` (operator.read),
 /// and start, stop, log out, reconnect and QR login (operator.admin). There's no channel status
-/// event upstream, so the page loads on open, polls while showing and reloads after each action.
+/// event upstream, so the page loads on open, polls when its last successful status is stale and
+/// reloads after each action.
 @MainActor
 @Observable
 public final class ChannelsModel {
@@ -357,6 +358,7 @@ public final class ChannelsModel {
     public typealias Request = @MainActor (_ method: String, _ params: JSONValue) async throws -> JSONValue
 
     @ObservationIgnored private let request: Request
+    @ObservationIgnored private let now: @MainActor () -> Date
     @ObservationIgnored var methods: @MainActor () -> Set<String>?
     @ObservationIgnored var scopes: @MainActor () -> [String]
     /// Gateway Health's channels, for labels before `channels.status` has loaded.
@@ -365,9 +367,11 @@ public final class ChannelsModel {
     @ObservationIgnored private var generation = 0
     private var unknownMethod = false
 
-    init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool) {
+    init(connection: GatewayConnection, hello: @escaping @MainActor () -> GatewayHello?, allowsWritesWithoutAdmin: Bool,
+         now: @escaping @MainActor () -> Date = { Date() }) {
         let request: Request = { method, params in try await connection.request(method, params, timeout: 150) }
         self.request = request
+        self.now = now
         self.methods = { hello()?.methods }
         self.scopes = { hello()?.scopes ?? [] }
         self.allowsWritesWithoutAdmin = allowsWritesWithoutAdmin
@@ -380,9 +384,11 @@ public final class ChannelsModel {
     public init(methods: @escaping @MainActor () -> Set<String>? = { nil },
                 scopes: @escaping @MainActor () -> [String] = { [] },
                 allowsWritesWithoutAdmin: Bool = false,
+                now: @escaping @MainActor () -> Date = { Date() },
                 request: @escaping Request)
     {
         self.request = request
+        self.now = now
         self.methods = methods
         self.scopes = scopes
         self.allowsWritesWithoutAdmin = allowsWritesWithoutAdmin
@@ -478,9 +484,12 @@ public final class ChannelsModel {
 
     public func refresh() async { await self.load() }
 
-    /// A periodic refresh: skipped while a load or probe is running.
+    /// A periodic refresh, when the last valid status snapshot is stale. Skipped while a load or
+    /// probe is running; manual refresh and probe calls remain unconditional.
     public func poll() async {
         guard !self.loadState.isRunning, !self.isProbing else { return }
+        if let loadedAt = self.loadedAt,
+           self.now().timeIntervalSince(loadedAt) < Double(Self.refreshInterval.components.seconds) { return }
         await self.load()
     }
 
@@ -507,7 +516,7 @@ public final class ChannelsModel {
             if let snapshot = ChannelsStatusSnapshot(result) {
                 self.snapshot = snapshot
                 self.loadState = .idle
-                self.loadedAt = Date()
+                self.loadedAt = self.now()
             } else {
                 self.loadState = .failed("The Gateway sent an unexpected channel status.")
             }
@@ -527,7 +536,7 @@ public final class ChannelsModel {
     /// (at most every few seconds; there's no channel status event).
     public func healthDidChange() {
         guard self.isShowing, self.hasLoaded, self.supported, !self.loadState.isRunning, !self.isProbing else { return }
-        if let loadedAt, Date().timeIntervalSince(loadedAt) < Self.healthRefreshSpacing { return }
+        if let loadedAt, self.now().timeIntervalSince(loadedAt) < Self.healthRefreshSpacing { return }
         Task { await self.load() }
     }
 
