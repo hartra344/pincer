@@ -507,6 +507,7 @@ private struct TranscriptPane: View {
                     openMCPServer: { [opener = self.openGatewaySettings, gateway = self.gateway] in
                         opener.mcpServer(gateway, name: $0)
                     }),
+                isConnected: self.gateway.state.isConnected,
                 bottomInset: self.bottomInset,
                 topInset: self.topInset,
                 highlight: self.find.highlight,

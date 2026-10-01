@@ -11,6 +11,7 @@ struct FilledCacheAdoptionRecoveryTests {
         let gateway = GatewayStore(profile: GatewayProfile(name: "Test", url: "ws://127.0.0.1:1", authMode: .none),
                                    defaults: scratch.defaults, identity: Fixtures.identity())
         gateway.cacheRoot = nil
+        defer { gateway.stop() }
         let chat = ChatStore(sessionKey: "agent:main:adoption", agentId: "main", gateway: gateway)
         defer { chat.saveTask?.cancel() }
         chat.items = [ChatItem(id: "fresh", role: .user, blocks: [.text("Unsaved message")], timestamp: .now)]
@@ -31,6 +32,7 @@ struct FilledCacheAdoptionRecoveryTests {
         let gateway = GatewayStore(profile: GatewayProfile(name: "Test", url: "ws://127.0.0.1:1", authMode: .none),
                                    defaults: scratch.defaults, identity: Fixtures.identity())
         gateway.cacheRoot = nil
+        defer { gateway.stop() }
         let chat = ChatStore(sessionKey: "agent:main:adoption", agentId: "main", gateway: gateway)
         defer { chat.saveTask?.cancel() }
         chat.items = [ChatItem(id: "fresh", role: .user, blocks: [.text("Unsaved message")], timestamp: .now)]

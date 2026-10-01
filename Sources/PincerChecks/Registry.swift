@@ -161,6 +161,7 @@ enum Suites {
         Section("Outbox & retry (demo)") { await runDemoOutbox() },
         Section("Accessibility labels (demo)") { await runDemoAccessibility() },
         Section("Accessibility pass (demo)") { await runDemoAccessibilityPass() },
+        Section("Transcript paging recovery (demo, #337)") { await runDemoTranscriptPagingRecovery() },
         Section("Sidebar working avatar (demo)") { await runDemoSidebarWorking() },
         Section("Sidebar agent groups (demo)") { await runDemoSidebarAgentGroups() },
         Section("Sidebar group moves (demo, #416)") { await runDemoSidebarGroupMoves() },
