@@ -12,7 +12,7 @@ struct QueuedImagePreviewTests {
         let gateway = GatewayStore(profile: GatewayProfile(name: "Home", url: "ws://127.0.0.1:9", authMode: .none),
                                    defaults: scratch.defaults, identity: Fixtures.identity())
         gateway.outboxRoot = nil
-        let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=")!
+        let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=")!
         let ref = OutboxAttachmentRef(id: UUID(), fileName: "photo.png", mimeType: "image/png", byteCount: data.count)
         let entry = OutboxEntry(id: "queued-image", sessionKey: key, text: "Look", createdAt: Date(timeIntervalSince1970: 1_800_000_000),
                                 state: state, attachments: [ref])
