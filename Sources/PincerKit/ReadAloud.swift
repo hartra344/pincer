@@ -66,6 +66,8 @@ public final class ReadAloudController {
     @ObservationIgnored private let localSpeaker: ReadAloudLocalSpeaking
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let gatewayTimeout: Duration
+    /// Waits out a Gateway timeout; tests swap in a timer they fire themselves.
+    @ObservationIgnored var gatewayTimer: @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var nowPlayingTitle: String?
@@ -222,6 +224,7 @@ public final class ReadAloudController {
     /// The Gateway's audio, or why there is none (any failure, or the timeout).
     private func fetchClip(_ text: String, from gateway: GatewayVoiceModel) async -> (TTSClip?, TTSFallbackReason?) {
         let timeout = self.gatewayTimeout
+        let wait = self.gatewayTimer
         let (stream, results) = AsyncStream.makeStream(of: (TTSClip?, TTSFallbackReason?).self)
         let speak = Task { @MainActor in
             do {
@@ -232,7 +235,7 @@ public final class ReadAloudController {
         }
         // Detached so the timeout still fires while the main actor is busy.
         let timer = Task.detached {
-            try? await Task.sleep(for: timeout)
+            await wait(timeout)
             results.yield((nil, .other(L("The Gateway took too long to answer."))))
         }
         defer {
