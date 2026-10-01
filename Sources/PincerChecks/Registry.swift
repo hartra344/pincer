@@ -123,6 +123,7 @@ enum Suites {
             Section(nil) { checkSidebarWorking() },
             Section("Sidebar activity dates") { runSidebarActivityDateChecks() },
             Section("First-run wizard") { await runFirstRunChecks() },
+            Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
         ]
         return sections
     }
