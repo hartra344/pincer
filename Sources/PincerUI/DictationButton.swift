@@ -16,6 +16,7 @@ final class DictationHolder {
 struct DictationButton: View {
     let model: DictationModel
     let app: AppModel
+    let gatewayID: UUID
     let sessionKey: String
     @Binding var draft: String
     /// The field's selection in UTF-16 units; nil until it reports one.
@@ -25,8 +26,13 @@ struct DictationButton: View {
     /// Whether the text field has keyboard focus; when it doesn't, dictation goes at the end of the draft.
     let isFieldFocused: Bool
     let onRequestFocus: () -> Void
+    @Environment(\.dictationSceneID) private var sceneID
     @Environment(\.chatPaneIsActive) private var paneIsActive
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 14
+
+    private var target: DictationTarget? {
+        self.sceneID.map { DictationTarget(sceneID: $0, gatewayID: self.gatewayID, sessionKey: self.sessionKey) }
+    }
 
     var body: some View {
         Group {
@@ -35,12 +41,17 @@ struct DictationButton: View {
             }
         }
         .onChange(of: self.app.dictationToggleRequest) { _, request in
-            guard request?.sessionKey == self.sessionKey, self.model.isAvailable || self.model.isActive else { return }
+            guard let target = self.target,
+                  request?.matches(target: target, paneIsActive: self.paneIsActive) == true,
+                  self.model.isAvailable || self.model.isActive else { return }
             self.toggle(focusing: true)
         }
         .onChange(of: self.model.isActive, initial: true) { self.publishState() }
-        .onDisappear { self.app.dictationActiveKeys.remove(self.sessionKey) }
-        .onChange(of: self.sessionKey) { old, _ in self.app.dictationActiveKeys.remove(old) }
+        .onDisappear { self.removePublishedState(for: self.target) }
+        .onChange(of: self.target) { old, _ in
+            self.removePublishedState(for: old)
+            self.publishState()
+        }
         .onChange(of: self.model.isAvailable) { self.publishState() }
         .onChange(of: self.paneIsActive) { self.publishState() }
         // Outside the availability check, so "isn't available" can still be shown.
@@ -90,14 +101,25 @@ struct DictationButton: View {
         }
     }
 
-    /// Tells the palette whether this chat is dictating and whether dictation is available.
+    /// Tells this window's palette whether this composer is dictating and available.
     private func publishState() {
+        guard let target = self.target else { return }
         if self.model.isActive {
-            self.app.dictationActiveKeys.insert(self.sessionKey)
+            self.app.dictationActiveTargets.insert(target)
         } else {
-            self.app.dictationActiveKeys.remove(self.sessionKey)
+            self.app.dictationActiveTargets.remove(target)
         }
-        if self.paneIsActive { self.app.dictationAvailable = self.model.isAvailable }
+        if self.paneIsActive && self.model.isAvailable {
+            self.app.dictationAvailableTargets.insert(target)
+        } else {
+            self.app.dictationAvailableTargets.remove(target)
+        }
+    }
+
+    private func removePublishedState(for target: DictationTarget?) {
+        guard let target else { return }
+        self.app.dictationActiveTargets.remove(target)
+        self.app.dictationAvailableTargets.remove(target)
     }
 
     @ViewBuilder private func focusedPaneShortcut(_ button: some View) -> some View {

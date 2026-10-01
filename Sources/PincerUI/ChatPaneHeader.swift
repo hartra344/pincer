@@ -21,6 +21,8 @@ extension EnvironmentValues {
     @Entry var chatPaneHandles: ChatPaneHandles?
     /// The window's Runs panel and Tools & Policy sheet, for the split view headers.
     @Entry var chatChromeActions: ChatChromeActions?
+    /// Stable identity of the window that owns a composer and its command palette.
+    @Entry var dictationSceneID: UUID?
 }
 
 /// A split view side's Find and export state, filled in by its `ChatView`, so the side's own menu

@@ -290,7 +290,8 @@ struct Composer: View {
 
     private var dictationButton: some View {
         DictationButton(
-            model: self.dictation, app: self.app, sessionKey: self.chat.sessionKey, draft: self.$chat.draft.text, selection: self.selection,
+            model: self.dictation, app: self.app, gatewayID: self.gateway.id, sessionKey: self.chat.sessionKey,
+            draft: self.$chat.draft.text, selection: self.selection,
             onCaret: self.placeCaret, isFieldFocused: self.fieldFocused, onRequestFocus: { self.focusRequest += 1 })
     }
 
