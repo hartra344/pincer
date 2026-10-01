@@ -98,13 +98,18 @@ public struct GatewayProfile: Codable, Identifiable, Hashable, Sendable {
 
     /// The built-in demo, which runs a simulated Gateway on the device.
     public var isDemo: Bool { self.url == DemoGateway.url || self.url == DemoGateway.noReplyToURL
-            || self.url == DemoGateway.noSessionReactionsURL
+            || self.url == DemoGateway.noSessionReactionsURL || self.url == DemoGateway.avatarPrefsReadFailureURL
     }
 
     /// `acceptsReplyTo: false` simulates an older Gateway that rejects `chat.send`'s `replyToId`.
     public static func demo(acceptsReplyTo: Bool = true, hasSessionReactions: Bool = true) -> GatewayProfile {
         let url = !hasSessionReactions ? DemoGateway.noSessionReactionsURL : (acceptsReplyTo ? DemoGateway.url : DemoGateway.noReplyToURL)
         return GatewayProfile(name: "Demo", url: url, authMode: .none)
+    }
+
+    /// A check-only demo profile with a transient avatar-prefs read failure and older remote seed.
+    static func demoAvatarPrefsReadFailure() -> GatewayProfile {
+        GatewayProfile(name: "Demo (avatar prefs recovery)", url: DemoGateway.avatarPrefsReadFailureURL, authMode: .none)
     }
 
     public var initials: String {

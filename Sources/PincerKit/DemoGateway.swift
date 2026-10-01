@@ -12,6 +12,8 @@ actor DemoGateway {
     static let noReplyToURL = "demo://pincer?replyTo=off"
     /// The demo as an older Gateway without `session.reactions.*`, for checks of the `users.prefs` fallback.
     static let noSessionReactionsURL = "demo://pincer?sessionReactions=off"
+    /// One transient avatar-prefs read failure, for bootstrap recovery checks.
+    static let avatarPrefsReadFailureURL = "demo://pincer?avatarPrefsReadFailure=once"
 
     typealias Row = [String: JSONValue]
 
@@ -144,15 +146,20 @@ actor DemoGateway {
 
     /// Whether the Gateway has `session.reactions.*` and `users.self` (an older one doesn't: the users.prefs fallback).
     let hasSessionReactions: Bool
+    var failsFirstAvatarPrefsRead: Bool
 
-    init(acceptsReplyTo: Bool = true, hasSessionReactions: Bool = true) {
+    init(acceptsReplyTo: Bool = true, hasSessionReactions: Bool = true, failsFirstAvatarPrefsRead: Bool = false) {
         self.acceptsReplyTo = acceptsReplyTo
         self.hasSessionReactions = hasSessionReactions
+        self.failsFirstAvatarPrefsRead = failsFirstAvatarPrefsRead
         self.prefs[Reactions.prefKey] = [
             "agent:main:main|demo-main-status": "👍",
             "agent:main:main|demo-main-gauge": "🎉",
         ]
         self.prefs.merge(DemoBookmarks.prefEntries()) { _, new in new }
+        if failsFirstAvatarPrefsRead {
+            self.prefs[AvatarPreferences.prefKey] = [AvatarPreferences.seedEntry(for: "research"): "Earlier Scout identity"]
+        }
         var seeded = Self.seed()
         self.branchTips = Self.seedSessionManager(sessions: &seeded.sessions, transcripts: &seeded.transcripts)
         self.sessions = seeded.sessions

@@ -87,6 +87,8 @@ enum Suites {
             Section("Progress card") { runProgressCardChecks() },
             Section("Slash commands") { runSlashCommandChecks() },
             Section("Dictation") { await runDictationChecks() },
+            Section("Avatar seed read authorization") { runAvatarSeedReadAuthorization() },
+            Section("Location context") { await runLocationContextChecks() },
             Section("Automations") { runAutomationChecks() },
             Section("Web Push") { await runWebPushChecks() },
             Section("Find in chat") { await runFindInChatChecks() },
@@ -124,6 +126,7 @@ enum Suites {
             Section("Sidebar activity dates") { runSidebarActivityDateChecks() },
             Section("Composer session title") { runComposerSessionTitleChecks() },
             Section("First-run wizard") { await runFirstRunChecks() },
+            Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
         ]
         return sections
     }
@@ -157,6 +160,7 @@ enum Suites {
         Section("Tool cards (demo)") { await runDemoToolCards() },
         Section("Rich rendering (demo)") { await runDemoRichRendering() },
         Section("Agent avatars (demo)") { await runDemoAvatars() },
+        Section("Agent avatar seed recovery (demo, #520)") { await runDemoAvatarSeedRecovery() },
         Section("First-run wizard (demo)") { await runDemoFirstRun() },
         Section("Outbox & retry (demo)") { await runDemoOutbox() },
         Section("Accessibility labels (demo)") { await runDemoAccessibility() },
@@ -171,6 +175,7 @@ enum Suites {
         Section("Voice / Read Aloud (demo)") { await runDemoVoice() },
         Section("Chat windows (demo)") { await runDemoChatWindows() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
+        Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },
         Section("Composer session title (demo)") { await runDemoComposerSessionTitleChecks() },
     ]
 

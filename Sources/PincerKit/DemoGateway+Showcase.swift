@@ -40,6 +40,8 @@ extension DemoGateway {
         - **⌘F** searches the chat — try "onsen" in *Japan trip*.
         - **⌘K** opens the command palette, and **⌘1–⌘3** jump to pinned chats.
         - On a Mac, **⌃⇧Space** opens Quick Capture.
+        - Settings → **Location** can attach approximate location to new messages. It starts off; \
+        when enabled, this demo quotes the visible location context just like the rest of your message.
         - Switch models, or pin, rename and group chats in the sidebar.
         """
     }
@@ -338,6 +340,11 @@ extension DemoGateway {
                 👋 **Welcome to the Pincer demo.** Everything here is simulated on your device, so no Gateway \
                 is needed. Send a message to see a streamed reply. Try the words *tool*, *image*, *approve*, *ask* or *plan*, \
                 or send */compact*.
+
+                Settings → **Location** can add approximate context to messages. It starts off.
+                This fictional Boston example shows the format; it is not your device's location:
+
+                > Location context (approximate, shared by Pincer): 📍 42.36, -71.06 ±2000m; observed 2026-09-30T12:00:00Z
                 """)], ago: 10),
             ])
         add(Self.kikoKey, agent: "kiko", title: "Main", preview: "Claw sent the list of home-lab bills.", age: 86_400_000,
