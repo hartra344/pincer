@@ -182,6 +182,8 @@ Messages started by an automation (a cron run) are shown under the automation's 
 
 Pincer hides the headers the Gateway adds for the model, such as `[Inter-session message]` and cron prompt prefixes. The footer of a message from another agent has no model, since no model in this chat wrote it. [Search results](../search/) and reply quotes name the actual sender.
 
+Sender labels in older cached messages refresh automatically when Pincer reconnects after an upgrade. Cached messages remain available offline while the labels are being repaired; you do not need to clear the cache.
+
 Chats cached by an older Pincer are updated to show the sender, and the message search index is rebuilt once.
 
 In the [demo](../../getting-started/try-the-demo/), open **Claw → Main** and scroll up to see Kiko, a finance agent, introduce herself to Claw.

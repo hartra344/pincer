@@ -17,21 +17,28 @@ public enum TranscriptCache {
         /// The transcript was cut at `maxItems` (the newest kept, older history dropped), so it's
         /// as complete as it will get even though `complete` is false.
         public var retained: Bool
+        /// Old caches may lack sender attribution for already-projected assistant messages.
+        /// This stays set until the bounded authoritative history scan succeeds.
+        public var forwardedSenderRefreshPending: Bool
+        /// A one-write instruction used only after that scan completes; never serialized.
+        var forwardedSenderRefreshCompleted = false
 
-        public static let currentVersion = 9
+        public static let currentVersion = 10
 
         public init(version: Int = Self.currentVersion, items: [ChatItem], complete: Bool, activityMs: Double? = nil,
-                    retained: Bool = false)
+                    retained: Bool = false, forwardedSenderRefreshPending: Bool = false)
         {
             self.version = version
             self.items = items
             self.complete = complete
             self.activityMs = activityMs
             self.retained = retained
+            self.forwardedSenderRefreshPending = forwardedSenderRefreshPending
+            self.forwardedSenderRefreshCompleted = false
         }
 
         private enum CodingKeys: String, CodingKey {
-            case version, items, complete, activityMs, retained
+            case version, items, complete, activityMs, retained, forwardedSenderRefreshPending
         }
 
         public init(from decoder: Decoder) throws {
@@ -41,6 +48,9 @@ public enum TranscriptCache {
             self.complete = try c.decode(Bool.self, forKey: .complete)
             self.activityMs = try c.decodeIfPresent(Double.self, forKey: .activityMs)
             self.retained = try c.decodeIfPresent(Bool.self, forKey: .retained) ?? false
+            self.forwardedSenderRefreshPending = try c.decodeIfPresent(Bool.self, forKey: .forwardedSenderRefreshPending)
+                ?? (self.version < Self.currentVersion)
+            self.forwardedSenderRefreshCompleted = false
         }
 
         /// Whether a transcript of `committedCount` items is cut at `maxItems` when saved.
@@ -58,6 +68,7 @@ public enum TranscriptCache {
         var version: Int?
         /// `Snapshot.retained`; nil in a sidecar written before v8.
         var retained: Bool?
+        var forwardedSenderRefreshPending: Bool? = nil
     }
 
     /// What `loadWithOutcome` found on disk. Anything but `missing`, `loaded`, `migrated` and
@@ -140,6 +151,8 @@ public enum TranscriptCache {
     //  - #110 (agent reply targets, v9) added `ChatItem.replyToCurrent` and `channelSenderName`, stored as optionals, so older
     //    files decode and `migrations[8]` does nothing. Assistant messages cached earlier have no reply target
     //    (the newest page is refetched on open).
+    //  - v10 (#229) marks old caches for one bounded history scan because already-projected
+    //    assistant rows did not retain `senderSession`; matching stable transcript ids are replaced.
 
     /// Upgrades a snapshot's JSON object from the version it's keyed by to the next one.
     typealias Migration = @Sendable (inout [String: Any]) throws -> Void
@@ -165,6 +178,7 @@ public enum TranscriptCache {
         6: forwardedSenderMigration,
         7: { _ in },
         8: { _ in },
+        9: { json in json["forwardedSenderRefreshPending"] = true },
     ]
 
     /// v6 → v7 (#207): cached inter-session turns become the sending agent's.
@@ -195,8 +209,8 @@ public enum TranscriptCache {
     /// Older transcripts are discarded rather than migrated.
     static let oldestMigratableVersion = 5
 
-    /// Manifest (segmented) versions read as they are. Manifests start at v8, and every migration
-    /// from v8 on is a no-op, so an older manifest is read and saved back at the current version
+    /// Manifest (segmented) versions read as they are. Pre-v10 manifests are read and saved back
+    /// with the pending refresh marker without decoding item JSON on the main thread.
     /// (#563: v8 manifests were discarded, so every chat went back to the network after the v9 bump).
     /// A migration that changes items must end this range at its source version.
     static let manifestVersions: ClosedRange<Int> = 8...Snapshot.currentVersion
@@ -572,13 +586,17 @@ public enum TranscriptCache {
     /// The newest `limit` cached items and whether the transcript is complete, reading only the
     /// segments that hold them. Remembers the layout, so the next save writes only what changed.
     public static func loadNewest(gatewayId: UUID, sessionKey: String, limit: Int,
-                                  root: URL? = Self.root) async -> (items: [ChatItem], complete: Bool, outcome: LoadOutcome)
+                                  root: URL? = Self.root) async ->
+        (items: [ChatItem], complete: Bool, outcome: LoadOutcome, forwardedSenderRefreshPending: Bool)
     {
-        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else { return ([], false, .missing) }
+        guard let url = self.file(gatewayId: gatewayId, sessionKey: sessionKey, root: root) else {
+            return ([], false, .missing, false)
+        }
         let (snapshot, outcome) = await self.read(url, gatewayId: gatewayId, root: root, newest: max(limit, 0),
                                                   priority: .userInitiated)
-        guard let snapshot else { return ([], false, outcome) }
-        return (Array(snapshot.items.suffix(max(limit, 0))), snapshot.complete, outcome)
+        guard let snapshot else { return ([], false, outcome, false) }
+        return (Array(snapshot.items.suffix(max(limit, 0))), snapshot.complete, outcome,
+                snapshot.forwardedSenderRefreshPending)
     }
 
     /// Up to `limit` cached items just before the item `itemId`, oldest first, reading only the

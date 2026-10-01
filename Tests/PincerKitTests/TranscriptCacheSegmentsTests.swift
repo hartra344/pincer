@@ -8,9 +8,10 @@ struct TranscriptCacheSegmentsTests {
     let gateway = UUID()
     let key = "agent:main:main"
 
-    @Test func currentVersionIsNine() {
-        #expect(TranscriptCache.Snapshot.currentVersion == 9)
-        #expect(TranscriptCache.migrations[7] != nil && TranscriptCache.migrations[8] != nil)
+    @Test func currentVersionIsTen() {
+        #expect(TranscriptCache.Snapshot.currentVersion == 10)
+        #expect(TranscriptCache.migrations[7] != nil && TranscriptCache.migrations[8] != nil
+                && TranscriptCache.migrations[9] != nil)
     }
 
     @Test func roundTripWritesManifestAndSegments() async throws {
@@ -105,10 +106,10 @@ struct TranscriptCacheSegmentsTests {
         #expect(second == .loaded && again?.items == items)
     }
 
-    // MARK: v8 manifest → v9 (#563)
+    // MARK: v8 manifest → v10 (#563, #229)
 
-    /// A v8 manifest (the v9 bump only added optional item fields) is read and saved back at the
-    /// current version, not discarded; `loadNewest` gets its items too.
+    /// A v8 manifest is read and saved back with the pending attribution marker, not discarded;
+    /// `loadNewest` gets its items too.
     @Test func v8ManifestMigratesInsteadOfBeingDiscarded() async throws {
         let temp = TempDir()
         defer { temp.remove() }
@@ -117,12 +118,14 @@ struct TranscriptCacheSegmentsTests {
         let url = V8.manifestURL(self.gateway, self.key, temp.url)
         var manifest = try V8.manifest(url)
         manifest["version"] = 8
+        manifest.removeValue(forKey: "forwardedSenderRefreshPending")
         try JSONSerialization.data(withJSONObject: manifest).write(to: url)
         try JSONEncoder().encode(TranscriptCache.Meta(complete: true, activityMs: 7, version: 8)).write(to: url.appendingPathExtension("meta"))
 
         let newest = await TranscriptCache.loadNewest(gatewayId: self.gateway, sessionKey: self.key, limit: 100, root: temp.url)
         #expect(newest.outcome == .migrated(from: 8) && !newest.outcome.discarded)
         #expect(newest.items == Array(items.suffix(100)) && newest.complete)
+        #expect(newest.forwardedSenderRefreshPending)
         // The write-back is queued behind the writer, not awaited by the read.
         for _ in 0..<500 where (try? V8.manifest(url)["version"] as? Int) != TranscriptCache.Snapshot.currentVersion {
             try await Task.sleep(for: .milliseconds(10))
@@ -131,7 +134,8 @@ struct TranscriptCacheSegmentsTests {
 
         #expect(try V8.manifest(url)["version"] as? Int == TranscriptCache.Snapshot.currentVersion)
         let (again, outcome) = await TranscriptCache.loadWithOutcome(gatewayId: self.gateway, sessionKey: self.key, root: temp.url)
-        #expect(outcome == .loaded && again?.items == items && again?.activityMs == 7)
+        #expect(outcome == .loaded && again?.items == items && again?.activityMs == 7
+                && again?.forwardedSenderRefreshPending == true)
     }
 
     /// #563: opening a chat read its cache only after every save queued on the writer had landed

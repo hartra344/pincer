@@ -19,19 +19,23 @@ extension TranscriptCache {
         var complete: Bool
         var activityMs: Double?
         var retained: Bool
+        var forwardedSenderRefreshPending: Bool
         /// Identifies this write; the search index uses it to know which save it last saw.
         var token: String
         var segments: [SegmentRef]
 
         private enum CodingKeys: String, CodingKey {
-            case version, complete, activityMs, retained, token, segments
+            case version, complete, activityMs, retained, forwardedSenderRefreshPending, token, segments
         }
 
-        init(version: Int, complete: Bool, activityMs: Double?, retained: Bool, token: String, segments: [SegmentRef]) {
+        init(version: Int, complete: Bool, activityMs: Double?, retained: Bool, forwardedSenderRefreshPending: Bool,
+             token: String, segments: [SegmentRef])
+        {
             self.version = version
             self.complete = complete
             self.activityMs = activityMs
             self.retained = retained
+            self.forwardedSenderRefreshPending = forwardedSenderRefreshPending
             self.token = token
             self.segments = segments
         }
@@ -42,6 +46,8 @@ extension TranscriptCache {
             self.complete = try c.decode(Bool.self, forKey: .complete)
             self.activityMs = try c.decodeIfPresent(Double.self, forKey: .activityMs)
             self.retained = try c.decodeIfPresent(Bool.self, forKey: .retained) ?? false
+            self.forwardedSenderRefreshPending = try c.decodeIfPresent(Bool.self, forKey: .forwardedSenderRefreshPending)
+                ?? (self.version < Snapshot.currentVersion)
             self.token = try c.decode(String.self, forKey: .token)
             self.segments = try c.decode([SegmentRef].self, forKey: .segments)
         }
@@ -84,6 +90,7 @@ extension TranscriptCache {
         var complete: Bool
         var activityMs: Double?
         var retained: Bool
+        var forwardedSenderRefreshPending: Bool
         var segments: [SegmentEntry]
         /// Of the items from `fingerprintOffset` on (a windowed load reads only the newest).
         var itemFingerprints: [Int]
@@ -240,10 +247,13 @@ extension TranscriptCache {
             }
         }
         let snapshot = Snapshot(items: items, complete: manifest.complete, activityMs: manifest.activityMs,
-                                retained: manifest.retained)
+                                retained: manifest.retained,
+                                forwardedSenderRefreshPending: manifest.forwardedSenderRefreshPending)
         let offset = manifest.segments[..<range.lowerBound].reduce(0) { $0 + $1.count }
         let layout = Layout(token: manifest.token, complete: manifest.complete, activityMs: manifest.activityMs,
-                            retained: manifest.retained, segments: entries, itemFingerprints: fingerprints,
+                            retained: manifest.retained,
+                            forwardedSenderRefreshPending: manifest.forwardedSenderRefreshPending,
+                            segments: entries, itemFingerprints: fingerprints,
                             fingerprintOffset: offset)
         return .loaded(snapshot, layout)
     }
@@ -324,7 +334,8 @@ extension TranscriptCache.Writer {
         try manifestData.write(to: url, options: [.atomic, .completeFileProtection])
         let meta = try JSONEncoder().encode(Cache.Meta(
             complete: manifest.complete, activityMs: manifest.activityMs, version: manifest.version,
-            retained: manifest.retained))
+            retained: manifest.retained,
+            forwardedSenderRefreshPending: manifest.forwardedSenderRefreshPending))
         try meta.write(to: metaURL, options: [.atomic, .completeFileProtection])
         result.bytesWritten += manifestData.count + meta.count
         result.filesWritten += 2
@@ -364,9 +375,11 @@ extension TranscriptCache.Writer {
             }
             let (entries, reusedAll) = try self.build(
                 items, fingerprints: fingerprints, reusable: reusable, directory: directory, result: &result)
+            let pendingRefresh = self.pendingForwardedRefresh(snapshot, existing: baseline?.forwardedSenderRefreshPending ?? false)
 
             if let baseline, reusedAll, baseline.complete == snapshot.complete, baseline.activityMs == snapshot.activityMs,
-               baseline.retained == snapshot.retained, baseline.segments.map(\.ref) == entries.map(\.ref),
+               baseline.retained == snapshot.retained, baseline.forwardedSenderRefreshPending == pendingRefresh,
+               baseline.segments.map(\.ref) == entries.map(\.ref),
                fileManager.fileExists(atPath: metaURL.path(percentEncoded: false))
             {
                 self.remember(baseline, for: url)
@@ -377,13 +390,15 @@ extension TranscriptCache.Writer {
             let token = String(UInt64.random(in: .min ... .max))
             try self.commit(
                 Cache.Manifest(version: snapshot.version, complete: snapshot.complete, activityMs: snapshot.activityMs,
-                               retained: snapshot.retained, token: token, segments: entries.map(\.ref)),
+                               retained: snapshot.retained, forwardedSenderRefreshPending: pendingRefresh,
+                               token: token, segments: entries.map(\.ref)),
                 url: url, directory: directory, result: &result)
 
             let date = Cache.modificationDate(url)
             self.remember(
                 Cache.Layout(token: token, complete: snapshot.complete, activityMs: snapshot.activityMs,
-                             retained: snapshot.retained, segments: entries, itemFingerprints: fingerprints,
+                             retained: snapshot.retained, forwardedSenderRefreshPending: pendingRefresh,
+                             segments: entries, itemFingerprints: fingerprints,
                              manifestDate: date),
                 for: url)
             result.modified = date ?? Date()
@@ -435,7 +450,7 @@ extension TranscriptCache.Writer {
             return fileManager.fileExists(atPath: url.path(percentEncoded: false)) ? Cache.SaveResult() : nil
         }
         guard let peek = try? JSONDecoder().decode(Cache.VersionPeek.self, from: storedData),
-              peek.version == Cache.Snapshot.currentVersion,
+              Cache.manifestVersions.contains(peek.version),
               let decoded = try? JSONDecoder().decode(Cache.Manifest.self, from: storedData)
         else { return nil }
         stored = decoded
@@ -489,14 +504,17 @@ extension TranscriptCache.Writer {
         let entries = olderEntries + built.entries
         let olderCount = older.reduce(0) { $0 + $1.count }
         let retained = stored.retained || snapshot.retained || dropped
+        let pendingRefresh = self.pendingForwardedRefresh(snapshot, existing: stored.forwardedSenderRefreshPending)
 
         if !dropped, built.reusedAll, entries.map(\.ref) == stored.segments,
            stored.activityMs == snapshot.activityMs, stored.retained == retained,
+           stored.forwardedSenderRefreshPending == pendingRefresh,
            fileManager.fileExists(atPath: metaURL.path(percentEncoded: false))
         {
             self.remember(
                 Cache.Layout(token: stored.token, complete: stored.complete && !dropped, activityMs: stored.activityMs,
-                             retained: stored.retained, segments: entries, itemFingerprints: fingerprints,
+                             retained: stored.retained, forwardedSenderRefreshPending: pendingRefresh,
+                             segments: entries, itemFingerprints: fingerprints,
                              fingerprintOffset: olderCount, manifestDate: Cache.modificationDate(url)),
                 for: url)
             result.unchanged = true
@@ -506,11 +524,13 @@ extension TranscriptCache.Writer {
         let token = String(UInt64.random(in: .min ... .max))
         try self.commit(
             Cache.Manifest(version: snapshot.version, complete: stored.complete && !dropped, activityMs: snapshot.activityMs,
-                           retained: retained, token: token, segments: entries.map(\.ref)),
+                           retained: retained, forwardedSenderRefreshPending: pendingRefresh,
+                           token: token, segments: entries.map(\.ref)),
             url: url, directory: directory, result: &result)
         let date = Cache.modificationDate(url)
         self.remember(
             Cache.Layout(token: token, complete: stored.complete && !dropped, activityMs: snapshot.activityMs, retained: retained,
+                         forwardedSenderRefreshPending: pendingRefresh,
                          segments: entries, itemFingerprints: fingerprints, fingerprintOffset: olderCount,
                          manifestDate: date),
             for: url)
@@ -523,5 +543,10 @@ extension TranscriptCache.Writer {
             : .tail(unchangedPrefix: Self.leadingUnchangedItems(old: stored.segments, new: entries.map(\.ref)),
                     baseToken: stored.token, token: token)
         return result
+    }
+
+    private func pendingForwardedRefresh(_ snapshot: Cache.Snapshot, existing: Bool) -> Bool {
+        if snapshot.forwardedSenderRefreshCompleted { return false }
+        return snapshot.forwardedSenderRefreshPending || existing
     }
 }
