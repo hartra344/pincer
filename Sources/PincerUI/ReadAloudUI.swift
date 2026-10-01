@@ -131,6 +131,7 @@ struct ReadAloudModifier: ViewModifier {
     @AppStorage(ReadAloudSettings.autoReadKey) private var autoRead = false
 
     func body(content: Content) -> some View {
+        let pillInset = self.$pillInset
         content
             // In the split view only the focused side answers the menu command and shows the pill (#404).
             .focusedSceneValue(\.readAloud, self.paneIsActive ? self.state : nil)
@@ -138,6 +139,13 @@ struct ReadAloudModifier: ViewModifier {
                 if self.paneIsActive { ReadAloudPill(controller: self.controller)
                     .padding(.bottom, self.bottomInset + ReadAloudPillLayout.bottomSpacing)
                     .animation(.snappy, value: self.controller.phase) }
+            }
+            .onPreferenceChange(ReadAloudPillHeight.self) { height in
+                let inset = height > 0 ? height + ReadAloudPillLayout.bottomSpacing : 0
+                if abs(pillInset.wrappedValue - inset) > 0.5 { pillInset.wrappedValue = inset }
+            }
+            .onChange(of: self.paneIsActive) { _, isActive in
+                if !isActive { pillInset.wrappedValue = 0 }
             }
             .background { self.hardwareShortcut }
             // Lowest priority: the composer, find bar and menus see Esc first and only pass it on when they don't use it.

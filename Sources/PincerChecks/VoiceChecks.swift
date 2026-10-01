@@ -1,6 +1,43 @@
 import Foundation
 import PincerKit
 
+@MainActor
+private final class HeldReadAloudSpeaker: ReadAloudLocalSpeaking {
+    private var completion: CheckedContinuation<Bool, Never>?
+
+    func speak(_ text: String, voice: String?, rate: Float) async -> Bool {
+        await withCheckedContinuation { self.completion = $0 }
+    }
+
+    func stop() {
+        self.completion?.resume(returning: false)
+        self.completion = nil
+    }
+}
+
+@MainActor
+private final class SilentReadAloudPlayer: ReadAloudClipPlaying {
+    func play(_: TTSClip) async -> Bool { false }
+    func stop() {}
+}
+
+/// The pill is present while Read Aloud has an active phase; stop returns the model to idle.
+@MainActor
+private func readAloudPresenceChecks() async {
+    let suite = "PincerChecks-ReadAloud-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    defaults.set(ReadAloudSettings.sourceDevice, forKey: ReadAloudSettings.sourceKey)
+    let speaker = HeldReadAloudSpeaker()
+    let controller = ReadAloudController(clipPlayer: SilentReadAloudPlayer(), localSpeaker: speaker, defaults: defaults)
+    controller.start(messageId: "demo-pill", text: "Read this reply.", gateway: nil)
+    check(controller.phase == .preparing("demo-pill") && controller.isActive, "Read Aloud enters an active preparing phase")
+    let speaking = await waitFor("Read Aloud demo speaker", timeout: 5) { controller.phase == .speaking("demo-pill") }
+    check(speaking && controller.activeMessageId == "demo-pill", "the active reply remains identified while speaking")
+    controller.stop()
+    check(controller.phase == .idle && !controller.isActive, "stopping Read Aloud returns to idle")
+}
+
 /// Gateway text-to-speech (`GatewayVoiceModel`) against the demo or the mock: status, providers and
 /// personas load, provider/persona round-trips, and `tts.speak` returns a decodable WAV.
 @MainActor
@@ -290,6 +327,7 @@ private func voiceConnect(_ profile: GatewayProfile, _ label: String) async -> G
 func runDemoVoice() async {
     guard let gateway = await voiceConnect(GatewayProfile.demo(), "demo") else { return }
     defer { gateway.stop() }
+    await readAloudPresenceChecks()
     await voiceChecks(gateway, label: "demo")
     await voiceSetupChecks(gateway, label: "demo")
     await voiceFallbackChecks()

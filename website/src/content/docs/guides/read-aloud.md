@@ -9,7 +9,7 @@ Pincer can read an agent's reply out loud. It uses your gateway's text-to-speech
 
 Every agent reply has a **Listen** button (a speaker icon) in the row of buttons under it, next to Copy and Reply. Choose it to hear the reply. While that reply is speaking, the button turns into **Stop**. You can also right-click a reply (Mac) or long-press it (iPhone and iPad) and choose **Read Aloud**.
 
-While it's speaking, a **Speaking** pill appears at the bottom of the chat. Tap it, or press <kbd>Esc</kbd>, to stop. <kbd>Esc</kbd> works even while you're typing in the message box, but it first closes menus, stops dictation and cancels an edit or reply chip. Only when none of those apply does it stop the reading.
+While it's speaking, a **Speaking** pill appears at the bottom of the chat. The transcript leaves room for the pill so it doesn't cover the last message. Tap it, or press <kbd>Esc</kbd>, to stop. <kbd>Esc</kbd> works even while you're typing in the message box, but it first closes menus, stops dictation and cancels an edit or reply chip. Only when none of those apply does it stop the reading.
 
 Other ways to start and stop:
 
