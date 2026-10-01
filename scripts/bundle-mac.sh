@@ -44,6 +44,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
   <key>NSMicrophoneUsageDescription</key><string>Dictate messages to your agents.</string>
+  <key>NSLocationUsageDescription</key><string>Include approximate location as visible context in messages, only when you enable location sharing.</string>
   <key>NSSpeechRecognitionUsageDescription</key><string>Turn what you say into text in the message box. Pincer never sends it on its own.</string>
 </dict>
 </plist>

@@ -18772,6 +18772,136 @@
           }
         }
       }
+    },
+    "Allow Location": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow Location"
+          }
+        }
+      }
+    },
+    "Allow location access to include context": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow location access to include context"
+          }
+        }
+      }
+    },
+    "Approximate location is ready": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approximate location is ready"
+          }
+        }
+      }
+    },
+    "Getting approximate location…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Getting approximate location…"
+          }
+        }
+      }
+    },
+    "Include approximate location with messages": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Include approximate location with messages"
+          }
+        }
+      }
+    },
+    "Location access is denied": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location access is denied"
+          }
+        }
+      }
+    },
+    "Location access is restricted on this device": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location access is restricted on this device"
+          }
+        }
+      }
+    },
+    "Location context (approximate, shared by Pincer)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location context (approximate, shared by Pincer)"
+          }
+        }
+      }
+    },
+    "Location is unavailable. Messages send without it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location is unavailable. Messages send without it."
+          }
+        }
+      }
+    },
+    "Location sharing is off": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Location sharing is off"
+          }
+        }
+      }
+    },
+    "Open Location Settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Location Settings"
+          }
+        }
+      }
+    },
+    "When enabled, new messages include an approximate location and its observation time as visible text. Pincer requests location only while the app is active, rounds it to a coarse area, and sends without it if no recent fix is available. Commands and edits do not add location. Turning this off stops future sharing; messages already queued keep their attached context.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When enabled, new messages include an approximate location and its observation time as visible text. Pincer requests location only while the app is active, rounds it to a coarse area, and sends without it if no recent fix is available. Commands and edits do not add location. Turning this off stops future sharing; messages already queued keep their attached context."
+          }
+        }
+      }
+    },
+    "observed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "observed"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
