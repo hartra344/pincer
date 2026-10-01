@@ -21,6 +21,7 @@ struct GatewayHealthPage: View {
             }
             self.summary(model, connected: connected)
             self.issues(model)
+            self.rejectedPreferences(self.gateway.rejectedPrefHealthRows)
             self.channels(model)
             self.clients(model)
             self.restartSection(model)
@@ -64,6 +65,46 @@ struct GatewayHealthPage: View {
     // MARK: Sections
 
     private static let dismissFooter = L("Dismissed issues come back if they get worse, or clear up and happen again.")
+
+    @ViewBuilder private func rejectedPreferences(_ rows: [RejectedPrefHealthRow]) -> some View {
+        if !rows.isEmpty {
+            Section {
+                ForEach(rows) { row in
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xxs) {
+                        Text(Self.preferenceTitle(row.feature))
+                        Text(row.message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                        Text(row.id)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.tertiary)
+                            .textSelection(.enabled)
+                    }
+                }
+            } header: {
+                Text("Synced preferences", bundle: .module)
+            } footer: {
+                Text("The Gateway rejected these synced settings. They remain pending on this device.", bundle: .module)
+            }
+        }
+    }
+
+    private static func preferenceTitle(_ feature: RejectedPrefHealthRow.Feature) -> String {
+        switch feature {
+        case .serverNames: L("Server names")
+        case .chatIcons: L("Chat icons")
+        case .chatColors: L("Chat colors")
+        case .groups: L("Groups")
+        case .chatOrder: L("Chat order")
+        case .groupIcons: L("Group icons")
+        case .reactions: L("Reactions")
+        case .healthDismissals: L("Health dismissals")
+        case .avatars: L("Avatars")
+        case .bookmarks: L("Bookmarks")
+        case .other: L("Synced preference")
+        }
+    }
 
     @ViewBuilder private func issues(_ model: GatewayHealthModel) -> some View {
         let active = model.activeIssues

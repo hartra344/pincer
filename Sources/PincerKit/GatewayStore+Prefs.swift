@@ -71,6 +71,12 @@ extension GatewayStore {
 
     func syncedMap(_ pref: String) -> SyncedMap { self.syncedMaps.first { $0.pref == pref }! }
 
+    /// Whether this known preference finished its first remote read and is safe to push.
+    package func hasSyncedPreference(_ pref: String) -> Bool {
+        guard let map = self.syncedMaps.first(where: { $0.pref == pref }) else { return false }
+        return self.defaults.bool(forKey: map.syncedDefaultsKey)
+    }
+
     private static func names(from value: JSONValue?) -> [String: String] {
         (value?.object ?? [:]).compactMapValues { $0.string?.nilIfEmpty }
     }
@@ -292,8 +298,15 @@ extension GatewayStore {
                 return .failed
             }
         }
-        guard let result = try? await self.connection.request("users.prefs.set", ["entries": entries], timeout: 15) else { return .failed }
-        return outcome(result)
+        do {
+            return outcome(try await self.connection.request("users.prefs.set", ["entries": entries], timeout: 15))
+        } catch let GatewayError.rpc(code, message, _) where code == "INVALID_REQUEST" {
+            // The Gateway rejected this synced map. Keep the pending local value and show why in Health.
+            self.rejectedPrefs[key] = message
+            return .rejected
+        } catch {
+            return .failed
+        }
     }
 
     // MARK: Reactions
