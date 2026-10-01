@@ -110,8 +110,11 @@ func runDemoSubagents(_ gateway: GatewayStore) async {
     check(streaming && runningLane?.isRunning == true && runningLane?.currentActivity?.hasPrefix("Running `") == true,
           "demo running helper streams tool calls (\(toolsBefore) → \(runningLane?.toolCount ?? 0), \(runningLane?.currentActivity ?? "nil"))")
 
-    // Compact iPhone shows the Runs button only while a helper runs (#180): the demo's flagship chat has one.
-    check(gateway.subagentTree(rootKey: root).runningCount >= 1, "demo launch plan has a running helper")
+    // Compact iPhone's Runs badge reads this aggregate count; the visible demo keeps one helper active.
+    let activeTree = gateway.subagentTree(rootKey: root)
+    let activeChildren = activeTree.flattened.filter { $0.status == .running }.count
+    check(activeTree.runningCount == activeChildren && activeChildren == 1,
+          "demo Runs activity count matches its active helper (\(activeTree.runningCount), \(activeChildren))")
 
     let chat = gateway.chat(for: kids.running)
     await chat.load()
@@ -128,7 +131,9 @@ func runDemoSubagents(_ gateway: GatewayStore) async {
     // Negative window: a stopped helper must not keep streaming.
     try? await Task.sleep(for: .seconds(3))
     check(gateway.runTimeline.latestLane(sessionKey: kids.running)?.toolCount == toolsAtStop, "demo helper stops streaming once stopped")
-    check(gateway.subagentTree(rootKey: root).runningCount == 0, "no helper still running")
+    let stoppedTree = gateway.subagentTree(rootKey: root)
+    check(stoppedTree.runningCount == stoppedTree.flattened.filter { $0.status == .running }.count
+          && stoppedTree.runningCount == 0, "demo Runs activity count clears when the helper stops")
 }
 
 @MainActor

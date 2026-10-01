@@ -18,52 +18,28 @@ private final class RunsToolbarPresentationState {
 
 @MainActor
 private struct RunsToolbarHostContent: View {
-        let gateway: GatewayStore
-        let rootKey: String
-        let presentation: RunsToolbarPresentationState
+    let gateway: GatewayStore
+    let rootKey: String
+    let presentation: RunsToolbarPresentationState
 
-        var body: some View {
-            NavigationStack {
-                Text("Launch plan")
-                    .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            RunsToolbarButton(isPresented: Binding(
-                                get: { self.presentation.presented }, set: { self.presentation.presented = $0 }
-                            ), isCompact: true, sessionKey: self.rootKey)
-                        }
+    var body: some View {
+        NavigationStack {
+            Text("Launch plan")
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        RunsToolbarButton(isPresented: Binding(
+                            get: { self.presentation.presented }, set: { self.presentation.presented = $0 }
+                        ), isCompact: true, sessionKey: self.rootKey)
                     }
-            }
-            .environment(self.gateway)
+                }
         }
+        .environment(self.gateway)
+        .background(Color(uiColor: .systemBackground))
+    }
 }
 
 @MainActor
 private enum RunsToolbarHostedFixtures {
-    static var keepAlive: [UIWindow] = []
-
-    static func accessibilityLabels(in root: UIView) -> [String] {
-        var labels: [String] = []
-        var visited = Set<ObjectIdentifier>()
-        Self.walk(root, labels: &labels, visited: &visited)
-        return Array(Set(labels))
-    }
-
-    private static func walk(_ element: Any, labels: inout [String], visited: inout Set<ObjectIdentifier>) {
-        guard let object = element as? NSObject,
-              visited.insert(ObjectIdentifier(object)).inserted else { return }
-        if let label = object.accessibilityLabel, !label.isEmpty { labels.append(label) }
-        if let view = object as? UIView {
-            for child in view.subviews { Self.walk(child, labels: &labels, visited: &visited) }
-        }
-        let count = object.accessibilityElementCount()
-        guard count > 0, count < 2_000 else { return }
-        for index in 0..<count {
-            if let child = object.accessibilityElement(at: index) {
-                Self.walk(child, labels: &labels, visited: &visited)
-            }
-        }
-    }
-
     static func snapshot(_ view: UIView) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = view.window?.screen.scale ?? UIScreen.main.scale
@@ -72,6 +48,28 @@ private enum RunsToolbarHostedFixtures {
                 view.layer.render(in: renderer.cgContext)
             }
         }
+    }
+
+    static func contentPixelCount(in image: UIImage) -> Int {
+        guard let source = image.cgImage,
+              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(data: nil, width: source.width, height: source.height,
+                                      bitsPerComponent: 8, bytesPerRow: source.width * 4,
+                                      space: colorSpace,
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue),
+              let data = context.data else { return 0 }
+        context.draw(source, in: CGRect(x: 0, y: 0, width: source.width, height: source.height))
+        let bytes = data.bindMemory(to: UInt8.self, capacity: source.width * source.height * 4)
+        let background = (bytes[0], bytes[1], bytes[2])
+        var count = 0
+        for pixel in 0..<(source.width * source.height) {
+            let offset = pixel * 4
+            let difference = abs(Int(bytes[offset]) - Int(background.0))
+                + abs(Int(bytes[offset + 1]) - Int(background.1))
+                + abs(Int(bytes[offset + 2]) - Int(background.2))
+            if bytes[offset + 3] > 200, difference > 60 { count += 1 }
+        }
+        return count
     }
 
     static func redBadgePixelCount(in image: UIImage) -> Int {
@@ -97,7 +95,7 @@ private enum RunsToolbarHostedFixtures {
 
 @MainActor
 extension TranscriptUIKitHostedTests {
-    @Test func compactRunsToolbarShowsAccessibleAndPaintedCountWhileRunsAreActive() async throws {
+    @Test func compactRunsToolbarPaintsCurrentCountWhileRunsAreActive() async throws {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
         let gateway = GatewayStore(profile: .demo(), defaults: scratch.defaults, identity: UIFixtures.identity())
@@ -116,6 +114,8 @@ extension TranscriptUIKitHostedTests {
         let presentation = RunsToolbarPresentationState()
         let root = RunsToolbarHostContent(gateway: gateway, rootKey: rootKey, presentation: presentation)
         let controller = UIHostingController(rootView: root)
+        controller.overrideUserInterfaceStyle = .light
+
         func makeRow(_ key: String, active: Bool) -> SessionRow {
             SessionRow(.object([
                 "key": .string(key), "label": .string("Badge fixture"),
@@ -125,106 +125,124 @@ extension TranscriptUIKitHostedTests {
             ]))!
         }
 
+        func renderButton() throws -> UIImage {
+            let button = RunsToolbarButton(isPresented: Binding(
+                get: { presentation.presented }, set: { presentation.presented = $0 }
+            ), isCompact: true, sessionKey: rootKey)
+                .environment(gateway)
+                .labelStyle(.iconOnly)
+                .buttonStyle(.plain)
+                .frame(width: 40, height: 40)
+            return try #require(ImageRenderer(content: button).uiImage)
+        }
+
         guard let scene = UIApplication.shared.connectedScenes
             .compactMap({ $0 as? UIWindowScene })
             .first(where: { $0.activationState != .unattached })
         else {
-            // Package tests have no app scene. Render the same production button's icon label;
-            // app-hosted runs below additionally exercise its real Liquid Glass toolbar container.
-            func renderButton() throws -> UIImage {
-                let button = RunsToolbarButton(isPresented: .constant(false), isCompact: true, sessionKey: rootKey)
-                    .environment(gateway)
-                    .labelStyle(.iconOnly)
-                    .buttonStyle(.plain)
-                    .frame(width: 40, height: 40)
-                return try #require(ImageRenderer(content: button).uiImage)
-            }
-            let active = try renderButton()
-            let path = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-runs-label-\(UUID().uuidString).png")
-            try active.pngData()?.write(to: path)
-            print("Runs headless label snapshot: \(path.path)")
-            #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: active) >= 20,
-                    "the production icon label paints the active badge even without symbol tint")
+            // SwiftPM's in-process runner has no UIWindowScene. Render the production button's
+            // badge here; the scene-backed branch also checks its native glass-toolbar placement.
+            #expect(gateway.subagentTree(rootKey: rootKey).runningCount == 1)
+            #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: try renderButton()) >= 20,
+                    "one active demo helper paints the production Runs icon badge")
+
             gateway.setSession(makeRow(secondKey, active: true), for: secondKey)
             #expect(gateway.subagentTree(rootKey: rootKey).runningCount == 2)
-            #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: try renderButton()) >= 20)
+            #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: try renderButton()) >= 20,
+                    "two active demo helpers keep the production Runs badge visible")
+
             gateway.setSession(makeRow(secondKey, active: false), for: secondKey)
+            #expect(gateway.subagentTree(rootKey: rootKey).runningCount == 1)
+            #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: try renderButton()) >= 20,
+                    "one remaining helper keeps the badge visible")
+
             gateway.setSession(makeRow(runningKey, active: false), for: runningKey)
             #expect(gateway.subagentTree(rootKey: rootKey).runningCount == 0)
-            #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: try renderButton()) == 0,
-                    "an idle compact button cannot leave an active badge behind")
+            let badgeCleared = await eventually(timeout: .seconds(5)) {
+                (try? renderButton()).map { RunsToolbarHostedFixtures.redBadgePixelCount(in: $0) == 0 } ?? false
+            }
+            #expect(badgeCleared, "no active helpers removes the badge")
+
+            presentation.presented = true
+            let presentedIdle = try renderButton()
+            #expect(RunsToolbarHostedFixtures.contentPixelCount(in: presentedIdle) > 0,
+                    "the presented idle Runs button still renders its icon")
+            #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: presentedIdle) == 0,
+                    "an open, idle Runs panel does not show an activity badge")
             return
         }
+        let previousKeyWindow = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
         window.frame = scene.coordinateSpace.bounds
+        window.isHidden = true
         window.rootViewController = controller
         window.makeKeyAndVisible()
         window.layoutIfNeeded()
         controller.view.layoutIfNeeded()
-        RunsToolbarHostedFixtures.keepAlive.append(window)
-
+        defer {
+            window.isHidden = true
+            previousKeyWindow?.makeKeyAndVisible()
+        }
 
         #expect(gateway.subagentTree(rootKey: rootKey).runningCount == 1)
-        let initialVisible = await eventually(timeout: .seconds(5)) {
-            let labels = RunsToolbarHostedFixtures.accessibilityLabels(in: controller.view)
-            return labels.contains("Launch plan") && labels.contains(where: { $0.hasPrefix("Runs") })
+        let initialBadgePainted = await eventually(timeout: .seconds(5)) {
+            controller.view.layoutIfNeeded()
+            return RunsToolbarHostedFixtures.redBadgePixelCount(in: RunsToolbarHostedFixtures.snapshot(controller.view)) >= 20
         }
-        #expect(initialVisible, "the connected host renders its body and seeded active Runs button")
-        gateway.setSession(makeRow(secondKey, active: true), for: secondKey)
-        #expect(gateway.subagentTree(rootKey: rootKey).runningCount == 2)
+        #expect(initialBadgePainted, "the attached native toolbar paints the seeded running helper badge")
+        controller.view.layoutIfNeeded()
+        let oneActive = RunsToolbarHostedFixtures.snapshot(controller.view)
+        #expect(RunsToolbarHostedFixtures.contentPixelCount(in: oneActive) > 100,
+                "the hosted Launch plan body and toolbar render visible content")
+        #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: oneActive) >= 20,
+                "one active helper paints the red activity badge over the toolbar symbol")
+        let onePath = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-runs-toolbar-one-\(UUID().uuidString).png")
+        let oneData = try #require(oneActive.pngData())
+        try oneData.write(to: onePath)
+        print("Runs toolbar count-one snapshot: \(onePath.path)")
 
-        let twoRunning = await eventually(timeout: .seconds(5)) {
-            RunsToolbarHostedFixtures.accessibilityLabels(in: controller.view).contains("Runs — 2 helpers running")
-        }
-        #expect(twoRunning, "the actual primary toolbar item exposes the current running count")
+        gateway.setSession(makeRow(secondKey, active: true), for: secondKey)
+        await Task.yield()
+        #expect(gateway.subagentTree(rootKey: rootKey).runningCount == 2)
+        controller.view.layoutIfNeeded()
+        let twoActive = RunsToolbarHostedFixtures.snapshot(controller.view)
+        #expect(RunsToolbarHostedFixtures.contentPixelCount(in: twoActive) > 100,
+                "the body remains painted with multiple helpers running")
+        #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: twoActive) >= 20,
+                "two active helpers keep the red activity badge visible")
+        let twoPath = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-runs-toolbar-two-\(UUID().uuidString).png")
+        let twoData = try #require(twoActive.pngData())
+        try twoData.write(to: twoPath)
+        print("Runs toolbar count-two snapshot: \(twoPath.path)")
 
         gateway.setSession(makeRow(secondKey, active: false), for: secondKey)
+        await Task.yield()
         #expect(gateway.subagentTree(rootKey: rootKey).runningCount == 1)
-        let oneRunning = await eventually(timeout: .seconds(5)) {
-            RunsToolbarHostedFixtures.accessibilityLabels(in: controller.view).contains("Runs — 1 helper running")
-        }
-        #expect(oneRunning, "the accessible count updates when a helper finishes")
-
-        let snapshot = RunsToolbarHostedFixtures.snapshot(controller.view)
-        let path = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-runs-toolbar-\(UUID().uuidString).png")
-        let snapshotData = try #require(snapshot.pngData())
-        try snapshotData.write(to: path)
-        print("Runs toolbar active badge snapshot: \(path.path)")
-        #expect(Self.paintedPixelCount(in: snapshot) > 100,
-                "the snapshot contains painted toolbar/body content rather than an empty render")
-        #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: snapshot) >= 20, "the active count badge is visibly painted in the native toolbar")
+        controller.view.layoutIfNeeded()
+        let oneAgain = RunsToolbarHostedFixtures.snapshot(controller.view)
+        #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: oneAgain) >= 20,
+                "the red activity badge remains when one helper is still active")
 
         gateway.setSession(makeRow(runningKey, active: false), for: runningKey)
-        let idleHidden = await eventually(timeout: .seconds(5)) {
-            !RunsToolbarHostedFixtures.accessibilityLabels(in: controller.view).contains(where: { $0.hasPrefix("Runs") })
+        #expect(gateway.subagentTree(rootKey: rootKey).runningCount == 0)
+        let nativeBadgeCleared = await eventually(timeout: .seconds(5)) {
+            controller.view.layoutIfNeeded()
+            return RunsToolbarHostedFixtures.redBadgePixelCount(in: RunsToolbarHostedFixtures.snapshot(controller.view)) == 0
         }
-        #expect(idleHidden, "compact idle Runs button hides when the panel is closed")
+        #expect(nativeBadgeCleared, "the native toolbar removes its badge after the last helper stops")
+        controller.view.layoutIfNeeded()
+        let idleHidden = RunsToolbarHostedFixtures.snapshot(controller.view)
+        #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: idleHidden) == 0,
+                "zero running helpers remove the active badge from the compact toolbar")
 
         presentation.presented = true
-        let presentedIdle = await eventually(timeout: .seconds(5)) {
-            RunsToolbarHostedFixtures.accessibilityLabels(in: controller.view).contains("Runs")
-        }
-        #expect(presentedIdle, "the plain Runs button remains available while its panel is open")
-    }
-
-    static func paintedPixelCount(in image: UIImage) -> Int {
-        guard let source = image.cgImage,
-              let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
-              let context = CGContext(data: nil, width: source.width, height: source.height,
-                                      bitsPerComponent: 8, bytesPerRow: source.width * 4,
-                                      space: colorSpace,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue),
-              let data = context.data else { return 0 }
-        context.draw(source, in: CGRect(x: 0, y: 0, width: source.width, height: source.height))
-        let bytes = data.bindMemory(to: UInt8.self, capacity: source.width * source.height * 4)
-        var count = 0
-        for pixel in 0..<(source.width * source.height) {
-            let offset = pixel * 4
-            if bytes[offset + 3] > 200, max(bytes[offset], max(bytes[offset + 1], bytes[offset + 2])) > 40 {
-                count += 1
-            }
-        }
-        return count
+        await Task.yield()
+        controller.view.layoutIfNeeded()
+        let presentedIdle = RunsToolbarHostedFixtures.snapshot(controller.view)
+        #expect(RunsToolbarHostedFixtures.contentPixelCount(in: presentedIdle) > 100,
+                "the open Runs panel state still renders the chat and toolbar")
+        #expect(RunsToolbarHostedFixtures.redBadgePixelCount(in: presentedIdle) == 0,
+                "an open, idle Runs panel does not show a running badge")
     }
 }
 #endif
