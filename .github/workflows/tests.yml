@@ -115,7 +115,7 @@ jobs:
 
   # The Swift job runs the tests on macOS, where the UIKit list never loads. This runs the transcript suites
   # (hosted UIKit list, Dynamic Type parity, controller) against an iPhone simulator, booted headless by xcodebuild.
-  # Other suites (e.g. StreamingRenderingTests) aren't listed: they haven't run on iOS yet.
+  # Includes streaming/committed row parity, off-main inline math, and WebKit SVG rasterization.
   ios-tests:
     name: iOS simulator tests
     needs: changes
@@ -165,6 +165,9 @@ jobs:
             -only-testing:PincerUITests/TranscriptNavigationTests \
             -only-testing:PincerUITests/TranscriptAccessibilityActionTests \
             -only-testing:PincerUITests/ScrollToBottomTests \
+            -only-testing:PincerUITests/StreamingRenderingTests \
+            -only-testing:PincerUITests/InlineMathOffMainTests \
+            -only-testing:PincerUITests/SVGRasterizerTests \
             | { command -v xcbeautify >/dev/null && xcbeautify || cat; }
 
   swift:

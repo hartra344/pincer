@@ -56,10 +56,10 @@ From the repository root, run:
 
 ```sh
 scripts/prepare-docs-capture.sh
-open 'build/Pincer Documentation.app'
+# Open the absolute "Capture app prepared" path printed by the script.
 ```
 
-The script builds an ad-hoc signed SwiftPM app and copies it to a separate bundle with identifier `chat.pincer.documentation`. It has no App Group or shared Keychain group. Only this bundle's preferences get the display name Alex, Light appearance and All thinking steps. Its launch environment sets `PINCER_KEYCHAIN=memory`, `PINCER_CACHE_DIR=off`, `PINCER_DRAFTS_DIR=off`, and `PINCER_OUTBOX_DIR=off`.
+The script builds an ad-hoc signed SwiftPM app in a fresh `build/docs-capture.*` directory and prints the resulting app path. Each run gets separate bundle, entitlement, icon and resource staging, so another app build or capture can run without replacing its files. The copy uses bundle identifier `chat.pincer.documentation` and has no App Group or shared Keychain group. Only this bundle's preferences get the display name Alex, Light appearance and All thinking steps. Its launch environment sets `PINCER_KEYCHAIN=memory`, `PINCER_CACHE_DIR=off`, `PINCER_DRAFTS_DIR=off`, and `PINCER_OUTBOX_DIR=off`.
 
 Never add a real gateway to this bundle. Its profiles persist in its own defaults, but credentials do not survive quitting. For a fresh run, remove its synthetic gateway through **Organize → Edit Connection… → Remove Gateway…**, then choose **Try the Demo** on the welcome screen. Do not reset the installed Pincer app's preferences.
 

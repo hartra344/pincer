@@ -6,7 +6,9 @@ cd "$(dirname "$0")/.."
 CONFIG="${1:-release}"
 swift build -c "$CONFIG" --product PincerMacDev
 BIN="$(swift build -c "$CONFIG" --show-bin-path)/PincerMacDev"
-APP="build/Pincer.app"
+BUILD_ROOT="${PINCER_BUNDLE_ROOT:-build}"
+APP="$BUILD_ROOT/Pincer.app"
+mkdir -p "$BUILD_ROOT"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Pincer"
@@ -22,7 +24,7 @@ vtool -set-build-version macos 15.0 "$SDK_VERSION" -replace -output "$APP/Conten
 # dark/clear/tinted appearances (macOS 26+); AppIcon.icns is the flat fallback for macOS 15.
 xcrun actool Apps/Shared/AppIcon.icon --compile "$APP/Contents/Resources" --platform macosx \
   --minimum-deployment-target 15.0 --app-icon AppIcon \
-  --output-partial-info-plist build/icon-partial.plist --output-format human-readable-text >/dev/null
+  --output-partial-info-plist "$BUILD_ROOT/icon-partial.plist" --output-format human-readable-text >/dev/null
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -51,10 +53,10 @@ PLIST
 # whereas ad-hoc signatures change every build and re-prompt for the Keychain.
 IDENTITY="${PINCER_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/ {print $2; exit}')}"
 IDENTITY="${IDENTITY:--}"
-cat > build/dev.entitlements <<ENT
+cat > "$BUILD_ROOT/dev.entitlements" <<ENT
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>com.apple.security.network.client</key><true/><key>com.apple.security.device.audio-input</key><true/></dict></plist>
 ENT
-codesign --force --sign "$IDENTITY" --entitlements build/dev.entitlements --options runtime "$APP"
+codesign --force --sign "$IDENTITY" --entitlements "$BUILD_ROOT/dev.entitlements" --options runtime "$APP"
 echo "Built $APP (signed: ${IDENTITY/#-/ad-hoc})"
