@@ -15,7 +15,7 @@ extension GatewayStore {
 
     /// The shared store, with local edits pushed to the gateway.
     var bookmarkStore: BookmarkStore {
-        let store = BookmarkStore.shared(gatewayId: self.id)
+        let store = BookmarkStore.shared(gatewayId: self.id, defaults: self.defaults)
         if store.onChange == nil { self.wireBookmarkSync(store) }
         return store
     }
@@ -24,7 +24,7 @@ extension GatewayStore {
     /// (a replaced gateway shares the store but not the instance).
     @discardableResult
     func wireBookmarkSync(_ store: BookmarkStore? = nil) -> BookmarkStore {
-        let store = store ?? BookmarkStore.shared(gatewayId: self.id)
+        let store = store ?? BookmarkStore.shared(gatewayId: self.id, defaults: self.defaults)
         // Bookmarks saved before the cap must fit a pref value before their first sync.
         if !self.defaults.bool(forKey: Self.bookmarksSyncedKey(0, self.id)) { store.enforceLimits() }
         store.onChange = { [weak self] changes in
@@ -68,4 +68,15 @@ extension GatewayStore {
     }
 
     static func bookmarksSyncedKey(_ shard: Int, _ id: UUID) -> String { "pincer.bookmarksSynced.\(shard).\(id.uuidString)" }
+
+    /// Call only after a complete, authoritative session list. Local chats and queued sends can
+    /// precede their Gateway session and must keep their saved messages.
+    func forgetOrphanedBookmarks(keeping listed: Set<String>) async {
+        let store = self.bookmarkStore
+        let keys = Set(store.bookmarks.map(\.sessionKey))
+        let orphaned = keys.subtracting(listed).filter { key in self.sessions[key] == nil && self.chats[key] == nil
+            && self.outbox.entries(for: key).isEmpty
+        }
+        await store.removeConfirmedSessions(orphaned)
+    }
 }

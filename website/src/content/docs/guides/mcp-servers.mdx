@@ -46,6 +46,8 @@ Plugins can declare MCP servers of their own. They appear in a **From Plugins** 
 
 Choose **+** to add a server, or open a server and choose **Edit**. Pick how it connects:
 
+Validation appears for a field after you edit that field. Choose **Done** to show any remaining problems before saving the draft.
+
 - **stdio** starts a program on the Gateway host. Set the **Command**, **Arguments** and, if needed, a working directory and **Environment** variables.
 - **Streamable HTTP** connects to a remote URL. Add **Headers** if the server needs them, such as `Authorization`.
 - **SSE** is the older remote transport. Use it only if the server doesn't offer Streamable HTTP.

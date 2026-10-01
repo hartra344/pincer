@@ -361,6 +361,7 @@ extension GatewayStore {
         defer { self.invalidatingTranscripts.remove(key) }
         await self.cancelHeadlessFill(key)
         if change == .deleted {
+            await self.bookmarkStore.removeConfirmedSessions([key])
             self.chats.removeValue(forKey: key)?.stopCaching()
             self.residency.forget(key)
             self.setSession(nil, for: key)
@@ -391,18 +392,20 @@ extension GatewayStore {
                                     request: (JSONValue) async throws -> JSONValue) async -> Set<String>? {
         var keys = Set<String>()
         var offset = 0
+        var reportedTotal = 0
         for _ in 0..<maxPages {
             var params: [String: JSONValue] = ["limit": JSONValue(limit), "archived": "all"]
             if offset > 0 { params["offset"] = JSONValue(offset) }
             guard let list = try? await request(.object(params)), let rows = list["sessions"]?.array else { return nil }
+            reportedTotal = max(reportedTotal, list["totalCount"]?.int ?? 0)
             keys.formUnion(rows.compactMap(SessionRow.init).map(\.key))
             if let hasMore = list["hasMore"]?.bool {
-                guard hasMore else { return keys }
+                guard hasMore else { return keys.count >= reportedTotal ? keys : nil }
                 let next = list["nextOffset"]?.int ?? offset + rows.count
                 guard next > offset else { return nil }
                 offset = next
             } else {
-                return rows.count < limit ? keys : nil
+                return rows.count < limit && keys.count >= reportedTotal ? keys : nil
             }
         }
         return nil
@@ -430,7 +433,10 @@ extension GatewayStore {
     /// orphaned when its digest matches no session on a COMPLETE list, none in memory and none in the
     /// outbox; the search index, which does store keys, names the ones to forget in full.
     func reconcileOrphanedTranscripts(epoch: Int) async {
-        guard let root = self.cacheRoot, let listed = await self.completeSessionKeys(), self.isCurrent(epoch) else { return }
+        guard let listed = await self.completeSessionKeys(), self.isCurrent(epoch) else { return }
+        await self.forgetOrphanedBookmarks(keeping: listed)
+        guard self.isCurrent(epoch) else { return }
+        guard let root = self.cacheRoot else { return }
         func isLive(_ key: String) -> Bool {
             listed.contains(key) || !self.isForgettable(key)
         }

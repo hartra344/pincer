@@ -487,6 +487,15 @@ public struct MCPServerDraft: Hashable, Sendable {
     }
 }
 
+/// Controls when validation problems are shown while editing an MCP server draft.
+public enum MCPFieldProblemVisibility {
+    /// Problems stay hidden until their matching field is touched or the user submits the draft.
+    public static func visible(_ problems: [String: String], touched: Set<String>, showAll: Bool) -> [String: String] {
+        guard !showAll else { return problems }
+        return problems.filter { touched.contains($0.key) }
+    }
+}
+
 // MARK: Status
 
 public enum MCPServerState: String, Sendable {

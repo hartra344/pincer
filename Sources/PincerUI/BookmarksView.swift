@@ -77,7 +77,7 @@ extension CommandPalette {
         var items: [PaletteItem] = []
         for gateway in gateways {
             for bookmark in BookmarkStore.shared(gatewayId: gateway.id).bookmarks {
-                let title = gateway.sessions[bookmark.sessionKey]?.title ?? bookmark.sessionKey
+                let title = Bookmark.chatTitle(gateway.sessions[bookmark.sessionKey]?.title, sessionKey: bookmark.sessionKey)
                 let target = Notifier.Target(gatewayId: gateway.id, sessionKey: bookmark.sessionKey)
                 items.append(PaletteItem(
                     id: "bookmark:\(gateway.id.uuidString):\(bookmark.id)",
