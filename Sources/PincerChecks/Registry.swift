@@ -140,6 +140,7 @@ enum Suites {
         Section("Messages from other agents (demo)") { await runDemoForwarded() },
         Section("Menu bar (demo)") { await runMenuBarDemo() },
         Section("Scroll to bottom (demo)") { await runDemoScrollToBottom() },
+        Section("Shared chat load (demo)") { await runDemoSharedLoadChecks() },
     ]
 
     /// The built-in demo, second half.
