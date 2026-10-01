@@ -117,7 +117,8 @@ actor DemoGateway {
     var seededStreamTask: Task<Void, Never>?
     /// Shared reactions by session key, then message id (DemoGateway+Reactions.swift).
     var sessionReactions: [String: [String: [DemoReaction]]] = [:]
-    var messageSubscriptions: Set<String> = []
+    /// Observer ids by session key; "" is the slot used when `subscriptionId` is omitted.
+    var messageSubscriptions: [String: Set<String>] = [:]
     var eventSeq = 0
     var sink: (@Sendable (GatewayEvent) -> Void)?
     /// When the simulated Gateway process started; reset by a restart.
@@ -148,6 +149,7 @@ actor DemoGateway {
             "agent:main:main|demo-main-status": "👍",
             "agent:main:main|demo-main-gauge": "🎉",
         ]
+        self.prefs.merge(DemoBookmarks.prefEntries()) { _, new in new }
         var seeded = Self.seed()
         self.branchTips = Self.seedSessionManager(sessions: &seeded.sessions, transcripts: &seeded.transcripts)
         self.sessions = seeded.sessions

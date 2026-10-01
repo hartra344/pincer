@@ -342,6 +342,8 @@ public final class GatewayStore: Identifiable {
         // Before this Gateway's first sync, start from the choices already made on this device.
         self.avatarChoices = defaults.dictionary(forKey: "pincer.avatars.\(profile.id.uuidString)") as? [String: String]
             ?? AvatarPreferences.local(in: defaults)
+        self.pendingPrefChanges = Self.loadPending([String: [String: String?]].self, Self.pendingPrefsKey(profile.id), defaults) ?? [:]
+        self.queuedAvatarChoices = Self.loadPending([String: String?].self, Self.queuedAvatarsKey(profile.id), defaults) ?? [:]
         self.selectedKey = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)")
         self.splitKey = defaults.string(forKey: "pincer.split.\(profile.id.uuidString)")
         self.connectedBeforeSetup = defaults.string(forKey: "pincer.selected.\(profile.id.uuidString)") != nil
@@ -373,6 +375,7 @@ public final class GatewayStore: Identifiable {
         }
         self.health.dismissals = self.healthDismissals
         self.health.onDismissalsChanged = { [weak self] changes in self?.applyHealthDismissals(changes) }
+        self.wireBookmarkSync()
     }
 
     public var deviceId: String { self.identity.deviceId }
@@ -493,6 +496,8 @@ public final class GatewayStore: Identifiable {
         self.images.retryUnavailable()
         self.health.connectionChanged(state, hello: hello)
         self.connectionEpoch += 1
+        self.expectedPrefEchoes = [:]
+        self.messageSubscriptionIdUnsupported = false
         self.replyToUnsupported = false
         self.reactionForwardingOff = []
         self.reactionNoticeShown = []
@@ -917,7 +922,7 @@ public final class GatewayStore: Identifiable {
             self.applySessionChange(payload)
         case "users.prefs.changed":
             let keys = payload["keys"]?.array?.compactMap(\.string)
-            let maps = self.syncedMaps.filter { keys?.contains($0.pref) ?? true && !self.consumeOwnWrite($0.pref) }
+            let maps = self.syncedMaps.filter { keys?.contains($0.pref) ?? true && !self.consumeExpectedEcho($0.pref) }
             if !maps.isEmpty { Task { await self.pullMaps(maps) } }
         case "session.reaction":
             guard let key = payload["sessionKey"]?.text else { return }
@@ -1382,12 +1387,23 @@ public final class GatewayStore: Identifiable {
     @ObservationIgnored var remotePrefMaps: [String: [String: String]] = [:]
     @ObservationIgnored var prefsSupportsExpected = true
     /// Changes not yet confirmed by the gateway, per pref.
-    @ObservationIgnored var pendingPrefChanges: [String: [String: String?]] = [:]
+    /// Persisted per gateway, so changes that never reached it survive a relaunch.
+    @ObservationIgnored var pendingPrefChanges: [String: [String: String?]] = [:] {
+        didSet { self.savePending(self.pendingPrefChanges, isEmpty: self.pendingPrefChanges.isEmpty, key: Self.pendingPrefsKey(self.id)) }
+    }
     /// The latest write per pref, which the next one waits for.
     @ObservationIgnored var prefPushes: [String: Task<Void, Never>] = [:]
 
-    /// Prefs we just wrote, whose `users.prefs.changed` echo needs no read back.
-    @ObservationIgnored var ownPrefWrites: [String: ContinuousClock.Instant] = [:]
+    /// This connection's Gateway (before 2026.9.7) rejected `subscriptionId` on message subscriptions.
+    @ObservationIgnored var messageSubscriptionIdUnsupported = false
+
+    /// Prefs the gateway refused as invalid (value too large, key limit), with its reason. Their
+    /// changes stay pending but only retry on the next push or connect.
+    public internal(set) var rejectedPrefs: [String: String] = [:]
+
+    /// `users.prefs.set` writes per pref whose `users.prefs.changed` echo hasn't arrived, so
+    /// that echo needs no read back. Reset on each connection, which pulls everything.
+    @ObservationIgnored var expectedPrefEchoes: [String: Int] = [:]
 
     /// Your emoji reactions, `"<sessionKey>|<transcriptId>"` to space-separated emoji in the order
     /// added, synced through `users.prefs` (`pincer.reactions`).
@@ -1433,7 +1449,9 @@ public final class GatewayStore: Identifiable {
 
     /// Choices made while this Gateway was unreachable. Its map is left alone until it reconnects,
     /// so pulling its older map can't undo them on this device; they're pushed after that pull.
-    var queuedAvatarChoices: [String: String?] = [:]
+    var queuedAvatarChoices: [String: String?] = [:] {
+        didSet { self.savePending(self.queuedAvatarChoices, isEmpty: self.queuedAvatarChoices.isEmpty, key: Self.queuedAvatarsKey(self.id)) }
+    }
 
     /// The connection epoch whose bootstrap prefs pull has finished; seeds are only recorded after
     /// it, so a device that hasn't read the Gateway's map can't overwrite an older seed.

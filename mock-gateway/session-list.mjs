@@ -132,13 +132,24 @@ function dispatch(state, conn, msg) {
       break;
     }
     case 'sessions.messages.subscribe': {
+      if (process.env.MOCK_NO_SUBSCRIPTION_ID === '1' && 'subscriptionId' in params) {
+        return sendErr(conn, id, 'INVALID_REQUEST', 'invalid sessions.messages.subscribe params: unexpected property \'subscriptionId\'');
+      }
       if (!state.sessions.has(params.key)) return sendErr(conn, id, 'INVALID_REQUEST', 'unknown session');
-      conn.messageSubs.add(params.key);
+      // Observers are keyed by subscriptionId; '' is the legacy slot used when it's omitted.
+      const observers = conn.messageSubs.get(params.key) ?? new Set();
+      observers.add(params.subscriptionId ?? '');
+      conn.messageSubs.set(params.key, observers);
       sendRes(conn, id, { subscribed: true, key: params.key });
       break;
     }
     case 'sessions.messages.unsubscribe': {
-      conn.messageSubs.delete(params.key);
+      if (process.env.MOCK_NO_SUBSCRIPTION_ID === '1' && 'subscriptionId' in params) {
+        return sendErr(conn, id, 'INVALID_REQUEST', 'invalid sessions.messages.unsubscribe params: unexpected property \'subscriptionId\'');
+      }
+      const observers = conn.messageSubs.get(params.key);
+      observers?.delete(params.subscriptionId ?? '');
+      if (observers?.size === 0) conn.messageSubs.delete(params.key);
       sendRes(conn, id, { ok: true, key: params.key });
       break;
     }

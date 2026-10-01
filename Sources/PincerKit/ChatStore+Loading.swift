@@ -18,7 +18,7 @@ extension ChatStore {
         if wasSubscribed, let gateway, gateway.state.isConnected {
             _ = try? await gateway.connection.request(
                 "sessions.messages.unsubscribe",
-                .object(self.params(keyName: "key")),
+                .object(self.unsubscribeParams()),
                 timeout: 10)
         }
     }
@@ -54,10 +54,7 @@ extension ChatStore {
             if self.subscribedEpoch != epoch {
                 self.subscribedEpoch = epoch
                 do {
-                    _ = try await gateway.connection.request(
-                        "sessions.messages.subscribe",
-                        .object(self.params(keyName: "key")),
-                        timeout: 10)
+                    try await self.subscribeToMessages(on: gateway)
                 } catch is CancellationError {
                     if self.subscribedEpoch == epoch { self.subscribedEpoch = nil }
                     return

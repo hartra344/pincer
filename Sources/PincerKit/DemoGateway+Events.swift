@@ -54,7 +54,7 @@ extension DemoGateway {
 
     func append(_ key: String, _ message: JSONValue) {
         self.transcripts[key, default: []].append(message)
-        guard self.messageSubscriptions.contains(key) else { return }
+        guard self.messageSubscriptions[key] != nil else { return }
         self.emit("session.message", [
             "sessionKey": .string(key),
             "message": message,
