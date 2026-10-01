@@ -144,8 +144,35 @@ func runDemoSessions(_ gateway: GatewayStore) async {
     let branches = manager.branches[garden] ?? []
     check(branches.count == 3 && branches.first?.active == true, "demo lists three branches, active first (\(branches.count))")
     if let drip = branches.first(where: { $0.headline.hasPrefix("Run a") }) {
+        let previousUpdatedAt = gateway.sessions[garden]?.raw["updatedAt"]?.double
         let ok = await manager.switchBranch(key: garden, leafEntryId: drip.leafEntryId)
         check(ok && manager.branches[garden]?.first?.leafEntryId == drip.leafEntryId, "demo switch branch (\(manager.actionError ?? ""))")
+        if ok {
+            let refreshed = await waitFor("demo branch switch session row") {
+                guard let row = gateway.sessions[garden],
+                      row.raw["activeLeafEntryId"]?.text == drip.leafEntryId,
+                      let updatedAt = row.raw["updatedAt"]?.double
+                else { return false }
+                return updatedAt != previousUpdatedAt
+            }
+            check(refreshed, "demo branch switch refreshes the garden row")
+            if refreshed {
+                if let row = gateway.sessions[garden], let updatedAt = row.raw["updatedAt"]?.double {
+                    let receivedAt = Date.now.timeIntervalSince1970 * 1000
+                    check(updatedAt <= receivedAt,
+                          "demo branch switch updatedAt does not exceed response receipt time (\(updatedAt) ≤ \(receivedAt))")
+                    if let activityDate = row.activityDate {
+                        let expected = String(localized: "now", bundle: PincerStrings.bundle ?? .main)
+                        check(SidebarActivityDate.relativeDate(activityDate, now: activityDate) == expected,
+                              "demo branch switch activity formats as now using its seeded session timestamp")
+                    } else {
+                        check(false, "demo branch switch row has an activity timestamp")
+                    }
+                } else {
+                    check(false, "demo branch switch row has an updatedAt timestamp")
+                }
+            }
+        }
     } else {
         check(false, "demo drip branch (\(branches.map(\.headline)))")
     }

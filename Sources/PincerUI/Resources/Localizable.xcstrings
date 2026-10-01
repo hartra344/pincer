@@ -17903,6 +17903,16 @@
         }
       }
     },
+    "now": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "now"
+          }
+        }
+      }
+    },
     "npx": {
       "localizations": {
         "en": {

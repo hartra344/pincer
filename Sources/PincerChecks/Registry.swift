@@ -143,7 +143,6 @@ enum Suites {
         Section("Menu bar (demo)") { await runMenuBarDemo() },
         Section("Scroll to bottom (demo)") { await runDemoScrollToBottom() },
         Section("Shared chat load (demo)") { await runDemoSharedLoadChecks() },
-        Section("Sidebar activity dates (demo)") { await runDemoSidebarActivityDateChecks() },
     ]
 
     /// The built-in demo, second half.

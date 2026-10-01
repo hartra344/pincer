@@ -139,8 +139,9 @@ extension DemoGateway {
         return parts
     }
 
+    /// Keeps millisecond timestamps at or before the sampled wall clock.
     static func now(_ date: Date = .now) -> JSONValue {
-        .number((date.timeIntervalSince1970 * 1000).rounded())
+        .number((date.timeIntervalSince1970 * 1000).rounded(.down))
     }
 
     static func shortId(_ prefix: String = "") -> String {

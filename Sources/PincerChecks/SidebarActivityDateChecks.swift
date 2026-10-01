@@ -19,24 +19,3 @@ func runSidebarActivityDateChecks() {
               "sidebar activity date: -\(offset)s keeps its previous relative label")
     }
 }
-
-@MainActor
-func runDemoSidebarActivityDateChecks() async {
-    let gateway = GatewayStore(profile: .demo())
-    gateway.start()
-    gateway.reconnectIfNeeded()
-    let ready = await waitFor("demo sidebar activity date") {
-        gateway.state.isConnected && gateway.sessions["agent:coder:dashboard:retry-fix"]?.activityDate != nil
-    }
-    check(ready, "sidebar activity date: demo connects with a seeded activity timestamp")
-    guard ready, let date = gateway.sessions["agent:coder:dashboard:retry-fix"]?.activityDate else {
-        gateway.stop()
-        return
-    }
-    defer { gateway.stop() }
-
-    let justBefore = date.addingTimeInterval(-0.1)
-    let expected = String(localized: "now", bundle: PincerStrings.bundle ?? .main)
-    check(SidebarActivityDate.relativeDate(date, now: justBefore) == expected,
-          "sidebar activity date: a seeded session timestamp just ahead of now uses the now label")
-}
