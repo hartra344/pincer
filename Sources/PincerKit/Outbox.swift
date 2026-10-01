@@ -226,8 +226,16 @@ public struct Outbox: Codable, Equatable, Sendable {
     /// session until then.
     /// A queued entry `holding` says to hold is skipped and blocks the later ones of its chat.
     public func nextToSend(sessionKey: String? = nil, holding: (OutboxEntry) -> Bool = { _ in false }) -> OutboxEntry? {
+        var scannedEntries = 0
+        return self.nextToSend(sessionKey: sessionKey, holding: holding, scannedEntries: &scannedEntries)
+    }
+
+    /// Same selection with an optional caller-owned scan count for deterministic performance checks.
+    func nextToSend(sessionKey: String? = nil, holding: (OutboxEntry) -> Bool = { _ in false },
+                    scannedEntries: inout Int) -> OutboxEntry? {
         var blocked = Set<String>()
         for entry in self.entries {
+            scannedEntries += 1
             if let sessionKey, entry.sessionKey != sessionKey { continue }
             if blocked.contains(entry.sessionKey) { continue }
             if entry.state == .queued, !entry.isMemoryOnly, !holding(entry) { return entry }

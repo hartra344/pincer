@@ -146,6 +146,8 @@ public final class GatewayStore: Identifiable {
     /// The saved outbox has been read and merged in; changes are saved from here on.
     @ObservationIgnored var outboxRestored = false
     @ObservationIgnored var outboxFlushing = false
+    /// Entries visited by `hold(for:)`'s queue-head scan; reset by performance checks between batches.
+    @ObservationIgnored var outboxHeadScanVisits = 0
     /// The task `start()` reads the saved outbox in; tests await it instead of polling `outboxRestored`.
     @ObservationIgnored var outboxLoadTask: Task<Void, Never>?
 

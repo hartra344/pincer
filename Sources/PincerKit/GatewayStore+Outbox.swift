@@ -43,9 +43,12 @@ extension GatewayStore {
     /// offline, is just queued.
     public func hold(for entry: OutboxEntry) -> OutboxHold? {
         guard entry.state == .queued, !entry.sendOnAnyNetwork, !entry.isMemoryOnly,
-              self.state.isConnected, self.hello != nil,
-              self.outbox.nextToSend(sessionKey: entry.sessionKey)?.id == entry.id
+              self.state.isConnected, self.hello != nil
         else { return nil }
+        var scannedEntries = 0
+        let next = self.outbox.nextToSend(sessionKey: entry.sessionKey, scannedEntries: &scannedEntries)
+        self.outboxHeadScanVisits += scannedEntries
+        guard next?.id == entry.id else { return nil }
         guard self.uploadBytes(for: entry) >= OutboxEntry.largeUploadBytes else { return nil }
         if self.network.isConstrained { return .constrained }
         if self.network.isExpensive { return .expensive }

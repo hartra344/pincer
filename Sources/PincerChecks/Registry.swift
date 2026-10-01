@@ -181,6 +181,7 @@ enum Suites {
         Section("Agent avatar seed recovery (demo, #520)") { await runDemoAvatarSeedRecovery() },
         Section("First-run wizard (demo)") { await runDemoFirstRun() },
         Section("Outbox & retry (demo)") { await runDemoOutbox() },
+        Section("Outbox head scan (demo, #557)") { await runDemoOutboxHeadScanChecks() },
         Section("Accessibility labels (demo)") { await runDemoAccessibility() },
         Section("Accessibility pass (demo)") { await runDemoAccessibilityPass() },
         Section("Transcript paging recovery (demo, #337)") { await runDemoTranscriptPagingRecovery() },
