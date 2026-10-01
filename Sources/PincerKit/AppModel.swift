@@ -33,6 +33,7 @@ public struct DictationToggleRequest: Equatable, Sendable {
 @MainActor
 @Observable
 public final class AppModel {
+    public let locationContext: LocationContextModel
     public private(set) var gateways: [GatewayStore] = []
     public var selectedGatewayId: UUID? {
         didSet {
@@ -71,6 +72,7 @@ public final class AppModel {
     public var appIsActive = false {
         didSet {
             self.notifier.appIsActive = self.appIsActive
+            self.locationContext.setActive(self.appIsActive)
             self.gateways.forEach { $0.appIsActive = self.appIsActive }
             if self.appIsActive, !oldValue { self.gateways.forEach { $0.reconnectIfNeeded() } }
             if !self.appIsActive, oldValue {
@@ -123,6 +125,8 @@ public final class AppModel {
     private init(sharedDefaults: UserDefaults, localDefaults: UserDefaults, firstRunEnvironment: FirstRunModel.Environment = .live) {
         self.sharedDefaults = sharedDefaults
         self.localDefaults = localDefaults
+        let locationContext = LocationContextModel(defaults: localDefaults)
+        self.locationContext = locationContext
         let profiles = GatewayProfileStore.load(from: sharedDefaults, legacy: localDefaults)
         SharedContainer.shareKeychainItems(for: profiles, defaults: sharedDefaults)
         // One Keychain read at launch, however many Gateways there are.
@@ -130,6 +134,7 @@ public final class AppModel {
         self.identity = identity
         self.gateways = profiles.map {
             let store = GatewayStore(profile: $0, defaults: localDefaults, identity: identity!)
+            store.locationContext = locationContext
             store.appIsActive = false
             return store
         }
@@ -284,6 +289,7 @@ public final class AppModel {
     public func add(_ profile: GatewayProfile, secret: String?) -> GatewayStore {
         profile.secret = secret
         let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: self.deviceIdentity())
+        store.locationContext = self.locationContext
         store.notifier = self.notifier
         store.appIsActive = self.appIsActive
         store.wireBookmarkSync()
@@ -321,6 +327,7 @@ public final class AppModel {
             profile.forgetDeviceToken()
         }
         let store = GatewayStore(profile: profile, defaults: self.localDefaults, identity: self.deviceIdentity())
+        store.locationContext = self.locationContext
         store.notifier = self.notifier
         store.appIsActive = self.appIsActive
         store.outboxRoot = old.outboxRoot

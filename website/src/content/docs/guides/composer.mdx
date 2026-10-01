@@ -25,6 +25,16 @@ The message box keeps the selected chat's name if its session row is briefly mis
 
 If you're offline, or a message can't be sent, it stays in the chat marked **Queued** or **Failed — Retry**. See [Offline sending & retry](../offline-outbox/).
 
+## Location context
+
+In app Settings, turn on **Include approximate location with messages** under **Location** (on macOS, in the **Conversation** tab). It starts off. Pincer asks for foreground location permission, then includes a recent approximate location and observation time as visible text in new chat messages and Quick Capture messages. The coordinates are rounded to a coarse area, with at least 2 km of reported uncertainty, even if the operating system supplies a precise fix.
+
+Location acquisition happens separately from sending. If permission is denied, the device cannot obtain a fix, or the last observation is more than five minutes old, the message sends without location. Settings shows the current permission or acquisition status and offers recovery. Pincer uses one-shot requests while the app is active and clears its location cache when it goes into the background.
+
+Slash commands, edits, and regenerated messages do not add a new location. Share extensions do not acquire location. Queued messages retain the context captured when you sent them, and retrying does not replace it with your new position. Turning sharing off clears the device-location cache and stops future captures; to remove context already in a queued message, delete that message and send it again with sharing off. Location text already received by the Gateway remains in that chat's history.
+
+You can try the setting in the built-in demo; its canned reply quotes the location context along with your message.
+
 ## Replying to a message
 
 After you choose **Reply** on a message (see [Replies](../transcript/#replies)), a **Replying to** chip sits above the composer with who wrote the message and how it starts. The composer takes focus, so you can start typing. Send as usual and your message is sent as a reply to that one, and the chip goes away.

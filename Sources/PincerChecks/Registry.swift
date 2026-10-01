@@ -88,6 +88,7 @@ enum Suites {
             Section("Slash commands") { runSlashCommandChecks() },
             Section("Dictation") { await runDictationChecks() },
             Section("Dictation target routing") { runDictationTargetChecks() },
+            Section("Location context") { await runLocationContextChecks() },
             Section("Automations") { runAutomationChecks() },
             Section("Web Push") { await runWebPushChecks() },
             Section("Find in chat") { await runFindInChatChecks() },
@@ -125,6 +126,7 @@ enum Suites {
             Section("Sidebar activity dates") { runSidebarActivityDateChecks() },
             Section("Composer session title") { runComposerSessionTitleChecks() },
             Section("First-run wizard") { await runFirstRunChecks() },
+            Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
         ]
         return sections
     }
@@ -172,6 +174,7 @@ enum Suites {
         Section("Chat windows (demo)") { await runDemoChatWindows() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
         Section("Dictation target routing (demo)") { await runDemoDictationTargetChecks() },
+        Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },
         Section("Composer session title (demo)") { await runDemoComposerSessionTitleChecks() },
     ]
 

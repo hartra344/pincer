@@ -2,11 +2,18 @@
 # Build a separate app for documentation captures. Never launch the ordinary dev bundle for captures.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-PINCER_SIGN_IDENTITY=- scripts/bundle-mac.sh "${1:-debug}"
-APP="build/Pincer Documentation.app"
-# Only replace this generated bundle, not the user's installed app or its preferences.
-rm -rf "$APP"
-cp -R build/Pincer.app "$APP"
+mkdir -p build
+CAPTURE_ROOT="$(mktemp -d "$PWD/build/docs-capture.XXXXXX")"
+cleanup() {
+  local status=$?
+  if [ "$status" -ne 0 ]; then rm -rf "$CAPTURE_ROOT"; fi
+}
+trap cleanup EXIT
+# Keep all packaging and actool outputs in this invocation's private staging root. This script can
+# run alongside the ordinary bundle script or another capture without deleting or signing its files.
+PINCER_BUNDLE_ROOT="$CAPTURE_ROOT" PINCER_SIGN_IDENTITY=- scripts/bundle-mac.sh "${1:-debug}"
+APP="$CAPTURE_ROOT/Pincer Documentation.app"
+mv "$CAPTURE_ROOT/Pincer.app" "$APP"
 python3 - "$APP/Contents/Info.plist" <<'PY'
 import plistlib, sys
 path = sys.argv[1]
@@ -26,9 +33,10 @@ info['LSEnvironment'] = {
 with open(path, 'wb') as f:
     plistlib.dump(info, f)
 PY
-codesign --force --sign - --entitlements build/dev.entitlements --options runtime "$APP"
+codesign --force --sign - --entitlements "$CAPTURE_ROOT/dev.entitlements" --options runtime "$APP"
 # These settings belong exclusively to the documentation bundle.
 defaults write chat.pincer.documentation pincer.ownerName -string Alex
 defaults write chat.pincer.documentation pincer.thinkingDisplay -string all
 defaults write chat.pincer.documentation pincer.theme.mode -string light
-printf 'Capture app prepared: %s\nChoose Try the Demo. Never add a real gateway to this app.\n' "$PWD/$APP"
+printf 'Capture app prepared: %s\nChoose Try the Demo. Never add a real gateway to this app.\n' "$APP"
+trap - EXIT
