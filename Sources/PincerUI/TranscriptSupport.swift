@@ -330,6 +330,8 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     var cachedLayoutCount: Int { self.cache.count }
+    var premeasureStyleGeneration: Int { TranscriptStyle.generation }
+    var premeasureDark: Bool { self.settings.dark }
 
     /// The spoken label of a row already laid out, without building anything.
     func cachedLabel(for row: TranscriptRow) -> String? {

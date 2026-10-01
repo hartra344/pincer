@@ -1,4 +1,5 @@
 import PincerKit
+import Synchronization
 #if os(macOS)
 import AppKit
 #else
@@ -27,19 +28,39 @@ enum TranscriptText {
         let plainText: String
     }
 
-    enum Tone: Hashable { case primary, secondary, error }
+    enum Tone: Hashable, Sendable { case primary, secondary, error }
 
     /// The appearance is part of the key only for text with inline math, which bakes a resolved color
     /// into its attachments; other text is appearance independent, so a Dark Mode flip keeps its sizes.
-    struct Key: Hashable {
+    struct Key: Hashable, Sendable {
         let source: String
         let tone: Tone
         let dark: Bool
+        /// String hashing walks the body. Cache its randomized process-local digest with this
+        /// immutable key so repeated dictionary/set lookups stay constant-time. Equality still
+        /// compares the complete source, so digest collisions cannot alias different text.
+        private let sourceDigest: Int
 
         init(source: String, tone: Tone, dark: Bool) {
             self.source = source
             self.tone = tone
             self.dark = Self.bakesAppearance(source) ? dark : false
+            var hasher = Hasher()
+            source.hash(into: &hasher)
+            self.sourceDigest = hasher.finalize()
+            #if DEBUG
+            TranscriptText.noteSourceDigestBuild()
+            #endif
+        }
+
+        nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.source == rhs.source && lhs.tone == rhs.tone && lhs.dark == rhs.dark
+        }
+
+        nonisolated func hash(into hasher: inout Hasher) {
+            hasher.combine(self.sourceDigest)
+            hasher.combine(self.tone)
+            hasher.combine(self.dark)
         }
 
         nonisolated static func bakesAppearance(_ source: String) -> Bool { source.contains("$") || source.contains("\\(") }
@@ -77,7 +98,30 @@ enum TranscriptText {
     private static var segmentCache = LRUCache<Key, [Segment]>(capacity: TranscriptText.segmentCapacity)
     private static var cacheGeneration = -1
 
+    struct WarmCacheRevision: Equatable {
+        let style: Int
+        let segments: UInt64
+        let heights: UInt64
+    }
+
+    /// Warm-row shortcuts are valid only while neither cache has evicted an entry. This token lets
+    /// the premeasure planner cheaply revalidate its memo after unrelated rows churn the LRUs.
+    static var warmCacheRevision: WarmCacheRevision {
+        self.syncGeneration()
+        return WarmCacheRevision(style: TranscriptStyle.generation,
+                                 segments: self.segmentCache.evictionGeneration,
+                                 heights: self.heightMemo.evictionGeneration)
+    }
+
     static let heightMemoCapacity = 6000
+#if DEBUG
+    /// Source digests built on the actual key path, for the repeated-split regression probe.
+    nonisolated private static let sourceDigestBuildCounter = Mutex<Int>(0)
+    nonisolated static var sourceDigestBuildCount: Int { self.sourceDigestBuildCounter.withLock { $0 } }
+    nonisolated private static func noteSourceDigestBuild() {
+        self.sourceDigestBuildCounter.withLock { $0 += 1 }
+    }
+#endif
 
     struct MemoKey: Hashable {
         let object: ObjectIdentifier
