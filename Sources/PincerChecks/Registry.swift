@@ -54,6 +54,7 @@ enum Suites {
     static func unit(skipIntentChecks: Bool) -> [Section] {
         var sections: [Section] = [
             Section("Payload & identity") { runIdentityChecks() },
+            Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
             Section("URL policy") { runURLPolicyChecks() },
             Section("Session rows") { runSessionRowChecks() },
             Section("Invalidation perf") { runInvalidationPerfChecks() },
@@ -166,6 +167,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
+        Section("Device ID Settings cache (demo)") { runSettingsDeviceIdentityChecks() },
         Section("Rejected synced preferences (demo)") { await runDemoRejectedPrefWriteChecks() },
         Section("Sidebar automations & slash commands (demo)") { await runDemoSidebarVisibility() },
         Section("Setup wizard (demo)") { await runDemoSetup() },

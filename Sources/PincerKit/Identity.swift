@@ -11,7 +11,11 @@ public enum Keychain {
     /// Process-local store used in `KeychainMode` memory mode (`PINCER_KEYCHAIN=memory`, test
     /// runners, or `useInMemoryStore()`), so checks and tests never touch or prompt for the real Keychain.
     private static let memoryStore = MemoryStore()
-    private static var memory: MemoryStore? { KeychainMode.isInMemory ? self.memoryStore : nil }
+    @TaskLocal private static var isolatedMemoryStore: MemoryStore?
+    private static var memory: MemoryStore? {
+        guard KeychainMode.isInMemory else { return nil }
+        return self.isolatedMemoryStore ?? self.memoryStore
+    }
 
     /// Keeps every secret (this store and `PushKeyStore`) in memory for the rest of the process.
     public static func useInMemoryStore() { KeychainMode.useInMemoryStore() }
@@ -21,12 +25,48 @@ public enum Keychain {
     /// Real `SecItem*` calls so far, from this store and `PushKeyStore`.
     public static var realKeychainCalls: Int { KeychainMode.realKeychainCalls }
 
+    /// Gives a synchronous test/check fixture an isolated process-local Keychain.
+    /// It cannot select or access the real Keychain.
+    @MainActor
+    package static func withIsolatedMemoryStore<T>(_ body: () throws -> T) rethrows -> T {
+        precondition(self.isInMemory, "isolated Keychain fixtures require memory mode")
+        return try self.$isolatedMemoryStore.withValue(MemoryStore(), operation: body)
+    }
+
+    /// Test/check diagnostics for the device identity entry, without exposing its key material.
+    @MainActor
+    package static var isolatedDeviceIdentityReadCount: Int {
+        guard let store = self.isolatedMemoryStore else {
+            preconditionFailure("device identity read counts require an isolated memory store")
+        }
+        return store.deviceIdentityReadCount
+    }
+
+    @MainActor
+    package static var isolatedDeviceIdentityIsStored: Bool {
+        guard let store = self.isolatedMemoryStore else {
+            preconditionFailure("device identity state requires an isolated memory store")
+        }
+        return store.contains(DeviceIdentity.keychainAccount)
+    }
+
     private final class MemoryStore: @unchecked Sendable {
         private let lock = NSLock()
         private var values: [String: String] = [:]
+        private var deviceIdentityReads = 0
+        var deviceIdentityReadCount: Int { self.lock.withLock { self.deviceIdentityReads } }
         subscript(key: String) -> String? {
-            get { self.lock.withLock { self.values[key] } }
+            get {
+                self.lock.withLock {
+                    if key == DeviceIdentity.keychainAccount { self.deviceIdentityReads += 1 }
+                    return self.values[key]
+                }
+            }
             set { self.lock.withLock { self.values[key] = newValue } }
+        }
+
+        func contains(_ key: String) -> Bool {
+            self.lock.withLock { self.values[key] != nil }
         }
     }
 
