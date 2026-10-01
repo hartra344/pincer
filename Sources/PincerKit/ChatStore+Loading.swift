@@ -30,7 +30,7 @@ extension ChatStore {
         guard let gateway, gateway.state.isConnected else { return }
         if self.hasLoaded, !force, !self.stale { return }
         if !force, let running = self.loadTask {
-            await running.value
+            await Self.value(of: running)
             // The caller that started it went away mid-fetch; this one still wants the history.
             if running.isCancelled, !Task.isCancelled { await self.load() }
             return
@@ -44,6 +44,22 @@ extension ChatStore {
         }
         self.loadTask = task
         await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
+    }
+
+    /// Waits for `task`, but returns as soon as the caller is cancelled; `task` itself keeps running.
+    private static func value(of task: Task<Void, Never>) async {
+        let gate = WaiterGate()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                gate.install(continuation)
+                Task {
+                    await task.value
+                    gate.resume()
+                }
+            }
+        } onCancel: {
+            gate.resume()
+        }
     }
 
     private func fetchHistory(_ gateway: GatewayStore) async {
@@ -649,4 +665,29 @@ extension ChatStore {
 private extension ChatItem {
     /// Where a windowed transcript may begin: a committed user message that a history refresh can match by id.
     var startsWindow: Bool { self.role == .user && !self.isPending && self.transcriptId != nil }
+}
+
+/// Resumes its continuation exactly once, from whichever of completion or cancellation comes first.
+private final class WaiterGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var done = false
+
+    func install(_ continuation: CheckedContinuation<Void, Never>) {
+        let resumeNow = self.lock.withLock {
+            if self.done { return true }
+            self.continuation = continuation
+            return false
+        }
+        if resumeNow { continuation.resume() }
+    }
+
+    func resume() {
+        let pending = self.lock.withLock {
+            self.done = true
+            defer { self.continuation = nil }
+            return self.continuation
+        }
+        pending?.resume()
+    }
 }
