@@ -122,6 +122,7 @@ enum Suites {
             Section(nil) { checkOutboxLogic() },
             Section(nil) { checkSidebarWorking() },
             Section("Sidebar activity dates") { runSidebarActivityDateChecks() },
+            Section("Composer session title") { runComposerSessionTitleChecks() },
             Section("First-run wizard") { await runFirstRunChecks() },
             Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
         ]
@@ -170,6 +171,7 @@ enum Suites {
         Section("Voice / Read Aloud (demo)") { await runDemoVoice() },
         Section("Chat windows (demo)") { await runDemoChatWindows() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
+        Section("Composer session title (demo)") { await runDemoComposerSessionTitleChecks() },
     ]
 
     /// Against a (mock) Gateway, first half.
