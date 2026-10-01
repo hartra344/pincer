@@ -13,4 +13,11 @@ func runMCPEditorChecks() {
 
     let afterDone = MCPFieldProblemVisibility.visible(problems, touched: ["name"], showAll: true)
     check(afterDone == problems, "Done reveals every remaining MCP validation problem")
+
+    var revertedDraft = MCPServerDraft()
+    revertedDraft.name = "filesystem"
+    revertedDraft.name = ""
+    let afterRevert = MCPFieldProblemVisibility.visible(revertedDraft.problems(existingNames: []),
+                                                        touched: ["name"], showAll: false)
+    check(afterRevert.keys.sorted() == ["name"], "reverting a touched field keeps its own error visible without revealing Command")
 }

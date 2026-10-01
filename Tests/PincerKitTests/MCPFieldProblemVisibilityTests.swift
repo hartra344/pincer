@@ -26,6 +26,17 @@ struct MCPFieldProblemVisibilityTests {
         #expect(visible.keys.sorted() == ["name"])
     }
 
+    @Test func revertingAFieldKeepsItsTouchAndDoesNotRevealOtherProblems() {
+        var draft = MCPServerDraft()
+        draft.name = "filesystem" // edited from the initial empty value
+        draft.name = "" // reverted; the field remains touched
+        let problems = draft.problems(existingNames: [])
+        #expect(problems["name"] != nil && problems["command"] != nil)
+
+        let visible = MCPFieldProblemVisibility.visible(problems, touched: ["name"], showAll: false)
+        #expect(visible.keys.sorted() == ["name"])
+    }
+
     @Test func doneRevealsAllRemainingProblems() {
         let problems = ["name": "Enter a name.", "command": "Enter the command to run."]
         #expect(MCPFieldProblemVisibility.visible(problems, touched: [], showAll: false).isEmpty)

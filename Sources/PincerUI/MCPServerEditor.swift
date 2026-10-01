@@ -95,7 +95,7 @@ struct MCPServerEditor: View {
                             self.revealAdvancedProblem(problems)
                         }
                     }
-                    .disabled(!self.isNew && self.draft == self.initial)
+                    .disabled(!self.isNew && self.draft == self.initial && problems.isEmpty)
                 }
             }
         }

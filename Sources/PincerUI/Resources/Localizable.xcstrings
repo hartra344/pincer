@@ -18922,6 +18922,16 @@
           }
         }
       }
+    },
+    "Copy Tool Name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Tool Name"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

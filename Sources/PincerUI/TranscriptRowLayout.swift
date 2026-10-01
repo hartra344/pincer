@@ -149,6 +149,8 @@ enum TranscriptPart {
         /// What VoiceOver reads for the chips, badges and captions drawn in the body.
         var notes: [Note] = []
         var search: Search?
+        /// MCP row actions are present even while the card body is collapsed.
+        var mcpContextMenu: TranscriptToolContextMenu? = nil
     }
 
     /// The line under a message: a Copy button and details such as when it was sent.
