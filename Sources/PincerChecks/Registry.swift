@@ -164,6 +164,7 @@ enum Suites {
 
     /// The built-in demo, second half.
     static let demoExtras: [Section] = [
+        Section("Device ID Settings cache (demo)") { runSettingsDeviceIdentityChecks() },
         Section("Sidebar automations & slash commands (demo)") { await runDemoSidebarVisibility() },
         Section("Setup wizard (demo)") { await runDemoSetup() },
         Section("Deep links (demo)") { await runDemoDeepLinks() },

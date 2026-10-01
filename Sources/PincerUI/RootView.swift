@@ -621,9 +621,14 @@ struct SettingsForm: View {
         case .device:
             SwiftUI.Section(L("This device")) {
                 LabeledContent(L("Device ID")) {
-                    Text(DeviceIdentity.loadOrCreate().deviceId.prefix(16) + "…")
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
+                    if let deviceId = self.app.deviceIdForDisplay {
+                        Text(deviceId.prefix(16) + "…")
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                    } else {
+                        Text("—")
+                            .font(.caption.monospaced())
+                    }
                 }
                 LabeledContent(L("Role"), value: "operator (read, write, approvals, questions)")
             }

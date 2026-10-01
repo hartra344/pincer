@@ -35,6 +35,9 @@ public struct DictationToggleRequest: Equatable, Sendable {
 public final class AppModel {
     public let locationContext: LocationContextModel
     public private(set) var gateways: [GatewayStore] = []
+    /// The device ID for Settings, only after the app has loaded or created its shared identity.
+    /// Reading this value never touches the Keychain.
+    public private(set) var deviceIdForDisplay: String?
     public var selectedGatewayId: UUID? {
         didSet {
             // Shared so the Share extension starts on the same gateway.
@@ -132,6 +135,7 @@ public final class AppModel {
         // One Keychain read at launch, however many Gateways there are.
         let identity = profiles.isEmpty ? nil : DeviceIdentity.loadOrCreate()
         self.identity = identity
+        self.deviceIdForDisplay = identity?.deviceId
         self.gateways = profiles.map {
             let store = GatewayStore(profile: $0, defaults: localDefaults, identity: identity!)
             store.locationContext = locationContext
@@ -188,6 +192,7 @@ public final class AppModel {
         if let identity { return identity }
         let loaded = DeviceIdentity.loadOrCreate()
         self.identity = loaded
+        self.deviceIdForDisplay = loaded.deviceId
         return loaded
     }
 
