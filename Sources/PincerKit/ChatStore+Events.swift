@@ -12,6 +12,7 @@ extension ChatStore {
             self.awaitingFinalReply = false
             var run = self.live?.runId == runId ? self.live! : LiveRun(runId: runId)
             run.phase = payload["phase"]?.string
+            if run.phase == "thinking" { run.isTextStreaming = false }
             self.live = run
         case "delta":
             self.awaitingFinalReply = false
@@ -22,7 +23,26 @@ extension ChatStore {
             {
                 // The cumulative snapshot carries thinking and images as well as text.
                 let text = item.plainText
-                if !text.isEmpty { run.text = text }
+                if payload["replace"]?.bool == true {
+                    run.text = text
+                    run.textUTF8Count = text.utf8.count
+                    run.isTextStreaming = !text.isEmpty
+                } else if !text.isEmpty {
+                    let textUTF8Count = text.utf8.count
+                    let grew = textUTF8Count > run.textUTF8Count
+                    if let delta = payload["deltaText"]?.string, !delta.isEmpty {
+                        run.text = text
+                        run.textUTF8Count = textUTF8Count
+                        run.isTextStreaming = true
+                    } else if grew {
+                        run.text = text
+                        run.textUTF8Count = textUTF8Count
+                        run.isTextStreaming = true
+                    } else {
+                        run.text = text
+                        run.textUTF8Count = textUTF8Count
+                    }
+                }
                 if let model = item.model {
                     run.model = model
                     run.provider = item.provider
@@ -34,7 +54,15 @@ extension ChatStore {
                 }
                 if !images.isEmpty { run.images = images }
             } else if let delta = payload["deltaText"]?.string {
-                run.text = payload["replace"]?.bool == true ? delta : run.text + delta
+                if payload["replace"]?.bool == true {
+                    run.text = delta
+                    run.textUTF8Count = delta.utf8.count
+                    run.isTextStreaming = !delta.isEmpty
+                } else if !delta.isEmpty {
+                    run.text += delta
+                    run.textUTF8Count += delta.utf8.count
+                    run.isTextStreaming = true
+                }
             }
             self.live = run
             if payload["replace"]?.bool == true { self.flushLive() }
@@ -62,6 +90,7 @@ extension ChatStore {
             guard let callId = data["toolCallId"]?.text else { return }
             var run = self.live?.runId == runId ? self.live! : LiveRun(runId: runId)
             let phase = data["phase"]?.string
+            if phase == "start" || phase == "result" { run.isTextStreaming = false }
             if let index = run.tools.firstIndex(where: { $0.id == callId }) {
                 if phase == "result" {
                     run.tools[index].isRunning = false
@@ -82,18 +111,33 @@ extension ChatStore {
             }
             self.live = run
         case "assistant":
-            guard let text = data["text"]?.string, var run = self.live, run.runId == runId else { return }
-            if run.text.isEmpty || text.count >= run.text.count { run.text = text }
+            guard var run = self.live, run.runId == runId else { return }
+            let hasDelta = data["delta"]?.string.map { !$0.isEmpty } ?? false
+            guard let text = data["text"]?.string else {
+                if hasDelta { run.isTextStreaming = true; self.live = run }
+                return
+            }
+            let wasTextEmpty = run.text.isEmpty
+            let textUTF8Count = text.utf8.count
+            let grew = textUTF8Count > run.textUTF8Count
+            if data["replace"]?.bool == true || run.text.isEmpty || textUTF8Count >= run.textUTF8Count {
+                run.text = text
+                run.textUTF8Count = textUTF8Count
+            }
+            if data["replace"]?.bool == true { run.isTextStreaming = !text.isEmpty }
+            else if hasDelta || grew || (wasTextEmpty && !text.isEmpty) { run.isTextStreaming = true }
             self.live = run
         case "thinking", "reasoning":
             guard var run = self.live, run.runId == runId, let text = data["text"]?.string else { return }
             run.thinking = text
+            run.isTextStreaming = false
             self.sawThinking = true
             self.live = run
         case "compaction":
             var run = self.live?.runId == runId ? self.live! : LiveRun(runId: runId)
             let phase = data["phase"]?.string
             run.isCompacting = phase == "start"
+            if run.isCompacting { run.isTextStreaming = false }
             self.live = run
             // The persisted marker lands in the transcript once compaction finishes.
             if phase == "end" { self.scheduleReload(after: .milliseconds(500)) }
@@ -153,6 +197,8 @@ extension ChatStore {
             } + [item.toolCallId].compactMap { $0 })
             if item.role == .assistant {
                 run.text = ""
+                run.textUTF8Count = 0
+                run.isTextStreaming = false
                 run.thinking = nil
                 run.images = []
             }
@@ -268,7 +314,7 @@ extension ChatStore {
         // A run that has ended stays live until its reload lands; it's done, not still replying.
         let live = self.live.flatMap { $0.runId == self.outcomeRunId ? nil : $0 }
         let runningTool = live?.tools.last(where: \.isRunning)?.name
-        let streaming = !(live?.text.isEmpty ?? true)
+        let streaming = live?.isTextStreaming == true
         let compacting = live?.isCompacting == true || self.compaction?.isRunning == true
         return AvatarSignals(
             isRunning: self.live != nil && live == nil ? false : self.isRunning,
