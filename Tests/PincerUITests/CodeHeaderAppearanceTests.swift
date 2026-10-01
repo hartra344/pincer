@@ -23,6 +23,8 @@ struct CodeHeaderAppearanceTests {
         }
         defaults.set("CC3300", forKey: accentKey)
         AppTheme.invalidateCache()
+        let initialTheme = AppTheme.current
+        #expect(initialTheme.value(.accent) == ThemeColor(hex: "CC3300"))
         let gateway = GatewayStore(profile: GatewayProfile(name: "T", url: "ws://127.0.0.1:1", authMode: .none),
                                    defaults: scratch.defaults, identity: UIFixtures.identity())
         let key = "agent:code:main"
@@ -41,26 +43,37 @@ struct CodeHeaderAppearanceTests {
         let copy = try #require(buttons.first { $0.accessibilityText == L("Copy") })
         let preview = try #require(buttons.first { $0.accessibilityText == L("Preview") })
         #expect(code.extraCopyItems.first?.text == source)
+        let copyLayer = try #require(copy.layer)
+        let previewLayer = try #require(preview.layer)
+        copyLayer.displayIfNeeded()
+        previewLayer.displayIfNeeded()
+        #expect(!copyLayer.needsDisplay() && !previewLayer.needsDisplay())
 
         // Both content and titles are identical on the next configuration. A theme event must
-        // request new drawing on the child views; redrawing only the parent leaves cached tint.
-        copy.needsDisplay = false
-        preview.needsDisplay = false
+        // update the child buttons' cached drawing, since redrawing only the parent keeps old pixels.
         defaults.set("008844", forKey: accentKey)
         AppTheme.invalidateCache()
+        let changedTheme = AppTheme.current
+        #expect(changedTheme.value(.accent) == ThemeColor(hex: "008844"))
+        #expect(changedTheme != initialTheme, "the test must activate a distinct theme before checking redraw")
         row.apply(layout, actions: renderer)
-        #expect(copy.needsDisplay && preview.needsDisplay, "Copy and Preview must resolve their tint again after an appearance change")
+        #expect(copyLayer.needsDisplay() && previewLayer.needsDisplay(), "both buttons must invalidate their cached tint")
         #expect(copy.accessibilityText == L("Copy") && preview.accessibilityText == L("Preview"))
 
+        copyLayer.displayIfNeeded()
+        previewLayer.displayIfNeeded()
         // This is the same feedback state the real Copy action displays, without writing to
         // the user's pasteboard. A tint refresh must preserve it until its own reset fires.
         copy.set(title: L("Copied"), symbol: "checkmark")
-        copy.needsDisplay = false
-        preview.needsDisplay = false
+        copyLayer.displayIfNeeded()
+        previewLayer.displayIfNeeded()
         defaults.set("3344CC", forKey: accentKey)
         AppTheme.invalidateCache()
+        let copiedTheme = AppTheme.current
+        #expect(copiedTheme.value(.accent) == ThemeColor(hex: "3344CC"))
+        #expect(copiedTheme != changedTheme, "the test must activate another distinct theme before checking redraw")
         row.apply(layout, actions: renderer)
-        #expect(copy.needsDisplay && preview.needsDisplay)
+        #expect(copyLayer.needsDisplay() && previewLayer.needsDisplay())
         #expect(copy.accessibilityText == L("Copied"), "refreshing tint must not reset copy feedback")
         #expect(code.extraCopyItems.first?.text == source, "theme changes preserve the exact copy payload")
     }
