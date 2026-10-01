@@ -261,6 +261,7 @@ extension ChatStore {
         self.outcomeRunId = runId
         self.lastOutcome = outcome
         self.lastOutcomeAt = outcome == .none ? nil : Date()
+        self.refreshRunActivity()
     }
 
     /// Inputs for the agent's avatar; derive its state with `AvatarStateMachine`.

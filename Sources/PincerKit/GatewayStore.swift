@@ -70,7 +70,9 @@ public final class GatewayStore: Identifiable {
     /// Streamed run activity, read through `runTimeline`; bumping the revision publishes it.
     @ObservationIgnored var runTimelineState = RunTimeline()
     var runTimelineRevision = 0
-    public private(set) var approvals: [ExecApproval] = []
+    public private(set) var approvals: [ExecApproval] = [] {
+        didSet { self.approvalsChanged(from: oldValue) }
+    }
     /// Pending agent questions (`ask_user`), oldest first.
     public private(set) var questions: [QuestionPrompt] = []
     public internal(set) var lastError: String?

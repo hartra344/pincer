@@ -54,13 +54,14 @@ targets:
     type: application
     scheme: {}
     platform: iOS
-    sources: [Apps/iOS, Apps/Shared, Apps/Intents]
+    sources: [Apps/iOS, Apps/Shared, Apps/Intents, Apps/LiveActivity]
     dependencies:
       - package: Pincer
         product: PincerUI
       - package: Pincer
         product: PincerKit
       - target: PincerNotifications-iOS
+      - target: PincerLiveActivity-iOS
       - target: PincerShare-iOS
     settings:
       base:
@@ -73,6 +74,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Pincer
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_NSSupportsLiveActivities: YES
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
@@ -133,5 +135,21 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios$(PINCER_DEV_SUFFIX).notifications
         CODE_SIGN_ENTITLEMENTS: Apps/iOSNotificationService/PincerNotifications.entitlements
         INFOPLIST_FILE: Apps/iOSNotificationService/Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+  PincerLiveActivity-iOS:
+    # The Lock Screen card and Dynamic Island for a running agent turn (Live Activity). The app starts
+    # and updates it; this only draws it, so it needs no App Group or Keychain access.
+    type: app-extension
+    platform: iOS
+    sources: [Apps/iOSLiveActivity, Apps/LiveActivity]
+    dependencies:
+      - package: Pincer
+        product: PincerKit
+    settings:
+      base:
+        PRODUCT_NAME: PincerLiveActivity
+        PRODUCT_BUNDLE_IDENTIFIER: chat.pincer.ios$(PINCER_DEV_SUFFIX).liveactivity
+        INFOPLIST_FILE: Apps/iOSLiveActivity/Info.plist
         GENERATE_INFOPLIST_FILE: YES
         TARGETED_DEVICE_FAMILY: "1,2"

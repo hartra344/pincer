@@ -9,6 +9,7 @@ struct PincerApp: App {
 
     init() {
         PincerIntentsSetup.install()
+        RunActivityCoordinator.shared.host = ActivityKitRunHost()
         #if DEBUG
         FirstRunTour.startIfRequested()
         #endif

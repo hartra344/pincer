@@ -17,7 +17,8 @@ PLATFORM="${1:?usage: $0 ios|macos}"
 TEAM_ID="E4Y97NXBXG"
 case "$PLATFORM" in
   ios)   SCHEME=Pincer-iOS;   DESTINATION="generic/platform=iOS";   BUNDLE_ID=chat.pincer.ios; PROFILE=Pincer_iOS_AppStore_CI; SHARE_PROFILE=Pincer_iOS_Share_AppStore_CI
-         EXTRA_PROFILES="<key>chat.pincer.ios.notifications</key><string>Pincer_iOS_Notifications_AppStore_CI</string>" ;;
+         EXTRA_PROFILES="<key>chat.pincer.ios.notifications</key><string>Pincer_iOS_Notifications_AppStore_CI</string>
+    <key>chat.pincer.ios.liveactivity</key><string>Pincer_iOS_LiveActivity_AppStore_CI</string>" ;;
   macos) SCHEME=Pincer-macOS; DESTINATION="generic/platform=macOS"; BUNDLE_ID=chat.pincer.mac; PROFILE=Pincer_macOS_AppStore_CI; SHARE_PROFILE=Pincer_macOS_Share_AppStore_CI ;;
   *) echo "unknown platform: $PLATFORM" >&2; exit 64 ;;
 esac
