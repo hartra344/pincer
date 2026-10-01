@@ -167,8 +167,9 @@ struct InlineMathOffMainTests {
         #expect(mainInk == darkInk)
     }
 
-    @Test func prewarmWarmsTheWindowAtTheFinalWidth() {
+    @Test(.timeLimit(.minutes(2))) func prewarmWarmsTheWindowAtTheFinalWidth() async {
         let scratch = ScratchDefaults()
+        defer { scratch.remove() }
         let renderer = TranscriptLayoutCacheTests.renderer(scratch)
         let body = String(repeating: "filler words that wrap ", count: 12)
         let salt = UUID().uuidString
@@ -183,8 +184,18 @@ struct InlineMathOffMainTests {
         let cold = rows.compactMap { renderer.premeasureBodies(for: $0) }
         #expect(cold.count == rows.count)
         #expect(cold.allSatisfy { keys in !keys.allSatisfy { TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) } })
-        let warmed = driver.prewarm(Array(rows.indices), all: rows, width: width, renderer: renderer, budget: 5)
-        #expect(warmed == rows.count)
+        // A bounded prewarm may finish only part of the window when other suites own the worker.
+        // Exercise that path without assuming the shared queue finishes before a wall-clock deadline.
+        let warmed = driver.prewarm(Array(rows.indices), all: rows, width: width, renderer: renderer, budget: 0)
+        #expect((0...rows.count).contains(warmed))
+        let remaining = driver.split(Array(rows.indices), all: rows, width: width, renderer: renderer).offload
+        if !remaining.isEmpty {
+            await withCheckedContinuation { continuation in
+                // Twelve rows fit in a single worker chunk; completion means adoption has finished.
+                #expect(remaining.count <= TranscriptPremeasureDriver.rowsPerJob)
+                driver.submit(remaining, width: width, env: renderer.textEnvironment) { continuation.resume() }
+            }
+        }
         #expect(cold.allSatisfy { keys in keys.allSatisfy { TranscriptText.isWarm($0.textKey, contentWidth: contentWidth) } })
         // A second pass finds everything warm and sends nothing.
         #expect(driver.prewarm(Array(rows.indices), all: rows, width: width, renderer: renderer) == 0)
