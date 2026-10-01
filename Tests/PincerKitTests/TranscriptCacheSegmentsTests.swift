@@ -124,7 +124,9 @@ struct TranscriptCacheSegmentsTests {
         #expect(newest.outcome == .migrated(from: 8) && !newest.outcome.discarded)
         #expect(newest.items == Array(items.suffix(100)) && newest.complete)
         // The write-back is queued behind the writer, not awaited by the read.
-        try await Task.sleep(for: .milliseconds(50))
+        for _ in 0..<500 where (try? V8.manifest(url)["version"] as? Int) != TranscriptCache.Snapshot.currentVersion {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         await TranscriptCache.flush(gatewayId: self.gateway, root: temp.url)
 
         #expect(try V8.manifest(url)["version"] as? Int == TranscriptCache.Snapshot.currentVersion)
@@ -134,27 +136,35 @@ struct TranscriptCacheSegmentsTests {
 
     /// #563: opening a chat read its cache only after every save queued on the writer had landed
     /// (the read primed the writer's layout and waited for it), so a switch could show the loading
-    /// placeholder for seconds behind other chats' saves. The read must not wait for them.
-    @Test func newestReadDoesNotWaitForQueuedSaves() async throws {
+    /// placeholder for seconds behind other chats' saves. With the writer busy, the read must still return.
+    @Test func newestReadDoesNotWaitForTheWriter() async throws {
         let temp = TempDir()
         defer { temp.remove() }
-        let small = V8.items(120)
-        await V8.save(V8.snapshot(small), self.gateway, "agent:main:small", temp.url)
+        let items = V8.items(120)
+        await V8.save(V8.snapshot(items), self.gateway, self.key, temp.url)
         await TranscriptCache.flush(gatewayId: self.gateway, root: temp.url)
-        let big = V8.snapshot(V8.items(20000))
-        let clock = ContinuousClock()
-        let started = clock.now
-        let saves = (0..<3).map { n in
-            Task.detached { await V8.save(big, self.gateway, "agent:main:big\(n)", temp.url) }
+
+        let entered = Flag()
+        let gate = DispatchSemaphore(value: 0)
+        let busy = Task.detached {
+            await TranscriptCache.Writer.shared.occupyForTesting(entered: { entered.set() }, gate: gate,
+                                                                  timeout: .now() + 10)
         }
-        try await Task.sleep(for: .milliseconds(20))
-        let newest = await TranscriptCache.loadNewest(gatewayId: self.gateway, sessionKey: "agent:main:small", limit: 100,
-                                                      root: temp.url)
-        let readTook = clock.now - started
-        for save in saves { _ = await save.value }
-        let savesTook = clock.now - started
-        #expect(newest.outcome == .loaded && newest.items == Array(small.suffix(100)))
-        #expect(readTook < .milliseconds(150), "read took \(readTook), queued saves \(savesTook)")
+        for _ in 0..<500 where !entered.value { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(entered.value)
+
+        let newest = await TranscriptCache.loadNewest(gatewayId: self.gateway, sessionKey: self.key, limit: 100, root: temp.url)
+        gate.signal()
+        // Signalled, not timed out: the read returned while the writer was still busy.
+        #expect(await busy.value, "the read waited for the busy writer")
+        #expect(newest.outcome == .loaded && newest.items == Array(items.suffix(100)))
+    }
+
+    private final class Flag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var raised = false
+        var value: Bool { self.lock.withLock { self.raised } }
+        func set() { self.lock.withLock { self.raised = true } }
     }
 
     @Test func removeDeletesSegmentsSidecarAndManifest() async throws {

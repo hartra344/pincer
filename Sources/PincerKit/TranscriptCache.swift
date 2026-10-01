@@ -766,6 +766,13 @@ public enum TranscriptCache {
         /// Returns once every write and removal queued before it has finished.
         func drain() {}
 
+        /// Tests: occupies the writer, as a long save would, until `gate` is signalled or `timeout`
+        /// passes. True when it was signalled.
+        func occupyForTesting(entered: @Sendable () -> Void, gate: DispatchSemaphore, timeout: DispatchTime) -> Bool {
+            entered()
+            return gate.wait(timeout: timeout) == .success
+        }
+
         func remove(_ url: URL) {
             self.forgetLayout(url)
             try? FileManager.default.removeItem(at: url.appendingPathExtension("meta"))
