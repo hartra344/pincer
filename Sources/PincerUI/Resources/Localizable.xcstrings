@@ -1463,6 +1463,16 @@
         }
       }
     },
+    "Switching branches needs Full Management access.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Switching branches needs Full Management access."
+          }
+        }
+      }
+    },
     "The agent sees your reactions on its next turn.": {
       "localizations": {
         "en": {
@@ -7389,6 +7399,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Took 1 minute 1 second"
+          }
+        }
+      }
+    },
+    "Wait for the reply to finish.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wait for the reply to finish."
           }
         }
       }

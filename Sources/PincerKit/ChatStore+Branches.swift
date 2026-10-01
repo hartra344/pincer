@@ -39,6 +39,12 @@ extension ChatStore {
         return users.last?.transcriptId
     }
 
+    /// The header chip's content, or nil while the chat has a single branch.
+    public var branchHeaderChip: BranchHeaderChip? {
+        BranchHeaderChip(branches: self.branches, hasAccess: self.gateway?.sessionManager.canSwitchBranch == true,
+                         isRunning: self.isRunning || self.isBusyForHistoryChange)
+    }
+
     /// Reloads `branches` (`sessions.branches.list`, read scope). Failures leave the list empty:
     /// branches are an extra, never an error banner. Overlapping calls apply only the newest
     /// response; an older caller returns once that one has landed.
@@ -88,5 +94,37 @@ extension ChatStore {
         await gateway.transcriptChanged(key: self.sessionKey, change: .changed(editorText: nil))
         await self.refreshBranches()
         return true
+    }
+}
+
+/// One branch in the footer switcher and the header chip's menu.
+public struct BranchMenuEntry: Equatable, Sendable {
+    public let leafEntryId: String
+    public let title: String
+    public let isActive: Bool
+
+    /// "Title · N messages".
+    public static func title(for branch: SessionBranch) -> String {
+        [branch.title, L("\(String(branch.messageCount)) messages")].joined(separator: " · ")
+    }
+}
+
+/// The "Branch 2 of 3" header control: always present when the chat has more than one branch.
+public struct BranchHeaderChip: Equatable, Sendable {
+    public let label: String
+    public let entries: [BranchMenuEntry]
+    /// Why switching is off, or nil when it's allowed.
+    public let disabledReason: String?
+    public var canSwitch: Bool { self.disabledReason == nil }
+
+    public init?(branches: [SessionBranch], hasAccess: Bool, isRunning: Bool) {
+        guard branches.count > 1 else { return nil }
+        let active = branches.firstIndex(where: \.active) ?? 0
+        self.label = L("Branch \(active + 1) of \(branches.count)")
+        self.entries = branches.map {
+            BranchMenuEntry(leafEntryId: $0.leafEntryId, title: BranchMenuEntry.title(for: $0), isActive: $0.active)
+        }
+        self.disabledReason = !hasAccess ? L("Switching branches needs Full Management access.")
+            : isRunning ? L("Wait for the reply to finish.") : nil
     }
 }

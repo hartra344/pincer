@@ -580,6 +580,12 @@ struct ChatChrome: ViewModifier {
                 ToolbarItem(placement: .topBarLeading) { ShowSidebarButton() }
                 ToolbarItem(placement: .topBarLeading) { if !split { ChatHeaderAvatar() } }
                 #endif
+                // A stable container, so a chat without branches doesn't remove the item (#262).
+                ToolbarItem(placement: .primaryAction) {
+                    ZStack {
+                        if !split, let key { BranchHeaderChipView(chat: self.gateway.chat(for: key)) }
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) { ChatModelItem(row: split ? nil : self.row) }
                 ToolbarItem(placement: .primaryAction) {
                     ChatSessionMenu(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector, row: split ? nil : self.row)

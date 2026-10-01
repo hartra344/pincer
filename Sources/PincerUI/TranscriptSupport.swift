@@ -766,7 +766,7 @@ final class TranscriptRenderer: TranscriptRowActions {
     var branchEntries: [TranscriptBranchEntry] {
         (self.context.chat?.branches ?? []).map { branch in
             TranscriptBranchEntry(leafEntryId: branch.leafEntryId,
-                                  title: [branch.title, L("\(String(branch.messageCount)) messages")].joined(separator: " · "),
+                                  title: BranchMenuEntry.title(for: branch),
                                   isActive: branch.active)
         }
     }

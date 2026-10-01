@@ -26,7 +26,11 @@ On the last assistant reply, **Regenerate** rewinds to the message before it and
 
 ## Switching between branches
 
-When a chat has more than one path, a **Branch 1 of 2** control with previous and next arrows appears above the composer. Use the arrows to step to the previous or next path, or click the label for a menu that lists every branch (with its message count and a checkmark on the current one); the transcript reloads to show it. The switcher is hidden while a reply is streaming. Nothing is deleted by switching, and you can still manage every branch in the [Session Manager](../sessions/). Switching needs Full Management (admin) access.
+When a chat has more than one path, an inline **‹ 2 / 3 ›** switcher sits in the footer of the message where the branches fork. Use the arrows to step to the previous or next path, or click the label for a menu that lists every branch (with its message count and a checkmark on the current one); the transcript reloads to show it. The switcher is hidden while a reply is streaming. Nothing is deleted by switching, and you can still manage every branch in the [Session Manager](../sessions/). Switching needs Full Management (admin) access.
+
+## The header branch menu
+
+Whenever a chat has more than one branch, a branch icon appears in the chat header: in the toolbar on iPhone, iPad and Mac, and in each pane header in split view. Hover it for a tooltip such as "Branch 2 of 3" (VoiceOver reads the same). Click it to list every branch with its message count and a checkmark on the current one, then pick one to switch, without scrolling back to the fork point. Switching needs Full Management access and isn't possible while a reply streams; the menu then shows why.
 
 :::note
 The Gateway only reports where each branch ends, not where it forks. Pincer puts the switcher on the message your latest Edit & Resend or Regenerate sent (remembered until the app quits), otherwise on the last message you sent on the current branch. After relaunching, or on another device, it may sit lower than the real fork point.

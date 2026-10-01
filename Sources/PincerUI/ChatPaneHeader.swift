@@ -84,6 +84,8 @@ struct ChatPaneHeader: View {
             }
             .layoutPriority(-1)
             Spacer(minLength: Theme.Spacing.md)
+            BranchHeaderChipView(chat: self.gateway.chat(for: self.key))
+                .controlSize(.small)
             if let row {
                 ModelPicker(row: row)
                     .controlSize(.small)
