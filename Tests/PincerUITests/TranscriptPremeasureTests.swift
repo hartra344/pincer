@@ -65,6 +65,24 @@ struct TranscriptPremeasureTests {
         #expect(TranscriptPremeasurer.offMainLayouts.withLock { $0 } > 0)
     }
 
+    @Test func repeatedSplitReusesPremeasureEligibilityForAnUnchangedRow() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let renderer = TranscriptLayoutCacheTests.renderer(scratch)
+        var item = ChatItem(id: "memoized-source", role: .user,
+                            blocks: [.text(String(repeating: "long source body ", count: 800))], timestamp: .now)
+        item.transcriptId = item.id
+        let rows: [TranscriptRow] = [.entry(.user(item))]
+        let driver = TranscriptPremeasureDriver()
+
+        let first = driver.split([0], all: rows, width: 700, renderer: renderer)
+        let second = driver.split([0], all: rows, width: 700, renderer: renderer)
+
+        #expect(first.offload.count == 1 && second.offload.count == 1)
+        #expect(renderer.premeasureBodyBuildCount == 1,
+                "scroll planning should not rebuild/join and hash an unchanged message body")
+    }
+
     @Test func tableCellsMatchMainAndWarmTheRow() async {
         let source = "| Name | Notes |\n|---|---:|\n| alpha | a fairly long note that has to wrap in a narrow column, more than once |\n| beta | short |"
         let width: CGFloat = 640
