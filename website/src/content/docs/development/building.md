@@ -62,6 +62,20 @@ The tests are hermetic:
 swift test --filter StreamingProbe
 ```
 
+CI also runs the transcript suites on an iPhone simulator, including live-versus-committed row layout, off-main inline math, and SVG rasterization. To run those rendering suites locally:
+
+```sh
+scripts/ios-test-scheme.sh
+xcodebuild test -scheme PincerUITests-iOS \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+  -derivedDataPath .build/xcode-ios \
+  -only-testing:PincerUITests/StreamingRenderingTests \
+  -only-testing:PincerUITests/InlineMathOffMainTests \
+  -only-testing:PincerUITests/SVGRasterizerTests
+```
+
+Use an available iPhone simulator name from `xcrun simctl list devices available`. SVG rendering can produce WebKit process logs in the simulator; the test assertions determine whether rasterization succeeded.
+
 While a reply streams, the transcript updates about 30 times a second. Finished paragraphs are laid out once and only the paragraph being written is measured again, so the cost of each update stays flat as the reply grows.
 
 ## Self-checks

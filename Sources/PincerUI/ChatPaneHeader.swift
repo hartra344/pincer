@@ -23,6 +23,8 @@ extension EnvironmentValues {
     @Entry var chatChromeActions: ChatChromeActions?
     /// Stable identity of the window that owns a composer and its command palette.
     @Entry var dictationSceneID: UUID?
+    /// The selected chat row cached by its window's chrome while a session refresh is in flight.
+    @Entry var chatChromeSessionRow: SessionRow?
 }
 
 /// A split view side's Find and export state, filled in by its `ChatView`, so the side's own menu
