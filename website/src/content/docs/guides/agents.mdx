@@ -64,9 +64,9 @@ Bindings can't be edited here yet. Use **Raw Config** in Gateway Settings or edi
 
 ## Duplicating an agent
 
-**Duplicate…** opens a sheet named **Duplicate "*Name*"** with the name "*Name* Copy" (or "*Name* Copy 2" if that's taken) and the same emoji, avatar and model. The copy gets its own new workspace, never the original's.
+**Duplicate…** opens a sheet named **Duplicate "*Name*"** with the name "*Name* Copy" (or "*Name* Copy 2" if that's taken) and the same emoji and model. **Avatar** starts empty, so the copy uses the default avatar. Avatar images aren't copied, and the original's avatar path isn't reused in the new workspace. Enter a new avatar in the sheet if you want one. The copy gets its own new workspace, never the original's.
 
-With **Copy workspace files** on (the default), Pincer copies the original's workspace files into the new workspace after creating the agent, replacing the starter files the gateway puts there. If some files can't be copied, the agent is still created, and **Some Files Weren't Copied** lists them.
+With **Copy workspace files** on (the default), Pincer copies the original's workspace files into the new workspace after creating the agent, replacing the starter files the gateway puts there. The copy keeps its newly generated `IDENTITY.md`, with the name, emoji and avatar chosen in the sheet. If some files can't be copied, the agent is still created, and **Some Files Weren't Copied** lists them.
 
 Bindings aren't copied, so the copy doesn't get any messages until you bind it to a channel.
 

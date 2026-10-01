@@ -611,6 +611,9 @@ struct AgentEditorSheet: View {
                 } header: {
                     Text("Identity", bundle: .module)
                 } footer: {
+                    if self.isDuplicate {
+                        Text(AgentManagement.duplicateAvatarNote)
+                    }
                     if let error = self.draft.validationError(existing: self.gateway.agents), !self.draft.name.isEmpty {
                         Text(error).foregroundStyle(.red)
                     }

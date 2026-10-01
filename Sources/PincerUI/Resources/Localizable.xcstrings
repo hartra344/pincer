@@ -2343,6 +2343,16 @@
         }
       }
     },
+    "Avatar images aren't copied. Leave Avatar empty to use the default, or enter a new avatar for the copy.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avatar images aren't copied. Leave Avatar empty to use the default, or enter a new avatar for the copy."
+          }
+        }
+      }
+    },
     "Avatars": {
       "localizations": {
         "en": {
