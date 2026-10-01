@@ -378,8 +378,11 @@ final class ComposerUITextView: UITextView {
     private static let returnCommands: [UIKeyCommand] = {
         let send = UIKeyCommand(title: L("Send"), action: #selector(ComposerUITextView.hardwareReturn(_:)), input: "\r")
         let commandSend = UIKeyCommand(input: "\r", modifierFlags: .command, action: #selector(ComposerUITextView.hardwareReturn(_:)))
-        for command in [send, commandSend] { command.wantsPriorityOverSystemBehavior = true }
-        return [send, commandSend]
+        // The keypad's Enter key arrives flagged as numeric-pad.
+        let keypadSend = UIKeyCommand(input: "\r", modifierFlags: .numericPad, action: #selector(ComposerUITextView.hardwareReturn(_:)))
+        let commands = [send, commandSend, keypadSend]
+        for command in commands { command.wantsPriorityOverSystemBehavior = true }
+        return commands
     }()
 
     private func returnKey(for command: UIKeyCommand?) -> ComposerReturnKey {
