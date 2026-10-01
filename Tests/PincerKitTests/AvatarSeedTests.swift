@@ -95,6 +95,22 @@ struct AvatarSeedStoreTests {
             == AvatarStyle.identitySeed(name: "Claw", agentId: "main"))
     }
 
+    /// A failed read on an already-synced Gateway must not authorize a new seed write.
+    @Test func failedPrefsReadDoesNotPromoteAvatarSeedsForTheCurrentEpoch() {
+        defer { self.scratch.remove() }
+        let store = self.store()
+        self.scratch.defaults.set(true, forKey: store.syncedMap(AvatarPreferences.prefKey).syncedDefaultsKey)
+        store.applyAgents(Self.agentsResult([("new-agent", "Renamed Before This Device Saw It")]))
+
+        store.finishBootstrapPrefsPull(epoch: store.connectionEpoch, readSucceeded: false)
+
+        let seedEntry = AvatarPreferences.seedEntry(for: "new-agent")
+        #expect(store.avatarPrefsPulledEpoch == nil)
+        #expect(store.avatarChoices[seedEntry] == nil)
+        #expect(store.pendingPrefChanges[AvatarPreferences.prefKey] == nil,
+                "an automatic seed is neither recorded nor pushed without a successful read")
+    }
+
     /// Before the first sync, seeds are kept here for the first sync's merge to write (the
     /// Gateway's older seeds win there), so first launch writes `pincer.avatars` once.
     @Test func beforeFirstSyncSeedsAreKeptForTheMerge() {

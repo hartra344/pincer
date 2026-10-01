@@ -115,6 +115,23 @@ extension GatewayStore {
     /// Seconds between bootstrap pulls after the read or a first-sync write fails.
     static let bootstrapPullRetryDelays: [Double] = [2, 5, 10, 30, 30]
 
+    /// The epoch is promoted once the bootstrap prefs read has succeeded, so avatar seeds cannot
+    /// write from a connection that never saw the Gateway's existing seed map.
+    enum AvatarPrefsPullAuthorization {
+        static func promotedEpoch(readEpoch: Int, readSucceeded: Bool, currentEpoch: Int) -> Int? {
+            // This baseline preserves the existing unconditional promotion; the regression test
+            // demonstrates why the read result must participate in the decision.
+            readEpoch == currentEpoch ? readEpoch : nil
+        }
+    }
+
+    func finishBootstrapPrefsPull(epoch: Int, readSucceeded: Bool) {
+        guard self.isCurrent(epoch) else { return }
+        self.avatarPrefsPulledEpoch = Self.AvatarPrefsPullAuthorization.promotedEpoch(
+            readEpoch: epoch, readSucceeded: readSucceeded, currentEpoch: self.connectionEpoch)
+        self.recordAvatarSeeds()
+    }
+
     /// Everything synced through `users.prefs`, except the group maps `loadGroups` owns, in one read.
     func pullBootstrapPrefs(epoch: Int) async {
         let prefs = Set([
@@ -137,8 +154,7 @@ extension GatewayStore {
         self.queuedAvatarChoices = [:]
         for (entry, value) in queued { self.setAvatarChoice(value, for: entry) }
         guard self.isCurrent(epoch) else { return }
-        self.avatarPrefsPulledEpoch = epoch
-        self.recordAvatarSeeds()
+        self.finishBootstrapPrefsPull(epoch: epoch, readSucceeded: true)
     }
 
     func pullServerNames() async { await self.pull(self.syncedMap(Self.serverNamesPref)) }
