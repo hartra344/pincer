@@ -13983,6 +13983,16 @@
         }
       }
     },
+    "Some bookmarks couldn't be saved to the gateway: %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some bookmarks couldn't be saved to the gateway: %@"
+          }
+        }
+      }
+    },
     "Some Files Weren't Copied": {
       "localizations": {
         "en": {
@@ -16049,6 +16059,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "To"
+          }
+        }
+      }
+    },
+    "To make room, Pincer removed an older bookmark.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "To make room, Pincer removed an older bookmark."
           }
         }
       }

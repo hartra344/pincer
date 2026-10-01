@@ -29,13 +29,21 @@ These are Pincer extras that OpenClaw's session data can't hold:
 | `pincer.groups` | Groups, on gateways without the group catalog |
 | `pincer.reactions` | Your [reactions](../../guides/transcript/#reactions), keyed by `<session key>\|<message id>`, with that message's emoji in the order you added them, separated by spaces |
 | `pincer.healthDismissals` | Gateway Health issues you dismissed or always ignore |
+| `pincer.bookmarks.0` … `pincer.bookmarks.7` | Your [bookmarks](../../guides/export-and-bookmarks/#bookmark-a-message), keyed by session key and message id, each with the start of the message, its role and when you added it. They're spread over eight keys because the gateway limits each preference to 4 KB. Room for about 100–150; once it's full, a new bookmark removes an older one. |
 | `pincer.avatars` | [Avatar](../../guides/agent-avatars/#settings) characters picked for each agent, keyed by agent id, the **Style** (`pixel` or `plush`) under `@style`, and under `seed@<agentId>` the identity the agent's pet was first picked from, so a rename keeps the pet |
 
 :::note
 If the gateway has no durable identity for your connection, these preferences stay on the current device instead of syncing.
 :::
 
-Removing a gateway from Pincer clears this device's copy of `pincer.healthDismissals` only. The gateway keeps it for your other devices, and adding the gateway again brings it back.
+Removing a gateway from Pincer clears this device's copy of `pincer.healthDismissals` and the bookmarks, and any changes not yet saved to the gateway. The gateway keeps them for your other devices, and adding the gateway again brings them back.
+
+## How syncing works
+
+- Each entry (one chat's icon, one bookmark, one reaction) syncs on its own. If two devices change different entries at the same time, both changes are kept. If they change the same entry, the last one saved wins.
+- A change shows up on your device right away. If the gateway is offline or the save fails, Pincer keeps the change on this device, even across a restart, and saves it again when the gateway is back. It never reverts to the gateway's older value in the meantime. If the gateway refuses a change as too large, Pincer stops retrying it on its own; for bookmarks, the Bookmarks list says so.
+- When another device changes a preference, the gateway tells Pincer, and Pincer reads just that preference again.
+- The first time a device syncs with a gateway, what's already on the device is merged with what the gateway has. Where both have the same entry, the gateway's wins. That's how bookmarks you saved before syncing existed move to the gateway. It also means a device that hasn't synced yet can bring back a bookmark you removed on another device.
 
 ## Kept on each device
 

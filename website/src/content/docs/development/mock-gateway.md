@@ -29,6 +29,7 @@ Then add `ws://127.0.0.1:18789` in Pincer with the token `dev-token`.
 | `MOCK_USAGE_FORBIDDEN` | off | Set to `1` to refuse `usage.cost` with `FORBIDDEN`, as for an operator whose role can't see every session. |
 | `MOCK_CHANNEL_PAIRING` | on | Set to `off` to hide the `channels.pairing.*` methods, like an older gateway. |
 | `MOCK_CHANNEL_PAIRING_EVERY` | off | Seconds between new channel pairing requests. |
+| `MOCK_NO_SUBSCRIPTION_ID` | off | Set to `1` to reject `subscriptionId` on `sessions.messages.subscribe` and `unsubscribe` with `INVALID_REQUEST`, like a gateway before 2026.9.7. |
 | `MOCK_NO_HEALTH` | off | Set to `1` to drop the health and restart methods, like an older gateway. |
 | `MOCK_NO_REPLY_TO` | off | Set to `1` to refuse `chat.send` with `replyToId`, like a gateway from before replies. Pincer then quotes the original in the text. |
 | `MOCK_FAILED_DELIVERY` | on | Set to `off` to drop the mock's one failed delivery, so Health shows Healthy. |

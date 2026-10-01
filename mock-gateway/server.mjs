@@ -421,7 +421,7 @@ export async function startServer(opts = {}) {
       authenticated: false,
       challenge: { nonce: b64url(crypto.randomBytes(24)), ts: nowMs() },
       sessionSubscribed: false,
-      messageSubs: new Set(),
+      messageSubs: new Map(),
       tickTimer: undefined,
       baseUrl: req.headers.host ? `http://${req.headers.host}` : undefined,
     };
