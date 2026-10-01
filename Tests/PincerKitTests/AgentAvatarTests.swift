@@ -336,6 +336,24 @@ struct ChatAvatarSignalsTests {
         #expect(self.state(chat, at: at.addingTimeInterval(AvatarStateMachine.successDuration + 0.1)) == .idle)
     }
 
+    @Test func thinkingAfterStreamedTextReturnsAvatarToThinkingBetweenTools() {
+        defer { self.scratch.remove() }
+        let chat = self.chat()
+        self.chatEvent(chat, "run_147", ["state": "status", "phase": "thinking"])
+        self.agentEvent(chat, "run_147", stream: "assistant", ["text": .string("I should check that.")])
+        #expect(chat.avatarSignals.isStreaming)
+
+        self.agentEvent(chat, "run_147", stream: "tool",
+                        ["phase": "start", "name": "exec", "toolCallId": "call_147", "args": ["command": "check"]])
+        #expect(self.state(chat) == .tool(.exec))
+        self.agentEvent(chat, "run_147", stream: "tool",
+                        ["phase": "result", "name": "exec", "toolCallId": "call_147", "isError": false, "result": "ok"])
+        self.agentEvent(chat, "run_147", stream: "thinking", ["text": .string("Now I can summarize.")])
+
+        #expect(chat.avatarSignals.isThinking && !chat.avatarSignals.isStreaming)
+        #expect(self.state(chat) == .thinking)
+    }
+
     @Test func latestRunningToolWins() {
         defer { self.scratch.remove() }
         let chat = self.chat()
