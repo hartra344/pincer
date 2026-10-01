@@ -62,6 +62,20 @@ The tests are hermetic:
 swift test --filter StreamingProbe
 ```
 
+CI also runs the transcript suites on an iPhone simulator, including live-versus-committed row layout, off-main inline math, and SVG rasterization. To run those rendering suites locally:
+
+```sh
+scripts/ios-test-scheme.sh
+xcodebuild test -scheme PincerUITests-iOS \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+  -derivedDataPath .build/xcode-ios \
+  -only-testing:PincerUITests/StreamingRenderingTests \
+  -only-testing:PincerUITests/InlineMathOffMainTests \
+  -only-testing:PincerUITests/SVGRasterizerTests
+```
+
+Use an available iPhone simulator name from `xcrun simctl list devices available`. SVG rendering can produce WebKit process logs in the simulator; the test assertions determine whether rasterization succeeded.
+
 While a reply streams, the transcript updates about 30 times a second. Finished paragraphs are laid out once and only the paragraph being written is measured again, so the cost of each update stays flat as the reply grows.
 
 ## Self-checks
@@ -188,4 +202,3 @@ xcodebuild -scheme Pincer-macOS PINCER_DEV_SUFFIX=.dev-feature-x   # bundle ids,
 ```
 
 With the suffix, `chat.pincer.mac` becomes `chat.pincer.mac.dev-feature-x`, the Keychain service `chat.pincer.gateway.dev-feature-x`, and storage folders `Pincer-feature-x`. Use the same name for both variables. On iOS the suffixed App Group and bundle ids need provisioning, so set the suffix there only when you want an isolated install. The push relay rejects the suffixed iOS topic (`chat.pincer.ios.dev-x`) unless you add it to its `APNS_TOPICS`, and it needs the aps capability provisioned. Both builds register the same `pincer://` URL scheme and Handoff type, so links and Handoff may open the other build. `PINCER_CACHE_DIR`, `PINCER_DRAFTS_DIR` and `PINCER_OUTBOX_DIR` still override folders explicitly.
-
