@@ -264,6 +264,31 @@ func runDemoAgents(_ gateway: GatewayStore) async {
         await editor.resolveConflictKeepTheirs()
         check(editor.text == "someone else" && editor.conflict == nil, "demo keep theirs")
         management.closeEditor(editor)
+
+        // Closing Gateway Settings can find a failed file even when another file saved first.
+        let earlierFile = management.editor(agentId: "main", name: "AGENTS.md")
+        let hiddenFile = management.editor(agentId: "main", name: "USER.md")
+        await earlierFile.load()
+        await hiddenFile.load()
+        earlierFile.text += "\nSaved during close."
+        hiddenFile.text += "\nLocal draft."
+        let hiddenDraft = hiddenFile.text
+        try await management.setFile(agentId: "main", name: "USER.md", content: "Changed elsewhere.",
+                                     expectedHash: hiddenFile.entry?.hash, expectedMissing: false)
+        let allSaved = await management.saveAll()
+        check(!allSaved && earlierFile.conflict == nil && !earlierFile.isDirty
+              && hiddenFile.conflict?.theirs == "Changed elsewhere." && hiddenFile.conflict?.yours == hiddenDraft
+              && hiddenFile.text == hiddenDraft && hiddenFile.isDirty,
+              "demo close-save keeps the failed workspace draft after earlier saves")
+        check(management.failedSaveAllFile === hiddenFile, "demo close-save identifies the file needing attention")
+        let overwrite = await hiddenFile.resolveConflictOverwrite()
+        management.closeEditor(hiddenFile)
+        check(management.failedSaveAllFile == nil && !management.openEditors.contains { $0 === hiddenFile },
+              "closing the resolved editor releases the saved failure reference")
+        let retry = await management.saveAll()
+        check(overwrite && retry && management.failedSaveAllFile == nil && !management.hasUnsavedChanges,
+              "demo close-save retry clears the failure after saving")
+        management.closeEditor(earlierFile)
         do {
             _ = try await management.setFile(agentId: agentId, name: "SOUL.md", content: "x", expectedHash: loaded, expectedMissing: false)
             check(false, "demo refuses a stale hash")

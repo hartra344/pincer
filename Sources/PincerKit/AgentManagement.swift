@@ -722,6 +722,7 @@ public final class AgentManagementModel {
     /// Forgets a clean editor (its page closed).
     public func closeEditor(_ editor: AgentFileEditorModel) {
         guard !editor.isDirty else { return }
+        if self.failedSaveAllFile === editor { self.failedSaveAllFile = nil }
         self.editors["\(editor.agentId)/\(editor.name)"] = nil
         self.openEditors.removeAll { $0 === editor }
     }
@@ -741,8 +742,14 @@ public final class AgentManagementModel {
 
     /// Saves every draft. Returns false if any save failed or hit a conflict.
     public func saveAll() async -> Bool {
+        self.failedSaveAllFile = nil
         var ok = true
-        for editor in self.dirtyEditors where !(await editor.save()) { ok = false }
+        for editor in self.dirtyEditors {
+            if !(await editor.save()) {
+                if self.failedSaveAllFile == nil { self.failedSaveAllFile = editor }
+                ok = false
+            }
+        }
         for agentId in self.dirtyAgentIds {
             do { try await self.saveDraft(agentId: agentId) } catch { ok = false }
         }
@@ -750,6 +757,7 @@ public final class AgentManagementModel {
     }
 
     public func discardAll() {
+        self.failedSaveAllFile = nil
         for editor in self.dirtyEditors { editor.revert() }
         self.agentEdits = [:]
         for editor in self.openEditors { self.closeEditor(editor) }
@@ -757,6 +765,7 @@ public final class AgentManagementModel {
 
     /// Drops drafts of an agent that no longer exists.
     func forget(agentId: String) {
+        if self.failedSaveAllFile?.agentId == agentId { self.failedSaveAllFile = nil }
         self.agentEdits[agentId] = nil
         for editor in self.openEditors where editor.agentId == agentId {
             self.editors["\(agentId)/\(editor.name)"] = nil
