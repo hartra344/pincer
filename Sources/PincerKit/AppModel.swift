@@ -2,13 +2,30 @@ import Foundation
 import PincerPush
 import Observation
 
+public struct DictationTarget: Hashable, Sendable {
+    public let sceneID: UUID
+    public let gatewayID: UUID
+    public let sessionKey: String
+
+    public init(sceneID: UUID, gatewayID: UUID, sessionKey: String) {
+        self.sceneID = sceneID
+        self.gatewayID = gatewayID
+        self.sessionKey = sessionKey
+    }
+}
+
 public struct DictationToggleRequest: Equatable, Sendable {
-    public var sessionKey: String
+    public var target: DictationTarget
     public var serial: Int
 
-    public init(sessionKey: String, serial: Int) {
-        self.sessionKey = sessionKey
+    public init(target: DictationTarget, serial: Int) {
+        self.target = target
         self.serial = serial
+    }
+
+    /// A request only reaches its exact chat composer when that pane owns keyboard focus.
+    public func matches(target: DictationTarget, paneIsActive: Bool) -> Bool {
+        self.target == target && paneIsActive
     }
 }
 
@@ -33,9 +50,10 @@ public final class AppModel {
     public let push = PushRegistrar.shared
     /// The palette's request to start or stop dictation in one chat's composer.
     public var dictationToggleRequest: DictationToggleRequest?
-    /// Chats whose composer is dictating, for the palette's Dictate/Stop item.
-    public var dictationActiveKeys: Set<String> = []
-    public var dictationAvailable = false
+    /// Composers currently dictating, keyed by window, Gateway, and chat for the command palette.
+    public var dictationActiveTargets: Set<DictationTarget> = []
+    /// Available composers, scoped like active targets so another window cannot affect the palette.
+    public var dictationAvailableTargets: Set<DictationTarget> = []
     /// Counts `open(_:)` calls (from notifications), so the UI can bring the chat on screen.
     public private(set) var openRequests = 0
     /// Find in Chat to open with a chat, e.g. after picking a message search result.

@@ -64,6 +64,7 @@ struct ChatWindow: View {
 private struct ChatWindowContent: View {
     let ref: ChatWindowRef
     let gateway: GatewayStore
+    @State private var dictationSceneID = UUID()
     @Environment(AppModel.self) private var app
     @Environment(\.appTheme) private var theme
     @Environment(\.openWindow) private var openWindow
@@ -79,6 +80,7 @@ private struct ChatWindowContent: View {
         }
         .environment(self.gateway)
         .environment(\.chatWindowKey, self.ref.sessionKey)
+        .environment(\.dictationSceneID, self.dictationSceneID)
         .environment(\.openGatewaySettings, GatewaySettingsOpener { gateway, destination, routes in
             gateway.settings.requestedRoutes = routes
             gateway.settings.requestedDestination = destination

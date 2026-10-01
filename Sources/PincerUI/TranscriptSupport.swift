@@ -266,6 +266,7 @@ final class TranscriptRenderer: TranscriptRowActions {
         if context.gateway !== self.context.gateway {
             self.context.gateway.images.setVisible([], owner: ObjectIdentifier(self))
         }
+        if changed, self.resumeOlderChat !== context.chat { self.resumeOlderChat = nil }
         self.context = context
         self.liveAvatar?.update(chat: context.chat)
         if changed {
@@ -800,18 +801,30 @@ final class TranscriptRenderer: TranscriptRowActions {
     func showOriginal(_ messageId: String) { self.showOriginal(messageId, missingNotice: nil, isReplyTarget: true) }
 
     private var olderLoop: Task<Void, Never>?
+    private weak var olderLoopChat: ChatStore?
+    /// The chat whose visible older row should resume after the current bounded paging pass.
+    /// Weak because the context is the owner; a chat switch must not keep the old store alive.
+    private weak var resumeOlderChat: ChatStore?
 
     /// Waits for the current paging pass to finish. Used by deterministic controller tests.
     func waitForOlderLoop() async {
-        let loop = self.olderLoop
-        await loop?.value
+        while let loop = self.olderLoop { await loop.value }
     }
 
     /// The loading-older row is on screen: pages in older history (the cache first) for as long as
     /// the row stays visible, so a page that adds no rows (duplicates, rows folding together) doesn't
     /// stall the list. Failures back off a second and give up after a few.
     func loadOlderIfShown(stillVisible: @escaping @MainActor () -> Bool) {
-        guard self.olderLoop == nil, let chat = self.context.chat, chat.hasOlderItems else { return }
+        guard stillVisible(), let chat = self.context.chat, chat.hasOlderItems else { return }
+        guard self.olderLoop == nil else {
+            // A list/context update can arrive while the previous chat's page is still unwinding.
+            // A different chat gets its own pass after the old one; same-chat list updates do not
+            // reset the bounded failure limit.
+            if self.olderLoopChat !== chat { self.resumeOlderChat = chat }
+            return
+        }
+        if self.resumeOlderChat === chat { self.resumeOlderChat = nil }
+        self.olderLoopChat = chat
         self.olderLoop = Task { @MainActor [weak self] in
             var failures = 0
             for _ in 0..<40 {
@@ -833,7 +846,25 @@ final class TranscriptRenderer: TranscriptRowActions {
                 try? await Task.sleep(for: .milliseconds(120))
                 guard stillVisible(), self?.context.chat === chat else { break }
             }
-            self?.olderLoop = nil
+            guard let self else { return }
+            self.olderLoop = nil
+            self.olderLoopChat = nil
+            let resumeChat = self.resumeOlderChat
+            self.resumeOlderChat = nil
+            if let resumeChat, resumeChat.hasOlderItems, stillVisible(), self.context.chat === resumeChat {
+                self.loadOlderIfShown(stillVisible: stillVisible)
+            }
+        }
+    }
+
+    /// A connected edge restarts paging only when the loading row is still visible. If a bounded
+    /// retry loop has not finished yet, remember one resume and launch it after that loop unwinds.
+    func resumeOlderIfShown(stillVisible: @escaping @MainActor () -> Bool) {
+        guard stillVisible(), let chat = self.context.chat, chat.hasOlderItems else { return }
+        if self.olderLoop != nil {
+            self.resumeOlderChat = chat
+        } else {
+            self.loadOlderIfShown(stillVisible: stillVisible)
         }
     }
 

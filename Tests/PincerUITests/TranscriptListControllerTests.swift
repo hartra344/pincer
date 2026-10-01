@@ -320,6 +320,107 @@ struct TranscriptListControllerTests {
         controller.loadOlderIfShown()
     }
 
+    @Test func reconnectDuringBoundedFailuresResumesPagingWhileTheOlderRowStaysVisible() async {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let (controller, host, context) = self.make(scratch)
+        let chat = context.chat!
+        chat.hasMoreHistory = true
+        controller.gatewayConnectionChanged(isConnected: false)
+        _ = controller.accept([.loadingOlder] + Self.rows(0..<3), contextChanged: false)
+        host.offset = 0
+        let firstPage = OlderPageGate()
+        var pageLoads = 0
+        controller.renderer.olderPageLoader = { _ in
+            pageLoads += 1
+            if pageLoads == 1 { return await firstPage.load() }
+            guard pageLoads < 4 else {
+                chat.hasMoreHistory = false
+                chat.olderInCache = false
+                return true
+            }
+            return false
+        }
+        controller.loadOlderIfShown()
+        await firstPage.waitUntilStarted()
+        controller.gatewayConnectionChanged(isConnected: true)
+        firstPage.complete(false)
+        await controller.renderer.waitForOlderLoop()
+        #expect(pageLoads == 4, "reconnect during the bounded retry pass launches one follow-up page")
+    }
+
+    @Test func reconnectPendingOnOldChatDoesNotStartPagingAfterSwitch() async {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let (controller, host, context) = self.make(scratch)
+        let oldChat = context.chat!
+        oldChat.hasMoreHistory = true
+        controller.gatewayConnectionChanged(isConnected: false)
+        _ = controller.accept([.loadingOlder] + Self.rows(0..<3), contextChanged: false)
+        host.offset = 0
+        let firstPage = OlderPageGate()
+        var pageLoads: [String] = []
+        controller.renderer.olderPageLoader = { chat in
+            pageLoads.append(chat.sessionKey)
+            if chat === oldChat { return await firstPage.load() }
+            chat.hasMoreHistory = false
+            chat.olderInCache = false
+            return true
+        }
+        controller.loadOlderIfShown()
+        await firstPage.waitUntilStarted()
+        controller.gatewayConnectionChanged(isConnected: true)
+
+        let newKey = "agent:list:other"
+        let newChat = context.gateway.chat(for: newKey)
+        newChat.hasMoreHistory = true
+        let newContext = TranscriptContext(gateway: context.gateway, disclosure: TranscriptDisclosure(),
+                                           agent: context.agent, sessionKey: newKey,
+                                           previewImage: { _ in }, saveFile: { _, _ in }, chat: newChat)
+        let contextChanged = controller.beginUpdate(context: newContext, rowCount: 3)
+        _ = controller.accept([.loadingOlder] + Self.rows(10..<13), contextChanged: contextChanged)
+        host.offset = 0
+        controller.loadOlderIfShown()
+
+        oldChat.hasMoreHistory = false
+        firstPage.complete(false)
+        await controller.renderer.waitForOlderLoop()
+        #expect(pageLoads == [oldChat.sessionKey, newKey],
+                "the old pass yields to the new visible chat instead of replaying its old page")
+        #expect(controller.context.chat === newChat)
+    }
+
+    @Test func reconnectAfterExhaustedPagingResumesWhileTheOlderRowStaysVisible() async {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let (controller, host, context) = self.make(scratch)
+        let chat = context.chat!
+        chat.hasMoreHistory = true
+        controller.gatewayConnectionChanged(isConnected: false)
+        _ = controller.accept([.loadingOlder] + Self.rows(0..<3), contextChanged: false)
+        host.offset = 0
+        var pageLoads = 0
+        controller.renderer.olderPageLoader = { _ in
+            pageLoads += 1
+            return false
+        }
+        controller.gatewayConnectionChanged(isConnected: true)
+        controller.loadOlderIfShown()
+        await controller.renderer.waitForOlderLoop()
+        #expect(pageLoads == 3, "paging reaches the existing bounded failure limit")
+
+        controller.gatewayConnectionChanged(isConnected: false)
+        controller.renderer.olderPageLoader = { _ in
+            pageLoads += 1
+            chat.hasMoreHistory = false
+            chat.olderInCache = false
+            return true
+        }
+        controller.gatewayConnectionChanged(isConnected: true)
+        await controller.renderer.waitForOlderLoop()
+        #expect(pageLoads == 4, "a later reconnect resumes without scrolling away and back")
+    }
+
     /// #467: a duplicated row id made the raw count differ from the list's on every update, re-arming the trigger.
     @Test func duplicateIdsDoNotReArmTheOlderRowTrigger() async {
         let scratch = ScratchDefaults()
@@ -332,22 +433,24 @@ struct TranscriptListControllerTests {
         controller.renderer.olderPageLoader = { _ in
             pageLoads += 1
             if pageLoads == 1 { return await gate.load() }
-            chat.olderInCache = false
-            return true
+            return false
         }
         chat.hasMoreHistory = true
         self.update(controller, context, rows)
         await gate.waitUntilStarted()
 
-        // Keep the real older loop in flight while identical raw input, including the duplicate,
-        // is accepted repeatedly. The gate removes cache I/O and controls exactly when paging ends.
-        for _ in 0..<3 { self.update(controller, context, rows) }
+        // Keep the retry loop in flight while identical raw input, including the duplicate, is
+        // accepted repeatedly. Ordinary updates must not queue a second failure budget.
+        for _ in 0..<3 {
+            self.update(controller, context, rows)
+            controller.renderer.loadOlderIfShown { true }
+        }
         #expect(pageLoads == 1, "updates while a page is pending must not start another page")
 
-        chat.hasMoreHistory = false
-        gate.complete(true)
+        gate.complete(false)
         await controller.renderer.waitForOlderLoop()
-        #expect(pageLoads == 1, "the loop must finish before the trigger is checked again")
+        #expect(pageLoads == 3, "same-chat updates don't restart the bounded failure loop")
+        chat.hasMoreHistory = false
         #expect(!chat.hasOlderItems)
 
         // A still-visible loading row can page again if more history is genuinely available.
@@ -355,7 +458,7 @@ struct TranscriptListControllerTests {
         chat.olderInCache = true
         for _ in 0..<3 { self.update(controller, context, rows) }
         await controller.renderer.waitForOlderLoop()
-        #expect(pageLoads == 1, "repeated duplicate ids don't re-arm the older-row trigger")
+        #expect(pageLoads == 3, "repeated duplicate ids don't re-arm the older-row trigger")
         #expect(chat.olderInCache, "no redundant page should consume the cached older flag")
         withExtendedLifetime(host) {}
     }

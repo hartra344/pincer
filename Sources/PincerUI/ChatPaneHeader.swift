@@ -21,6 +21,8 @@ extension EnvironmentValues {
     @Entry var chatPaneHandles: ChatPaneHandles?
     /// The window's Runs panel and Tools & Policy sheet, for the split view headers.
     @Entry var chatChromeActions: ChatChromeActions?
+    /// Stable identity of the window that owns a composer and its command palette.
+    @Entry var dictationSceneID: UUID?
     /// The selected chat row cached by its window's chrome while a session refresh is in flight.
     @Entry var chatChromeSessionRow: SessionRow?
 }

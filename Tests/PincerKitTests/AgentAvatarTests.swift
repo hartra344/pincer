@@ -336,6 +336,44 @@ struct ChatAvatarSignalsTests {
         #expect(self.state(chat, at: at.addingTimeInterval(AvatarStateMachine.successDuration + 0.1)) == .idle)
     }
 
+    @Test func thinkingAfterStreamedTextReturnsAvatarToThinkingBetweenTools() {
+        defer { self.scratch.remove() }
+        let chat = self.chat()
+        self.chatEvent(chat, "run_147", ["state": "status", "phase": "thinking"])
+        self.agentEvent(chat, "run_147", stream: "assistant", ["text": .string("I should check that.")])
+        #expect(chat.avatarSignals.isStreaming)
+
+        self.agentEvent(chat, "run_147", stream: "tool",
+                        ["phase": "start", "name": "exec", "toolCallId": "call_147", "args": ["command": "check"]])
+        #expect(self.state(chat) == .tool(.exec))
+        self.agentEvent(chat, "run_147", stream: "tool",
+                        ["phase": "result", "name": "exec", "toolCallId": "call_147", "isError": false, "result": "ok"])
+        #expect(self.state(chat) == .thinking, "finishing a tool clears prior text activity")
+        self.agentEvent(chat, "run_147", stream: "thinking", ["text": .string("Now I can summarize.")])
+        self.chatEvent(chat, "run_147", ["state": "delta", "deltaText": .string(""),
+                                          "message": Self.assistant(thinking: "Now I can summarize.", text: "I should check that.")])
+
+        #expect(chat.avatarSignals.isThinking && !chat.avatarSignals.isStreaming)
+        #expect(self.state(chat) == .thinking)
+
+        self.chatEvent(chat, "run_147", ["state": "delta",
+                                          "message": Self.assistant(thinking: "Now I can summarize.",
+                                                                    text: "I should check that. Here is the result.")])
+        #expect(chat.avatarSignals.isStreaming)
+        self.agentEvent(chat, "run_147", stream: "thinking", ["text": .string("I have the result.")])
+        self.chatEvent(chat, "run_147", ["state": "delta", "deltaText": .string(""),
+                                          "message": Self.assistant(thinking: "I have the result.",
+                                                                    text: "I should check that. Here is the result.")])
+        #expect(chat.avatarSignals.isThinking && !chat.avatarSignals.isStreaming,
+                "a repeated cumulative snapshot with no delta does not reactivate streaming")
+        chat.apply(history: ["inFlightRun": ["runId": "run_147", "text": "I should check that. Here is the result."]], parsed: [])
+        #expect(chat.avatarSignals.isThinking && !chat.avatarSignals.isStreaming,
+                "same-run history does not reactivate unchanged text after thinking")
+
+        self.agentEvent(chat, "run_147", stream: "assistant", ["delta": .string(" Next sentence.")])
+        #expect(chat.avatarSignals.isStreaming, "a delta-only assistant event signals active text")
+    }
+
     @Test func latestRunningToolWins() {
         defer { self.scratch.remove() }
         let chat = self.chat()
