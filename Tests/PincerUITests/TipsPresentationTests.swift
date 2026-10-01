@@ -69,13 +69,13 @@ struct TipsPresentationTests {
         let presented = await eventually(timeout: .seconds(10)) { window.attachedSheet != nil }
         #expect(presented, "Tips are presented in an attached native sheet")
         guard presented, let sheet = window.attachedSheet else { return }
-        #expect(sheet.isKeyWindow, "the sheet owns keyboard focus")
-        #expect(NSApp.keyWindow === sheet, "key events are routed to Tips rather than the composer behind it")
+        #expect(sheet.isSheet && sheet.sheetParent === window, "Tips own the parent's native modal sheet")
+        #expect(sheet.firstResponder != nil, "the modal sheet establishes its own responder")
 
         let imagePath = Self.writeSheetSnapshot(sheet)
         print("Tips native sheet snapshot: \(imagePath)")
 
-        Self.sendKey(keyCode: 36, characters: "\r")
+        Self.sendKey(to: sheet, keyCode: 36, characters: "\r")
         let dismissed = await eventually(timeout: .seconds(10)) { window.attachedSheet == nil }
         #expect(dismissed, "Return invokes the sheet's Got It default action")
         #expect(tips.hasSeen && scratch.defaults.bool(forKey: SetupTips.seenKey), "dismissing Tips records that they were seen")
@@ -99,35 +99,53 @@ struct TipsPresentationTests {
         tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
         let presented = await eventually(timeout: .seconds(10)) { window.attachedSheet != nil }
         #expect(presented, "Tips are presented in an attached native sheet")
-        guard presented else { return }
+        guard presented, let sheet = window.attachedSheet else { return }
 
-        Self.sendKey(keyCode: 53, characters: "\u{1b}")
+        Self.sendKey(to: sheet, keyCode: 53, characters: "\u{1b}")
         let dismissed = await eventually(timeout: .seconds(10)) { window.attachedSheet == nil }
         #expect(dismissed, "Escape dismisses the tips sheet")
         #expect(tips.hasSeen && scratch.defaults.bool(forKey: SetupTips.seenKey), "Escape records that Tips were seen")
         #expect(background.count == 0, "Escape does not activate the control behind Tips")
     }
 
+    @Test func setupHidesTipsWithoutRecordingAnExplicitDismissal() async {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let tips = TipsModel(defaults: scratch.defaults, delay: .zero)
+        let host = NSHostingView(rootView: TipsPresentationHost(tips: tips, backgroundAction: TipsBackgroundAction()))
+        host.frame = NSRect(x: 0, y: 0, width: 520, height: 420)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.close() }
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: false)
+        #expect(await eventually { window.attachedSheet != nil })
+        tips.evaluate(connected: true, setupShowingOrPending: true, isDemo: false)
+        #expect(await eventually { window.attachedSheet == nil })
+        #expect(!tips.hasSeen && !scratch.defaults.bool(forKey: SetupTips.seenKey),
+                "setup cancellation does not mark unseen Tips as read")
+    }
+
     private static func descendants(of view: NSView) -> [NSView] {
         [view] + view.subviews.flatMap(Self.descendants)
     }
 
-    private static func sendKey(keyCode: UInt16, characters: String) {
+    private static func sendKey(to window: NSWindow, keyCode: UInt16, characters: String) {
         guard let event = NSEvent.keyEvent(
             with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: NSApp.keyWindow?.windowNumber ?? 0, context: nil,
+            windowNumber: window.windowNumber, context: nil,
             characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode
         ) else { Issue.record("could not create key event"); return }
-        NSApp.sendEvent(event)
+        window.sendEvent(event)
     }
 
     private static func writeSheetSnapshot(_ sheet: NSWindow) -> String {
         guard let view = sheet.contentView,
-              let bitmap = NSBitmapImageRep(
-                bitmapDataPlanes: nil, pixelsWide: max(Int(view.bounds.width), 1), pixelsHigh: max(Int(view.bounds.height), 1),
-                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
-              ) else { return "(sheet snapshot unavailable)" }
+              let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+        else { return "(sheet snapshot unavailable)" }
+        view.layoutSubtreeIfNeeded()
+        print("Tips sheet bounds: \(view.bounds); fitting size: \(view.fittingSize)")
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let path = FileManager.default.temporaryDirectory.appendingPathComponent("pincer-tips-sheet-\(UUID().uuidString).png")
         guard let data = bitmap.representation(using: .png, properties: [:]), (try? data.write(to: path)) != nil else {

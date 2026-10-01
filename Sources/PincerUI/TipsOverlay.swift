@@ -1,7 +1,7 @@
 import PincerKit
 import SwiftUI
 
-/// The one-time tips card over the main window. Waits for the setup wizard, never covers it.
+/// The one-time tips presentation. Waits for the setup wizard, never covers it.
 struct TipsOverlay: ViewModifier {
     @Environment(AppModel.self) private var app
     private var tips: TipsModel { TipsModel.shared }
@@ -34,14 +34,15 @@ struct TipsPresentation: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .overlay(alignment: .bottomTrailing) {
-                if !self.isCompact, self.tips.isPresented {
-                    TipsCard { self.tips.dismiss() }
-                        .padding(Theme.Spacing.section)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+            .sheet(isPresented: Binding(
+                get: { self.tips.isPresented && !self.isCompact },
+                set: { presented in
+                    if !presented, !self.isCompact, self.tips.isPresented { self.tips.dismiss() }
                 }
+            )) {
+                TipsCard { self.tips.dismiss() }
+                    .presentationSizing(.fitted)
             }
-            .animation(.snappy, value: self.tips.isPresented)
     }
 }
 
@@ -76,16 +77,21 @@ private struct TipsCard: View {
                 .font(.callout)
             }
             HStack {
+                // A second key equivalent for the same action; native sheets route Escape here.
+                Button(L("Got It"), action: self.dismiss)
+                    .keyboardShortcut(.cancelAction)
+                    .hidden()
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
                 Spacer()
-                // No default-action shortcut: Return belongs to the composer underneath.
                 Button(L("Got It"), action: self.dismiss)
                     .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
             }
         }
         .padding(Theme.Spacing.xxl)
-        .frame(maxWidth: 360)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.bubble, style: .continuous))
-        .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+        .frame(width: 360)
+        .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .contain)
     }
 }
