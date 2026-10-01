@@ -93,7 +93,10 @@ extension GatewayStore {
         let changed = entries.filter { previous?[$0.id] != $0 }
         let removed = (previous ?? [:]).keys.filter { current[$0] == nil }
         if !removed.isEmpty { await indexer.delete(ids: Array(removed)) }
-        if !changed.isEmpty, Spotlight.isEnabled(self.defaults) { await indexer.index(changed) }
+        guard !Task.isCancelled, !self.profile.isDemo,
+              Spotlight.canPublish(includeMessages: includeMessages, defaults: self.defaults)
+        else { return }
+        if !changed.isEmpty { await indexer.index(changed) }
     }
 
     /// A chat's cache was dropped (deleted or vanished): it leaves Spotlight too.
