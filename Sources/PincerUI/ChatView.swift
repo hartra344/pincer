@@ -574,6 +574,8 @@ struct ChatChrome: ViewModifier {
                 #if os(macOS)
                 ToolbarItem(placement: .navigation) { if !split { ChatHeaderAvatar() } }
                 #else
+                // The inspector below hides the split view's own sidebar button (#564).
+                ToolbarItem(placement: .topBarLeading) { ShowSidebarButton() }
                 ToolbarItem(placement: .topBarLeading) { if !split { ChatHeaderAvatar() } }
                 #endif
                 ToolbarItem(placement: .primaryAction) { ChatModelItem(row: split ? nil : self.row) }

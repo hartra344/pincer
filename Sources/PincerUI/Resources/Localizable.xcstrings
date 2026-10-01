@@ -1413,6 +1413,16 @@
         }
       }
     },
+    "Hide Sidebar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Sidebar"
+          }
+        }
+      }
+    },
     "Provider %@": {
       "localizations": {
         "en": {
@@ -1429,6 +1439,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Search in output"
+          }
+        }
+      }
+    },
+    "Show Sidebar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Sidebar"
           }
         }
       }
@@ -7299,6 +7319,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kind"
+          }
+        }
+      }
+    },
+    "Toggle Sidebar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toggle Sidebar"
           }
         }
       }
