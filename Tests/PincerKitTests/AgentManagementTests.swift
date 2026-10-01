@@ -325,6 +325,22 @@ struct AgentManagementTests {
         #expect(!model.hasUnsavedChanges)
     }
 
+    @MainActor @Test func closingAResolvedFileClearsBulkSaveFailure() async throws {
+        let (model, demo) = Self.demoModel()
+        let editor = model.editor(agentId: "main", name: "SOUL.md")
+        await editor.load()
+        editor.text += "\nlocal draft"
+        _ = try await demo.handle("agents.files.set", ["agentId": "main", "name": "SOUL.md", "content": "changed elsewhere",
+                                                        "expectedHash": .string(editor.entry?.hash ?? "")])
+        #expect(!(await model.saveAll()))
+        #expect(model.failedSaveAllFile === editor)
+        await editor.resolveConflictKeepTheirs()
+        #expect(!editor.isDirty && editor.conflict == nil)
+        model.closeEditor(editor)
+        #expect(model.failedSaveAllFile == nil, "leaving a resolved file must release the failed editor without another bulk save")
+        #expect(!model.openEditors.contains { $0 === editor })
+    }
+
     @MainActor @Test func discardAllClearsFailedWorkspaceFile() async throws {
         let (model, demo) = Self.demoModel()
         let editor = model.editor(agentId: "main", name: "SOUL.md")
