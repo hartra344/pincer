@@ -13,6 +13,29 @@ import UserNotifications
 
 @MainActor
 func runSlashCommandChecks() {
+    let tabCases: [(Bool, Bool, Bool, Bool, ComposerTabAction)] = [
+        (false, false, false, false, .nextKeyView),
+        (false, true, false, false, .previousKeyView),
+        (true, false, false, false, .acceptSuggestion),
+        (true, true, false, false, .system),
+        (false, false, true, false, .insertLiteralTab),
+        (true, false, true, false, .insertLiteralTab),
+        (false, true, true, false, .system),
+        (true, true, true, false, .system),
+        (false, false, false, true, .system),
+        (true, false, false, true, .system),
+        (false, true, false, true, .system),
+        (true, true, false, true, .system),
+        (false, false, true, true, .system),
+        (true, false, true, true, .system),
+        (false, true, true, true, .system),
+        (true, true, true, true, .system),
+    ]
+    let tabResults = tabCases.map { item in
+        ComposerTabAction.resolve(menuActive: item.0, backwards: item.1, optionPressed: item.2, hasMarkedText: item.3) == item.4
+    }
+    check(tabResults.allSatisfy { $0 }, "Tab routing covers key-view traversal, slash completion, literal tabs and marked text")
+
     let catalog = SlashCommand.parse(json(#"""
     {"commands":[
      {"name":"think","textAliases":["/think","/thinking","/t"],"description":"Set thinking level.","source":"native","scope":"both","acceptsArgs":true,

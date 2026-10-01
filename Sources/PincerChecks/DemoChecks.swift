@@ -36,6 +36,11 @@ func runDemo() async {
     let demoCommands = gateway.slashCommands(for: key)
     check(demoCommands.contains { $0.name == "restart" } && demoCommands.contains { $0.source == "skill" },
           "demo commands.list (\(demoCommands.count))")
+    let suggestions = SlashCompletion.suggestions(for: "/", commands: demoCommands)
+    check(!suggestions.isEmpty
+          && ComposerTabAction.resolve(menuActive: true, backwards: false, optionPressed: false, hasMarkedText: false) == .acceptSuggestion
+          && ComposerTabAction.resolve(menuActive: false, backwards: false, optionPressed: false, hasMarkedText: false) == .nextKeyView,
+          "demo slash suggestions retain Tab completion; closing them restores focus traversal")
     gateway.selectedKey = key
     let chat = gateway.chat(for: key)
     let loaded = await waitFor("history") { chat.hasLoaded }

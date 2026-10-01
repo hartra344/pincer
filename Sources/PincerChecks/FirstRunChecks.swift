@@ -200,6 +200,16 @@ func runDemoFirstRun() async {
     check(!demo.setup.isShowingOrPending, "Try the Demo doesn't queue a setup offer")
     let connected = await waitFor("first-run demo connects") { demo.state.isConnected && !demo.sessions.isEmpty }
     check(connected, "the demo connects")
+    if connected {
+        let tips = TipsModel(defaults: defaults, delay: .zero)
+        tips.evaluate(connected: true, setupShowingOrPending: false, isDemo: true)
+        check(tips.isPresented, "the demo offers Tips after setup is clear")
+        tips.dismiss()
+        check(tips.hasSeen && defaults.bool(forKey: SetupTips.seenKey), "dismissing demo Tips persists the seen state")
+        let nextLaunchTips = TipsModel(defaults: defaults, delay: .zero)
+        nextLaunchTips.evaluate(connected: true, setupShowingOrPending: false, isDemo: true)
+        check(nextLaunchTips.isPresented, "the demo offers Tips again on the next launch")
+    }
     // Try the Demo lands straight in the chat list (#175 product review r1): no setup wizard offer.
     // Negative window: a connected demo must not offer setup.
     try? await Task.sleep(for: .milliseconds(500))
