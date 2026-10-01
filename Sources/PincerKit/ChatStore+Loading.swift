@@ -580,8 +580,15 @@ extension ChatStore {
         self.recoverCappedMessages()
 
         if let inFlight = history["inFlightRun"], let runId = inFlight["runId"]?.text {
-            var run = self.live?.runId == runId ? self.live! : LiveRun(runId: runId)
-            if let text = inFlight["text"]?.string, !text.isEmpty { run.text = text }
+            let isSameRun = self.live?.runId == runId
+            var run = isSameRun ? self.live! : LiveRun(runId: runId)
+            if let text = inFlight["text"]?.string, !text.isEmpty {
+                let textUTF8Count = text.utf8.count
+                let grew = textUTF8Count > run.textUTF8Count
+                run.text = text
+                run.textUTF8Count = textUTF8Count
+                if !isSameRun || grew { run.isTextStreaming = true }
+            }
             self.live = run
             self.gateway?.track(runId: runId, sessionKey: self.sessionKey)
         } else if history["sessionInfo"]?["hasActiveRun"]?.bool == false {

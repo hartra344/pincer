@@ -79,6 +79,7 @@ enum Suites {
             Section(nil) { await checkGatewayHealth() },
             Section("Usage & cost") { await checkUsage() },
             Section("Replies & reactions") { checkReactionsReply() },
+            Section("Agent avatar signals") { runAvatarSignalChecks() },
             Section("Agent reply targets") { checkReplyTargets() },
             Section("Reaction level") { checkReactionLevel() },
             Section("Gateway reactions") { checkGatewayReactions() },
