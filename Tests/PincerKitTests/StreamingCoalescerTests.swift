@@ -126,6 +126,17 @@ struct StreamingCoalescerTests {
         }
     }
 
+    @Test func liveReplyStripsDirectiveSplitAcrossSnapshotAndAppend() async {
+        defer { self.scratch.remove() }
+        await self.withInterval(5) {
+            let chat = self.chat()
+            let prefix = "[[reply_to_current"
+            self.delta(chat, prefix, full: prefix)
+            self.chatEvent(chat, ["state": "delta", "deltaText": .string("]] Recovered response")])
+            #expect(self.liveText(chat) == "Recovered response")
+        }
+    }
+
     @Test func toolEventsFlushPendingTextImmediately() async {
         defer { self.scratch.remove() }
         await self.withInterval(5) {
