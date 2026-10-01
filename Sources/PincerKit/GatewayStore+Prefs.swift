@@ -71,6 +71,19 @@ extension GatewayStore {
 
     func syncedMap(_ pref: String) -> SyncedMap { self.syncedMaps.first { $0.pref == pref }! }
 
+    /// Whether the Gateway advertised both native methods, even if a later request failed. Legacy
+    /// prefs may still be the migration source on that connection.
+    var advertisedNativeSessionReactions: Bool {
+        guard let methods = self.hello?.methods else { return false }
+        return methods.contains("session.reactions.set") && methods.contains("session.reactions.list")
+    }
+
+    /// Encoding and deterministic eviction can inspect many cached reactions, so keep that work
+    /// off the main actor that owns GatewayStore.
+    func fitLegacyReactionPrefs(_ entries: [String: String], preserving key: String?) async -> [String: String]? {
+        await self.legacyReactionPrefsFitter(entries, key)
+    }
+
     private static func names(from value: JSONValue?) -> [String: String] {
         (value?.object ?? [:]).compactMapValues { $0.string?.nilIfEmpty }
     }
@@ -106,9 +119,17 @@ extension GatewayStore {
     /// Returns false when the read failed.
     @discardableResult
     func pullMaps(_ maps: [SyncedMap], epoch: Int? = nil) async -> Bool {
+        let fetchEpoch = epoch ?? self.connectionEpoch
         guard let fetched = await self.fetchRemoteMaps(maps.map(\.pref)) else { return false }
-        if let epoch, !self.isCurrent(epoch) { return true }
-        for map in maps { await self.pull(map, fetched: fetched[map.pref] ?? nil) }
+        if !self.isCurrent(fetchEpoch) { return true }
+        for map in maps {
+            if map.pref == Reactions.prefKey {
+                await self.pullReactionMap(map, fetched: fetched[map.pref] ?? nil, epoch: fetchEpoch)
+                guard self.isCurrent(fetchEpoch) else { return true }
+            } else {
+                await self.pull(map, fetched: fetched[map.pref] ?? nil)
+            }
+        }
         return true
     }
 
@@ -165,11 +186,21 @@ extension GatewayStore {
     func pullChatColors() async { await self.pull(self.syncedMap(Self.chatColorsPref)) }
 
     func pull(_ map: SyncedMap) async {
+        let fetchEpoch = self.connectionEpoch
         guard let fetched = await self.fetchRemoteMap(map.pref) else { return }
-        await self.pull(map, fetched: fetched)
+        if map.pref == Reactions.prefKey {
+            guard self.isCurrent(fetchEpoch) else { return }
+            await self.pullReactionMap(map, fetched: fetched, epoch: fetchEpoch)
+        } else {
+            await self.pull(map, fetched: fetched)
+        }
     }
 
     func pull(_ map: SyncedMap, fetched: [String: String]?) async {
+        if map.pref == Reactions.prefKey {
+            await self.pullReactionMap(map, fetched: fetched, epoch: self.connectionEpoch)
+            return
+        }
         let defaults = self.defaults
         if !defaults.bool(forKey: map.syncedDefaultsKey) {
             // First sync from this device: keep values already set here, remote wins on conflicts.
@@ -180,6 +211,7 @@ extension GatewayStore {
                 guard await self.writeRemoteMap(map.pref, merged, expected: fetched) == .ok else { return }
             }
             defaults.set(true, forKey: map.syncedDefaultsKey)
+            self.rejectedPrefs.removeValue(forKey: map.pref)
             self.remotePrefMaps[map.pref] = merged
             self[keyPath: map.local] = merged
             return
@@ -191,6 +223,55 @@ extension GatewayStore {
         if self[keyPath: map.local] != local { self[keyPath: map.local] = local }
     }
 
+    /// Applies a reaction pull only while the connection that fetched it is still current. Fitting
+    /// can suspend on a worker, so neither its RPC result nor the fetched map may outlive its epoch.
+    private func pullReactionMap(_ map: SyncedMap, fetched: [String: String]?, epoch: Int) async {
+        guard self.isCurrent(epoch) else { return }
+        let defaults = self.defaults
+        if !defaults.bool(forKey: map.syncedDefaultsKey) {
+            var merged = self[keyPath: map.local]
+            merged.merge(fetched ?? [:]) { _, remote in remote }
+            let fullLocalReactionMap = merged
+            guard let fitted = await self.fitLegacyReactionPrefs(
+                merged, preserving: self.mostRecentChangedReactionKey
+            ) else {
+                guard self.isCurrent(epoch) else { return }
+                self.rejectedPrefs[map.pref] = L("The latest reaction is too large to sync.")
+                return
+            }
+            guard self.isCurrent(epoch) else { return }
+            merged = fitted
+            if merged != (fetched ?? [:]) {
+                guard self.isCurrent(epoch) else { return }
+                let outcome = await self.writeRemoteMap(map.pref, merged, expected: fetched)
+                guard self.isCurrent(epoch) else { return }
+                guard outcome == .ok else { return }
+            }
+            guard self.isCurrent(epoch) else { return }
+            defaults.set(true, forKey: map.syncedDefaultsKey)
+            self.rejectedPrefs.removeValue(forKey: map.pref)
+            self.remotePrefMaps[map.pref] = merged
+            var local = self.advertisedNativeSessionReactions ? fullLocalReactionMap : merged
+            for (id, value) in self.pendingPrefChanges[map.pref] ?? [:] {
+                if let value { local[id] = value }
+                else { local.removeValue(forKey: id) }
+            }
+            guard self.isCurrent(epoch) else { return }
+            self[keyPath: map.local] = local
+            return
+        }
+        guard self.isCurrent(epoch) else { return }
+        self.remotePrefMaps[map.pref] = fetched ?? [:]
+        var local = fetched ?? [:]
+        if self.advertisedNativeSessionReactions {
+            local = self.reactions
+            local.merge(fetched ?? [:]) { _, remote in remote }
+        }
+        for (id, value) in self.pendingPrefChanges[map.pref] ?? [:] { local[id] = value }
+        guard self.isCurrent(epoch) else { return }
+        if self[keyPath: map.local] != local { self[keyPath: map.local] = local }
+    }
+
     func push(_ map: SyncedMap, _ id: String, _ value: String?) async {
         await self.push(map, [id: value])
     }
@@ -198,7 +279,16 @@ extension GatewayStore {
     /// Writes one after another per pref, so quick successive changes (toggling reactions) don't
     /// conflict with each other, and a pull in between keeps them.
     func push(_ map: SyncedMap, _ changes: [String: String?]) async {
-        guard self.defaults.bool(forKey: map.syncedDefaultsKey) else { return }
+        guard self.defaults.bool(forKey: map.syncedDefaultsKey) else {
+            // A reaction can arrive while its first sync is fitting/writing the legacy map.
+            // Keep it pending so that the pull cannot overwrite the optimistic value.
+            if map.pref == Reactions.prefKey, !changes.isEmpty {
+                var pending = self.pendingPrefChanges[map.pref] ?? [:]
+                for (id, value) in changes { pending.updateValue(value, forKey: id) }
+                self.pendingPrefChanges[map.pref] = pending
+            }
+            return
+        }
         var pending = self.pendingPrefChanges[map.pref] ?? [:]
         guard !changes.isEmpty || !pending.isEmpty else { return }
         for (id, value) in changes { pending.updateValue(value, forKey: id) }
@@ -214,6 +304,16 @@ extension GatewayStore {
                 self.pendingPrefChanges[map.pref]?.removeValue(forKey: id)
             }
             if self.pendingPrefChanges[map.pref]?.isEmpty == true { self.pendingPrefChanges.removeValue(forKey: map.pref) }
+            if map.pref == Reactions.prefKey, !self.advertisedNativeSessionReactions {
+                // Reflect evictions locally, but layer any newer gesture that arrived while the
+                // network write was in flight on top of the confirmed map.
+                var local = self.remotePrefMaps[map.pref] ?? [:]
+                for (id, value) in self.pendingPrefChanges[map.pref] ?? [:] {
+                    if let value { local[id] = value }
+                    else { local.removeValue(forKey: id) }
+                }
+                if self.reactions != local { self.reactions = local }
+            }
         }
         self.prefPushes[map.pref] = task
         await task.value
@@ -229,25 +329,49 @@ extension GatewayStore {
     /// True only when the gateway accepted the write. A conflict (another device changed the map
     /// meanwhile) is followed by a pull, since its changed event may have been taken for our echo.
     private func write(_ map: SyncedMap, _ changes: [String: String?]) async -> Bool {
+        let reactionEpoch = map.pref == Reactions.prefKey ? self.connectionEpoch : nil
         var conflicted = false
         var written = false
         for _ in 0..<3 {
+            if let reactionEpoch, !self.isCurrent(reactionEpoch) { return false }
             let cached = self.remotePrefMaps[map.pref]
             guard let current = cached == nil ? await self.fetchRemoteMap(map.pref) : .some(cached) else { break }
+            if let reactionEpoch, !self.isCurrent(reactionEpoch) { return false }
             var next = current ?? [:]
             for (id, value) in changes { next[id] = value }
+            if map.pref == Reactions.prefKey {
+                guard let fitting = await self.fitLegacyReactionPrefs(next, preserving: self.mostRecentChangedReactionKey) else {
+                    guard let reactionEpoch, self.isCurrent(reactionEpoch) else { return false }
+                    self.rejectedPrefs[map.pref] = L("The latest reaction is too large to sync.")
+                    return false
+                }
+                guard let reactionEpoch, self.isCurrent(reactionEpoch) else { return false }
+                next = fitting
+            }
+            if let reactionEpoch, !self.isCurrent(reactionEpoch) { return false }
             let outcome = await self.writeRemoteMap(map.pref, next, expected: current)
+            if let reactionEpoch, !self.isCurrent(reactionEpoch) { return false }
             if outcome == .ok {
                 self.rejectedPrefs.removeValue(forKey: map.pref)
                 self.remotePrefMaps[map.pref] = next
                 written = true
                 break
             }
+            if let reactionEpoch, !self.isCurrent(reactionEpoch) { return false }
             self.remotePrefMaps[map.pref] = nil
             if outcome == .failed || outcome == .rejected { break }
             conflicted = true
         }
-        if conflicted { await self.pull(map) }
+        if conflicted {
+            if let reactionEpoch {
+                guard self.isCurrent(reactionEpoch), let fetched = await self.fetchRemoteMap(map.pref),
+                      self.isCurrent(reactionEpoch)
+                else { return written }
+                await self.pullReactionMap(map, fetched: fetched, epoch: reactionEpoch)
+            } else {
+                await self.pull(map)
+            }
+        }
         return written
     }
 
@@ -309,6 +433,7 @@ extension GatewayStore {
         let value = Reactions.encode(emoji)
         guard self.reactions[key] != value else { return }
         self.reactions[key] = value
+        if !emoji.isEmpty { self.mostRecentChangedReactionKey = key }
         Task { await self.push(self.syncedMap(Reactions.prefKey), key, value) }
     }
 
