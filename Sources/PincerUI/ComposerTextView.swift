@@ -311,11 +311,34 @@ private struct PlatformComposerTextView: NSViewRepresentable {
         }
 
         func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+            let modifierFlags = NSApp.currentEvent?.modifierFlags ?? []
+            let isForwardTab = selector == #selector(NSResponder.insertTab(_:))
+            let isBackwardTab = selector == #selector(NSResponder.insertBacktab(_:))
+            if isForwardTab || isBackwardTab {
+                let action = ComposerTabAction.resolve(
+                    menuActive: self.parent.menuActive,
+                    backwards: isBackwardTab || modifierFlags.contains(.shift),
+                    optionPressed: modifierFlags.contains(.option),
+                    hasMarkedText: textView.hasMarkedText())
+                switch action {
+                case .insertLiteralTab, .system:
+                    return false
+                case .acceptSuggestion:
+                    return self.parent.onKey(.tab)
+                case .nextKeyView, .previousKeyView:
+                    guard let window = textView.window else { return false }
+                    if action == .previousKeyView {
+                        window.selectPreviousKeyView(textView)
+                    } else {
+                        window.selectNextKeyView(textView)
+                    }
+                    return true
+                }
+            }
             if self.parent.menuActive, !textView.hasMarkedText() {
                 let key: ComposerKey? = switch selector {
                 case #selector(NSResponder.moveUp(_:)): .up
                 case #selector(NSResponder.moveDown(_:)): .down
-                case #selector(NSResponder.insertTab(_:)): .tab
                 // Escape in a text view is `complete:` (system completion), not `cancelOperation:`.
                 case #selector(NSResponder.cancelOperation(_:)), #selector(NSTextView.complete(_:)): .escape
                 default: nil
@@ -329,10 +352,9 @@ private struct PlatformComposerTextView: NSViewRepresentable {
                 return true
             }
             guard selector == #selector(NSResponder.insertNewline(_:)) else { return false }
-            let flags = NSApp.currentEvent?.modifierFlags ?? []
             switch ComposerReturnKey.resolve(
                 source: .hardware, hasMarkedText: textView.hasMarkedText(),
-                shift: flags.contains(.shift), option: flags.contains(.option), command: flags.contains(.command),
+                shift: modifierFlags.contains(.shift), option: modifierFlags.contains(.option), command: modifierFlags.contains(.command),
                 supportsSendAndOpen: self.parent.onCommandSubmit != nil, canSubmit: self.parent.canSubmit)
             {
             case .system: return false

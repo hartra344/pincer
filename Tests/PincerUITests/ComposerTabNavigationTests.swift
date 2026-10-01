@@ -18,6 +18,7 @@ private final class ComposerTabFixture {
 @MainActor
 private final class ComposerNeighborButton: NSButton {
     override var acceptsFirstResponder: Bool { true }
+    override var canBecomeKeyView: Bool { true }
 }
 
 private struct ComposerNeighbor: NSViewRepresentable {
@@ -41,7 +42,7 @@ private struct ComposerTabHost: View {
                     guard key == .tab, self.fixture.menuActive else { return false }
                     self.fixture.acceptedSuggestions += 1
                     return true
-                })
+                }, autoFocus: { false })
                 .frame(width: 240, height: 50)
             ComposerNeighbor(title: "After composer").frame(width: 120, height: 32)
         }
@@ -55,8 +56,6 @@ private struct ComposerTabHost: View {
 @MainActor
 @Suite("Composer Tab navigation", .serialized)
 struct ComposerTabNavigationTests {
-    private static var keepAlive: [(NSWindow, NSHostingView<ComposerTabHost>)] = []
-
     @Test func tabMovesFocusAndOptionTabInsertsText() async throws {
         let fixture = ComposerTabFixture()
         let host = NSHostingView(rootView: ComposerTabHost(fixture: fixture))
@@ -64,6 +63,7 @@ struct ComposerTabNavigationTests {
         let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: 700, height: 120),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
+        window.autorecalculatesKeyViewLoop = false
         window.contentView = host
         window.makeKeyAndOrderFront(nil)
         host.layout()
@@ -76,6 +76,7 @@ struct ComposerTabNavigationTests {
         before.nextKeyView = textView
         textView.nextKeyView = after
         after.nextKeyView = before
+        #expect(textView.nextValidKeyView === after)
 
         #expect(window.makeFirstResponder(textView), "the composer accepts keyboard focus")
         Self.sendTab(window, modifiers: [])
@@ -96,6 +97,10 @@ struct ComposerTabNavigationTests {
         #expect(fixture.acceptedSuggestions == 1, "plain Tab remains the slash-menu acceptance key")
         #expect(window.firstResponder === textView, "accepting a suggestion keeps focus in the composer")
 
+        Self.sendTab(window, modifiers: [.option])
+        #expect(textView.string == "\t\t", "Option-Tab inserts text even while suggestions are open")
+        #expect(fixture.acceptedSuggestions == 1, "Option-Tab does not accept a suggestion")
+
         Self.sendTab(window, modifiers: [.shift])
         #expect(fixture.acceptedSuggestions == 1, "Shift-Tab with a menu open is left to AppKit")
     }
@@ -110,7 +115,12 @@ struct ComposerTabNavigationTests {
             windowNumber: window.windowNumber, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
             isARepeat: false, keyCode: 48
         ) else { Issue.record("could not create Tab event"); return }
-        NSApp.sendEvent(event)
+        NSApp.postEvent(event, atStart: true)
+        guard let queued = NSApp.nextEvent(matching: .keyDown, until: Date(), inMode: .default, dequeue: true) else {
+            Issue.record("Tab event was not queued")
+            return
+        }
+        NSApp.sendEvent(queued)
     }
 }
 #endif
