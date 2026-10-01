@@ -88,6 +88,7 @@ enum Suites {
             Section("Slash commands") { runSlashCommandChecks() },
             Section("Dictation") { await runDictationChecks() },
             Section("Avatar seed read authorization") { runAvatarSeedReadAuthorization() },
+            Section("Location context") { await runLocationContextChecks() },
             Section("Automations") { runAutomationChecks() },
             Section("Web Push") { await runWebPushChecks() },
             Section("Find in chat") { await runFindInChatChecks() },
@@ -173,6 +174,7 @@ enum Suites {
         Section("Voice / Read Aloud (demo)") { await runDemoVoice() },
         Section("Chat windows (demo)") { await runDemoChatWindows() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
+        Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },
         Section("Composer session title (demo)") { await runDemoComposerSessionTitleChecks() },
     ]
 
