@@ -47,6 +47,18 @@ struct ChatView: View {
     #endif
 
     private var row: SessionRow? { self.chat.sessionRow }
+    private var composerPlaceholder: String {
+        Self.composerPlaceholder(
+            sessionKey: self.chat.sessionKey,
+            current: self.row,
+            lastKnown: self.chatChromeSessionRow
+        )
+    }
+
+    static func composerPlaceholder(sessionKey: String, current: SessionRow?, lastKnown: SessionRow?) -> String {
+        let title = ComposerSessionTitle.title(sessionKey: sessionKey, current: current, lastKnown: lastKnown) ?? L("chat")
+        return L("Message #\(title)")
+    }
 
     /// The chat ⋯ menu's Reactions submenu reads the config, so load it for a chat on a supported channel.
     private func loadReactionLevels() async {
@@ -60,6 +72,7 @@ struct ChatView: View {
     @State private var topChrome: CGFloat = 0
     @State private var bottomChrome: CGFloat = 0
     @State private var safeArea = EdgeInsets()
+    @Environment(\.chatChromeSessionRow) private var chatChromeSessionRow
 
     var body: some View {
         #if DEBUG
@@ -142,7 +155,7 @@ struct ChatView: View {
                         ProgressCardView(chat: self.chat, card: card)
                     }
                     PendingQuestionCard(chat: self.chat)
-                    Composer(chat: self.chat, placeholder: L("Message #\(self.row?.title ?? L("chat"))"), find: self.find)
+                    Composer(chat: self.chat, placeholder: self.composerPlaceholder, find: self.find)
                 }
                 .modifier(QuestionsAnimation())
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { self.bottomChrome = $0 }
@@ -566,6 +579,7 @@ struct ChatChrome: ViewModifier {
         content
             .environment(\.showsChatSplit, split)
             .environment(\.chatChromeActions, ChatChromeActions(showRuns: self.$showRuns, toolsInspector: self.$toolsInspector))
+            .environment(\.chatChromeSessionRow, self.row)
             .onGeometryChange(for: Bool.self) { $0.size.width >= ChatSplitHost.minWidth * 2 + 1 } action: { self.fitsSplit = $0 }
             .navigationTitle(self.key.map { chatTitle(self.gateway, key: $0, row: self.row) } ?? L("Chat"))
             #if os(macOS)

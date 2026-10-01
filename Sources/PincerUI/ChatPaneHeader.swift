@@ -21,6 +21,8 @@ extension EnvironmentValues {
     @Entry var chatPaneHandles: ChatPaneHandles?
     /// The window's Runs panel and Tools & Policy sheet, for the split view headers.
     @Entry var chatChromeActions: ChatChromeActions?
+    /// The selected chat row cached by its window's chrome while a session refresh is in flight.
+    @Entry var chatChromeSessionRow: SessionRow?
 }
 
 /// A split view side's Find and export state, filled in by its `ChatView`, so the side's own menu

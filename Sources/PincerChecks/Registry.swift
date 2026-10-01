@@ -104,6 +104,7 @@ enum Suites {
                 await withScratchCache { root in await withCacheEnvironment(root.path(percentEncoded: false)) { await runTranscriptWindowChecks() } }
                 await withCacheEnvironment("off") { await runTranscriptWindowCacheOffChecks() }
             },
+            Section("Paged history probe") { runPagingProbeChecks() },
             Section("Message search in the palette") { checkPaletteMessages() },
             Section("Context usage") { runContextUsageChecks() },
             Section("Quick Capture") { await runQuickCaptureChecks() },
@@ -122,6 +123,7 @@ enum Suites {
             Section(nil) { checkOutboxLogic() },
             Section(nil) { checkSidebarWorking() },
             Section("Sidebar activity dates") { runSidebarActivityDateChecks() },
+            Section("Composer session title") { runComposerSessionTitleChecks() },
             Section("First-run wizard") { await runFirstRunChecks() },
         ]
         return sections
@@ -170,6 +172,7 @@ enum Suites {
         Section("Chat windows (demo)") { await runDemoChatWindows() },
         Section("Unread in the open chat (demo)") { await runDemoVisibleChatRead() },
         Section("Location context opt-in (demo)") { await runDemoLocationContextChecks() },
+        Section("Composer session title (demo)") { await runDemoComposerSessionTitleChecks() },
     ]
 
     /// Against a (mock) Gateway, first half.
