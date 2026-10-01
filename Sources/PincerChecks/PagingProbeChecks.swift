@@ -4,7 +4,9 @@ import Foundation
 /// A warm registered transcript must not become the store used by a cold latest-page probe.
 @MainActor
 func runPagingProbeChecks() {
-    let gateway = GatewayStore(profile: .demo())
+    let (defaults, suite) = scratchDefaults()
+    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+    let gateway = GatewayStore(profile: .demo(), defaults: defaults)
     gateway.cacheRoot = nil
     let key = "agent:main:dashboard:trip"
     let resident = gateway.chat(for: key)
