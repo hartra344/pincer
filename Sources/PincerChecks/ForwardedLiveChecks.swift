@@ -169,7 +169,11 @@ private func runDemoForwardedSenderRefresh() async {
                                                      fallbackLimit: 120) == .complete(nextOffset: 120),
           "sender refresh accepts a normal empty terminal page")
     let profile = GatewayProfile.demoForwardedSenderRefresh()
-    let gateway = GatewayStore(profile: profile)
+    let (defaults, suite) = scratchDefaults()
+    // Bootstrap may open its selected chat even while background prefetch is paused. Keep this
+    // chat unopened until its pre-upgrade cache is seeded, as on the first launch after upgrade.
+    defaults.set("agent:kiko:main", forKey: "pincer.selected.\(profile.id.uuidString)")
+    let gateway = GatewayStore(profile: profile, defaults: defaults)
     let root = FileManager.default.temporaryDirectory.appending(path: "pincer-checks-forwarded-refresh-\(UUID().uuidString)",
                                                                  directoryHint: .isDirectory)
     gateway.cacheRoot = root
@@ -180,12 +184,13 @@ private func runDemoForwardedSenderRefresh() async {
         gateway.state.isConnected && gateway.sessions["agent:main:main"] != nil
     }
     check(connected, "forwarded cache repair demo connected")
-    guard connected else { gateway.stop(); return }
     defer {
         gateway.stop()
         TranscriptCache.removeAll(gatewayId: gateway.id, root: root)
         try? FileManager.default.removeItem(at: root)
+        defaults.removePersistentDomain(forName: suite)
     }
+    guard connected else { return }
 
     let key = "agent:main:main"
     let response: JSONValue
@@ -240,7 +245,7 @@ private func runDemoForwardedSenderRefresh() async {
     }
 
     let chat = gateway.chat(for: key)
-    chat.windowLimit = min(raw.count, TranscriptCache.maxItems)
+    chat.windowLimit = min(staleItems.count, TranscriptCache.maxItems)
     await chat.restoreFromCache()
     let cachedIntro = chat.message(withId: DemoGateway.kikoIntroId)
     check(cachedIntro != nil && cachedIntro?.sender == nil,
