@@ -214,11 +214,35 @@ enum TranscriptSymbols {
         let weight: Weight
     }
 
-    private static var cache: [Key: PlatformImage] = [:]
+    private static var cache = BoundedLRUCache<Key, PlatformImage>(countLimit: 128, costLimit: 128)
+    #if os(macOS)
+    private struct TintKey: Hashable {
+        let symbol: Key
+        let width: CGFloat
+        let height: CGFloat
+        let red: CGFloat
+        let green: CGFloat
+        let blue: CGFloat
+        let alpha: CGFloat
+    }
+    private static var tintCache = BoundedLRUCache<TintKey, NSImage>(countLimit: 256, costLimit: 4 * 1024 * 1024)
+    private static var tintAppearance: NSAppearance.Name?
+
+    private static func prepareAppearance() {
+        let appearance = NSAppearance.currentDrawing().name
+        guard self.tintAppearance != appearance else { return }
+        self.tintAppearance = appearance
+        self.tintCache.removeAll()
+        self.cache.removeAll()
+    }
+    #endif
 
     static func image(_ name: String, size: CGFloat, weight: Weight = .regular) -> PlatformImage? {
+        #if os(macOS)
+        self.prepareAppearance()
+        #endif
         let key = Key(name: name, size: size, weight: weight)
-        if let cached = self.cache[key] { return cached }
+        if let cached = self.cache.value(for: key) { return cached }
         #if os(macOS)
         let symbolWeight: NSFont.Weight = switch weight {
         case .regular: .regular
@@ -237,7 +261,7 @@ enum TranscriptSymbols {
         }
         let image = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: size, weight: symbolWeight))
         #endif
-        if let image { self.cache[key] = image }
+        if let image { self.cache.insert(image, for: key, cost: 1) }
         return image
     }
 
@@ -252,16 +276,41 @@ enum TranscriptSymbols {
                             width: drawn.width, height: drawn.height)
         #if os(macOS)
         // Palette rendering with one color fills a multi-layer symbol's (face.smiling) background layer into a dot.
-        let mono = image.withSymbolConfiguration(NSImage.SymbolConfiguration.preferringMonochrome()) ?? image
-        let tinted = NSImage(size: target.size, flipped: false) { rect in
-            mono.draw(in: rect)
-            color.setFill()
-            rect.fill(using: .sourceIn)
-            return true
-        }
-        tinted.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        self.tintedImage(name, size: size, weight: weight, drawnSize: target.size, color: color)?
+            .draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         #else
         image.withTintColor(color, renderingMode: .alwaysOriginal).draw(in: target)
         #endif
     }
+    #if os(macOS)
+    /// The image used by the native draw path, exposed internally for reuse and appearance checks.
+    static func tintedImage(_ name: String, size: CGFloat, weight: Weight = .regular,
+                            drawnSize: CGSize, color: NSColor) -> NSImage? {
+        guard let image = self.image(name, size: size, weight: weight) else { return nil }
+        guard drawnSize.width.isFinite, drawnSize.height.isFinite,
+              drawnSize.width > 0, drawnSize.height > 0 else { return nil }
+        let rgb = color.usingColorSpace(.deviceRGB)
+        let key = rgb.map { TintKey(symbol: Key(name: name, size: size, weight: weight),
+                                   width: drawnSize.width, height: drawnSize.height,
+                                   red: $0.redComponent, green: $0.greenComponent,
+                                   blue: $0.blueComponent, alpha: $0.alphaComponent) }
+        if let key, let cached = self.tintCache.value(for: key) { return cached }
+        let mono = image.withSymbolConfiguration(NSImage.SymbolConfiguration.preferringMonochrome()) ?? image
+        let resolvedColor = rgb ?? color
+        let tinted = NSImage(size: drawnSize, flipped: false) { rect in
+            mono.draw(in: rect)
+            resolvedColor.setFill()
+            rect.fill(using: .sourceIn)
+            return true
+        }
+        // Reserve for up to 4x pixel density. AppKit keeps the actual representation correct for
+        // the destination's density and color space. Large one-off symbols bypass the cache.
+        if let key, drawnSize.width <= 256, drawnSize.height <= 256 {
+            let cost = Int(ceil(drawnSize.width * 4)) * Int(ceil(drawnSize.height * 4)) * 4
+            self.tintCache.insert(tinted, for: key, cost: cost)
+        }
+        return tinted
+    }
+    #endif
+
 }

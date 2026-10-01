@@ -152,7 +152,8 @@ public actor GatewayConnection {
         self.demo = profile.isDemo ? DemoGateway(
             acceptsReplyTo: profile.url != DemoGateway.noReplyToURL,
             hasSessionReactions: profile.url != DemoGateway.noSessionReactionsURL,
-            failsFirstAvatarPrefsRead: profile.url == DemoGateway.avatarPrefsReadFailureURL) : nil
+            failsFirstAvatarPrefsRead: profile.url == DemoGateway.avatarPrefsReadFailureURL,
+            seedsForwardedSenderRefreshHistory: profile.url == DemoGateway.forwardedSenderRefreshURL) : nil
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
         configuration.timeoutIntervalForRequest = 30

@@ -1258,7 +1258,10 @@ final class TranscriptToolView: TranscriptBaseView {
         self.rowId = row.id
         self.actions = actions
         let rowId = row.id
-        self.header.configure(tool, trailing: tool.run == nil ? 10 : 6)
+        self.header.configure(tool, trailing: tool.run == nil ? 10 : 6,
+                              contextMenu: tool.mcpContextMenu
+                                  ?? TranscriptToolContextMenu.make(toolName: tool.tool.name, controls: tool.controls))
+        self.header.onOpenMCPServer = { [weak actions] name in actions?.openMCPServer(name) }
         self.header.onTap = { [weak actions] in actions?.setExpanded(tool.key, !tool.isExpanded, row: rowId) }
         let spokenDuration = tool.tool.isRunning ? nil : tool.tool.durationMs.map { ToolDuration.format($0).spoken }
         if let edit = tool.edit {
@@ -1509,22 +1512,62 @@ final class TranscriptNoteView: TranscriptBaseView {
 final class TranscriptToolHeaderView: TranscriptTapView {
     private var part: TranscriptPart.Tool?
     private var trailing: CGFloat = 10
+    private(set) var contextMenu: TranscriptToolContextMenu?
+    var onOpenMCPServer: ((String) -> Void)?
     private let spinner = TranscriptSpinner(size: 14)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         self.addSubview(self.spinner)
+        #if os(iOS)
+        self.isContextMenuInteractionEnabled = true
+        #endif
     }
 
-    func configure(_ part: TranscriptPart.Tool, trailing: CGFloat) {
+    func configure(_ part: TranscriptPart.Tool, trailing: CGFloat, contextMenu: TranscriptToolContextMenu? = nil) {
         self.part = part
         self.trailing = trailing
+        self.contextMenu = contextMenu ?? TranscriptToolContextMenu.make(toolName: part.tool.name, controls: part.controls)
         self.spinner.setAnimating(part.tool.isRunning)
         #if os(macOS)
         self.toolTip = part.edit?.fullPaths
         #endif
         self.redraw()
     }
+
+    #if os(macOS)
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let contextMenu else { return super.menu(for: event) }
+        let menu = NSMenu()
+        if let name = contextMenu.openServerName, let title = contextMenu.openServerTitle {
+            menu.addItem(TranscriptMenuItem(title, symbol: "point.3.connected.trianglepath.dotted") { [weak self] in
+                self?.onOpenMCPServer?(name)
+            })
+        }
+        menu.addItem(TranscriptMenuItem(L("Copy Tool Name"), symbol: "doc.on.doc") {
+            Clipboard.copy(contextMenu.toolName)
+        })
+        return menu
+    }
+    #else
+    override func contextMenuInteraction(_ interaction: UIContextMenuInteraction,
+                                configurationForMenuAtLocation location: CGPoint) -> UIContextMenuConfiguration?
+    {
+        guard let contextMenu else { return nil }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            var actions: [UIMenuElement] = []
+            if let name = contextMenu.openServerName, let title = contextMenu.openServerTitle {
+                actions.append(UIAction(title: title, image: UIImage(systemName: "point.3.connected.trianglepath.dotted")) { _ in
+                    self?.onOpenMCPServer?(name)
+                })
+            }
+            actions.append(UIAction(title: L("Copy Tool Name"), image: UIImage(systemName: "doc.on.doc")) { _ in
+                Clipboard.copy(contextMenu.toolName)
+            })
+            return UIMenu(children: actions)
+        }
+    }
+    #endif
 
     override func layoutContent() {
         self.spinner.place(center: CGPoint(x: 10 + 8, y: self.bounds.midY))
@@ -1708,6 +1751,7 @@ extension TranscriptToolHeaderView {
 
 /// Input or output of an expanded tool card: selectable monospaced text that scrolls once it's
 /// taller than the card allows.
+
 final class TranscriptToolSectionView: TranscriptBaseView {
     private let textView = TranscriptTextView(wraps: true)
     private var contentHeight: CGFloat = 0

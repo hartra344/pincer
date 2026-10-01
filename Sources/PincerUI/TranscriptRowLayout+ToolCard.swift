@@ -116,6 +116,9 @@ private let toolOutputPreviewLines = 12
 extension TranscriptLayoutBuilder {
     func tool(_ tool: ToolActivity, first: Bool, into stack: inout Stack, layout: inout TranscriptRowLayout) {
         let key = "tool:\(tool.id)"
+        let mcpContextMenu = TranscriptToolContextMenu.make(
+            toolName: tool.name, supportsMCPServers: self.settings.supportsMCPServers,
+            mcpServerNames: self.settings.mcpServerNames)
         let edit = tool.fileEdit
         // A diff is the point of an edit card, so it starts open; long ones start cut short.
         let expanded = self.context.disclosure.isExpanded(key, default: edit != nil)
@@ -172,7 +175,7 @@ extension TranscriptLayoutBuilder {
             height = y + 10
         } else if expanded {
             var card = ToolCardBuild(y: headerHeight + 1 + 10, inner: max(width - 20, 20))
-            runningY = self.toolCard(tool, row: layout.id, into: &card)
+            runningY = self.toolCard(tool, row: layout.id, mcpContextMenu: mcpContextMenu, into: &card)
             sections = card.sections
             decor = card.decor
             controls = card.controls
@@ -187,12 +190,15 @@ extension TranscriptLayoutBuilder {
                                        sections: sections, runningY: runningY, edit: edit, diff: diff,
                                        decor: decor, controls: controls, notes: notes)
         part.search = search
+        part.mcpContextMenu = mcpContextMenu
         stack.add(.tool(part), height: height, width: width, spacing: first ? TranscriptMetrics.blockSpacing : TranscriptMetrics.toolSpacing)
         if let toolMatchY, let frame = stack.parts.last?.frame { layout.matchY = frame.minY + toolMatchY }
     }
 
     /// Lays out the body of a non-edit card. Returns where "Running…" goes, if it should show.
-    private func toolCard(_ tool: ToolActivity, row: String, into card: inout ToolCardBuild) -> CGFloat? {
+    private func toolCard(_ tool: ToolActivity, row: String, mcpContextMenu: TranscriptToolContextMenu?,
+                          into card: inout ToolCardBuild) -> CGFloat?
+    {
         let presentation = ToolPresentationCache.presentation(for: tool)
         // Find counts the formatted text, so while it has matches in this row nothing is raw or cut short.
         let searchKey = ToolCardSearchStore.key(tool.id)
@@ -215,12 +221,12 @@ extension TranscriptLayoutBuilder {
             runningY = self.formattedBody(presentation, tool: tool, finding: finding, into: &card)
         }
         // Offered for every MCP call, whatever its arguments or outcome; beside "Show raw JSON" when it fits.
-        let openServer = presentation.kind == .mcp && self.settings.supportsMCPServers ? presentation.mcpServer : nil
+        let openServer = mcpContextMenu?.openServerName
         var openPlaced = false
         func placeOpenServer(_ server: String, ownRow: Bool, into card: inout ToolCardBuild) {
             // A server that isn't configured (e.g. declared by a plugin) can only be found in the list.
             let known = self.settings.mcpServerNames.map { $0.contains(server) } ?? true
-            let title = known ? L("Open MCP Server") : L("Show MCP Servers")
+            let title = mcpContextMenu?.openServerTitle ?? TranscriptToolContextMenu.title(forKnownServer: known)
             let size = TranscriptLabelButton.size(title: title)
             if ownRow { card.gap(8) }
             card.controls.append(.init(id: "open-mcp-server", title: title, symbol: "point.3.connected.trianglepath.dotted",
