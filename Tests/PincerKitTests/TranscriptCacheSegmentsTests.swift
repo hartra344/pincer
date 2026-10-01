@@ -143,28 +143,17 @@ struct TranscriptCacheSegmentsTests {
         let items = V8.items(120)
         await V8.save(V8.snapshot(items), self.gateway, self.key, temp.url)
         await TranscriptCache.flush(gatewayId: self.gateway, root: temp.url)
+        let url = V8.manifestURL(self.gateway, self.key, temp.url)
+        // A read that waited for the writer would take these 10 s.
+        await TranscriptCache.Writer.shared.delayPrimeForTesting(url, by: .seconds(10))
+        defer { Task { await TranscriptCache.Writer.shared.delayPrimeForTesting(url, by: nil) } }
 
-        let entered = Flag()
-        let gate = DispatchSemaphore(value: 0)
-        let busy = Task.detached {
-            await TranscriptCache.Writer.shared.occupyForTesting(entered: { entered.set() }, gate: gate,
-                                                                  timeout: .now() + 10)
-        }
-        for _ in 0..<500 where !entered.value { try await Task.sleep(for: .milliseconds(10)) }
-        #expect(entered.value)
-
+        let clock = ContinuousClock()
+        let started = clock.now
         let newest = await TranscriptCache.loadNewest(gatewayId: self.gateway, sessionKey: self.key, limit: 100, root: temp.url)
-        gate.signal()
-        // Signalled, not timed out: the read returned while the writer was still busy.
-        #expect(await busy.value, "the read waited for the busy writer")
+        let took = clock.now - started
+        #expect(took < .seconds(5), "the read waited for the writer (\(took))")
         #expect(newest.outcome == .loaded && newest.items == Array(items.suffix(100)))
-    }
-
-    private final class Flag: @unchecked Sendable {
-        private let lock = NSLock()
-        private var raised = false
-        var value: Bool { self.lock.withLock { self.raised } }
-        func set() { self.lock.withLock { self.raised = true } }
     }
 
     @Test func removeDeletesSegmentsSidecarAndManifest() async throws {

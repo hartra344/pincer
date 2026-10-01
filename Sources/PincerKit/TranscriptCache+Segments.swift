@@ -278,7 +278,8 @@ extension TranscriptCache.Writer {
     }
 
     /// Records what a load found so the first save after launch writes only what changed.
-    func prime(_ url: URL, layout: Cache.Layout) {
+    func prime(_ url: URL, layout: Cache.Layout) async {
+        if let delay = self.primeDelaysForTesting[url] { try? await Task.sleep(for: delay) }
         guard self.layouts[url] == nil, layout.manifestDate != nil else { return }
         self.remember(layout, for: url)
     }
