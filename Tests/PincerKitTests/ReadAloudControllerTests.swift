@@ -98,6 +98,17 @@ private func waitUntil(_ label: String = "", timeout: Duration = .seconds(120), 
 @Suite("Read Aloud controller")
 @MainActor
 struct ReadAloudControllerTests {
+    @Test func idleControllerAccessDoesNotCreateThePlatformSpeechSynthesizer() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let controller = ReadAloudController(clipPlayer: FakeClipPlayer(), defaults: scratch.defaults)
+
+        #expect(!controller.hasCreatedSystemSpeaker,
+                "opening Settings must not construct AVSpeechSynthesizer just to read Read Aloud state")
+        controller.stop()
+        #expect(!controller.hasCreatedSystemSpeaker, "stopping an already-idle controller stays lazy")
+    }
+
     @Test func gatewaySuccessPlaysClip() async {
         let h = Harness()
         h.controller.toggle(messageId: "m1", text: "Hello world.", gateway: h.gateway)

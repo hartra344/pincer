@@ -71,7 +71,8 @@ public final class ReadAloudController {
     public var isDictating: Bool { self.activeDictation?.isActive == true }
 
     @ObservationIgnored private let clipPlayer: ReadAloudClipPlaying
-    @ObservationIgnored private let localSpeaker: ReadAloudLocalSpeaking
+    @ObservationIgnored private var localSpeaker: ReadAloudLocalSpeaking?
+    package var hasCreatedSystemSpeaker: Bool { self.localSpeaker is AVLocalSpeaker }
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let gatewayTimeout: Duration
     /// Waits out a Gateway timeout; tests swap in a timer they fire themselves.
@@ -85,7 +86,7 @@ public final class ReadAloudController {
                 defaults: UserDefaults = .standard, gatewayTimeout: Duration = ReadAloudSettings.gatewayTimeout)
     {
         self.clipPlayer = clipPlayer ?? AVClipPlayer()
-        self.localSpeaker = localSpeaker ?? AVLocalSpeaker()
+        self.localSpeaker = localSpeaker
         self.defaults = defaults
         self.gatewayTimeout = gatewayTimeout
         #if os(iOS)
@@ -149,7 +150,14 @@ public final class ReadAloudController {
         self.task?.cancel()
         self.task = nil
         self.clipPlayer.stop()
-        self.localSpeaker.stop()
+        self.localSpeaker?.stop()
+    }
+
+    private func deviceSpeaker() -> ReadAloudLocalSpeaking {
+        if let localSpeaker = self.localSpeaker { return localSpeaker }
+        let localSpeaker = AVLocalSpeaker()
+        self.localSpeaker = localSpeaker
+        return localSpeaker
     }
 
     private var usesGatewayVoice: Bool {
@@ -234,7 +242,7 @@ public final class ReadAloudController {
                     self.lastFallback = fallback
                     self.phase = .speaking(messageId)
                     let voice = self.defaults.string(forKey: ReadAloudSettings.deviceVoiceKey).flatMap { $0.isEmpty ? nil : $0 }
-                    _ = await self.localSpeaker.speak(chunks[index...].joined(separator: " "), voice: voice, rate: self.deviceRate)
+                    _ = await self.deviceSpeaker().speak(chunks[index...].joined(separator: " "), voice: voice, rate: self.deviceRate)
                     return
                 }
             } else {
@@ -246,7 +254,7 @@ public final class ReadAloudController {
         self.lastSource = .device
         self.phase = .speaking(messageId)
         let voice = self.defaults.string(forKey: ReadAloudSettings.deviceVoiceKey).flatMap { $0.isEmpty ? nil : $0 }
-        _ = await self.localSpeaker.speak(text, voice: voice, rate: self.deviceRate)
+        _ = await self.deviceSpeaker().speak(text, voice: voice, rate: self.deviceRate)
     }
 
     /// The Gateway's audio, or why there is none (any failure, or the timeout).
@@ -288,7 +296,7 @@ public final class ReadAloudController {
             guard let self else { return }
             self.lastSource = .device
             self.phase = .speaking("test")
-            _ = await self.localSpeaker.speak(sample, voice: voice, rate: rate)
+            _ = await self.deviceSpeaker().speak(sample, voice: voice, rate: rate)
             if generation == self.generation { self.phase = .idle }
         }
     }

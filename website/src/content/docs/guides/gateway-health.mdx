@@ -35,6 +35,7 @@ A healthy gateway shows nothing there. In the [demo](../../getting-started/try-t
   - failed deliveries waiting in a queue;
   - a quarantined context engine;
   - a failed heartbeat, or one that's more than twice its interval late while heartbeats are on.
+- **Synced preferences:** when the Gateway rejects a synced setting, Health shows the affected feature, the Gateway's message, and its preference key. The setting stays pending locally so a later edit can retry it. This includes bookmark shards; the [Bookmarks page](../export-and-bookmarks/) also shows bookmark-specific write errors.
 - **Dismissed:** issues you [dismissed](#dismissing-issues), collapsed until you open it.
 - **Channels:** each channel with its status (Connected, Degraded, Stopped…) and its last error. Status labels match [Channel Status](../channel-status/); Control-click or touch and hold a channel and choose **Show in Channel Status** to manage it.
 - **Connected Clients:** the apps and nodes connected to the gateway right now, with their platform, role and last activity. **This device** is marked.

@@ -2,6 +2,12 @@ import Foundation
 
 /// The session list, history, patch/create, prefs and message actions.
 extension DemoGateway {
+    private enum UserPrefsLimits {
+        static let entryCount = 32
+        static let profileKeys = 128
+        static let valueBytes = 4 * 1024
+    }
+
     func handleSessionList(_ method: String, _ params: JSONValue) async throws -> JSONValue? {
         switch method {
         case "sessions.subscribe":
@@ -193,17 +199,31 @@ extension DemoGateway {
         return ["key": .string(key), "sessionId": row["sessionId"] ?? .null, "session": .object(row)]
     }
 
-    /// Like upstream (v2026.9.7): at most 32 entries per set, 128 keys per profile, 4 KiB per value.
+    /// Mirrors OpenClaw's `USER_PREFS_ENTRY_LIMIT`, `USER_PREFS_PROFILE_KEY_LIMIT`, and
+    /// `USER_PREFS_VALUE_BYTES` validation and its `users.prefs.set` INVALID_REQUEST messages.
     func setPrefs(_ params: JSONValue) throws -> JSONValue {
         for (key, expected) in params["expectedEntries"]?.object ?? [:] where (self.prefs[key] ?? .null) != expected {
             return ["status": "conflict"]
         }
         let entries = params["entries"]?.object ?? [:]
-        func invalid(_ message: String) -> GatewayError { .rpc(code: "INVALID_REQUEST", message: message, details: nil) }
-        if entries.count > 32 { throw invalid("too-many-entries") }
-        if Set(self.prefs.keys).union(entries.filter { !$0.value.isNull }.keys).count > 128 { throw invalid("profile-key-limit") }
-        for value in entries.values where ((try? JSONEncoder().encode(value))?.count ?? 0) > 4 * 1024 {
-            throw invalid("value-too-large")
+        func invalid(_ message: String, details: JSONValue? = nil) -> GatewayError {
+            .rpc(code: "INVALID_REQUEST", message: message, details: details)
+        }
+        if entries.count > Self.UserPrefsLimits.entryCount {
+            throw invalid("invalid users.prefs.set entry: invalid-entry-count")
+        }
+        let resultingKeys = Set(self.prefs.keys)
+            .subtracting(entries.filter { $0.value.isNull }.keys)
+            .union(entries.filter { !$0.value.isNull }.keys)
+        if resultingKeys.count > Self.UserPrefsLimits.profileKeys {
+            let currentCount = self.prefs.keys.count
+            throw invalid("users.prefs.set exceeds the \(Self.UserPrefsLimits.profileKeys)-key profile limit (current count: \(currentCount))",
+                          details: ["code": "USER_PREFS_LIMIT_EXCEEDED",
+                                    "limit": JSONValue(Self.UserPrefsLimits.profileKeys),
+                                    "currentCount": JSONValue(currentCount)])
+        }
+        for (key, value) in entries where ((try? JSONEncoder().encode(value))?.count ?? 0) > Self.UserPrefsLimits.valueBytes {
+            throw invalid("invalid users.prefs.set entry for \(key): value-too-large")
         }
         for (key, value) in entries {
             self.prefs[key] = value.isNull ? nil : value

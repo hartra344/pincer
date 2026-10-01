@@ -3,8 +3,8 @@ import SwiftUI
 
 /// Gateway Settings → Channel Status: every channel account's connection from `channels.status`, with
 /// Probe, Start, Stop, Log Out, Reconnect and QR login (lifecycle needs Full Management). Upstream has
-/// no channel status event, so the page loads when it opens, on `health` events and every 30 seconds
-/// while it's showing, on Refresh or pull to refresh, and after each action.
+/// no channel status event, so the page loads when it opens, on `health` events and on Refresh or pull
+/// to refresh. While showing, its 30-second timer polls only after the last successful status is 30s old.
 struct ChannelStatusPage: View {
     @Environment(GatewayStore.self) private var gateway
     @Environment(SettingsNavigator.self) private var navigator

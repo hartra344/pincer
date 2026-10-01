@@ -487,6 +487,7 @@ struct SettingsForm: View {
     }
 
     let sections: [Section]
+    var speechCatalog: AppleDeviceSpeechCatalog = .shared
     #if os(macOS)
     /// Every tab hugs its content but never grows taller than this; longer tabs scroll.
     var maxHeight = SettingsHeightCap.screenLimit()
@@ -525,9 +526,9 @@ struct SettingsForm: View {
         case .tips:
             TipsSettingsSection()
         case .readAloud:
-            ReadAloudSettingsSection()
+            ReadAloudSettingsSection(catalog: self.speechCatalog)
         case .dictation:
-            DictationSettingsSection()
+            DictationSettingsSection(catalog: self.speechCatalog)
         case .location:
             LocationSettingsSection()
         case .launch:
@@ -620,9 +621,14 @@ struct SettingsForm: View {
         case .device:
             SwiftUI.Section(L("This device")) {
                 LabeledContent(L("Device ID")) {
-                    Text(DeviceIdentity.loadOrCreate().deviceId.prefix(16) + "…")
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
+                    if let deviceId = self.app.deviceIdForDisplay {
+                        Text(deviceId.prefix(16) + "…")
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                    } else {
+                        Text("—")
+                            .font(.caption.monospaced())
+                    }
                 }
                 LabeledContent(L("Role"), value: "operator (read, write, approvals, questions)")
             }

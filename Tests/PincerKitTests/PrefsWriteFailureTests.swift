@@ -160,6 +160,24 @@ struct PrefsWriteFailureTests {
         #expect(h.store.pendingPrefChanges[PrefsHarness.pref] == nil)
     }
 
+    @Test func rejectedLegacySetIsRecordedStaysPendingAndClearsOnSuccess() async throws {
+        let h = try await PrefsHarness()
+        defer { h.finish() }
+        h.store.prefsSupportsExpected = false
+        h.gateway.setReply = .error
+
+        await h.store.push(h.map, "k", "v")
+
+        #expect(h.gateway.sets.last?["expectedEntries"] == nil, "legacy writes omit compare-and-set")
+        #expect(h.store.rejectedPrefs[PrefsHarness.pref] == "rejected", "the Gateway rejection is visible")
+        #expect(h.store.pendingPrefChanges[PrefsHarness.pref]?["k"] == .some("v"))
+
+        h.gateway.setReply = .ok
+        await h.store.push(h.map, "k2", "v2")
+        #expect(h.store.rejectedPrefs[PrefsHarness.pref] == nil, "a successful retry clears the rejection")
+        #expect(h.store.pendingPrefChanges[PrefsHarness.pref] == nil)
+    }
+
     // MARK: Persistence
 
     @Test func pendingSurvivesANewStoreWithTheSameIdAndDefaults() async throws {

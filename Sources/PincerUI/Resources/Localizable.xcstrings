@@ -18933,12 +18933,122 @@
         }
       }
     },
+    "The latest reaction is too large to sync.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The latest reaction is too large to sync."
+          }
+        }
+      }
+    },
     "Copy Tool Name": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "Copy Tool Name"
+          }
+        }
+      }
+    },
+    "Chat colors": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat colors"
+          }
+        }
+      }
+    },
+    "Chat icons": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat icons"
+          }
+        }
+      }
+    },
+    "Chat order": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat order"
+          }
+        }
+      }
+    },
+    "Group icons": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Group icons"
+          }
+        }
+      }
+    },
+    "Groups": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Groups"
+          }
+        }
+      }
+    },
+    "Health dismissals": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Health dismissals"
+          }
+        }
+      }
+    },
+    "Server names": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server names"
+          }
+        }
+      }
+    },
+    "Synced preference": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synced preference"
+          }
+        }
+      }
+    },
+    "Synced preferences": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synced preferences"
+          }
+        }
+      }
+    },
+    "The Gateway rejected these synced settings. They remain pending on this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Gateway rejected these synced settings. They remain pending on this device."
           }
         }
       }

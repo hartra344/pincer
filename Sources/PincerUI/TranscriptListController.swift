@@ -179,6 +179,7 @@ final class TranscriptListController {
            self.rows.dropLast() == newRows.dropLast() {
             let row = self.rows.count - 1
             guard self.rows[row] != last else { return .unchanged }
+            self.premeasure.invalidateRows([last.id])
             self.rows[row] = last
             self.heights[last.id]?.measured = false
             self.queue.markUnmeasured(row)
@@ -207,6 +208,7 @@ final class TranscriptListController {
             self.heights[item.id]?.measured = false
             changed.insert(row)
         }
+        self.premeasure.invalidateRows(Set(changed.map { unique[$0].id }))
         let oldIds = oldRows.map(\.id)
         let newIds = unique.map(\.id)
         let idsChanged = oldIds != newIds

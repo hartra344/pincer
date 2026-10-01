@@ -206,6 +206,10 @@ final class TranscriptRenderer: TranscriptRowActions {
     private var serial = 0
     /// Layouts built (cache misses), for regression checks.
     private(set) var layoutBuildCount = 0
+    #if DEBUG
+    /// Counts row-body source extraction on the real premeasure path for the focused cache probe.
+    private(set) var premeasureBodyBuildCount = 0
+    #endif
     private var useStamp = 0
     /// Rows on screen, which are never evicted from the layout cache: an image or file arriving for
     /// one must still find it.
@@ -326,6 +330,8 @@ final class TranscriptRenderer: TranscriptRowActions {
     }
 
     var cachedLayoutCount: Int { self.cache.count }
+    var premeasureStyleGeneration: Int { TranscriptStyle.generation }
+    var premeasureDark: Bool { self.settings.dark }
 
     /// The spoken label of a row already laid out, without building anything.
     func cachedLabel(for row: TranscriptRow) -> String? {
@@ -373,6 +379,9 @@ final class TranscriptRenderer: TranscriptRowActions {
     /// What a background pass would build and measure for `row`; nil when the row has to be laid out on
     /// main: one streaming (its text changes every flush), highlighted by Find, or without text.
     func premeasureBodies(for row: TranscriptRow) -> [PremeasureKey]? {
+        #if DEBUG
+        self.premeasureBodyBuildCount += 1
+        #endif
         guard !self.highlight.rows.contains(row.id) else { return nil }
         let sources: [(String, TranscriptText.Tone)]
         switch row {
