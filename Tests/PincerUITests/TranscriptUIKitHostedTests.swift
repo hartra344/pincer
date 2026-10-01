@@ -44,6 +44,15 @@ struct TranscriptUIKitHostedTests {
         coordinator.controller.premeasure
     }
 
+    @Test func floatingPillReserveReachesTheNativeTranscriptInsets() async {
+        let host = await Self.makeHost()
+        // A representative fractional reserve exercises the native scrolling and indicator insets.
+        let pillReserve: CGFloat = 47.5
+        host.coordinator.update(rows: [], context: host.context, insets: (0, pillReserve))
+        #expect(abs(host.view.contentInset.bottom - TranscriptLayout.verticalInset - pillReserve) < 0.5)
+        #expect(abs(host.view.verticalScrollIndicatorInsets.bottom - pillReserve) < 0.5)
+    }
+
     static func assistant(_ id: String, text: String, streaming: Bool = false, at n: Int) -> TranscriptRow {
         let stamp = Date(timeIntervalSince1970: 1_700_000_000 + Double(n))
         var turn = AssistantTurn(id: id, timestamp: stamp)

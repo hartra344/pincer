@@ -39,6 +39,7 @@ struct ChatView: View {
     @State private var pendingExport: ExportedFile?
     @State private var exportError: String?
     @State private var bottomState = TranscriptBottomState()
+    @State private var readAloudPillInset: CGFloat = 0
     @Environment(\.chatPaneIsActive) private var paneIsActive
     @Environment(\.chatPaneHandles) private var paneHandles
     #if os(iOS)
@@ -113,7 +114,8 @@ struct ChatView: View {
             chat: self.chat, find: self.find, jump: self.jump, navigator: self.navigator, disclosure: self.disclosure,
             previewing: self.$previewing, previewingHTML: self.$previewingHTML, quickLookURL: self.$quickLookURL,
             exporting: self.$exporting, bottomState: self.bottomState,
-            bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom,
+            bottomInset: self.bottomChrome + self.transcriptSafeArea.bottom
+                + (self.paneIsActive ? self.readAloudPillInset : 0),
             topInset: self.topChrome + self.transcriptSafeArea.top,
             reasoningOff: self.reasoningOff)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -193,7 +195,8 @@ struct ChatView: View {
             self.paneHandles?.find = self.find
             self.paneHandles?.export = self.exportState
         }
-        .readAloud(chat: self.chat, gateway: self.gateway, bottomInset: self.bottomChrome)
+        .readAloud(chat: self.chat, gateway: self.gateway, bottomInset: self.bottomChrome,
+                   pillInset: self.$readAloudPillInset)
         .sheet(isPresented: self.$exportState.showExport, onDismiss: self.presentPendingExport) {
             ExportSheet(chat: self.chat, title: self.row?.title ?? L("Chat"), agentName: self.agent.name,
                         agents: self.gateway.agents) { file in

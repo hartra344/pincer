@@ -99,9 +99,23 @@ struct ReadAloudPill: View {
             .buttonStyle(.plain)
             .accessibilityLabel(L("Stop Reading Aloud"))
             .accessibilityValue(phase == .idle ? "" : { if case .preparing = phase { L("Preparing") } else { L("Speaking") } }())
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(key: ReadAloudPillHeight.self, value: geometry.size.height)
+                }
+            }
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
+}
+
+private struct ReadAloudPillHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+private enum ReadAloudPillLayout {
+    static let bottomSpacing: CGFloat = 8
 }
 
 /// Wires a chat into Read Aloud: the menu command, the pill and auto-read of new replies.
@@ -109,6 +123,8 @@ struct ReadAloudModifier: ViewModifier {
     let chat: ChatStore
     let gateway: GatewayStore
     let bottomInset: CGFloat
+    let controller: ReadAloudController
+    @Binding var pillInset: CGFloat
     @State private var state = ReadAloudChatState()
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.chatPaneIsActive) private var paneIsActive
@@ -119,9 +135,9 @@ struct ReadAloudModifier: ViewModifier {
             // In the split view only the focused side answers the menu command and shows the pill (#404).
             .focusedSceneValue(\.readAloud, self.paneIsActive ? self.state : nil)
             .overlay(alignment: .bottom) {
-                if self.paneIsActive { ReadAloudPill(controller: .shared)
-                    .padding(.bottom, self.bottomInset + 8)
-                    .animation(.snappy, value: ReadAloudController.shared.phase) }
+                if self.paneIsActive { ReadAloudPill(controller: self.controller)
+                    .padding(.bottom, self.bottomInset + ReadAloudPillLayout.bottomSpacing)
+                    .animation(.snappy, value: self.controller.phase) }
             }
             .background { self.hardwareShortcut }
             // Lowest priority: the composer, find bar and menus see Esc first and only pass it on when they don't use it.
@@ -140,8 +156,9 @@ struct ReadAloudModifier: ViewModifier {
     @ViewBuilder private var hardwareShortcut: some View {
         #if os(iOS)
         if self.paneIsActive {
-            Button(ReadAloudController.shared.isActive ? L("Stop Reading Aloud") : L("Read Last Reply Aloud")) {
-                self.state.toggleLastReply()
+            Button(self.controller.isActive ? L("Stop Reading Aloud") : L("Read Last Reply Aloud")) {
+                if self.controller.isActive { self.controller.stop() }
+                else { self.state.toggleLastReply() }
             }
             .shortcut(.readAloud)
             .disabled(!self.state.isEnabled)
@@ -153,7 +170,7 @@ struct ReadAloudModifier: ViewModifier {
     }
 
     private func stopWithEscape() -> KeyPress.Result {
-        let controller = ReadAloudController.shared
+        let controller = self.controller
         guard self.paneIsActive, controller.isActive, !controller.isDictating else { return .ignored }
         controller.stop()
         return .handled
@@ -165,11 +182,12 @@ struct ReadAloudModifier: ViewModifier {
         self.state.isVisible = self.scenePhase == .active
         guard self.autoRead else { return self.uninstall() }
         let state = self.state
+        let controller = self.controller
         self.chat.onFinalAssistantReplyOwner = state
-        self.chat.onFinalAssistantReply = { [weak state] item in
-            guard let state, state.isVisible, !ReadAloudSupport.isVoiceOverRunning, !ReadAloudController.shared.isDictating,
+        self.chat.onFinalAssistantReply = { [weak state, weak controller] item in
+            guard let state, let controller, state.isVisible, !ReadAloudSupport.isVoiceOverRunning, !controller.isDictating,
                   let text = SpeechText.speakableText(for: item) else { return }
-            ReadAloudController.shared.start(messageId: item.transcriptId ?? item.id, text: text, gateway: state.gateway?.voice)
+            controller.start(messageId: item.transcriptId ?? item.id, text: text, gateway: state.gateway?.voice)
         }
     }
 
@@ -182,7 +200,10 @@ struct ReadAloudModifier: ViewModifier {
 
 extension View {
     /// Read Aloud for a chat: the Edit menu command, the Stop pill and auto-read.
-    func readAloud(chat: ChatStore, gateway: GatewayStore, bottomInset: CGFloat) -> some View {
-        self.modifier(ReadAloudModifier(chat: chat, gateway: gateway, bottomInset: bottomInset))
+    func readAloud(chat: ChatStore, gateway: GatewayStore, bottomInset: CGFloat, pillInset: Binding<CGFloat>,
+                   controller: ReadAloudController = .shared) -> some View
+    {
+        self.modifier(ReadAloudModifier(chat: chat, gateway: gateway, bottomInset: bottomInset,
+                                        controller: controller, pillInset: pillInset))
     }
 }
