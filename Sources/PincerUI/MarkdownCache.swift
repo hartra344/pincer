@@ -19,6 +19,7 @@ struct LRUCache<Key: Hashable, Value> {
     private var nodes: [Key: Node] = [:]
     private var newest: Node?
     private unowned(unsafe) var oldest: Node?
+    private(set) var evictionGeneration: UInt64 = 0
 
     init(capacity: Int) { self.capacity = max(capacity, 1) }
 
@@ -42,6 +43,7 @@ struct LRUCache<Key: Hashable, Value> {
         if self.nodes.count > self.capacity, let last = self.oldest {
             self.unlink(last)
             self.nodes[last.key] = nil
+            self.evictionGeneration &+= 1
         }
     }
 
@@ -55,6 +57,7 @@ struct LRUCache<Key: Hashable, Value> {
         self.nodes.removeAll()
         self.newest = nil
         self.oldest = nil
+        self.evictionGeneration &+= 1
     }
 
     private mutating func touch(_ node: Node) {

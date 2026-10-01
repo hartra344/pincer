@@ -65,6 +65,97 @@ struct TranscriptPremeasureTests {
         #expect(TranscriptPremeasurer.offMainLayouts.withLock { $0 } > 0)
     }
 
+    @Test func repeatedSplitReusesPremeasureEligibilityForAnUnchangedRow() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let renderer = TranscriptLayoutCacheTests.renderer(scratch)
+        var item = ChatItem(id: "memoized-source", role: .user,
+                            blocks: [.text(String(repeating: "long source body ", count: 800))], timestamp: .now)
+        item.transcriptId = item.id
+        let rows: [TranscriptRow] = [.entry(.user(item))]
+        let driver = TranscriptPremeasureDriver()
+
+        let first = driver.split([0], all: rows, width: 700, renderer: renderer)
+        let digestsAfterFirst = TranscriptText.sourceDigestBuildCount
+        let second = driver.split([0], all: rows, width: 700, renderer: renderer)
+
+        #expect(first.offload.count == 1 && second.offload.count == 1)
+        #expect(renderer.premeasureBodyBuildCount == 1,
+                "scroll planning should not rebuild/join and hash an unchanged message body")
+        #expect(TranscriptText.sourceDigestBuildCount == digestsAfterFirst,
+                "warm-cache probes should reuse the memoized full-source digest")
+    }
+
+    @Test func changedTailRejectsAResultForItsPriorRowRevision() async {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let seedRenderer = TranscriptLayoutCacheTests.renderer(scratch)
+        let controller = TranscriptListController(context: seedRenderer.context, prefetchBudget: 0.004)
+        let driver = controller.premeasure
+        let oldText = "Old body " + UUID().uuidString
+        let newText = "New body " + UUID().uuidString
+        let oldRow = Self.userRow(id: "same-id", text: oldText)
+        let newRow = Self.userRow(id: "same-id", text: newText)
+
+        #expect(controller.accept([oldRow], contextChanged: false) == .initial)
+        let oldJob = try! #require(driver.split([0], all: controller.rows, width: 700,
+                                                renderer: controller.renderer).offload.first)
+        let oldResult = await TranscriptPremeasurer.shared.measureWithin(
+            5, jobs: [oldJob], env: controller.renderer.textEnvironment, epoch: driver.epoch)
+        #expect(oldResult.count == 1)
+
+        #expect(controller.accept([newRow], contextChanged: false) == .tail(0))
+        #expect(driver.adopt(oldResult, width: 700, epoch: driver.epoch.current).isEmpty,
+                "a delayed worker result must not adopt after the controller advances the row revision")
+        #expect(!TranscriptText.isWarm(TranscriptText.Key(source: oldText, tone: .primary, dark: false),
+                                       contentWidth: TranscriptMetrics.contentWidth(rowWidth: 700)))
+        let newJob = try! #require(driver.split([0], all: controller.rows, width: 700,
+                                                renderer: controller.renderer).offload.first)
+        #expect(newJob.bodies.first?.source == newText)
+        #expect(newJob.rowRevision != oldJob.rowRevision)
+    }
+
+    @Test func warmRowMemoRechecksAfterTextCacheEviction() async {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let renderer = TranscriptLayoutCacheTests.renderer(scratch)
+        let source = "Evict me from the text cache " + UUID().uuidString
+        let rows = [Self.userRow(id: "cache-eviction-\(UUID().uuidString)", text: source)]
+        let driver = TranscriptPremeasureDriver()
+        let job = try! #require(driver.split([0], all: rows, width: 700, renderer: renderer).offload.first)
+        let measured = await TranscriptPremeasurer.shared.measureWithin(
+            5, jobs: [job], env: renderer.textEnvironment, epoch: driver.epoch)
+        #expect(driver.adopt(measured, width: 700, epoch: driver.epoch.current).count == 1)
+        #expect(driver.split([0], all: rows, width: 700, renderer: renderer).measureNow == [0])
+
+        let churnID = UUID().uuidString
+        for index in 0...TranscriptText.segmentCapacity {
+            _ = TranscriptText.markdown("cache-churn-\(churnID)-\(index)", tone: .primary, dark: false)
+        }
+
+        #expect(driver.split([0], all: rows, width: 700, renderer: renderer).offload.count == 1,
+                "an evicted text entry invalidates the warm shortcut")
+    }
+
+    @Test func rowBodyMemoStaysWithinItsEntryAndSourceBudgets() {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let renderer = TranscriptLayoutCacheTests.renderer(scratch)
+        let rows = (0..<(TranscriptPremeasureDriver.memoRowLimit + 2)).map(TranscriptLayoutCacheTests.row)
+        let driver = TranscriptPremeasureDriver()
+
+        _ = driver.split(Array(rows.indices), all: rows, width: 700, renderer: renderer)
+
+        #expect(driver.memoRowCount <= TranscriptPremeasureDriver.memoRowLimit)
+        #expect(driver.memoSourceCost <= TranscriptPremeasureDriver.memoSourceByteLimit)
+    }
+
+    private static func userRow(id: String, text: String) -> TranscriptRow {
+        var item = ChatItem(id: id, role: .user, blocks: [.text(text)], timestamp: .now)
+        item.transcriptId = id
+        return .entry(.user(item))
+    }
+
     @Test func tableCellsMatchMainAndWarmTheRow() async {
         let source = "| Name | Notes |\n|---|---:|\n| alpha | a fairly long note that has to wrap in a narrow column, more than once |\n| beta | short |"
         let width: CGFloat = 640
@@ -242,7 +333,9 @@ struct TranscriptPremeasureHostedTests {
         let host = await Self.makeHost()
         let count = 300
         var rows = Self.rows(count: count, salt: "s2")
-        let streamingIndex = count - 1, mathIndex = count - 17, findIndex = count - 9, controlIndex = count - 13
+        // Keep this eligible row outside the visible bottom rows so the test observes worker
+        // prefetch, rather than the expected main-thread layout for a visible row.
+        let streamingIndex = count - 1, mathIndex = count - 17, findIndex = count - 9, controlIndex = count - 35
         let body = String(repeating: "filler words that wrap ", count: 12)
         rows[streamingIndex] = Self.assistant("stream", text: "Streaming reply " + body, streaming: true, at: streamingIndex)
         rows[mathIndex] = Self.assistant("math", text: "Energy scales as $x^2$ and \\(y^3\\) here. " + body, at: mathIndex)

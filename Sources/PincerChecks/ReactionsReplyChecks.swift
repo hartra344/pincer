@@ -493,6 +493,24 @@ func runDemoPrefsReactions() async {
     chat.toggleReaction("👍", on: "not-loaded")
     check(!gateway.reactions.keys.contains(Reactions.prefEntryKey(sessionKey: main, messageId: "not-loaded")), "unknown messages can't be reacted to")
 
+    // Legacy Gateways enforce a 4 KiB users.prefs value cap. A burst of older reactions must be
+    // bounded before the current gesture is written, rather than leaving pincer.reactions rejected.
+    let latestLegacyKey = Reactions.prefEntryKey(sessionKey: main, messageId: "legacy-cap-139")
+    for index in 0..<140 {
+        gateway.setReactions(["👍"], sessionKey: main, messageId: "legacy-cap-\(index)")
+    }
+    _ = await waitFor("legacy reaction preference sync settled") {
+        gateway.remotePrefMaps[Reactions.prefKey]?[latestLegacyKey] == "👍"
+            || gateway.rejectedPrefs[Reactions.prefKey] != nil
+    }
+    await gateway.prefPushes[Reactions.prefKey]?.value
+    let remoteReactions = gateway.remotePrefMaps[Reactions.prefKey]
+    let remoteReactionBytes = remoteReactions.flatMap { try? JSONEncoder().encode($0).count } ?? Int.max
+    check(remoteReactionBytes <= LegacyReactionPrefs.syncedByteBudget,
+          "legacy reaction prefs fit the sync budget (\(remoteReactionBytes) bytes)")
+    check(remoteReactions?[latestLegacyKey] == "👍" && gateway.rejectedPrefs[Reactions.prefKey] == nil,
+          "the latest legacy reaction reaches users.prefs without a rejected sync")
+
     // Forwarding: home-lab sensor forwards, Main doesn't (AC-30, AC-31).
     let actionsBefore = await gateway.demoRecordedActions().count
     chat.toggleReaction("🎉", on: "demo-main-status")

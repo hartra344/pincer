@@ -113,7 +113,7 @@ Reactions appear as small chips under a message, above its footer. Each chip sho
 - **Add or remove:** click a chip to add the same reaction, or click one of yours to remove it.
 - **Who reacted:** hover over a chip on macOS, or touch and hold it on iOS. On iOS, that menu also has **Remove My Reaction**.
 
-On a gateway with shared reactions (it offers `session.reactions.set` and `session.reactions.list`), your reactions are saved on the gateway with the chat. Other people and clients on the chat see them, and you see theirs, under their names. Changes from others show up live. On an older gateway, your reactions sync between your devices through `users.prefs` instead (see [Synced preferences](../../reference/synced-preferences/)) and are kept in Pincer only. The emoji you used recently are kept on each device.
+On a gateway with shared reactions (it offers `session.reactions.set` and `session.reactions.list`), your reactions are saved on the gateway with the chat. Other people and clients on the chat see them, and you see theirs, under their names. Changes from others show up live. On an older gateway, your reactions sync between your devices through `users.prefs` instead (see [Synced preferences](../../reference/synced-preferences/)) and are kept in Pincer only. That preference has a size limit, so when it fills Pincer may remove some previously saved reactions to make room for the reaction you just added. The emoji you used recently are kept on each device.
 
 ### The agent's reactions
 

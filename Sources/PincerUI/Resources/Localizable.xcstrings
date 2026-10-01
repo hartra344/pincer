@@ -18933,6 +18933,16 @@
         }
       }
     },
+    "The latest reaction is too large to sync.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The latest reaction is too large to sync."
+          }
+        }
+      }
+    },
     "Copy Tool Name": {
       "localizations": {
         "en": {
