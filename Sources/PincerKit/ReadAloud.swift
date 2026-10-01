@@ -72,6 +72,7 @@ public final class ReadAloudController {
 
     @ObservationIgnored private let clipPlayer: ReadAloudClipPlaying
     @ObservationIgnored private let localSpeaker: ReadAloudLocalSpeaking
+    var hasCreatedSystemSpeaker: Bool { self.localSpeaker is AVLocalSpeaker }
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let gatewayTimeout: Duration
     /// Waits out a Gateway timeout; tests swap in a timer they fire themselves.

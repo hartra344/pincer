@@ -4,18 +4,18 @@ import SwiftUI
 
 /// Settings → Read Aloud: where the voice comes from, the device voice and speed, and auto-read.
 struct ReadAloudSettingsSection: View {
+    let catalog: AppleDeviceSpeechCatalog
     @AppStorage(ReadAloudSettings.sourceKey) private var source = ReadAloudSettings.sourceAutomatic
     @AppStorage(ReadAloudSettings.deviceVoiceKey) private var deviceVoice = ""
     @AppStorage(ReadAloudSettings.rateKey) private var rate = Double(AVSpeechUtteranceDefaultSpeechRate)
     @AppStorage(ReadAloudSettings.autoReadKey) private var autoRead = false
     private let controller = ReadAloudController.shared
 
-    private var voices: [AVSpeechSynthesisVoice] {
-        let language = AVSpeechSynthesisVoice.currentLanguageCode().prefix(2)
-        return AVSpeechSynthesisVoice.speechVoices()
-            .filter { $0.language.hasPrefix(language) }
-            .sorted { ($0.quality.rawValue, $1.name) > ($1.quality.rawValue, $0.name) }
+    init(catalog: AppleDeviceSpeechCatalog = .shared) {
+        self.catalog = catalog
     }
+
+    private var voices: [DeviceSpeechVoice] { self.catalog.state.snapshot?.voices ?? [] }
 
     private var shownDeviceVoice: Binding<String> {
         Binding(get: { self.displayedVoice }, set: { self.deviceVoice = $0 })
@@ -23,7 +23,10 @@ struct ReadAloudSettingsSection: View {
 
     /// The stored voice when this device still has it, otherwise System Default, so the picker is never blank.
     private var displayedVoice: String {
-        ReadAloudSettings.displayedDeviceVoice(stored: self.deviceVoice, available: self.voices.map(\.identifier))
+        if self.catalog.state.snapshot == nil || self.catalog.state.isRefreshing {
+            return self.deviceVoice
+        }
+        return ReadAloudSettings.displayedDeviceVoice(stored: self.deviceVoice, available: self.voices.map(\.id))
     }
 
     private var rateDescription: String {
@@ -41,7 +44,13 @@ struct ReadAloudSettingsSection: View {
             ReadAloudGatewayVoiceRows()
             Picker(L("Device Voice"), selection: self.shownDeviceVoice) {
                 Text("System Default", bundle: .module).tag("")
-                ForEach(self.voices, id: \.identifier) { Text($0.name).tag($0.identifier) }
+                if !self.deviceVoice.isEmpty,
+                   (self.catalog.state.snapshot == nil || self.catalog.state.isRefreshing),
+                   !self.voices.contains(where: { $0.id == self.deviceVoice })
+                {
+                    Text("Loading voices…", bundle: .module).tag(self.deviceVoice)
+                }
+                ForEach(self.voices) { Text($0.name).tag($0.id) }
             }
             LabeledContent(L("Speaking Rate")) {
                 Slider(value: self.$rate, in: Double(ReadAloudSettings.rateRange.lowerBound) ... Double(ReadAloudSettings.rateRange.upperBound)) {
@@ -68,5 +77,6 @@ struct ReadAloudSettingsSection: View {
         } footer: {
             Text("Tap Listen under a reply, or use Read Last Reply Aloud (its keyboard shortcut) from the command palette. Press Esc or tap the Speaking pill to stop. Automatic uses the Gateway's voice when available. The device voice is used when the Gateway can't provide one. New replies are only read in the chat you're looking at, and not while VoiceOver is on.", bundle: .module)
         }
+        .task { self.catalog.refresh() }
     }
 }
