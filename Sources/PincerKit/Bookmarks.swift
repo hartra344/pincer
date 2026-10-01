@@ -28,7 +28,7 @@ public struct Bookmark: Codable, Hashable, Identifiable, Sendable {
 
     /// Label for a bookmarked chat whose session may not be loaded on this device.
     public static func chatTitle(_ loadedTitle: String?, sessionKey: String) -> String {
-        loadedTitle ?? sessionKey
+        loadedTitle ?? L("Saved chat")
     }
 
     static func id(sessionKey: String, messageId: String) -> String { "\(sessionKey)\u{1F}\(messageId)" }
@@ -96,6 +96,7 @@ public final class BookmarkStore {
     public private(set) var bookmarks: [Bookmark] = []
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var index: Set<String> = []
+    @ObservationIgnored private var persistenceRevision = 0
 
     /// Most bookmarks kept per gateway; adding beyond drops the oldest.
     public static let limit = 150
@@ -198,6 +199,22 @@ public final class BookmarkStore {
         self.onChange?(Dictionary(uniqueKeysWithValues: removed.map { ($0.id, String?.none) }))
     }
 
+    /// Gateway-confirmed deletion: apply the bounded in-memory edit immediately, then encode the
+    /// remaining bookmarks off-main. A newer local edit wins while that encoding is in flight.
+    func removeConfirmedSessions(_ sessionKeys: Set<String>) async {
+        let removed = self.bookmarks.filter { sessionKeys.contains($0.sessionKey) }
+        guard !removed.isEmpty else { return }
+        self.bookmarks.removeAll { sessionKeys.contains($0.sessionKey) }
+        for bookmark in removed { self.index.remove(bookmark.id) }
+        self.persistenceRevision += 1
+        let revision = self.persistenceRevision
+        let remaining = self.bookmarks
+        self.onChange?(Dictionary(uniqueKeysWithValues: removed.map { ($0.id, String?.none) }))
+        let data = await Task.detached { try? JSONEncoder().encode(remaining) }.value
+        guard revision == self.persistenceRevision, let data else { return }
+        self.defaults.set(data, forKey: self.defaultsKey)
+    }
+
     /// Drops the oldest bookmarks over the cap, then the oldest in `shard` until its synced map fits.
     private func trim(shard: Int) -> [Bookmark] {
         let oldest: (Bookmark, Bookmark) -> Bool = { ($0.createdAt, $0.id) < ($1.createdAt, $1.id) }
@@ -265,12 +282,14 @@ public final class BookmarkStore {
     }
 
     public func removeAll() {
+        self.persistenceRevision += 1
         self.bookmarks = []
         self.index = []
         self.defaults.removeObject(forKey: self.defaultsKey)
     }
 
     private func save() {
+        self.persistenceRevision += 1
         if let data = try? JSONEncoder().encode(self.bookmarks) { self.defaults.set(data, forKey: self.defaultsKey) }
     }
 }

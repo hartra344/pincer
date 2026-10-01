@@ -35,8 +35,10 @@ To find your bookmarks, either:
 - press <kbd>⌘</kbd> <kbd>K</kbd> and look in the **Bookmarks** section of the [command palette](../command-palette-and-navigation/), or
 - open the chat's **⋯** menu and choose **Bookmarks…** to see that chat's bookmarks.
 
-Choosing a bookmark opens the chat and jumps to the message.
+Choosing a bookmark opens the chat and jumps to the message. Bookmarks whose chat has not loaded yet show **Saved chat** in the command palette until its title arrives.
+
+Once the gateway confirms a chat was deleted, Pincer removes its bookmarks from this device and synced preferences, including when reconnecting after being offline. Clearing a local transcript cache keeps its bookmarks.
 
 :::note
-Bookmarks sync between your devices through your gateway, separately for each gateway (see [Synced preferences](../../reference/synced-preferences/)). Removing one removes it everywhere. Other devices show the first 60 characters of the message. There's room for about 100–150 bookmarks per gateway; once it's full, a new bookmark removes an older one, and Pincer tells you when that happens. If the gateway has no durable identity for your connection, bookmarks stay on the current device.
+Bookmarks sync between your devices through your gateway, separately for each gateway (see [Synced preferences](../../reference/synced-preferences/)). Removing one removes it everywhere. Other devices show the first 60 characters of the message. There's room for about 100–150 bookmarks per gateway; once it's full, a new bookmark removes an older one (the oldest in its full sync shard, or the oldest overall at the 150-bookmark cap), and Pincer tells you when that happens. If the gateway has no durable identity for your connection, bookmarks stay on the current device.
 :::

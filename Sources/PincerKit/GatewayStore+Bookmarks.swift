@@ -68,4 +68,15 @@ extension GatewayStore {
     }
 
     static func bookmarksSyncedKey(_ shard: Int, _ id: UUID) -> String { "pincer.bookmarksSynced.\(shard).\(id.uuidString)" }
+
+    /// Call only after a complete, authoritative session list. Local chats and queued sends can
+    /// precede their Gateway session and must keep their saved messages.
+    func forgetOrphanedBookmarks(keeping listed: Set<String>) async {
+        let store = self.bookmarkStore
+        let keys = Set(store.bookmarks.map(\.sessionKey))
+        let orphaned = keys.subtracting(listed).filter { key in self.sessions[key] == nil && self.chats[key] == nil
+            && self.outbox.entries(for: key).isEmpty
+        }
+        await store.removeConfirmedSessions(orphaned)
+    }
 }

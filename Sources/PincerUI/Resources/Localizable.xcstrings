@@ -18922,6 +18922,16 @@
           }
         }
       }
+    },
+    "Saved chat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved chat"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
