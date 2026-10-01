@@ -30,6 +30,20 @@ struct AgentManagementTests {
         #expect(draft.name == "Scout Copy 2" && draft.workspace.isEmpty && draft.emoji == "🔭" && draft.model == "m")
     }
 
+    /// #130: the duplicate has a fresh workspace; inherited image paths point at the old one.
+    @Test(arguments: ["avatars/scout.png", "/w/scout/avatars/scout.png", "https://example.test/scout.png", "data:image/png;base64,aGVsbG8="])
+    func duplicateStartsWithDefaultAvatar(_ avatar: String) {
+        let source = AgentSummary(id: "scout", name: "Scout", emoji: "🔭", avatar: avatar,
+                                  workspace: "/w/scout", model: "test/model")
+        var draft = AgentDraft.duplicate(of: source, existing: [])
+        #expect(draft.name == "Scout Copy" && draft.emoji == "🔭" && draft.model == "test/model")
+        #expect(draft.avatar.isEmpty && draft.workspace.isEmpty)
+        #expect(draft.createParams["avatar"] == nil && draft.createParams["workspace"] == nil)
+        #expect(source.avatar == avatar, "duplicating never edits the source")
+        draft.avatar = "avatars/new-copy.png"
+        #expect(draft.createParams["avatar"] == "avatars/new-copy.png", "an explicitly chosen new avatar is sent")
+    }
+
     @Test func draftValidation() {
         let roster = [AgentSummary(id: "main", name: "Claw")]
         #expect(AgentDraft(name: "Night Owl").validationError == nil)
@@ -161,8 +175,10 @@ struct AgentManagementTests {
 
     @MainActor @Test func duplicateCopiesFilesNotBindings() async throws {
         let recorder = Recorder()
-        let source: [String: String] = ["AGENTS.md": "a", "SOUL.md": "s", "MEMORY.md": "m"]
-        var target: [String: String] = ["AGENTS.md": "seeded", "SOUL.md": "s"]
+        let source: [String: String] = ["AGENTS.md": "a", "SOUL.md": "s", "MEMORY.md": "m",
+                                     "IDENTITY.md": "- Name: Scout\n- Emoji: 🔭\n- Avatar: avatars/scout.png\n"]
+        let freshIdentity = "- Name: Scout Copy\n- Emoji: 🔭\n"
+        var target: [String: String] = ["AGENTS.md": "seeded", "SOUL.md": "s", "IDENTITY.md": freshIdentity]
         recorder.handler = { method, params in
             let agent = params["agentId"]?.string
             let name = params["name"]?.string ?? ""
@@ -170,7 +186,7 @@ struct AgentManagementTests {
             switch method {
             case "agents.create": return ["ok": true, "agentId": "copy"]
             case "agents.files.list":
-                return ["files": .array(["AGENTS.md", "SOUL.md", "USER.md", "MEMORY.md"].map {
+                return ["files": .array(["AGENTS.md", "SOUL.md", "IDENTITY.md", "USER.md", "MEMORY.md"].map {
                     ["name": .string($0), "missing": .bool(files[$0] == nil)]
                 })]
             case "agents.files.get":
@@ -184,15 +200,17 @@ struct AgentManagementTests {
             }
         }
         let model = AgentManagementModel(request: { try recorder.request($0, $1) })
-        let draft = AgentDraft.duplicate(of: AgentSummary(id: "src", name: "Scout", emoji: "🔭", workspace: "/w/src"), existing: [])
+        let draft = AgentDraft.duplicate(of: AgentSummary(id: "src", name: "Scout", emoji: "🔭", avatar: "avatars/scout.png", workspace: "/w/src"), existing: [])
         let result = try await model.duplicate(sourceId: "src", draft: draft, copyFiles: true)
         #expect(result.agentId == "copy" && result.failedFiles.isEmpty && Set(result.copiedFiles) == ["AGENTS.md", "SOUL.md", "MEMORY.md"])
-        #expect(target == source.merging(["SOUL.md": "s"]) { $1 })
+        #expect(target["AGENTS.md"] == "a" && target["SOUL.md"] == "s" && target["MEMORY.md"] == "m")
+        #expect(target["IDENTITY.md"] == freshIdentity, "the Gateway's fresh identity must not inherit the source name/avatar")
         let create = recorder.calls.first { $0.method == "agents.create" }?.params
         #expect(create == ["name": "Scout Copy", "emoji": "🔭"], "no workspace, no bindings")
         #expect(Set(recorder.calls.map(\.method)).isSubset(of: ["agents.create", "agents.files.list", "agents.files.get", "agents.files.set"]),
                 "nothing touches bindings or config")
         let sets = recorder.calls.filter { $0.method == "agents.files.set" }
+        #expect(!sets.contains { $0.params["name"] == "IDENTITY.md" }, "never resurrect an inherited avatar via workspace copying")
         #expect(sets.first { $0.params["name"] == "MEMORY.md" }?.params["expectedMissing"] == true, "absent target → expectedMissing")
         #expect(sets.first { $0.params["name"] == "AGENTS.md" }?.params["expectedHash"]?.string == AgentManagement.sha256Hex("seeded"),
                 "seeded target → its hash")
