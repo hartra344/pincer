@@ -5,6 +5,8 @@ import Observation
 @MainActor
 @Observable
 public final class GatewayStore: Identifiable {
+    /// Installed by the app; auxiliary operator clients never acquire device location.
+    public var locationContext: LocationContextModel?
     public private(set) var profile: GatewayProfile
     public nonisolated let id: UUID
     public private(set) var state: ConnectionState = .idle

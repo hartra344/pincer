@@ -38,11 +38,12 @@ extension ChatStore {
     /// kept: offline or failed sends come back as `.failed` with `errorMessage` set.
     @discardableResult
     public func sendMessage(_ text: String, attachments: [OutgoingAttachment] = [], replyTo: ReplyTarget? = nil,
-                            requiresConnection: Bool = false) async -> SendOutcome
+                            requiresConnection: Bool = false, includeLocation: Bool = false) async -> SendOutcome
     {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty || !attachments.isEmpty else { return .failed("Couldn’t send: the message is empty.") }
         guard let gateway else { return .failed("Couldn’t send: the Gateway is gone.") }
+        if includeLocation { trimmed = gateway.locationContext?.message(trimmed) ?? trimmed }
         let connected = gateway.state.isConnected
         let attachmentBytes = attachments.reduce(0) { $0 + $1.data.count }
         let persistsAttachments = !attachments.isEmpty && gateway.canPersistAttachments(bytes: attachmentBytes)

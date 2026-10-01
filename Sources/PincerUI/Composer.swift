@@ -340,7 +340,8 @@ struct Composer: View {
         self.chat.draft = ComposerDraft()
         self.attachmentError = nil
         Task {
-            guard case .failed = await self.chat.sendMessage(text, attachments: attachments, replyTo: replyTo) else { return }
+            guard case .failed = await self.chat.sendMessage(text, attachments: attachments, replyTo: replyTo,
+                                                          includeLocation: true) else { return }
             // Keep what was typed so it can be retried, unless something new was started meanwhile.
             if self.chat.draft.text.isEmpty, self.chat.draft.attachments.isEmpty { self.chat.draft = draft }
         }

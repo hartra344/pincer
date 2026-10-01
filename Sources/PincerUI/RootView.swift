@@ -11,6 +11,7 @@ public struct PincerScene: Scene {
         // PincerKit's sentences are keys in this catalog.
         PincerStrings.bundle = .module
         SVGRasterizer.install()
+        AppModel.shared.locationContext.configure(driver: DeviceLocationContext(model: AppModel.shared.locationContext))
         #if os(macOS)
         QuickCaptureController.shared.install(app: AppModel.shared)
         #endif
@@ -461,7 +462,7 @@ enum ReactionFeature {
 
 struct SettingsForm: View {
     enum Section: CaseIterable {
-        case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, readAloud, dictation, sidebar, notifications, keyboardShortcuts, device, storage, spotlight, tips
+        case you, launch, quickCapture, menuBar, appearance, avatars, colors, conversation, readAloud, dictation, location, sidebar, notifications, keyboardShortcuts, device, storage, spotlight, tips
 
         /// Sections that exist on this platform.
         static var available: [Self] {
@@ -475,7 +476,7 @@ struct SettingsForm: View {
         #if os(macOS)
         static let generalTab: [Self] = [.you, .launch, .quickCapture, .menuBar, .device, .storage, .spotlight, .tips]
         static let appearanceTab: [Self] = [.appearance, .avatars, .colors]
-        static let conversationTab: [Self] = [.conversation, .readAloud, .dictation, .sidebar]
+        static let conversationTab: [Self] = [.conversation, .readAloud, .dictation, .location, .sidebar]
         static let notificationsTab: [Self] = [.notifications]
         static let shortcutsTab: [Self] = [.keyboardShortcuts]
         /// The Settings window's tabs, in order.
@@ -525,6 +526,8 @@ struct SettingsForm: View {
             ReadAloudSettingsSection()
         case .dictation:
             DictationSettingsSection()
+        case .location:
+            LocationSettingsSection()
         case .launch:
             #if os(macOS)
             LaunchAtLoginSettingsSection()
