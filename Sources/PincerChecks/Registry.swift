@@ -125,6 +125,7 @@ enum Suites {
             Section("Sidebar activity dates") { runSidebarActivityDateChecks() },
             Section("Composer session title") { runComposerSessionTitleChecks() },
             Section("First-run wizard") { await runFirstRunChecks() },
+            Section("Documentation capture packaging") { runDocsCaptureIsolationChecks() },
         ]
         return sections
     }
