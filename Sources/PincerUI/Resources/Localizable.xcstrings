@@ -18902,6 +18902,26 @@
           }
         }
       }
+    },
+    "Show More": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show More"
+          }
+        }
+      }
+    },
+    "Show Less": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Less"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
