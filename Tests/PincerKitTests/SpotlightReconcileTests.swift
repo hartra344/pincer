@@ -123,6 +123,51 @@ struct SpotlightReconcileTests {
         #expect(indexer.ids.count == 1)
     }
 
+    @Test func gatewayReindexIncludesProfileNameInTheDescription() async {
+        let scratch = ScratchDefaults()
+        let indexerA = FakeSpotlightIndexer(), indexerB = FakeSpotlightIndexer()
+        let gatewayA = self.store(indexerA, defaults: scratch.defaults,
+                                  profile: GatewayProfile(name: "Personal", url: "ws://127.0.0.1:1", authMode: .none))
+        let gatewayB = self.store(indexerB, defaults: scratch.defaults,
+                                  profile: GatewayProfile(name: "Work", url: "ws://127.0.0.1:2", authMode: .none))
+        let key = "agent:main:dashboard:same-title"
+        let row = Self.row(key, title: "Planning", at: 42)
+        gatewayA.setSession(row, for: key)
+        gatewayB.setSession(row, for: key)
+        defer {
+            SpotlightCenter.shared.forgetGateway(gatewayA.id)
+            SpotlightCenter.shared.forgetGateway(gatewayB.id)
+            scratch.remove()
+        }
+
+        await gatewayA.reindexSpotlight()
+        await gatewayB.reindexSpotlight()
+        #expect(indexerA.entries.first?.title == indexerB.entries.first?.title)
+        #expect(indexerA.entries.first?.contentDescription == "Personal")
+        #expect(indexerB.entries.first?.contentDescription == "Work")
+    }
+
+    @Test func firstReindexStillClearsUnknownGatewayResultsBeforeAddingCurrentChats() async {
+        let scratch = ScratchDefaults()
+        let indexer = FakeSpotlightIndexer()
+        let gateway = self.store(indexer, defaults: scratch.defaults,
+                                 profile: GatewayProfile(name: "Personal", url: "ws://127.0.0.1:1", authMode: .none))
+        let stale = Spotlight.entries(gatewayId: gateway.id,
+                                      sessions: [Self.row("agent:main:dashboard:removed", at: 1)],
+                                      includeMessages: false)
+        await indexer.index(stale)
+        let currentKey = "agent:main:dashboard:current"
+        gateway.setSession(Self.row(currentKey, at: 2), for: currentKey)
+        defer {
+            SpotlightCenter.shared.forgetGateway(gateway.id)
+            scratch.remove()
+        }
+
+        await gateway.reindexSpotlight()
+        #expect(indexer.entries.map(\.sessionKey) == [currentKey])
+        #expect(Array(indexer.calls.suffix(2)) == ["domain", "index:1"])
+    }
+
     @Test func disabledDoesNotIndex() async {
         let scratch = ScratchDefaults()
         scratch.defaults.set(false, forKey: Spotlight.enabledKey)
@@ -209,6 +254,17 @@ struct SpotlightReconcileTests {
         let scratch = ScratchDefaults()
         #expect(Spotlight.isEnabled(scratch.defaults))
         #expect(!Spotlight.includesMessages(scratch.defaults))
+        scratch.remove()
+    }
+
+    @Test func asyncReindexMustStillMatchMessageTextPrivacySetting() {
+        let scratch = ScratchDefaults()
+        #expect(Spotlight.canPublish(includeMessages: false, defaults: scratch.defaults))
+        scratch.defaults.set(true, forKey: Spotlight.includeMessagesKey)
+        #expect(!Spotlight.canPublish(includeMessages: false, defaults: scratch.defaults))
+        #expect(Spotlight.canPublish(includeMessages: true, defaults: scratch.defaults))
+        scratch.defaults.set(false, forKey: Spotlight.enabledKey)
+        #expect(!Spotlight.canPublish(includeMessages: true, defaults: scratch.defaults))
         scratch.remove()
     }
 }

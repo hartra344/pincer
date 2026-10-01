@@ -16,7 +16,11 @@ public struct SpotlightEntry: Hashable, Sendable {
     public var lastActivity: Date?
 
     /// The descriptive text Spotlight indexes below the result's title.
-    public var contentDescription: String? { self.snippet }
+    public var contentDescription: String? {
+        let parts = [self.gatewayName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                     self.snippet?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 
     public var domainIdentifier: String { Spotlight.domain(gatewayId) }
 }
@@ -48,6 +52,11 @@ public enum Spotlight {
 
     public static func includesMessages(_ defaults: UserDefaults = .standard) -> Bool {
         defaults.object(forKey: self.includeMessagesKey) as? Bool ?? self.includeMessagesDefault
+    }
+
+    /// Whether an async reindex still matches the privacy settings it began with.
+    package static func canPublish(includeMessages: Bool, defaults: UserDefaults = .standard) -> Bool {
+        Self.isEnabled(defaults)
     }
 
     public static func domain(_ gatewayId: UUID) -> String { "gateway:\(gatewayId.uuidString)" }

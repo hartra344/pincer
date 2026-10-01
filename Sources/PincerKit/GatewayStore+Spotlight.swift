@@ -79,7 +79,9 @@ extension GatewayStore {
                 if let snippet = Spotlight.snippet(from: tail.items) { snippets[row.key] = snippet }
             }
         }
-        guard !Task.isCancelled, !self.profile.isDemo, Spotlight.isEnabled(self.defaults) else { return }
+        guard !Task.isCancelled, !self.profile.isDemo,
+              Spotlight.canPublish(includeMessages: includeMessages, defaults: self.defaults)
+        else { return }
         let entries = Spotlight.entries(gatewayId: self.id, gatewayURL: self.profile.url, gatewayHost: self.gatewayHost,
                                         gatewayName: self.profile.name,
                                         sessions: rows, cachedSnippets: snippets, includeMessages: includeMessages)
