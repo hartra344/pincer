@@ -133,6 +133,7 @@ struct StreamingCoalescerTests {
             let prefix = "[[reply_to_current"
             self.delta(chat, prefix, full: prefix)
             self.chatEvent(chat, ["state": "delta", "deltaText": .string("]] Recovered response")])
+            chat.flushLive()
             #expect(self.liveText(chat) == "Recovered response")
         }
     }
