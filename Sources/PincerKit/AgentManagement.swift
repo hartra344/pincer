@@ -736,6 +736,9 @@ public final class AgentManagementModel {
         return names.count == 1 ? names[0] : "\(names.count) documents"
     }
 
+    /// The first workspace file that failed in the last bulk save, for revealing its error or conflict.
+    public private(set) var failedSaveAllFile: AgentFileEditorModel?
+
     /// Saves every draft. Returns false if any save failed or hit a conflict.
     public func saveAll() async -> Bool {
         var ok = true

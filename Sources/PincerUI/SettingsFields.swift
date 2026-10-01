@@ -27,6 +27,11 @@ final class SettingsNavigator {
         self.focus = location.focus
     }
 
+    /// The close dialog saves every draft before closing the settings window.
+    func saveAgentsBeforeClosing(_ management: AgentManagementModel, close: () -> Void) async {
+        if await management.saveAll() { close() }
+    }
+
     func go(to path: [String]) {
         self.go(to: SettingsCatalog.location(for: path))
     }
