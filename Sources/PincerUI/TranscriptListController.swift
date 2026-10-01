@@ -648,6 +648,10 @@ final class TranscriptListController {
         self.renderer.loadOlderIfShown { [weak self] in self?.isOlderRowVisible ?? false }
     }
 
+    /// Called when the Gateway reconnects while this transcript's older-history row is visible.
+    /// Kept as a separate transition seam so paging can resume without a scroll event.
+    func gatewayConnectionChanged(isConnected: Bool) {}
+
     private var isOlderRowVisible: Bool {
         guard case .loadingOlder? = self.rows.first, let visible = self.host?.visibleRows else { return false }
         return visible.lowerBound == 0

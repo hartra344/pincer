@@ -321,6 +321,37 @@ struct TranscriptListControllerTests {
     }
 
     /// #467: a duplicated row id made the raw count differ from the list's on every update, re-arming the trigger.
+    @Test func reconnectResumesExhaustedPagingWhileTheOlderRowStaysVisible() async {
+        let scratch = ScratchDefaults()
+        defer { scratch.remove() }
+        let (controller, host, context) = self.make(scratch)
+        let chat = context.chat!
+        chat.hasMoreHistory = true
+        controller.gatewayConnectionChanged(isConnected: false)
+        _ = controller.accept([.loadingOlder] + Self.rows(0..<3), contextChanged: false)
+        host.offset = 0
+        var pageLoads = 0
+        controller.renderer.olderPageLoader = { _ in
+            pageLoads += 1
+            return false
+        }
+        controller.gatewayConnectionChanged(isConnected: true)
+        controller.loadOlderIfShown()
+        await controller.renderer.waitForOlderLoop()
+        #expect(pageLoads == 3, "paging reaches the existing bounded failure limit")
+
+        controller.gatewayConnectionChanged(isConnected: false)
+        controller.renderer.olderPageLoader = { _ in
+            pageLoads += 1
+            chat.hasMoreHistory = false
+            chat.olderInCache = false
+            return true
+        }
+        controller.gatewayConnectionChanged(isConnected: true)
+        await controller.renderer.waitForOlderLoop()
+        #expect(pageLoads == 4, "reconnect resumes paging without scrolling away and back")
+    }
+
     @Test func duplicateIdsDoNotReArmTheOlderRowTrigger() async {
         let scratch = ScratchDefaults()
         defer { scratch.remove() }
