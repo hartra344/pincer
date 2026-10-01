@@ -52,6 +52,8 @@ Sending text to the gateway's voice needs write access. If you connected with a 
 
 Open **Settings** and find the **Read Aloud** section. On a Mac it's on the **Conversation** tab.
 
+Device voices load in the background so you can keep scrolling and using Settings. Your selected voice stays saved while the list loads. The list refreshes when your system language or installed voices change.
+
 - **Voice**: **Automatic** uses the gateway voice when there is one. **This Device Only** always uses the device voice, so the text of replies never goes back to the gateway to be spoken.
 - **Device Voice** and **Speaking Rate** set the voice used when the device speaks. Pick **System Default** to follow your system language. If a voice you chose earlier isn't installed any more, the picker shows **System Default** instead of going blank.
 - **Read New Replies Aloud** speaks an agent's final reply when a run finishes successfully in the chat you have open. It doesn't read old messages, chats in the background or history loading in. It stays quiet while VoiceOver is running, so the two don't talk over each other.

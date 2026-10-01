@@ -1,6 +1,6 @@
 import Foundation
 import Synchronization
-@testable import PincerKit
+import PincerKit
 
 private final class DiscoveryThreadProbe: @unchecked Sendable {
     private let value = Mutex<Bool?>(nil)
@@ -54,6 +54,8 @@ func runDemoDeviceSpeechCatalogChecks() async {
             dictationSupport: DeviceDictationSupport(language: "English", supported: true))
     }
     catalog.refresh(localeIdentifier: "en-US")
+    let loaded = await waitFor("demo device speech snapshot", timeout: 2) { catalog.snapshot != nil }
+    check(loaded, "the demo device speech snapshot arrives asynchronously")
     check(catalog.snapshot?.voices.first?.name == "Sage"
           && ReadAloudSettings.displayedDeviceVoice(stored: "demo.sage", available: catalog.snapshot?.voices.map(\.id) ?? []) == "demo.sage",
           "the demo's saved device voice appears when the platform catalog is ready")

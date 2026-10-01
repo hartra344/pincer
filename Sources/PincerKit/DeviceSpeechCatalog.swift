@@ -69,12 +69,19 @@ public struct DeviceSpeechCatalogSnapshot: Sendable, Equatable {
 /// away from SwiftUI and deterministic callers can exercise refresh ordering.
 @MainActor @Observable
 public final class DeviceSpeechCatalog {
+    private struct Request: Sendable {
+        let localeIdentifier: String
+        let generation: Int
+    }
+
     public private(set) var snapshot: DeviceSpeechCatalogSnapshot?
     public private(set) var requestedLocaleIdentifier: String?
     public private(set) var isRefreshing = false
 
     @ObservationIgnored private let discover: @Sendable (String) -> DeviceSpeechCatalogSnapshot
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var inFlight: Task<DeviceSpeechCatalogSnapshot, Never>?
+    @ObservationIgnored private var pending: Request?
 
     public init(discover: @escaping @Sendable (String) -> DeviceSpeechCatalogSnapshot) {
         self.discover = discover
@@ -84,14 +91,38 @@ public final class DeviceSpeechCatalog {
     public func refresh(localeIdentifier: String, force: Bool = false) {
         guard force || self.requestedLocaleIdentifier != localeIdentifier else { return }
         self.generation += 1
-        let generation = self.generation
         self.requestedLocaleIdentifier = localeIdentifier
         self.isRefreshing = true
+        let request = Request(localeIdentifier: localeIdentifier, generation: self.generation)
+        guard self.inFlight == nil else {
+            self.pending = request
+            return
+        }
+        self.start(request)
+    }
 
-        // Baseline repro: platform discovery currently runs synchronously on this caller.
-        let discovered = self.discover(localeIdentifier)
-        guard generation == self.generation else { return }
-        self.snapshot = discovered
-        self.isRefreshing = false
+    private func start(_ request: Request) {
+        let discover = self.discover
+        let work = Task.detached(priority: .utility) {
+            discover(request.localeIdentifier)
+        }
+        self.inFlight = work
+        Task { [weak self] in
+            let discovered = await work.value
+            guard let self else { return }
+            self.inFlight = nil
+            if request.generation == self.generation,
+               discovered.localeIdentifier == request.localeIdentifier
+            {
+                self.snapshot = discovered
+                self.isRefreshing = false
+            }
+            if let pending = self.pending {
+                self.pending = nil
+                self.start(pending)
+            } else {
+                self.isRefreshing = false
+            }
+        }
     }
 }
