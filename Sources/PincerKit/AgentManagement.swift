@@ -32,6 +32,7 @@ public enum AgentManagement {
     public static var unsupportedMessage: String { L("This Gateway can't manage agents. Update OpenClaw to create and edit agents here.") }
     public static let workspaceChangeWarning = "Changing the workspace points this agent at a different folder. Files aren't moved."
     public static let bindingsNotCopiedNote = "Channel bindings aren't copied. The copy gets its own new workspace."
+    public static var duplicateAvatarNote: String { L("Avatar images aren't copied. Leave Avatar empty to use the default, or enter a new avatar for the copy.") }
 
     /// The id the Gateway derives from an agent name (`normalizeAgentIdStrict`), or nil when the
     /// name has no usable characters.
@@ -164,11 +165,13 @@ public struct AgentDraft: Hashable, Sendable {
                   model: configuredModel ?? agent.model ?? "", workspace: agent.workspace ?? "")
     }
 
-    /// The Create sheet for duplicating `agent`: "<Name> Copy", same identity and model, and a
-    /// blank workspace so the Gateway makes a new one.
+    /// The Create sheet for duplicating `agent`: "<Name> Copy", same emoji and model, and a
+    /// blank workspace so the Gateway makes a new one. Avatars start at the default because an
+    /// inherited image path may not exist in that workspace; the user may choose a new avatar.
     public static func duplicate(of agent: AgentSummary, existing: [AgentSummary]) -> AgentDraft {
         var draft = AgentDraft(agent)
         draft.name = AgentManagement.duplicateName(for: agent.name, existing: existing)
+        draft.avatar = ""
         draft.workspace = ""
         return draft
     }
@@ -547,8 +550,9 @@ public final class AgentManagementModel {
     }
 
     /// Creates a copy from `draft` (see `AgentDraft.duplicate`), then optionally copies the source's
-    /// existing workspace files into the new workspace. Bindings are never copied. File failures
-    /// don't undo the new agent.
+    /// existing workspace files into the new workspace. The new agent keeps its generated
+    /// IDENTITY.md so the source's name and avatar path cannot replace the chosen identity.
+    /// Bindings are never copied. File failures don't undo the new agent.
     public func duplicate(sourceId: String, draft: AgentDraft, copyFiles: Bool) async throws -> AgentDuplicateResult {
         let agentId = try await self.create(draft)
         guard copyFiles else { return AgentDuplicateResult(agentId: agentId, copiedFiles: [], failedFiles: [:]) }
@@ -556,7 +560,8 @@ public final class AgentManagementModel {
         var failed: [String: String] = [:]
         let sources: [AgentFileEntry]
         do {
-            sources = try await self.listFiles(agentId: sourceId).files.filter { !$0.missing }
+            // Current Gateways omit IDENTITY.md from this list; older Gateways may include it.
+            sources = try await self.listFiles(agentId: sourceId).files.filter { !$0.missing && $0.name != "IDENTITY.md" }
         } catch {
             return AgentDuplicateResult(agentId: agentId, copiedFiles: [], failedFiles: ["workspace files": AgentManagementError.classify(error).message])
         }
