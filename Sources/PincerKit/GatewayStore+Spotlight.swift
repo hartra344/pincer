@@ -81,6 +81,7 @@ extension GatewayStore {
         }
         guard !Task.isCancelled, !self.profile.isDemo, Spotlight.isEnabled(self.defaults) else { return }
         let entries = Spotlight.entries(gatewayId: self.id, gatewayURL: self.profile.url, gatewayHost: self.gatewayHost,
+                                        gatewayName: self.profile.name,
                                         sessions: rows, cachedSnippets: snippets, includeMessages: includeMessages)
         let indexer = center.indexer(for: self.id)
         let previous = center.sent[self.id]

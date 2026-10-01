@@ -48,6 +48,25 @@ struct SpotlightReconcileTests {
         #expect(self.entries(rows, snippets: snippets, includeMessages: true)[0].snippet == "hello there")
     }
 
+    @Test func sameTitleChatsAreDisambiguatedWithoutLeakingMessageText() {
+        let gatewayA = UUID(), gatewayB = UUID()
+        let key = "agent:main:dashboard:same-title"
+        let rows = [Self.row(key, title: "Planning", at: 1)]
+        let snippets = [key: "private message excerpt"]
+        let personal = Spotlight.entries(gatewayId: gatewayA, gatewayName: "Personal", sessions: rows,
+                                         cachedSnippets: snippets, includeMessages: false)[0]
+        let work = Spotlight.entries(gatewayId: gatewayB, gatewayName: "Work", sessions: rows,
+                                     cachedSnippets: snippets, includeMessages: false)[0]
+        #expect(personal.title == work.title && personal.id != work.id)
+        #expect(personal.contentDescription == "Personal" && work.contentDescription == "Work")
+        #expect(personal.snippet == nil && work.snippet == nil)
+        #expect(personal.contentDescription?.contains("private message excerpt") == false)
+
+        let included = Spotlight.entries(gatewayId: gatewayA, gatewayName: "Personal", sessions: rows,
+                                         cachedSnippets: snippets, includeMessages: true)[0]
+        #expect(included.contentDescription == "Personal · private message excerpt")
+    }
+
     @Test func snippetIsLastThreeTextMessagesCappedAt300() {
         func item(_ id: String, _ role: ChatRole, _ text: String) -> ChatItem {
             ChatItem(id: id, role: role, blocks: [.text(text)], timestamp: Date(timeIntervalSince1970: 1))

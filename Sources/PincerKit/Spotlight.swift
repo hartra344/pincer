@@ -11,7 +11,12 @@ public struct SpotlightEntry: Hashable, Sendable {
     public var sessionKey: String
     public var title: String
     public var snippet: String?
+    /// The user-configured Gateway name, included separately from optional message text.
+    public var gatewayName: String?
     public var lastActivity: Date?
+
+    /// The descriptive text Spotlight indexes below the result's title.
+    public var contentDescription: String? { self.snippet }
 
     public var domainIdentifier: String { Spotlight.domain(gatewayId) }
 }
@@ -56,6 +61,7 @@ public enum Spotlight {
     /// The newest `cap` non-archived, non-placeholder chats. `cachedSnippets` (by session key) are
     /// used only when `includeMessages` is on.
     public static func entries(gatewayId: UUID, gatewayURL: String? = nil, gatewayHost: String? = nil,
+                              gatewayName: String? = nil,
                               sessions: [SessionRow], cachedSnippets: [String: String] = [:],
                               includeMessages: Bool, cap: Int = Spotlight.maxEntries) -> [SpotlightEntry]
     {
@@ -65,6 +71,7 @@ public enum Spotlight {
                 id: self.identifier(gatewayId: gatewayId, sessionKey: row.key, gatewayURL: gatewayURL, gatewayHost: gatewayHost),
                 gatewayId: gatewayId, sessionKey: row.key, title: row.title,
                 snippet: includeMessages ? cachedSnippets[row.key].flatMap { $0.isEmpty ? nil : $0 } : nil,
+                gatewayName: gatewayName,
                 lastActivity: row.activityDate)
         }
     }
@@ -148,7 +155,7 @@ public struct CoreSpotlightIndexer: SpotlightIndexer {
             let attributes = CSSearchableItemAttributeSet(contentType: .content)
             attributes.title = entry.title
             attributes.displayName = entry.title
-            attributes.contentDescription = entry.snippet
+            attributes.contentDescription = entry.contentDescription
             attributes.contentModificationDate = entry.lastActivity
             attributes.lastUsedDate = entry.lastActivity
             let item = CSSearchableItem(uniqueIdentifier: entry.id, domainIdentifier: entry.domainIdentifier,
