@@ -60,13 +60,14 @@ private enum RunsToolbarHostedFixtures {
               let data = context.data else { return 0 }
         context.draw(source, in: CGRect(x: 0, y: 0, width: source.width, height: source.height))
         let bytes = data.bindMemory(to: UInt8.self, capacity: source.width * source.height * 4)
-        let background = (bytes[0], bytes[1], bytes[2])
+        let background = (bytes[0], bytes[1], bytes[2], bytes[3])
         var count = 0
         for pixel in 0..<(source.width * source.height) {
             let offset = pixel * 4
             let difference = abs(Int(bytes[offset]) - Int(background.0))
                 + abs(Int(bytes[offset + 1]) - Int(background.1))
                 + abs(Int(bytes[offset + 2]) - Int(background.2))
+                + abs(Int(bytes[offset + 3]) - Int(background.3))
             if bytes[offset + 3] > 200, difference > 60 { count += 1 }
         }
         return count
