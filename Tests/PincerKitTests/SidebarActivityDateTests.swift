@@ -27,4 +27,13 @@ struct SidebarActivityDateTests {
                     "past activity at -\(offset)s should keep its existing label")
         }
     }
+
+    @Test func demoActivityTimestampNeverRoundsIntoTheFuture() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000.000_6)
+        let milliseconds = DemoGateway.now(date).double
+
+        #expect(milliseconds != nil)
+        #expect(milliseconds.map { $0 <= date.timeIntervalSince1970 * 1000 } == true)
+        #expect(milliseconds == floor(date.timeIntervalSince1970 * 1000))
+    }
 }

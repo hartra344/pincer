@@ -139,8 +139,8 @@ extension DemoGateway {
         return parts
     }
 
-    static func now() -> JSONValue {
-        .number((Date().timeIntervalSince1970 * 1000).rounded())
+    static func now(_ date: Date = .now) -> JSONValue {
+        .number((date.timeIntervalSince1970 * 1000).rounded())
     }
 
     static func shortId(_ prefix: String = "") -> String {
