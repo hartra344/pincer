@@ -84,6 +84,7 @@ enum Suites {
             Section("Gateway reactions") { checkGatewayReactions() },
             Section("Agent questions") { runAgentQuestionChecks() },
             Section("Gateway config schema") { runConfigChecks() },
+            Section("MCP editor validation") { runMCPEditorChecks() },
             Section("Progress card") { runProgressCardChecks() },
             Section("Slash commands") { runSlashCommandChecks() },
             Section("Dictation") { await runDictationChecks() },
