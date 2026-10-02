@@ -55,6 +55,7 @@ enum Suites {
         var sections: [Section] = [
             Section("Payload & identity") { runIdentityChecks() },
             Section("App-managed device identity") { runSettingsDeviceIdentityChecks() },
+            Section("Settings content height") { checkSettingsContentHeight() },
             Section("URL policy") { runURLPolicyChecks() },
             Section("Session rows") { runSessionRowChecks() },
             Section("Invalidation perf") { runInvalidationPerfChecks() },
@@ -73,6 +74,7 @@ enum Suites {
             Section(nil) { await checkAgentManagement() },
             Section(nil) { checkSubagents() },
             Section(nil) { checkForwardedMessages() },
+            Section("Bridged row authors") { checkBridgedHeaderAuthors() },
             Section(nil) { await checkChannelStatus() },
             Section("Channel status staleness") { await runChannelPollingChecks() },
             Section("Settings notice lifetime") { runSettingsNoticeChecks() },
@@ -176,6 +178,7 @@ enum Suites {
         Section("Sidebar section work (demo)") { await runDemoSidebarSectionWorkChecks() },
         Section("Shortcuts unread visibility (demo)") { await runDemoIntentVisibilityChecks() },
         Section("Device ID Settings cache (demo)") { runSettingsDeviceIdentityChecks() },
+        Section("Settings content height (demo)") { checkSettingsContentHeight() },
         Section("Rejected synced preferences (demo)") { await runDemoRejectedPrefWriteChecks() },
         Section("Sidebar automations & slash commands (demo)") { await runDemoSidebarVisibility() },
         Section("Setup wizard (demo)") { await runDemoSetup() },

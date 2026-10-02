@@ -131,9 +131,14 @@ public enum AccessibilityText {
     }
 
     /// Who wrote a transcript row: `You`, the agent's name (or `Assistant`), `Tool result`, `System`.
-    public static func speaker(role: ChatRole, author: String? = nil) -> String {
+    public static func speaker(role: ChatRole, author: String? = nil, userAuthor: String? = nil) -> String {
+        if role == .user,
+           let userAuthor = userAuthor?.trimmingCharacters(in: .whitespacesAndNewlines), !userAuthor.isEmpty
+        {
+            return userAuthor
+        }
         if let author = author?.trimmingCharacters(in: .whitespacesAndNewlines), !author.isEmpty,
-           role != .user
+            role != .user
         {
             return author
         }
@@ -150,12 +155,14 @@ public enum AccessibilityText {
     /// `Claude, Responding, Here is…` while streaming.
     ///
     /// - Parameters:
-    ///   - author: agent name for assistant rows; ignored for the user's own rows (always `You`).
+    ///   - author: agent name for assistant rows; ignored for user rows.
+    ///   - userAuthor: bridged sender name for a user row; absent names remain `You`.
     ///   - via: channel a user turn arrived through, e.g. `Discord`.
     ///   - timestamp: already formatted for the current locale (the caller owns `DateFormatter`).
     public static func messageRow(
         role: ChatRole,
         author: String? = nil,
+        userAuthor: String? = nil,
         text: String,
         timestamp: String? = nil,
         toolCount: Int = 0,
@@ -169,7 +176,7 @@ public enum AccessibilityText {
     {
         let body = Self.summary(text, limit: summaryLimit)
         return Self.join([
-            Self.speaker(role: role, author: author),
+            Self.speaker(role: role, author: author, userAuthor: userAuthor),
             isBookmarked ? L("Bookmarked", comment: "VoiceOver: the message is bookmarked") : nil,
             via.map { L("via \($0)") },
             isStreaming ? L("Responding") : nil,

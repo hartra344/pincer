@@ -416,24 +416,74 @@ struct SettingsView: View {
 /// Applied to every tab by `SettingsForm`, so adding sections can't push the window off screen.
 struct SettingsHeightCap: ViewModifier {
     /// Room for the title bar and tab toolbar, plus a margin so the window never touches the Dock.
-    static let windowChrome: CGFloat = 140
+    static let windowChrome = CGFloat(SettingsContentHeight.windowChrome)
     /// Tall enough for any tab on a large display, without a towering window.
-    static let comfortableMax: CGFloat = 720
-    static let minimum: CGFloat = 240
+    static let comfortableMax = CGFloat(SettingsContentHeight.comfortableMax)
+    static let minimum = CGFloat(SettingsContentHeight.minimum)
 
     let maxHeight: CGFloat
 
     static func limit(visibleScreenHeight: CGFloat?) -> CGFloat {
-        guard let visibleScreenHeight else { return self.comfortableMax }
-        return max(self.minimum, min(self.comfortableMax, visibleScreenHeight - self.windowChrome))
-    }
-
-    @MainActor static func screenLimit() -> CGFloat {
-        self.limit(visibleScreenHeight: (NSApp?.keyWindow?.screen ?? NSScreen.main)?.visibleFrame.height)
+        CGFloat(SettingsContentHeight.limit(visibleScreenHeight: visibleScreenHeight.map(Double.init)))
     }
 
     func body(content: Content) -> some View {
         CappedHeightLayout(maxHeight: self.maxHeight) { content }
+    }
+}
+
+/// Reads the display of this form's native window, rather than whichever app window is key.
+private struct SettingsScreenHeightReader: NSViewRepresentable {
+    let provider: @MainActor (NSScreen?) -> CGFloat?
+    let onHeight: @MainActor (CGFloat?) -> Void
+
+    func makeNSView(context: Context) -> ObserverView {
+        let view = ObserverView()
+        view.provider = self.provider
+        view.onHeight = self.onHeight
+        return view
+    }
+
+    func updateNSView(_ view: ObserverView, context: Context) {
+        view.provider = self.provider
+        view.onHeight = self.onHeight
+    }
+
+    static func dismantleNSView(_ view: ObserverView, coordinator: ()) {
+        NotificationCenter.default.removeObserver(view)
+        view.onHeight = nil
+    }
+
+    final class ObserverView: NSView {
+        var provider: (@MainActor (NSScreen?) -> CGFloat?)?
+        var onHeight: (@MainActor (CGFloat?) -> Void)?
+        private var refreshPending = false
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            NotificationCenter.default.removeObserver(self)
+            guard let window = self.window else { return }
+            NotificationCenter.default.addObserver(self, selector: #selector(self.displayChanged),
+                name: NSWindow.didChangeScreenNotification, object: window)
+            NotificationCenter.default.addObserver(self, selector: #selector(self.displayChanged),
+                name: NSApplication.didChangeScreenParametersNotification, object: nil)
+            self.refreshSoon()
+        }
+
+        @objc private func displayChanged(_ notification: Notification) { self.refreshSoon() }
+
+        private func refreshSoon() {
+            guard !self.refreshPending else { return }
+            self.refreshPending = true
+            // Native attachment can occur during a SwiftUI update. Apply the finished scalar on
+            // the next turn, coalescing multiple display notifications without mutating that update.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.refreshPending = false
+                guard let window = self.window, let provider = self.provider else { return }
+                self.onHeight?(provider(window.screen))
+            }
+        }
     }
 }
 
@@ -490,7 +540,28 @@ struct SettingsForm: View {
     var speechCatalog: AppleDeviceSpeechCatalog = .shared
     #if os(macOS)
     /// Every tab hugs its content but never grows taller than this; longer tabs scroll.
-    var maxHeight = SettingsHeightCap.screenLimit()
+    @State private var screenMaxHeight: CGFloat
+    var maxHeight: CGFloat { self.maxHeightOverride ?? self.screenMaxHeight }
+    let maxHeightOverride: CGFloat?
+    let visibleScreenHeightProvider: @MainActor (NSScreen?) -> CGFloat?
+
+    @MainActor init(
+        sections: [Section], speechCatalog: AppleDeviceSpeechCatalog = .shared, maxHeight: CGFloat? = nil,
+        visibleScreenHeightProvider: @escaping @MainActor (NSScreen?) -> CGFloat? = { screen in
+            (screen ?? NSScreen.main)?.visibleFrame.height
+        }
+    ) {
+        self.sections = sections
+        self.speechCatalog = speechCatalog
+        self.maxHeightOverride = maxHeight
+        self.visibleScreenHeightProvider = visibleScreenHeightProvider
+        self._screenMaxHeight = State(initialValue: maxHeight ?? SettingsHeightCap.limit(visibleScreenHeight: visibleScreenHeightProvider(nil)))
+    }
+    #else
+    init(sections: [Section], speechCatalog: AppleDeviceSpeechCatalog = .shared) {
+        self.sections = sections
+        self.speechCatalog = speechCatalog
+    }
     #endif
     @Environment(AppModel.self) private var app
     @AppStorage("pincer.ownerName") private var ownerName = ""
@@ -510,6 +581,14 @@ struct SettingsForm: View {
         .formStyle(.grouped)
         #if os(macOS)
         .modifier(SettingsHeightCap(maxHeight: self.maxHeight))
+        .background {
+            if self.maxHeightOverride == nil {
+                SettingsScreenHeightReader(provider: self.visibleScreenHeightProvider) { height in
+                    let cap = SettingsHeightCap.limit(visibleScreenHeight: height)
+                    if self.screenMaxHeight != cap { self.screenMaxHeight = cap }
+                }
+            }
+        }
         #endif
     }
 
