@@ -644,7 +644,7 @@ struct TranscriptLayoutBuilder {
         layout.copyItems = [.init(title: L("Copy Reply"), text: body)]
         if !thinking.isEmpty { layout.copyItems.append(.init(title: L("Copy Thinking"), text: thinking)) }
         let accessibilityAuthor = turn.sender?.accessibilityAuthor(
-            agents: self.context.gateway.agents, receivingAgentId: agent.id) ?? header.name
+            agents: self.context.gateway.agents, receivingAgentId: agent.id, resolvedName: header.name) ?? header.name
         layout.accessibilityLabel = AccessibilityText.messageRow(
             role: .assistant, author: accessibilityAuthor,
             text: turn.isStreaming ? AccessibilityText.streamingExcerpt(body) : body, timestamp: header.time,

@@ -90,8 +90,8 @@ public struct MessageSender: Hashable, Codable, Sendable {
 
     /// Spoken author for a transcript row. Kept in Kit so checks can validate the same
     /// attribution policy the native transcript renderer uses.
-    public func accessibilityAuthor(agents: [AgentSummary], receivingAgentId: String?) -> String {
-        let name = self.displayName(agents: agents)
+    public func accessibilityAuthor(agents: [AgentSummary], receivingAgentId: String?, resolvedName: String? = nil) -> String {
+        let name = resolvedName ?? self.displayName(agents: agents)
         if self.kind == .agent, let receivingAgentId,
            let agentId = self.agentId, agentId != receivingAgentId
         {

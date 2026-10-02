@@ -19,6 +19,8 @@ struct ForwardedSenderAccessibilityTests {
         let namedUnknownAgent = MessageSender(kind: .agent, sessionKey: "agent:scout:main", agentId: "scout")
         #expect(namedUnknownAgent.accessibilityAuthor(agents: self.agents, receivingAgentId: "main")
                 == "Scout, forwarded")
+        #expect(namedUnknownAgent.accessibilityAuthor(agents: [], receivingAgentId: "main", resolvedName: "Scout")
+                == "Scout, forwarded", "the renderer can reuse the already resolved header name")
     }
 
     @Test func helperAutomationAndUnknownSourcesKeepTheirContext() {
