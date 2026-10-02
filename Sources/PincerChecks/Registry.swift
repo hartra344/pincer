@@ -58,6 +58,7 @@ enum Suites {
             Section("Bundled development namespace") { runBundleNamespaceChecks() },
             Section("Voice key removal explanation") { runVoiceKeyRemovalChecks() },
             Section("Settings content height") { checkSettingsContentHeight() },
+            Section("Display name editing") { await runOwnerNameChecks() },
             Section("URL policy") { runURLPolicyChecks() },
             Section("Session rows") { runSessionRowChecks() },
             Section("Invalidation perf") { runInvalidationPerfChecks() },
