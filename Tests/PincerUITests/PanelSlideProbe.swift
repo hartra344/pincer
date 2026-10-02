@@ -43,13 +43,23 @@ struct PanelSlideProbe {
         let scroll: NSScrollView
         let window: NSWindow
         let table: NSTableView
+        let context: TranscriptContext
         var clip: NSClipView { self.scroll.contentView }
-        init(coordinator: TranscriptList.Coordinator, scroll: NSScrollView, window: NSWindow, table: NSTableView) {
+        init(coordinator: TranscriptList.Coordinator, scroll: NSScrollView, window: NSWindow,
+             table: NSTableView, context: TranscriptContext) {
             self.coordinator = coordinator
             self.scroll = scroll
             self.window = window
             self.table = table
+            self.context = context
         }
+    }
+
+    /// Lets the probe hold AppKit's public live-resize state through a quiet pause without KVC or
+    /// a real mouse drag, which is not deterministic in a headless test runner.
+    final class ProbeResizeWindow: NSWindow {
+        var resizingForProbe = false
+        override var inLiveResize: Bool { self.resizingForProbe }
     }
 
     static func makeHost(rows: [TranscriptRow]) async -> Host {
@@ -62,16 +72,18 @@ struct PanelSlideProbe {
                                         previewImage: { _ in }, saveFile: { _, _ in }, chat: gateway.chat(for: key))
         let coordinator = TranscriptList.Coordinator(context: context)
         let scroll = coordinator.makeScrollView()
-        let window = NSWindow(contentRect: NSRect(x: -4000, y: -4000, width: wide, height: 900),
-                              styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        let window = ProbeResizeWindow(contentRect: NSRect(x: -4000, y: -4000, width: wide, height: 900),
+                                       styleMask: [.titled, .resizable], backing: .buffered, defer: false)
         window.contentView = scroll
         scroll.frame = NSRect(x: 0, y: 0, width: wide, height: 900)
+        scroll.autoresizingMask = [.width, .height]
         window.orderBack(nil)
         _ = await TranscriptPrefetchProbe.spinUntilIdle(cap: 0.5)
         coordinator.update(rows: rows, context: context, insets: (0, 0))
         _ = await TranscriptPrefetchProbe.spinUntilIdle(cap: 20)
         Self.keepAlive.append((window, coordinator))
-        return Host(coordinator: coordinator, scroll: scroll, window: window, table: scroll.documentView as! NSTableView)
+        return Host(coordinator: coordinator, scroll: scroll, window: window,
+                    table: scroll.documentView as! NSTableView, context: context)
     }
 
     /// Layout builds so far: the coder's `layoutBuildCount`, else the renderer's private `serial` (same thing today).
@@ -88,6 +100,17 @@ struct PanelSlideProbe {
         var frame = host.scroll.frame
         frame.size.width = width
         host.scroll.frame = frame
+    }
+
+    /// Resizes the actual hosted window so AppKit delivers the same scroll/clip frame changes as
+    /// a window resize, rather than changing the scroll view's frame directly.
+    static func setWindowContentWidth(_ host: Host, _ width: CGFloat) {
+        var frame = host.window.frame
+        frame.size.width += width - host.scroll.frame.width
+        host.window.setFrame(frame, display: false, animate: false)
+        host.window.contentView?.layoutSubtreeIfNeeded()
+        host.scroll.layoutSubtreeIfNeeded()
+        host.clip.layoutSubtreeIfNeeded()
     }
 
     /// Row at the middle of the viewport (the coordinator's anchor row) and its top offset within the viewport.
@@ -267,6 +290,75 @@ struct PanelSlideProbe {
         let close = await Self.toggle(host, name: "sidebar close \(Int(Self.narrow))->\(Int(Self.wide))", to: Self.wide, mid: true)
         Self.table("mid-transcript", [open, close])
         Self.check([open, close])
+    }
+
+    @Test func liveResizeWaitsPastQuietPauseAndThawsStreamingTailOnce() async throws {
+        let rows = Self.streamingTail(TranscriptPrefetchProbe.rows(count: 400), append: "")
+        let host = await Self.makeHost(rows: rows)
+        let window = try #require(host.window as? ProbeResizeWindow)
+        let originalWidth = host.scroll.frame.width
+        let gapBefore = Self.bottomGap(host)
+        let initialBuilds = Self.builds(host)
+        let initialThaws = host.coordinator.thawStats.count
+
+        window.resizingForProbe = true
+        NotificationCenter.default.post(name: NSWindow.willStartLiveResizeNotification, object: window)
+        for width in [originalWidth - 36, originalWidth - 72, originalWidth - 108] {
+            Self.setWindowContentWidth(host, width)
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(window.inLiveResize)
+        #expect(host.coordinator.isWidthFrozen)
+        #expect(Self.builds(host) == initialBuilds, "window width changes do not build transcript layouts during the drag")
+
+        // Real users can pause while still holding the resize handle. The quiet timer must not thaw
+        // while AppKit reports an active live resize; didEndLiveResize remains the authoritative end.
+        try? await Task.sleep(for: .milliseconds(Int(TranscriptWidthFreeze.quietInterval * 2_000)))
+        #expect(host.coordinator.isWidthFrozen, "an active window resize stays frozen past the quiet interval")
+        #expect(host.coordinator.thawStats.count == initialThaws,
+                "the quiet timer does not relayout while the window is still live-resizing")
+
+        // Keep exercising the stream-at-frozen-width case on the baseline too, even though its
+        // quiet timer currently thaws early: a new native width change starts a fresh freeze.
+        let finalWidth = originalWidth - 132
+        Self.setWindowContentWidth(host, finalWidth)
+        #expect(abs(host.scroll.frame.width - finalWidth) <= 0.5)
+        let streamedRows = Self.streamingTail(rows, append: String(repeating: " streamed words", count: 220))
+        host.coordinator.update(rows: streamedRows, context: host.context, insets: (0, 0))
+        #expect(host.coordinator.isWidthFrozen, "a same-ID streaming tail updates while the resize width is frozen")
+
+        let buildsBeforeEnd = Self.builds(host)
+        try? await Task.sleep(for: .milliseconds(20))
+        #expect(Self.builds(host) == buildsBeforeEnd, "no additional layout work occurs before the resize ends")
+        window.resizingForProbe = false
+        NotificationCenter.default.post(name: NSWindow.didEndLiveResizeNotification, object: window)
+
+        #expect(host.coordinator.thawStats.count == initialThaws + 1,
+                "the live resize causes exactly one thaw after its end notification")
+        #expect(!host.coordinator.isWidthFrozen)
+        #expect(abs(host.scroll.frame.width - finalWidth) <= 0.5)
+        let finalLayoutWidth = host.clip.bounds.width
+        let last = try #require(streamedRows.last)
+        let measured = try #require(host.coordinator.controller.heights[last.id])
+        let expectedHeight = host.coordinator.renderer.layout(for: last, width: finalLayoutWidth).height
+        #expect(measured.isCurrent(at: finalLayoutWidth), "the streamed tail is measured at the final window width")
+        #expect(abs(measured.value - expectedHeight) <= 0.5, "the streamed tail has its final-width height")
+        #expect(abs(Self.bottomGap(host) - gapBefore) <= 1, "the reader remains bottom-anchored through the stream and thaw")
+    }
+
+    static func streamingTail(_ rows: [TranscriptRow], append: String) -> [TranscriptRow] {
+        guard let last = rows.last, case let .entry(.assistant(original)) = last else {
+            Issue.record("the live-resize fixture must end with an assistant turn")
+            return rows
+        }
+        var turn = original
+        turn.isStreaming = true
+        if !append.isEmpty, !turn.text.isEmpty {
+            turn.text[turn.text.count - 1] += append
+        }
+        var result = rows
+        result[result.count - 1] = .entry(.assistant(turn))
+        return result
     }
 }
 #endif

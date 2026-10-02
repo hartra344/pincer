@@ -237,20 +237,10 @@ struct ChannelStatusPage: View {
 
     @ViewBuilder private func noticeView(_ model: ChannelsModel) -> some View {
         if let notice = model.notice {
-            Label(notice.text, systemImage: notice.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(notice.isError ? Color.red : Color.green)
-                .font(.callout)
-                .padding(.horizontal, Theme.Spacing.xxl)
-                .padding(.vertical, Theme.Spacing.lg)
-                .glassSurface(in: Capsule())
-                .padding(.bottom, Theme.Spacing.section)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .onTapGesture { withAnimation { model.clearNotice() } }
-                .task(id: notice.id) {
-                    try? await Task.sleep(for: .seconds(4))
-                    guard !Task.isCancelled, model.notice?.id == notice.id else { return }
-                    withAnimation { model.clearNotice() }
-                }
+            ChannelStatusNoticeView(notice: notice) {
+                guard model.notice?.id == notice.id else { return }
+                withAnimation { model.clearNotice() }
+            }
         }
     }
 
@@ -263,6 +253,30 @@ struct ChannelStatusPage: View {
         case .stopped: .gray
         case .notConfigured, .disabled, .unknown: .secondary
         }
+    }
+}
+
+/// Kept separate so the notice lifecycle can be hosted with a deterministic waiter in UI tests.
+struct ChannelStatusNoticeView: View {
+    let notice: ChannelsModel.Notice
+    let dismiss: @MainActor () -> Void
+    var wait: @MainActor (Duration) async -> Void = { duration in try? await Task.sleep(for: duration) }
+    var announce: @MainActor (String) -> Void = { AccessibilityAnnouncer.announce($0) }
+
+    var body: some View {
+        SettingsNoticeBanner(id: self.notice.id, text: self.notice.text, severity: self.notice.severity,
+                             announces: true, dismiss: self.dismiss, wait: self.wait, announce: self.announce) {
+            Label(self.notice.text,
+                  systemImage: self.notice.isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                .foregroundStyle(self.notice.isError ? Color.red : Color.green)
+                .font(.callout)
+        }
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.vertical, Theme.Spacing.lg)
+        .glassSurface(in: Capsule())
+        .padding(.bottom, Theme.Spacing.section)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .onTapGesture { withAnimation { self.dismiss() } }
     }
 }
 

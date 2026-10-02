@@ -327,6 +327,7 @@ public final class ChannelsModel {
         public let id = UUID()
         public let text: String
         public let isError: Bool
+        public var severity: SettingsNoticeSeverity { self.isError ? .error : .success }
     }
 
     public nonisolated static let statusMethod = "channels.status"

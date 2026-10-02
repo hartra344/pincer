@@ -318,6 +318,7 @@ struct DeviceManagementModelTests {
         fake.results["device.pair.list"] = DeviceFixtures.list()
         #expect(await model.approve(request), "already handled counts as gone")
         #expect(model.pending.isEmpty && model.notice?.text == DeviceManagementModel.staleRequestMessage)
+        #expect(model.notice?.severity == .warning, "a stale request is announced as a persistent warning")
         #expect(fake.methods.last == "device.pair.list", "reloads after a stale answer")
         model.clearNotice()
         #expect(model.notice == nil)
@@ -330,6 +331,7 @@ struct DeviceManagementModelTests {
         removing.results["device.pair.list"] = DeviceFixtures.list()
         #expect(await other.remove(device))
         #expect(other.paired.isEmpty && other.notice?.text == DeviceManagementModel.staleDeviceMessage)
+        #expect(other.notice?.severity == .warning, "a stale device is announced as a persistent warning")
     }
 
     @Test func deniedTurnsReadOnly() async {
@@ -340,6 +342,7 @@ struct DeviceManagementModelTests {
         await model.load()
         #expect(!(await model.approve(model.pending[0])))
         #expect(!model.canManage && model.notice?.text == DeviceManagementModel.readOnlyMessage)
+        #expect(model.notice?.severity == .warning)
         #expect(model.pending.count == 1 && model.operation(for: model.pending[0]) == .idle)
         #expect(!(await model.remove(model.paired[0])) && fake.params("device.pair.remove").isEmpty)
         model.handleReconnect()
