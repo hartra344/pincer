@@ -141,8 +141,8 @@ public final class ChatStore: Identifiable {
             if (oldValue == nil) != (self.live == nil) { self.updateIsRunning() }
         }
     }
-    /// Minimum time between published transcripts while text or thinking streams in (~30 Hz).
-    nonisolated(unsafe) static var liveFlushInterval: TimeInterval = 1.0 / 30
+    /// Minimum time between published transcripts while text or thinking streams in (60 Hz cap).
+    nonisolated(unsafe) static var liveFlushInterval: TimeInterval = 1.0 / 60
     @ObservationIgnored var lastPublishAt = Date.distantPast
     @ObservationIgnored var pendingFlush: Task<Void, Never>?
     @ObservationIgnored var outboxImagePreviews = OutboxImagePreviewCache()
