@@ -97,7 +97,7 @@ func runDemoSkills(_ gateway: GatewayStore) async {
         check(saved == .done("Saved the API key for notion") && skills.skill(key: "notion")?.apiKeyIsSet == true
               && skills.skill(key: "notion")?.state == .ready, "demo pasted API key satisfies the skill requirement (#505)")
         do {
-            let report = try await gateway.request(Skills.statusMethod, [:])
+            let report = try await gateway.connection.request(Skills.statusMethod, [:])
             let writeOnly = try await Task.detached {
                 try JSONEncoder().encode(report).range(of: Data(transientKey.utf8)) == nil
             }.value

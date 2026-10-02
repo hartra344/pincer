@@ -13,7 +13,6 @@ struct APIKeyField: View {
         #if os(iOS)
         APIKeyIOSField(title: self.title, prompt: self.prompt, text: self.$text,
                        isRevealed: self.$isRevealed, onSubmit: self.onSubmit)
-            .accessibilityLabel(self.title)
         #else
         APIKeyMacField(title: self.title, prompt: self.prompt, text: self.$text,
                        isRevealed: self.$isRevealed, onSubmit: self.onSubmit)

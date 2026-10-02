@@ -138,6 +138,8 @@ struct APIKeyVisibilityTests {
         let button = try #require(Self.descendants(host.view).compactMap { $0 as? UIButton }
             .first { $0.accessibilityIdentifier == "api-key-visibility" })
         let field = try #require(Self.descendants(host.view).compactMap { $0 as? UITextField }.first)
+        #expect(field.accessibilityLabel == "API key" && !field.superview!.isAccessibilityElement,
+                "The input and eye retain separate native accessibility elements")
         #expect(field.isSecureTextEntry)
         let start = try #require(field.position(from: field.beginningOfDocument, offset: 4))
         let end = try #require(field.position(from: start, offset: 3))
