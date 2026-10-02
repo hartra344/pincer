@@ -22,6 +22,8 @@ func checkToolDiffs() {
                                                                          "new_string": "let a = 2\nlet b = 3"]))
     check(diffLines(edit) == ["-let a = 1", "+let a = 2", "+let b = 3"] && edit?.additions == 2 && edit?.deletions == 1,
           "edit old_string/new_string → -1 +2 (\(diffLines(edit)))")
+    check(edit?.additionsLabel == "+2" && edit?.deletionsLabel == "−1",
+          "an edit with both sides keeps its exact addition and deletion header labels")
     check(edit?.unifiedText.hasPrefix("--- a/a.swift\n+++ b/a.swift\n@@") == true
           && edit?.unifiedText.hasSuffix("\n-let a = 1\n+let a = 2\n+let b = 3") == true, "edit unified text has headers and lines")
     let write = ToolFileEdit.parse(toolName: "write", arguments: toolArgs(["path": "n.md", "content": "# N\nbody\n"]),
@@ -114,6 +116,10 @@ private func checkRetryFixChat(_ chat: ChatStore, label: String, editHasReceipt:
     } else {
         check(edit?.additions == 2 && edit?.deletions == 1 && diffLines(edit).contains("-      const delay = opts.baseDelayMs * 2 ** attempt;"),
               "\(label): edit diffs old_string → new_string (\(diffLines(edit)))")
+        if label == "demo" {
+            check(edit?.additionsLabel == "+2" && edit?.deletionsLabel == "−1",
+                  "demo: the loaded retry edit supplies both visible header counts")
+        }
     }
     check(write?.kind == .write && write?.files.first?.operation == .add && write?.additions == 17 && write?.deletions == 0
           && write?.primaryPath == "src/net/retry.test.ts" && write?.isStatExact == true,
