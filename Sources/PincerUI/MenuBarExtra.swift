@@ -139,10 +139,10 @@ struct MenuBarContent: View {
     static func petImage(style: AvatarStyle, state: AvatarState, colorScheme: ColorScheme,
                          accent: CGColor, side: CGFloat, scale: CGFloat) -> NSImage?
     {
+        let appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
         var image: NSImage?
-        NSApp.effectiveAppearance.performAsCurrentDrawingAppearance {
-            let dark = NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            image = AvatarArt.still(style, state: state, dark: dark, accent: accent, side: side, scale: scale)
+        appearance?.performAsCurrentDrawingAppearance {
+            image = AvatarArt.still(style, state: state, dark: colorScheme == .dark, accent: accent, side: side, scale: scale)
                 .map { NSImage(cgImage: $0, size: NSSize(width: side, height: side)) }
         }
         return image
