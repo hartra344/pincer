@@ -32,6 +32,8 @@ Accounts are grouped by channel. Each one shows its state, its last error if it 
 | **Not Configured** | It's missing settings it needs. Add them on the **Channels** settings page. |
 | **Disabled** | It's turned off in the gateway's config. |
 
+Every state has an icon and a text label. **Logged Out** uses the standard text color so its label stays readable in light and dark appearances.
+
 Channels are optional: Pincer talks to your agents directly. If none is set up, the page just says **No Channels** (with **Open Channels Settings**); it's never flagged as a problem. If your gateway doesn't report channel status, the page says **Unavailable on this Gateway** and shows the channels from Health, read-only. While Pincer isn't connected, it shows the last list it had, dimmed.
 
 At the bottom, **Approving new senders? See Pairing Requests.** opens [Pairing Requests](../gateway-settings/#pairing-requests).

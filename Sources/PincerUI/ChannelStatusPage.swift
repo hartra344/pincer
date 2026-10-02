@@ -249,7 +249,7 @@ struct ChannelStatusPage: View {
         switch state {
         case .connected, .running: .green
         case .degraded, .disconnected: .orange
-        case .loggedOut: .yellow
+        case .loggedOut: .primary
         case .stopped: .gray
         case .notConfigured, .disabled, .unknown: .secondary
         }
