@@ -7,6 +7,12 @@ import Synchronization
 /// On-disk copy of each chat's committed transcript. Reopening a chat is instant (even offline) and
 /// older history — which doesn't change — never has to be refetched; only the newest page is.
 public enum TranscriptCache {
+    /// Test seam around the asynchronous writeback for an older segmented manifest.
+    enum LegacyManifestMigrationWritePhase: Sendable {
+        case beforeEnqueue
+        case finished
+    }
+
     public struct Snapshot: Codable, Sendable {
         public var version = Self.currentVersion
         public var items: [ChatItem]
@@ -367,6 +373,8 @@ public enum TranscriptCache {
     /// covering that many of its newest items (the snapshot then holds those, and possibly more).
     static func read(_ url: URL, gatewayId: UUID, root: URL? = Self.root, newest: Int? = nil,
                      waitForWriterPrime: Bool = false,
+                     legacyManifestMigrationWriteObserver: (@Sendable (LegacyManifestMigrationWritePhase) async -> Void)? = nil,
+                     migrationWriter: Writer = .shared,
                      priority: TaskPriority) async -> (snapshot: Snapshot?, outcome: LoadOutcome)
     {
         let quarantine = self.quarantineDirectory(gatewayId: gatewayId, root: root)
@@ -407,7 +415,11 @@ public enum TranscriptCache {
                             Self.logger.notice("Migrated cached transcript \(url.lastPathComponent, privacy: .private) from v\(peek.version) to v\(Snapshot.currentVersion)")
                             // Written back behind the writer's queue; the chat being opened doesn't wait for it.
                             if !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId) {
-                                Task.detached(priority: .utility) { _ = await Writer.shared.write(snapshot, to: url) }
+                                Task.detached(priority: .utility) {
+                                    await legacyManifestMigrationWriteObserver?(.beforeEnqueue)
+                                    _ = await migrationWriter.migrate(snapshot, to: url, ifManifestEquals: data)
+                                    await legacyManifestMigrationWriteObserver?(.finished)
+                                }
                             }
                             return (snapshot, .migrated(from: peek.version))
                         }
@@ -447,7 +459,7 @@ public enum TranscriptCache {
                 case let .migrated(from):
                     Self.logger.notice("Migrated cached transcript \(url.lastPathComponent, privacy: .private) from v\(from) to v\(Snapshot.currentVersion)")
                     if let snapshot = result.snapshot, !MessageIndex.isDiscardedPermanently(gatewayId: gatewayId) {
-                        _ = await Writer.shared.write(snapshot, to: url)
+                        _ = await migrationWriter.migrate(snapshot, to: url, ifManifestEquals: data)
                     }
                 case .outdated, .future, .corrupt:
                     await Writer.shared.discard(url, expected: data, outcome: result.outcome, quarantine: quarantine)
@@ -836,8 +848,23 @@ public enum TranscriptCache {
         var primeStartsForTesting: [URL: Int] = [:]
         var trackedPrimeURLsForTesting: Set<URL> = []
 
+        /// Isolated writers can opt out of platform file protection in tests; the shared writer
+        /// keeps the protected default used by the app.
+        let writeOptions: Data.WritingOptions
+
+        init(writeOptions: Data.WritingOptions = [.atomic, .completeFileProtection]) {
+            self.writeOptions = writeOptions
+        }
+
         func delayPrimeForTesting(_ url: URL, by delay: Duration?) {
             self.primeDelaysForTesting[url] = delay
+        }
+
+        /// Applies a legacy migration only if its source bytes are still current. The compare and
+        /// write stay in this actor turn, so a queued newer save cannot be overwritten afterward.
+        func migrate(_ snapshot: Cache.Snapshot, to url: URL, ifManifestEquals expectedData: Data) -> Cache.SaveResult? {
+            guard let currentData = try? Data(contentsOf: url), currentData == expectedData else { return nil }
+            return self.write(snapshot, to: url)
         }
 
         func primeStartCountForTesting(_ url: URL) -> Int {

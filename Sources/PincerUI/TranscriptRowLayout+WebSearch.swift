@@ -6,6 +6,12 @@ import AppKit
 import UIKit
 #endif
 
+enum TranscriptWebSearchAccessibility {
+    /// Attached only to web-search result/citation title links. The action title uses this safe
+    /// host context without speaking the linked URL's path, query, or fragment.
+    static let host = NSAttributedString.Key("Pincer.WebSearchAccessibilityHost")
+}
+
 extension TranscriptLayoutBuilder {
     /// A web_search result as a link list: each title opens its page, under it the site and the start
     /// of the snippet. An answer shows its text, then its sources. Each entry is one section whose text
@@ -40,7 +46,7 @@ extension TranscriptLayoutBuilder {
             for (index, result) in web.results.enumerated() {
                 if index > 0 { card.y += 8 }
                 self.linkSection("\(tool.id):web-\(index)", result.text, link: result.url, titleLength: result.title.utf16.count,
-                                 tool: tool, into: &card)
+                                 accessibilityHost: result.url.host(percentEncoded: false), tool: tool, into: &card)
             }
         case .answer:
             if let answer = web.answer {
@@ -56,7 +62,7 @@ extension TranscriptLayoutBuilder {
                 for (index, citation) in web.citations.enumerated() {
                     if index > 0 { card.y += 4 }
                     self.linkSection("\(tool.id):web-source-\(index)", citation.label, link: citation.url, titleLength: citation.label.utf16.count,
-                                     tool: tool, into: &card)
+                                     accessibilityHost: citation.url.host(percentEncoded: false), tool: tool, into: &card)
                 }
             }
         case .error:
@@ -83,13 +89,17 @@ extension TranscriptLayoutBuilder {
     }
 
     /// `text` with its first `titleLength` UTF-16 units as the link, then the meta line (dimmer) and snippet.
-    private func linkSection(_ id: String, _ text: String, link: URL, titleLength: Int, tool: ToolActivity,
+    private func linkSection(_ id: String, _ text: String, link: URL, titleLength: Int, accessibilityHost: String? = nil,
+                             tool: ToolActivity,
                              into card: inout ToolCardBuild)
     {
         let style = self.style
         let string = NSMutableAttributedString(string: text, attributes: [.font: style.caption, .foregroundColor: TranscriptColors.secondary])
         let titleRange = NSRange(location: 0, length: min(titleLength, string.length))
         var titleAttributes: [NSAttributedString.Key: Any] = [.font: style.callout, .foregroundColor: TranscriptColors.link, .link: link]
+        if let accessibilityHost, !accessibilityHost.isEmpty {
+            titleAttributes[TranscriptWebSearchAccessibility.host] = accessibilityHost
+        }
         #if os(macOS)
         titleAttributes[.toolTip] = link.absoluteString
         #endif

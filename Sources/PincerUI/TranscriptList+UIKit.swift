@@ -606,10 +606,17 @@ private final class TranscriptCell: UICollectionViewCell {
                 actions.append(.init(name: control.accessibilityText) { [weak control] in control?.onTap?() })
             }
             // Markdown links in the message text, which the single element hides too.
-            for (title, url) in AccessibilityText.linkActions(Self.linkRuns(in: self.content)) {
-                let name = L("Open \(title)")
+            for action in AccessibilityText.linkActionsWithWebHosts(Self.linkRuns(in: self.content)) {
+                let name: String
+                if let host = action.webHost {
+                    name = action.title.map { L("Open \($0) on \(host)") } ?? L("Open \(host)")
+                } else if let title = action.title {
+                    name = L("Open \(title)")
+                } else {
+                    continue
+                }
                 guard names.insert(name).inserted else { continue }
-                actions.append(.init(name: name) { [weak renderer = self.actions] in renderer?.open(url) })
+                actions.append(.init(name: name) { [weak renderer = self.actions] in renderer?.open(action.url) })
             }
             return actions.map { action in
                 UIAccessibilityCustomAction(name: action.name) { _ in
@@ -622,14 +629,15 @@ private final class TranscriptCell: UICollectionViewCell {
     }
 
     /// Every link run in the row's visible text, top to bottom (deduped and capped by the caller).
-    private static func linkRuns(in view: UIView) -> [(text: String, url: URL)] {
-        var runs: [(text: String, url: URL)] = []
+    private static func linkRuns(in view: UIView) -> [AccessibilityText.LinkActionRun] {
+        var runs: [AccessibilityText.LinkActionRun] = []
         for subview in view.subviews where !subview.isHidden {
             if let text = subview as? UITextView {
                 let storage = text.textStorage
                 storage.enumerateAttribute(.link, in: NSRange(location: 0, length: storage.length)) { value, range, _ in
                     guard let url = (value as? URL) ?? (value as? String).flatMap(URL.init(string:)) else { return }
-                    runs.append((storage.attributedSubstring(from: range).string, url))
+                    let host = storage.attribute(TranscriptWebSearchAccessibility.host, at: range.location, effectiveRange: nil) as? String
+                    runs.append(.init(text: storage.attributedSubstring(from: range).string, url: url, webHost: host))
                 }
             } else {
                 runs += Self.linkRuns(in: subview)
