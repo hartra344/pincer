@@ -109,6 +109,12 @@ func runMenuBarDemo() async {
     let seededRun = "agent:coder:dashboard:refactor"
     check(Set(inbox.running.map(\.target.sessionKey)) == ["agent:coder:dashboard:retry-fix", seededRun] && !inbox.isCaughtUp && inbox.badgeText == "4",
           "only the seeded runs are running; the icon shows 4 (\(inbox.running.map(\.title)), \(inbox.badgeText ?? "none"))")
+    check(seeded?.agentId == "coder" && seeded?.pose == .awaitingApproval
+          && inbox.running.allSatisfy { $0.pose == .thinking },
+          "menu bar pets: actual approval and running rows provide their still poses")
+    check(Set(inbox.unread.compactMap(\.agentId)) == ["main", "research"]
+          && inbox.unread.allSatisfy { $0.pose == .idle },
+          "menu bar pets: actual unread rows retain their agent identities and idle poses")
     // #9: the menu takes `now` from a tick, not body. Past its 30 minutes the seeded approval drops out.
     let expired = MenuBarInbox(app: app, now: Date().addingTimeInterval(31 * 60))
     check(expired.needsYou.isEmpty && expired.needsYouCount == 0 && expired.badgeText == "3" && !expired.accessibilityLabel.contains("need"),
