@@ -67,6 +67,8 @@ Each result is a title link, a dimmed line with the site, host and publish date 
 
 Some providers answer the question instead of listing pages. Then the section is titled **Answer**, the card shows the answer text, and a **Sources** list of links follows. If the search failed, the card shows the provider's own error message, with its documentation link when it sent one, like any other tool.
 
+When a provider or OpenClaw shortens or omits part of the search output to fit its limits, the card shows **Search output was truncated**. This can refer to shortened text or omitted results or sources.
+
 <DocScreenshot src={shotWeb} alt="A web_search card listing five results as blue links with site, date and snippet, above an expanded web_fetch card." caption="macOS, built-in demo. The brave, 5 results and 640 ms badges sit in the title row." ios={shotWebIOS} iosAlt="A web_search card on iPhone listing five results as links with site, date and snippet." iosCaption="iOS, built-in demo. Tap a title to open the page." />
 
 Only `http` and `https` links are shown. If the gateway's result is in a shape Pincer doesn't recognize, or the chat was cached by an earlier version of Pincer without the result details, the card shows the output as plain text. **Show raw JSON** in the section's title row always shows the full result. To get the links for an old cached chat, clear the cache under **Settings → Storage** (see [Local cache](../local-cache/#clearing-the-cache)).

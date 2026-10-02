@@ -47,16 +47,17 @@ extension TranscriptLayoutBuilder {
                 card.y += self.textSection("\(tool.id):web-answer", TranscriptText.plain(answer, font: self.style.caption, color: TranscriptColors.label),
                                            tool: tool, x: card.x, width: card.inner, maxHeight: .greatestFiniteMagnitude, into: &card)
             }
-            guard !web.citations.isEmpty else { return }
-            card.y += 8
-            let font = self.style.captionSemibold
-            card.decor.append(.label(L("Sources"), CGPoint(x: card.x, y: card.y + (self.titleRowHeight - TranscriptStyle.lineHeight(font)) / 2),
-                                     width: card.inner, .captionSemibold, .secondary, truncation: .byTruncatingTail))
-            card.y += self.titleRowHeight + 4
-            for (index, citation) in web.citations.enumerated() {
-                if index > 0 { card.y += 4 }
-                self.linkSection("\(tool.id):web-source-\(index)", citation.label, link: citation.url, titleLength: citation.label.utf16.count,
-                                 tool: tool, into: &card)
+            if !web.citations.isEmpty {
+                card.y += 8
+                let font = self.style.captionSemibold
+                card.decor.append(.label(L("Sources"), CGPoint(x: card.x, y: card.y + (self.titleRowHeight - TranscriptStyle.lineHeight(font)) / 2),
+                                         width: card.inner, .captionSemibold, .secondary, truncation: .byTruncatingTail))
+                card.y += self.titleRowHeight + 4
+                for (index, citation) in web.citations.enumerated() {
+                    if index > 0 { card.y += 4 }
+                    self.linkSection("\(tool.id):web-source-\(index)", citation.label, link: citation.url, titleLength: citation.label.utf16.count,
+                                     tool: tool, into: &card)
+                }
             }
         case .error:
             if let message = web.message {
@@ -68,6 +69,16 @@ extension TranscriptLayoutBuilder {
                 self.linkSection("\(tool.id):web-docs", docs.absoluteString, link: docs, titleLength: docs.absoluteString.utf16.count,
                                  tool: tool, into: &card)
             }
+        }
+        if web.truncated && (web.kind == .results || web.kind == .answer) {
+            let text = L("Search output was truncated")
+            let font = self.style.caption
+            let height = TranscriptStyle.lineHeight(font)
+            card.y += 8
+            card.decor.append(.label(text, CGPoint(x: card.x, y: card.y), width: card.inner,
+                                     .caption, .secondary, truncation: .byTruncatingTail))
+            card.notes.append(.init(frame: CGRect(x: card.x, y: card.y, width: card.inner, height: height), text: text))
+            card.y += height
         }
     }
 
